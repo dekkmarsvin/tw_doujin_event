@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-06T12:00:00+08:00",
+  "title": "Design System: FF47 場刊 MAP",
+  "extensions": {
+    "directionSeed": "local-extension-c",
+    "colorMeta": {
+      "shell-ink": {
+        "role": "primary",
+        "displayName": "作戰桌深墨色",
+        "canonical": "#202a35",
+        "tonalRamp": ["oklch(15% 0.018 245)", "oklch(25% 0.018 245)", "oklch(35% 0.017 245)", "oklch(45% 0.015 245)", "oklch(58% 0.013 245)", "oklch(70% 0.010 245)", "oklch(84% 0.007 245)", "oklch(95% 0.004 245)"]
+      },
+      "paper-ground": {
+        "role": "neutral",
+        "displayName": "暖紙底",
+        "canonical": "#f8f7f2",
+        "tonalRamp": ["oklch(15% 0.012 85)", "oklch(28% 0.012 85)", "oklch(40% 0.011 85)", "oklch(54% 0.010 85)", "oklch(68% 0.009 85)", "oklch(79% 0.008 85)", "oklch(89% 0.007 85)", "oklch(97% 0.006 85)"]
+      },
+      "coral-current": {
+        "role": "primary",
+        "displayName": "目前位置珊瑚色",
+        "canonical": "#e86f5d",
+        "tonalRamp": ["oklch(15% 0.08 28)", "oklch(25% 0.11 28)", "oklch(35% 0.14 28)", "oklch(45% 0.16 28)", "oklch(58% 0.17 28)", "oklch(70% 0.14 28)", "oklch(84% 0.08 28)", "oklch(95% 0.03 28)"]
+      },
+      "mint-illustration": {
+        "role": "secondary",
+        "displayName": "插畫薄荷色",
+        "canonical": "#57a88e",
+        "tonalRamp": ["oklch(15% 0.045 165)", "oklch(25% 0.065 165)", "oklch(35% 0.085 165)", "oklch(45% 0.095 165)", "oklch(58% 0.10 165)", "oklch(70% 0.085 165)", "oklch(84% 0.05 165)", "oklch(95% 0.02 165)"]
+      },
+      "blue-vtuber": {
+        "role": "secondary",
+        "displayName": "VTuber 藍",
+        "canonical": "#4f83bd",
+        "tonalRamp": ["oklch(15% 0.055 250)", "oklch(25% 0.075 250)", "oklch(35% 0.095 250)", "oklch(45% 0.105 250)", "oklch(58% 0.11 250)", "oklch(70% 0.09 250)", "oklch(84% 0.055 250)", "oklch(95% 0.02 250)"]
+      },
+      "amber-maker": {
+        "role": "tertiary",
+        "displayName": "手作琥珀色",
+        "canonical": "#d99b44",
+        "tonalRamp": ["oklch(15% 0.055 75)", "oklch(25% 0.08 75)", "oklch(35% 0.105 75)", "oklch(45% 0.125 75)", "oklch(58% 0.14 75)", "oklch(70% 0.115 75)", "oklch(84% 0.07 75)", "oklch(95% 0.025 75)"]
+      },
+      "lilac-cosplay": {
+        "role": "tertiary",
+        "displayName": "Cosplay 丁香色",
+        "canonical": "#8b72b1",
+        "tonalRamp": ["oklch(15% 0.045 300)", "oklch(25% 0.065 300)", "oklch(35% 0.085 300)", "oklch(45% 0.095 300)", "oklch(58% 0.10 300)", "oklch(70% 0.085 300)", "oklch(84% 0.05 300)", "oklch(95% 0.02 300)"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "地圖、管理流程與社團詳情的最高層標題。" },
+      "title": { "displayName": "Title", "purpose": "面板、狀態與內容名稱。" },
+      "body": { "displayName": "Body", "purpose": "說明、作品內容與管理引導。" },
+      "label": { "displayName": "Label", "purpose": "欄位名稱與短導覽字。" },
+      "data": { "displayName": "Data", "purpose": "攤位代碼、數量、時間與版本。" }
+    },
+    "shadows": [
+      { "name": "control-float", "value": "0 4px 14px #2733291f", "purpose": "地圖縮放控制與小型浮動工具。" },
+      { "name": "map-paper", "value": "0 7px 24px #202a3526", "purpose": "SVG 場館平面。" },
+      { "name": "detail-overlay", "value": "0 14px 40px #2631293a", "purpose": "中型畫面上的社團詳情浮層。" },
+      { "name": "admin-workspace", "value": "0 28px 80px #11182066", "purpose": "管理匯入工作面板。" }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "160ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "hover、focus 與選取狀態。" },
+      { "name": "map-direct", "value": "80ms linear", "purpose": "地圖拖曳與縮放的直接跟手回饋。" },
+      { "name": "reduced-motion", "value": "none", "purpose": "prefers-reduced-motion 時停用所有轉場。" }
+    ],
+    "breakpoints": [
+      { "name": "details-overlay", "value": "1050px" },
+      { "name": "mobile-shell", "value": "760px" },
+      { "name": "admin-sheet", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主要規劃與發布動作。",
+      "html": "<button class=\"ds-btn-primary\">設為下一站 <span>↗</span></button>",
+      "css": ".ds-btn-primary{height:38px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 12px;border:1px solid var(--ink);border-radius:8px;background:var(--ink);color:#f9faf8;font:800 10px var(--font-geist),system-ui,sans-serif;cursor:pointer;transition:background 160ms cubic-bezier(.16,1,.3,1),transform 160ms cubic-bezier(.16,1,.3,1)}.ds-btn-primary span{color:#f4c65c;font-size:16px}.ds-btn-primary:hover{background:#2d3945}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:3px solid #dfe8e3;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "取消、清除與次要操作。",
+      "html": "<button class=\"ds-btn-secondary\">加入收藏</button>",
+      "css": ".ds-btn-secondary{height:38px;padding:0 14px;border:1px solid #dcdedb;border-radius:8px;background:#f9faf8;color:var(--ink);font:800 10px var(--font-geist),system-ui,sans-serif;cursor:pointer;transition:background 160ms cubic-bezier(.16,1,.3,1)}.ds-btn-secondary:hover{background:#f0f2ef}.ds-btn-secondary:active{background:#e8ebe8}.ds-btn-secondary:focus-visible{outline:3px solid #dfe8e3;outline-offset:2px}"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "跨社團、攤位與作品的主要入口。",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z\"/></svg><input placeholder=\"搜尋社團、攤位或作品\"><kbd>⌘ K</kbd></label>",
+      "css": ".ds-search{height:42px;display:flex;align-items:center;gap:9px;padding:0 12px;border:1px solid #d8ddd9;border-radius:11px;background:#f9faf8;color:var(--ink)}.ds-search:focus-within{border-color:#849087;box-shadow:0 0 0 3px #dfe8e3}.ds-search svg{width:18px;fill:none;stroke:#7b867f;stroke-width:1.8}.ds-search input{min-width:0;flex:1;border:0;outline:0;background:transparent;font:400 13px var(--font-geist),system-ui,sans-serif}.ds-search kbd{padding:3px 6px;border:1px solid var(--line);border-radius:5px;background:#f8f7f2;color:#929a95;font-size:10px}"
+    },
+    {
+      "name": "Segmented Filter",
+      "kind": "chip",
+      "refersTo": "filter-selected",
+      "description": "展區與行動版場館切換。",
+      "html": "<div class=\"ds-segments\" role=\"group\" aria-label=\"展區\"><button class=\"is-active\">全部</button><button>A–K</button><button>L–U</button></div>",
+      "css": ".ds-segments{display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border-radius:9px;background:#f0f1ee}.ds-segments button{padding:7px 5px;border:0;border-radius:7px;background:transparent;color:#7e8680;font:400 11px var(--font-geist),system-ui,sans-serif;cursor:pointer}.ds-segments button:hover{color:var(--ink)}.ds-segments .is-active{background:#f9faf8;color:var(--ink);font-weight:800;box-shadow:0 1px 4px #26362b14}.ds-segments button:focus-visible{outline:2px solid var(--ink);outline-offset:1px}"
+    },
+    {
+      "name": "Published Status",
+      "kind": "card",
+      "refersTo": "status-success",
+      "description": "已發布活動地圖的持久化狀態。",
+      "html": "<div class=\"ds-status\" role=\"status\"><span>✓</span><div><b>活動地圖已發布</b><small>revision 1 · FF47 map · 99% 信心</small></div><button>更新地圖</button></div>",
+      "css": ".ds-status{display:grid;grid-template-columns:28px 1fr auto;gap:9px;align-items:center;padding:8px 10px;border:1px solid #b8d8cc;border-radius:9px;background:#edf8f3;color:#306d59}.ds-status>span{width:25px;height:25px;display:grid;place-items:center;border-radius:7px;background:var(--mint);color:#f9faf8;font-weight:900}.ds-status b,.ds-status small{display:block}.ds-status b{font-size:10px}.ds-status small{margin-top:2px;color:#628578;font-size:8px}.ds-status button{padding:5px 8px;border:1px solid #bdd4cb;border-radius:6px;background:#f9faf8;color:#477665;font-size:9px;cursor:pointer}.ds-status button:hover{background:#f3f6f2}.ds-status button:focus-visible{outline:2px solid #306d59;outline-offset:2px}"
+    },
+    {
+      "name": "Interactive Map Slot",
+      "kind": "custom",
+      "refersTo": "map-slot",
+      "description": "可選取、收藏並設為下一站的 SVG 攤位格。",
+      "html": "<svg class=\"ds-slot\" viewBox=\"0 0 80 42\" role=\"button\" tabindex=\"0\" aria-label=\"A01 OriginZero\"><rect x=\"2\" y=\"2\" width=\"76\" height=\"38\" rx=\"5\"/><text x=\"40\" y=\"26\">A01</text><circle cx=\"70\" cy=\"10\" r=\"4\"/></svg>",
+      "css": ".ds-slot{width:120px;cursor:pointer;outline:none}.ds-slot rect{fill:color-mix(in srgb,var(--mint),#f9faf8 72%);stroke:color-mix(in srgb,var(--mint),#29332d 34%);stroke-width:1}.ds-slot text{fill:#26312b;font:700 12px var(--font-mono),monospace;text-anchor:middle}.ds-slot circle{fill:var(--coral);stroke:#f9faf8;stroke-width:1}.ds-slot:hover rect{fill:color-mix(in srgb,var(--mint),#f9faf8 54%);stroke-width:2}.ds-slot:focus-visible rect{stroke:#1f2933;stroke-width:3}"
+    },
+    {
+      "name": "Category Filter Item",
+      "kind": "nav",
+      "description": "高密度分類篩選與數量提示。",
+      "html": "<button class=\"ds-category is-active\"><i></i><span>繪圖・創作</span><small>637</small></button>",
+      "css": ".ds-category{display:grid;grid-template-columns:8px 1fr auto;gap:9px;align-items:center;width:220px;padding:8px 7px;border:0;border-radius:7px;background:transparent;color:var(--ink);text-align:left;font:400 12px var(--font-geist),system-ui,sans-serif;cursor:pointer}.ds-category i{width:7px;height:7px;border-radius:2px;background:var(--mint)}.ds-category small{color:#a0a6a2;font-size:10px}.ds-category:hover,.ds-category.is-active{background:#f2f3f0}.ds-category.is-active{font-weight:800}.ds-category:focus-visible{outline:2px solid var(--ink);outline-offset:1px}"
+    },
+    {
+      "name": "Mobile Work Tabs",
+      "kind": "nav",
+      "description": "手機在地圖上方切換篩選、結果、詳情與行程。",
+      "html": "<div class=\"ds-mobile-tabs\" role=\"tablist\" aria-label=\"行動版工作區\"><button role=\"tab\">篩選</button><button role=\"tab\" aria-selected=\"true\">結果 <span>24</span></button><button role=\"tab\">詳情</button><button role=\"tab\">行程 <span>5</span></button></div>",
+      "css": ".ds-mobile-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 10px 6px;border-bottom:1px solid #eceeea;background:#f9faf8}.ds-mobile-tabs button{min-height:34px;border:0;border-radius:8px;background:#f2f3ef;color:#7e8781;font:800 9px var(--font-geist),system-ui,sans-serif;cursor:pointer}.ds-mobile-tabs button:hover{color:#202a35}.ds-mobile-tabs button[aria-selected=\"true\"]{background:#202a35;color:#f9faf8}.ds-mobile-tabs button:focus-visible{outline:3px solid #dfe8e3;outline-offset:2px}.ds-mobile-tabs span{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:3px;padding:0 5px;border-radius:9px;background:#eff1ed;color:#202a35;font:700 9px ui-monospace,monospace}"
+    },
+    {
+      "name": "Planning Data Launcher",
+      "kind": "button",
+      "description": "開啟本機規劃資料的備份、匯入與群組管理。",
+      "html": "<button class=\"ds-planning-launcher\">規劃資料</button>",
+      "css": ".ds-planning-launcher{padding:9px 12px;border:1px solid #202a35;border-radius:8px;background:#202a35;color:#f9faf8;font:800 9px var(--font-geist),system-ui,sans-serif;box-shadow:0 4px 14px #2733291f;cursor:pointer;transition:background 160ms cubic-bezier(.16,1,.3,1)}.ds-planning-launcher:hover{background:#2d3945}.ds-planning-launcher:active{transform:translateY(1px)}.ds-planning-launcher:focus-visible{outline:3px solid #dfe8e3;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "攤位作戰桌",
+    "overview": "介面是一張在展前被反覆攤開、標記與修訂的作戰桌。使用者需要在大量社團中迅速搜尋作品、比較題材、收藏攤位並安排下一站。設計必須讓工具本身退後，讓社團內容、地圖位置與規劃狀態站到前景。最終方向種子為 local-extension-c。整體採明亮、低彩度、紙張感的工具外殼；高密度不是壓縮一切，而是建立固定欄位、可預測的層級與精準的資料字體。桌機把規劃工具、向量地圖、詳情／行程並置，手機則以四頁籤讓地圖與當前工作保持在同一畫面。這不是行銷網站、活動宣傳頁、企業儀表板或過度裝飾的娛樂頁面。大型形象視覺、空泛品牌文案與卡片堆疊都不得取代實際的攤位與作品資訊。",
+    "keyCharacteristics": [
+      "高密度但每一層都有固定位置與可掃讀節奏。",
+      "地圖與社團詳情雙向定位，任何選取都必須在兩側同步表達。",
+      "一般使用者使用成熟、熟悉的搜尋、篩選、收藏與路線操作。",
+      "管理功能與參觀者流程視覺分離，管理操作明確標示並集中處理。",
+      "動態只說明狀態變化，離散轉場維持 150 至 250ms，拖曳與縮放直接跟手。"
+    ],
+    "rules": [
+      { "name": "The Task-Surface Rule", "body": "每個畫面必須先回答使用者現在要找什麼、在哪裡、接下來去哪裡。任何不能改善這三個答案的裝飾都必須刪除。", "section": "overview" },
+      { "name": "The Semantic Color Rule", "body": "分類色只能表示資料類型或狀態，不得用來裝飾標題、背景或分隔線。", "section": "colors" },
+      { "name": "The Ten Percent Shell Rule", "body": "珊瑚色與金色在工具外殼中合計不得超過可見面積的 10%。地圖資料色不受此限制，但必須可由標籤與形狀補充辨識。", "section": "colors" },
+      { "name": "The Data-Is-Mono Rule", "body": "只有可比較、可排序或具座標意義的資料使用等寬字。按鈕名稱與一般中文標題禁止使用等寬字。", "section": "typography" },
+      { "name": "The Tight-Scale Rule", "body": "產品字級階層維持約 1.15 至 1.2 的比例，不得突然加入巨型展示字搶走作品內容的注意力。", "section": "typography" },
+      { "name": "The Three-Zone Rule", "body": "桌機永遠保留「規劃／探索、地圖、詳情／行程」三個任務區；中型畫面可覆蓋詳情，但不得移除地圖上下文。", "section": "layout" },
+      { "name": "The Four-Tab Rule", "body": "手機只使用篩選、結果、詳情、行程四個工作頁籤；未選攤位時詳情頁籤停用，不建立第五種導航模型。", "section": "layout" },
+      { "name": "The Flat-By-Default Rule", "body": "靜止內容不得靠陰影區分群組。先使用間距、表面色與一像素邊界；只有覆蓋、浮動或互動回饋才能增加陰影。", "section": "elevation" },
+      { "name": "The No Decorative Glass Rule", "body": "透明與模糊只允許在管理面板的遮罩與黏著標頭，作用是保留上下文，不得用於一般卡片。", "section": "elevation" },
+      { "name": "The Radius-Follows-Layer Rule", "body": "元件越接近資料層，圓角越小；18px 只屬於離開頁面基準層的對話框與行動面板。", "section": "shapes" }
+    ],
+    "dos": [
+      "Do 讓搜尋、作品題材、攤位代碼與規劃狀態永遠比品牌裝飾更醒目。",
+      "Do 使用固定三欄結構與明確斷點，1050px 處處理詳情覆蓋，760px 處重組一般使用者流程，720px 處重組管理面板。",
+      "Do 使用一像素中性邊界、4/8/12/18/24px 節奏與 5/7/9/12/18px 圓角建立一致元件語彙。",
+      "Do 為所有攤位狀態提供文字、描邊或圖形提示，確保色彩不是唯一線索。",
+      "Do 讓收藏、下一站與路線形成同一套可回顧的規劃流程。",
+      "Do 讓收藏分類同時顯示名稱與色彩，並在所有社團介面共用同一收藏元件。",
+      "Do 為外部內容顯示提供者、內容類型、更新時間與原始來源連結。",
+      "Do 使用 skeleton 或保留版面結構的狀態處理載入，不在內容中央放置孤立 spinner。"
+    ],
+    "donts": [
+      "Don't 做成行銷網站、活動宣傳頁、企業儀表板或過度裝飾的娛樂頁面。",
+      "Don't 以大型形象視覺、空泛品牌文案或卡片堆疊取代實際的攤位與作品資訊。",
+      "Don't 在圖片上疊互動按鈕；地圖必須由 SVG 向量元素直接承擔互動。",
+      "Don't 使用大於一像素的彩色左側或右側條帶作為警告、卡片或清單裝飾。",
+      "Don't 使用漸層文字、裝飾性 glassmorphism、彈跳動態或無狀態意義的動畫。",
+      "Don't 為了風格重新發明搜尋、篩選、收藏、日期分頁或關閉按鈕等標準操作。",
+      "Don't 在不同畫面重新設計同一種按鈕、輸入框、chip 或狀態提示。",
+      "Don't 只用色點區分收藏分類，或讓收藏、行程與下一站互相隱性改寫。",
+      "Don't 以同名搜尋結果自動合併社團、靜默覆寫本地資料，或隱藏外部內容來源。",
+      "Don't 用純黑或純白建立新 token；所有中性色必須帶有深墨或暖紙色傾向。"
+    ]
+  }
+}

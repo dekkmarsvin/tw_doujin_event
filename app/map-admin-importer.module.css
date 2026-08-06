@@ -1,0 +1,42 @@
+.backdrop { position:fixed; inset:0; z-index:100; display:grid; place-items:center; padding:24px; background:#202a35b8; backdrop-filter:blur(5px); }
+.dialog { width:min(1120px,100%); max-height:calc(100vh - 48px); overflow:auto; border:1px solid #dfe3df; border-radius:18px; background:#fff; box-shadow:0 28px 80px #11182066; }
+.header { position:sticky; z-index:3; top:0; display:flex; justify-content:space-between; align-items:center; padding:20px 24px 16px; border-bottom:1px solid #dfe3df; background:#fffc; backdrop-filter:blur(12px); }
+.header small { color:#8c9690; font:800 9px ui-monospace,monospace; letter-spacing:.16em; }
+.header h2 { margin:3px 0 0; font-size:20px; }
+.header button { width:34px; height:34px; border:1px solid #dfe3df; border-radius:50%; background:#fff; cursor:pointer; }
+.intro { padding:18px 24px 2px; }
+.intro b { font-size:14px; }
+.intro p { max-width:760px; margin:5px 0 0; color:#6f7973; font-size:12px; line-height:1.65; }
+.dropzone { margin:16px 24px 20px; min-height:96px; display:grid; grid-template-columns:48px 1fr; grid-template-rows:1fr 1fr; column-gap:14px; align-items:end; padding:18px 20px; border:1px dashed #9ba7a0; border-radius:12px; background:#f8faf7; cursor:pointer; }
+.dropzone:hover { border-color:#202a35; background:#f3f6f2; }
+.dropzone input { position:absolute; width:1px; height:1px; opacity:0; }
+.dropzone>span { grid-row:1/3; width:46px; height:46px; display:grid; place-items:center; align-self:center; border-radius:12px; background:#202a35; color:#fff; font-size:24px; }
+.dropzone b { align-self:end; font-size:13px; }
+.dropzone small { align-self:start; margin-top:3px; color:#8a948e; font-size:10px; }
+.busy { opacity:.65; pointer-events:none; }
+.error { margin:0 24px 18px; padding:10px 12px; border:1px solid #efc3bc; border-radius:8px; background:#fff3f1; color:#a43e30; font-size:11px; white-space:pre-line; }
+.summary { display:grid; grid-template-columns:repeat(5,1fr); gap:1px; margin:0 24px 16px; overflow:hidden; border:1px solid #dfe3df; border-radius:11px; background:#dfe3df; }
+.summary>div { padding:12px 14px; background:#fff; }
+.summary small,.summary b { display:block; }
+.summary small { margin-bottom:4px; color:#8a948e; font-size:9px; letter-spacing:.06em; }
+.summary b { font:800 17px ui-monospace,monospace; }
+.summary b i { margin-left:3px; color:#9aa29d; font-size:9px; font-style:normal; }
+.summary .good { color:#39816a; }
+.summary .warn { color:#b26135; }
+.comparison { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 24px; }
+.comparison figure { min-width:0; margin:0; overflow:hidden; border:1px solid #d4d9d5; border-radius:12px; background:#f3f2ed; }
+.comparison figcaption { padding:9px 12px; border-bottom:1px solid #d4d9d5; background:#fff; color:#637069; font-size:9px; font-weight:800; letter-spacing:.05em; }
+.comparison img,.vectorPreview { display:block; width:100%; aspect-ratio:2400/1696; object-fit:contain; }
+.vectorPreview { background:#f5f3ed; }
+.rows { display:grid; grid-template-columns:repeat(12,1fr); gap:5px; margin:12px 24px 0; }
+.rows span { padding:7px 4px 6px; border:1px solid #dfe3df; border-radius:6px; background:#f8f9f7; text-align:center; font:800 11px ui-monospace,monospace; }
+.rows small { display:block; margin-top:2px; color:#87918b; font-size:7px; font-weight:600; }
+.warnings { margin:14px 24px 0; padding:12px 14px; border-left:3px solid #d99b44; background:#fff8ea; color:#785e2c; font-size:10px; }
+.warnings b { display:block; margin-bottom:4px; color:#5d4926; font-size:11px; }
+.warnings p { margin:2px 0; }
+.actions { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:8px; margin-top:20px; padding:14px 24px; border-top:1px solid #dfe3df; background:#fffc; backdrop-filter:blur(12px); }
+.actions button { min-width:90px; padding:10px 15px; border:1px solid #d6dbd7; border-radius:8px; background:#fff; font-size:12px; font-weight:700; cursor:pointer; }
+.actions .publish { min-width:170px; border-color:#202a35; background:#202a35; color:#fff; }
+.actions .publish span { margin-left:18px; }
+.actions button:disabled { border-color:#dfe3df; background:#e8ebe8; color:#9ba39e; cursor:not-allowed; }
+@media (max-width:720px) { .backdrop { align-items:end; padding:0; }.dialog { max-height:94vh; border-radius:18px 18px 0 0; }.comparison { grid-template-columns:1fr; }.summary { grid-template-columns:repeat(2,1fr); }.rows { grid-template-columns:repeat(8,1fr); } }

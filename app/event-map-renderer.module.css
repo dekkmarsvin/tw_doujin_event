@@ -1,0 +1,26 @@
+.map { display:block; width:100%; height:100%; overflow:visible; background:#f5f3ed; }
+.paper { fill:#f7f5ef; }
+.floor { fill:#fff; stroke:#8b918b; stroke-width:3; }
+.landmark { fill:#f0eee7; stroke:#89918b; stroke-width:2; }
+.landmarkLabel { fill:#58625c; font-size:12px; font-weight:750; text-anchor:middle; dominant-baseline:middle; }
+.slot { outline:none; }
+.slot rect { vector-effect:non-scaling-stroke; stroke-width:1; }
+.slot text { pointer-events:none; fill:#48534c; font-family:var(--font-mono),monospace; font-size:7px; font-weight:700; text-anchor:middle; }
+.emptySlot rect { fill:#f3f2ed; stroke:#c9cdc7; }
+.emptySlot text { fill:#a5aaa5; }
+.activeSlot { cursor:pointer; }
+.activeSlot rect { fill:color-mix(in srgb,var(--slot-tone),#fff 72%); stroke:color-mix(in srgb,var(--slot-tone),#29332d 34%); }
+.activeSlot text { fill:#26312b; }
+.activeSlot:hover rect { fill:color-mix(in srgb,var(--slot-tone),#fff 54%); stroke-width:2; }
+.activeSlot:focus-visible rect { stroke:#1f2933; stroke-width:3; }
+.selected rect { fill:var(--slot-tone); stroke:#1d2730; stroke-width:3; }
+.selected text { fill:#fff; }
+.favoriteMark { fill:#e86f5d; stroke:#fff; stroke-width:.8; }
+.nextMark { fill:none; stroke:#202a35; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.rowLabel { fill:#202a35; font-family:var(--font-mono),monospace; font-size:22px; font-weight:900; text-anchor:middle; }
+.pillar { fill:#151918; }
+.entrance line,.entrance path { fill:none; stroke:#267cad; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+.exit line,.exit path { fill:none; stroke:#d25b50; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+.entrance text,.exit text { font-size:10px; font-weight:800; text-anchor:middle; }
+.entrance text { fill:#276b92; }
+.exit text { fill:#ad453d; }
