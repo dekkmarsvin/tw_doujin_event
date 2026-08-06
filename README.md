@@ -1,100 +1,48 @@
-# vinext-starter
+# FF47 場刊 MAP
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Fancy Frontier 47 的同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，並支援桌面與行動版。
 
-## Prerequisites
+目前的規劃資料保存在瀏覽器 `localStorage`，不會跨裝置同步。活動地圖由管理介面辨識配置圖，通過驗證後發布至 Cloudflare D1；開發階段的管理員身分與寫入權限尚未實作，請勿把未受保護的 PUT route 公開部署。
+
+## 環境需求
 
 - Node.js `>=22.13.0`
+- npm
+- 本機開發不需要預先建立 D1；`vite.config.ts` 會模擬 `.openai/hosting.json` 宣告的 `DB` binding
 
-## Quick Start
+## 啟動
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+開啟終端顯示的本機網址。第一次使用且 D1 尚無已發布地圖時，從頁面上的「管理地圖」選擇 `data_source_test/FF47社團攤位配置圖.jpg`，確認辨識結果後發布；前台之後會透過 `GET /api/events/ff47/map` 取得版本化 SVG layout。
 
-## Included Shape
+## 驗證與資料庫
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm test
+npm run lint
+npx tsc --noEmit --incremental false
+npm run db:generate
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+`npm test` 會先建立 production build，再執行所有 Node 測試。Drizzle schema 位於 `db/schema.ts`，migration 位於 `drizzle/`。
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## 專案結構
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- `app/event-map-app.tsx`：搜尋、地圖、詳情與行程工作區
+- `app/accessible-event-map-renderer.tsx`：可用鍵盤操作的 SVG 地圖 renderer
+- `app/planning-store.ts`：版本化本機收藏與行程狀態
+- `app/map-recognition.ts`：配置圖辨識與發布前驗證
+- `app/api/events/[eventId]/map/route.ts`：活動地圖讀寫 route
+- `data_source_test/`：本專案引用的 FF47 公開整理資料與配置圖測試輸入
+- `PRODUCT.md`、`DESIGN.md`、`docs/`：產品、互動、資料及分期契約
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## 目前邊界
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+- 一般使用者公開瀏覽；管理寫入權限仍是部署前必做項目。
+- 收藏、群組、備註與行程只儲存在目前瀏覽器。
+- 安全匯出已提供；JSON／CSV 匯入、帳號同步與協作仍屬 P2，尚未在一般介面開放。
+- 外部來源只補充內容與可核對連結，不取代本地社團及攤位身分。

@@ -11,6 +11,6 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-Hant"><body className={`${geist.variable} ${mono.variable}`}>{children}</body></html>;
+  return <html lang="zh-Hant" data-impeccable-direction="local-extension-c"><body className={`${geist.variable} ${mono.variable}`}>{children}</body></html>;
 }
 
