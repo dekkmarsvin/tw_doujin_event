@@ -39,6 +39,13 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.match(editor, /新增企業攤/);
   assert.match(editor, /新增舞台/);
   assert.match(editor, /選取地圖元素/);
+  assert.match(editor, /縮小編輯地圖/);
+  assert.match(editor, /放大編輯地圖/);
+  assert.match(editor, /MAX_EDITOR_ZOOM = 4/);
+  assert.match(editor, /data-resize-corner/);
+  assert.match(editor, /resizeRectFromCorner/);
+  assert.match(editor, /區域類型/);
+  assert.match(admin, /scaleMapLandmarks/);
   assert.match(editor, /onPointerMove=\{moveDrag\}/);
   assert.match(editor, /Shift \+ 方向鍵/);
   assert.match(eventCatalog, /areaMode: "single"/);

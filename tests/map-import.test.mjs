@@ -6,7 +6,8 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
-const { validateEventMapLayout, validateFF47EventMapLayout } = await environment.runner.import("/app/event-map.ts");
+const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout, validateFF47EventMapLayout } = await environment.runner.import("/app/event-map.ts");
+const { resizeRectFromCorner } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 after(() => vite.close());
 
 function syntheticFF47Image() {
@@ -53,6 +54,8 @@ test("recognizes A-W with horizontal W, pillars, and access points", () => {
   assert.equal(rows.V.slots.length, 44);
   assert.equal(rows.W.orientation, "horizontal");
   assert.equal(rows.W.slots.length, 42);
+  assert.deepEqual(report.layout.landmarks, []);
+  assert.ok(report.warnings.some((warning) => warning.includes("企業攤與舞台目前不會自動辨識")));
   assert.ok(rows.A.slots.find((slot) => slot.code === "A01").rect.y > rows.A.slots.find((slot) => slot.code === "A22").rect.y);
   assert.ok(rows.B.slots.find((slot) => slot.code === "B23").rect.y < rows.B.slots.find((slot) => slot.code === "B44").rect.y);
   assert.ok(rows.W.slots.find((slot) => slot.code === "W42").rect.x < rows.W.slots.find((slot) => slot.code === "W01").rect.x);
@@ -70,6 +73,27 @@ test("rejects malformed or duplicate non-booth landmarks", () => {
   assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", label: "", rect: { x: 10, y: 10, width: 20, height: 10 } }] }).ok, false);
   assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", label: "舞台", rect: { x: 95, y: 10, width: 20, height: 10 } }] }).ok, false);
   assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", label: "舞台", rect: { x: 10, y: 10, width: 20, height: 10 } }, { id: "stage-1", label: "企業攤", rect: { x: 40, y: 10, width: 20, height: 10 } }] }).ok, false);
+  assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", kind: "billboard", label: "舞台", rect: { x: 10, y: 10, width: 20, height: 10 } }] }).ok, false);
+});
+
+test("resizes enterprise and stage rectangles from all four corners", () => {
+  const rect = { x: 20, y: 30, width: 40, height: 20 };
+  const bounds = { width: 100, height: 100 };
+  assert.deepEqual(resizeRectFromCorner(rect, "nw", -10, -15, bounds, 12), { x: 10, y: 15, width: 50, height: 35 });
+  assert.deepEqual(resizeRectFromCorner(rect, "ne", 20, -15, bounds, 12), { x: 20, y: 15, width: 60, height: 35 });
+  assert.deepEqual(resizeRectFromCorner(rect, "se", 20, 15, bounds, 12), { x: 20, y: 30, width: 60, height: 35 });
+  assert.deepEqual(resizeRectFromCorner(rect, "sw", -10, 15, bounds, 12), { x: 10, y: 30, width: 50, height: 35 });
+  assert.deepEqual(resizeRectFromCorner(rect, "nw", 100, 100, bounds, 12), { x: 48, y: 38, width: 12, height: 12 });
+});
+
+test("keeps landmark types editable and scales manual regions for a replacement image", () => {
+  assert.equal(resolveMapLandmarkKind({ label: "企業攤" }), "enterprise");
+  assert.equal(resolveMapLandmarkKind({ label: "主舞台", kind: "stage" }), "stage");
+  assert.equal(resolveMapLandmarkKind({ label: "主舞台" }), "other");
+  assert.deepEqual(
+    scaleMapLandmarks([{ id: "stage-1", kind: "stage", label: "主舞台", rect: { x: 10, y: 20, width: 30, height: 40 } }], { width: 100, height: 200 }, { width: 200, height: 100 }),
+    [{ id: "stage-1", kind: "stage", label: "主舞台", rect: { x: 20, y: 10, width: 60, height: 20 } }],
+  );
 });
 
 test("rejects images that are too small", () => {

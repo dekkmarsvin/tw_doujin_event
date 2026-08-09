@@ -11,6 +11,8 @@ import {
 
 export type PixelSource = { data: Uint8ClampedArray; width: number; height: number };
 
+export const LANDMARK_RECOGNITION_WARNING = "企業攤與舞台目前不會自動辨識；若配置圖含有這些區域，請在發布前手動新增。";
+
 type Line = { start: number; end: number; center: number; score: number };
 type Triple = { left: Line; middle: Line; right: Line };
 type Component = { x: number; y: number; width: number; height: number; area: number; fill: number };
@@ -337,7 +339,7 @@ export function recognizeFF47Map(source: PixelSource): MapRecognitionReport {
   if (slotCount !== 988) warnings.push(`只辨識到 ${slotCount}/988 個一般攤位格。`);
   if (pillars.length !== 28) warnings.push(`辨識到 ${pillars.length} 根柱子，預期為 28。`);
   if (accessPoints.length !== 5) warnings.push(`辨識到 ${accessPoints.length} 個出入口，預期為 5。`);
-  if (!layout.landmarks.length) warnings.push("非一般攤位區目前僅保留在統一座標空間，尚未加入文字語意。" );
+  if (!layout.landmarks.length) warnings.push(LANDMARK_RECOGNITION_WARNING);
 
   const validation = validateFF47EventMapLayout(layout);
   if (!validation.ok) warnings.push(...validation.errors);
