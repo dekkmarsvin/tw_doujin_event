@@ -7,7 +7,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
 const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout, validateFF47EventMapLayout } = await environment.runner.import("/app/event-map.ts");
-const { resizeRectFromCorner } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { resizeRectFromCorner, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 after(() => vite.close());
 
 function syntheticFF47Image() {
@@ -76,7 +76,7 @@ test("rejects malformed or duplicate non-booth landmarks", () => {
   assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", kind: "billboard", label: "舞台", rect: { x: 10, y: 10, width: 20, height: 10 } }] }).ok, false);
 });
 
-test("resizes enterprise and stage rectangles from all four corners", () => {
+test("resizes any non-booth landmark rectangle from all four corners", () => {
   const rect = { x: 20, y: 30, width: 40, height: 20 };
   const bounds = { width: 100, height: 100 };
   assert.deepEqual(resizeRectFromCorner(rect, "nw", -10, -15, bounds, 12), { x: 10, y: 15, width: 50, height: 35 });
@@ -84,6 +84,34 @@ test("resizes enterprise and stage rectangles from all four corners", () => {
   assert.deepEqual(resizeRectFromCorner(rect, "se", 20, 15, bounds, 12), { x: 20, y: 30, width: 60, height: 35 });
   assert.deepEqual(resizeRectFromCorner(rect, "sw", -10, 15, bounds, 12), { x: 10, y: 30, width: 50, height: 35 });
   assert.deepEqual(resizeRectFromCorner(rect, "nw", 100, 100, bounds, 12), { x: 48, y: 38, width: 12, height: 12 });
+});
+
+test("snaps enterprise rectangles to the nearest overlapping adjacent edge", () => {
+  const bounds = { width: 200, height: 120 };
+  const target = { id: "enterprise-a", rect: { x: 20, y: 8, width: 30, height: 28 } };
+  const moved = snapRectToAdjacentRects({ x: 52, y: 10, width: 20, height: 20 }, [target], { bounds, mode: "move", threshold: 3 });
+  assert.deepEqual(moved.rect, { x: 50, y: 10, width: 20, height: 20 });
+  assert.deepEqual(moved.guides, [{ axis: "x", position: 50, start: 8, end: 36, targetId: "enterprise-a" }]);
+
+  const separated = snapRectToAdjacentRects({ x: 52, y: 70, width: 20, height: 20 }, [target], { bounds, mode: "move", threshold: 3 });
+  assert.deepEqual(separated, { rect: { x: 52, y: 70, width: 20, height: 20 }, guides: [] });
+});
+
+test("snaps only the active resize-corner edges without moving the opposite corner", () => {
+  const snapped = snapRectToAdjacentRects({ x: 50, y: 42, width: 18, height: 18 }, [
+    { id: "enterprise-right", rect: { x: 70, y: 45, width: 20, height: 20 } },
+    { id: "enterprise-above", rect: { x: 52, y: 20, width: 14, height: 20 } },
+  ], { bounds: { width: 200, height: 120 }, mode: "ne", threshold: 3, minimumSize: 12 });
+  assert.deepEqual(snapped.rect, { x: 50, y: 40, width: 20, height: 20 });
+  assert.deepEqual(snapped.guides.map((guide) => [guide.axis, guide.position, guide.targetId]), [
+    ["x", 70, "enterprise-right"],
+    ["y", 40, "enterprise-above"],
+  ]);
+
+  const minimumProtected = snapRectToAdjacentRects({ x: 50, y: 40, width: 24, height: 24 }, [
+    { id: "enterprise-right", rect: { x: 70, y: 40, width: 20, height: 24 } },
+  ], { bounds: { width: 200, height: 120 }, mode: "se", threshold: 5 });
+  assert.deepEqual(minimumProtected, { rect: { x: 50, y: 40, width: 24, height: 24 }, guides: [] });
 });
 
 test("keeps landmark types editable and scales manual regions for a replacement image", () => {

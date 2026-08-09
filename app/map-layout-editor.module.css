@@ -46,6 +46,7 @@
 .resizeHandle:active .resizeKnob { fill:#f8ddd8; }
 .resizeNwSe { cursor:nwse-resize; }
 .resizeNeSw { cursor:nesw-resize; }
+.snapGuide { fill:none; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke; pointer-events:none; }
 .inspector { min-width:0; padding:15px; border-left:1px solid #d4dad5; background:#fff; }
 .elementPicker { margin-bottom:15px!important; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker select { width:100%; }

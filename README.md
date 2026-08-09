@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-開啟終端顯示的本機網址。第一次使用且 D1 尚無已發布地圖時，從頁面上的「管理地圖」選擇 `data_source_test/FF47社團攤位配置圖.jpg`，確認辨識結果後發布；前台之後會透過 `GET /api/events/ff47/map` 取得版本化 SVG layout。
+開啟終端顯示的本機網址。第一次使用且 D1 尚無已發布地圖時，從頁首右上角的「管理」選擇 `data_source_test/FF47社團攤位配置圖.jpg`，確認辨識結果後發布；前台之後會透過 `GET /api/events/ff47/map` 取得版本化 SVG layout。
 
 ## 驗證與資料庫
 

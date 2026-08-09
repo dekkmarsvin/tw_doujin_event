@@ -15,13 +15,14 @@ test("server-renders the FF47 vector map application", async () => {
   const html = await response.text();
   assert.match(html, /<title>FF47 場刊 MAP｜同人展逛攤地圖<\/title>/i);
   assert.match(html, /aria-label="攤位地圖"/);
-  assert.match(html, /管理地圖/);
-  assert.match(html.replaceAll("<!-- -->", ""), /<b>994<\/b> 個符合條件的社團/);
+  assert.match(html, /aria-label="管理活動地圖"/);
+  assert.match(html.replaceAll("<!-- -->", ""), /搜尋結果<\/b><small>994 個社團<\/small>/);
 });
 
 test("separates admin import, server publication, and accessible SVG rendering", async () => {
   const paths = ["event-map-app.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "event-map-client.ts", "event-catalog.ts"];
   const [app, admin, editor, recognizer, renderer, client, eventCatalog] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const repository = await readFile(new URL("../db/event-maps.ts", import.meta.url), "utf8");
   const repositoryCore = await readFile(new URL("../db/event-map-repository.ts", import.meta.url), "utf8");
   const route = await readFile(new URL("../app/api/events/[eventId]/map/route.ts", import.meta.url), "utf8");
@@ -44,6 +45,12 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.match(editor, /MAX_EDITOR_ZOOM = 4/);
   assert.match(editor, /data-resize-corner/);
   assert.match(editor, /resizeRectFromCorner/);
+  assert.match(editor, /snapRectToAdjacentRects/);
+  assert.match(editor, /SNAP_THRESHOLD_PX = 8/);
+  assert.match(editor, /event\.altKey/);
+  assert.match(editor, /className=\{styles\.snapGuide\}/);
+  assert.match(editor, /非一般攤位區可拖曳四角調整大小/);
+  assert.doesNotMatch(editor, /selectedLandmarkKind !== "other"/);
   assert.match(editor, /區域類型/);
   assert.match(admin, /scaleMapLandmarks/);
   assert.match(editor, /onPointerMove=\{moveDrag\}/);
@@ -52,6 +59,14 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.match(app, /showAreaSwitcher && <fieldset/);
   assert.match(app, /data-text-scale=\{textScale\}/);
   assert.match(app, /網頁字體大小/);
+  assert.match(app, /publicationNotice/);
+  assert.match(app, /setPublicationNotice\(null\), 6000/);
+  assert.match(app, /aria-label="關閉活動地圖發布提示"/);
+  assert.match(app, /mapError \? "活動地圖讀取失敗"/);
+  assert.match(app, /開啟管理地圖/);
+  assert.doesNotMatch(app, /className=\{styles\.mapMeta\}/);
+  assert.doesNotMatch(app, /publishedMap && <div className=\{styles\.layoutStatus\}/);
+  assert.match(appStyles, /\.topbarActions :global\(\.help\) \{ display:block; \}/);
   assert.match(recognizer, /slotCount !== 988/);
   assert.match(renderer, /<svg/);
   assert.match(renderer, /aria-label="場內柱子"/);
