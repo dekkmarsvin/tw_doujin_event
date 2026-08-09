@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 
@@ -13,16 +13,19 @@ export type MapSlotView = {
   planned?: boolean;
   visited?: boolean;
   next?: boolean;
+  thumbnailUrl?: string;
 };
 
 export type AccessibleEventMapRendererProps = {
   eventName: string;
   layout: EventMapLayout;
   slots: Record<string, MapSlotView>;
+  showMedia?: boolean;
   onSelect: (code: string) => void;
 };
 
-export default function AccessibleEventMapRenderer({ eventName, layout, slots, onSelect }: AccessibleEventMapRendererProps) {
+export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, onSelect }: AccessibleEventMapRendererProps) {
+  const clipPrefix = useId().replaceAll(":", "");
   const interactiveSlots = useMemo(() => layout.rows.flatMap((row) => row.slots).filter((slot) => !!slots[slot.code]), [layout.rows, slots]);
   const selectedCode = interactiveSlots.find((slot) => slots[slot.code]?.selected)?.code;
   const [keyboardCode, setKeyboardCode] = useState(selectedCode ?? interactiveSlots[0]?.code ?? "");
@@ -67,8 +70,9 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, o
     requestAnimationFrame(() => svg?.querySelector<SVGGElement>(`[data-slot-code="${next.code}"]`)?.focus());
   };
 
-  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="group" aria-label={`${eventName} 向量攤位地圖，使用方向鍵移動焦點，Enter 或空白鍵開啟攤位`}>
-    <title>{eventName} 向量攤位地圖</title>
+  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="group" aria-label={`${eventName} 社團攤位配置圖，使用方向鍵移動焦點，Enter 或空白鍵開啟攤位`}>
+    <title>{eventName} 社團攤位配置圖</title>
+    {showMedia && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
     <rect className={styles.floor} x={layout.floor.x} y={layout.floor.y} width={layout.floor.width} height={layout.floor.height} />
     <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id}><rect className={styles.landmark} {...landmark.rect} />{landmark.label && <text className={styles.landmarkLabel} x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label}</text>}</g>)}</g>
@@ -76,11 +80,14 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, o
       {row.slots.map((slot) => {
         const view = slots[slot.code];
         const interactive = !!view;
-        const className = [styles.slot, interactive ? styles.activeSlot : styles.emptySlot, view?.selected ? styles.selected : "", view?.visited ? styles.visited : ""].filter(Boolean).join(" ");
+        const hasMedia = !!(showMedia && view?.thumbnailUrl);
+        const className = [styles.slot, interactive ? styles.activeSlot : styles.emptySlot, hasMedia ? styles.mediaSlot : "", view?.selected ? styles.selected : "", view?.visited ? styles.visited : ""].filter(Boolean).join(" ");
         const style = view?.tone ? ({ "--slot-tone": `var(--${view.tone})` } as CSSProperties) : undefined;
         return <g key={slot.code} data-slot-code={slot.code} className={className} style={style} role={interactive ? "button" : undefined} tabIndex={interactive && activeKeyboardCode === slot.code ? 0 : -1} aria-label={view?.ariaLabel} onFocus={interactive ? () => setKeyboardCode(slot.code) : undefined} onClick={interactive ? () => onSelect(slot.code) : undefined} onKeyDown={interactive ? (event) => handleKeyDown(event, slot.code) : undefined}>
-          <rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
-          <text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .69}>{slot.code.slice(1)}</text>
+          <rect className={styles.slotSurface} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
+          {hasMedia && <image className={styles.slotMedia} href={view.thumbnailUrl} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipPrefix}-${slot.code})`} aria-hidden="true" />}
+          {hasMedia && <rect className={styles.mediaShade} x={slot.rect.x} y={slot.rect.y + slot.rect.height * .62} width={slot.rect.width} height={slot.rect.height * .38} />}
+          <text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * (hasMedia ? .88 : .69)}>{slot.code.slice(1)}</text>
           {view?.favorite && <circle className={styles.favoriteMark} cx={slot.rect.x + slot.rect.width - 2.5} cy={slot.rect.y + 2.5} r="2.2" />}
           {view?.planned && !view.next && <circle fill="#d59b37" stroke="#fff" strokeWidth=".6" cx={slot.rect.x + 2.8} cy={slot.rect.y + 2.8} r="1.8" />}
           {view?.visited && <path fill="none" stroke="#4f6559" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d={`M ${slot.rect.x + 1.5} ${slot.rect.y + slot.rect.height / 2} L ${slot.rect.x + slot.rect.width / 2 - 1} ${slot.rect.y + slot.rect.height - 2} L ${slot.rect.x + slot.rect.width - 1.5} ${slot.rect.y + 2}`} />}

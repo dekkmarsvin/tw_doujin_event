@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- FF47 media URLs are source-controlled remote assets, not build-time application images. */
+
 import { useState } from "react";
 import type { CircleViewRecord } from "./circle-records";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
@@ -17,39 +19,54 @@ const SOURCE_STATUS_LABEL = {
   unverified: "尚未驗證",
 } as const;
 
+const LINK_KIND_LABEL = {
+  social: "社群與作者",
+  support: "贊助平台",
+  website: "網站與其他連結",
+  announcement: "本次預告",
+  catalog: "品書",
+  store: "預購／通販",
+  sample: "試閱",
+} as const;
+
 function sourceDate(value: string) {
   const date = value.slice(0, 10).replaceAll("-", ".");
   return date || "時間不明";
 }
 
-export function SearchResults({ records, selectedId, favoriteIds, favoriteGroupLabels, plans, density, query, activeFilters, onSelect, onToggleFavorite, onClearFilters, onClearQuery }: {
+export function SearchResults({ records, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
   records: CircleViewRecord[];
   selectedId: string | null;
   favoriteIds: Set<string>;
   favoriteGroupLabels: Map<string, string>;
   plans: Map<string, VisitPlanEntry>;
   density: "compact" | "informative";
+  mediaCount: 0 | 1 | 3;
   query: string;
   activeFilters: ActiveResultFilter[];
+  advancedSearchActive: boolean;
   onSelect: (record: CircleViewRecord) => void;
   onToggleFavorite: (record: CircleViewRecord) => void;
+  onResetAdvancedSearch: () => void;
   onClearFilters: () => void;
   onClearQuery: () => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(RESULT_LIMIT);
   return <section className={styles.results} aria-label="搜尋結果" aria-live="polite">
-    <header><div><b>搜尋結果</b><small>{records.length} 個社團</small></div>{records.length > visibleCount && <span>已顯示 {visibleCount} 筆</span>}</header>
+    <header><div><b>搜尋結果</b><small>{records.length} 個社團</small></div><div className={styles.resultHeaderActions}>{records.length > visibleCount && <span>已顯示 {visibleCount} 筆</span>}{advancedSearchActive && <button type="button" onClick={onResetAdvancedSearch} aria-label="重設詳細搜尋">重設</button>}</div></header>
     {records.length === 0 ? <div className={styles.empty}><b>找不到符合條件的社團</b><p>{query.trim() ? <>保留搜尋「{query.trim()}」，可先移除下列篩選條件。</> : <>試著移除已套用的篩選條件。</>}</p>{activeFilters.length > 0 && <div className={styles.emptyFilters} aria-label="已套用篩選">{activeFilters.map((filter) => <button key={filter.id} onClick={filter.onClear} aria-label={`移除篩選：${filter.label}`}>{filter.label}<UiIcon name="close" /></button>)}</div>}<button onClick={activeFilters.length > 0 ? onClearFilters : onClearQuery}>{activeFilters.length > 0 ? "清除所有篩選（保留搜尋）" : "清除搜尋"}</button></div> : <div className={styles.resultList}>
       {records.slice(0, visibleCount).map((record) => {
-        const plan = plans.get(record.recordId);
+        const plan = plans.get(record.circle.id);
+        const thumbnail = record.circle.media[0];
         return <article key={record.recordId} className={`${selectedId === record.recordId ? styles.selectedResult : ""} ${density === "compact" ? styles.compactResult : ""}`}>
-          <button className={styles.resultMain} onClick={() => onSelect(record)}>
+          <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
+            {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
-            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <><small>{record.genre} · {record.work}</small><small className={styles.sourceHint}>來源：開拓動漫＋社群整理</small></>}</span>
-            {favoriteGroupLabels.has(record.recordId) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.recordId)}</span>}
+            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <><small>{record.circle.creatorTypes.join("、") || record.genre} · {record.circle.work}</small><small className={styles.sourceHint}>來源：FF47 公開整理表{thumbnail ? " · 有縮圖" : ""}</small></>}</span>
+            {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>
-          <button className={`${styles.heart} ${favoriteIds.has(record.recordId) ? styles.saved : ""}`} onClick={() => onToggleFavorite(record)} aria-label={favoriteIds.has(record.recordId) ? `取消收藏 ${record.name}` : `收藏 ${record.name}`}><UiIcon name="heart" /></button>
+          <button className={`${styles.heart} ${favoriteIds.has(record.circle.id) ? styles.saved : ""}`} onClick={() => onToggleFavorite(record)} aria-label={favoriteIds.has(record.circle.id) ? `取消收藏 ${record.name}` : `收藏 ${record.name}`}><UiIcon name="heart" /></button>
         </article>;
       })}
       {visibleCount < records.length && <button className={styles.loadMore} onClick={() => setVisibleCount((count) => Math.min(records.length, count + RESULT_LIMIT))}>載入更多（剩餘 {records.length - visibleCount} 筆）</button>}
@@ -106,14 +123,17 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
 }) {
   const [newGroup, setNewGroup] = useState("");
   if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳情"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b><p>作品資訊、收藏備註與行程動作會集中顯示在這裡。</p></section>;
+  const thumbnail = record.circle.media[0];
+  const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
   return <section className={styles.details} aria-label="攤位詳情">
-    <div className={`${styles.hero} ${styles[record.tone]}`}><div><span>{record.code}</span><small>{record.hall} 區 · DAY {record.day}</small></div><button onClick={onClose} aria-label="關閉攤位詳情"><UiIcon name="close" /></button><b>{record.work}</b></div>
+    <div className={`${styles.hero} ${thumbnail ? styles.heroWithMedia : ""} ${styles[record.tone]}`}>{thumbnail && <img src={thumbnail.url} alt={thumbnail.alt} referrerPolicy="no-referrer" />}<div className={styles.heroCopy}><span>{record.code}</span><small>{record.hall} 區 · DAY {record.day}</small></div><button onClick={onClose} aria-label="關閉攤位詳情"><UiIcon name="close" /></button><b>{record.circle.work}</b></div>
     <div className={styles.detailBody}>
-      <div className={styles.title}><div><h2>{record.name}</h2><p>{record.genre}{record.pen ? ` · ${record.pen}` : ""}</p></div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
+      <div className={styles.title}><div><h2>{record.name}</h2><p>{record.circle.creatorTypes.join("、") || record.genre}{record.circle.pen ? ` · ${record.circle.pen}` : ""}</p>{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
       {favorite?.groupId && <p className={styles.sourceHint}>收藏群組：{groups.find((group) => group.id === favorite.groupId)?.name ?? "未分組"}</p>}
       {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登錄 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
-      {!compact && <div className={styles.tags}>{record.tags.map((tag) => <span key={tag}>#{tag.trim()}</span>)}</div>}
-      <div className={styles.work}><small>作品與攤位資訊</small><b>{record.work}</b><p>{record.note}</p></div>
+      {!compact && <div className={styles.tags}>{[...new Set([...record.circle.workTypes, ...record.circle.referencedWorks, ...record.circle.specialTags, ...record.tags.map((tag) => tag.trim())])].filter(Boolean).map((tag) => <span key={tag}>#{tag}</span>)}</div>}
+      <div className={styles.work}><small>作品與販售資訊</small><b>{record.circle.work}</b><p>{record.circle.saleInfo || record.note}</p></div>
+      {visibleLinks.length > 0 && <div className={styles.externalLinks} aria-label="社團外部連結"><b>追加情報</b><div>{visibleLinks.map((link) => <a key={`${link.kind}-${link.provider}-${link.url}`} href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>)}</div>{compact && record.circle.externalLinks.length > visibleLinks.length && <small>完整詳情另有 {record.circle.externalLinks.length - visibleLinks.length} 個連結</small>}</div>}
       <div className={styles.detailActions}><button className={styles.primary} onClick={onTogglePlan}>{plan ? "從行程移除" : "加入今日行程"}</button><button disabled={plan?.status === "next"} onClick={onSetNext}>{plan?.status === "next" ? "目前下一站" : "設為下一站"}</button></div>
       {compact && <><div className={styles.sourceSummary}><b>資料來源</b><span>{record.sources.map((source) => source.provider).join("、")}</span></div><button className={styles.fullDetailButton} onClick={onOpenFull}>開啟完整詳情</button></>}
       {!compact && favorite && <div className={styles.favoriteEditor}>

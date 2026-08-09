@@ -10,3 +10,10 @@
 .segments { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
 .segments button, .panel footer button { min-height:31px; border:1px solid #ded3cb; border-radius:7px; background:#fff; color:#5d534d; font-size:9px; }
 .segments .active, .panel footer .apply { border-color:#a64e40; background:#a64e40; color:#fff; }
+
+@media (max-width:760px) {
+  .wrap { padding:10px 16px 0; }
+  .panel { position:relative; top:auto; right:auto; left:auto; margin-top:8px; box-shadow:none; }
+  .panel select { min-height:44px; font-size:16px; }
+  .segments button,.panel footer button { min-height:42px; }
+}

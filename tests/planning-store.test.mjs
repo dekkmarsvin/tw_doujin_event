@@ -39,6 +39,31 @@ test("migrates favorites from the legacy storage key through the catalog ID map"
   assert.deepEqual(store.loadPlanningDocument(storage, eventId, (circleId) => [`${circleId}-canonical`]).favorites.map((favorite) => favorite.circleId), ["1-a01-canonical"]);
 });
 
+test("migrates schema-1 placement planning to canonical circle IDs without losing notes", () => {
+  const raw = JSON.stringify({
+    schemaVersion: 1,
+    favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
+    favorites: [
+      { eventId, circleId: "1-a01-0", groupId: "priority", memo: "買新刊", createdAt: "2026-08-06T00:00:00.000Z", updatedAt: "2026-08-06T00:01:00.000Z" },
+      { eventId, circleId: "1-a02-1", groupId: null, memo: "拿無料", createdAt: "2026-08-06T00:00:30.000Z", updatedAt: "2026-08-06T00:02:00.000Z" },
+    ],
+    visitPlans: [
+      { eventId, day: 1, circleId: "1-a01-0", status: "planned", routeOrder: 0, updatedAt: "2026-08-06T00:01:00.000Z" },
+      { eventId, day: 1, circleId: "1-a02-1", status: "next", routeOrder: 1, updatedAt: "2026-08-06T00:02:00.000Z" },
+    ],
+  });
+  const snapshot = store.inspectPlanningStorage(
+    { getItem: (key) => key === store.PLANNING_STORAGE_KEY ? raw : null },
+    eventId,
+    (circleId) => [circleId === "1-a01-0" || circleId === "1-a02-1" ? "canonical-origin" : circleId],
+  );
+  assert.equal(snapshot.document.schemaVersion, store.PLANNING_SCHEMA_VERSION);
+  assert.equal(snapshot.document.favorites.length, 1);
+  assert.match(snapshot.document.favorites[0].memo, /買新刊/);
+  assert.match(snapshot.document.favorites[0].memo, /拿無料/);
+  assert.deepEqual(snapshot.document.visitPlans.map(({ circleId, status }) => [circleId, status]), [["canonical-origin", "next"]]);
+});
+
 test("moves visit plan entries and compacts route order", () => {
   let document = store.addToVisitPlan(empty(), eventId, 2, "a");
   document = store.addToVisitPlan(document, eventId, 2, "b");

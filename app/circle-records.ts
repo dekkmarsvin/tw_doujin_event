@@ -1,4 +1,5 @@
 import { FF47_EVENT } from "./event-catalog";
+import { FF47_CIRCLE_TEMPLATES, findCircleTemplate, type CircleTemplate, type CircleTemplateLinkKind } from "./ff47-circle-templates";
 import { BOOTHS, type Booth, type Tone } from "./ff47-booths";
 
 export type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
@@ -13,15 +14,39 @@ export type SourceLink = {
   status: SourceStatus;
 };
 
+export type CircleMedia = {
+  id: string;
+  kind: "thumbnail";
+  url: string;
+  sourceUrl: string;
+  provider: string;
+  alt: string;
+};
+
+export type CircleExternalLink = {
+  provider: string;
+  kind: CircleTemplateLinkKind;
+  url: string;
+};
+
 /** A circle's reusable identity and catalog metadata, independent of a booth. */
 export type CircleRecord = {
   id: string;
+  sourceRow?: number;
   name: string;
   nameReading?: string;
   description: string;
   categories: string[];
   pen: string;
   work: string;
+  creatorTypes: string[];
+  ageRatings: string[];
+  workTypes: string[];
+  referencedWorks: string[];
+  saleInfo: string;
+  specialTags: string[];
+  media: CircleMedia[];
+  externalLinks: CircleExternalLink[];
   updatedAt: string;
   sources: SourceLink[];
 };
@@ -48,7 +73,7 @@ export type CircleViewRecord = Booth & {
   placement: PlacementRecord;
 };
 
-const CATALOG_FETCHED_AT = "2026-08-06T00:00:00.000+08:00";
+const CATALOG_FETCHED_AT = "2026-08-09T00:00:00.000+08:00";
 
 const FF47_SOURCES = [
   {
@@ -73,24 +98,65 @@ function cloneSources(): SourceLink[] {
   return FF47_SOURCES.map((source) => ({ ...source }));
 }
 
+function templateSource(template?: CircleTemplate): SourceLink[] {
+  return template?.thumbnail ? [{
+    provider: template.thumbnail.provider,
+    contentType: "media",
+    label: `${template.name} 公開縮圖`,
+    url: template.thumbnail.sourceUrl,
+    fetchedAt: CATALOG_FETCHED_AT,
+    status: "linked",
+  }] : [];
+}
+
+function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?: Booth): CircleRecord {
+  const name = template?.name ?? booth?.name ?? "未命名社團";
+  return {
+    id: circleId,
+    sourceRow: template?.sourceRow,
+    name,
+    description: template?.saleInfo ?? booth?.note ?? "尚未提供販售資訊。",
+    categories: [...new Set([
+      ...(booth ? [booth.genre, ...booth.tags.map((tag) => tag.trim()).filter(Boolean)] : []),
+      ...(template?.creatorTypes ?? []),
+      ...(template?.workTypes ?? []),
+      ...(template?.referencedWorks ?? []),
+      ...(template?.specialTags ?? []),
+    ])],
+    pen: template?.pen ?? booth?.pen ?? "",
+    work: template?.referencedWorks.join("、") || booth?.work || template?.creatorTypes.join("、") || "尚未提供作品分類",
+    creatorTypes: template?.creatorTypes ?? [],
+    ageRatings: template?.ageRatings ?? [],
+    workTypes: template?.workTypes ?? [],
+    referencedWorks: template?.referencedWorks ?? [],
+    saleInfo: template?.saleInfo ?? "",
+    specialTags: template?.specialTags ?? [],
+    media: template?.thumbnail ? [{
+      id: `${circleId}-thumbnail`,
+      kind: "thumbnail",
+      url: template.thumbnail.url,
+      sourceUrl: template.thumbnail.sourceUrl,
+      provider: template.thumbnail.provider,
+      alt: `${name} 社團縮圖`,
+    }] : [],
+    externalLinks: template?.links.map((link) => ({ ...link })) ?? [],
+    updatedAt: CATALOG_FETCHED_AT,
+    sources: [...cloneSources(), ...templateSource(template)],
+  };
+}
+
+const circlesById = new Map<string, CircleRecord>();
+
 const rows = BOOTHS.map((booth, index) => {
   const recordId = `${booth.id}-${index}`;
-  // The current reviewed catalog is one row per circle identity. Future
-  // reviewed merges may let multiple placements share a canonical circle key.
-  const circleId = recordId;
-  const sources = cloneSources();
-  const circle: CircleRecord = {
-    id: circleId,
-    name: booth.name,
-    description: booth.note,
-    categories: [booth.genre, ...booth.tags.map((tag) => tag.trim()).filter(Boolean)],
-    pen: booth.pen,
-    work: booth.work,
-    updatedAt: CATALOG_FETCHED_AT,
-    sources: cloneSources(),
-  };
+  const template = findCircleTemplate(booth.name, booth.day, booth.code);
+  // One row in the reviewed Excel master is identity evidence. Its booth cells
+  // may expand to several event placements without duplicating the circle.
+  const circleId = template?.id ?? recordId;
+  const circle = circlesById.get(circleId) ?? circleFromTemplate(circleId, template, booth);
+  circlesById.set(circleId, circle);
   const placement: PlacementRecord = {
-    id: booth.id,
+    id: recordId,
     eventId: FF47_EVENT.id,
     circleId,
     day: booth.day,
@@ -102,21 +168,35 @@ const rows = BOOTHS.map((booth, index) => {
     tone: booth.tone,
   };
 
-  const view: CircleViewRecord = { ...booth, recordId, sources, circle, placement };
+  const view: CircleViewRecord = { ...booth, recordId, sources: circle.sources, circle, placement };
   return { circle, placement, view };
 });
 
-export const CIRCLE_CATALOG: CircleRecord[] = rows.map(({ circle }) => circle);
+// Keep known Excel circles even when their row currently has no numbered booth
+// (for example an enterprise/guest entry). They remain searchable data, but do
+// not fabricate a PlacementRecord or map slot.
+for (const template of FF47_CIRCLE_TEMPLATES) {
+  if (circlesById.has(template.id)) continue;
+  circlesById.set(template.id, circleFromTemplate(template.id, template));
+}
+
+export const CIRCLE_CATALOG: CircleRecord[] = [...circlesById.values()];
 export const PLACEMENT_CATALOG: PlacementRecord[] = rows.map(({ placement }) => placement);
 export const CIRCLE_RECORDS: CircleViewRecord[] = rows.map(({ view }) => view);
 export const CIRCLE_RECORDS_BY_ID = new Map(CIRCLE_RECORDS.map((record) => [record.recordId, record]));
-export const LEGACY_CIRCLE_RECORD_IDS = new Map<string, string[]>();
+export const CIRCLE_RECORDS_BY_CIRCLE_ID = new Map<string, CircleViewRecord[]>();
+CIRCLE_RECORDS.forEach((record) => CIRCLE_RECORDS_BY_CIRCLE_ID.set(record.circle.id, [...(CIRCLE_RECORDS_BY_CIRCLE_ID.get(record.circle.id) ?? []), record]));
+export const CIRCLE_ID_MIGRATION_TARGETS = new Map<string, string[]>();
 CIRCLE_RECORDS.forEach((record) => {
-  LEGACY_CIRCLE_RECORD_IDS.set(record.id, [...(LEGACY_CIRCLE_RECORD_IDS.get(record.id) ?? []), record.recordId]);
+  CIRCLE_ID_MIGRATION_TARGETS.set(record.circle.id, [record.circle.id]);
+  CIRCLE_ID_MIGRATION_TARGETS.set(record.recordId, [record.circle.id]);
+  CIRCLE_ID_MIGRATION_TARGETS.set(record.id, [...new Set([...(CIRCLE_ID_MIGRATION_TARGETS.get(record.id) ?? []), record.circle.id])]);
 });
 
 export function circleSearchText(record: CircleViewRecord) {
-  return [record.code, record.name, record.pen, record.genre, record.work, record.note, ...record.tags]
+  return [record.code, record.name, record.circle.pen, record.genre, record.circle.work, record.note, record.circle.saleInfo,
+    ...record.tags, ...record.circle.creatorTypes, ...record.circle.ageRatings, ...record.circle.workTypes,
+    ...record.circle.referencedWorks, ...record.circle.specialTags, ...record.circle.externalLinks.flatMap((link) => [link.provider, link.url])]
     .join(" ")
     .toLocaleLowerCase("zh-Hant");
 }

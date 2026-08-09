@@ -9,7 +9,7 @@ import {
   savePlanningDocument,
   type PlanningDocument,
 } from "./planning-store";
-import { LEGACY_CIRCLE_RECORD_IDS } from "./circle-records";
+import { CIRCLE_ID_MIGRATION_TARGETS } from "./circle-records";
 
 export function usePlanning(eventId: string) {
   const [document, setDocument] = useState<PlanningDocument>(EMPTY_PLANNING_DOCUMENT);
@@ -21,7 +21,7 @@ export function usePlanning(eventId: string) {
   useEffect(() => {
     let cancelled = false;
     const reload = () => {
-      const snapshot = inspectPlanningStorage(localStorage, eventId, (circleId) => LEGACY_CIRCLE_RECORD_IDS.get(circleId) ?? [circleId]);
+      const snapshot = inspectPlanningStorage(localStorage, eventId, (circleId) => CIRCLE_ID_MIGRATION_TARGETS.get(circleId) ?? [circleId]);
       writable.current = snapshot.writable;
       setDocument(snapshot.document);
       setStorageError(snapshot.error);
@@ -30,7 +30,7 @@ export function usePlanning(eventId: string) {
     const onStorage = (event: StorageEvent) => { if (event.key === PLANNING_STORAGE_KEY) reload(); };
     queueMicrotask(() => {
       if (cancelled) return;
-      const initial = inspectPlanningStorage(localStorage, eventId, (circleId) => LEGACY_CIRCLE_RECORD_IDS.get(circleId) ?? [circleId]);
+      const initial = inspectPlanningStorage(localStorage, eventId, (circleId) => CIRCLE_ID_MIGRATION_TARGETS.get(circleId) ?? [circleId]);
       writable.current = initial.writable;
       setStorageError(initial.error);
       setUnsupportedRaw(initial.writable ? null : initial.raw);

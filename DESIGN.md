@@ -241,7 +241,9 @@ components:
 - **Focus:** 邊界變深並顯示 3px 低彩度焦點環，禁止只移除 outline。
 - **Error / Disabled:** 錯誤使用淡紅表面、深紅文字與完整邊框；disabled 降低對比但保留可讀標籤。
 - **Exploration Search:** 搜尋社團名、作品名、題材與介紹內容；結果可搭配日期、區域、分類與收藏狀態篩選。
-- **Map Locator Search:** 搜尋攤位代碼或社團名；結果選取後必須直接移動並放大到對應攤位。
+- **Advanced Work Search:** 作品名稱／題材輸入從目前活動資料提供至多六筆浮動建議，支援方向鍵、Enter、Escape 與點按；跨語別同義名稱由獨立人工核對表擴展查詢，不改寫來源資料。套用詳細搜尋後，搜尋結果標題右側必須提供只重設詳細搜尋條件的操作。
+- **Rating Search:** R18 與一般內容只匹配來源明確標記的分級；未知與 R15 不得推測成一般或 R18。
+- **Map Locator Search:** 搜尋攤位代碼或社團名；結果選取後必須直接移動到對應攤位並保留目前倍率。
 - **Visible Scope:** 搜尋欄附近必須顯示目前活動、日期、區域、篩選摘要與結果數，不讓使用者猜測搜尋範圍。
 - **Result Volume:** 大量結果使用分頁或漸進載入，保留目前查詢與捲動位置；不得一次渲染全部結果造成介面失去回應。
 - **Empty Results:** 顯示已套用條件、清除個別條件與清除全部的操作；保留原查詢，避免只能返回重打。
@@ -252,7 +254,7 @@ components:
 - **Desktop:** 左欄在搜尋與行程間切換，中欄固定為地圖，右欄同時展示詳情與行程；這是規劃工作面的主要資訊架構。
 - **Mobile:** 760px 以下改為單欄頂部列、三等分日期與場館選擇，並以「篩選／結果／詳情／行程」四頁籤承載工作內容。
 - **State:** 當前狀態同時使用位置、文字重量與色彩，不得只靠色彩。
-- **URL Contract:** `event`、`day`、`area`、`query`、`genre`、`favorite`、`favoriteGroup`、`visit`、`sort`、`density`、`media`、`selectedCircle` 與 `selectedBooth` 是可分享、可還原的檢視狀態。
+- **URL Contract:** `event`、`day`、`area`、`query`、`genre`、`creator`、`work`、`workType`、`r18`、`favorite`、`favoriteGroup`、`visit`、`sort`、`density`、`media`、`selectedCircle` 與 `selectedBooth` 是可分享、可還原的檢視狀態。
 - **Restoration:** 初始化、重新整理與 `popstate` 必須恢復篩選及選取；地圖資料延後完成時，以保存的攤位代碼重新聚焦。hover、動畫進度與尚未套用的篩選草稿不得寫入 URL。
 
 ### Circle Information Surfaces
@@ -266,9 +268,11 @@ components:
 
 - **Canvas:** 地圖工作區使用 22px 格線提示可拖曳座標空間，SVG 場館使用同一 viewBox 保存攤位、柱子與出入口。
 - **Slots:** 未配置攤位低對比；有社團的攤位採分類色淡底；selected 使用實色與 3px 深色描邊；favorite 加入珊瑚圓點；next 加入深墨箭頭。
-- **Interaction:** SVG slot 本身是互動元素，禁止在圖片上疊 HTML 按鈕；攤位使用單一 Tab 入口與方向鍵移動焦點，Enter／Space 開啟。地圖支援滑鼠拖曳、游標中心滾輪縮放、觸控單指平移與雙指縮放，固定控制器提供放大、縮小與重設。
+- **Interaction:** SVG slot 本身是互動元素，禁止在圖片上疊 HTML 按鈕；攤位使用單一 Tab 入口與方向鍵移動焦點，Enter／Space 開啟。地圖支援滑鼠拖曳、游標中心滾輪縮放、觸控單指平移與雙指縮放，固定控制器提供放大、縮小與重設；地圖畫布及其中所有文字不得被拖曳選取。
 - **Controls:** 縮放、重設與指南針固定在地圖邊緣，不得跟隨 SVG 一起縮放。重設必須回到完整可用範圍。
-- **Focus:** 搜尋結果或 URL 選取攤位後，地圖必須移動至對應座標並使用桌機 1.02、手機 1.18 的辨識倍率；單一搜尋結果可自動開啟詳情。
+- **Focus:** 搜尋結果、URL 或地圖選取攤位後，地圖只移動至對應座標並保留使用者目前倍率，不得回彈到預設倍率；單一搜尋結果可自動開啟詳情。
+- **Zoom Range:** 完整地圖適配倍率是動態下限，使用者可放大到 600%；145% 起顯示具可追溯來源的社團縮圖，200% 以上固定控制器以 25% 級距縮放，方便快速進入可辨識縮圖的倍率。
+- **User-facing Name:** 一般介面與輔助科技名稱使用「社團攤位配置圖」或「活動地圖」；「向量」只屬於實作技術，不顯示為地圖名稱。
 - **Overview:** 目前不顯示 minimap；未來若活動包含多館或分層場域，仍須與主地圖共用同一 layout 投影，不建立第二份座標資料。
 
 ### Booth Details

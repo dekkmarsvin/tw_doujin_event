@@ -11,7 +11,7 @@ after(() => vite.close());
 
 function sample() {
   return planning.parsePlanningDocument({
-    schemaVersion: 1,
+    schemaVersion: planning.PLANNING_SCHEMA_VERSION,
     favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
     favorites: [{ eventId: "ff47", circleId: "1-e19-0", groupId: "priority", memo: "=危險公式", updatedAt: "2026-08-06T00:00:00.000Z" }],
     visitPlans: [{ eventId: "ff47", day: 1, circleId: "1-e19-0", status: "next", routeOrder: 0, updatedAt: "2026-08-06T00:00:00.000Z" }],
