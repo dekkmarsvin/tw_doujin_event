@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { resolveMapLandmarkKind, type EventMapLayout, type MapLandmarkKind, type MapRect } from "./event-map";
-import { resizeRectFromCorner, type ResizeCorner } from "./map-layout-editor-geometry";
+import { resizeRectFromCorner, snapRectToAdjacentRects, type ResizeCorner, type SnapGuide } from "./map-layout-editor-geometry";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
 
@@ -43,6 +43,7 @@ type Props = {
 const MIN_EDITOR_ZOOM = 1;
 const MAX_EDITOR_ZOOM = 4;
 const EDITOR_ZOOM_STEP = .5;
+const SNAP_THRESHOLD_PX = 8;
 
 function cloneLayout(layout: EventMapLayout): EventMapLayout {
   return {
@@ -74,6 +75,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const [selection, setSelection] = useState<Selection | null>(null);
   const [zoom, setZoom] = useState(MIN_EDITOR_ZOOM);
   const [layoutUnitsPerPixel, setLayoutUnitsPerPixel] = useState(layout.width / 800);
+  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const drag = useRef<DragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -145,6 +147,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     event.stopPropagation();
     svg.setPointerCapture(event.pointerId);
     svg.focus({ preventScroll: true });
+    setSnapGuides([]);
     setSelection(nextSelection);
     drag.current = { mode: "move", pointerId: event.pointerId, selection: nextSelection, startX: point.x, startY: point.y, originX: position.x, originY: position.y };
   };
@@ -161,6 +164,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     event.stopPropagation();
     svg.setPointerCapture(event.pointerId);
     svg.focus({ preventScroll: true });
+    setSnapGuides([]);
     const nextSelection = { kind: "landmark", itemIndex } as const;
     setSelection(nextSelection);
     drag.current = { mode: "resize", pointerId: event.pointerId, selection: nextSelection, corner, startX: point.x, startY: point.y, originRect: { ...landmark.rect } };
@@ -178,11 +182,20 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     if (!active || active.pointerId !== event.pointerId) return;
     const point = pointInLayout(event);
     if (active.mode === "resize") {
+      let nextGuides: SnapGuide[] = [];
       commit((draft) => {
         const target = draft.landmarks[active.selection.itemIndex];
         if (!target) return;
-        target.rect = resizeRectFromCorner(active.originRect, active.corner, point.x - active.startX, point.y - active.startY, draft);
+        const resized = resizeRectFromCorner(active.originRect, active.corner, point.x - active.startX, point.y - active.startY, draft);
+        if (!event.altKey && resolveMapLandmarkKind(target) === "enterprise") {
+          const snapped = snapRectToAdjacentRects(resized, draft.landmarks
+            .filter((landmark, itemIndex) => itemIndex !== active.selection.itemIndex && resolveMapLandmarkKind(landmark) === "enterprise")
+            .map((landmark) => ({ id: landmark.id, rect: landmark.rect })), { bounds: draft, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
+          target.rect = snapped.rect;
+          nextGuides = snapped.guides;
+        } else target.rect = resized;
       });
+      setSnapGuides(nextGuides);
       return;
     }
     const x = active.originX + point.x - active.startX;
@@ -193,6 +206,22 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
         target.x = clamp(x, 0, draft.width);
         target.y = clamp(y, 0, draft.height);
       });
+      return;
+    }
+    if (active.selection.kind === "landmark") {
+      let nextGuides: SnapGuide[] = [];
+      commit((draft) => {
+        const target = draft.landmarks[active.selection.itemIndex];
+        const moved = { ...target.rect, x: clamp(x, 0, draft.width - target.rect.width), y: clamp(y, 0, draft.height - target.rect.height) };
+        if (!event.altKey && resolveMapLandmarkKind(target) === "enterprise") {
+          const snapped = snapRectToAdjacentRects(moved, draft.landmarks
+            .filter((landmark, itemIndex) => itemIndex !== active.selection.itemIndex && resolveMapLandmarkKind(landmark) === "enterprise")
+            .map((landmark) => ({ id: landmark.id, rect: landmark.rect })), { bounds: draft, mode: "move", threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
+          target.rect = snapped.rect;
+          nextGuides = snapped.guides;
+        } else target.rect = moved;
+      });
+      setSnapGuides(nextGuides);
       return;
     }
     commit((draft) => {
@@ -209,6 +238,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
     if (drag.current?.pointerId !== event.pointerId) return;
     drag.current = null;
+    setSnapGuides([]);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
@@ -306,7 +336,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>選取企業攤或舞台後可拖曳四角調整大小；方向鍵微調 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>非一般攤位區可拖曳四角調整大小；企業攤靠近相鄰邊緣時會自動貼齊，按住 Alt 可暫停。方向鍵微調 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器地圖縮放控制"><span>檢視倍率</span><div><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selection} onClick={() => selection && focusSelection(selection)}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
@@ -320,7 +350,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${activeKey === `slot:${rowIndex}:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${activeKey === `pillar:${itemIndex}` ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
           {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "entrance" ? styles.entrance : styles.exit} ${activeKey === `access:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
-          {selectedLandmark && selectedLandmarkKind !== "other" && ([
+          {snapGuides.map((guide) => guide.axis === "x"
+            ? <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.position} x2={guide.position} y1={guide.start} y2={guide.end} aria-hidden="true" />
+            : <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.start} x2={guide.end} y1={guide.position} y2={guide.position} aria-hidden="true" />)}
+          {selectedLandmark && ([
             ["nw", selectedLandmark.rect.x, selectedLandmark.rect.y],
             ["ne", selectedLandmark.rect.x + selectedLandmark.rect.width, selectedLandmark.rect.y],
             ["se", selectedLandmark.rect.x + selectedLandmark.rect.width, selectedLandmark.rect.y + selectedLandmark.rect.height],
@@ -344,7 +377,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
             {selectedRect && numberField("高", selectedRect.height, (value) => updateRect({ height: value }))}
           </div>
           {selectedLandmark && <button className={styles.remove} onClick={removeLandmark}>移除此區域</button>}
-          <p className={styles.hint}>{selectedLandmarkKind && selectedLandmarkKind !== "other" ? "拖曳物件可移動，拖曳四角可調整大小。" : "拖曳會直接更新預覽；"}發布前仍會由 FF47 完整性規則檢查所有座標與必要元素。</p>
+          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selectedLandmark ? "拖曳物件可移動，拖曳四角可調整大小。" : "拖曳會直接更新預覽；"}發布前仍會由 FF47 完整性規則檢查所有座標與必要元素。</p>
         </>}
       </aside>
     </div>
