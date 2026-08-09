@@ -32,7 +32,7 @@ export type MapAccessPoint = {
 export type MapLandmark = {
   id: string;
   rect: MapRect;
-  label?: string;
+  label: string;
 };
 
 export type EventMapLayout = {
@@ -112,6 +112,17 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
   layout.accessPoints?.forEach((point) => {
     if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.y < 0 || point.x > width || point.y > height) errors.push(`出入口 ${point.id} 的座標無效。`);
   });
+  if (Array.isArray(layout.landmarks)) {
+    const landmarkIds = new Set<string>();
+    layout.landmarks.forEach((landmark) => {
+      if (!landmark || typeof landmark !== "object") { errors.push("非一般攤位區必須是物件。" ); return; }
+      if (typeof landmark.id !== "string" || !landmark.id.trim()) errors.push("每一個非一般攤位區都必須有 id。" );
+      else if (landmarkIds.has(landmark.id)) errors.push(`非一般攤位區 id ${landmark.id} 重複。`);
+      else landmarkIds.add(landmark.id);
+      if (typeof landmark.label !== "string" || !landmark.label.trim()) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 必須有顯示名稱。`);
+      if (!landmark.rect || !finiteRect(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的矩形座標無效。`);
+    });
+  }
 
   return errors.length ? { ok: false, errors } : { ok: true, errors: [] };
 }

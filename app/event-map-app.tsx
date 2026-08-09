@@ -35,13 +35,15 @@ import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
 import { calculateMapFitZoom, centerMapOffset, clampMapZoom, shouldShowMapMedia, zoomOffsetAroundPoint } from "./map-viewport";
-import { FF47_EVENT, type FF47Area, type FF47Day } from "./event-catalog";
+import { eventUsesAreaSwitcher, FF47_EVENT, type FF47Area, type FF47Day } from "./event-catalog";
 import styles from "./event-map-app.module.css";
 
 type Hall = FF47Area;
 type MobilePanel = "filters" | "results" | "details" | "plan";
+type TextScale = "standard" | "large" | "extra";
 
 const WORK_TOPIC_SUGGESTIONS = buildWorkTopicSuggestions(CIRCLE_RECORDS);
+const TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
 type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
   | { kind: "pinch"; distance: number; zoom: number; mapX: number; mapY: number };
@@ -52,10 +54,12 @@ function parseDay(value: string | null): FF47Day | null {
 }
 
 function parseArea(value: string | null): Hall {
+  if (!eventUsesAreaSwitcher(FF47_EVENT)) return "ALL";
   return FF47_EVENT.areas.some((area) => area.id === value) ? value as Hall : "ALL";
 }
 
 export default function EventMapApp() {
+  const showAreaSwitcher = eventUsesAreaSwitcher(FF47_EVENT);
   const [day, setDay] = useState<FF47Day>(FF47_EVENT.days[0].id);
   const [hall, setHall] = useState<Hall>("ALL");
   const [genre, setGenre] = useState("全部類別");
@@ -75,6 +79,7 @@ export default function EventMapApp() {
   const [mapError, setMapError] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
   const [showFullDetail, setShowFullDetail] = useState(false);
+  const [textScale, setTextScale] = useState<TextScale>("standard");
   const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
   const { document: planning, ready: planningReady, update: updatePlanning, storageError: planningStorageError } = usePlanning(FF47_EVENT_ID);
@@ -91,6 +96,20 @@ export default function EventMapApp() {
   const mapWasFitted = useRef(false);
   const floorHeight = 950;
   const floorWidth = publishedMap ? floorHeight * publishedMap.layout.width / publishedMap.layout.height : 1344;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(TEXT_SCALE_STORAGE_KEY);
+      if (stored === "standard" || stored === "large" || stored === "extra") queueMicrotask(() => setTextScale(stored));
+    } catch {
+      // Font scaling remains available for this session when storage is blocked.
+    }
+  }, []);
+
+  const changeTextScale = (next: TextScale) => {
+    setTextScale(next);
+    try { window.localStorage.setItem(TEXT_SCALE_STORAGE_KEY, next); } catch { /* Keep the in-memory preference. */ }
+  };
 
   useEffect(() => {
     const restore = (fromHistory = false) => {
@@ -438,7 +457,7 @@ export default function EventMapApp() {
   const planningPanel = <div className={styles.planningPanel}>{planningControls}{itineraryPanel}</div>;
   const resultSetKey = `${day}|${hall}|${genre}|${favoriteOnly}|${advancedSearch.creatorType}|${advancedSearch.workQuery}|${advancedSearch.workType}|${advancedSearch.adultContent}|${planningDisplay.favoriteGroupId}|${planningDisplay.visitStatus}|${planningDisplay.sort}|${planningDisplay.density}|${planningDisplay.mediaCount}|${query}`;
   const activeResultFilters: ActiveResultFilter[] = [
-    ...(hall !== "ALL" ? [{ id: "area", label: hall === "A" ? "A–K 區" : "L–W 區", onClear: () => { historyIntent.current = "push"; setHall("ALL"); } }] : []),
+    ...(showAreaSwitcher && hall !== "ALL" ? [{ id: "area", label: hall === "A" ? "A–K 區" : "L–W 區", onClear: () => { historyIntent.current = "push"; setHall("ALL"); } }] : []),
     ...(genre !== "全部類別" ? [{ id: "genre", label: genre, onClear: () => { historyIntent.current = "push"; setGenre("全部類別"); } }] : []),
     ...(favoriteOnly ? [{ id: "favorite", label: "只看收藏", onClear: () => { historyIntent.current = "push"; setFavoriteOnly(false); } }] : []),
     ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", label: `創作者：${advancedSearch.creatorType}`, onClear: () => { historyIntent.current = "push"; setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" })); } }] : []),
@@ -466,13 +485,13 @@ export default function EventMapApp() {
     <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={WORK_TOPIC_SUGGESTIONS} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
   </section>;
 
-  return <main className="app-shell">
-    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 MAP</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{FF47_EVENT.name}</b><small>{FF47_EVENT.dateRangeLabel} · {FF47_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setLeftMode("search"); setMobilePanel("results"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><button className="help" onClick={() => setShowAdmin(true)}>管理</button></header>
-    <section className="toolbar" aria-label="日期與場館篩選"><div className="days">{FF47_EVENT.days.map((eventDay) => <button key={eventDay.id} className={day === eventDay.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setDay(eventDay.id); setSelectedRecordId(null); }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div><div className="mobile-halls">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.label}</button>)}</div><div className="open-hours" role="status"><span />本機行程 · {planningStorageError ? "儲存異常，請開啟規劃資料" : planningReady ? "自動保存" : "讀取中"}</div><button className={`${styles.onsiteToggle} ${onsiteMode ? styles.onsiteToggleActive : ""}`} aria-pressed={onsiteMode} onClick={toggleOnsiteMode}><UiIcon name="locate" />{onsiteMode ? "退出展場模式" : "展場模式"}</button></section>
+  return <main className="app-shell" data-text-scale={textScale}>
+    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 MAP</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{FF47_EVENT.name}</b><small>{FF47_EVENT.dateRangeLabel} · {FF47_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setLeftMode("search"); setMobilePanel("results"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><div className={styles.topbarActions}><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><button className="help" onClick={() => setShowAdmin(true)}>管理</button></div></header>
+    <section className="toolbar" aria-label={showAreaSwitcher ? "日期與場館篩選" : "日期篩選"}><div className="days">{FF47_EVENT.days.map((eventDay) => <button key={eventDay.id} className={day === eventDay.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setDay(eventDay.id); setSelectedRecordId(null); }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>{showAreaSwitcher && <div className="mobile-halls">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.label}</button>)}</div>}<div className="open-hours" role="status"><span />本機行程 · {planningStorageError ? "儲存異常，請開啟規劃資料" : planningReady ? "自動保存" : "讀取中"}</div><button className={`${styles.onsiteToggle} ${onsiteMode ? styles.onsiteToggleActive : ""}`} aria-pressed={onsiteMode} onClick={toggleOnsiteMode}><UiIcon name="locate" />{onsiteMode ? "退出展場模式" : "展場模式"}</button></section>
     <div className={`workspace ${styles.workspace}`}>
       <aside className={`filters ${styles.leftRail}`}>
         <div className={styles.modeTabs} role="tablist" aria-label="規劃工具"><button role="tab" aria-selected={leftMode === "search"} onClick={() => setLeftMode("search")}>搜尋</button><button role="tab" aria-selected={leftMode === "plan"} onClick={() => setLeftMode("plan")}>行程 <span>{dayPlan.length}</span></button></div>
-        {leftMode === "search" ? <><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button onClick={clearFilters}>全部清除</button></div><fieldset><legend>展區</legend><div className="segments">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.shortLabel}</button>)}</div></fieldset><fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{CIRCLE_RECORDS.filter((record) => record.day === day && (value === "全部類別" || record.genre === value)).length}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label></div><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={WORK_TOPIC_SUGGESTIONS} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />{resultsPanel}</> : planningPanel}
+        {leftMode === "search" ? <><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button onClick={clearFilters}>全部清除</button></div>{showAreaSwitcher && <fieldset><legend>場館／區域</legend><div className="segments">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.shortLabel}</button>)}</div></fieldset>}<fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{CIRCLE_RECORDS.filter((record) => record.day === day && (value === "全部類別" || record.genre === value)).length}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label></div><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={WORK_TOPIC_SUGGESTIONS} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />{resultsPanel}</> : planningPanel}
       </aside>
       <section className="map-region" aria-label="攤位地圖">
         <div className="map-title"><div><small>社團攤位配置圖</small><h1>{FF47_EVENT.venue} <em>{FF47_EVENT.areas.find((area) => area.id === hall)?.label}</em></h1></div><div className={styles.mapMeta}><p><b>{mapRecords.length}</b> {onsiteMode ? "個行程攤位" : "個符合條件的社團"}</p><button onClick={() => setShowAdmin(true)}>管理地圖</button></div></div>
@@ -489,6 +508,6 @@ export default function EventMapApp() {
     </div>
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
     {showFullDetail && selected && <div className={styles.fullDetailBackdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowFullDetail(false); }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳情`} tabIndex={-1}>{fullDetailsPanel}</div></div>}
-    {showAdmin && <MapAdminImporter eventId={FF47_EVENT_ID} onPublished={(map) => { setPublishedMap(map); setMapError(""); setMapLoading(false); setShowAdmin(false); resetMap(); }} onClose={() => setShowAdmin(false)} />}
+    {showAdmin && <MapAdminImporter eventId={FF47_EVENT_ID} initialMap={publishedMap} onPublished={(map) => { setPublishedMap(map); setMapError(""); setMapLoading(false); setShowAdmin(false); resetMap(); }} onClose={() => setShowAdmin(false)} />}
   </main>;
 }

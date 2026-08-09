@@ -16,12 +16,12 @@ test("server-renders the FF47 vector map application", async () => {
   assert.match(html, /<title>FF47 場刊 MAP｜同人展逛攤地圖<\/title>/i);
   assert.match(html, /aria-label="攤位地圖"/);
   assert.match(html, /管理地圖/);
-  assert.match(html.replaceAll("<!-- -->", ""), /<b>992<\/b> 個符合條件的社團/);
+  assert.match(html.replaceAll("<!-- -->", ""), /<b>994<\/b> 個符合條件的社團/);
 });
 
 test("separates admin import, server publication, and accessible SVG rendering", async () => {
-  const paths = ["event-map-app.tsx", "map-admin-importer.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "event-map-client.ts"];
-  const [app, admin, recognizer, renderer, client] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "event-map-client.ts", "event-catalog.ts"];
+  const [app, admin, editor, recognizer, renderer, client, eventCatalog] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const repository = await readFile(new URL("../db/event-maps.ts", import.meta.url), "utf8");
   const repositoryCore = await readFile(new URL("../db/event-map-repository.ts", import.meta.url), "utf8");
   const route = await readFile(new URL("../app/api/events/[eventId]/map/route.ts", import.meta.url), "utf8");
@@ -34,6 +34,17 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.doesNotMatch(app, /LAYOUT_KEY|imageDataUrl|<img\b/);
   assert.match(admin, /data-testid="map-image-input"/);
   assert.match(admin, /發布活動地圖/);
+  assert.match(admin, /<MapLayoutEditor/);
+  assert.match(admin, /initialMap/);
+  assert.match(editor, /新增企業攤/);
+  assert.match(editor, /新增舞台/);
+  assert.match(editor, /選取地圖元素/);
+  assert.match(editor, /onPointerMove=\{moveDrag\}/);
+  assert.match(editor, /Shift \+ 方向鍵/);
+  assert.match(eventCatalog, /areaMode: "single"/);
+  assert.match(app, /showAreaSwitcher && <fieldset/);
+  assert.match(app, /data-text-scale=\{textScale\}/);
+  assert.match(app, /網頁字體大小/);
   assert.match(recognizer, /slotCount !== 988/);
   assert.match(renderer, /<svg/);
   assert.match(renderer, /aria-label="場內柱子"/);

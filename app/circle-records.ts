@@ -1,6 +1,7 @@
 import { FF47_EVENT } from "./event-catalog";
 import { FF47_CIRCLE_TEMPLATES, findCircleTemplate, type CircleTemplate, type CircleTemplateLinkKind } from "./ff47-circle-templates";
 import { BOOTHS, type Booth, type Tone } from "./ff47-booths";
+import { FF47_OFFICIAL_BOOTH_LIST_URLS, isFF47OfficialNameSupplement } from "./ff47-official-booths";
 
 export type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
 export type SourceContentType = "official" | "circle" | "catalog" | "social" | "media";
@@ -75,27 +76,28 @@ export type CircleViewRecord = Booth & {
 
 const CATALOG_FETCHED_AT = "2026-08-09T00:00:00.000+08:00";
 
-const FF47_SOURCES = [
-  {
-    provider: "開拓動漫",
-    contentType: "official",
-    label: "FF47 活動與攤位配置",
-    url: "https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/",
-    fetchedAt: CATALOG_FETCHED_AT,
-    status: "linked",
-  },
-  {
+const CATALOG_SOURCE = {
     provider: "加帕利天藍怪預警中心",
     contentType: "catalog",
     label: "FF47 社團公開整理資料",
     url: "https://www.facebook.com/JapariWeatherBureau/",
     fetchedAt: CATALOG_FETCHED_AT,
     status: "linked",
-  },
-] as const satisfies readonly SourceLink[];
+} as const satisfies SourceLink;
+
+function buildOfficialSource(day?: Booth["day"]): SourceLink {
+  return {
+    provider: "開拓動漫",
+    contentType: "official",
+    label: day ? `FF47 第 ${day} 天攤位清單` : "FF47 活動與攤位配置",
+    url: day ? FF47_OFFICIAL_BOOTH_LIST_URLS[day] : "https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/",
+    fetchedAt: CATALOG_FETCHED_AT,
+    status: "linked",
+  };
+}
 
 function cloneSources(): SourceLink[] {
-  return FF47_SOURCES.map((source) => ({ ...source }));
+  return [buildOfficialSource(), { ...CATALOG_SOURCE }];
 }
 
 function templateSource(template?: CircleTemplate): SourceLink[] {
@@ -168,7 +170,9 @@ const rows = BOOTHS.map((booth, index) => {
     tone: booth.tone,
   };
 
-  const view: CircleViewRecord = { ...booth, recordId, sources: circle.sources, circle, placement };
+  const organizerSource = isFF47OfficialNameSupplement(booth.day, booth.code) ? buildOfficialSource(booth.day) : buildOfficialSource();
+  const placementSources = [organizerSource, ...circle.sources.filter((source) => source.provider !== "開拓動漫")];
+  const view: CircleViewRecord = { ...booth, recordId, sources: placementSources, circle, placement };
   return { circle, placement, view };
 });
 
