@@ -1,4 +1,5 @@
-export const PLANNING_SCHEMA_VERSION = 1 as const;
+export const PLANNING_SCHEMA_VERSION = 2 as const;
+const LEGACY_PLANNING_SCHEMA_VERSION = 1;
 export const PLANNING_STORAGE_KEY = "event-map-planning-v1";
 export const LEGACY_FAVORITES_KEY = "event-map-favorites";
 export const PLANNING_CHANGED_EVENT = "event-map-planning-changed";
@@ -105,6 +106,39 @@ export function parsePlanningDocument(value: unknown): PlanningDocument {
   return normalize({ schemaVersion: PLANNING_SCHEMA_VERSION, favoriteGroups, favorites, visitPlans });
 }
 
+function mergeMemo(left: string, right: string) {
+  return [...new Set([left.trim(), right.trim()].filter(Boolean))].join("\n\n");
+}
+
+export function migratePlanningCircleIds(document: PlanningDocument, migrateCircleId: (circleId: string) => string[]): PlanningDocument {
+  const favorites = new Map<string, FavoriteRecord>();
+  document.favorites.forEach((favorite) => {
+    const targets = migrateCircleId(favorite.circleId);
+    (targets.length > 0 ? targets : [favorite.circleId]).forEach((circleId) => {
+      const key = `${favorite.eventId}\u0000${circleId}`;
+      const current = favorites.get(key);
+      if (!current) {
+        favorites.set(key, { ...favorite, circleId });
+        return;
+      }
+      const newer = current.updatedAt.localeCompare(favorite.updatedAt) <= 0 ? favorite : current;
+      favorites.set(key, {
+        ...newer,
+        circleId,
+        groupId: newer.groupId ?? current.groupId ?? favorite.groupId,
+        memo: mergeMemo(current.memo, favorite.memo),
+        createdAt: [current.createdAt, favorite.createdAt].filter(Boolean).sort()[0] ?? newer.createdAt,
+        updatedAt: [current.updatedAt, favorite.updatedAt].sort().at(-1) ?? newer.updatedAt,
+      });
+    });
+  });
+  const visitPlans = document.visitPlans.flatMap((entry) => {
+    const targets = migrateCircleId(entry.circleId);
+    return (targets.length > 0 ? targets : [entry.circleId]).map((circleId) => ({ ...entry, circleId }));
+  });
+  return normalize({ ...document, favorites: [...favorites.values()], visitPlans });
+}
+
 export function loadPlanningDocument(storage: Pick<Storage, "getItem">, eventId: string, migrateLegacyCircleId?: (circleId: string) => string[]): PlanningDocument {
   return inspectPlanningStorage(storage, eventId, migrateLegacyCircleId).document;
 }
@@ -114,10 +148,16 @@ export function inspectPlanningStorage(storage: Pick<Storage, "getItem">, eventI
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      if (!isObject(parsed) || parsed.schemaVersion !== PLANNING_SCHEMA_VERSION) {
+      if (!isObject(parsed) || (parsed.schemaVersion !== PLANNING_SCHEMA_VERSION && parsed.schemaVersion !== LEGACY_PLANNING_SCHEMA_VERSION)) {
         return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: "偵測到不相容的規劃資料版本；原始資料已保留，尚未覆寫。" };
       }
-      return { document: parsePlanningDocument(parsed), writable: true, raw: saved, error: "" };
+      const document = parsePlanningDocument({ ...parsed, schemaVersion: PLANNING_SCHEMA_VERSION });
+      return {
+        document: parsed.schemaVersion === LEGACY_PLANNING_SCHEMA_VERSION ? migratePlanningCircleIds(document, migrateLegacyCircleId) : document,
+        writable: true,
+        raw: saved,
+        error: "",
+      };
     } catch {
       return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: "規劃資料無法解析；原始資料已保留，尚未覆寫。" };
     }

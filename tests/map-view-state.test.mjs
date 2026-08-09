@@ -9,16 +9,17 @@ const { resolveCircleSelection } = await environment.runner.import("/app/map-vie
 after(() => vite.close());
 
 const records = [
-  { recordId: "d1-a01", day: 1, code: "A01" },
-  { recordId: "d1-a02", day: 1, code: "A02" },
-  { recordId: "d2-a01", day: 2, code: "A01" },
+  { recordId: "d1-a01", circle: { id: "circle-a" }, day: 1, code: "A01" },
+  { recordId: "d1-a02", circle: { id: "circle-a" }, day: 1, code: "A02" },
+  { recordId: "d2-a01", circle: { id: "circle-a" }, day: 2, code: "A01" },
 ];
 const byId = new Map(records.map((record) => [record.recordId, record]));
 
-test("restores a circle only when selected circle and booth mutually agree", () => {
-  assert.equal(resolveCircleSelection(records, byId, 1, "d1-a01", "A01")?.recordId, "d1-a01");
-  assert.equal(resolveCircleSelection(records, byId, 1, "d1-a01", "A02"), null);
-  assert.equal(resolveCircleSelection(records, byId, 2, "d1-a01", "A01"), null);
+test("restores a canonical circle only when its day and booth mutually agree", () => {
+  assert.equal(resolveCircleSelection(records, byId, 1, "circle-a", "A01")?.recordId, "d1-a01");
+  assert.equal(resolveCircleSelection(records, byId, 1, "circle-a", "A02")?.recordId, "d1-a02");
+  assert.equal(resolveCircleSelection(records, byId, 2, "circle-a", "A01")?.recordId, "d2-a01");
+  assert.equal(resolveCircleSelection(records, byId, 1, "circle-a", "Z99"), null);
 });
 
 test("supports a valid circle-only or booth-only deep link", () => {

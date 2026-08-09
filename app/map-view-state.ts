@@ -7,13 +7,14 @@ export function resolveCircleSelection(
   selectedCircleId: string | null,
   selectedBoothCode: string | null,
 ) {
-  const byId = selectedCircleId ? recordsById.get(selectedCircleId) : undefined;
-  const circleMatchesDay = byId?.day === day;
+  const legacyById = selectedCircleId ? recordsById.get(selectedCircleId) : undefined;
+  const circleMatches = selectedCircleId ? records.filter((record) => record.day === day
+    && (record.circle.id === selectedCircleId || record.recordId === selectedCircleId)) : [];
 
   if (selectedCircleId && selectedBoothCode) {
-    return circleMatchesDay && byId.code === selectedBoothCode ? byId : null;
+    return circleMatches.find((record) => record.code === selectedBoothCode) ?? null;
   }
-  if (selectedCircleId) return circleMatchesDay ? byId : null;
+  if (selectedCircleId) return circleMatches[0] ?? (legacyById?.day === day ? legacyById : null);
   if (selectedBoothCode) return records.find((record) => record.day === day && record.code === selectedBoothCode) ?? null;
   return null;
 }

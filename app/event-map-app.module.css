@@ -1,6 +1,7 @@
 :global(.app-shell) { height:100vh; }
 .workspace { height:calc(100vh - 130px); min-height:0; grid-template-columns:296px minmax(430px,1fr) 330px; grid-template-rows:minmax(0,1fr); overflow:hidden; }
 .leftRail { display:flex; flex-direction:column; padding:0; overflow:hidden; }
+.planningPanel { min-height:0; display:flex; flex:1; flex-direction:column; }
 .modeTabs { display:grid; grid-template-columns:1fr 1fr; padding:10px 12px 0; border-bottom:1px solid var(--line); }
 .modeTabs button { position:relative; padding:10px; border:0; background:none; color:#89908c; font-size:11px; font-weight:800; cursor:pointer; }
 .modeTabs button[aria-selected="true"] { color:var(--ink); }

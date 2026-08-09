@@ -1,7 +1,30 @@
 export type MapPoint = { x: number; y: number };
+export type MapSize = { width: number; height: number };
 
-export function clampMapZoom(value: number) {
-  return Math.max(.35, Math.min(1.8, value));
+export const MAP_MAX_ZOOM = 6;
+export const MAP_MEDIA_ZOOM_THRESHOLD = 1.45;
+
+export function clampMapZoom(value: number, minimum = .35, maximum = MAP_MAX_ZOOM) {
+  return Math.max(Math.min(minimum, maximum), Math.min(maximum, value));
+}
+
+/** Smallest zoom that keeps the complete floor inside the viewport. */
+export function calculateMapFitZoom(viewport: MapSize, floor: MapSize, padding = 36) {
+  if (viewport.width <= 0 || viewport.height <= 0 || floor.width <= 0 || floor.height <= 0) return 1;
+  const usableWidth = Math.max(1, viewport.width - padding * 2);
+  const usableHeight = Math.max(1, viewport.height - padding * 2);
+  return Math.min(MAP_MAX_ZOOM, usableWidth / floor.width, usableHeight / floor.height);
+}
+
+export function centerMapOffset(viewport: MapSize, floor: MapSize, zoom: number, inset: MapPoint = { x: 18, y: 18 }): MapPoint {
+  return {
+    x: (viewport.width - floor.width * zoom) / 2 - inset.x,
+    y: (viewport.height - floor.height * zoom) / 2 - inset.y,
+  };
+}
+
+export function shouldShowMapMedia(zoom: number) {
+  return zoom >= MAP_MEDIA_ZOOM_THRESHOLD;
 }
 
 export function zoomOffsetAroundPoint(offset: MapPoint, currentZoom: number, nextZoom: number, point: MapPoint): MapPoint {

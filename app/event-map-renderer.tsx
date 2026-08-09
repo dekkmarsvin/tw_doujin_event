@@ -27,7 +27,7 @@ export default function EventMapRenderer({ layout, slots, onSelect }: Props) {
     }
   };
 
-  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="FF47 向量攤位地圖">
+  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="FF47 社團攤位配置圖">
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
     <rect className={styles.floor} x={layout.floor.x} y={layout.floor.y} width={layout.floor.width} height={layout.floor.height} />
 
@@ -46,7 +46,7 @@ export default function EventMapRenderer({ layout, slots, onSelect }: Props) {
           const className = [styles.slot, interactive ? styles.activeSlot : styles.emptySlot, view?.selected ? styles.selected : "", view?.favorite ? styles.favorite : "", view?.next ? styles.next : ""].filter(Boolean).join(" ");
           const style = view?.tone ? ({ "--slot-tone": `var(--${view.tone})` } as CSSProperties) : undefined;
           return <g key={slot.code} className={className} style={style} role={interactive ? "button" : undefined} tabIndex={interactive ? 0 : -1} aria-label={view?.ariaLabel} onClick={interactive ? () => onSelect(slot.code) : undefined} onKeyDown={interactive ? (event) => activate(event, slot.code) : undefined}>
-            <rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
+            <rect className={styles.slotSurface} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
             <text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .69}>{slot.code.slice(1)}</text>
             {view?.favorite && <circle className={styles.favoriteMark} cx={slot.rect.x + slot.rect.width - 2.5} cy={slot.rect.y + 2.5} r="2.2" />}
             {view?.next && <path className={styles.nextMark} d={`M ${slot.rect.x + 2} ${slot.rect.y + slot.rect.height - 3} L ${slot.rect.x + slot.rect.width - 3} ${slot.rect.y + 3} M ${slot.rect.x + slot.rect.width - 7} ${slot.rect.y + 3} H ${slot.rect.x + slot.rect.width - 3} V ${slot.rect.y + 7}`} />}
