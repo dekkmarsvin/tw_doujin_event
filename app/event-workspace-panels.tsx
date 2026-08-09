@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- FF47 media URLs are source-controlled remote assets, not build-time application images. */
 
 import { useState } from "react";
-import type { CircleViewRecord } from "./circle-records";
+import type { CircleMedia, CircleViewRecord } from "./circle-records";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
 import styles from "./event-workspace-panels.module.css";
@@ -105,6 +105,32 @@ export function DayItinerary({ day, entries, recordsById, onSelect, onMove, onMo
   </section>;
 }
 
+function CircleMediaGallery({ media, activeIndex, compact, onActiveIndex, onOpenFull }: {
+  media: CircleMedia[];
+  activeIndex: number;
+  compact: boolean;
+  onActiveIndex: (index: number) => void;
+  onOpenFull?: () => void;
+}) {
+  const activeMedia = media[Math.min(activeIndex, media.length - 1)];
+  if (!activeMedia) return null;
+  const image = <img src={activeMedia.url} alt={activeMedia.alt} referrerPolicy="no-referrer" loading={compact ? "lazy" : undefined} />;
+  const move = (delta: number) => onActiveIndex((activeIndex + delta + media.length) % media.length);
+  return <div className={`${styles.mediaGallery} ${compact ? styles.compactGallery : styles.fullGallery}`} role="group" aria-label="社團圖片">
+    {compact && onOpenFull
+      ? <button className={styles.galleryOpen} onClick={onOpenFull} aria-label={`開啟 ${activeMedia.alt} 的完整詳情`}>{image}</button>
+      : <div className={styles.galleryFrame}>{image}</div>}
+    {!compact && <div className={styles.galleryFooter}>
+      {media.length > 1 && <div className={styles.galleryControls} role="group" aria-label="圖片幻燈片控制">
+        <button type="button" onClick={() => move(-1)} aria-label="上一張圖片"><UiIcon name="chevron-left" /></button>
+        <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
+        <button type="button" onClick={() => move(1)} aria-label="下一張圖片"><UiIcon name="chevron-right" /></button>
+      </div>}
+      <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer"><span>{activeMedia.provider}</span><span>查看原始圖片</span><UiIcon name="external" /></a>
+    </div>}
+  </div>;
+}
+
 export function CircleDetails({ record, sharedRecords, favorite, plan, groups, compact = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
   record: CircleViewRecord | null;
   sharedRecords: CircleViewRecord[];
@@ -122,12 +148,14 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
   onCreateGroup: (name: string) => void;
 }) {
   const [newGroup, setNewGroup] = useState("");
+  const [mediaSelection, setMediaSelection] = useState({ circleId: "", index: 0 });
   if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳情"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b><p>作品資訊、收藏備註與行程動作會集中顯示在這裡。</p></section>;
-  const thumbnail = record.circle.media[0];
+  const activeMediaIndex = mediaSelection.circleId === record.circle.id ? mediaSelection.index : 0;
   const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
-  return <section className={styles.details} aria-label="攤位詳情">
-    <div className={`${styles.hero} ${thumbnail ? styles.heroWithMedia : ""} ${styles[record.tone]}`}>{thumbnail && compact && onOpenFull ? <button className={styles.heroMediaButton} onClick={onOpenFull} aria-label={`開啟 ${record.name} 完整詳情`}><img src={thumbnail.url} alt={thumbnail.alt} referrerPolicy="no-referrer" /><span className={styles.heroMediaHint} aria-hidden="true">查看完整詳情</span></button> : thumbnail && <img src={thumbnail.url} alt={thumbnail.alt} referrerPolicy="no-referrer" />}<div className={styles.heroCopy}><span>{record.code}</span><small>全館 · DAY {record.day}</small></div><button onClick={onClose} aria-label="關閉攤位詳情"><UiIcon name="close" /></button><b>{record.circle.work}</b></div>
+  return <section className={`${styles.details} ${compact ? "" : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} aria-label="攤位詳情">
+    <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
     <div className={styles.detailBody}>
+      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} onClick={onClose} aria-label="關閉攤位詳情"><UiIcon name="close" /></button></div>
       <div className={styles.title}><div><h2>{record.name}</h2><p>{record.circle.creatorTypes.join("、") || record.genre}{record.circle.pen ? ` · ${record.circle.pen}` : ""}</p>{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
       {favorite?.groupId && <p className={styles.sourceHint}>收藏群組：{groups.find((group) => group.id === favorite.groupId)?.name ?? "未分組"}</p>}
       {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登錄 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
