@@ -49,7 +49,7 @@
 .undoToast button { min-height:28px; padding:0 8px; border:1px solid #ffffff4d; border-radius:6px; background:#fff; color:#202a35; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
 .undoToast button:last-child { width:28px; padding:0; background:transparent; color:#fff; }
 .fullDetailBackdrop { position:fixed; z-index:45; inset:0; display:grid; place-items:center; padding:24px; background:#202a3566; }
-.fullDetailDialog { width:min(680px,100%); max-height:calc(100vh - 48px); overflow:auto; border:1px solid #d8ddd8; border-radius:18px; background:#fff; box-shadow:0 28px 80px #11182066; outline:0; }
+.fullDetailDialog { width:min(1040px,calc(100vw - 48px)); max-height:calc(100vh - 48px); overflow:hidden; border:1px solid #d8ddd8; border-radius:18px; background:#fff; box-shadow:0 28px 80px #11182066; outline:0; }
 .fullDetailDialog>section { min-height:0; }
 
 @media (max-width:1180px) {
@@ -89,7 +89,7 @@
   .onsiteBanner { grid-template-columns:26px 1fr auto; }
   .undoToast { top:188px; right:12px; left:12px; max-width:none; }
   .fullDetailBackdrop { align-items:end; padding:0; }
-  .fullDetailDialog { width:100%; max-height:88vh; border-radius:18px 18px 0 0; }
+  .fullDetailDialog { width:100%; max-height:88vh; overflow:auto; border-radius:18px 18px 0 0; }
   .filterStack { display:none; }
   .layoutStatus { grid-template-columns:26px 1fr auto; }.layoutStatus small { max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }

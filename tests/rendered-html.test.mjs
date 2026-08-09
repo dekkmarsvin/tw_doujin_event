@@ -20,9 +20,10 @@ test("server-renders the FF47 vector map application", async () => {
 });
 
 test("separates admin import, server publication, and accessible SVG rendering", async () => {
-  const paths = ["event-map-app.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "event-map-client.ts", "event-catalog.ts"];
-  const [app, admin, editor, recognizer, renderer, client, eventCatalog] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx"];
+  const [app, admin, editor, recognizer, renderer, client, eventCatalog, workspacePanels] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
+  const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
   const repository = await readFile(new URL("../db/event-maps.ts", import.meta.url), "utf8");
   const repositoryCore = await readFile(new URL("../db/event-map-repository.ts", import.meta.url), "utf8");
   const route = await readFile(new URL("../app/api/events/[eventId]/map/route.ts", import.meta.url), "utf8");
@@ -67,6 +68,13 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.doesNotMatch(app, /className=\{styles\.mapMeta\}/);
   assert.doesNotMatch(app, /publishedMap && <div className=\{styles\.layoutStatus\}/);
   assert.match(appStyles, /\.topbarActions :global\(\.help\) \{ display:block; \}/);
+  assert.match(workspacePanels, /function CircleMediaGallery/);
+  assert.match(workspacePanels, /record\.circle\.media/);
+  assert.match(workspacePanels, /styles\.placementMeta/);
+  assert.match(workspacePanels, /aria-label="圖片幻燈片控制"/);
+  assert.doesNotMatch(workspacePanels, /heroCopy|heroMediaHint|heroWithMedia/);
+  assert.match(workspaceStyles, /\.fullDetails\.detailsWithMedia \{ display:grid; grid-template-columns:/);
+  assert.match(workspaceStyles, /\.fullDetails,\.fullDetails\.detailsWithMedia \{ height:auto; display:block; \}/);
   assert.match(recognizer, /slotCount !== 988/);
   assert.match(renderer, /<svg/);
   assert.match(renderer, /aria-label="場內柱子"/);
