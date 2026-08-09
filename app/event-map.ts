@@ -29,11 +29,39 @@ export type MapAccessPoint = {
   label: string;
 };
 
+export type MapLandmarkKind = "enterprise" | "stage" | "other";
+
 export type MapLandmark = {
   id: string;
+  kind?: MapLandmarkKind;
   rect: MapRect;
   label: string;
 };
+
+export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "label">): MapLandmarkKind {
+  if (landmark.kind) return landmark.kind;
+  if (landmark.label === "企業攤") return "enterprise";
+  if (landmark.label === "舞台") return "stage";
+  return "other";
+}
+
+export function scaleMapLandmarks(
+  landmarks: MapLandmark[],
+  sourceSize: Pick<EventMapLayout, "width" | "height">,
+  targetSize: Pick<EventMapLayout, "width" | "height">,
+): MapLandmark[] {
+  const scaleX = targetSize.width / sourceSize.width;
+  const scaleY = targetSize.height / sourceSize.height;
+  return landmarks.map((landmark) => ({
+    ...landmark,
+    rect: {
+      x: landmark.rect.x * scaleX,
+      y: landmark.rect.y * scaleY,
+      width: landmark.rect.width * scaleX,
+      height: landmark.rect.height * scaleY,
+    },
+  }));
+}
 
 export type EventMapLayout = {
   version: typeof EVENT_MAP_VERSION;
@@ -120,6 +148,7 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
       else if (landmarkIds.has(landmark.id)) errors.push(`非一般攤位區 id ${landmark.id} 重複。`);
       else landmarkIds.add(landmark.id);
       if (typeof landmark.label !== "string" || !landmark.label.trim()) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 必須有顯示名稱。`);
+      if (landmark.kind !== undefined && !["enterprise", "stage", "other"].includes(landmark.kind)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的類型無效。`);
       if (!landmark.rect || !finiteRect(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的矩形座標無效。`);
     });
   }

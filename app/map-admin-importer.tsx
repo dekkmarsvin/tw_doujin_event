@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { publishEventMap } from "./event-map-client";
 import EventMapRenderer from "./event-map-renderer";
 import MapLayoutEditor from "./map-layout-editor";
-import { recognizeFF47Map } from "./map-recognition";
-import { validateFF47EventMapLayout, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
+import { LANDMARK_RECOGNITION_WARNING, recognizeFF47Map } from "./map-recognition";
+import { scaleMapLandmarks, validateFF47EventMapLayout, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
 import { UiIcon } from "./ui-icons";
 import { useModalFocus } from "./use-modal-focus";
 import styles from "./map-admin-importer.module.css";
@@ -30,7 +30,7 @@ function diagnostics(layout: EventMapLayout) {
 
 function reportFromPublished(map?: PublishedEventMap | null): MapRecognitionReport | null {
   if (!map) return null;
-  return { layout: map.layout, confidence: map.confidence, warnings: [], diagnostics: diagnostics(map.layout) };
+  return { layout: map.layout, confidence: map.confidence, warnings: map.layout.landmarks.length ? [] : [LANDMARK_RECOGNITION_WARNING], diagnostics: diagnostics(map.layout) };
 }
 
 function readFile(file: File) {
@@ -65,7 +65,6 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
   const handleFile = async (file?: File) => {
     if (!file) return;
     setError("");
-    setReport(null);
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setError("請選擇 JPG、PNG 或 WebP 圖片。" );
       return;
@@ -86,6 +85,11 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
       context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
       const recognized = recognizeFF47Map({ data: pixels.data, width: pixels.width, height: pixels.height });
+      const previousLayout = report?.layout;
+      if (previousLayout?.landmarks.length) {
+        recognized.layout.landmarks = scaleMapLandmarks(previousLayout.landmarks, previousLayout, recognized.layout);
+        recognized.warnings.push(`已依新圖片尺寸保留 ${previousLayout.landmarks.length} 個手動區域；請在發布前確認位置。`);
+      }
       setReport(recognized);
       setBaselineReport(recognized);
       setSourceName(file.name);
@@ -134,7 +138,7 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
 
       {report && <>
         <div className={styles.summary}>
-          <div><small>辨識信心</small><b className={report.confidence >= .85 ? styles.good : styles.warn}>{Math.round(report.confidence * 100)}%</b></div>
+          <div><small>一般結構辨識信心</small><b className={report.confidence >= .85 ? styles.good : styles.warn}>{Math.round(report.confidence * 100)}%</b></div>
           <div><small>A–W 排</small><b>{currentDiagnostics?.rowCount}<i>/ 23</i></b></div>
           <div><small>攤位格</small><b>{currentDiagnostics?.slotCount}<i>/ 988</i></b></div>
           <div><small>柱子</small><b>{currentDiagnostics?.pillarCount}</b></div>
