@@ -3,19 +3,35 @@
 import { useRef, useState } from "react";
 import { publishEventMap } from "./event-map-client";
 import EventMapRenderer from "./event-map-renderer";
+import MapLayoutEditor from "./map-layout-editor";
 import { recognizeFF47Map } from "./map-recognition";
-import type { MapRecognitionReport, PublishedEventMap } from "./event-map";
+import { validateFF47EventMapLayout, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
 import { UiIcon } from "./ui-icons";
 import { useModalFocus } from "./use-modal-focus";
 import styles from "./map-admin-importer.module.css";
 
 type Props = {
   eventId: string;
+  initialMap?: PublishedEventMap | null;
   onPublished: (map: PublishedEventMap) => void;
   onClose: () => void;
 };
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
+
+function diagnostics(layout: EventMapLayout) {
+  return {
+    rowCount: layout.rows.length,
+    slotCount: layout.rows.reduce((total, row) => total + row.slots.length, 0),
+    pillarCount: layout.pillars.length,
+    accessPointCount: layout.accessPoints.length,
+  };
+}
+
+function reportFromPublished(map?: PublishedEventMap | null): MapRecognitionReport | null {
+  if (!map) return null;
+  return { layout: map.layout, confidence: map.confidence, warnings: [], diagnostics: diagnostics(map.layout) };
+}
 
 function readFile(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -35,13 +51,15 @@ function loadImage(source: string) {
   });
 }
 
-export default function MapAdminImporter({ eventId, onPublished, onClose }: Props) {
-  const [sourceName, setSourceName] = useState("");
+export default function MapAdminImporter({ eventId, initialMap, onPublished, onClose }: Props) {
+  const initialReport = reportFromPublished(initialMap);
+  const [sourceName, setSourceName] = useState(initialMap?.sourceName ?? "");
   const [imageDataUrl, setImageDataUrl] = useState("");
-  const [report, setReport] = useState<MapRecognitionReport | null>(null);
+  const [report, setReport] = useState<MapRecognitionReport | null>(initialReport);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<"recognizing" | "publishing" | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
+  const [baselineReport, setBaselineReport] = useState<MapRecognitionReport | null>(initialReport);
   useModalFocus(true, dialogRef, onClose);
 
   const handleFile = async (file?: File) => {
@@ -67,7 +85,9 @@ export default function MapAdminImporter({ eventId, onPublished, onClose }: Prop
       if (!context) throw new Error("瀏覽器無法建立圖片分析畫布。" );
       context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-      setReport(recognizeFF47Map({ data: pixels.data, width: pixels.width, height: pixels.height }));
+      const recognized = recognizeFF47Map({ data: pixels.data, width: pixels.width, height: pixels.height });
+      setReport(recognized);
+      setBaselineReport(recognized);
       setSourceName(file.name);
       setImageDataUrl(source);
     } catch (caught) {
@@ -77,7 +97,10 @@ export default function MapAdminImporter({ eventId, onPublished, onClose }: Prop
     }
   };
 
-  const canPublish = !!report && report.confidence >= .85 && report.diagnostics.rowCount === 23 && report.diagnostics.slotCount === 988 && report.diagnostics.pillarCount === 28 && report.diagnostics.accessPointCount === 5;
+  const currentDiagnostics = report ? diagnostics(report.layout) : null;
+  const layoutValidation = report ? validateFF47EventMapLayout(report.layout) : null;
+  const canPublish = !!report && report.confidence >= .85 && !!layoutValidation?.ok;
+  const visibleWarnings = [...new Set([...(report?.warnings ?? []), ...(layoutValidation && !layoutValidation.ok ? layoutValidation.errors : [])])];
 
   const publish = async () => {
     if (!report || !canPublish) return;
@@ -96,11 +119,11 @@ export default function MapAdminImporter({ eventId, onPublished, onClose }: Prop
   return <div className={styles.backdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="admin-map-title" tabIndex={-1}>
       <header className={styles.header}>
-        <div><small>ADMIN · MAP RECOGNITION</small><h2 id="admin-map-title">管理 FF47 活動地圖</h2></div>
+        <div><small>ADMIN · MAP EDITOR</small><h2 id="admin-map-title">管理 FF47 活動地圖</h2></div>
         <button onClick={onClose} aria-label="關閉管理地圖視窗"><UiIcon name="close" /></button>
       </header>
 
-      <div className={styles.intro}><b>匯入一次，發布給所有使用者</b><p>圖片只用於管理辨識與比對。發布後保存的是 A–W 攤位、柱子與出入口的向量資料，一般使用者不需要上傳圖片。</p></div>
+      <div className={styles.intro}><b>辨識、微調，再發布給所有使用者</b><p>可直接編輯目前 revision，或重新匯入配置圖。圖片只用於管理辨識與比對；發布保存的是一般攤位、柱子、出入口、企業攤與舞台等向量資料。</p></div>
 
       <label className={`${styles.dropzone} ${busy ? styles.busy : ""}`}>
         <input data-testid="map-image-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void handleFile(event.target.files?.[0])} disabled={!!busy} />
@@ -112,24 +135,25 @@ export default function MapAdminImporter({ eventId, onPublished, onClose }: Prop
       {report && <>
         <div className={styles.summary}>
           <div><small>辨識信心</small><b className={report.confidence >= .85 ? styles.good : styles.warn}>{Math.round(report.confidence * 100)}%</b></div>
-          <div><small>A–W 排</small><b>{report.diagnostics.rowCount}<i>/ 23</i></b></div>
-          <div><small>攤位格</small><b>{report.diagnostics.slotCount}<i>/ 988</i></b></div>
-          <div><small>柱子</small><b>{report.diagnostics.pillarCount}</b></div>
-          <div><small>出入口</small><b>{report.diagnostics.accessPointCount}</b></div>
+          <div><small>A–W 排</small><b>{currentDiagnostics?.rowCount}<i>/ 23</i></b></div>
+          <div><small>攤位格</small><b>{currentDiagnostics?.slotCount}<i>/ 988</i></b></div>
+          <div><small>柱子</small><b>{currentDiagnostics?.pillarCount}</b></div>
+          <div><small>出入口</small><b>{currentDiagnostics?.accessPointCount}</b></div>
         </div>
 
-        <div className={styles.comparison}>
-          <figure>
+        <div className={`${styles.comparison} ${!imageDataUrl ? styles.vectorOnly : ""}`}>
+          {imageDataUrl && <figure>
             <figcaption>原始配置圖（僅供管理比對）</figcaption>
             {/* eslint-disable-next-line @next/next/no-img-element -- admin-only local recognition preview */}
             <img src={imageDataUrl} alt="管理員上傳的 FF47 原始配置圖" />
-          </figure>
+          </figure>}
           <figure><figcaption>可發布的 SVG 地圖</figcaption><div className={styles.vectorPreview}><EventMapRenderer layout={report.layout} slots={{}} onSelect={() => undefined} /></div></figure>
         </div>
 
+        <MapLayoutEditor layout={report.layout} backgroundImageUrl={imageDataUrl} onChange={(layout) => setReport((current) => current ? { ...current, layout, diagnostics: diagnostics(layout) } : current)} />
         <div className={styles.rows} aria-label="已辨識 A 到 W 排">{report.layout.rows.map((row) => <span key={row.label}>{row.label}<small>{row.orientation === "horizontal" ? "橫" : "直"} · {row.slots.length}</small></span>)}</div>
-        {!!report.warnings.length && <div className={styles.warnings}><b>辨識備註</b>{report.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
-        <footer className={styles.actions}><button onClick={onClose}>取消</button><button className={styles.publish} disabled={!canPublish || !!busy} onClick={() => void publish()}>{busy === "publishing" ? "正在發布…" : "發布活動地圖"}<UiIcon name="external" /></button></footer>
+        {!!visibleWarnings.length && <div className={styles.warnings}><b>發布前檢查</b>{visibleWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
+        <footer className={styles.actions}><button onClick={onClose}>取消</button><button disabled={!baselineReport || !!busy} onClick={() => baselineReport && setReport(baselineReport)}>還原本次編輯</button><button className={styles.publish} disabled={!canPublish || !!busy} onClick={() => void publish()}>{busy === "publishing" ? "正在發布…" : "發布活動地圖"}<UiIcon name="external" /></button></footer>
       </>}
     </section>
   </div>;

@@ -64,6 +64,14 @@ test("accepts a generic future event layout without FF47-specific counts", () =>
   assert.equal(validateFF47EventMapLayout(layout).ok, false);
 });
 
+test("rejects malformed or duplicate non-booth landmarks", () => {
+  const base = { version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 100, floor: { x: 0, y: 0, width: 100, height: 100 }, rows: [], pillars: [], accessPoints: [] };
+  assert.equal(validateEventMapLayout({ ...base, landmarks: [null] }).ok, false);
+  assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", label: "", rect: { x: 10, y: 10, width: 20, height: 10 } }] }).ok, false);
+  assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", label: "舞台", rect: { x: 95, y: 10, width: 20, height: 10 } }] }).ok, false);
+  assert.equal(validateEventMapLayout({ ...base, landmarks: [{ id: "stage-1", label: "舞台", rect: { x: 10, y: 10, width: 20, height: 10 } }, { id: "stage-1", label: "企業攤", rect: { x: 40, y: 10, width: 20, height: 10 } }] }).ok, false);
+});
+
 test("rejects images that are too small", () => {
   const report = recognizeFF47Map({ data: new Uint8ClampedArray(400 * 300 * 4), width: 400, height: 300 });
   assert.equal(report.confidence, 0);

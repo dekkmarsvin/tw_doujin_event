@@ -41,10 +41,23 @@ test("integrates Excel profile links and the sourced thumbnail index", () => {
   assert.match(record.circle.media[0].sourceUrl, /^https:\/\/drive\.google\.com\/file\/d\//);
 });
 
-test("retains known circles that currently have no numbered placement", () => {
-  const circle = catalog.CIRCLE_CATALOG.find((item) => item.name === "+Ely Cosplay+");
-  assert.ok(circle);
-  assert.equal(catalog.PLACEMENT_CATALOG.some((placement) => placement.circleId === circle.id), false);
+test("fills only the organizer-listed booth gaps with their existing circle templates", () => {
+  const expected = [
+    [1, "J09", "+喵耳園魔法道具屋+"], [1, "J10", "+喵耳園魔法道具屋+"],
+    [2, "J09", "+喵耳園魔法道具屋+"], [2, "J10", "+喵耳園魔法道具屋+"],
+    [2, "R01", "+Ely Cosplay+"], [2, "R02", "+Ely Cosplay+"],
+    [3, "R01", "+Ely Cosplay+"], [3, "R02", "+Ely Cosplay+"],
+  ];
+  for (const [day, code, name] of expected) {
+    const record = catalog.CIRCLE_RECORDS.find((item) => item.day === day && item.code === code && item.name === name);
+    assert.ok(record, `missing organizer supplement ${day}:${code}`);
+    assert.equal(Number.isInteger(record.circle.sourceRow), true);
+    const organizer = record.sources.find((source) => source.provider === "開拓動漫");
+    assert.match(organizer?.url ?? "", new RegExp(`%E7%AC%AC%E${day === 1 ? "4%B8%80" : day === 2 ? "4%BA%8C" : "4%B8%89"}%E5%A4%A9`, "i"));
+  }
+  const existing = catalog.CIRCLE_RECORDS.find((item) => item.day === 1 && item.code === "A01");
+  const existingOrganizer = existing?.sources.find((source) => source.provider === "開拓動漫");
+  assert.doesNotMatch(existingOrganizer?.url ?? "", /%E7%AC%AC%E4%B8%80%E5%A4%A9/i);
 });
 
 test("creates unique record IDs and maps legacy placement IDs to canonical circles", () => {

@@ -16,6 +16,7 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   venue: string;
   dateRangeLabel: string;
   mapTemplate: string;
+  areaMode: "single" | "switchable";
   days: readonly EventDayDefinition<TDay>[];
   areas: readonly EventAreaDefinition<TArea>[];
 };
@@ -26,6 +27,7 @@ export const FF47_EVENT = {
   venue: "花博公園爭艷館",
   dateRangeLabel: "8.21–23",
   mapTemplate: "FF47",
+  areaMode: "single",
   days: [
     { id: 1, label: "DAY 1", dateLabel: "8月21日・五" },
     { id: 2, label: "DAY 2", dateLabel: "8月22日・六" },
@@ -37,6 +39,10 @@ export const FF47_EVENT = {
     { id: "B", label: "L–W 區", shortLabel: "L–W" },
   ],
 } as const satisfies EventDefinition;
+
+export function eventUsesAreaSwitcher(event: EventDefinition) {
+  return event.areaMode === "switchable" && event.areas.length > 1;
+}
 
 export type FF47Day = (typeof FF47_EVENT.days)[number]["id"];
 export type FF47Area = (typeof FF47_EVENT.areas)[number]["id"];
