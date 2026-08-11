@@ -15,6 +15,7 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   name: string;
   venue: string;
   dateRangeLabel: string;
+  dataLastUpdatedLabel: string;
   mapTemplate: string;
   areaMode: "single" | "switchable";
   days: readonly EventDayDefinition<TDay>[];
@@ -26,6 +27,7 @@ export const FF47_EVENT = {
   name: "Fancy Frontier 47",
   venue: "花博公園爭艷館",
   dateRangeLabel: "8.21–23",
+  dataLastUpdatedLabel: "2026 年 8 月 11 日",
   mapTemplate: "FF47",
   areaMode: "single",
   days: [

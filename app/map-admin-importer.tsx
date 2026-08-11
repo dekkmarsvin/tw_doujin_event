@@ -127,7 +127,7 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
         <button onClick={onClose} aria-label="關閉管理地圖視窗"><UiIcon name="close" /></button>
       </header>
 
-      <div className={styles.intro}><b>辨識、微調，再發布給所有使用者</b><p>可直接編輯目前 revision，或重新匯入配置圖。圖片只用於管理辨識與比對；發布保存的是一般攤位、柱子、出入口、企業攤與舞台等向量資料。</p></div>
+      <div className={styles.intro}><b>辨識、微調，再發布給所有使用者</b><p>可直接編輯目前 revision，或重新匯入配置圖。圖片只用於管理辨識與比對；發布內容只包含一般攤位、柱子、出入口、企業攤與舞台等向量資料。</p></div>
 
       <label className={`${styles.dropzone} ${busy ? styles.busy : ""}`}>
         <input data-testid="map-image-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void handleFile(event.target.files?.[0])} disabled={!!busy} />

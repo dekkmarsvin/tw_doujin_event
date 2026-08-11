@@ -74,31 +74,46 @@ export function SearchResults({ records, selectedId, favoriteIds, favoriteGroupL
   </section>;
 }
 
-export function DayItinerary({ day, entries, recordsById, onSelect, onMove, onMoveTo, onVisit, onRemove }: {
+export function DayItinerary({ day, entries, recordsById, variant = "compact", onSelect, onMove, onMoveTo, onVisit, onRemove, onUpdatePurchase }: {
   day: EventDayKey;
   entries: VisitPlanEntry[];
   recordsById: Map<string, CircleViewRecord>;
+  variant?: "compact" | "full";
   onSelect: (record: CircleViewRecord) => void;
   onMove: (circleId: string, direction: -1 | 1) => void;
   onMoveTo: (circleId: string, targetIndex: number) => void;
   onVisit: (entry: VisitPlanEntry) => void;
   onRemove: (circleId: string) => void;
+  onUpdatePurchase: (circleId: string, purchaseMemo: string, budget: number | null) => void;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  return <section className={styles.itinerary} aria-label={`DAY ${day} 每日行程`}>
-    <header><div><small>DAY {day} ROUTE</small><h2>我的每日行程</h2></div><span>{entries.length} 站</span></header>
-    {entries.length === 0 ? <div className={styles.empty}><b>還沒有安排攤位</b><p>從搜尋結果或社團詳情加入；資料只會保存在這台裝置。</p></div> : <ol>
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const budgetTotal = entries.reduce((total, entry) => total + (entry.budget ?? 0), 0);
+  const shoppingCount = entries.filter((entry) => entry.purchaseMemo.trim() || entry.budget !== null).length;
+  const formatBudget = (value: number) => new Intl.NumberFormat("zh-TW").format(value);
+  return <section className={`${styles.itinerary} ${variant === "full" ? styles.fullItinerary : styles.compactItinerary}`} aria-label={`DAY ${day} 當日行程列表`}>
+    <header><div><small>DAY {day} ROUTE</small><h2>當日行程列表</h2></div><span>{entries.length} 站</span></header>
+    {entries.length > 0 && <div className={styles.shoppingSummary}><b>今日購物規劃</b><span>{shoppingCount > 0 ? `${shoppingCount} 攤已填寫 · ` : "尚未填寫購買項目 · "}預算合計 NT$ {formatBudget(budgetTotal)}</span></div>}
+    {entries.length === 0 ? <div className={styles.empty}><b>還沒有安排攤位</b><p>從搜尋結果或社團詳細資訊加入；資料只會儲存在此裝置。</p></div> : <ol>
       {entries.map((entry, index) => {
         const record = recordsById.get(entry.circleId);
         if (!record) return null;
-        return <li key={entry.circleId} draggable onDragStart={(event) => { setDraggingId(entry.circleId); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", entry.circleId); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); const circleId = draggingId ?? event.dataTransfer.getData("text/plain"); if (circleId) onMoveTo(circleId, index); setDraggingId(null); }} onDragEnd={() => setDraggingId(null)} className={`${entry.status === "next" ? styles.next : entry.status === "visited" ? styles.visited : ""} ${draggingId === entry.circleId ? styles.dragging : ""}`}>
-          <span className={styles.dragHandle} aria-hidden="true"><UiIcon name="drag" /></span><button className={styles.planMain} onClick={() => onSelect(record)}><span>{index + 1}</span><div><b>{record.code} · {record.name}</b><small>{entry.status === "next" ? "下一站" : entry.status === "visited" ? "已走訪" : "待前往"}</small></div></button>
-          <div className={styles.planActions}>
-            <button disabled={index === 0} onClick={() => onMove(entry.circleId, -1)} aria-label={`將 ${record.name} 往前移`}><UiIcon name="arrow-up" /></button>
-            <button disabled={index === entries.length - 1} onClick={() => onMove(entry.circleId, 1)} aria-label={`將 ${record.name} 往後移`}><UiIcon name="arrow-down" /></button>
-            <button onClick={() => onVisit(entry)}>{entry.status === "visited" ? "復原" : "走訪"}</button>
-            <button onClick={() => onRemove(entry.circleId)} aria-label={`從行程移除 ${record.name}`}><UiIcon name="close" /></button>
+        const purchaseEditorVisible = variant === "full" || editingPurchaseId === entry.circleId;
+        const purchaseSummary = [entry.purchaseMemo.trim(), entry.budget !== null ? `NT$ ${formatBudget(entry.budget)}` : ""].filter(Boolean).join(" · ");
+        return <li key={entry.circleId} draggable={!purchaseEditorVisible} onDragStart={(event) => { setDraggingId(entry.circleId); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", entry.circleId); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); const circleId = draggingId ?? event.dataTransfer.getData("text/plain"); if (circleId) onMoveTo(circleId, index); setDraggingId(null); }} onDragEnd={() => setDraggingId(null)} className={`${entry.status === "next" ? styles.next : entry.status === "visited" ? styles.visited : ""} ${draggingId === entry.circleId ? styles.dragging : ""}`}>
+          <div className={styles.itineraryRow}><span className={styles.dragHandle} aria-hidden="true"><UiIcon name="drag" /></span><button className={styles.planMain} onClick={() => onSelect(record)}><span>{index + 1}</span><div><b>{record.code} · {record.name}</b><small>{entry.status === "next" ? "下一站" : entry.status === "visited" ? "已走訪" : "待前往"}</small></div></button>
+            <div className={styles.planActions}>
+              <button disabled={index === 0} onClick={() => onMove(entry.circleId, -1)} aria-label={`將 ${record.name} 往前移`}><UiIcon name="arrow-up" /></button>
+              <button disabled={index === entries.length - 1} onClick={() => onMove(entry.circleId, 1)} aria-label={`將 ${record.name} 往後移`}><UiIcon name="arrow-down" /></button>
+              <button className={styles.visitToggle} aria-pressed={entry.status === "visited"} aria-label={entry.status === "visited" ? `將 ${record.name} 標示為待前往` : `將 ${record.name} 標示為已走訪`} onClick={() => onVisit(entry)}><UiIcon name={entry.status === "visited" ? "check-square" : "square"} /></button>
+              <button onClick={() => onRemove(entry.circleId)} aria-label={`從行程移除 ${record.name}`}><UiIcon name="close" /></button>
+            </div>
           </div>
+          {variant === "compact" && <button type="button" className={styles.purchaseToggle} aria-expanded={purchaseEditorVisible} onClick={() => setEditingPurchaseId((current) => current === entry.circleId ? null : entry.circleId)}><span>{purchaseSummary || "新增購買項目與預算"}</span><b>{purchaseEditorVisible ? "收合" : purchaseSummary ? "編輯" : "新增"}</b></button>}
+          {purchaseEditorVisible && <div className={styles.purchaseEditor}>
+            <label><span>購買項目</span><textarea value={entry.purchaseMemo} onChange={(event) => onUpdatePurchase(entry.circleId, event.target.value, entry.budget)} placeholder="例如：新刊 1 本、壓克力立牌" /></label>
+            <label><span>預算（NT$）</span><input type="number" inputMode="numeric" min="0" step="1" value={entry.budget ?? ""} onChange={(event) => onUpdatePurchase(entry.circleId, entry.purchaseMemo, event.target.value === "" ? null : Number(event.target.value))} placeholder="0" /></label>
+          </div>}
         </li>;
       })}
     </ol>}
@@ -118,7 +133,7 @@ function CircleMediaGallery({ media, activeIndex, compact, onActiveIndex, onOpen
   const move = (delta: number) => onActiveIndex((activeIndex + delta + media.length) % media.length);
   return <div className={`${styles.mediaGallery} ${compact ? styles.compactGallery : styles.fullGallery}`} role="group" aria-label="社團圖片">
     {compact && onOpenFull
-      ? <button className={styles.galleryOpen} onClick={onOpenFull} aria-label={`開啟 ${activeMedia.alt} 的完整詳情`}>{image}</button>
+      ? <button className={styles.galleryOpen} onClick={onOpenFull} aria-label={`開啟 ${activeMedia.alt} 的完整詳細資訊`}>{image}</button>
       : <div className={styles.galleryFrame}>{image}</div>}
     {!compact && <div className={styles.galleryFooter}>
       {media.length > 1 && <div className={styles.galleryControls} role="group" aria-label="圖片幻燈片控制">
@@ -149,21 +164,21 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
 }) {
   const [newGroup, setNewGroup] = useState("");
   const [mediaSelection, setMediaSelection] = useState({ circleId: "", index: 0 });
-  if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳情"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b><p>作品資訊、收藏備註與行程動作會集中顯示在這裡。</p></section>;
+  if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳細資訊"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b><p>作品資訊、收藏備註與行程動作會集中顯示在這裡。</p></section>;
   const activeMediaIndex = mediaSelection.circleId === record.circle.id ? mediaSelection.index : 0;
   const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
-  return <section className={`${styles.details} ${compact ? "" : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} aria-label="攤位詳情">
+  return <section className={`${styles.details} ${compact ? styles.compactDetails : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} aria-label="攤位詳細資訊">
     <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
     <div className={styles.detailBody}>
-      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} onClick={onClose} aria-label="關閉攤位詳情"><UiIcon name="close" /></button></div>
+      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button></div>
       <div className={styles.title}><div><h2>{record.name}</h2><p>{record.circle.creatorTypes.join("、") || record.genre}{record.circle.pen ? ` · ${record.circle.pen}` : ""}</p>{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
       {favorite?.groupId && <p className={styles.sourceHint}>收藏群組：{groups.find((group) => group.id === favorite.groupId)?.name ?? "未分組"}</p>}
-      {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登錄 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
+      {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登記 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
       {!compact && <div className={styles.tags}>{[...new Set([...record.circle.workTypes, ...record.circle.referencedWorks, ...record.circle.specialTags, ...record.tags.map((tag) => tag.trim())])].filter(Boolean).map((tag) => <span key={tag}>#{tag}</span>)}</div>}
       <div className={styles.work}><small>作品與販售資訊</small><b>{record.circle.work}</b><p>{record.circle.saleInfo || record.note}</p></div>
-      {visibleLinks.length > 0 && <div className={styles.externalLinks} aria-label="社團外部連結"><b>追加情報</b><div>{visibleLinks.map((link) => <a key={`${link.kind}-${link.provider}-${link.url}`} href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>)}</div>{compact && record.circle.externalLinks.length > visibleLinks.length && <small>完整詳情另有 {record.circle.externalLinks.length - visibleLinks.length} 個連結</small>}</div>}
+      {visibleLinks.length > 0 && <div className={styles.externalLinks} aria-label="社團外部連結"><b>更多資訊</b><div>{visibleLinks.map((link) => <a key={`${link.kind}-${link.provider}-${link.url}`} href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>)}</div>{compact && record.circle.externalLinks.length > visibleLinks.length && <small>完整詳細資訊另有 {record.circle.externalLinks.length - visibleLinks.length} 個連結</small>}</div>}
       <div className={styles.detailActions}><button className={styles.primary} onClick={onTogglePlan}>{plan ? "從行程移除" : "加入今日行程"}</button><button disabled={plan?.status === "next"} onClick={onSetNext}>{plan?.status === "next" ? "目前下一站" : "設為下一站"}</button></div>
-      {compact && <><div className={styles.sourceSummary}><b>資料來源</b><span>{record.sources.map((source) => source.provider).join("、")}</span></div><button className={styles.fullDetailButton} onClick={onOpenFull}>開啟完整詳情</button></>}
+      {compact && <><div className={styles.sourceSummary}><b>資料來源</b><span>{record.sources.map((source) => source.provider).join("、")}</span></div><button className={styles.fullDetailButton} onClick={onOpenFull}>開啟完整詳細資訊</button></>}
       {!compact && favorite && <div className={styles.favoriteEditor}>
         <label>收藏分組<select value={favorite.groupId ?? ""} onChange={(event) => onUpdateFavorite(event.target.value || null, favorite.memo)}><option value="">未分組</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
         <label>備註<textarea value={favorite.memo} onChange={(event) => onUpdateFavorite(favorite.groupId, event.target.value)} placeholder="記下想買的刊物、預算或提醒" /></label>
