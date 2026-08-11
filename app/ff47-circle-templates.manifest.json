@@ -5,7 +5,7 @@
   "sourceSheet": "攤位整理表 請在此填寫資訊",
   "sourceWorkbookSha256": "337d91fd2feebda9176a6a0a4e1f2f8d5447317dc3aebc96f1c181700a2d4dea",
   "thumbnailIndex": "data_source_test/ff47-thumbnail-index.csv",
-  "thumbnailIndexSha256": "6f145bb41414aafbedae6f117b7eae86cb14625bdb5365ddae2b756a7959ca22",
+  "thumbnailIndexSha256": "0858a0ff387957c22df9d913db781e5f03ed16c7335c02ff269a7adc003281e0",
   "output": "app/ff47-circle-templates.generated.json",
   "outputSha256": "3a6e78820732dc4804e038681ac918774edb8d09a11f613454457156a172ba6b",
   "counts": {

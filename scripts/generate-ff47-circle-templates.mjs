@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { inflateRawSync } from "node:zlib";
+import { normalizeTextSource } from "./catalog-source-utils.mjs";
 
 const WORKBOOK_PATH = "data_source_test/FF47 完整攤位整理.xlsx";
 const THUMBNAIL_INDEX_PATH = "data_source_test/ff47-thumbnail-index.csv";
@@ -137,8 +138,8 @@ const LINK_COLUMNS = [
 ];
 
 const workbookBytes = await readFile(WORKBOOK_PATH);
-const thumbnailCsvBytes = await readFile(THUMBNAIL_INDEX_PATH);
-const thumbnailRows = parseCsv(thumbnailCsvBytes.toString("utf8"));
+const thumbnailCsvText = normalizeTextSource(await readFile(THUMBNAIL_INDEX_PATH, "utf8"));
+const thumbnailRows = parseCsv(thumbnailCsvText);
 const thumbnails = new Map(thumbnailRows.slice(1).flatMap((row) => text(row[0]) && text(row[1]) ? [[text(row[0]), text(row[1])]] : []));
 const rows = parseWorksheet(unzip(workbookBytes), SOURCE_SHEET);
 const templates = rows.slice(1).flatMap((row, index) => {
@@ -182,7 +183,7 @@ const manifest = {
   sourceSheet: SOURCE_SHEET,
   sourceWorkbookSha256: sha256(workbookBytes),
   thumbnailIndex: THUMBNAIL_INDEX_PATH,
-  thumbnailIndexSha256: sha256(thumbnailCsvBytes),
+  thumbnailIndexSha256: sha256(thumbnailCsvText),
   output: OUTPUT_PATH,
   outputSha256: sha256(output),
   counts: {
