@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -9,6 +10,13 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout, validateFF47EventMapLayout } = await environment.runner.import("/app/event-map.ts");
 const { resizeRectFromCorner, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 after(() => vite.close());
+
+test("validates the exported FF47 Pages snapshot", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../public/data/events/ff47/map.json", import.meta.url), "utf8"));
+  assert.equal(snapshot.eventId, "ff47");
+  assert.ok(Number.isSafeInteger(snapshot.revision) && snapshot.revision > 0);
+  assert.equal(validateFF47EventMapLayout(snapshot.layout).ok, true);
+});
 
 function syntheticFF47Image() {
   const width = 1200;

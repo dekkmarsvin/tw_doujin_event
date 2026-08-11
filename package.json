@@ -1,5 +1,5 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "ff47-event-map",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -7,12 +7,18 @@
   },
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
-    "start": "vinext start",
+    "dev:pages": "vite --config vite.pages.config.ts",
+    "build": "npm run catalog:check && npm run pages:prepare && vite build --config vite.pages.config.ts",
+    "build:editor": "vinext build",
+    "preview": "vite preview --config vite.pages.config.ts",
+    "pages:dev": "npm run build && wrangler pages dev dist",
+    "pages:deploy": "npm run build && wrangler pages deploy dist",
+    "pages:prepare": "node scripts/prepare-pages-build.mjs",
+    "map:snapshot": "npm run build:editor && node scripts/export-static-event-map.mjs",
     "catalog:generate": "node scripts/generate-ff47-circle-templates.mjs",
     "catalog:check": "node scripts/generate-ff47-circle-templates.mjs --check",
-    "test": "npm run catalog:check && npm run build && node --test tests/*.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .wrangler",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -21,7 +27,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/vite-plugin": "1.51.2",
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.2.6",
     "@tailwindcss/postcss": "4.2.1",
@@ -42,7 +48,7 @@
     "typescript-eslint": "8.59.3",
     "vinext": "1.0.0-beta.2",
     "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "wrangler": "4.120.1"
   },
   "type": "module"
 }
