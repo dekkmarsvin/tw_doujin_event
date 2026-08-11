@@ -14,7 +14,7 @@ permissions:
   deployments: write
 
 concurrency:
-  group: cloudflare-pages-${{ github.ref }}
+  group: cloudflare-pages-${{ github.event_name == 'pull_request' && 'development' || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -46,8 +46,8 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit --incremental false
 
-      - name: Deploy to Cloudflare Pages
-        id: deploy
+      - name: Deploy development environment
+        id: deploy-development
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -56,5 +56,32 @@ jobs:
           wranglerVersion: 4.120.1
           command: >-
             pages deploy dist
-            --project-name=ff47-event-map
-            --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
+            --project-name=dev-tw-catalog
+            --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'main' }}
+
+      - name: Smoke test development deployment
+        run: >-
+          curl --fail --silent --show-error
+          --retry 8 --retry-all-errors --retry-delay 2
+          https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || '' }}dev-tw-catalog.pages.dev/
+
+      - name: Deploy production environment
+        id: deploy-production
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          wranglerVersion: 4.120.1
+          command: >-
+            pages deploy dist
+            --project-name=tw-catalog
+            --branch=main
+
+      - name: Smoke test production deployment
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: >-
+          curl --fail --silent --show-error
+          --retry 8 --retry-all-errors --retry-delay 2
+          https://tw-catalog.pages.dev/
