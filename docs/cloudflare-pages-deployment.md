@@ -9,12 +9,12 @@
 
 ## 自動部署架構
 
-本專案選擇 **GitHub Actions + Wrangler Direct Upload**，不使用 Cloudflare Dashboard 的原生 Git integration。Cloudflare 不允許同一個 Pages project 在 Git integration 與 Direct Upload 之間切換，因此首次建立 project 時就必須選定這條路徑。
+本專案選擇 **GitHub Actions + Wrangler Direct Upload**，不使用 Cloudflare Dashboard 的原生 Git integration。Cloudflare 不允許同一個 Pages project 在 Git integration 與 Direct Upload 之間切換，因此首次建立 project 時就必須選定這條路徑。開發與正式環境分別使用 `dev-tw-catalog` 與 `tw-catalog`，避免 preview 與 production deployment 共用回滾歷史。
 
 `.github/workflows/deploy-pages.yml` 的行為：
 
-- push 到 `main`：完整 gate 通過後發布 production deployment。
-- 同 repository 的 pull request：發布 `pr-<number>` preview deployment。
+- push 到 `main`：完整 gate 通過後，先發布並 smoke test `dev-tw-catalog.pages.dev`，成功後才發布並 smoke test `tw-catalog.pages.dev`。
+- 同 repository 的 pull request：發布 `pr-<number>.dev-tw-catalog.pages.dev` preview deployment，不觸碰 production project。
 - fork pull request：只因拿不到 deployment secrets 而不執行 deploy job，避免把 Cloudflare token 暴露給外部程式碼。
 - `workflow_dispatch`：允許從 GitHub Actions 頁面手動重跑目前 branch。
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
@@ -33,7 +33,8 @@ Workflow 使用 Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output
 
 ```bash
 npx wrangler login
-npx wrangler pages project create ff47-event-map --production-branch main
+npx wrangler pages project create dev-tw-catalog --production-branch main
+npx wrangler pages project create tw-catalog --production-branch main
 ```
 
 不要在 Dashboard 用 **Connect to Git** 建立同名 project。專案不需要 Functions、D1、R2、KV 或 runtime secret。
@@ -56,7 +57,7 @@ gh secret set CLOUDFLARE_ACCOUNT_ID
 gh secret set CLOUDFLARE_API_TOKEN
 ```
 
-完成後 push `main`，第一次 workflow 就會建立 production deployment。驗證 `pages.dev` 網址後，再綁定正式網域。
+完成後 push `main`，第一次 workflow 就會依序建立 development 與 production deployment。驗證兩個 `pages.dev` 網址後，再為 `tw-catalog` 綁定正式網域。
 
 ## 發布前 gate
 
@@ -80,10 +81,11 @@ npx tsc --noEmit --incremental false
 Pages project 已建立且 Wrangler 已登入時，可執行：
 
 ```bash
+npm run pages:deploy:dev
 npm run pages:deploy
 ```
 
-這個 script 會重新 build，再依 `wrangler.jsonc` 執行 `wrangler pages deploy dist`。不要直接上傳舊的 `dist/`；一般 production 發布仍以 GitHub Actions 為準。
+兩個 script 都會重新 build，再分別 Direct Upload 至 development 或 production project。不要直接上傳舊的 `dist/`；一般 production 發布仍以 GitHub Actions 為準。
 
 ## 更新活動地圖
 
