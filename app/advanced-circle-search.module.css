@@ -30,5 +30,5 @@
   .wrap { padding:10px 0 0; border-bottom:0; }
   .trigger { min-height:48px; }
   .panel input,.panel select { min-height:44px; font-size:calc(16px * var(--ui-font-scale,1)); }
-  .segments button,.panel footer button { min-height:42px; font-size:calc(10px * var(--ui-font-scale,1)); }
+  .segments button,.panel footer button { min-height:44px; font-size:calc(10px * var(--ui-font-scale,1)); }
 }

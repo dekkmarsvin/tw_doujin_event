@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
 import { GENRES } from "./ff47-booths";
 import AccessibleEventMapRenderer, { type MapSlotView } from "./accessible-event-map-renderer";
 import { loadStaticEventMap } from "./static-event-map-client";
@@ -34,7 +34,7 @@ import { usePlanning } from "./use-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
-import { calculateMapFitZoom, centerMapOffset, clampMapZoom, shouldShowMapMedia, zoomOffsetAroundPoint } from "./map-viewport";
+import { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
 import { eventUsesAreaSwitcher, FF47_EVENT, type FF47Area, type FF47Day } from "./event-catalog";
 import PlanningTools from "./planning-tools";
 import styles from "./event-map-app.module.css";
@@ -48,7 +48,7 @@ const WORK_TOPIC_SUGGESTIONS = buildWorkTopicSuggestions(CIRCLE_RECORDS);
 const TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
 type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
-  | { kind: "pinch"; distance: number; zoom: number; mapX: number; mapY: number };
+  | ({ kind: "pinch" } & MapPinchOrigin);
 
 function parseDay(value: string | null): FF47Day | null {
   const day = Number(value);
@@ -93,6 +93,7 @@ export default function EventMapApp() {
   const aboutRef = useRef<HTMLDivElement | null>(null);
   const aboutButtonRef = useRef<HTMLButtonElement | null>(null);
   const gesture = useRef<MapGesture | null>(null);
+  const mapGestureFrame = useRef<number | null>(null);
   const mobileSheetGesture = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const mobileSheetWasDragged = useRef(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -118,6 +119,10 @@ export default function EventMapApp() {
     setTextScale(next);
     try { window.localStorage.setItem(TEXT_SCALE_STORAGE_KEY, next); } catch { /* Keep the in-memory preference. */ }
   };
+
+  useEffect(() => () => {
+    if (mapGestureFrame.current !== null) cancelAnimationFrame(mapGestureFrame.current);
+  }, []);
 
   useEffect(() => {
     if (!showAbout) return;
@@ -451,11 +456,10 @@ export default function EventMapApp() {
     ];
   };
   const handleMobileSheetPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
-    const dock = event.currentTarget.closest("aside");
-    if (!dock) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     mobileSheetWasDragged.current = false;
-    mobileSheetGesture.current = { pointerId: event.pointerId, startY: event.clientY, startHeight: dock.getBoundingClientRect().height };
+    const startHeight = mobileSheetSnapPoints().find((point) => point.level === mobileSheetLevel)?.height ?? 92;
+    mobileSheetGesture.current = { pointerId: event.pointerId, startY: event.clientY, startHeight };
     setMobileSheetDragging(true);
   };
   const handleMobileSheetPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -496,29 +500,49 @@ export default function EventMapApp() {
     if (active.length === 1) gesture.current = { kind: "drag", pointerId: event.pointerId, x: active[0].x, y: active[0].y, ox: offset.x, oy: offset.y };
     if (active.length === 2) {
       const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
-      gesture.current = { kind: "pinch", distance: Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y), zoom, mapX: (center.x - offset.x) / zoom, mapY: (center.y - offset.y) / zoom };
+      gesture.current = { kind: "pinch", distance: Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y), zoom, mapX: (center.x - offset.x) / zoom, mapY: (center.y - offset.y) / zoom, center };
     }
+  };
+  const applyMapGesture = () => {
+    const active = [...pointers.current.values()];
+    if (active.length >= 2 && gesture.current?.kind === "pinch") {
+      const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
+      const distance = Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y);
+      const view = calculatePinchMapView(gesture.current, distance, center, mapMinZoom);
+      gesture.current.boundaryCenter = view.boundaryCenter;
+      setZoom(view.zoom);
+      setOffset(view.offset);
+      return view.offset;
+    } else if (gesture.current?.kind === "drag") {
+      const point = pointers.current.get(gesture.current.pointerId);
+      if (point) {
+        const nextOffset = { x: gesture.current.ox + point.x - gesture.current.x, y: gesture.current.oy + point.y - gesture.current.y };
+        setOffset(nextOffset);
+        return nextOffset;
+      }
+    }
+    return null;
   };
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(event.pointerId)) return;
     const rect = event.currentTarget.getBoundingClientRect();
     pointers.current.set(event.pointerId, { x: event.clientX - rect.left, y: event.clientY - rect.top });
-    const active = [...pointers.current.values()];
-    if (active.length >= 2 && gesture.current?.kind === "pinch") {
-      const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
-      const distance = Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y);
-      const nextZoom = clampMapZoom(gesture.current.zoom * distance / Math.max(1, gesture.current.distance), mapMinZoom);
-      setZoom(nextZoom);
-      setOffset({ x: center.x - gesture.current.mapX * nextZoom, y: center.y - gesture.current.mapY * nextZoom });
-    } else if (gesture.current?.kind === "drag" && gesture.current.pointerId === event.pointerId) {
-      const point = pointers.current.get(event.pointerId)!;
-      setOffset({ x: gesture.current.ox + point.x - gesture.current.x, y: gesture.current.oy + point.y - gesture.current.y });
-    }
+    if (mapGestureFrame.current !== null) return;
+    mapGestureFrame.current = requestAnimationFrame(() => {
+      mapGestureFrame.current = null;
+      applyMapGesture();
+    });
   };
   const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    let finalOffset: { x: number; y: number } | null = null;
+    if (mapGestureFrame.current !== null) {
+      cancelAnimationFrame(mapGestureFrame.current);
+      mapGestureFrame.current = null;
+      finalOffset = applyMapGesture();
+    }
     pointers.current.delete(event.pointerId);
     const remaining = [...pointers.current.entries()][0];
-    gesture.current = remaining ? { kind: "drag", pointerId: remaining[0], x: remaining[1].x, y: remaining[1].y, ox: offset.x, oy: offset.y } : null;
+    gesture.current = remaining ? { kind: "drag", pointerId: remaining[0], x: remaining[1].x, y: remaining[1].y, ox: finalOffset?.x ?? offset.x, oy: finalOffset?.y ?? offset.y } : null;
   };
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -575,6 +599,13 @@ export default function EventMapApp() {
   </section>;
   const mobileDockStyle = mobileSheetDragHeight === null ? undefined : { "--mobile-sheet-height": `${mobileSheetDragHeight}px` } as CSSProperties;
   const mobileSheetActionLabel = mobileSheetLevel === "peek" ? "展開工作面板" : mobileSheetLevel === "half" ? "完整展開工作面板" : "縮小工作面板";
+  const activeMobileTabId = `mobile-workspace-tab-${mobilePanel}`;
+  const handleMobilePanelFocus = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+    setMobileSheetLevel("full");
+    requestAnimationFrame(() => requestAnimationFrame(() => target.scrollIntoView({ block: "center" })));
+  };
 
   return <main className="app-shell" data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
     <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 MAP</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{FF47_EVENT.name}</b><small>{FF47_EVENT.dateRangeLabel} · {FF47_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><div className={styles.topbarActions}><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools /><div ref={aboutRef} className={styles.aboutMenu}><button ref={aboutButtonRef} type="button" className={styles.aboutTrigger} aria-haspopup="dialog" aria-expanded={showAbout} aria-controls="about-this-site" onClick={() => setShowAbout((current) => !current)}>關於</button>{showAbout && <section id="about-this-site" className={styles.aboutPanel} role="dialog" aria-labelledby="about-title"><header><h2 id="about-title">關於本頁</h2><button type="button" onClick={() => { setShowAbout(false); aboutButtonRef.current?.focus(); }} aria-label="關閉關於說明"><UiIcon name="close" /></button></header><p>本頁是非官方同人展逛攤工具，不代表 Fancy Frontier 主辦單位。資料整理自公開資料，實際活動資訊請以主辦單位與社團最新公告為準。</p><dl><div><dt>資料最後更新</dt><dd>{FF47_EVENT.dataLastUpdatedLabel}</dd></div><div><dt>聯絡</dt><dd>Discord ID <strong>dekkorakki</strong></dd></div></dl></section>}</div></div></header>
@@ -593,9 +624,9 @@ export default function EventMapApp() {
         </div>
       </section>
       <aside className={`${styles.rightRail} ${navigationMode ? styles.navigationRightRail : ""}`}><div className={styles.detailSlot}>{detailsPanel}</div>{!navigationMode && <div className={styles.planSlot}>{compactItineraryPanel}</div>}</aside>
-      <aside className={styles.mobileDock} style={mobileDockStyle} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板"><button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} onClick={toggleMobileSheetLevel} onPointerDown={handleMobileSheetPointerDown} onPointerMove={handleMobileSheetPointerMove} onPointerUp={handleMobileSheetPointerEnd} onPointerCancel={handleMobileSheetPointerEnd}><span aria-hidden="true" /></button><div className={styles.mobileTabs} role="tablist" aria-label="行動版工作區"><button role="tab" aria-selected={mobilePanel === "filters"} onClick={() => selectMobilePanel("filters")}>篩選</button><button role="tab" aria-selected={mobilePanel === "results"} onClick={() => selectMobilePanel("results")}>結果 <span>{filtered.length}</span></button><button role="tab" aria-selected={mobilePanel === "details"} onClick={() => selectMobilePanel("details")} disabled={!selected}>詳情</button><button role="tab" aria-selected={mobilePanel === "plan"} onClick={() => selectMobilePanel("plan")}>行程 <span>{dayPlan.length}</span></button></div><div className={styles.mobilePanel} aria-hidden={mobileSheetLevel === "peek"}>{mobilePanel === "filters" ? mobileFiltersPanel : mobilePanel === "results" ? resultsPanel : mobilePanel === "details" ? detailsPanel : planningPanel}</div></aside>
+      <aside className={styles.mobileDock} style={mobileDockStyle} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板"><button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} onClick={toggleMobileSheetLevel} onPointerDown={handleMobileSheetPointerDown} onPointerMove={handleMobileSheetPointerMove} onPointerUp={handleMobileSheetPointerEnd} onPointerCancel={handleMobileSheetPointerEnd}><span aria-hidden="true" /></button><div className={styles.mobileTabs} role="tablist" aria-label="行動版工作區"><button id="mobile-workspace-tab-filters" role="tab" aria-controls="mobile-workspace-panel" aria-selected={mobilePanel === "filters"} onClick={() => selectMobilePanel("filters")}>篩選</button><button id="mobile-workspace-tab-results" role="tab" aria-controls="mobile-workspace-panel" aria-selected={mobilePanel === "results"} onClick={() => selectMobilePanel("results")}>結果 <span>{filtered.length}</span></button><button id="mobile-workspace-tab-details" role="tab" aria-controls="mobile-workspace-panel" aria-selected={mobilePanel === "details"} onClick={() => selectMobilePanel("details")} disabled={!selected}>詳細資訊</button><button id="mobile-workspace-tab-plan" role="tab" aria-controls="mobile-workspace-panel" aria-selected={mobilePanel === "plan"} onClick={() => selectMobilePanel("plan")}>行程 <span>{dayPlan.length}</span></button></div><div id="mobile-workspace-panel" className={styles.mobilePanel} role="tabpanel" aria-labelledby={activeMobileTabId} aria-hidden={mobileSheetLevel === "peek"} onFocusCapture={handleMobilePanelFocus}>{mobilePanel === "filters" ? mobileFiltersPanel : mobilePanel === "results" ? resultsPanel : mobilePanel === "details" ? detailsPanel : planningPanel}</div></aside>
     </div>
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
-    {showFullDetail && selected && <div className={styles.fullDetailBackdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowFullDetail(false); }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳情`} tabIndex={-1}>{fullDetailsPanel}</div></div>}
+    {showFullDetail && selected && <div className={styles.fullDetailBackdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowFullDetail(false); }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>}
   </main>;
 }

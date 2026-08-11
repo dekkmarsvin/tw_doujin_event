@@ -74,7 +74,7 @@
 .fullItinerary .itineraryRow { grid-template-columns:18px minmax(0,1fr) auto; }
 .fullItinerary .purchaseEditor { grid-template-columns:minmax(0,1fr) 104px; margin-inline:18px 0; padding:8px 0 4px; }
 
-.details { min-height:100%; position:relative; }
+.details { width:100%; min-width:0; min-height:100%; position:relative; }
 .mediaGallery { min-width:0; overflow:hidden; background:var(--cream); }
 .compactGallery { aspect-ratio:16/8; border-bottom:1px solid var(--line); }
 .galleryOpen,.galleryFrame { width:100%; height:100%; display:grid; place-items:center; overflow:hidden; }
@@ -175,10 +175,23 @@
 .coral { --tone:var(--coral); }.mint { --tone:var(--mint); }.blue { --tone:var(--blue); }.amber { --tone:var(--amber); }.lilac { --tone:var(--lilac); }
 
 @media (max-width:760px) {
-  .results,.itinerary { width:100%; height:100%; }
+  .results,.itinerary,.details,.detailEmpty { width:100%; height:100%; }
   .resultList,.itinerary ol { max-height:none; }
-  .planActions button { min-width:32px; height:32px; }
-  .planActions .visitToggle { width:32px; font-size:17px; }
+  .resultList article { grid-template-columns:minmax(0,1fr) 44px; }
+  .resultMain,.planMain,.purchaseToggle,.resultHeaderActions button,.empty button,.heart,.loadMore,.fullDetailButton,.shared button,.externalLinks a { min-height:44px; }
+  .heart { width:44px; height:44px; }
+  .itinerary>header small { font-size:9px; }
+  .itinerary>header h2 { font-size:16px; }
+  .shoppingSummary b { font-size:11px; }.shoppingSummary span { font-size:10px; }
+  .planMain b { font-size:12px; }.planMain small { font-size:10px; }
+  .planActions button { min-width:44px; height:44px; }
+  .planActions .visitToggle { width:44px; font-size:17px; }
+  .purchaseEditor label { font-size:12px; }
+  .purchaseEditor textarea { min-height:64px; }
+  .purchaseEditor input { height:44px; }
+  .detailClose { width:44px; height:44px; }
+  .detailActions button { min-height:44px; }
+  .favoriteEditor select,.groupCreator input,.groupCreator button { min-height:44px; }
   .compactGallery { aspect-ratio:16/8; }
   :global([data-mobile-sheet-level="half"]) .compactDetails .compactGallery,
   :global([data-mobile-sheet-level="half"]) .compactDetails .externalLinks,
@@ -190,4 +203,5 @@
   .fullGallery .galleryFrame { aspect-ratio:16/10; padding:12px; }
   .fullDetails>.detailBody { overflow:visible; padding:18px; }
   .galleryControls { padding-inline:12px; }
+  .galleryRail button { height:44px; }
 }
