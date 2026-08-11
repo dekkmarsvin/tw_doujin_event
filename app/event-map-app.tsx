@@ -34,7 +34,7 @@ import { usePlanning } from "./use-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
-import { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
+import { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin, type MapView } from "./map-viewport";
 import { eventUsesAreaSwitcher, FF47_EVENT, type FF47Area, type FF47Day } from "./event-catalog";
 import PlanningTools from "./planning-tools";
 import styles from "./event-map-app.module.css";
@@ -75,9 +75,9 @@ export default function EventMapApp() {
   const [mobileSheetDragHeight, setMobileSheetDragHeight] = useState<number | null>(null);
   const [mobileSheetDragging, setMobileSheetDragging] = useState(false);
   const [navigationMode, setNavigationMode] = useState(false);
-  const [zoom, setZoom] = useState(.8);
+  const [mapView, setMapViewState] = useState<MapView>({ zoom: .8, offset: { x: 0, y: 0 } });
   const [mapMinZoom, setMapMinZoom] = useState(0);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [mapGestureActive, setMapGestureActive] = useState(false);
   const [publishedMap, setPublishedMap] = useState<PublishedEventMap | null>(null);
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState("");
@@ -89,6 +89,7 @@ export default function EventMapApp() {
   const { document: planning, ready: planningReady, update: updatePlanning, storageError: planningStorageError } = usePlanning(FF47_EVENT_ID);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const floorRef = useRef<HTMLDivElement | null>(null);
   const fullDetailRef = useRef<HTMLDivElement | null>(null);
   const aboutRef = useRef<HTMLDivElement | null>(null);
   const aboutButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -97,6 +98,7 @@ export default function EventMapApp() {
   const mobileSheetGesture = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const mobileSheetWasDragged = useRef(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const mapViewRef = useRef(mapView);
   const historyIntent = useRef<"replace" | "push">("replace");
   const suppressUrlWrite = useRef(false);
   const lastAutoSelection = useRef("");
@@ -105,6 +107,13 @@ export default function EventMapApp() {
   const mapWasFitted = useRef(false);
   const floorHeight = 950;
   const floorWidth = publishedMap ? floorHeight * publishedMap.layout.width / publishedMap.layout.height : 1344;
+  const { zoom, offset } = mapView;
+  const getFloorInset = useCallback(() => ({ x: floorRef.current?.offsetLeft ?? 0, y: floorRef.current?.offsetTop ?? 0 }), []);
+  const setMapView = useCallback((next: MapView | ((current: MapView) => MapView)) => {
+    const resolved = typeof next === "function" ? next(mapViewRef.current) : next;
+    mapViewRef.current = resolved;
+    setMapViewState(resolved);
+  }, []);
 
   useEffect(() => {
     try {
@@ -198,16 +207,16 @@ export default function EventMapApp() {
     if (!publishedMap || !viewportElement) return;
     const fitMap = () => {
       const viewport = viewportElement.getBoundingClientRect();
+      const inset = getFloorInset();
       const nextMinimum = calculateMapFitZoom(viewport, { width: floorWidth, height: floorHeight });
       const previousMinimum = previousFitZoom.current;
       previousFitZoom.current = nextMinimum;
       setMapMinZoom(nextMinimum);
-      setZoom((current) => {
-        const wasAtFit = previousMinimum > 0 && Math.abs(current - previousMinimum) < .006;
-        if (!mapWasFitted.current || current < nextMinimum || wasAtFit) {
+      setMapView((current) => {
+        const wasAtFit = previousMinimum > 0 && Math.abs(current.zoom - previousMinimum) < .006;
+        if (!mapWasFitted.current || current.zoom < nextMinimum || wasAtFit) {
           mapWasFitted.current = true;
-          setOffset(centerMapOffset(viewport, { width: floorWidth, height: floorHeight }, nextMinimum));
-          return nextMinimum;
+          return { zoom: nextMinimum, offset: centerMapOffset(viewport, { width: floorWidth, height: floorHeight }, nextMinimum, inset) };
         }
         return current;
       });
@@ -216,7 +225,7 @@ export default function EventMapApp() {
     const observer = new ResizeObserver(fitMap);
     observer.observe(viewportElement);
     return () => observer.disconnect();
-  }, [floorWidth, publishedMap]);
+  }, [floorWidth, getFloorInset, publishedMap, setMapView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,6 +263,25 @@ export default function EventMapApp() {
     map.addEventListener("selectstart", preventMapTextSelection);
     return () => map.removeEventListener("selectstart", preventMapTextSelection);
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = map.getBoundingClientRect();
+      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const inset = getFloorInset();
+      const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? rect.height : 1;
+      const delta = { x: event.deltaX * multiplier, y: event.deltaY * multiplier };
+      const mobileScroll = window.matchMedia("(max-width: 760px)").matches && !event.ctrlKey;
+      setMapView((current) => mapViewFromWheel(current, delta, point, mapMinZoom, mobileScroll ? "pan" : "zoom", inset));
+    };
+
+    map.addEventListener("wheel", handleWheel, { passive: false });
+    return () => map.removeEventListener("wheel", handleWheel);
+  }, [getFloorInset, mapMinZoom, setMapView]);
 
   useEffect(() => {
     if (!urlReady) return;
@@ -354,12 +382,15 @@ export default function EventMapApp() {
     if (!slot) return;
     const floorHeight = 950;
     const floorScale = floorHeight / publishedMap.layout.height;
-    const targetZoom = clampMapZoom(zoom, mapMinZoom);
     const centerX = (slot.rect.x + slot.rect.width / 2) * floorScale;
     const centerY = (slot.rect.y + slot.rect.height / 2) * floorScale;
     const viewport = mapRef.current.getBoundingClientRect();
-    setOffset({ x: viewport.width / 2 - 18 - centerX * targetZoom, y: viewport.height / 2 - 18 - centerY * targetZoom });
-  }, [mapMinZoom, publishedMap, zoom]);
+    const inset = getFloorInset();
+    setMapView((current) => {
+      const targetZoom = clampMapZoom(current.zoom, mapMinZoom);
+      return { zoom: targetZoom, offset: { x: viewport.width / 2 - inset.x - centerX * targetZoom, y: viewport.height / 2 - inset.y - centerY * targetZoom } };
+    });
+  }, [getFloorInset, mapMinZoom, publishedMap, setMapView]);
 
   useEffect(() => {
     const code = pendingRestoreCode.current;
@@ -417,18 +448,18 @@ export default function EventMapApp() {
     previousFitZoom.current = nextZoom;
     mapWasFitted.current = true;
     setMapMinZoom(nextZoom);
-    setZoom(nextZoom);
-    setOffset(centerMapOffset(viewport, { width: floorWidth, height: floorHeight }, nextZoom));
+    setMapView({ zoom: nextZoom, offset: centerMapOffset(viewport, { width: floorWidth, height: floorHeight }, nextZoom, getFloorInset()) });
   };
   const stepZoom = (delta: number) => {
     const viewport = mapRef.current?.getBoundingClientRect();
     if (!viewport) return;
     const point = { x: viewport.width / 2, y: viewport.height / 2 };
-    const buttonStep = zoom >= 2 ? .25 : .1;
-    const nextZoom = clampMapZoom(+(zoom + Math.sign(delta) * buttonStep).toFixed(2), mapMinZoom);
-    if (nextZoom === zoom) return;
-    setOffset((current) => zoomOffsetAroundPoint(current, zoom, nextZoom, point));
-    setZoom(nextZoom);
+    setMapView((current) => {
+      const buttonStep = current.zoom >= 2 ? .25 : .1;
+      const nextZoom = clampMapZoom(+(current.zoom + Math.sign(delta) * buttonStep).toFixed(2), mapMinZoom);
+      if (nextZoom === current.zoom) return current;
+      return { zoom: nextZoom, offset: zoomOffsetAroundPoint(current.offset, current.zoom, nextZoom, point, getFloorInset()) };
+    });
   };
   const toggleNavigationMode = () => {
     const enabled = !navigationMode;
@@ -496,11 +527,14 @@ export default function EventMapApp() {
     const rect = event.currentTarget.getBoundingClientRect();
     pointers.current.set(event.pointerId, { x: event.clientX - rect.left, y: event.clientY - rect.top });
     event.currentTarget.setPointerCapture(event.pointerId);
+    setMapGestureActive(true);
     const active = [...pointers.current.values()];
-    if (active.length === 1) gesture.current = { kind: "drag", pointerId: event.pointerId, x: active[0].x, y: active[0].y, ox: offset.x, oy: offset.y };
+    const currentView = mapViewRef.current;
+    const inset = getFloorInset();
+    if (active.length === 1) gesture.current = { kind: "drag", pointerId: event.pointerId, x: active[0].x, y: active[0].y, ox: currentView.offset.x, oy: currentView.offset.y };
     if (active.length === 2) {
       const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
-      gesture.current = { kind: "pinch", distance: Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y), zoom, mapX: (center.x - offset.x) / zoom, mapY: (center.y - offset.y) / zoom, center };
+      gesture.current = { kind: "pinch", distance: Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y), zoom: currentView.zoom, mapX: (center.x - inset.x - currentView.offset.x) / currentView.zoom, mapY: (center.y - inset.y - currentView.offset.y) / currentView.zoom, center, inset };
     }
   };
   const applyMapGesture = () => {
@@ -510,14 +544,13 @@ export default function EventMapApp() {
       const distance = Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y);
       const view = calculatePinchMapView(gesture.current, distance, center, mapMinZoom);
       gesture.current.boundaryCenter = view.boundaryCenter;
-      setZoom(view.zoom);
-      setOffset(view.offset);
+      setMapView({ zoom: view.zoom, offset: view.offset });
       return view.offset;
     } else if (gesture.current?.kind === "drag") {
       const point = pointers.current.get(gesture.current.pointerId);
       if (point) {
         const nextOffset = { x: gesture.current.ox + point.x - gesture.current.x, y: gesture.current.oy + point.y - gesture.current.y };
-        setOffset(nextOffset);
+        setMapView((current) => ({ ...current, offset: nextOffset }));
         return nextOffset;
       }
     }
@@ -542,16 +575,10 @@ export default function EventMapApp() {
     }
     pointers.current.delete(event.pointerId);
     const remaining = [...pointers.current.entries()][0];
-    gesture.current = remaining ? { kind: "drag", pointerId: remaining[0], x: remaining[1].x, y: remaining[1].y, ox: finalOffset?.x ?? offset.x, oy: finalOffset?.y ?? offset.y } : null;
-  };
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    const nextZoom = clampMapZoom(+(zoom * Math.exp(-event.deltaY * .0012)).toFixed(3), mapMinZoom);
-    if (nextZoom === zoom) return;
-    setOffset(zoomOffsetAroundPoint(offset, zoom, nextZoom, point));
-    setZoom(nextZoom);
+    const currentView = mapViewRef.current;
+    const endOffset = finalOffset ?? currentView.offset;
+    gesture.current = remaining ? { kind: "drag", pointerId: remaining[0], x: remaining[1].x, y: remaining[1].y, ox: endOffset.x, oy: endOffset.y } : null;
+    if (!remaining) setMapGestureActive(false);
   };
   const itineraryProps = {
     day,
@@ -592,7 +619,7 @@ export default function EventMapApp() {
   const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact onClose={() => { historyIntent.current = "push"; setSelectedRecordId(null); setShowFullDetail(false); }} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
   const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
-    <header><div><small>FILTERS</small><b>篩選攤位</b></div><button onClick={clearFilters}>全部清除</button></header>
+    <header><div><small>FILTERS</small><b>篩選攤位</b></div><button className={`${styles.clearFilters} ${genre !== "全部類別" ? styles.clearFiltersActive : ""}`} onClick={clearFilters}>全部清除</button></header>
     <fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{CIRCLE_RECORDS.filter((record) => record.day === day && (value === "全部類別" || record.genre === value)).length}</small></button>)}</div></fieldset>
     <label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label>
     <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={WORK_TOPIC_SUGGESTIONS} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
@@ -618,8 +645,8 @@ export default function EventMapApp() {
         <div className="map-title"><div><small>社團攤位配置圖</small><h1>{FF47_EVENT.venue} <em>{FF47_EVENT.areas.find((area) => area.id === hall)?.label}</em></h1></div></div>
         {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>導航模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{navigationTargetRecord ? ` · 目前目標 ${navigationTargetRecord.code}` : ""}</small></div><button onClick={toggleNavigationMode}>退出</button></div>}
         {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>下一站</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, FF47_EVENT_ID, day, nextRecord.circle.id))} aria-label="從行程移除下一站"><UiIcon name="close" /></button></div>}
-        <div ref={mapRef} className="map" onWheel={handleWheel} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd}>
-          {publishedMap ? <div className={`floor ${styles.vectorFloor}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={FF47_EVENT.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span></div>}
+        <div ref={mapRef} className="map" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd} onLostPointerCapture={handlePointerEnd}>
+          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={FF47_EVENT.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span></div>}
           <div className="controls" aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span aria-live="polite">{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" onClick={resetMap} aria-label="重設地圖位置"><UiIcon name="locate" /></button></div><div className="compass"><small>N</small><UiIcon name="north" /></div>
         </div>
       </section>

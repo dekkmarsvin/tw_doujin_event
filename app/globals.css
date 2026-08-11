@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root { --font-geist:"Geist"; --font-mono:"Geist Mono"; --ink:#202a35; --muted:#707a82; --line:#dfe3df; --paper:#f8f7f2; --cream:#f2f0e8; --coral:#e86f5d; --mint:#57a88e; --blue:#4f83bd; --amber:#d99b44; --lilac:#8b72b1; }
+:root { --font-geist:"Geist"; --font-mono:"Geist Mono"; --ink:#202a35; --muted:#707a82; --line:#dfe3df; --paper:#f8f7f2; --cream:#f2f0e8; --surface-soft:#f9faf8; --coral:#e86f5d; --mint:#57a88e; --blue:#4f83bd; --amber:#d99b44; --lilac:#8b72b1; }
 * { box-sizing:border-box; }
 html,body { margin:0; min-height:100%; background:var(--paper); color:var(--ink); }
 body,button,input,select,textarea { font-family:var(--font-geist),system-ui,"Noto Sans TC",sans-serif; }
