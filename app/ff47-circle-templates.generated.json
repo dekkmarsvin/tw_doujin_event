@@ -1861,13 +1861,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "R15"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "💠搖擺星陽組 500元\n1、星野壓克力立牌 300元\n2、陽奈壓克力立牌 300元\n💠同人誌新刊 400元\n💠壓克力腳踏車立牌 300元\n💠新刊+特典+腳踏車立牌套組 600元\n💠同人誌三部曲套組 800元\n💠壓克力懸吊莉排 300元\n💠壓克力色紙 300元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -1885,6 +1888,11 @@
         "provider": "pixivFANBOX",
         "kind": "support",
         "url": "https://manmaderain.fanbox.cc/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02ZofUsKmozEYQJNYYFnfhd1diUYrN5Jj3CscHocihqUULNDmq7HKtdtNFGDGwgfMl&id=61587605733163"
       }
     ],
     "thumbnail": {
@@ -2192,9 +2200,18 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "絕區零",
+      "蔚藍檔案",
+      "米哈遊"
+    ],
+    "saleInfo": "💠大套組 (新刊+3個立牌) 1100元\n💠中套組 ( 新刊+2個立牌) 800元\n💠小套組 (新刊+1個立牌)  500元\n💠同人誌新刊 200元\n💠壓克力立牌 350元\n💠陽奈抱枕 2500元\n💠Kei滑鼠墊 600元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -2217,6 +2234,11 @@
         "provider": "pixivFANBOX",
         "kind": "support",
         "url": "https://jack0418.fanbox.cc/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/k2illust/posts/pfbid0zQRyzDdSSymUVhmkwuf4CmF9nBREC5FwDosCkwq4PXHKzjt3u4a2CTeAvXHV6ZDal"
       }
     ],
     "thumbnail": {
@@ -2332,6 +2354,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/TUITDC/posts/pfbid04xGpSCyaq9gZfikNr6YBiTMHAPrqsGRYEUYgAKnEpgeEEQRPcXiVWj1cZGM41Bwwl"
+      },
+      {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://www.threads.com/share/BAW7WoqKPc/"
       }
     ]
   },
@@ -3722,9 +3749,14 @@
     "creatorTypes": [
       "vtuber"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "R15"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "💠同人誌 插畫本 350元\n💠魔法少女套組 10套 1500元\n壓克力立牌\n徽章\n壓克力鑰匙圈\n明信片",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -3747,6 +3779,11 @@
         "provider": "Twitch",
         "kind": "social",
         "url": "https://www.google.com/url?sa=t&source=web&rct=j&opi=89978449&url=https://www.twitch.tv/hosinoyasetsu%3Flang%3Dzh-tw&ved=2ahUKEwi5ku-O6ZqKAxW7n68BHTzXAMUQFnoECBsQAQ&usg=AOvVaw0vOpddAijLPnz6BehVhX5Z"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/Yukichan1102/status/2086101771420881106"
       }
     ]
   },
@@ -4933,6 +4970,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://www.nnoo007.com/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.threads.com/share/_lyaksIrD/"
       }
     ],
     "thumbnail": {
@@ -5908,9 +5950,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "新刊5點套組 350元 (1-5)\n💠1、同人誌【PALETTE】250元\n💠2、A4 海報 50元\n💠3-4、百鬼明信片\n💠5、手提資料夾\n新刊7點套組 750元 (1-7)\n💠6、壓克力力排\n💠7、星星壓克力色紙\n新刊 8點套組 1300元 (1-8)\n💠8、百鬼大掛軸 650元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -5918,6 +5967,11 @@
         "provider": "Facebook",
         "kind": "social",
         "url": "https://www.facebook.com/tsukihikarinya"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/tsukihikarinya/posts/pfbid022Tgv1XoLE7A8QhWCACkAV9U5dWu1dd6GDVRXGdRMMWw8m5j5XXEfjnA4bx2vGP5al"
       }
     ],
     "thumbnail": {
@@ -5968,14 +6022,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "賽馬娘 / Unamused / ウマ娘"
     ],
-    "saleInfo": "同人誌",
+    "saleInfo": "💠同人誌 新刊 250元\n💠樂團壓克力立牌 350元-900元\n💠新刊套組 (新刊+樂團立牌) 1100元\n💠掛軸 550元\n💠同人誌 既刊 250元\n💠鑰匙圈 150元/個 2個250元\n💠壓克力立牌 500元\n💠壓克力磚",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -6038,6 +6094,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.plurk.com/p/3ixtmjdaql"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/klm.lee.14/posts/pfbid0xGNKgkcMysQfC1V5XfjAQSo16s9yx3HZZdYGXoeEWXSeMq2W3udzubVkoCK4XcWel"
       }
     ]
   },
@@ -7412,9 +7473,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "明日方舟"
+    ],
+    "saleInfo": "同人誌「整合運動」+貼紙包 150元\n壓克力飯友 100元\n「整合孕肚」周邊套組:香片吊卡+拍立得+底片+貼紙包 200元\n娃包\n火花壓克力立牌 300元\n米家透明流星雨明信片",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -7447,6 +7515,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/li.jia.yu.733626/posts/pfbid02K9NhojQTpQXhg57mvZmgFUM1zwhdLmXtZY5vLeWCCdSKDD6nzbAe4UDbmT2kXjnwl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0luv7qqu"
       }
     ],
     "thumbnail": {
@@ -8172,9 +8245,18 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Arcaea",
+      "WACCA",
+      "Rotaeno"
+    ],
+    "saleInfo": "掛軸 800元\n壓克力飯友 150元\n壓克力吊飾 100元\n明信片",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -8192,6 +8274,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/11365349"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/liquineeeeeeeko/posts/pfbid0A3G3qFsGWNuJqr21PhjnTnp33x86AnM9VM1q9o8KnYLAMpGuQ6kKtP2uSyXpFxHCl"
       }
     ]
   },
@@ -10160,9 +10247,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "米哈遊",
+      "絕區零"
+    ],
+    "saleInfo": "💠火花與花火雙人壓克力吊飾 350元\n💠抽拉式吊飾+色紙 500元\n💠閃亮色紙 120元\n💠花火壓克力色紙 200元\n💠長夜月壓克力雙閃色紙 200元\n💠套組 400元\n1、同人誌 新刊\n2、壓克力飯友\n3、妄想天使明信片\n💠妄想天使立牌 350元\n💠維琳娜立牌 350元\n💠絕區零掛軸 500元\n💠妄想天使壓克力立牌 350元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -10200,6 +10295,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/wu.xi.ya.458042/posts/pfbid02dMyxSYTynoSQBHkj3H64ixxFtEF1d6wzuyHwmn81cejAMXcoDHedrozpRoqSPFBUl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/wu.xi.ya.458042/posts/pfbid033behkim3XsEF32JPqxkJpXfXLEm19uUGuEs8j3UVnqcdo7p9r1R5bBU1vsfJ6Nbkl"
       }
     ]
   },
@@ -10366,9 +10466,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "台灣Vtuber",
+      "亞洛赫x幽李鈴"
+    ],
+    "saleInfo": "💠同人誌新刊 200元\n💠觀影注意事項貼紙\n💠經典作品明信片 90元\n💠電影票造型光柵卡 150元\n💠特效壓克力色紙 200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -10416,6 +10524,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://x.com/Ara1kumaru/status/2069767896176435401"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/Ara1kumaru/status/2086336949766558056"
       }
     ]
   },
@@ -10607,9 +10720,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "同人誌",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -10637,6 +10757,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/en/yoshieeneko"
+      },
+      {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://www.facebook.com/YoshieEneko/posts/pfbid0atqLHi1SpxdZgj1UtMfzfUzSXcLYy5MmJJDdJPwy4PKtRCKVCQ6dBmHPqK8tc6VKl"
       }
     ],
     "thumbnail": {
@@ -11290,9 +11415,14 @@
     "creatorTypes": [
       "Coser"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "寫真集 1200元\n電子檔小卡 950元\n檔案袋 200元\n透卡盲包 250元\n身份小卡 250元\n訂製原子筆 350元\n膠片明信片 200元\n大徽章 350元\n透扇 200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -11300,6 +11430,11 @@
         "provider": "Facebook",
         "kind": "social",
         "url": "https://www.facebook.com/ushiiyuri"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/100054111561867/posts/pfbid02Mym6APP7i1Unyzjk266cvStbTn6oGa7WfgctZC42yn9Aysgp21jKq9YTZ81J3VM9l/?"
       }
     ]
   },
@@ -11651,9 +11786,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "陶瓷溪水杯墊 150元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -11676,6 +11816,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/1730300"
+      },
+      {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://x.com/yorumi2025/status/2086392492166148587"
       }
     ],
     "thumbnail": {
@@ -11778,9 +11923,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "💠同人誌 新刊 200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -11803,6 +11953,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/4215933"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/yumemida/posts/pfbid0JygS1KbRUcxzmQNxgkoK4UzapwYSgZ4BZFJpNV6irz6JJxZQzM1ZF9sWFJ3xVUBGl"
       }
     ]
   },
@@ -12158,9 +12313,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "盛夏草莓套組 650元\n1、同人誌新刊 250元\n2、壓克力立牌 399元\n3、扇子 100元\n4、草莓明信片\n雌小鬼手機支架 280元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -12203,6 +12363,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/en/narurock8925"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid0e468526NUKdMsNiRxNuNzmUKcDCJyomFA5JZMwjHrnPrpbmvg1a1oN5PGdE3sgY8l&id=100093903764915"
       }
     ]
   },
@@ -12281,7 +12446,7 @@
       "原創"
     ],
     "referencedWorks": [],
-    "saleInfo": "同人誌【和核心群辣妹也能談戀愛】",
+    "saleInfo": "同人誌【和核心群辣妹也能談戀愛】450元\n同人誌【淫辱的褻玩手】300元\n資料夾 120元\n同人誌+資料夾",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -12339,6 +12504,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.plurk.com/p/3iy40c6ab0"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0l5gnimb"
       }
     ],
     "thumbnail": {
@@ -14553,9 +14723,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "💠明信片 20元\n💠透卡 50元\n💠壓克力飯友 100元\n💠雨傘 300元\n💠水壺 280元\n💠貼紙 100元\n💠LED燈箱 150元\n💠10公分壓克力立牌 150元\n💠壓克力夾 50元\n💠絨毛徽章 50元\n💠防水貼 65元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -14568,6 +14743,11 @@
         "provider": "Instagram",
         "kind": "social",
         "url": "https://www.instagram.com/_rabbit_0723/?fbclid=IwAR063ir7gMoQgi8C_ajdiCxyCg4cxlOK42Y2JpRtXsH0Ch"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/alma.lan.37/posts/pfbid0GxwDDuRStegNmGfU8PyhGW2eY9QavY2uKe3ACzcjZCt9auGaefrPdQv58vDQyBXHl"
       }
     ]
   },
@@ -14661,6 +14841,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/en/akame1225"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/akarizu223/posts/pfbid02j1kG39tNgZLhoWtp3uXDD7bz6Hsa3eMD7zACDvoaZCgoPc8nsCpXdA4xtJ92U8mUl"
       }
     ]
   },
@@ -14915,9 +15100,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "光之美少女【名偵探光之美少女】"
+    ],
+    "saleInfo": "寶石底座壓克力立牌 350元\n雙閃徽章 80元\n等身掛軸 1500元\n燙金明信片 80元\n複製畫 300元\n壓克力色紙 250元\n日式掛軸 600元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -14925,6 +15117,11 @@
         "provider": "其他連結",
         "kind": "website",
         "url": "https://www.threads.com/@iruiru_00"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.threads.com/share/_qd-MKvx3/"
       }
     ]
   },
@@ -15040,6 +15237,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/reel/1037157915386101/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/photo?fbid=1978508496182898"
       }
     ],
     "thumbnail": {
@@ -15164,9 +15366,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "💠同人誌新刊 Pekora插畫本 150元\n💠Q版貼紙 80元\n💠明信片 40元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -15184,6 +15393,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/83352137"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/tusi_0502/status/2086406222442622990"
       }
     ]
   },
@@ -15479,9 +15693,14 @@
       "繪師",
       "vtuber"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "鴿子湯圓 500元\n鴿布林 500元\n灰色系鴿子耳機包 500元\n鴿子絨毛杯套 600元\n閃亮緞帶蝴蝶結 150元\n信使娃包 400元\nPVC拉鏈袋 120元\n百貼布 230-270元\n水晶貼 70元\n小吊飾 100元\n收藏明信片 30元\n三週年衣裝立牌 250元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -15499,6 +15718,11 @@
         "provider": "Twitch",
         "kind": "social",
         "url": "https://www.twitch.tv/buttergugu100?lang=zh-tw"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0l4ecutq"
       }
     ]
   },
@@ -15799,14 +16023,16 @@
       "繪師",
       "同人誌"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "Ave Mujica"
     ],
-    "saleInfo": "同人誌",
+    "saleInfo": "同人誌 50元\nFF46壓克力套組 400元\n1、既刊\n2、差分小卡\n3、初華壓克力鑰匙圈\n4、明信片\n莓祥既刊套組 200元\nFGO套組 300元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -15834,6 +16060,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.plurk.com/p/3iu5qidc89"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0ngpo181"
       }
     ]
   },
@@ -15882,6 +16113,7 @@
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "櫻花未散的初夏 小說 250元\n千年小套組 小說 300元\n三一小套組 300元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -15909,6 +16141,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/innxuan.jr/posts/pfbid02zhZYFjBQKp9oUeavzLeABhygdJYmJPD3X7oWQrukfoKt6dYqkKaZuuCFH13YJr4l"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/100090010608959/posts/pfbid02VnDeZGtVnGVvP6iUUuiSL6hRmkWvCDvTuzDRLqypCTUs3yxFfB2qvmFmZa9T3pGyl/?"
       }
     ],
     "thumbnail": {
@@ -16145,9 +16382,15 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "鳴潮"
+    ],
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -16185,6 +16428,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://portaly.cc/pachi?fbclid=IwY2xjawJRq_JleHRuA2FlbQIxMAABHTagUCdnAFdismGsHkviz9qmteAkTsMLJvdfGiSUYXi65OitnjacAqUlIA_aem_1XWzCrrmm6b-9dL_m4b0pw"
+      },
+      {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://www.threads.com/share/_2YhaRgTS/"
       }
     ]
   },
@@ -16197,13 +16445,19 @@
       "1": [
         "D19"
       ],
-      "2": [],
-      "3": []
+      "2": [
+        "D18"
+      ],
+      "3": [
+        "D18"
+      ]
     },
     "creatorTypes": [
       "遊戲製作"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "原創"
     ],
@@ -16245,6 +16499,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://portaly.cc/delayGG"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/DelayGG0508/status/2086407150574948696"
       }
     ],
     "thumbnail": {
@@ -16270,9 +16529,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "同人誌新刊 200元\n同人誌既刊 100-200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -16290,6 +16554,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "http://linktr.ee/barley_tea_o.o?fbclid=IwRlRTSASLZnNleHRuA2FlbQIxMABzcnRjBmFwcF9pZAo2NjI4NTY4Mzc5AAEeRW9ToEpn6nsSC5IlGB9-dLzuMFCMxGONwJ0oMExlvAgzkFh-f9MexFkSSCQ_aem_8qNN_aAAIlSFaLFo6M7kmA"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid0UvRKU5dRsskcez1XPybCBo6V6ymKrBeaqysrVwoL93VBwi2assKustPkKNTkn9uel&id=100023888870805"
       }
     ]
   },
@@ -16598,13 +16867,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "R15"
+    ],
     "workTypes": [
-      "二創"
+      "二創",
+      "原創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "💠會場限定9點套組 1200元\n1、同人誌新刊\n2、證物袋\n3、鑰匙圈\n4、貼紙包\n5、半透明夾鏈袋\n6、特製防偽扣\n7、套組吊牌\n8、組裝說明書\n9、透明海報\n💠戰鬥兔女郎壓克力立牌 400元\n💠佳世子大滑鼠墊 700元\n💠同人誌 200元\n💠貼紙包 300元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -16622,6 +16895,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/29647900"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/fataaahsu/posts/pfbid0G3rmkAyss4fvZiAdD9yira9RKtcAqppMhgTMgHXr54H1RDciY1cv1DZYFfomugnJl"
       }
     ]
   },
@@ -17212,9 +17490,15 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創",
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "💠同人誌 200元\n💠貼紙 30元\n💠壓克力飯友 120元\n💠狐狸團子 230元\n💠壓克力立牌 120元\n💠芙莉蓮吊飾 130元\n💠團子 150元\n💠卡片 100元\n💠貼紙 20元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -17232,6 +17516,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/eden.lee.3954/posts/pfbid0CWX6Gkcqg8UKSGBD4d6s8EngNupgspLjc7g6dMs58fm1sFZinTLMYqzjauf55Ujfl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/eden.lee.3954/posts/pfbid0nXXupZ7zTE2nJ68MW6xgjWERo3dfML4ZzMSUMMm4M91vaCZqYQiAc9rEYKDgbc7Ul"
       }
     ]
   },
@@ -17327,18 +17616,24 @@
         "D23",
         "D24"
       ],
-      "3": []
+      "3": [
+        "D21",
+        "D22"
+      ]
     },
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "明日方舟終末地"
     ],
+    "saleInfo": "💠新刊五點套組 \n1、同人誌新刊\n2、光柵卡\n3、壓克力複製色紙\n4、半透明PE提袋\n5、壓克力吊飾\n💠滑鼠墊\n💠壓克力飯友",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -17406,6 +17701,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://x.com/zimin183610/status/2069782927244963903"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/zimin.zheng.5/posts/pfbid0AovjQ9Z6DC6mJEXq9VRCEVbCddy5wVACTKca8LGGwT1UpdHaqeVAtQ8tYNHUhe3xl"
       }
     ]
   },
@@ -17933,13 +18233,51 @@
       ],
       "3": []
     },
-    "creatorTypes": [],
-    "ageRatings": [],
-    "workTypes": [],
+    "creatorTypes": [
+      "台灣Vtuber個人勢"
+    ],
+    "ageRatings": [
+      "R15"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "💠夏季套組 450元\n壓克力立牌\n壓克力飯友?\n💠飯友+滑鼠墊 600元",
     "specialTags": [],
     "surveyUrls": [],
-    "links": []
+    "links": [
+      {
+        "provider": "X",
+        "kind": "social",
+        "url": "https://x.com/Hiruyoru1016"
+      },
+      {
+        "provider": "YouTube",
+        "kind": "social",
+        "url": "https://www.youtube.com/@Hiruyoru1016"
+      },
+      {
+        "provider": "Twitch",
+        "kind": "social",
+        "url": "https://www.twitch.tv/hiruyoru1016"
+      },
+      {
+        "provider": "Discord",
+        "kind": "social",
+        "url": "https://discord.gg/QtBhWZ93CX"
+      },
+      {
+        "provider": "連結整合頁",
+        "kind": "website",
+        "url": "https://lit.link/zh-tw/hiruyoruouo"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/Hiruyoru1016/status/2086042911788163294/photo/1"
+      }
+    ]
   },
   {
     "id": "ff47-k9i9yx",
@@ -19485,13 +19823,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "MyGO!!!!!",
-      "Ave Mujica"
+      "Ave Mujica",
+      "少女樂團吶喊吧(GBC)"
     ],
     "saleInfo": "💠2026月曆\n💠MgGO!!!!!布袋\n💠梗圖鑰匙圈\n💠明信片\n💠零錢包",
     "specialTags": [],
@@ -19526,6 +19867,11 @@
         "provider": "品書",
         "kind": "catalog",
         "url": "https://www.facebook.com/chatora118/posts/pfbid0azc2jonNcAXe7eg46ybCVa5vJACjdShJnkVyG3L2qstzfWVoFUBN6AKAG92VF8FLl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid02rmNBMF3pJVPz6zs8aUDM7TSqCW3CXT288zP4EMCCjcnk7VvnupCG2uiKg5WsJMLPl&id=100082490476676"
       }
     ]
   },
@@ -20147,7 +20493,7 @@
       "原創"
     ],
     "referencedWorks": [],
-    "saleInfo": "💠超胖洛卡比飯友\n💠壓克力拼圖魔方",
+    "saleInfo": "💠LOCO畢母 200元\n💠超胖洛卡比飯友 150元\n💠蘿可水噴霧 100元\n💠壓克力拼圖魔方 250元\n💠洛可飯友 150元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -20165,6 +20511,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://x.com/jinjinsun217/status/2084255755973402910"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/jinjinsun217/status/2086346743906758694"
       }
     ]
   },
@@ -20308,13 +20659,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "R18"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "💠明日奈是老師的狗狗 7點套組\n1、壓克力立牌\n2、光柵卡\n3、透扇\n4、CUAYO壓克力飯友\n5、CUAYO不織布提袋\n6、小特典",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -20332,6 +20686,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/8057905"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/aki.yama.73228/posts/pfbid02NCyXUuhr3LHfAJpJ8cBL4LYCs73d5YcgD5BApMURJEn9xzoBBRJwshw4sHeDge7al"
       }
     ]
   },
@@ -20639,9 +20998,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "maimai",
+      "音樂遊戲"
+    ],
+    "saleInfo": "同人誌 新刊Sweetie Paradise",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -20659,6 +21026,16 @@
         "provider": "Instagram",
         "kind": "social",
         "url": "https://www.instagram.com/akarizu223?fbclid=IwY2xjawLwW21leHRuA2FlbQIxMABicmlkETFPTUNwYWlFNXZDcDBpYzc2AR59GJzq4RZW76zYw9GHZ_Wv5bdt36AJ2N6OZnOzVCtNu_v_CNFHUuOlatP0XA_aem_NLIXDXKGGe3xYBl2mh4Opw"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/akarizu223/posts/pfbid02j1kG39tNgZLhoWtp3uXDD7bz6Hsa3eMD7zACDvoaZCgoPc8nsCpXdA4xtJ92U8mUl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/100039142095902/posts/pfbid02PreGpSrRHr6zimgWXvzYxWx4HUSxHndQCRqU2A1cz2gDqngG3CrDHWQi44tyjM3Fl/?"
       }
     ]
   },
@@ -20929,6 +21306,21 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/singhe.hong/posts/pfbid0mrHfNAKdvsgCgtFe8SpLAno3Zk3k3bvgHnxhuUPiMcMJ8vG8cuLFDWoJeEAApvYtl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/share/p/1EfxLgTP3a/"
+      },
+      {
+        "provider": "預購／通販",
+        "kind": "store",
+        "url": "https://www.myacg.com.tw/seller_market.php?seller=551830"
+      },
+      {
+        "provider": "試閱",
+        "kind": "sample",
+        "url": "https://www.myacg.com.tw/seller_market.php?seller=551830"
       }
     ],
     "thumbnail": {
@@ -23583,14 +23975,16 @@
       "繪師",
       "模型製作"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "R18"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
-    "saleInfo": "小春同人誌",
+    "saleInfo": "💠同人誌 kei新刊 150元\n💠同人誌 既刊\n💠明信片",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -23633,6 +24027,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.plurk.com/p/3iu1gg0ph7"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/sinryuvietrereich/posts/pfbid02VgRtQ4cEuETgSTeftxHCSrSP6w6YG7gQ4i1dBtDeZ2mSmv3wWZuuFjtK5H1shrwFl"
       }
     ],
     "thumbnail": {
@@ -23973,9 +24372,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "MyGO!!!!!"
+    ],
+    "saleInfo": "💠同人誌 250元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -23988,6 +24394,11 @@
         "provider": "其他連結",
         "kind": "website",
         "url": "https://cxc.today/zh/@ibaraki/intro"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/gqiFKz2csPZScnO/status/2086135827160272946"
       }
     ]
   },
@@ -26058,9 +26469,14 @@
     "creatorTypes": [
       "VTuber"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "💠我想擺爛抱枕 600元\n💠餅乾絨毛胸章 200元\n💠壓克力吊飾 300元\n💠滔組 1300元\n1、組裝立牌\n2、飯友\n3、車車吊飾\n4、雷射票\n5、不織布袋\n💠組裝立牌 750元\n💠飯友 250元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -26078,6 +26494,11 @@
         "provider": "YouTube",
         "kind": "social",
         "url": "https://www.youtube.com/@MusicStreamVirtual"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/taotaotaotie/status/2086301444425019775"
       }
     ]
   },
@@ -27305,9 +27726,18 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "極深空",
+      "台灣Vtuber",
+      "春魚"
+    ],
+    "saleInfo": "💠明信片? 120元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -27315,6 +27745,11 @@
         "provider": "X",
         "kind": "social",
         "url": "https://x.com/bird09_art"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/bird09_art/status/2086009726429765803"
       }
     ]
   },
@@ -27385,7 +27820,9 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "R15"
+    ],
     "workTypes": [
       "二創"
     ],
@@ -27394,7 +27831,7 @@
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ",
       "跑跑薑餅人"
     ],
-    "saleInfo": "壓克力座",
+    "saleInfo": "💠目白山峰大掛軸 600元\n💠帆布袋 250元\n💠壓克力炫彩色紙 200元\n💠壓克力畫板 200元\n💠馬娘壓克力票卡 150元\n💠鈴鹿壓克力飯友 150元\n💠蔚藍檔案立牌 350元\n💠跑跑薑餅人明信片 30元",
     "specialTags": [],
     "surveyUrls": [
       "https://docs.google.com/forms/d/e/1FAIpQLScbxtqQ5_lSL1ytSo35TW5noX5KGbzJMVAyn_rZ6jkR-DNmfA/viewform?usp=dialog"
@@ -27439,6 +27876,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/reel/1533571151751310/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0FcXGNPXGKc2NWVXyaBQpEuzrmcXN7HMrQGfLpUsMtW9r8FwRKfUV4375LGAKXffnl&id=100064034705711"
       }
     ]
   },
@@ -29188,13 +29630,18 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般",
+      "R18"
+    ],
     "workTypes": [
-      "二創"
+      "二創",
+      "原創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "💠同人誌 老師坐下Vol3 200元\n💠既刊 300元\n💠啾啾包 250元\n💠壓克力飯友 300元\n💠壓克力透卡 250元\n💠轉轉壓克力 350元\n💠壓克力立牌 300-500元\n💠抱枕 600元\n💠娃娃 600元\n💠滑鼠墊 600元\n💠原創同人誌 200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -29212,6 +29659,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/5796114"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/li.an.zhu.338696/posts/pfbid02TH5TwTZpJGGXVkJAmw3v15rNJyLkvW5ZGUPZKsw4EvhzPsErKtmhH8ZwYCJVvtrcl"
       }
     ],
     "thumbnail": {
@@ -30029,9 +30481,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "Towa、綿芽御守 200元\nTowa、綿芽壓克力飯友 150元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -30044,6 +30503,11 @@
         "provider": "X",
         "kind": "social",
         "url": "https://x.com/tobunchudoku?fbclid=IwY2xjawSToOZleHRuA2FlbQIxMABicmlkETFtRUg2U081bXFiYjFGMjQ1c3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHtcg28Q7VnNJdczRi0PTMlYA05ZbK-aKUENlwRDlr2PU8KRB45BmGYSmh_A-_aem_c19KECBwi_dDEc47VuWGPA"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/61550530477984/posts/pfbid0euZV3bMBBX1AUGvp96ZecxEK9UDG4nZnwMPWYK3Hmnxfy7QWvHF1LdE1aGEDXehBl/?"
       }
     ]
   },
@@ -30771,7 +31235,7 @@
       {
         "provider": "品書",
         "kind": "catalog",
-        "url": "https://www.facebook.com/reel/2109998159551671/"
+        "url": "https://www.facebook.com/zuo.mu.604593/posts/pfbid0i9wxPCGQcuHjVHwshch7wt4eaz2J5dnY6WFBubnH8TDaBn7AYirhDJfYVkXQxdTRl"
       }
     ]
   },
@@ -31797,9 +32261,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "學園偶像大師"
+    ],
+    "saleInfo": "新刊套組 800元\n1、同人誌新刊\n2、同人誌副刊\n3、不織布提袋\n4、明信片\n5、貼紙\n6、運動毛巾\n7、夏日透扇\n8、雷射膜心形胸章\nP套組(新刊套組+琴音立牌)1100元\n夏季琴懷套組 全部套組 2300元\n同人誌既刊 200元\n掛軸 500元\n壓克力立牌 350元\n壓克力透卡 100元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -31832,6 +32303,11 @@
         "provider": "Instagram",
         "kind": "social",
         "url": "https://www.instagram.com/rumiechen/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/1838973063/posts/pfbid0TcQj32LHjPhgfNM1jUag6vUe6FoBgoC6GyaYb6qkDAgYc8mRxr3GZss1nnZ6MZb6l/?"
       }
     ]
   },
@@ -33025,7 +33501,10 @@
         "G19"
       ],
       "2": [],
-      "3": []
+      "3": [
+        "V43",
+        "V44"
+      ]
     },
     "creatorTypes": [
       "繪師"
@@ -33312,9 +33791,16 @@
       "同人社團",
       "香港"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R15"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "鳴潮"
+    ],
+    "saleInfo": "贊妮套組 900元\n1、同人誌新刊 300元\n2、紙袋\n3、透卡\n4、明信片\n5、雙面差分立牌\n壓克力立牌 450-600元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -33342,6 +33828,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0kuUnrtUQ7MeLzCXq826NjcHroPAJATy6fwh1AUVTaHDK8vLf1K4ZgbYPSqZtxmfyl&id=100085390073719"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid02x4FF2jrX24PaUzd3s5HHoDofoWKMcxzMAa3riZrQ3EDq2ZGm532xrzZxNnwJjuM4l&id=61569658034788"
       }
     ]
   },
@@ -33377,19 +33868,43 @@
     "sourceRow": 734,
     "name": "熊老大株式會社",
     "placements": {
-      "1": [],
-      "2": [],
+      "1": [
+        "D33",
+        "D34"
+      ],
+      "2": [
+        "D33",
+        "D34"
+      ],
       "3": [
         "E21"
       ]
     },
     "creatorTypes": [],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "FGO"
+    ],
+    "saleInfo": "同人誌新刊 250~400元\n同人誌既刊 200元",
     "specialTags": [],
     "surveyUrls": [],
-    "links": []
+    "links": [
+      {
+        "provider": "Facebook",
+        "kind": "social",
+        "url": "https://www.facebook.com/bear.boss.348298/?"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid08YDn3SGC7kAQXJpgYanezMj5aSGg2qx1A1amzZ112ETUwXaG1iJ85bK3zi4fsCbEl&id=100042029169537"
+      }
+    ]
   },
   {
     "id": "ff47-3n3jun",
@@ -33858,6 +34373,11 @@
         "provider": "其他連結",
         "kind": "website",
         "url": "https://www.threads.com/@vlsi_ntnu?igshid=NTc4MTIwNjQ2YQ=="
+      },
+      {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://www.facebook.com/100083372109516/posts/pfbid0355VQ5Fd14xa4UVVeEQ3Tk84fFLbtuqmgX94JSyVoyr5j21xzLDd9u8KjTDTUKjZBl/?"
       }
     ]
   },
@@ -34588,8 +35108,13 @@
       "繪師"
     ],
     "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive",
+      "百鬼綾目"
+    ],
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -34611,7 +35136,7 @@
       {
         "provider": "Discord",
         "kind": "social",
-        "url": "https://discord.gg/GuqWrsYEzN"
+        "url": "https://discord.gg/gHFE2MABbe"
       }
     ]
   },
@@ -35451,7 +35976,7 @@
       "Hololive",
       "Shiori"
     ],
-    "saleInfo": "同人誌【OUR ADVENT EVE 2-Red Warrior】\n女僕Shiori 立牌",
+    "saleInfo": "💠同人誌【OUR ADVENT EVE 2-Red Warrior】200元\n💠女僕Shiori 立牌\n💠變幻光柵卡\n💠海報 150元\n💠壓克力磚 450元\n💠壓克力飯友150元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -35489,6 +36014,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/kevin.lin.54922/posts/pfbid02hB3dryK4UCdTsHwSXfsZsVqAoftR4xwKLXHt1kRQv7gJ21f1YT4tmrzyua8WMz7zl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/kevin.lin.54922/posts/pfbid023xQEXDRHWhvCadV6sncPMcNXkLatRv69rENscNL4W68neGDbuVashU2Fgiv8fjivl"
       },
       {
         "provider": "試閱",
@@ -35820,9 +36350,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "原創"
+    ],
+    "referencedWorks": [
+      "上伊那牡丹",
+      "醉姿如百合"
+    ],
+    "saleInfo": "💠同人誌新刊 100-200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -35845,6 +36383,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/13442393"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/qiao.ben.seigi/posts/pfbid02PLq1stAr1JzKGLDZaPJw9yvvNXiBA2yKB7KZJz7WeNaAc3PKc2F8LsjzsbySF6b3l"
       }
     ]
   },
@@ -37218,9 +37761,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "同人誌新刊 500元元\n同人誌既刊 200-300元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -37248,6 +37796,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/474346"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0nexqu8u"
       }
     ],
     "thumbnail": {
@@ -38304,7 +38857,9 @@
     "sourceRow": 847,
     "name": "繪宅米行",
     "placements": {
-      "1": [],
+      "1": [
+        "H16"
+      ],
       "2": [
         "K28"
       ],
@@ -38315,9 +38870,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "新刊套組 400元\n1、同人誌新刊 150元\n2、Biboo軟糖吊飾\n3、草莓牛奶吊飾\nBiboo軟糖吊飾 200元\nBiboo草莓牛奶吊飾 100元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -38340,6 +38902,11 @@
         "provider": "Instagram",
         "kind": "social",
         "url": "https://www.instagram.com/ricke._.2002/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/100063766683561/posts/pfbid0bKjZ19jALFGG72oWqkmtU5gQ5gqWUnNXDH2WXnPKsh9ymLDoqRKDiVQXKiA8TsqSl/?"
       }
     ]
   },
@@ -38562,13 +39129,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "絕區零 / ZenlessZoneZero / ゼンレスゾーンゼロ"
     ],
+    "saleInfo": "💠咖啡喫茶10點全餐大套組 2500元\n1、同人誌 新刊 200元\n2、妄想天使女僕三人壓克力立牌 1000元/組 350元/個\n3、雅 女僕坐姿立牌 350元\n4、明信片 100元\n5、滑鼠墊 600元\n6、金屬徽章 400元\n7、串串 100元\n8、小天使點心零錢包 150元\n9、妄想天使三人組壓克力飯友 300元/組 120元/個\n10、拍立得\n💠小冰雹壓克力吊飾 200元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -38591,6 +39161,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/share/1DhSnPVCQn/?mibextid=wwXIfr"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/s9654431/posts/pfbid0XiNsJAczyMBFAvEBUtcqyK7djoXMZgTCLnVMRTf3KdYQHtTb5EvBAeFSF7Ge84zfl"
       }
     ]
   },
@@ -38819,9 +39394,17 @@
     "creatorTypes": [
       "Vtuber應援團體"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "台灣Vtuber",
+      "祈Iruni"
+    ],
+    "saleInfo": "💠壓克力飯友 150元\n💠悠遊卡卡貼 100元\n💠造型運動毛巾 250元\n💠胸章 50元\n💠壓克力吊飾 150元\n💠壓克力御守 200元\n💠壓克力換裝立牌 500元\n💠大掛軸 350元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -38829,6 +39412,11 @@
         "provider": "X",
         "kind": "social",
         "url": "https://x.com/council_of_runi"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/council_of_runi/status/2086475887630070014/photo/2"
       }
     ]
   },
@@ -38888,7 +39476,9 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
@@ -38897,7 +39487,7 @@
       "魔法少女的魔女審判",
       "活俠傳"
     ],
-    "saleInfo": "同人誌",
+    "saleInfo": "💠蔚藍檔案4點套組 600元\n1、同人誌新刊\n2、明信片\n3、壓克力立牌\n💠同人誌既刊 200元\n💠有明的女王立牌 300元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -38930,6 +39520,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/akiragiorgio/posts/pfbid02rGBU329x45mdYx8vGjSMpVCsVbiJrnsXojKNaz7eKbQPfPh5YTnPhqrkT23WT8Wpl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/akiragiorgio/posts/pfbid0dxX2gDKfSnEkgy6FFiMjaeyjaFmjiUKvhANMmAgLVkP19STjJ4qytjR45imXEMeEl"
       }
     ],
     "thumbnail": {
@@ -39091,6 +39686,7 @@
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "同人誌愛麗絲新刊 200元\n壓克力立牌 250元\n限定套組(同人誌+立牌+明信片)400元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -39113,6 +39709,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/share/p/1CrpQLLfpo/?mibextid=wwXIfr"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid02uwvxHkYwFFGWSXZ5RkSgGf93dk7XEg5r2s4vRbCbtc3fhJUJFPEAJN9q5Z8DqWm8l&id=61575813196261"
       }
     ],
     "thumbnail": {
@@ -39232,6 +39833,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/luo.ma.roma.2025/posts/pfbid0212FUNWz1kssvfvA2a994ssX1LrJ39xXUqky3MtrNwzZ2gufvGcEq5TJhbs55Y8EDl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/100012263404876/posts/pfbid02VL7n4qWMuCqp5kwRiuTa3r59CLEW2S9trgTgNbzCmjtNRmHh5oZ4r52PauW28j5Vl/?"
       }
     ]
   },
@@ -39302,9 +39908,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "學園偶像大師"
+    ],
+    "saleInfo": "補充包單品 500元\n新刊套組 250元\n同人誌新刊\n資料夾\n明信片\n卡包\n壓克力立牌",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -39342,6 +39955,11 @@
         "provider": "官方網站",
         "kind": "website",
         "url": "https://www.paintcanfarm.com/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0nebrt7t"
       }
     ]
   },
@@ -39674,6 +40292,11 @@
         "url": "https://x.com/ACGNCRPA?fbclid=IwY2xjawSHYCtleHRuA2FlbQIxMABicmlkETE5Z29QNEM3a3lQQXNEU1Nlc3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHpkDWlNGAA0-tF4EpK5BAKW_yjGh176rV9vfM1SCb7ZMxQOrvhJtOT6pPAVz_aem_yCTydzQA6-HJ8Ny_tT1J0w"
       },
       {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://www.facebook.com/61556769354394/posts/pfbid02b6r5oFQhCFh96F63KytQo9dYvSCVv4PSDDDWD25QA7Ci2x8MM7KSQDYoTzhYDMmAl/?"
+      },
+      {
         "provider": "品書",
         "kind": "catalog",
         "url": "https://drive.google.com/file/d/1uusNonFL_JGqkbuUbnvxe8WGP7zJG36e/view?usp=drive_link"
@@ -39706,13 +40329,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "明日方舟"
     ],
+    "saleInfo": "辭歲行套組(色紙+鑰匙",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -40120,9 +40746,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "米哈遊",
+      "絕區零"
+    ],
+    "saleInfo": "♥單品\n新刊《法厄同淫樂錄♥》妄想天使篇 (16P/全彩/R18漫畫)\n立牌《愛羽盛夏》千夏/南宮羽/愛芮 (18cm/雙面/磁吸可脫/R18)\n滑鼠墊《千夏的午後小憩》(42x30cm)\n♥套組\n小小應援套組\n內容包含:新刊/小天使光柵卡(R18)/半透明磨砂PE袋(35x30cm)/立牌三選一\n熱情打call套組\n內容包含:新刊/小天使光柵卡(R18)/半透明磨砂PE袋(35x30cm)/立牌三入\n《愛羽盛夏》立牌套組\n♥既品\n既刊《法厄同淫樂錄♥》卡呂冬之子篇 (16P/全彩/R18)\n立牌《淫舞魅姿》露西/派派款 (18cm/雙面/磁吸可脫/R18)\nA套組(小)\n內容包含:新刊/乳牛比基尼雷射票卡2入(R18/雙面)/帆布袋(35x25cm)\nB套組(大)\n內容包含:新刊/乳牛比基尼雷射票卡2入(R18)/帆布袋(35x25cm)/《淫舞魅姿》系列立牌2選1\n威風轉轉大師姊! 旋轉式立牌 10cm/雙面/可旋轉",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -40140,6 +40774,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/41444763?"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/ameart22/posts/pfbid093VGL3cVQAWUXvjFvZjfcjsqPn4ycQKaHAYqzKhJEtc4herfLi41c3UWvi8r8u1dl"
       }
     ]
   },
@@ -41354,7 +41993,7 @@
     "referencedWorks": [
       "庫洛魔法使"
     ],
-    "saleInfo": "PVC包軸桃皮絨",
+    "saleInfo": "💘NEW ITEM !! \n❥ 「FINDiNG LOVE」28P新刊\n❥ 「FINDiNG LOVE」 5點小套組/6點大套組\n❥ 貝殼光壓克力色紙 3款 單品\n❥ 小唧滿版貼紙\n❥ 小唧無邊雙插立牌\n❥ 基路仔睡房浮雕磁石木餅\n❥ 知櫻髮夾Set \n❥ 微噴複印原畫 <附親簽> 4款 [ 極少量 ]",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -41920,7 +42559,7 @@
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
-    "saleInfo": "同人誌【文學少女最近有點悶悶不樂】",
+    "saleInfo": "同人誌【文學少女最近有點悶悶不樂】\n同人誌既刊",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -41938,6 +42577,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.plurk.com/p/3izgsxuwai"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0i3n68cg"
       }
     ]
   },
@@ -43788,6 +44432,7 @@
     "referencedWorks": [
       "原神 / Genshin Impact"
     ],
+    "saleInfo": "01 ▸ 新刊《愚人亭》:B5 | 32P | 全彩 | R18\n02 ▸【特典】明信片:10.5×14.8cm | 高清電子桌布\n03 ▸《錯謬》磁吸吊飾:6cm | 2入 | 磁吸設計\n04 ▸【套組限定】帆布袋:45×34×10cm | 磁吸扣\n05 ▸《午間茶話》大滑鼠墊:70×40cm | 防滑橡膠底\n06 ▸《店內小憩》皮革杯墊:10cm\n07 ▸《貓女僕》等身抱枕套:50×160cm | 2WAY\n08 ▸【套組限定】電子典藏卡:85×54mm | 電子書\n09 ▸【套組限定】《秘密營業》色紙:14×21cm\n10 ▸《女僕外帶》壓克力立牌:17~19cm | 全4款",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -43820,6 +44465,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/zh-tw/sha6666669"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0MjEhieuFfdtq8HsYF1dzXQRTKbnjg3zYVWu6EjVnsQCZQwxA37Sxys1ma6avp2dJl&id=61585579530911"
       },
       {
         "provider": "預購／通販",
@@ -44243,13 +44893,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "💠同人誌新刊 250元\n💠同人誌既刊\n💠學生桌曆 350元\n💠壓克力飯友 200元\n💠壓克力吊飾 100元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -44272,6 +44925,11 @@
         "provider": "pixivFANBOX",
         "kind": "support",
         "url": "https://ewai.fanbox.cc/"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/EwaiObeiwei/posts/pfbid0jdTd7tDwXkmbaPwZvxcdS5h8HHw4TV6PgWShEsHZDNoWQJb7hH3JmWt24X8u1hirl"
       }
     ],
     "thumbnail": {
@@ -44460,9 +45118,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "❖❖「白夜」FF476點套組價格❖❖\n預計販售價格:$500\n內容物:\n➤「白夜」 新刊 (B5/20P/單品$200)\n➤ A5 全彩 おまけ本\n➤ 4cmX12cm 壓克力雙面長條吊飾\n➤ 明信片X2\n➤ 光柵卡+紙相框\n➤ A4 夾鏈袋\n❖❖單品❖❖\n➤ 60cm x 35cm 白藻 滑鼠墊 兩款 各$700\n➤ 15cm 白藻 全身壓克力立牌 $400\n➤ 15cm 夜玈 全身壓克力立牌 $400",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -44505,6 +45168,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/en/ninsaki"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/Fennec.tamamo/posts/pfbid02B2No1GLLTGZtie7ygzXXJ3Z5EQ6piEaNbsWJbdcaE4zzo12YVvuac4Rd9o5StrbXl"
       }
     ]
   },
@@ -44822,6 +45490,7 @@
     "id": "ff47-f630nw",
     "sourceRow": 981,
     "name": "Frankiew Yip",
+    "pen": "Frankiew Yip",
     "placements": {
       "1": [
         "I18"
@@ -46172,9 +46841,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "FGO"
+    ],
+    "saleInfo": "套組 1000元\n💠同人誌 新刊 《Fate/City Girls Collection vol.9》 200元\n💠壓克力立牌\n💠資料夾\n💠胸章\n💠明信片\n💠壓克力鑰匙圈",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -46202,6 +46878,11 @@
         "provider": "巴哈姆特",
         "kind": "social",
         "url": "https://home.gamer.com.tw/homeindex.php"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/HoodierHG/posts/pfbid037vwfb4QTi6YQxhSCZYQCxWUhAgWWmA2MB3NJj4RzGHtrG6V8YFWgRNYqpZUSg1f8l"
       }
     ],
     "thumbnail": {
@@ -46489,6 +47170,11 @@
         "provider": "品書",
         "kind": "catalog",
         "url": "https://www.threads.com/@reku2080/post/DbdQmbmE_ea"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/XFateArtworks/posts/pfbid0J8KNyiTHrVu2Ex1PNknU9bBiemqZzKeUUhrpoZicBeMAVy3PbTEHrdBnv8jbzmHGl"
       }
     ]
   },
@@ -47817,9 +48503,17 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "少女前線",
+      "賽馬娘"
+    ],
+    "saleInfo": "💠同人誌 少女前線插畫集 250元\n💠同人誌 既刊 150元\n💠壓克力立牌 300-400元\n💠金屬無框畫 800元\n💠UMP45 立體滑鼠墊 250元\n💠大掛軸 800元\n💠帆布袋 200元\n💠新刊套組 (新刊+壓克力立牌+滑鼠墊) 800元\n💠壓克力小飯友 100元\n💠賽馬娘壓克力吊飾 100元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -47837,6 +48531,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/13654932/illustrations"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/ye.jun.ting.716704/posts/pfbid08ndqhicEyziWCoXyjbyvFeW6DVhNuvwoCeaFddPmdDmSwbQ2897FwUt4V3q73wRDl"
       }
     ]
   },
@@ -48392,8 +49091,10 @@
       "二創"
     ],
     "referencedWorks": [
-      "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
+      "蔚藍檔案 / Blue Archive / ブルーアーカイブ",
+      "棕色塵埃2"
     ],
+    "saleInfo": "同人誌全彩畫冊 250元\n壓克力角色吊飾 150元\n壓克力角色立牌 200-350元\n角色套卡 150元\n角色海報 100元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -48406,6 +49107,11 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/533562"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.plurk.com/p/3j0gnp5nj5"
       }
     ],
     "thumbnail": {
@@ -48920,9 +49626,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "勝利女神妮姬"
+    ],
+    "saleInfo": "⭐新品⭐️\n-A4全彩 20P 新刊\n-搖屁屁吊飾\n-小DORO搖屁屁吊飾\n-🔞R18 自己掰開吊飾\n兩天都會有60*90挂軸競標 \n⭐既品⭐\n-超大異端者立牌",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -48955,6 +49668,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://linktr.ee/lawliet_liaw?fbclid=PAZXh0bgNhZW0CMTEAAaeYfV-QjWNmGrlbBBwWZN4fbHahVzwh2ZDovjPwG9b_sHIIdFW0fzcCryfCuA_aem_05FPD2g20NPK38zo-vz6qg"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/liaw.zhen.hong/posts/pfbid02EYVPU3w7aGNYULTUBqDVejy7PpXQcbKxxBntCnHsn9ikpEFdkszRxQso5maJPeFWl"
       }
     ]
   },
@@ -49055,9 +49773,17 @@
       "繪師",
       "日本"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "超時空輝耀姬",
+      "彩虹社"
+    ],
+    "saleInfo": "🔷同人誌 合同本 500元\n🔷Idios 壓克力立牌 500元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -49075,6 +49801,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/zh-tw/liliumcasablanca"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/Samidare_Haduki/status/2086448383796158586"
       },
       {
         "provider": "預購／通販",
@@ -49717,16 +50448,27 @@
       "1": [
         "K11"
       ],
-      "2": [],
-      "3": []
+      "2": [
+        "J31"
+      ],
+      "3": [
+        "J33"
+      ]
     },
     "creatorTypes": [
       "繪師",
       "香港"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "同人誌新刊\n壓克力立牌\n燙金明信片\n掛軸",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -49744,6 +50486,16 @@
         "provider": "pixiv",
         "kind": "social",
         "url": "https://www.pixiv.net/users/6880878/artworks"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/groups/528068505186588/permalink/1744850456841714/?"
+      },
+      {
+        "provider": "預購／通販",
+        "kind": "store",
+        "url": "https://forms.gle/B8TmsJcvm8w1agbF9"
       }
     ]
   },
@@ -51017,6 +51769,7 @@
     "referencedWorks": [
       "賽馬娘"
     ],
+    "saleInfo": "💠新刊五點套組 1600元\n1、同人誌 新刊\n2、壓克力立牌套組 x5\n3、拍立得套組\n4、購物袋子\n5、壓克力背景立牌\n💠愛麗速子痛T 700元\n💠既刊套組 700元\n💠雙面吊飾 150元\n💠立牌吊飾 150元\n💠掛軸 600元\n💠舊套組 400元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -51049,6 +51802,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/hui.zhang.334083/posts/pfbid0YLxfvectwPAX3mpWEF1kpeWZfsa8iYDBzu6bgQRrA9qUuKvXMRZaEmiqyXYWme6fl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/hui.zhang.334083/posts/pfbid02cmH6WVvPRazGt96pFMwxBg9vh38ZMYEnPcWGAjrDjDEruGYpnmvv46fUMFPQVTyal"
       }
     ]
   },
@@ -51356,7 +52114,7 @@
       "音樂遊戲",
       "Maimai"
     ],
-    "saleInfo": "壓克力立牌",
+    "saleInfo": "💠B2掛軸 600元\n💠壓克力吊飾 120元\n💠壓克力立牌 360元\n💠色紙 160元\n💠壓克力飯友 160元\n💠貼紙包 80元\n💠RG33 7點套組 800元\n1、燙金拍立得\n2、明信片\n3、色紙\n4、壓克力立牌/吊飾\n5、文件夾\n6、貼紙\n7、袋子\n💠魔法少女智乃 6點套組 800元\n1、壓克力立牌\n2、7公分壓克力吊飾\n3、壓克力雙閃色紙\n4、58毫米貓耳徽章\n5、明信片\n6、袋子\n💠智乃掛軸 600元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -51384,6 +52142,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/mofuuneko/posts/pfbid02vGoadXR7Z68p43piBEAKfATVKhRm1QuYvQTq6FTrKhe1G9QgCUtVPvVqr3F9XnNDl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/mofuuneko/posts/pfbid0LsexVQcUM6P7m52qhBEBQsnSpWTiKPdwV7C1uPyNL88Ydt8vqidQem51GY6Tg4L1l"
       },
       {
         "provider": "預購／通販",
@@ -51961,9 +52724,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "勝利女神妮姬"
+    ],
+    "saleInfo": "💠同人誌 新刊 200元\n💠雙面立牌 350元\n💠同人誌新刊+壓克力立牌 500元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -51996,6 +52766,11 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/en/orun078"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0PnGxyZZbb6KQSKfajwwjGBE3nunngqWE6HgmYg1uerFNjCvLrRSAvoh7w73MnhTRl&id=100000279956946"
       }
     ],
     "thumbnail": {
@@ -52581,7 +53356,9 @@
     "sourceRow": 1153,
     "name": "PoiLiang",
     "placements": {
-      "1": [],
+      "1": [
+        "L09"
+      ],
       "2": [
         "L20"
       ],
@@ -52592,9 +53369,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "Hololive"
+    ],
+    "saleInfo": "🌽白上 居家服雙面立牌 NT 350/個   new!\n🌲澪 水手服立牌 NT 290/個 new!\n🌲澪 雙面吊飾 NT 250/個  new!\n🐾FuwaMoco 睡衣立牌 NT 550/組(不拆售)   new!",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -52602,6 +53386,11 @@
         "provider": "X",
         "kind": "social",
         "url": "https://x.com/PoiLiang"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0h5hSkSRmcJXGbmarXjJvZe7t498QUW7boPq75s6dkjiQqECoamyudHGEKPjbNYS8l&id=61579182357523"
       }
     ]
   },
@@ -52864,7 +53653,9 @@
       "繪師",
       "代理社團"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "R18"
+    ],
     "workTypes": [
       "二創"
     ],
@@ -52898,6 +53689,11 @@
         "provider": "官方網站",
         "kind": "website",
         "url": "https://rabcandy.com/"
+      },
+      {
+        "provider": "本次預告",
+        "kind": "announcement",
+        "url": "https://www.facebook.com/100064439989067/posts/pfbid0T7FUPgBN25LqYKge8nVGoJKDCP88HC6VgWycJq6sinJmAmKzMkYfYTyez1MWm8Sbl/?"
       }
     ]
   },
@@ -53101,11 +53897,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "R18"
+    ],
+    "workTypes": [
+      "二創"
+    ],
     "referencedWorks": [
       "學園偶像大師 / Gakuen IDOLM@STER /学園アイドルマスター"
     ],
+    "saleInfo": "同人誌新刊套組\n壓克力立牌\n行李束帶",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -53118,6 +53919,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/reisroom711/posts/pfbid0FQWFuk73omhXJxW8NC7ESMftE2VPtGKzwMEQg3bkXJLBLVB8x7tRyZYLMrDntfd6l"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid031yHzSrJsFzPQRsjxLK9KFrzsyyxyZP8o3kDYhBkKDBwNf5Fd1WgvBkjxTzuKnExil&id=100063552917700"
       }
     ]
   },
@@ -53256,9 +54062,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "HimeHina"
+    ],
+    "saleInfo": "同人誌既刊 300元\n場次限定掛軸 1200元\n壓克力厚磚 650元\n看板娘立牌 300元\nHimeHina泳裝立牌 500元\nHimeHina花籃立牌 450元\nHimeHina壓克力吊飾、壓克力飯友 150元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -53296,6 +54109,11 @@
         "provider": "其他連結",
         "kind": "website",
         "url": "https://www.threads.com/@riverbit0?xmt=AQGzzB1b95yP_RKFrqWbBsqhYNx6e0b9K2Z4zsZITdco6t0"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid0bS4xe99C28eFEDKzUeUzXEAuw8gMzsoAnoTBU6x4r1LRK56a1MLKSykkcrqXJ9Dal&id=100002519062623"
       }
     ]
   },
@@ -54546,9 +55364,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "勝利女神妮姬"
+    ],
+    "saleInfo": "同人誌新刊 250元\n票根\n少量透卡套組 350元\n壓克力磚 400元\n壓克力立牌 350元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -54576,6 +55401,11 @@
         "provider": "其他連結",
         "kind": "website",
         "url": "https://www.threads.com/@shou_you97"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://m.facebook.com/story.php?story_fbid=pfbid02Kr8pGCfLdjM9d1FtWnFYQ6ZGtXZR58vi1MxxR5Pyh5m9QAxPsc2vATUSzn3nWU1vl&id=100000993740844"
       }
     ]
   },
@@ -54764,7 +55594,7 @@
     "id": "ff47-1ehye3u",
     "sourceRow": 1195,
     "name": "Socotaku帝大社研宅學組",
-    "pen": "Mark, SH",
+    "pen": "\" \"",
     "placements": {
       "1": [],
       "2": [
@@ -54778,10 +55608,12 @@
       "動漫評論",
       "資料型同人誌"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [],
     "referencedWorks": [],
-    "saleInfo": "同人誌【關於百合的評論集】",
+    "saleInfo": "💠百河豚‧嵐 百合評論集 250元\n💠MediaPromenade 真下耕一評論 150元\n💠Litmus試紙 320元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -54804,6 +55636,11 @@
         "provider": "官方網站",
         "kind": "website",
         "url": "https://www.socotaku.org/"
+      },
+      {
+        "provider": "連結整合頁",
+        "kind": "website",
+        "url": "https://lit.link/en/socotaku"
       }
     ],
     "thumbnail": {
@@ -58425,7 +59262,7 @@
     "referencedWorks": [
       "明日方舟終末地"
     ],
-    "saleInfo": "同人誌",
+    "saleInfo": "大套組\n💠同人誌新刊\n💠光柵卡3款\n💠壓克力複製色紙\n💠PE提袋\n💠壓克力吊飾",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -58493,6 +59330,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://x.com/zimin183610/status/2083357047236784238"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.facebook.com/zimin.183/posts/pfbid02maARGaa6LWTNPGBREqMwbhueBtQwuC3XccNKsUa1QLZMJJ1VjKas9zrWQj1twBKJl"
       }
     ],
     "thumbnail": {

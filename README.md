@@ -43,6 +43,22 @@ npx tsc --noEmit --incremental false
 
 `npm test` 會先建立 Pages production build，再執行所有 Node 測試。測試會確認 `dist/index.html` 與靜態地圖快照存在，且公開產物不含 `_worker.js` 或 vinext server bundle。
 
+## 更新 FF47 試算表資料
+
+權威來源是公開的 [FF47 Google 試算表](https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing)。先檢查線上資料與本機 `data_source_test/FF47 完整攤位整理.xlsx` 是否有儲存格差異：
+
+```bash
+npm run source:check
+```
+
+若有差異，命令會列出各工作表新增、移除與變更的儲存格數量及最多 20 筆樣本，並以非零狀態結束，但不修改檔案。確認後執行：
+
+```bash
+npm run source:update
+```
+
+更新命令會先下載及驗證 XLSX，再替換本機來源，最後重新產生社團模板與來源 manifest。比對以工作表名稱、儲存格值與公式為準，不會因 Google 每次匯出產生不同的 XLSX 封裝位元而誤判。下載失敗、回傳內容不是 XLSX、缺少主資料工作表或資料列異常過少時都會停止，不會覆寫既有來源。
+
 ## 本機地圖 authoring
 
 ```bash

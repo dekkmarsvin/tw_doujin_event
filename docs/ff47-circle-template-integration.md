@@ -1,14 +1,14 @@
 # FF47 社團模板與 WebCatalog 顯示整合紀錄
 
-更新日期：2026-08-09
+更新日期：2026-08-11
 
 ## 資料來源與邊界
 
-- 權威來源：`data_source_test/FF47 完整攤位整理.xlsx`。
+- 線上權威來源：`https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing`；版本化本機快照為 `data_source_test/FF47 完整攤位整理.xlsx`。
 - 社團模板來源工作表：`攤位整理表 請在此填寫資訊`，共 1,336 筆具名稱的社團列。
 - `DAY1`、`DAY2`、`DAY3` 只用於核對活動配置；不以同名推測社團身分。
 - Excel 的縮圖欄本身沒有 URL，而是透過 `IMPORTRANGE` 查詢公開縮圖索引：`https://docs.google.com/spreadsheets/d/1f7uHQQgxgff8nh6aFDrh_cqkeFpcVPsvJILesm778_0/`；本次使用的固定快照位於 `data_source_test/ff47-thumbnail-index.csv`。
-- 生成資料包含 5,013 個外部連結、242 筆販售資訊與 262 張具原始 Drive 連結的縮圖。未出現在來源中的欄位不補值；沒有來源圖片時維持文字卡。
+- 生成資料包含 5,104 個外部連結、319 筆販售資訊與 262 張具原始 Drive 連結的縮圖。未出現在來源中的欄位不補值；沒有來源圖片時維持文字卡。
 
 ## 社團模板匹配契約
 
@@ -22,6 +22,7 @@
 
 - 重新生成：`npm run catalog:generate`。
 - 驗證工作簿、縮圖快照與輸出未漂移：`npm run catalog:check`。
+- 比對線上工作簿與本機快照：`npm run source:check`；更新快照並重新生成 catalog：`npm run source:update`。
 - 生成器只使用 Node.js 內建模組解析 XLSX／CSV，位於 `scripts/generate-ff47-circle-templates.mjs`，不依賴未鎖定的全域套件或即時網路資料。
 
 ## 對照 Comike WebCatalog 的介面落地
@@ -42,6 +43,6 @@
 
 ## 驗證摘要
 
-- 自動測試涵蓋 1,336 個模板、2,969 筆配置、跨攤位模板共用、未配置社團保留、縮圖來源、完整場館倍率、置中與圖片門檻。
+- 自動測試涵蓋 1,336 個模板、2,986 筆配置、跨攤位模板共用、未配置社團保留、縮圖來源、完整場館倍率、置中與圖片門檻。
 - 實際瀏覽器驗證：614 × 430 地圖可視區的完整場館倍率為 38%；再縮小仍維持 38%，且場館四邊均在可視區內。
 - 實際瀏覽器驗證：148% 時 DAY 1 地圖呈現 211 個來源縮圖攤位；縮圖成功載入為 800 × 400。

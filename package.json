@@ -16,6 +16,8 @@
     "pages:deploy": "npm run build && wrangler pages deploy dist --project-name=tw-catalog --branch=main",
     "pages:prepare": "node scripts/prepare-pages-build.mjs",
     "map:snapshot": "npm run build:editor && node scripts/export-static-event-map.mjs",
+    "source:check": "node scripts/sync-ff47-google-sheet.mjs --check",
+    "source:update": "node scripts/sync-ff47-google-sheet.mjs --update && npm run catalog:generate",
     "catalog:generate": "node scripts/generate-ff47-circle-templates.mjs",
     "catalog:check": "node scripts/generate-ff47-circle-templates.mjs --check",
     "test": "npm run build && node --test tests/*.test.mjs",
