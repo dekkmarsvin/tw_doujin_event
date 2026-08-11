@@ -3,14 +3,14 @@
   "generatorVersion": 1,
   "sourceWorkbook": "data_source_test/FF47 完整攤位整理.xlsx",
   "sourceSheet": "攤位整理表 請在此填寫資訊",
-  "sourceWorkbookSha256": "9a906abba768b56ca9df3f2262aa0e06ceecfdd67a37172ca83bed07af727bd3",
+  "sourceWorkbookSha256": "2319be2157ad63c90b40cd8eb25082cd405c9b7dd081dee33da6d85af883017e",
   "thumbnailIndex": "data_source_test/ff47-thumbnail-index.csv",
   "thumbnailIndexSha256": "0858a0ff387957c22df9d913db781e5f03ed16c7335c02ff269a7adc003281e0",
   "output": "app/ff47-circle-templates.generated.json",
-  "outputSha256": "92dbc13c1d40af4c7087e6178bb798be56784605be43f556a0e180e61ee6be21",
+  "outputSha256": "aa1dcc624de68cf0d241a7bc23e0c01586a7c3958668c77d68afaed33251df44",
   "counts": {
     "templates": 1336,
-    "links": 5104,
+    "links": 5129,
     "thumbnails": 262
   }
 }
