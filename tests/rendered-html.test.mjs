@@ -56,6 +56,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /導航模式/);
   assert.doesNotMatch(app, /展場模式/);
   assert.match(app, /navigationMode \? planningPanel/);
+  assert.match(app, /navigationMode \? styles\.navigationWorkspace/);
   assert.match(app, /!navigationMode && <div className=\{styles\.planSlot\}>\{compactItineraryPanel\}<\/div>/);
   assert.match(app, /mapRecords/);
   assert.doesNotMatch(app, /LAYOUT_KEY|imageDataUrl|<img\b/);
@@ -103,6 +104,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(appStyles, /mobileDock\[data-mobile-sheet-level="peek"\]/);
   assert.match(appStyles, /mobileDock\[data-mobile-sheet-level="full"\]/);
   assert.match(appStyles, /data-mobile-sheet-level="half".*:global\(\.controls\)/s);
+  assert.match(appStyles, /data-text-scale="large".*filterStack :global\(\.genres\)/s);
+  assert.match(appStyles, /\.clearFiltersActive,\.filterStack \.clearFiltersActive \{ border-color:var\(--ink\); background:var\(--ink\);/);
   assert.match(appStyles, /transform:translateY\(calc\(100% - var\(--mobile-sheet-height\)\)\)/);
   assert.match(appStyles, /height:max\(0px,calc\(var\(--mobile-sheet-height\) - var\(--mobile-sheet-handle-height\) - var\(--mobile-sheet-tabs-height\) - env\(safe-area-inset-bottom\)\)\)/);
   assert.doesNotMatch(appStyles, /transition:height/);
@@ -125,6 +128,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(workspacePanels, /今日購物規劃/);
   assert.match(workspacePanels, /購買項目/);
   assert.match(workspacePanels, /預算（NT\$）/);
+  assert.match(workspaceStyles, /\.fullItinerary \.shoppingSummary span \{[^}]*white-space:normal/);
+  assert.match(workspaceStyles, /\.fullItinerary \.purchaseEditor \{ grid-template-columns:minmax\(0,1fr\)/);
   assert.match(app, />詳細資訊<\/button>/);
   assert.doesNotMatch(app, />詳情<\/button>/);
   assert.match(workspacePanels, /更多資訊/);
