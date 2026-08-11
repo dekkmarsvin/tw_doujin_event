@@ -46,11 +46,29 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit --incremental false
 
+      - name: Normalize Cloudflare API token
+        id: cloudflare-auth
+        shell: bash
+        env:
+          RAW_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          token="$RAW_CLOUDFLARE_API_TOKEN"
+          if [[ "$token" == *"Authorization: Bearer "* ]]; then
+            token="$(printf '%s' "$token" | sed -n 's/.*Authorization: Bearer \([^"[:space:]]*\).*/\1/p' | head -n 1)"
+          fi
+          token="$(printf '%s' "$token" | tr -d '\r\n')"
+          if [[ ${#token} -lt 20 || ! "$token" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Cloudflare API token has an unsupported format." >&2
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          printf 'token=%s\n' "$token" >> "$GITHUB_OUTPUT"
+
       - name: Deploy development environment
         id: deploy-development
         uses: cloudflare/wrangler-action@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ steps.cloudflare-auth.outputs.token }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: 4.120.1
@@ -70,7 +88,7 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: cloudflare/wrangler-action@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ steps.cloudflare-auth.outputs.token }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: 4.120.1
