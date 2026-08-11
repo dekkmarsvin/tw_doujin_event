@@ -74,14 +74,12 @@ export type CircleViewRecord = Booth & {
   placement: PlacementRecord;
 };
 
-const CATALOG_FETCHED_AT = "2026-08-09T00:00:00.000+08:00";
-
 const CATALOG_SOURCE = {
     provider: "加帕利天藍怪預警中心",
     contentType: "catalog",
     label: "FF47 社團公開整理資料",
     url: "https://www.facebook.com/JapariWeatherBureau/",
-    fetchedAt: CATALOG_FETCHED_AT,
+    fetchedAt: FF47_EVENT.dataUpdatedAt,
     status: "linked",
 } as const satisfies SourceLink;
 
@@ -91,7 +89,7 @@ function buildOfficialSource(day?: Booth["day"]): SourceLink {
     contentType: "official",
     label: day ? `FF47 第 ${day} 天攤位清單` : "FF47 活動與攤位配置",
     url: day ? FF47_OFFICIAL_BOOTH_LIST_URLS[day] : "https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/",
-    fetchedAt: CATALOG_FETCHED_AT,
+    fetchedAt: FF47_EVENT.dataUpdatedAt,
     status: "linked",
   };
 }
@@ -106,7 +104,7 @@ function templateSource(template?: CircleTemplate): SourceLink[] {
     contentType: "media",
     label: `${template.name} 公開縮圖`,
     url: template.thumbnail.sourceUrl,
-    fetchedAt: CATALOG_FETCHED_AT,
+    fetchedAt: FF47_EVENT.dataUpdatedAt,
     status: "linked",
   }] : [];
 }
@@ -142,7 +140,7 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
       alt: `${name} 社團縮圖`,
     }] : [],
     externalLinks: template?.links.map((link) => ({ ...link })) ?? [],
-    updatedAt: CATALOG_FETCHED_AT,
+    updatedAt: FF47_EVENT.dataUpdatedAt,
     sources: [...cloneSources(), ...templateSource(template)],
   };
 }
@@ -185,6 +183,7 @@ for (const template of FF47_CIRCLE_TEMPLATES) {
 }
 
 export const CIRCLE_CATALOG: CircleRecord[] = [...circlesById.values()];
+export const CIRCLE_CATALOG_BY_ID = new Map(CIRCLE_CATALOG.map((circle) => [circle.id, circle]));
 export const PLACEMENT_CATALOG: PlacementRecord[] = rows.map(({ placement }) => placement);
 export const CIRCLE_RECORDS: CircleViewRecord[] = rows.map(({ view }) => view);
 export const CIRCLE_RECORDS_BY_ID = new Map(CIRCLE_RECORDS.map((record) => [record.recordId, record]));
@@ -196,6 +195,10 @@ CIRCLE_RECORDS.forEach((record) => {
   CIRCLE_ID_MIGRATION_TARGETS.set(record.recordId, [record.circle.id]);
   CIRCLE_ID_MIGRATION_TARGETS.set(record.id, [...new Set([...(CIRCLE_ID_MIGRATION_TARGETS.get(record.id) ?? []), record.circle.id])]);
 });
+
+export function isKnownCircleId(circleId: string) {
+  return CIRCLE_CATALOG_BY_ID.has(circleId) || CIRCLE_RECORDS_BY_ID.has(circleId);
+}
 
 export function circleSearchText(record: CircleViewRecord) {
   return [record.code, record.name, record.circle.pen, record.genre, record.circle.work, record.note, record.circle.saleInfo,

@@ -15,6 +15,7 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   name: string;
   venue: string;
   dateRangeLabel: string;
+  dataUpdatedAt: string;
   dataLastUpdatedLabel: string;
   mapTemplate: string;
   areaMode: "single" | "switchable";
@@ -22,12 +23,20 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   areas: readonly EventAreaDefinition<TArea>[];
 };
 
+export const FF47_DATA_UPDATED_AT = "2026-08-11T00:00:00.000+08:00";
+
+function dataDateLabel(value: string) {
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  return `${year} 年 ${month} 月 ${day} 日`;
+}
+
 export const FF47_EVENT = {
   id: "ff47",
   name: "Fancy Frontier 47",
   venue: "花博公園爭艷館",
   dateRangeLabel: "8.21–23",
-  dataLastUpdatedLabel: "2026 年 8 月 11 日",
+  dataUpdatedAt: FF47_DATA_UPDATED_AT,
+  dataLastUpdatedLabel: dataDateLabel(FF47_DATA_UPDATED_AT),
   mapTemplate: "FF47",
   areaMode: "single",
   days: [

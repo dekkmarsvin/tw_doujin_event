@@ -5,6 +5,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
+const catalog = await environment.runner.import("/app/circle-records.ts");
 const transfer = await environment.runner.import("/app/planning-transfer.ts");
 const planning = await environment.runner.import("/app/planning-store.ts");
 after(() => vite.close());
@@ -69,4 +70,25 @@ test("merge reports and excludes unmatched circles", () => {
   assert.deepEqual(preview.unmatchedCircleIds, ["missing"]);
   const merged = transfer.mergePlanningImport(sample(), preview.document, "incoming");
   assert.equal(merged.favorites.some((item) => item.circleId === "missing"), false);
+});
+
+test("real canonical circle IDs survive planning backup preview and merge", () => {
+  const record = catalog.CIRCLE_RECORDS.find((item) => item.name === "蒼銀之星" && item.day === 1);
+  assert.ok(record);
+  const canonical = planning.parsePlanningDocument({
+    schemaVersion: planning.PLANNING_SCHEMA_VERSION,
+    favoriteGroups: [],
+    favorites: [{ eventId: "ff47", circleId: record.circle.id, groupId: null, memo: "買新刊", updatedAt: "2026-08-11T00:00:00.000Z" }],
+    visitPlans: [{ eventId: "ff47", day: record.day, circleId: record.circle.id, status: "next", routeOrder: 0, purchaseMemo: "新刊 1 本", budget: 500, updatedAt: "2026-08-11T00:00:00.000Z" }],
+  });
+
+  const jsonPreview = transfer.parsePlanningJson(transfer.exportPlanningJson(canonical));
+  assert.deepEqual(jsonPreview.unmatchedCircleIds, []);
+  const merged = transfer.mergePlanningImport(planning.EMPTY_PLANNING_DOCUMENT, jsonPreview.document, "incoming");
+  assert.equal(merged.favorites[0].circleId, record.circle.id);
+  assert.equal(merged.visitPlans[0].circleId, record.circle.id);
+
+  const csvPreview = transfer.parsePlanningCsv(transfer.exportPlanningCsv(canonical));
+  assert.deepEqual(csvPreview.unmatchedCircleIds, []);
+  assert.equal(csvPreview.document.visitPlans[0].day, record.day);
 });

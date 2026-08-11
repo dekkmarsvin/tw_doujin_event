@@ -24,6 +24,7 @@
 - 驗證工作簿、縮圖快照與輸出未漂移：`npm run catalog:check`。
 - 比對線上工作簿與本機快照：`npm run source:check`；更新快照並重新生成 catalog：`npm run source:update`。
 - 生成器只使用 Node.js 內建模組解析 XLSX／CSV，位於 `scripts/generate-ff47-circle-templates.mjs`，不依賴未鎖定的全域套件或即時網路資料。
+- `app/event-catalog.ts` 的 `FF47_EVENT.dataUpdatedAt` 是公開 catalog 的資料版本日期；活動更新標籤、社團 `updatedAt` 與逐來源 `fetchedAt` 共用此值，避免同步工作簿後顯示不同日期。
 
 ## 對照 Comike WebCatalog 的介面落地
 
