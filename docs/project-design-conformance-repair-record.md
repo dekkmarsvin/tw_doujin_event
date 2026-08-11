@@ -35,6 +35,14 @@
 - 地圖容器與 SVG 文字同時套用不可選取規則，並由 `selectstart` 防線阻止拖曳時產生文字反白。
 - 一般介面的 `VECTOR FLOOR MAP` 與輔助科技「向量攤位地圖」名稱改為「社團攤位配置圖」；向量仍是內部渲染技術，不作為使用者名稱。
 
+## 2026-08-11 公開測試準入修復
+
+- 修正規劃資料 canonical identity 判定：`FavoriteRecord.circleId` 與 `VisitPlanEntry.circleId` 以 `CIRCLE_CATALOG_BY_ID`／`isKnownCircleId()` 核對，不再誤用以 placement `recordId` 為 key 的 `CIRCLE_RECORDS_BY_ID`。有效的 `ff47-*` 收藏與行程不會被資料管理誤列為「目前無法匹配」。
+- 規劃備份 preview、CSV 日期解析與 merge 使用相同 identity seam；仍接受既有 placement-style ID，真實 canonical ID 的 JSON／CSV preview 與 merge 已有 regression。
+- `FF47_EVENT.dataUpdatedAt` 成為活動資料版本與社團來源 `fetchedAt` 的單一日期來源；頂部「資料最後更新」和完整詳情逐來源匯入日期不再漂移。
+- 資料管理 modal 改由 portal 掛到文件根層，避免 390px 下被地圖縮放列或行動工作台的 stacking context 遮擋；對話框內容、關閉與清除操作均維持鍵盤焦點管理。
+- 公開測試準入仍以完整 build、test、lint、typecheck、source/catalog check、公開產物邊界，以及桌機／390px 收藏、行程、資料管理流程為 gate。登入、P2 匯入、OAuth、跨裝置同步、協作與 minimap 不在本次準入範圍。
+
 ## 結論摘要
 
 目前桌面與行動版的地圖主流程已大致符合設計，包括三區工作台、四頁籤行動面板、向量地圖、URL 選取恢復、簡版／完整詳情、來源標示及本機規劃資料。

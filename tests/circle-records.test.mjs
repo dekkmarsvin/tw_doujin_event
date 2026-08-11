@@ -6,6 +6,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const catalog = await environment.runner.import("/app/circle-records.ts");
+const events = await environment.runner.import("/app/event-catalog.ts");
 after(() => vite.close());
 
 test("projects independent circle and placement catalogs into the map read model", () => {
@@ -68,6 +69,16 @@ test("creates unique record IDs and maps legacy placement IDs to canonical circl
     assert.equal(catalog.CIRCLE_ID_MIGRATION_TARGETS.get(record.id).includes(record.circle.id), true);
   });
   assert.equal(new Set(catalog.CIRCLE_RECORDS.map((record) => record.recordId)).size, catalog.CIRCLE_RECORDS.length);
+});
+
+test("recognizes canonical planning identities and uses the event data version for source freshness", () => {
+  const record = catalog.CIRCLE_RECORDS.find((item) => item.name === "蒼銀之星" && item.day === 1);
+  assert.ok(record);
+
+  assert.equal(catalog.CIRCLE_CATALOG_BY_ID.get(record.circle.id), record.circle);
+  assert.equal(catalog.isKnownCircleId(record.circle.id), true);
+  assert.equal(new Set(record.sources.map((source) => source.fetchedAt)).size, 1);
+  assert.equal(record.sources[0].fetchedAt, events.FF47_EVENT.dataUpdatedAt);
 });
 
 test("includes every V and W booth slot for all three FF47 days", () => {

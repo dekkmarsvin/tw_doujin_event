@@ -96,6 +96,9 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(page, /return <EventMapApp \/>/);
   assert.doesNotMatch(pagesEntry, /PlanningTools/);
   assert.match(planningTools, />資料管理<\/button>/);
+  assert.match(planningTools, /import \{ createPortal \} from "react-dom"/);
+  assert.match(planningTools, /open && createPortal\(/);
+  assert.match(planningTools, /globalThis\.document\.body/);
   assert.doesNotMatch(planningToolsStyles, /\.launcher \{[^}]*position:fixed/);
   assert.match(app, /type MobileSheetLevel = "peek" \| "half" \| "full"/);
   assert.match(app, /data-mobile-sheet-level=\{mobileSheetLevel\}/);
@@ -114,7 +117,9 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /role="tabpanel" aria-labelledby=\{activeMobileTabId\}/);
   assert.match(app, /onFocusCapture=\{handleMobilePanelFocus\}/);
   assert.match(app, /setMobileSheetLevel\("full"\)/);
-  assert.match(eventCatalog, /dataLastUpdatedLabel: "2026 年 8 月 11 日"/);
+  assert.match(eventCatalog, /FF47_DATA_UPDATED_AT = "2026-08-11T00:00:00\.000\+08:00"/);
+  assert.match(eventCatalog, /dataUpdatedAt: FF47_DATA_UPDATED_AT/);
+  assert.match(eventCatalog, /dataLastUpdatedLabel: dataDateLabel\(FF47_DATA_UPDATED_AT\)/);
   assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
   assert.match(editorPage, /loadPublishedEventMap\(FF47_EVENT_ID\)/);
   assert.match(editorPage, /<MapAdminImporter/);
