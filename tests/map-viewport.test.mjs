@@ -5,7 +5,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, shouldShowMapMedia, zoomOffsetAroundPoint } = await environment.runner.import("/app/map-viewport.ts");
+const { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint } = await environment.runner.import("/app/map-viewport.ts");
 after(() => vite.close());
 
 test("button zoom preserves the map coordinate at the viewport center", () => {
@@ -56,4 +56,21 @@ test("pinch zoom below the limit follows the live two-pointer center", () => {
 test("map media appears after the close-inspection zoom threshold", () => {
   assert.equal(shouldShowMapMedia(1.44), false);
   assert.equal(shouldShowMapMedia(1.45), true);
+});
+
+test("mobile scroll pans the map without changing zoom", () => {
+  const view = { zoom: .8, offset: { x: 35, y: 98 } };
+  const next = mapViewFromWheel(view, { x: 12, y: 120 }, { x: 180, y: 40 }, .2, "pan");
+
+  assert.deepEqual(next, { zoom: .8, offset: { x: 23, y: -22 } });
+});
+
+test("pinch updates zoom and offset as one inset-aware anchored map view", () => {
+  const center = { x: 160, y: 70 };
+  const anchor = { distance: 100, zoom: .8, mapX: 200, mapY: 120, center, inset: { x: 10, y: 10 } };
+  const next = calculatePinchMapView(anchor, 160, center, .2);
+
+  assert.equal(next.zoom, 1.28);
+  assert.equal((center.x - anchor.inset.x - next.offset.x) / next.zoom, anchor.mapX);
+  assert.equal((center.y - anchor.inset.y - next.offset.y) / next.zoom, anchor.mapY);
 });
