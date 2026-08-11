@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GENRES } from "./ff47-booths";
-import MapAdminImporter from "./map-admin-importer";
 import AccessibleEventMapRenderer, { type MapSlotView } from "./accessible-event-map-renderer";
-import { loadPublishedEventMap } from "./event-map-client";
+import { loadStaticEventMap } from "./static-event-map-client";
 import { FF47_EVENT_ID, type PublishedEventMap } from "./event-map";
 import { CIRCLE_RECORDS, CIRCLE_RECORDS_BY_CIRCLE_ID, CIRCLE_RECORDS_BY_ID, circleSearchText, type CircleViewRecord } from "./circle-records";
 import { CircleDetails, DayItinerary, SearchResults, type ActiveResultFilter } from "./event-workspace-panels";
@@ -77,8 +76,6 @@ export default function EventMapApp() {
   const [publishedMap, setPublishedMap] = useState<PublishedEventMap | null>(null);
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState("");
-  const [publicationNotice, setPublicationNotice] = useState<PublishedEventMap | null>(null);
-  const [showAdmin, setShowAdmin] = useState(false);
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
   const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
@@ -188,7 +185,7 @@ export default function EventMapApp() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadPublishedEventMap(FF47_EVENT_ID)
+    void loadStaticEventMap(FF47_EVENT_ID)
       .then((map) => { if (!cancelled) setPublishedMap(map); })
       .catch((error) => { if (!cancelled) setMapError(error instanceof Error ? error.message : "讀取活動地圖失敗。"); })
       .finally(() => { if (!cancelled) setMapLoading(false); });
@@ -200,12 +197,6 @@ export default function EventMapApp() {
     const timeout = window.setTimeout(() => setFavoriteUndo(null), 7000);
     return () => window.clearTimeout(timeout);
   }, [favoriteUndo]);
-
-  useEffect(() => {
-    if (!publicationNotice) return;
-    const timeout = window.setTimeout(() => setPublicationNotice(null), 6000);
-    return () => window.clearTimeout(timeout);
-  }, [publicationNotice]);
 
   useModalFocus(showFullDetail, fullDetailRef, () => setShowFullDetail(false));
 
@@ -493,7 +484,7 @@ export default function EventMapApp() {
   </section>;
 
   return <main className="app-shell" data-text-scale={textScale}>
-    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 MAP</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{FF47_EVENT.name}</b><small>{FF47_EVENT.dateRangeLabel} · {FF47_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setLeftMode("search"); setMobilePanel("results"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><div className={styles.topbarActions}><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><button className="help" aria-label="管理活動地圖" onClick={() => setShowAdmin(true)}>管理</button></div></header>
+    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 MAP</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{FF47_EVENT.name}</b><small>{FF47_EVENT.dateRangeLabel} · {FF47_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setLeftMode("search"); setMobilePanel("results"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><div className={styles.topbarActions}><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div></div></header>
     <section className="toolbar" aria-label={showAreaSwitcher ? "日期與場館篩選" : "日期篩選"}><div className="days">{FF47_EVENT.days.map((eventDay) => <button key={eventDay.id} className={day === eventDay.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setDay(eventDay.id); setSelectedRecordId(null); }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>{showAreaSwitcher && <div className="mobile-halls">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.label}</button>)}</div>}<div className="open-hours" role="status"><span />本機行程 · {planningStorageError ? "儲存異常，請開啟規劃資料" : planningReady ? "自動保存" : "讀取中"}</div><button className={`${styles.onsiteToggle} ${onsiteMode ? styles.onsiteToggleActive : ""}`} aria-pressed={onsiteMode} onClick={toggleOnsiteMode}><UiIcon name="locate" />{onsiteMode ? "退出展場模式" : "展場模式"}</button></section>
     <div className={`workspace ${styles.workspace}`}>
       <aside className={`filters ${styles.leftRail}`}>
@@ -503,10 +494,9 @@ export default function EventMapApp() {
       <section className="map-region" aria-label="攤位地圖">
         <div className="map-title"><div><small>社團攤位配置圖</small><h1>{FF47_EVENT.venue} <em>{FF47_EVENT.areas.find((area) => area.id === hall)?.label}</em></h1></div></div>
         {onsiteMode && <div className={styles.onsiteBanner} role="status"><span><UiIcon name="locate" /></span><div><b>展場模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{onsiteTargetRecord ? ` · 目前目標 ${onsiteTargetRecord.code}` : ""}</small></div><button onClick={toggleOnsiteMode}>退出</button></div>}
-        {publicationNotice && <div className={styles.layoutStatus} role="status"><span><UiIcon name="check" /></span><div><b>活動地圖已發布</b><small>revision {publicationNotice.revision} · {publicationNotice.sourceName}</small></div><button type="button" onClick={() => setPublicationNotice(null)} aria-label="關閉活動地圖發布提示"><UiIcon name="close" /></button></div>}
         {nextRecord && !onsiteMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>下一站</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, FF47_EVENT_ID, day, nextRecord.circle.id))} aria-label="從行程移除下一站"><UiIcon name="close" /></button></div>}
         <div ref={mapRef} className="map" onWheel={handleWheel} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd}>
-          {publishedMap ? <div className={`floor ${styles.vectorFloor}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={FF47_EVENT.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : mapError ? "活動地圖讀取失敗" : "此活動尚未發布地圖"}</b><span className={mapError ? styles.mapError : ""}>{mapError || (mapLoading ? "請稍候" : "請由管理介面匯入 FF47 配置圖；發布後所有使用者會看到同一張地圖。")}</span>{!mapLoading && <button onClick={() => setShowAdmin(true)}>開啟管理地圖</button>}</div>}
+          {publishedMap ? <div className={`floor ${styles.vectorFloor}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={FF47_EVENT.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span></div>}
           <div className="controls" aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span aria-live="polite">{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" onClick={resetMap} aria-label="重設地圖位置"><UiIcon name="locate" /></button></div><div className="compass"><small>N</small><UiIcon name="north" /></div>
         </div>
       </section>
@@ -515,6 +505,5 @@ export default function EventMapApp() {
     </div>
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
     {showFullDetail && selected && <div className={styles.fullDetailBackdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowFullDetail(false); }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳情`} tabIndex={-1}>{fullDetailsPanel}</div></div>}
-    {showAdmin && <MapAdminImporter eventId={FF47_EVENT_ID} initialMap={publishedMap} onPublished={(map) => { setPublishedMap(map); setMapError(""); setMapLoading(false); setPublicationNotice(map); setShowAdmin(false); resetMap(); }} onClose={() => setShowAdmin(false)} />}
   </main>;
 }

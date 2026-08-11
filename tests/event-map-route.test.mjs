@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { Miniflare } from "miniflare";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
@@ -8,11 +8,11 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createEventMapRepository } = await environment.runner.import("/db/event-map-repository.ts");
 const { createEventMapHandlers } = await environment.runner.import("/app/event-map-route-handlers.ts");
-const miniflare = new Miniflare({
+const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
   script: "export default { fetch() { return new Response('ok'); } }",
   d1Databases: { DB: "event-map-test" },
-});
+}));
 const database = await miniflare.getD1Database("DB");
 const repository = createEventMapRepository(database);
 const handlers = createEventMapHandlers(repository);

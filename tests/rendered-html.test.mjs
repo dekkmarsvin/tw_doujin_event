@@ -1,33 +1,52 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
+async function readTextAssets(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const contents = await Promise.all(entries.map(async (entry) => {
+    const url = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
+    if (entry.isDirectory()) return readTextAssets(url);
+    if (!/\.(?:css|html|js)$/.test(entry.name)) return [];
+    return [await readFile(url, "utf8")];
+  }));
+  return contents.flat();
 }
 
-test("server-renders the FF47 vector map application", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  const html = await response.text();
+test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
+  const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>FF47 場刊 MAP｜同人展逛攤地圖<\/title>/i);
-  assert.match(html, /aria-label="攤位地圖"/);
-  assert.match(html, /aria-label="管理活動地圖"/);
-  assert.match(html.replaceAll("<!-- -->", ""), /搜尋結果<\/b><small>994 個社團<\/small>/);
+  assert.match(html, /<div id="root"><\/div>/);
+  assert.match(html, /\/assets\/index-[^"']+\.js/);
+
+  const publicAssets = (await readTextAssets(new URL("../dist/", import.meta.url))).join("\n");
+  assert.match(publicAssets, /\/data\/events\//);
+  assert.doesNotMatch(publicAssets, /\/api\/events\/|發布活動地圖|MapAdminImporter/);
+
+  const snapshot = JSON.parse(await readFile(new URL("../dist/data/events/ff47/map.json", import.meta.url), "utf8"));
+  const sourceSnapshot = JSON.parse(await readFile(new URL("../public/data/events/ff47/map.json", import.meta.url), "utf8"));
+  assert.equal(snapshot.eventId, "ff47");
+  assert.ok(Number.isSafeInteger(snapshot.revision) && snapshot.revision > 0);
+  assert.equal(snapshot.revision, sourceSnapshot.revision);
+  assert.equal(snapshot.layout.rows.reduce((total, row) => total + row.slots.length, 0), 988);
+  assert.equal(snapshot.layout.pillars.length, 28);
+  assert.equal(snapshot.layout.accessPoints.length, 5);
+  assert.equal(snapshot.layout.landmarks.length, 21);
+
+  await assert.rejects(readFile(new URL("../dist/_worker.js", import.meta.url), "utf8"), { code: "ENOENT" });
+  await assert.rejects(readFile(new URL("../dist/server/index.js", import.meta.url), "utf8"), { code: "ENOENT" });
+  await assert.rejects(readFile(new URL("../dist/_redirects", import.meta.url), "utf8"), { code: "ENOENT" });
+  assert.match(await readFile(new URL("../dist/404.html", import.meta.url), "utf8"), /找不到這個頁面/);
+  assert.match(await readFile(new URL("../dist/fonts/geist.css", import.meta.url), "utf8"), /font-family: "Geist"/);
 });
 
-test("separates admin import, server publication, and accessible SVG rendering", async () => {
-  const paths = ["event-map-app.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx"];
-  const [app, admin, editor, recognizer, renderer, client, eventCatalog, workspacePanels] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+test("separates the public static app from the retained editor implementation", async () => {
+  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx"];
+  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
-  const repository = await readFile(new URL("../db/event-maps.ts", import.meta.url), "utf8");
-  const repositoryCore = await readFile(new URL("../db/event-map-repository.ts", import.meta.url), "utf8");
-  const route = await readFile(new URL("../app/api/events/[eventId]/map/route.ts", import.meta.url), "utf8");
-  assert.match(app, /loadPublishedEventMap\(FF47_EVENT_ID\)/);
+  const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
+  assert.match(app, /loadStaticEventMap\(FF47_EVENT_ID\)/);
   assert.match(app, /<AccessibleEventMapRenderer eventName=\{FF47_EVENT\.name\} layout=\{publishedMap\.layout\}/);
   assert.match(app, /showFullDetail/);
   assert.match(app, /fullDetailsPanel/);
@@ -60,11 +79,9 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.match(app, /showAreaSwitcher && <fieldset/);
   assert.match(app, /data-text-scale=\{textScale\}/);
   assert.match(app, /網頁字體大小/);
-  assert.match(app, /publicationNotice/);
-  assert.match(app, /setPublicationNotice\(null\), 6000/);
-  assert.match(app, /aria-label="關閉活動地圖發布提示"/);
-  assert.match(app, /mapError \? "活動地圖讀取失敗"/);
-  assert.match(app, /開啟管理地圖/);
+  assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
+  assert.match(editorPage, /loadPublishedEventMap\(FF47_EVENT_ID\)/);
+  assert.match(editorPage, /<MapAdminImporter/);
   assert.doesNotMatch(app, /className=\{styles\.mapMeta\}/);
   assert.doesNotMatch(app, /publishedMap && <div className=\{styles\.layoutStatus\}/);
   assert.match(appStyles, /\.topbarActions :global\(\.help\) \{ display:block; \}/);
@@ -80,10 +97,9 @@ test("separates admin import, server publication, and accessible SVG rendering",
   assert.match(renderer, /aria-label="場內柱子"/);
   assert.match(renderer, /aria-label="出入口"/);
   assert.doesNotMatch(renderer, /<img\b/);
-  assert.match(client, /return `\/api\/events\/\$\{encodeURIComponent\(eventId\)\}\/map`/);
-  assert.match(repository, /createEventMapRepository/);
-  assert.match(repositoryCore, /onConflictDoUpdate/);
-  assert.match(repositoryCore, /revision: sql/);
-  assert.match(route, /export const GET/);
-  assert.match(route, /export const PUT/);
+  assert.match(staticClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/map\.json`/);
+  assert.doesNotMatch(staticClient, /force-cache/);
+  assert.doesNotMatch(staticClient, /\/api\/|method: "PUT"/);
+  assert.match(wrangler, /"pages_build_output_dir": "\.\/dist"/);
+  assert.doesNotMatch(wrangler, /d1_databases|r2_buckets|main/);
 });

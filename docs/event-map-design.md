@@ -2,8 +2,8 @@
 
 ## 產品定義
 
-- 配置圖匯入是管理員工作；開發階段先不做權限控管，但所有寫入集中在管理匯入介面與 `PUT /api/events/:eventId/map`。
-- 一般使用者不需要也不應上傳圖片。頁面只透過 `GET /api/events/:eventId/map` 讀取該活動目前發布的地圖。
+- 配置圖匯入是受信任維護者的 authoring 工作；首次公開版本只在本機 `/editor` 使用未驗證的 `PUT /api/events/:eventId/map`，該 route 不部署至 Cloudflare Pages。
+- 一般使用者不需要也不應上傳圖片。公開頁面只讀取 `public/data/events/:eventId/map.json` 隨 build 發布的已驗證快照。
 - 原始圖片只供辨識與管理預覽；發布內容是可版本化的向量地圖資料，不保存為前台底圖。
 - FF47 第一階段以 A–W 一般攤位排、柱子及出入口準確為完成條件。非一般攤位區域使用可選的 landmark 保存相對位置，之後可以逐步補上語意標籤。
 - 地圖的可分享檢視狀態由 URL 表達；外部圖片或介紹是可選補充，載入失敗不得阻斷攤位定位、收藏與行程操作。
@@ -44,7 +44,7 @@ type AccessibleEventMapRendererProps = {
 
 ### 活動地圖 repository
 
-持久化 seam 由純 repository、純 route handlers 與環境 wrapper 構成：
+本機 authoring 持久化 seam 由純 repository、純 route handlers 與環境 wrapper 構成；它不在首次 Pages deployment 內：
 
 - `createEventMapRepository(database)` 只接收注入的 `D1Database`，負責資料表就緒、驗證、查詢與 revision UPSERT。
 - `createEventMapHandlers(repository)` 只依賴 `getEventMap`／`publishEventMap`，負責參數與 payload 驗證及 HTTP 回應；Cloudflare route wrapper 才讀取環境 binding。
@@ -52,7 +52,7 @@ type AccessibleEventMapRendererProps = {
 - `GET /api/events/:eventId/map`：取得已發布 layout；不存在時回傳 404。
 - `PUT /api/events/:eventId/map`：驗證完整 layout 後以 event ID UPSERT；開發階段不驗證管理員身分。
 - D1 `event_maps.event_id` 是唯一鍵；每次覆寫增加 revision，保存來源檔名、辨識信心與更新時間。
-- 前台只讀 GET。管理匯入器在預覽確認後才呼叫 PUT。
+- 公開前台不呼叫 GET 或 PUT route。管理匯入器在本機預覽確認後才呼叫 PUT，再由 `npm run map:snapshot` 匯出公開 JSON。
 - 隔離 Miniflare D1 測試必須證明一次 PUT 可由稍後 GET 讀回，第二次 PUT 會增加 revision，且無效 event ID／低信心內容不寫入。
 
 ## 地圖資料不變量
@@ -99,13 +99,13 @@ type MapViewState = {
 
 ## 管理流程
 
-1. 管理員由全域頁首右上角的「管理」開啟活動地圖管理；一般狀態不在地圖標題列提供第二個入口，只有未發布、讀取失敗或資料異常時在問題說明中提供修復入口。
+1. 維護者執行 `npm run dev` 並開啟本機 `/editor`；公開 Pages 前台沒有管理入口或問題修復入口。
 2. 上傳 FF47 配置圖，在瀏覽器完成一般攤位、柱子與出入口的純像素辨識；企業攤與舞台目前需手動新增。重新上傳時，既有手動區域會依新圖片尺寸等比例保留並要求再次確認。
 3. 預覽 SVG 草稿與辨識摘要；原圖只在此階段作比較。
 4. 在細部位置編輯器以 100% 至 400% 縮放、捲動與精確聚焦定位元素，再點選、拖曳或輸入座標，微調一般攤位、柱子、出入口、企業攤、舞台與其他區域；非一般攤位區可改分類，且全部可直接拖曳物件四角縮放。企業攤移動或縮放至相鄰企業攤 8 個螢幕像素內，且另一軸至少重疊四分之一時，吸附最近的相對邊並顯示導引線；按住 Alt 可暫停。方向鍵移動 1px，Shift 加方向鍵移動 10px。
 5. 完整性規則與信心門檻通過後按「發布活動地圖」。
 6. route 驗證並 UPSERT 到 D1，回傳 revision。
-7. 所有使用者重新載入時從 GET 取得同一份活動地圖；成功發布提示只顯示六秒且可立即關閉，正常載入既有地圖時不持續顯示「已發布」banner。
+7. 執行 `npm run map:snapshot` 將本機 D1 revision 匯出到 `public/data/events/ff47/map.json`，review diff 並通過 gate 後隨 Pages build 發布。所有使用者讀取同一份靜態快照。
 
 ## 目前不做
 
@@ -120,7 +120,7 @@ type MapViewState = {
 - FF47 原圖辨識結果包含 23 排：A–W；A–V 縱向、W 橫向。
 - slot 總數為 988（A 22、B–V 21×44、W 42）。
 - 真圖可辨識柱子與 5 個出入口，且 SVG 中可見。
-- 管理員發布後，另一個全新瀏覽器工作階段不需圖片即可取得同一 event map。
+- 靜態快照發布後，另一個全新瀏覽器工作階段不需圖片、Worker 或 D1 即可取得同一 event map。
 - 前台 DOM 不含作為地圖底圖的配置圖 `<img>`。
 - 從社團清單點「在地圖查看」會直接顯示正確日期、區域、攤位高亮與對應詳情。
 - 複製地圖 URL 到新瀏覽器工作階段後，可恢復有效的查詢與選取；瀏覽器上一頁不會被平移／縮放事件淹沒。
@@ -129,4 +129,4 @@ type MapViewState = {
 - 管理員可移動既有地圖元素、加入企業攤或舞台，且只有調整後的 layout 再次通過完整性規則才可發布。
 - P1 地圖可用滑鼠、觸控與鍵盤完成縮放、重設、搜尋定位與攤位選取；狀態不只以色彩表達。
 - 外部內容缺少或載入失敗時，已發布向量地圖、社團核心資訊與收藏操作仍可使用。
-- build、lint、辨識測試、route 持久化測試與瀏覽器實測通過。
+- Pages build、lint、靜態 snapshot、辨識測試、authoring route 持久化測試與瀏覽器實測通過；公開產物不得包含 `_worker.js` 或 server bundle。
