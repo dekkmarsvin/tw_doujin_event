@@ -34,6 +34,14 @@ test("keeps adding to the itinerary separate from choosing the next stop", () =>
   assert.deepEqual(document.visitPlans.map(({ circleId, status }) => [circleId, status]), [["circle-b", "visited"]]);
 });
 
+test("stores purchase notes and budgets with each itinerary entry", () => {
+  let document = store.addToVisitPlan(empty(), eventId, 1, "circle-a", "2026-08-06T00:00:00.000Z");
+  document = store.updateVisitPlanPurchase(document, eventId, 1, "circle-a", "新刊 1 本、壓克力立牌", 850.4, "2026-08-06T00:01:00.000Z");
+  assert.equal(document.visitPlans[0].purchaseMemo, "新刊 1 本、壓克力立牌");
+  assert.equal(document.visitPlans[0].budget, 850);
+  assert.equal(document.visitPlans[0].updatedAt, "2026-08-06T00:01:00.000Z");
+});
+
 test("migrates favorites from the legacy storage key through the catalog ID map", () => {
   const storage = { getItem: (key) => key === "event-map-favorites" ? JSON.stringify(["1-a01"]) : null };
   assert.deepEqual(store.loadPlanningDocument(storage, eventId, (circleId) => [`${circleId}-canonical`]).favorites.map((favorite) => favorite.circleId), ["1-a01-canonical"]);

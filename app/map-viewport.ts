@@ -1,5 +1,7 @@
 export type MapPoint = { x: number; y: number };
 export type MapSize = { width: number; height: number };
+export type MapPinchOrigin = { distance: number; zoom: number; mapX: number; mapY: number; center: MapPoint; boundaryCenter?: MapPoint };
+export type MapPinchView = { zoom: number; offset: MapPoint; boundaryCenter?: MapPoint };
 
 export const MAP_MAX_ZOOM = 6;
 export const MAP_MEDIA_ZOOM_THRESHOLD = 1.45;
@@ -32,5 +34,21 @@ export function zoomOffsetAroundPoint(offset: MapPoint, currentZoom: number, nex
   return {
     x: point.x - (point.x - offset.x) / currentZoom * nextZoom,
     y: point.y - (point.y - offset.y) / currentZoom * nextZoom,
+  };
+}
+
+export function calculatePinchMapView(origin: MapPinchOrigin, distance: number, center: MapPoint, minimum = .35, maximum = MAP_MAX_ZOOM): MapPinchView {
+  const requestedZoom = origin.zoom * distance / Math.max(1, origin.distance);
+  const zoom = clampMapZoom(requestedZoom, minimum, maximum);
+  const constrained = requestedZoom <= Math.min(minimum, maximum) || requestedZoom >= Math.max(minimum, maximum);
+  const boundaryCenter = constrained ? origin.boundaryCenter ?? center : undefined;
+  const anchor = boundaryCenter ?? center;
+  return {
+    zoom,
+    offset: {
+      x: anchor.x - origin.mapX * zoom,
+      y: anchor.y - origin.mapY * zoom,
+    },
+    ...(boundaryCenter ? { boundaryCenter } : {}),
   };
 }

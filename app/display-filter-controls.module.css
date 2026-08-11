@@ -15,5 +15,5 @@
   .wrap { padding:10px 16px 0; }
   .panel { position:relative; top:auto; right:auto; left:auto; margin-top:8px; box-shadow:none; }
   .panel select { min-height:44px; font-size:calc(16px * var(--ui-font-scale,1)); }
-  .segments button,.panel footer button { min-height:42px; }
+  .trigger,.segments button,.panel footer button { min-height:44px; }
 }
