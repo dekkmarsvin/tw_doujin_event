@@ -57,6 +57,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.doesNotMatch(app, /展場模式/);
   assert.match(app, /navigationMode \? planningPanel/);
   assert.match(app, /navigationMode \? styles\.navigationWorkspace/);
+  assert.match(globalStyles, /\.filters \{ padding:20px 18px;/);
+  assert.match(appStyles, /\.workspace > \.leftRail \{[^}]*padding:0/);
   assert.match(app, /!navigationMode && <div className=\{styles\.planSlot\}>\{compactItineraryPanel\}<\/div>/);
   assert.match(app, /mapRecords/);
   assert.doesNotMatch(app, /LAYOUT_KEY|imageDataUrl|<img\b/);

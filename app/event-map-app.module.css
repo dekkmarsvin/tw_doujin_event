@@ -25,7 +25,8 @@
 .aboutPanel dd { margin:0; font-size:calc(10px * var(--ui-font-scale,1)); }
 .workspace { height:calc(100vh - 130px); min-height:0; grid-template-columns:296px minmax(430px,1fr) 330px; grid-template-rows:minmax(0,1fr); overflow:hidden; }
 .workspace.navigationWorkspace { grid-template-columns:360px minmax(430px,1fr) 330px; }
-.leftRail { display:flex; flex-direction:column; padding:0; overflow:hidden; }
+.leftRail { display:flex; flex-direction:column; overflow:hidden; }
+.workspace > .leftRail { padding:0; }
 .planningPanel { min-height:0; display:flex; flex:1; flex-direction:column; }
 .clearFilters,.filterStack .clearFilters { min-height:36px; padding:8px 12px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); color:var(--ink); font-size:calc(10px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
 .clearFilters:hover,.filterStack .clearFilters:hover { filter:brightness(.94); }
