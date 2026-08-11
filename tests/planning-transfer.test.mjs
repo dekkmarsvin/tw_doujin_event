@@ -14,7 +14,7 @@ function sample() {
     schemaVersion: planning.PLANNING_SCHEMA_VERSION,
     favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
     favorites: [{ eventId: "ff47", circleId: "1-e19-0", groupId: "priority", memo: "=危險公式", updatedAt: "2026-08-06T00:00:00.000Z" }],
-    visitPlans: [{ eventId: "ff47", day: 1, circleId: "1-e19-0", status: "next", routeOrder: 0, updatedAt: "2026-08-06T00:00:00.000Z" }],
+    visitPlans: [{ eventId: "ff47", day: 1, circleId: "1-e19-0", status: "next", routeOrder: 0, purchaseMemo: "新刊 1 本", budget: 500, updatedAt: "2026-08-06T00:00:00.000Z" }],
   });
 }
 
@@ -24,6 +24,8 @@ test("JSON export and import preserve planning data", () => {
   assert.equal(preview.document.favoriteGroups[0].name, "必逛");
   assert.equal(preview.document.favorites[0].memo, "=危險公式");
   assert.equal(preview.document.visitPlans[0].status, "next");
+  assert.equal(preview.document.visitPlans[0].purchaseMemo, "新刊 1 本");
+  assert.equal(preview.document.visitPlans[0].budget, 500);
 });
 
 test("JSON import rejects an unknown inner planning schema without producing writable data", () => {
@@ -39,6 +41,19 @@ test("CSV v1 round trip protects formula-like text and keeps favorite independen
   assert.deepEqual(preview.errors, []);
   assert.equal(preview.document.favorites[0].memo, "=危險公式");
   assert.equal(preview.document.visitPlans[0].routeOrder, 0);
+  assert.equal(preview.document.visitPlans[0].purchaseMemo, "新刊 1 本");
+  assert.equal(preview.document.visitPlans[0].budget, 500);
+});
+
+test("CSV v1 still accepts legacy rows without shopping fields", () => {
+  const csv = [
+    '"schema_version","event_id","circle_id","group_label","memo","visit_status","route_order","source_provider","source_url"',
+    '"circle-plan-csv/1","ff47","1-e19-0","","","planned","1","",""',
+  ].join("\n");
+  const preview = transfer.parsePlanningCsv(csv);
+  assert.deepEqual(preview.errors, []);
+  assert.equal(preview.document.visitPlans[0].purchaseMemo, "");
+  assert.equal(preview.document.visitPlans[0].budget, null);
 });
 
 test("CSV rejects unknown versions, formula injection, and invalid URLs with row numbers", () => {

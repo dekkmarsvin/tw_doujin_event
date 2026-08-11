@@ -20,7 +20,8 @@ export type ImportPreview = {
   format: "json" | "csv";
 };
 
-const csvHeaders = ["schema_version", "event_id", "circle_id", "group_label", "memo", "visit_status", "route_order", "source_provider", "source_url"] as const;
+const legacyCsvHeaders = ["schema_version", "event_id", "circle_id", "group_label", "memo", "visit_status", "route_order", "source_provider", "source_url"] as const;
+const csvHeaders = [...legacyCsvHeaders, "purchase_memo", "budget"] as const;
 
 function protectSpreadsheetValue(value: string) {
   return /^[\s]*[=+\-@]/.test(value) ? `'${value}` : value;
@@ -52,6 +53,8 @@ export function exportPlanningCsv(document: PlanningDocument) {
     "",
     "",
     "",
+    "",
+    "",
   ]));
   document.visitPlans.forEach((entry) => rows.push([
     CSV_SCHEMA_VERSION,
@@ -63,6 +66,8 @@ export function exportPlanningCsv(document: PlanningDocument) {
     String(entry.routeOrder + 1),
     "",
     "",
+    entry.purchaseMemo,
+    entry.budget === null ? "" : String(entry.budget),
   ]));
   return [csvHeaders.map(csvCell).join(","), ...rows.map((row) => row.map(csvCell).join(","))].join("\r\n");
 }
@@ -127,13 +132,14 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
   try { rows = parseCsv(text); } catch (error) { return preview(EMPTY_PLANNING_DOCUMENT, "csv", [error instanceof Error ? error.message : "CSV 無法解析。"], current); }
   if (rows.length - 1 > MAX_IMPORT_ROWS) return preview(EMPTY_PLANNING_DOCUMENT, "csv", [`CSV 超過 ${MAX_IMPORT_ROWS.toLocaleString()} 筆資料列上限。`], current);
   const header = rows.shift() ?? [];
-  if (header.join("\u0000") !== csvHeaders.join("\u0000")) return preview(EMPTY_PLANNING_DOCUMENT, "csv", ["CSV 欄位不符合 circle-plan-csv/1。"], current);
+  const headerKey = header.join("\u0000");
+  if (headerKey !== csvHeaders.join("\u0000") && headerKey !== legacyCsvHeaders.join("\u0000")) return preview(EMPTY_PLANNING_DOCUMENT, "csv", ["CSV 欄位不符合 circle-plan-csv/1。"], current);
   const groupByLabel = new Map<string, FavoriteGroup>();
   const favorites: PlanningDocument["favorites"] = [];
   const visitPlans: VisitPlanEntry[] = [];
   rows.forEach((row, index) => {
     const line = index + 2;
-    const [schemaVersion, eventId, circleId, groupLabelRaw, memoRaw, visitStatus, routeOrderRaw, , sourceUrl] = row.map(unprotectSpreadsheetValue);
+    const [schemaVersion, eventId, circleId, groupLabelRaw, memoRaw, visitStatus, routeOrderRaw, , sourceUrl, purchaseMemoRaw = "", budgetRaw = ""] = row.map(unprotectSpreadsheetValue);
     if (schemaVersion !== CSV_SCHEMA_VERSION) { errors.push(`第 ${line} 列：未知 schema version。`); return; }
     if (!circleId) { errors.push(`第 ${line} 列：circle_id 為必填。`); return; }
     if (row.some((value) => /^[\s]*[=+\-@]/.test(value))) { errors.push(`第 ${line} 列：包含可能的公式注入內容。`); return; }
@@ -152,7 +158,9 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
     else if (visitStatus === "planned" || visitStatus === "next" || visitStatus === "visited") {
       const routeOrder = Number(routeOrderRaw);
       if (!Number.isInteger(routeOrder) || routeOrder < 1) { errors.push(`第 ${line} 列：route_order 必須是正整數。`); return; }
-      visitPlans.push({ eventId: eventId || "ff47", day: resolvedDay, circleId, status: visitStatus, routeOrder: routeOrder - 1, updatedAt });
+      const budget = budgetRaw.trim() ? Number(budgetRaw) : null;
+      if (budget !== null && (!Number.isInteger(budget) || budget < 0)) { errors.push(`第 ${line} 列：budget 必須是零或正整數。`); return; }
+      visitPlans.push({ eventId: eventId || "ff47", day: resolvedDay, circleId, status: visitStatus, routeOrder: routeOrder - 1, purchaseMemo: purchaseMemoRaw, budget, updatedAt });
     } else errors.push(`第 ${line} 列：visit_status 無效。`);
   });
   const document = parsePlanningDocument({ schemaVersion: PLANNING_SCHEMA_VERSION, favoriteGroups: [...groupByLabel.values()], favorites, visitPlans });
