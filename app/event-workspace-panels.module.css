@@ -70,9 +70,11 @@
 .purchaseEditor textarea { min-height:48px; padding:8px; resize:vertical; line-height:1.45; }
 .purchaseEditor input { height:30px; padding:0 8px; font-variant-numeric:tabular-nums; }
 .purchaseToggle:focus-visible,.purchaseEditor textarea:focus-visible,.purchaseEditor input:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
-.fullItinerary .shoppingSummary { margin-inline:12px; padding:12px; }
+.fullItinerary .shoppingSummary { display:grid; align-items:start; justify-content:stretch; gap:4px; margin-inline:12px; padding:12px; }
+.fullItinerary .shoppingSummary span { overflow:visible; text-overflow:clip; white-space:normal; line-height:1.45; }
 .fullItinerary .itineraryRow { grid-template-columns:18px minmax(0,1fr) auto; }
-.fullItinerary .purchaseEditor { grid-template-columns:minmax(0,1fr) 104px; margin-inline:18px 0; padding:8px 0 4px; }
+.fullItinerary .purchaseEditor { grid-template-columns:minmax(0,1fr); margin-inline:18px 0; padding:8px 0 4px; }
+.fullItinerary .purchaseEditor textarea { min-height:64px; }
 
 .details { width:100%; min-width:0; min-height:100%; position:relative; }
 .mediaGallery { min-width:0; overflow:hidden; background:var(--cream); }
