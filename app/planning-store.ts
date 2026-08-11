@@ -28,6 +28,8 @@ export type VisitPlanEntry = {
   circleId: string;
   status: "planned" | "next" | "visited";
   routeOrder: number;
+  purchaseMemo: string;
+  budget: number | null;
   updatedAt: string;
 };
 
@@ -101,7 +103,8 @@ export function parsePlanningDocument(value: unknown): PlanningDocument {
   const visitPlans = Array.isArray(value.visitPlans) ? value.visitPlans.flatMap((item): VisitPlanEntry[] => {
     if (!isObject(item) || typeof item.eventId !== "string" || typeof item.circleId !== "string" || !isDay(item.day)) return [];
     const status = item.status === "next" || item.status === "visited" ? item.status : "planned";
-    return [{ eventId: item.eventId, day: item.day, circleId: item.circleId, status, routeOrder: typeof item.routeOrder === "number" ? item.routeOrder : 0, updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "" }];
+    const budget = typeof item.budget === "number" && Number.isFinite(item.budget) && item.budget >= 0 ? Math.round(item.budget) : null;
+    return [{ eventId: item.eventId, day: item.day, circleId: item.circleId, status, routeOrder: typeof item.routeOrder === "number" ? item.routeOrder : 0, purchaseMemo: typeof item.purchaseMemo === "string" ? item.purchaseMemo : "", budget, updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "" }];
   }) : [];
   return normalize({ schemaVersion: PLANNING_SCHEMA_VERSION, favoriteGroups, favorites, visitPlans });
 }
@@ -251,7 +254,17 @@ export function moveFavoritesToGroup(document: PlanningDocument, eventId: string
 export function addToVisitPlan(document: PlanningDocument, eventId: string, day: EventDayKey, circleId: string, updatedAt = nowIso()): PlanningDocument {
   if (document.visitPlans.some((item) => item.eventId === eventId && item.day === day && item.circleId === circleId)) return document;
   const scoped = document.visitPlans.filter((item) => item.eventId === eventId && item.day === day);
-  return normalize({ ...document, visitPlans: [...document.visitPlans, { eventId, day, circleId, status: "planned", routeOrder: scoped.length, updatedAt }] });
+  return normalize({ ...document, visitPlans: [...document.visitPlans, { eventId, day, circleId, status: "planned", routeOrder: scoped.length, purchaseMemo: "", budget: null, updatedAt }] });
+}
+
+export function updateVisitPlanPurchase(document: PlanningDocument, eventId: string, day: EventDayKey, circleId: string, purchaseMemo: string, budget: number | null, updatedAt = nowIso()): PlanningDocument {
+  const normalizedBudget = typeof budget === "number" && Number.isFinite(budget) && budget >= 0 ? Math.round(budget) : null;
+  return normalize({
+    ...document,
+    visitPlans: document.visitPlans.map((item) => item.eventId === eventId && item.day === day && item.circleId === circleId
+      ? { ...item, purchaseMemo, budget: normalizedBudget, updatedAt }
+      : item),
+  });
 }
 
 export function removeFromVisitPlan(document: PlanningDocument, eventId: string, day: EventDayKey, circleId: string): PlanningDocument {
