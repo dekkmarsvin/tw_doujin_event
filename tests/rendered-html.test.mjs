@@ -28,8 +28,26 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
   const bundle = scripts.join("\n");
   assert.doesNotMatch(bundle, /BASE_BOOTHS|V_W_BOOTHS|FF47_OFFICIAL_NAME_BOOTHS/);
   assert.doesNotMatch(bundle, /"sourceRow":|完整品項與庫存請以現場公告為準/);
-  const bundleBytes = Buffer.byteLength(bundle, "utf8");
-  assert.ok(bundleBytes < 900_000, `public bundle grew to ${bundleBytes} bytes; keep event data in the catalog snapshot.`);
+  // Measure only what the reader actually loads. The circle portal is a second
+  // entry sharing dist/assets/, so a total would let reader bloat hide behind a
+  // shrinking portal — and vice versa.
+  const readerAssets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1]);
+  assert.ok(readerAssets.some((path) => path.endsWith(".js")), "index.html must reference a script");
+  const readerBytes = (await Promise.all(readerAssets.map(async (path) =>
+    Buffer.byteLength(await readFile(new URL(`../dist${path}`, import.meta.url), "utf8"), "utf8")))).reduce((total, size) => total + size, 0);
+  assert.ok(readerBytes < 900_000, `reader bundle grew to ${readerBytes} bytes; keep event data in the catalog snapshot.`);
+
+  // The portal must have its own entry, and none of its code may ride along in
+  // a chunk the reader loads. Check content, not filenames: Rollup names the
+  // shared chunk after a module inside it, so a name match proves nothing.
+  const portalHtml = await readFile(new URL("../dist/circle.html", import.meta.url), "utf8");
+  const portalAssets = [...portalHtml.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1]);
+  assert.ok(portalAssets.some((path) => !readerAssets.includes(path)), "the portal must have its own entry chunk");
+
+  const readerJs = (await Promise.all(readerAssets.filter((path) => path.endsWith(".js"))
+    .map((path) => readFile(new URL(`../dist${path}`, import.meta.url), "utf8")))).join("\n");
+  assert.doesNotMatch(readerJs, /\/api\/auth\/|\/api\/claims|\/api\/admin\//, "the reader must not carry write endpoints");
+  assert.doesNotMatch(readerJs, /寄出登入連結|認領社團|__Host-ff47_session/);
 
   const catalog = JSON.parse(await readFile(new URL("../dist/data/events/ff47/circles.json", import.meta.url), "utf8"));
   const sourceCatalog = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
@@ -206,6 +224,14 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(catalogStore, /status: "unverified"/);
   assert.match(workspacePanels, /SOURCE_ORIGIN_LABEL/);
   assert.match(workspacePanels, /circle: "社團自述"/);
-  assert.match(wrangler, /"pages_build_output_dir": "\.\/dist"/);
-  assert.doesNotMatch(wrangler, /d1_databases|r2_buckets|main/);
+  // Structural, not substring: a D1 binding is now legitimate, but advanced
+  // mode is not. A `main` entry would route every asset request — including the
+  // 1.8 MB catalog — through a Worker, which is exactly what these guards exist
+  // to prevent. Pages Functions under functions/ leave the static path alone.
+  const wranglerConfig = JSON.parse(wrangler.replace(/^\s*\/\/.*$/gm, ""));
+  assert.equal(wranglerConfig.pages_build_output_dir, "./dist");
+  assert.equal("main" in wranglerConfig, false, "Pages must never run in advanced mode");
+  assert.equal("r2_buckets" in wranglerConfig, false);
+  assert.equal(wranglerConfig.d1_databases.length, 1);
+  assert.equal(wranglerConfig.d1_databases[0].binding, "DB");
 });

@@ -1,0 +1,164 @@
+/* Deliberately its own stylesheet, not the reader's globals: the portal is a
+   separate entry, and pulling the map/workspace CSS in would bloat it for no
+   reason. Shares the reader's paper/ink language so it still reads as one site. */
+
+.page {
+  --ink: #202a35;
+  --muted: #707a82;
+  --line: #dfe3df;
+  --paper: #f8f7f2;
+  --surface: #f9faf8;
+  --coral: #e86f5d;
+  --success: #306d59;
+  --danger: #a43e30;
+
+  box-sizing: border-box;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 18px 64px;
+  color: var(--ink);
+  font-family: Geist, system-ui, "Noto Sans TC", sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.page :is(h1, h2, p, ul, form) { margin: 0; }
+.page *, .page *::before, .page *::after { box-sizing: border-box; }
+
+.masthead {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.masthead small { display: block; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.masthead h1 { margin-top: 4px; font-size: 20px; letter-spacing: .02em; }
+.masthead p { color: var(--muted); font-size: 11px; }
+
+.identity { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+
+.card {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.card h2 { font-size: 14px; }
+.card > p { margin-top: 6px; color: var(--muted); font-size: 11px; }
+
+.card label { display: block; margin-top: 12px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.card :is(input, select, textarea) {
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  /* 16px avoids the iOS zoom-on-focus jump on a phone at the venue. */
+  font-size: 16px;
+}
+.card :is(input, select, textarea):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
+.card textarea { resize: vertical; }
+
+.card button {
+  min-height: 38px;
+  margin-top: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  cursor: pointer;
+}
+.card button:hover { filter: brightness(1.15); }
+.card button:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
+.card button:disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
+
+.identity button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.claimList { display: grid; gap: 8px; margin-top: 12px; padding: 0; list-style: none; }
+.claimList li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.claimList li > div { min-width: 0; flex: 1; }
+.claimList b { display: block; font-size: 12px; }
+.claimList small { display: block; color: var(--muted); font-size: 10px; word-break: break-all; }
+.claimList a { color: var(--danger); font-size: 10px; }
+.claimList button { margin-top: 0; }
+
+.claim_pending, .claim_verified, .claim_rejected, .claim_revoked {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+.claim_pending { background: #fff6e6; color: #8a6414; }
+.claim_verified { background: #edf8f3; color: var(--success); }
+.claim_rejected, .claim_revoked { background: #fff3f1; color: var(--danger); }
+
+.matchList { display: grid; gap: 5px; margin-top: 8px; padding: 0; list-style: none; }
+.matchList button {
+  width: 100%;
+  margin-top: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.matchList b { display: block; font-size: 12px; }
+.matchList small { color: var(--muted); font-size: 10px; }
+
+.challenge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--coral);
+  border-radius: 9px;
+  background: #fff;
+}
+.challenge span { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.challenge code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 14px; font-weight: 700; letter-spacing: .06em; user-select: all; }
+
+.notice, .error { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 11px; }
+.notice { border: 1px solid #cfe4da; background: #edf8f3; color: var(--success); }
+.error { border: 1px solid #f0cdc6; background: #fff3f1; color: var(--danger); }
+
+.admin { border-color: #c9d2cc; background: var(--paper); }
+
+.footer { margin-top: 24px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+
+@media (max-width: 520px) {
+  .masthead { flex-direction: column; align-items: start; }
+  .claimList li { flex-wrap: wrap; }
+}

@@ -4,8 +4,12 @@
 
 - 公開站是 Vite React SPA，build output 為 `dist/`。
 - `dist/index.html`、hashed JS/CSS、自託管 Geist 字型、靜態地圖 JSON 與公開圖示是唯一部署內容。
-- 不建立 `functions/`、`_worker.js`、D1、R2 或其他 Pages binding。
-- `app/editor/`、`app/api/`、`db/`、`worker/` 與 `drizzle/` 保留在 source tree，供本機 authoring 與遠期控制面設計；`vite.pages.config.ts` 不會把它們納入公開 bundle。
+- 不使用 advanced mode：不得產生 `dist/_worker.js`、`dist/server/index.js`、`dist/_redirects` 或 `dist/_routes.json`。advanced mode 會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker，正是這些防線要避免的事。
+- `functions/` 只承載社團身分與寫入 route，以及 `/data/events/:id/overrides.json` 這個公開補充資料端點。Pages 自動產生的路由表只涵蓋這些路徑，其餘靜態資源仍由邊緣直送。
+- binding 只有一個 D1（`DB`，資料庫 `tw-catalog-identity`），用於帳號、session、認領、社團補充資料與稽核。不建立 R2、KV 或 Durable Objects。
+- 密鑰以 `wrangler pages secret put` 設定，不進 repo、不進 `wrangler.jsonc`、GitHub Actions 也不需要：`SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）。本機開發用 `.dev.vars`，該檔已列入 `.gitignore`。
+- `app/editor/`、`app/api/`、`worker/` 與 `drizzle/` 保留在 source tree，供本機地圖 authoring 使用；`vite.pages.config.ts` 不會把它們納入公開 bundle。
+- 公開 build 有兩個 entry：`index.html`（閱讀端，可離線）與 `circle.html`（社團控制面，`noindex`）。社團入口的程式碼不得出現在閱讀端 bundle，`tests/rendered-html.test.mjs` 會以內容比對把關。
 
 ## 自動部署架構
 

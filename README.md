@@ -2,7 +2,9 @@
 
 Fancy Frontier 47 的同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，並支援桌面與行動版。
 
-目前的規劃資料保存在瀏覽器 `localStorage`，不會跨裝置同步。首次公開版本部署為 Cloudflare Pages Free 純靜態站：場刊在 build 時打包，活動地圖讀取版本化 JSON 快照，不部署 Pages Functions、Cloudflare Worker、D1 binding 或管理寫入 route。
+目前的規劃資料保存在瀏覽器 `localStorage`，不會跨裝置同步。
+
+公開閱讀路徑是純靜態的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務，不經過任何 Worker。另有一個獨立入口 `/circle` 供參展社團登入並維護自己的補充資料，由 `functions/` 下的 Pages Functions 與 D1 承載；**不使用 advanced mode**（不產生 `dist/_worker.js`），因此 `/`、`/assets/*`、`/fonts/*` 與場刊快照都不會被 Worker 攔截。
 
 地圖辨識與細部編輯器仍保留為本機 authoring 工具，供未來拆成受驗證的編輯控制面；它不是公開 Pages 入口的一部分。
 
@@ -59,7 +61,15 @@ npm run source:check
 npm run source:update
 ```
 
-更新命令會先下載及驗證 XLSX，再替換本機來源，接著重新產生社團模板與來源 manifest，最後重新輸出 `public/data/events/ff47/circles.json`。快照必須納入版本控制；`npm run build` 會以 `catalog:snapshot:check` 驗證它與來源一致，不一致就中止。比對以工作表名稱、儲存格值與公式為準，不會因 Google 每次匯出產生不同的 XLSX 封裝位元而誤判。下載失敗、回傳內容不是 XLSX、缺少主資料工作表或資料列異常過少時都會停止，不會覆寫既有來源。
+更新命令會先下載及驗證 XLSX，再替換本機來源，接著重新產生社團模板與來源 manifest，最後重新輸出 `public/data/events/ff47/circles.json`。快照必須納入版本控制；`npm run build` 會以 `catalog:snapshot:check` 驗證它與來源一致，不一致就中止。
+
+**重建場刊後、commit 之前**，必須確認既有認領仍指向存在的社團：
+
+```bash
+npm run claims:check
+```
+
+社團 ID 是 `FNV-1a(試算表列號 + 社團名)`，上游插入一列或社團改名都會讓其後所有 ID 改變。這個檢查會列出失效的認領與補充資料，並用認領當下記錄的名稱建議新的 ID。它不在 `npm run build` 裡——CI 沒有 D1 binding，放進去只會讓每次部署失敗，而不是抓到真正的漂移。加上 `-- --remote` 可檢查正式環境的 D1。比對以工作表名稱、儲存格值與公式為準，不會因 Google 每次匯出產生不同的 XLSX 封裝位元而誤判。下載失敗、回傳內容不是 XLSX、缺少主資料工作表或資料列異常過少時都會停止，不會覆寫既有來源。
 
 ## 本機地圖 authoring
 
@@ -84,7 +94,12 @@ npm test
 - `app/static-event-map-client.ts`：公開版靜態地圖讀取與格式驗證
 - `app/static-circle-catalog-client.ts`、`app/circle-records.ts`：社團快照讀取、格式驗證與讀取模型投影
 - `app/use-circle-catalog.ts`：社團快照的共用載入狀態
-- `app/service-worker-source.js`、`scripts/build-service-worker.mjs`：離線 shell 與 build 時產生的 precache 清單
+- `app/service-worker-source.js`、`scripts/build-service-worker.mjs`：離線 shell 與 build 時產生的 precache 清單（只涵蓋 `index.html` 實際載入的資源，不含社團入口）
+- `app/circle-overrides.ts`：社團補充資料的型別、驗證與長度上限，寫入路由與閱讀端共用同一套規則
+- `app/circle-portal-handlers.ts`、`db/identity-repository.ts`：與框架無關的 portal route 與 D1 查詢層
+- `functions/`：Pages Functions（身分、認領、編輯、管理，以及公開的 `overrides.json`）
+- `circle.html`、`app/circle-portal/`：社團控制面入口與介面
+- `scripts/check-claimed-circles.mjs`：重建場刊後檢查認領是否仍指向存在的社團
 - `public/data/events/ff47/map.json`：首次公開版地圖快照
 - `public/data/events/ff47/circles.json`：社團與攤位快照（由 `npm run catalog:snapshot` 產生）
 - `public/fonts/`：公開版自託管 Geist / Geist Mono 字型與授權
@@ -96,10 +111,11 @@ npm test
 
 ## 目前邊界
 
-- 一般使用者公開瀏覽；公開 build 不含管理入口或伺服器寫入 route。
+- 一般使用者公開瀏覽，不需登入；閱讀端 bundle 不含任何寫入 route 或登入介面。
+- 參展社團可在 `/circle` 以 email 一次性登入連結認領自己的社團，並維護販售資訊、連結與作品標籤。這些內容標示為「社團自述／尚未驗證」，與主辦資料分開呈現；社團名稱、筆名需經審核，攤位與日期不開放修改。管理者可隨時撤下，所有決策寫入稽核記錄。
 - 場刊資料以 `circles.json` 靜態快照隨 build 發布，不打包進 JS bundle；首屏先顯示介面骨架，社團清單於快照載入後補上。
 - 站台註冊 Service Worker 作為離線 shell：導覽採 network-first，`/data/events/` 採 stale-while-revalidate，雜湊資產採 cache-first。展場離線可重新載入並繼續使用已下載的場刊與地圖；社團縮圖等外部圖片不在離線範圍。
 - 收藏、群組、備註與行程只儲存在目前瀏覽器。
-- 安全匯出已提供；JSON／CSV 匯入、帳號同步與協作仍屬 P2，尚未在一般介面開放。
+- 安全匯出已提供；JSON／CSV 匯入、使用者規劃資料的跨裝置同步與協作仍屬 P2，尚未在一般介面開放。社團登入只用於維護社團自己的公開資料，不涉及一般使用者的收藏與行程。
 - 外部來源只補充內容與可核對連結，不取代本地社團及攤位身分。
 - 未來外部編輯控制面必須另行加入身分驗證、角色、草稿、審核、稽核與版本化發布，不得重新公開現有未驗證的 PUT route。

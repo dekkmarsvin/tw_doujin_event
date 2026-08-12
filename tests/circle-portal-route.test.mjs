@@ -1,0 +1,335 @@
+import assert from "node:assert/strict";
+import test, { after, beforeEach } from "node:test";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { createServer, isRunnableDevEnvironment } from "vite";
+
+const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
+const environment = vite.environments.ssr;
+if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
+const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
+const { createCirclePortalHandlers, SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
+
+const miniflare = new Miniflare(convertV4MiniflareOptions({
+  modules: true,
+  script: "export default { fetch() { return new Response('ok'); } }",
+  d1Databases: { DB: "portal-route-test" },
+}));
+const database = await miniflare.getD1Database("DB");
+after(async () => { await miniflare.dispose(); await vite.close(); });
+
+const ORIGIN = "https://verify.kotoban.top";
+const CIRCLES = {
+  "ff47-site": { id: "ff47-site", name: "有官網的社團", nameKey: "有官網的社團", sourceRow: 10, links: [{ provider: "官方網站", url: "https://circle.example/home" }] },
+  "ff47-social": { id: "ff47-social", name: "只有社群的社團", nameKey: "只有社群的社團", sourceRow: 11, links: [{ provider: "X", url: "https://x.com/circle" }] },
+  "ff47-domain": { id: "ff47-domain", name: "同網域社團", nameKey: "同網域社團", sourceRow: 12, links: [{ provider: "官方網站", url: "https://owner.example/" }] },
+};
+
+let clock = 1_786_500_000_000;
+let sent = [];
+let evidenceBody = null;
+let handlers;
+let repository;
+
+const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log"];
+
+beforeEach(async () => {
+  sent = [];
+  evidenceBody = null;
+  repository = createIdentityRepository(database);
+  // Isolation matters here: claim ownership and the login rate-limit window are
+  // both persistent, so a shared database would make tests order-dependent.
+  await repository.ensureTables();
+  await database.batch(TABLES.map((table) => database.prepare(`DELETE FROM ${table}`)));
+  handlers = createCirclePortalHandlers({
+    repository,
+    sendMail: async (message) => { sent.push(message); },
+    lookupCircle: async (circleId) => CIRCLES[circleId] ?? null,
+    fetchEvidence: async () => evidenceBody,
+    config: {
+      eventId: "ff47",
+      origin: ORIGIN,
+      sessionSecret: "test-session-secret",
+      hashPepper: "test-pepper",
+      adminEmails: ["admin@example.com"],
+      dataUpdatedAt: "2026-08-11T00:00:00.000+08:00",
+      now: () => clock,
+    },
+  });
+});
+
+function post(path, body, cookie) {
+  return new Request(`${ORIGIN}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: ORIGIN, ...(cookie ? { cookie } : {}) },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+function get(path, cookie) {
+  return new Request(`${ORIGIN}${path}`, { headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) } });
+}
+
+function cookieFrom(response) {
+  const header = response.headers.get("set-cookie") ?? "";
+  return header.split(";")[0];
+}
+
+/** Drive the real magic-link flow rather than forging a session. */
+async function signIn(email) {
+  await handlers.requestLink(post("/api/auth/request-link", { email }));
+  const link = sent.at(-1).text.match(/login=([^\s]+)/)[1];
+  const response = await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(link) }));
+  assert.equal(response.status, 200, `sign-in failed for ${email}`);
+  return cookieFrom(response);
+}
+
+async function approve(cookieOwner, circleId, adminCookie) {
+  const created = await handlers.createClaim(post("/api/claims", { circleId }, cookieOwner));
+  const { id } = await created.json();
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, adminCookie));
+  return id;
+}
+
+test("a login request answers identically whether or not the inbox is known", async () => {
+  const fresh = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com" }));
+  await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]) }));
+  const known = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com" }));
+
+  assert.equal(fresh.status, 202);
+  assert.equal(known.status, 202);
+  assert.deepEqual(await fresh.json(), await known.json());
+
+  // A malformed address is accepted silently too, and sends nothing.
+  const before = sent.length;
+  const bad = await handlers.requestLink(post("/api/auth/request-link", { email: "not-an-email" }));
+  assert.equal(bad.status, 202);
+  assert.equal(sent.length, before);
+});
+
+test("a magic link works once and never again", async () => {
+  await handlers.requestLink(post("/api/auth/request-link", { email: "replay@example.com" }));
+  const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
+
+  assert.equal((await handlers.verify(post("/api/auth/verify", { token }))).status, 200);
+  const replayed = await handlers.verify(post("/api/auth/verify", { token }));
+  assert.equal(replayed.status, 400);
+});
+
+test("the raw token never reaches the database", async () => {
+  await handlers.requestLink(post("/api/auth/request-link", { email: "secrets@example.com" }));
+  const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
+
+  const rows = await database.prepare("SELECT * FROM login_tokens").all();
+  const dumped = JSON.stringify(rows.results);
+  assert.ok(!dumped.includes(token), "a database dump must not yield a usable login link");
+});
+
+test("the sixth link request within an hour is refused", async () => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    assert.equal((await handlers.requestLink(post("/api/auth/request-link", { email: "flood@example.com" }))).status, 202);
+  }
+  assert.equal((await handlers.requestLink(post("/api/auth/request-link", { email: "flood@example.com" }))).status, 429);
+});
+
+test("the session cookie is host-locked, http-only and not readable by script", async () => {
+  await handlers.requestLink(post("/api/auth/request-link", { email: "cookie@example.com" }));
+  const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
+  const response = await handlers.verify(post("/api/auth/verify", { token }));
+  const header = response.headers.get("set-cookie");
+
+  assert.match(header, new RegExp(`^${SESSION_COOKIE}=`));
+  assert.match(header, /HttpOnly/);
+  assert.match(header, /Secure/);
+  assert.match(header, /SameSite=Lax/);
+  assert.match(header, /Path=\//);
+  assert.doesNotMatch(header, /Domain=/);
+});
+
+test("a forged or tampered session cookie is rejected", async () => {
+  const cookie = await signIn("tamper@example.com");
+  assert.equal((await handlers.session(get("/api/auth/session", cookie))).status, 200);
+
+  const [name, value] = cookie.split("=");
+  const [sessionId, signature] = [value.slice(0, value.lastIndexOf(".")), value.slice(value.lastIndexOf(".") + 1)];
+  assert.equal((await handlers.session(get("/api/auth/session", `${name}=${sessionId}.${signature}x`))).status, 401);
+  assert.equal((await handlers.session(get("/api/auth/session", `${name}=forged.${signature}`))).status, 401);
+  assert.equal((await handlers.session(get("/api/auth/session", `${name}=nonsense`))).status, 401);
+  assert.equal((await handlers.session(get("/api/auth/session"))).status, 401);
+});
+
+test("signing out revokes the session immediately", async () => {
+  const cookie = await signIn("bye@example.com");
+  await handlers.signOut(post("/api/auth/session", {}, cookie));
+  assert.equal((await handlers.session(get("/api/auth/session", cookie))).status, 401);
+});
+
+test("every write refuses an anonymous caller", async () => {
+  for (const response of await Promise.all([
+    handlers.listClaims(get("/api/claims")),
+    handlers.createClaim(post("/api/claims", { circleId: "ff47-site" })),
+    handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "x" } }), "ff47-site"),
+    handlers.adminListClaims(get("/api/admin/claims")),
+    handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-site", reason: "x" })),
+  ])) {
+    assert.equal(response.status, 401);
+  }
+});
+
+test("a signed-in stranger cannot edit a circle they have not claimed", async () => {
+  const cookie = await signIn("stranger@example.com");
+  const response = await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "冒名" } }, cookie), "ff47-site");
+  assert.equal(response.status, 403);
+});
+
+test("a matching email domain verifies the claim without review", async () => {
+  const cookie = await signIn("hello@owner.example");
+  const response = await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, cookie));
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).status, "verified");
+});
+
+test("a challenge is only offered for a recorded, fetchable url", async () => {
+  const cookie = await signIn("challenge@example.com");
+
+  const social = await handlers.createClaim(post("/api/claims", { circleId: "ff47-social", targetUrl: "https://x.com/circle" }, cookie));
+  assert.equal((await social.json()).challenge, null, "bot-walled hosts must go to review");
+
+  const attacker = await signIn("attacker@example.com");
+  const forged = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://attacker.example/page" }, attacker));
+  assert.equal((await forged.json()).challenge, null, "a url not already in the catalog must never be fetched");
+
+  const site = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, cookie));
+  assert.match((await site.json()).challenge, /^ff47-[23456789BCDFGHJKLMNPQRSTVWXYZ]{10}$/);
+});
+
+test("a challenge verifies only when the code is actually published", async () => {
+  const cookie = await signIn("verify-challenge@example.com");
+  const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, cookie));
+  const { id, challenge } = await created.json();
+
+  evidenceBody = "<html>nothing here</html>";
+  const missed = await handlers.runChallenge(post(`/api/claims/${id}/challenge`, {}, cookie), id);
+  assert.equal((await missed.json()).verified, false);
+
+  evidenceBody = `<html>我的驗證碼是 ${challenge} 謝謝</html>`;
+  const hit = await handlers.runChallenge(post(`/api/claims/${id}/challenge`, {}, cookie), id);
+  assert.equal((await hit.json()).verified, true);
+
+  assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff47", "ff47-site"), true);
+});
+
+test("a claim cannot be challenged by anyone but its author", async () => {
+  const owner = await signIn("claim-owner@example.com");
+  const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, owner));
+  const { id } = await created.json();
+
+  const other = await signIn("someone-else@example.com");
+  assert.equal((await handlers.runChallenge(post(`/api/claims/${id}/challenge`, {}, other), id)).status, 404);
+});
+
+test("a verified owner can publish, and the reader document reflects it", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("publisher@example.com");
+  await approve(owner, "ff47-social", admin);
+
+  const written = await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "新刊 300 元" } }, owner), "ff47-social");
+  assert.equal(written.status, 200);
+
+  const doc = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  const payload = await doc.json();
+  assert.equal(payload.overrides.find((entry) => entry.circleId === "ff47-social").fields.saleInfo, "新刊 300 元");
+  assert.match(doc.headers.get("cache-control"), /max-age=60/);
+});
+
+test("the public document is anonymous, revalidatable, and answers 304", async () => {
+  const first = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  const etag = first.headers.get("etag");
+  assert.ok(etag);
+
+  const revalidated = await handlers.publicOverrides(
+    new Request(`${ORIGIN}/data/events/ff47/overrides.json`, { headers: { "if-none-match": etag } }),
+    "ff47",
+  );
+  assert.equal(revalidated.status, 304);
+  assert.equal(revalidated.headers.get("etag"), etag);
+});
+
+test("an unknown event serves an empty document rather than failing", async () => {
+  const response = await handlers.publicOverrides(get("/data/events/ff48/overrides.json"), "ff48");
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).overrides, []);
+});
+
+test("rejects payloads the reader could not project", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("bad-payload@example.com");
+  await approve(owner, "ff47-site", admin);
+
+  for (const fields of [
+    { saleInfo: "x".repeat(2001) },
+    { links: [{ provider: "X", kind: "social", url: "javascript:alert(1)" }] },
+    { thumbnail: { url: "https://tracker.example/pixel.png", sourceUrl: "https://tracker.example/p", provider: "x" } },
+    { placements: { 1: ["A01"] } },
+  ]) {
+    const response = await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields }, owner), "ff47-site");
+    assert.equal(response.status, 400, `should reject ${JSON.stringify(fields).slice(0, 60)}`);
+  }
+});
+
+test("only a listed admin reaches the review queue", async () => {
+  const ordinary = await signIn("ordinary@example.com");
+  assert.equal((await handlers.adminListClaims(get("/api/admin/claims", ordinary))).status, 403);
+
+  const admin = await signIn("admin@example.com");
+  assert.equal((await handlers.adminListClaims(get("/api/admin/claims", admin))).status, 200);
+});
+
+test("admin actions require a recently created session", async () => {
+  const admin = await signIn("admin@example.com");
+  clock += 25 * 60 * 60 * 1000;
+  const response = await handlers.adminListClaims(get("/api/admin/claims", admin));
+  assert.equal(response.status, 401, "a stale admin session must re-authenticate before deciding");
+  clock -= 25 * 60 * 60 * 1000;
+});
+
+test("a takedown removes the content and a second takedown reports nothing to do", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("takedown@example.com");
+  await approve(owner, "ff47-domain", admin);
+  await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "冒名內容" } }, owner), "ff47-domain");
+
+  assert.equal((await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-domain", reason: "冒名" }, admin))).status, 200);
+
+  const doc = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  const payload = await doc.json();
+  assert.equal(payload.overrides.some((entry) => entry.circleId === "ff47-domain"), false);
+
+  assert.equal((await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-domain", reason: "again" }, admin))).status, 404);
+});
+
+test("revoking a claim stops the former owner from editing", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("revoked@example.com");
+  const claimId = await approve(owner, "ff47-social", admin);
+
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId, decision: "revoke" }, admin));
+  const response = await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "還想改" } }, owner), "ff47-social");
+  assert.equal(response.status, 403);
+});
+
+test("a claim on an already-owned circle is refused without naming the owner", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("first@example.com");
+  await approve(owner, "ff47-site", admin);
+
+  const rival = await signIn("second@example.com");
+  const response = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site" }, rival));
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.doesNotMatch(body.error, /first@example\.com/, "the response must not leak who owns the circle");
+});
+
+test("a claim for an unknown circle is refused", async () => {
+  const cookie = await signIn("unknown@example.com");
+  assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-nope" }, cookie))).status, 404);
+});
