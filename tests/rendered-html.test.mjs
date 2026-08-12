@@ -76,8 +76,8 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
 });
 
 test("separates the public static app from the retained editor implementation", async () => {
-  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "use-circle-catalog.ts"];
-  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, catalogHook] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "use-circle-catalog.ts", "circle-editor-client.ts"];
+  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, catalogHook, editorClient] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
   const planningToolsStyles = await readFile(new URL("../app/planning-tools.module.css", import.meta.url), "utf8");
@@ -215,6 +215,14 @@ test("separates the public static app from the retained editor implementation", 
   // must never put a reader into the error state.
   assert.match(catalogHook, /setCircleCatalog\(payload\);/);
   assert.match(catalogHook, /loadStaticCircleOverrides\(eventId\)\.catch\(\(\) => undefined\)/);
+
+  // Every authenticated write lives in one client, it always sends the session,
+  // and it never touches the cacheable read namespace.
+  assert.match(editorClient, /credentials: "same-origin"/);
+  assert.doesNotMatch(editorClient, /\/data\/events\//);
+  // An access gate answers with an HTML login page that fetch reports as a 200.
+  // Parsing that must yield an actionable message, not a bare syntax error.
+  assert.match(editorClient, /response\.redirected/);
 
   // The override is applied downstream of the booth-matching indexes. Moving it
   // upstream would silently detach renamed circles from every map placement;
