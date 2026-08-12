@@ -23,6 +23,7 @@
     "catalog:check": "node scripts/generate-ff47-circle-templates.mjs --check",
     "catalog:snapshot": "node scripts/export-static-circle-catalog.mjs",
     "catalog:snapshot:check": "node scripts/export-static-circle-catalog.mjs --check",
+    "claims:check": "node scripts/check-claimed-circles.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .wrangler",
     "db:generate": "drizzle-kit generate"
@@ -48,6 +49,7 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
+    "miniflare": "5.20260804.0-alpha",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

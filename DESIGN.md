@@ -338,6 +338,15 @@ components:
 - **Offline Boundary:** 離線範圍只涵蓋自家靜態產物。外部社團縮圖與外部連結不快取，離線時維持既有的降級狀態，不得改以本地內容假冒。
 - **Installability:** 提供 web app manifest 與可遮罩圖示，讓使用者能在展前把工具加入主畫面；安裝與否不改變任何核心流程。
 
+### Circle Self-Service Control Plane
+
+- **Separate Entry:** 社團登入與編輯位於獨立入口 `/circle`，不與閱讀端共用 bundle。閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱。
+- **Identity vs Ownership:** email 一次性連結只證明控制某信箱，不證明身分。認領必須另有證據：帳號網域與社團官網相符可自動通過；社團在已登錄於場刊的可抓取連結上公開驗證碼可自動通過；其餘一律人工審核。資料庫層保證一個社團同時只有一位擁有者。
+- **Editable Scope:** 販售資訊、連結、縮圖與作品／標籤類欄位即時生效；社團名稱與筆名需審核（名稱同時是攤位比對鍵與 ID 雜湊輸入）；攤位、日期與 `SourceLink` 永不開放。
+- **Attribution:** 社團自填內容一律附 `provider: "社團本人"`、`contentType: "circle"`、`status: "unverified"` 的來源條目，顯示為「社團自述／尚未驗證」，且不提供偽造的原始來源連結。不得以任何版面權重暗示已獲主辦確認。
+- **Takedown:** 管理者可即時撤下任何社團補充資料；撤下後該筆立刻自公開文件消失，不需用戶端邏輯配合。所有認領與撤下決策寫入稽核記錄。
+- **Media Safety:** 社團提供的縮圖來源限於允許清單內的主機。任意主機會讓每位讀者的瀏覽器對外發出請求並暴露 IP，這是內容安全問題而非樣式問題。
+
 ### Local Map Authoring and Future Control Plane
 
 - **Scope:** 只用於受信任維護者上傳、辨識、原圖對照、向量元素微調與產生公開快照；公開 Pages 介面不得出現檔案欄位、管理入口或寫入 route。
