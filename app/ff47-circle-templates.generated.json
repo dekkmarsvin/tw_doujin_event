@@ -1039,13 +1039,33 @@
         "A14"
       ]
     },
-    "creatorTypes": [],
-    "ageRatings": [],
-    "workTypes": [],
-    "referencedWorks": [],
+    "creatorTypes": [
+      "繪師"
+    ],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "二創"
+    ],
+    "referencedWorks": [
+      "鳴潮"
+    ],
+    "saleInfo": "小吊飾 80元\n大吊飾 130元\n明信片 50元\n色紙 120元",
     "specialTags": [],
     "surveyUrls": [],
-    "links": []
+    "links": [
+      {
+        "provider": "X",
+        "kind": "social",
+        "url": "https://x.com/kateterkk"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/kateterkk/status/2087032725270417690/photo/1"
+      }
+    ]
   },
   {
     "id": "ff47-doaqqr",
@@ -7438,6 +7458,7 @@
     "referencedWorks": [
       "請問您今天要來點兔子嗎? / Is the order a rabbit? / ご注文はうさぎですか?"
     ],
+    "saleInfo": "資料為https://tw-doujin.info用請勿轉載",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -19318,9 +19339,14 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "同人誌【狐羊小姐抱抱】",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -19353,6 +19379,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://www.facebook.com/KBMIE624/posts/pfbid02ScQte8MVRRCdbaKYuoG8YYDLrqCf8NhvHr72xF3FHHynDV7FP7kUDyynGrTWoMFel"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/kbmie_tw/status/2087173339320344907"
       }
     ]
   },
@@ -21086,9 +21117,9 @@
     ]
   },
   {
-    "id": "ff47-1qy4046",
+    "id": "ff47-qsa5t1",
     "sourceRow": 452,
-    "name": "紅色荔枝樹",
+    "name": "https://www.facebook.com/akarizu223/posts/pfbid02j1kG39tNgZLhoWtp3uXDD7bz6Hsa3eMD7zACDvoaZCgoPc8nsCpXdA4xtJ92U8mUl\n\nhttps://www.facebook.com/100039142095902/posts/pfbid02PreGpSrRHr6zimgWXvzYxWx4HUSxHndQCRqU2A1cz2gDqngG3CrDHWQi44tyjM3Fl/?",
     "placements": {
       "1": [
         "D09"
@@ -33154,9 +33185,12 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [],
     "referencedWorks": [],
+    "saleInfo": "新刊 HONEY GLAZE",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -33189,6 +33223,11 @@
         "provider": "本次預告",
         "kind": "announcement",
         "url": "https://x.com/misu__0300/status/2060363869487534469"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/misu__0300/status/2087124367104712954"
       }
     ]
   },
@@ -46330,9 +46369,14 @@
     "creatorTypes": [
       "音聲作品"
     ],
-    "ageRatings": [],
-    "workTypes": [],
+    "ageRatings": [
+      "一般"
+    ],
+    "workTypes": [
+      "原創"
+    ],
     "referencedWorks": [],
+    "saleInfo": "同人誌【中文音聲圈大拜拜 2026典藏冊】650元\n「壞學妹需要用藥物治療一下呢」光柵作品卡 100元",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -46340,6 +46384,11 @@
         "provider": "Facebook",
         "kind": "social",
         "url": "https://www.facebook.com/handoruclub"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/HandoruClub/status/2087169595811705090"
       }
     ]
   },
@@ -47314,12 +47363,13 @@
       "一般"
     ],
     "workTypes": [
-      "二創"
+      "二創",
+      "原創"
     ],
     "referencedWorks": [
       "IDOLiSH"
     ],
-    "saleInfo": "飯友組 100元\n明信片 30元\n徽章 60元",
+    "saleInfo": "飯友組 100元\n明信片 30元\n徽章 60元\n壓克力立牌 350元\n徽章 700元\n票卡 150元\n同人誌新刊 400元\n新刊套組 1700元 (新刊+立牌+掛軸)",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -47352,6 +47402,11 @@
         "provider": "品書",
         "kind": "catalog",
         "url": "https://www.facebook.com/XFateArtworks/posts/pfbid0J8KNyiTHrVu2Ex1PNknU9bBiemqZzKeUUhrpoZicBeMAVy3PbTEHrdBnv8jbzmHGl"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://x.com/huhome0906/status/2087074918286725199"
       }
     ]
   },
@@ -60633,13 +60688,16 @@
     "creatorTypes": [
       "繪師"
     ],
-    "ageRatings": [],
+    "ageRatings": [
+      "一般"
+    ],
     "workTypes": [
       "二創"
     ],
     "referencedWorks": [
       "蔚藍檔案 / Blue Archive / ブルーアーカイブ"
     ],
+    "saleInfo": "💠新刊四點套組 700元\n1、同人誌新刊 150-200元\n2、艾莉千紗貼貼壓克力立牌/吊飾\n💠尼古和紗 極品壓克力紀念冊 800元\n💠懶散電波極簡套組 500元\n1、壓克力立牌\n2、壓克力拍立得\n3、A4樂團海報\n💠學生證 200元\n💠Good Set 800元\n1、壓克力立牌\n2、壓克力拍立得\n3、雷射票\n4、特製海報\n5、睿智貓貓吊飾\n6、主題貼紙",
     "specialTags": [],
     "surveyUrls": [],
     "links": [
@@ -60677,6 +60735,16 @@
         "provider": "連結整合頁",
         "kind": "website",
         "url": "https://lit.link/en/ranyu222"
+      },
+      {
+        "provider": "品書",
+        "kind": "catalog",
+        "url": "https://www.threads.com/@ranyu_ku/post/Db5gH-gAZsx"
+      },
+      {
+        "provider": "預購／通販",
+        "kind": "store",
+        "url": "https://www.myacg.com.tw/seller_market.php?keyword=FF47&seller=281185"
       }
     ],
     "thumbnail": {
