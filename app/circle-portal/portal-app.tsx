@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createClaim, decideClaim, listMyClaims, listPendingClaims, PortalError, readMyOverride,
-  readSession, requestLoginLink, runChallenge, saveOverride, signOut, takedownOverride, verifyLoginToken,
-  type ClaimSummary, type PendingClaim, type PortalSession,
+  readSession, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
+  type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import { OVERRIDE_LIMITS, type CircleOverrideFields } from "../circle-overrides";
 import { FF47_EVENT } from "../event-catalog";
-import type { CircleCatalogPayload, CircleTemplate } from "../circle-records";
 import styles from "./portal.module.css";
 
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
@@ -160,32 +159,41 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
   </section>;
 }
 
-function useCircleSearch() {
-  const [templates, setTemplates] = useState<CircleTemplate[]>([]);
+/**
+ * Server-side search. Downloading the catalog here would force it to be public,
+ * which is exactly what the access gate is holding back until the source
+ * licensing review lands.
+ */
+function useCircleSearch(query: string) {
+  const [matches, setMatches] = useState<CircleMatch[]>([]);
+  // Derived rather than cleared in the effect: a too-short query has no results
+  // by definition, so there is nothing to synchronise and nothing to flash.
+  const active = query.trim().length >= 2;
+
   useEffect(() => {
-    void fetch(`/data/events/${FF47_EVENT.id}/circles.json`, { headers: { accept: "application/json" } })
-      .then((response) => response.json() as Promise<CircleCatalogPayload>)
-      .then((payload) => setTemplates(payload.templates))
-      .catch(() => setTemplates([]));
-  }, []);
-  return templates;
+    if (!active) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void searchCircles(query)
+        .then((result) => { if (!cancelled) setMatches(result.circles); })
+        .catch(() => { if (!cancelled) setMatches([]); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [active, query]);
+
+  return active ? matches : [];
 }
 
 function ClaimForm({ onCreated }: { onCreated: () => void }) {
-  const templates = useCircleSearch();
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<CircleTemplate | null>(null);
+  const [selected, setSelected] = useState<CircleMatch | null>(null);
   const [targetUrl, setTargetUrl] = useState("");
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
   const [challenge, setChallenge] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>(IDLE);
 
-  const matches = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    if (needle.length < 2) return [];
-    return templates.filter((template) => template.name.toLocaleLowerCase().includes(needle)).slice(0, 8);
-  }, [query, templates]);
+  const matches = useCircleSearch(selected ? "" : query);
 
   return <section className={styles.card}>
     <h2>認領社團</h2>
@@ -194,9 +202,9 @@ function ClaimForm({ onCreated }: { onCreated: () => void }) {
     <label htmlFor="portal-search">社團名稱</label>
     <input id="portal-search" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder="輸入兩個字以上" />
     {matches.length > 0 && !selected && <ul className={styles.matchList}>
-      {matches.map((template) => <li key={template.id}>
-        <button type="button" onClick={() => { setSelected(template); setQuery(template.name); }}>
-          <b>{template.name}</b><small>{template.links.length} 個已登錄連結</small>
+      {matches.map((match) => <li key={match.id}>
+        <button type="button" onClick={() => { setSelected(match); setQuery(match.name); }}>
+          <b>{match.name}</b><small>{match.linkCount} 個已登錄連結</small>
         </button>
       </li>)}
     </ul>}

@@ -109,6 +109,16 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     repository: createIdentityRepository(env.DB),
     sendMail: (message) => sendMailgun(env, message),
     lookupCircle: async (circleId) => (await catalogIndex(env, request, eventId)).get(circleId) ?? null,
+    searchCircles: async (query, limit) => {
+      const needle = query.normalize("NFKC").toLocaleLowerCase("zh-Hant");
+      const matches: CircleLookup[] = [];
+      for (const circle of (await catalogIndex(env, request, eventId)).values()) {
+        if (!circle.nameKey.includes(needle)) continue;
+        matches.push(circle);
+        if (matches.length >= limit) break;
+      }
+      return matches;
+    },
     fetchEvidence,
     config: {
       eventId,

@@ -44,6 +44,9 @@ beforeEach(async () => {
     repository,
     sendMail: async (message) => { sent.push(message); },
     lookupCircle: async (circleId) => CIRCLES[circleId] ?? null,
+    searchCircles: async (query, limit) => Object.values(CIRCLES)
+      .filter((circle) => circle.nameKey.includes(query.toLocaleLowerCase("zh-Hant")))
+      .slice(0, limit),
     fetchEvidence: async () => evidenceBody,
     config: {
       eventId: "ff47",
@@ -327,6 +330,38 @@ test("a claim on an already-owned circle is refused without naming the owner", a
   assert.equal(response.status, 409);
   const body = await response.json();
   assert.doesNotMatch(body.error, /first@example\.com/, "the response must not leak who owns the circle");
+});
+
+test("circle search requires a session, so the catalog stays gated", async () => {
+  // The portal must never need the public catalog to be readable: that is the
+  // whole reason the search runs server-side.
+  assert.equal((await handlers.searchCatalog(get("/api/circle/search?q=社團"))).status, 401);
+
+  const cookie = await signIn("searcher@example.com");
+  const response = await handlers.searchCatalog(get("/api/circle/search?q=社團", cookie));
+  assert.equal(response.status, 200);
+  assert.ok((await response.json()).circles.length > 0);
+});
+
+test("search needs two characters and returns only verifiable links", async () => {
+  const cookie = await signIn("searcher2@example.com");
+
+  for (const short of ["", " ", "社"]) {
+    const response = await handlers.searchCatalog(get(`/api/circle/search?q=${encodeURIComponent(short)}`, cookie));
+    assert.deepEqual((await response.json()).circles, [], `must not search on ${JSON.stringify(short)}`);
+  }
+
+  const social = await handlers.searchCatalog(get("/api/circle/search?q=只有社群", cookie));
+  const [entry] = (await social.json()).circles;
+  assert.equal(entry.name, "只有社群的社團");
+  // The circle has an X link, which a Worker cannot read, so it is not offered
+  // as a challenge target — but the count still tells the user it exists.
+  assert.deepEqual(entry.links, []);
+  assert.equal(entry.linkCount, 1);
+
+  const site = await handlers.searchCatalog(get("/api/circle/search?q=有官網", cookie));
+  const [withSite] = (await site.json()).circles;
+  assert.deepEqual(withSite.links, [{ provider: "官方網站", url: "https://circle.example/home" }]);
 });
 
 test("a claim for an unknown circle is refused", async () => {

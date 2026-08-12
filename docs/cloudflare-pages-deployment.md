@@ -5,7 +5,22 @@
 - 公開站是 Vite React SPA，build output 為 `dist/`。
 - `dist/index.html`、hashed JS/CSS、自託管 Geist 字型、靜態地圖 JSON 與公開圖示是唯一部署內容。
 - 不使用 advanced mode：不得產生 `dist/_worker.js`、`dist/server/index.js`、`dist/_redirects` 或 `dist/_routes.json`。advanced mode 會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker，正是這些防線要避免的事。
-- `functions/` 只承載社團身分與寫入 route，以及 `/data/events/:id/overrides.json` 這個公開補充資料端點。Pages 自動產生的路由表只涵蓋這些路徑，其餘靜態資源仍由邊緣直送。
+- `functions/` 只承載社團身分、認領、編輯與管理 route，以及 `/data/events/:id/overrides.json` 這個公開補充資料端點。Pages 自動產生的路由表只涵蓋這些路徑，其餘靜態資源仍由邊緣直送。
+- 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。這讓公開場刊在授權確認前可以維持閘控，也省下每位社團 1.8 MB 的下載。
+
+## Cloudflare Access 例外路徑
+
+在來源授權確認前，`/` 與 `/data/*` 維持閘控，但社團入口必須可達，否則社團無法登入或認領。Zero Trust 需要 Bypass 的路徑：
+
+| 路徑 | 用途 |
+|---|---|
+| `/circle`、`/circle.html` | 社團入口頁 |
+| `/assets/*`、`/fonts/*` | 入口頁的 JS／CSS／字型（與閱讀端共用） |
+| `/api/auth/*` | 索取與驗證登入連結、查詢與登出 session |
+| `/api/claims/*` | 送出認領與執行連結驗證 |
+| `/api/circle/*` | 社團搜尋與自己的補充資料讀寫 |
+
+`/api/admin/*` **刻意不放行**：管理操作同時受 Access 與 `ADMIN_EMAILS` 兩層保護。`/data/*` 也不放行——社團入口已不需要它。
 - binding 只有一個 D1（`DB`，資料庫 `tw-catalog-identity`），用於帳號、session、認領、社團補充資料與稽核。不建立 R2、KV 或 Durable Objects。
 - 密鑰以 `wrangler pages secret put` 設定，不進 repo、不進 `wrangler.jsonc`、GitHub Actions 也不需要：`SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）。本機開發用 `.dev.vars`，該檔已列入 `.gitignore`。
 - `app/editor/`、`app/api/`、`worker/` 與 `drizzle/` 保留在 source tree，供本機地圖 authoring 使用；`vite.pages.config.ts` 不會把它們納入公開 bundle。
