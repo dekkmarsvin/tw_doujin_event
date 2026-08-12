@@ -41,6 +41,11 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   // that the precache fetch never sent. Every read must ignore it or the whole
   // page fails offline.
   assert.match(worker, /const MATCH_OPTIONS = \{ ignoreVary: true \};/);
+
+  // The data namespace is JSON only; a 200 HTML fallback must never be stored
+  // there and then served offline as if it were the catalog.
+  assert.match(worker, /function isJson\(response\)/);
+  assert.match(worker, /if \(isStorable\(response\) && isJson\(response\)\) await cache\.put\(request, response\.clone\(\)\);/);
   const matchCalls = worker.match(/cache\.match\([^)]*\)/g) ?? [];
   assert.equal(matchCalls.length, 3, "every caching strategy must read through the cache exactly once");
 

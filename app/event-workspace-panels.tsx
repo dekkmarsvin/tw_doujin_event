@@ -19,6 +19,15 @@ const SOURCE_STATUS_LABEL = {
   unverified: "尚未驗證",
 } as const;
 
+/** Only organizer data may read as official; circle-authored content says so. */
+const SOURCE_ORIGIN_LABEL = {
+  official: "主辦來源",
+  circle: "社團自述",
+  catalog: "公開整理資料",
+  social: "社群來源",
+  media: "外部媒體",
+} as const;
+
 const LINK_KIND_LABEL = {
   social: "社群與作者",
   support: "贊助平台",
@@ -194,7 +203,7 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
       </div>}
       {!compact && <div className={styles.sources} aria-label="資料來源">
         <b>資料來源</b>
-        {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong><small>{source.label} · {source.contentType === "official" ? "主辦來源" : "非主辦官方"} · {SOURCE_STATUS_LABEL[source.status]}</small><small>匯入 {sourceDate(source.fetchedAt)}</small></span><a href={source.url} target="_blank" rel="noreferrer">查看原始來源 <UiIcon name="external" /></a></div>)}
+        {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong><small>{source.label} · {SOURCE_ORIGIN_LABEL[source.contentType]} · {SOURCE_STATUS_LABEL[source.status]}</small><small>匯入 {sourceDate(source.fetchedAt)}</small></span>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">查看原始來源 <UiIcon name="external" /></a> : <small className={styles.sourceNoLink}>於本站填寫</small>}</div>)}
         <p>社團與作品欄位由公開整理資料彙整；品項、庫存與臨時異動以社團及主辦現場公告為準。</p>
       </div>}
     </div>
