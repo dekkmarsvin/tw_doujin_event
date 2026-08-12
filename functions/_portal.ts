@@ -125,7 +125,13 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       origin: new URL(request.url).origin,
       sessionSecret: requireSecret(env, "SESSION_SECRET"),
       hashPepper: requireSecret(env, "HASH_PEPPER"),
-      adminEmails: (env.ADMIN_EMAILS ?? "").split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean),
+      // Split on whatever a human pasted — comma, semicolon or newline — and
+      // drop quotes carried in from a shell or a prompt. The handler normalizes
+      // each entry, so this only has to separate and unwrap them.
+      adminEmails: (env.ADMIN_EMAILS ?? "")
+        .split(/[,;\s]+/)
+        .map((entry) => entry.replace(/^["']+|["']+$/g, ""))
+        .filter(Boolean),
       dataUpdatedAt: FF47_EVENT.dataUpdatedAt,
       now: () => Date.now(),
     },

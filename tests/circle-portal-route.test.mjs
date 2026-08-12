@@ -279,6 +279,31 @@ test("rejects payloads the reader could not project", async () => {
   }
 });
 
+test("an admin address matches regardless of case or padding", async () => {
+  // Configuration is typed by a human and the stored address is normalized, so
+  // the two must be compared after the same normalization, not literally.
+  const padded = createCirclePortalHandlers({
+    repository,
+    sendMail: async (message) => { sent.push(message); },
+    lookupCircle: async (circleId) => CIRCLES[circleId] ?? null,
+    searchCircles: async () => [],
+    fetchEvidence: async () => null,
+    config: {
+      eventId: "ff47", origin: ORIGIN,
+      sessionSecret: "test-session-secret", hashPepper: "test-pepper",
+      adminEmails: ["  Admin@Example.COM  "],
+      dataUpdatedAt: "2026-08-11T00:00:00.000+08:00", now: () => clock,
+    },
+  });
+
+  const cookie = await signIn("admin@example.com");
+  const response = await padded.session(get("/api/auth/session", cookie));
+  assert.equal((await response.json()).isAdmin, true);
+
+  const stranger = await signIn("nobody@example.com");
+  assert.equal((await (await padded.session(get("/api/auth/session", stranger))).json()).isAdmin, false);
+});
+
 test("only a listed admin reaches the review queue", async () => {
   const ordinary = await signIn("ordinary@example.com");
   assert.equal((await handlers.adminListClaims(get("/api/admin/claims", ordinary))).status, 403);
