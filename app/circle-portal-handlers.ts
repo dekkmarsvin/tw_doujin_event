@@ -88,7 +88,11 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, config }: PortalDependencies) {
-  const isAdmin = (email: string) => config.adminEmails.includes(email);
+  // Both sides go through the same normalization as a stored account email.
+  // Comparing a raw configured string against a normalized one silently denies
+  // an admin whose address differs only in case or Unicode width.
+  const adminEmails = new Set(config.adminEmails.map(normalizeEmail).filter(Boolean));
+  const isAdmin = (email: string) => adminEmails.has(normalizeEmail(email));
 
   async function clientIpHash(request: Request) {
     const address = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "";
