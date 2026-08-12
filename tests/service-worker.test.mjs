@@ -43,6 +43,15 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   assert.match(worker, /const MATCH_OPTIONS = \{ ignoreVary: true \};/);
   const matchCalls = worker.match(/cache\.match\([^)]*\)/g) ?? [];
   assert.equal(matchCalls.length, 3, "every caching strategy must read through the cache exactly once");
+
+  // An expired Cloudflare Access session or a captive portal answers with a 200
+  // login page after a redirect. Storing one would replace the shell or the
+  // catalog with it, so every cache write is gated on the response being ours.
+  assert.match(worker, /function isStorable\(response\) \{\s*return response\.ok && !response\.redirected && response\.type === "basic";/);
+  const putCalls = worker.match(/^.*cache\.put\(.*$/gm) ?? [];
+  assert.equal(putCalls.length, 4, "the worker writes to the cache in exactly four places");
+  for (const call of putCalls) assert.match(call, /isStorable\(response\)/, `cache write is not guarded: ${call.trim()}`);
+  assert.doesNotMatch(worker, /if \(response\.ok\) await cache\.put/);
   for (const call of matchCalls) assert.match(call, /MATCH_OPTIONS/, `cache lookup ignores Vary: ${call}`);
 });
 

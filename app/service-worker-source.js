@@ -26,6 +26,16 @@ const NAVIGATION_TIMEOUT_MS = 3500;
  */
 const MATCH_OPTIONS = { ignoreVary: true };
 
+/**
+ * A redirected response is not our artifact. An expired Cloudflare Access
+ * session, a captive portal or a hotel wifi gateway all answer with a 200 login
+ * page after a redirect; caching one would replace the shell or the catalog
+ * with it and break the site offline. Serve it, never store it.
+ */
+function isStorable(response) {
+  return response.ok && !response.redirected && response.type === "basic";
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
@@ -33,7 +43,7 @@ self.addEventListener("install", (event) => {
     await Promise.all(PRECACHE_MANIFEST.map(async (url) => {
       try {
         const response = await fetch(url, { cache: "reload" });
-        if (response.ok) await cache.put(url, response);
+        if (isStorable(response)) await cache.put(url, response);
       } catch {
         // A missing entry degrades offline coverage; it must not block install.
       }
@@ -56,7 +66,7 @@ async function networkFirstNavigation(request) {
   const timeout = setTimeout(() => controller.abort(), NAVIGATION_TIMEOUT_MS);
   try {
     const response = await fetch(request, { signal: controller.signal });
-    if (response.ok) await cache.put(SHELL_URL, response.clone());
+    if (isStorable(response)) await cache.put(SHELL_URL, response.clone());
     return response;
   } catch {
     return (await cache.match(SHELL_URL, MATCH_OPTIONS)) ?? Response.error();
@@ -69,7 +79,7 @@ async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request, MATCH_OPTIONS);
   const network = fetch(request).then(async (response) => {
-    if (response.ok) await cache.put(request, response.clone());
+    if (isStorable(response)) await cache.put(request, response.clone());
     return response;
   }).catch(() => undefined);
   if (cached) {
@@ -85,7 +95,7 @@ async function cacheFirst(request) {
   if (cached) return cached;
   try {
     const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
+    if (isStorable(response)) await cache.put(request, response.clone());
     return response;
   } catch {
     return Response.error();
