@@ -326,6 +326,18 @@ components:
 - **Pointer and Touch:** 空白地圖區支援拖曳；觸控使用 pointer capture 維持單指平移與雙指縮放。攤位本身保留點按，不觸發背景拖曳。
 - **Motion:** `prefers-reduced-motion` 時停用轉場；拖曳與縮放維持直接跟手，不加入彈性或慣性動畫。
 
+### Data Loading and Offline
+
+- **Payload Boundary:** 場刊與地圖資料是版本化靜態快照（`circles.json`、`map.json`），不打包進 JS bundle。公開 bundle 只承載介面與投影邏輯；場刊資料字面值不得回流到 bundle。
+- **Shell First:** 首屏必須先畫出頂部列、日期、篩選與面板結構。搜尋結果在快照載入前顯示保留版面的 skeleton 與「正在讀取社團資料…」，不得以空白畫面或孤立 spinner 代替。
+- **Filter Vocabulary:** 創作類別等篩選選項屬於活動定義，必須在快照抵達前就可見；只有依賴資料的計數可以稍後補上。
+- **Deferred Selection:** 可分享連結的社團與攤位選取在快照可解析後才套用；在此之前不得改寫 URL，避免把使用者分享的深層連結洗掉。
+- **Planning Gate:** 收藏與行程的舊版 ID 遷移必須在快照可用後才執行並寫回，不得在空目錄上判定孤立或凍結未遷移的 ID。
+- **Failure:** 快照讀取失敗時保留介面結構，明確說明是社團資料讀取失敗並提示重新整理；不得偽裝成「查無結果」。
+- **Offline Shell:** 公開站註冊 Service Worker：導覽 network-first 並回退已快取 shell，`/data/events/` stale-while-revalidate，雜湊資產 cache-first。展場重新載入必須能以已下載的場刊、地圖、字型與介面繼續運作。
+- **Offline Boundary:** 離線範圍只涵蓋自家靜態產物。外部社團縮圖與外部連結不快取，離線時維持既有的降級狀態，不得改以本地內容假冒。
+- **Installability:** 提供 web app manifest 與可遮罩圖示，讓使用者能在展前把工具加入主畫面；安裝與否不改變任何核心流程。
+
 ### Local Map Authoring and Future Control Plane
 
 - **Scope:** 只用於受信任維護者上傳、辨識、原圖對照、向量元素微調與產生公開快照；公開 Pages 介面不得出現檔案欄位、管理入口或寫入 route。

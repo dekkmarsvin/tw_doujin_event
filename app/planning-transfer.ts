@@ -1,4 +1,4 @@
-import { CIRCLE_RECORDS_BY_CIRCLE_ID, CIRCLE_RECORDS_BY_ID, isKnownCircleId } from "./circle-records";
+import { getCircleCatalog, isKnownCircleId } from "./circle-records";
 import {
   EMPTY_PLANNING_DOCUMENT,
   PLANNING_SCHEMA_VERSION,
@@ -144,7 +144,8 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
     if (!circleId) { errors.push(`第 ${line} 列：circle_id 為必填。`); return; }
     if (row.some((value) => /^[\s]*[=+\-@]/.test(value))) { errors.push(`第 ${line} 列：包含可能的公式注入內容。`); return; }
     if (sourceUrl && (!sourceUrl.startsWith("https://") || (() => { try { new URL(sourceUrl); return false; } catch { return true; } })())) { errors.push(`第 ${line} 列：source_url 必須是有效 HTTPS URL。`); return; }
-    const record = CIRCLE_RECORDS_BY_CIRCLE_ID.get(circleId)?.[0] ?? CIRCLE_RECORDS_BY_ID.get(circleId);
+    const catalog = getCircleCatalog();
+    const record = catalog.recordsByCircleId.get(circleId)?.[0] ?? catalog.recordsById.get(circleId);
     const resolvedDay = record?.day ?? 1;
     const updatedAt = new Date().toISOString();
     const groupLabel = groupLabelRaw.trim();

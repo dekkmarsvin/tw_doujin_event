@@ -9,9 +9,15 @@ import {
   savePlanningDocument,
   type PlanningDocument,
 } from "./planning-store";
-import { CIRCLE_ID_MIGRATION_TARGETS } from "./circle-records";
+import { circleIdMigrationTargets } from "./circle-records";
 
-export function usePlanning(eventId: string) {
+/**
+ * Load planning data once the catalog has settled. Legacy favorites are
+ * migrated to canonical circle IDs through the catalog, and the migrated
+ * document is written back, so reading storage against an empty catalog would
+ * freeze unmigrated IDs into the current schema.
+ */
+export function usePlanning(eventId: string, catalogSettled: boolean) {
   const [document, setDocument] = useState<PlanningDocument>(EMPTY_PLANNING_DOCUMENT);
   const [ready, setReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -19,9 +25,10 @@ export function usePlanning(eventId: string) {
   const writable = useRef(true);
 
   useEffect(() => {
+    if (!catalogSettled) return;
     let cancelled = false;
     const reload = () => {
-      const snapshot = inspectPlanningStorage(localStorage, eventId, (circleId) => CIRCLE_ID_MIGRATION_TARGETS.get(circleId) ?? [circleId]);
+      const snapshot = inspectPlanningStorage(localStorage, eventId, circleIdMigrationTargets);
       writable.current = snapshot.writable;
       setDocument(snapshot.document);
       setStorageError(snapshot.error);
@@ -30,7 +37,7 @@ export function usePlanning(eventId: string) {
     const onStorage = (event: StorageEvent) => { if (event.key === PLANNING_STORAGE_KEY) reload(); };
     queueMicrotask(() => {
       if (cancelled) return;
-      const initial = inspectPlanningStorage(localStorage, eventId, (circleId) => CIRCLE_ID_MIGRATION_TARGETS.get(circleId) ?? [circleId]);
+      const initial = inspectPlanningStorage(localStorage, eventId, circleIdMigrationTargets);
       writable.current = initial.writable;
       setStorageError(initial.error);
       setUnsupportedRaw(initial.writable ? null : initial.raw);
@@ -44,7 +51,7 @@ export function usePlanning(eventId: string) {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(PLANNING_CHANGED_EVENT, reload);
     };
-  }, [eventId]);
+  }, [catalogSettled, eventId]);
 
   const update = useCallback((change: (current: PlanningDocument) => PlanningDocument) => {
     setDocument((current) => {

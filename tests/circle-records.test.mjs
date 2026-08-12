@@ -1,20 +1,39 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const catalog = await environment.runner.import("/app/circle-records.ts");
+const records = await environment.runner.import("/app/circle-records.ts");
 const events = await environment.runner.import("/app/event-catalog.ts");
 after(() => vite.close());
 
-test("projects independent circle and placement catalogs into the map read model", () => {
-  assert.equal(catalog.CIRCLE_CATALOG.length, 1338);
-  assert.equal(catalog.PLACEMENT_CATALOG.length, catalog.CIRCLE_RECORDS.length);
-  assert.ok(catalog.CIRCLE_CATALOG.length < catalog.PLACEMENT_CATALOG.length);
+// The published snapshot is the runtime source of truth, so the read model is
+// exercised through exactly the payload the browser downloads.
+const payload = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
+records.setCircleCatalog(payload);
+const catalog = records.getCircleCatalog();
 
-  const first = catalog.CIRCLE_RECORDS[0];
+test("accepts the published snapshot and rejects payloads the read model cannot project", () => {
+  assert.equal(records.isCircleCatalogPayload(payload), true);
+  assert.equal(payload.schema, "circle-catalog/1");
+  assert.equal(payload.eventId, "ff47");
+
+  assert.equal(records.isCircleCatalogPayload({ ...payload, schema: "circle-catalog/2" }), false);
+  assert.equal(records.isCircleCatalogPayload({ ...payload, booths: [] }), false);
+  assert.equal(records.isCircleCatalogPayload({ ...payload, booths: [{ ...payload.booths[0], day: 4 }] }), false);
+  assert.equal(records.isCircleCatalogPayload({ ...payload, templates: [{ ...payload.templates[0], placements: undefined }] }), false);
+  assert.equal(records.isCircleCatalogPayload(null), false);
+});
+
+test("projects independent circle and placement catalogs into the map read model", () => {
+  assert.equal(catalog.circles.length, 1338);
+  assert.equal(catalog.placements.length, catalog.records.length);
+  assert.ok(catalog.circles.length < catalog.placements.length);
+
+  const first = catalog.records[0];
   assert.equal(first.circle.id, first.placement.circleId);
   assert.equal(first.placement.id, first.recordId);
   assert.notEqual(first.circle.id, first.recordId);
@@ -22,11 +41,18 @@ test("projects independent circle and placement catalogs into the map read model
   assert.equal(first.placement.status, "active");
   assert.equal("boothCode" in first.circle, false);
   assert.equal("name" in first.placement, false);
-  assert.equal(catalog.CIRCLE_RECORDS.every((record) => record.circle.sourceRow === undefined || Number.isInteger(record.circle.sourceRow)), true);
+  assert.equal(catalog.records.every((record) => record.circle.sourceRow === undefined || Number.isInteger(record.circle.sourceRow)), true);
+});
+
+test("builds the same catalog from the same payload without touching the store", () => {
+  const rebuilt = records.buildCircleCatalog(payload);
+  assert.equal(rebuilt.records.length, catalog.records.length);
+  assert.equal(rebuilt.circles.length, catalog.circles.length);
+  assert.deepEqual(rebuilt.records[0], catalog.records[0]);
 });
 
 test("shares one Excel-backed circle template across its reviewed placements", () => {
-  const duplicates = catalog.CIRCLE_RECORDS.filter((record) => record.name === "OriginZero");
+  const duplicates = catalog.records.filter((record) => record.name === "OriginZero");
   assert.ok(duplicates.length > 1);
   assert.equal(new Set(duplicates.map((record) => record.circle.id)).size, 1);
   assert.equal(new Set(duplicates.map((record) => record.circle.sourceRow)).size, 1);
@@ -34,7 +60,7 @@ test("shares one Excel-backed circle template across its reviewed placements", (
 });
 
 test("integrates Excel profile links and the sourced thumbnail index", () => {
-  const record = catalog.CIRCLE_RECORDS.find((item) => item.name === "33号部屋");
+  const record = catalog.records.find((item) => item.name === "33号部屋");
   assert.ok(record);
   assert.ok(record.circle.externalLinks.some((link) => link.provider === "X"));
   assert.equal(record.circle.media.length, 1);
@@ -50,40 +76,42 @@ test("fills only the organizer-listed booth gaps with their existing circle temp
     [3, "R01", "+Ely Cosplay+"], [3, "R02", "+Ely Cosplay+"],
   ];
   for (const [day, code, name] of expected) {
-    const record = catalog.CIRCLE_RECORDS.find((item) => item.day === day && item.code === code && item.name === name);
+    const record = catalog.records.find((item) => item.day === day && item.code === code && item.name === name);
     assert.ok(record, `missing organizer supplement ${day}:${code}`);
     assert.equal(Number.isInteger(record.circle.sourceRow), true);
     const organizer = record.sources.find((source) => source.provider === "開拓動漫");
     assert.match(organizer?.url ?? "", new RegExp(`%E7%AC%AC%E${day === 1 ? "4%B8%80" : day === 2 ? "4%BA%8C" : "4%B8%89"}%E5%A4%A9`, "i"));
   }
-  const existing = catalog.CIRCLE_RECORDS.find((item) => item.day === 1 && item.code === "A01");
+  const existing = catalog.records.find((item) => item.day === 1 && item.code === "A01");
   const existingOrganizer = existing?.sources.find((source) => source.provider === "開拓動漫");
   assert.doesNotMatch(existingOrganizer?.url ?? "", /%E7%AC%AC%E4%B8%80%E5%A4%A9/i);
 });
 
 test("creates unique record IDs and maps legacy placement IDs to canonical circles", () => {
-  catalog.CIRCLE_RECORDS.slice(0, 20).forEach((record, index) => {
+  catalog.records.slice(0, 20).forEach((record, index) => {
     assert.equal(record.recordId, `${record.id}-${index}`);
-    assert.equal(catalog.CIRCLE_RECORDS_BY_ID.get(record.recordId), record);
-    assert.deepEqual(catalog.CIRCLE_ID_MIGRATION_TARGETS.get(record.recordId), [record.circle.id]);
-    assert.equal(catalog.CIRCLE_ID_MIGRATION_TARGETS.get(record.id).includes(record.circle.id), true);
+    assert.equal(catalog.recordsById.get(record.recordId), record);
+    assert.deepEqual(catalog.idMigrationTargets.get(record.recordId), [record.circle.id]);
+    assert.equal(catalog.idMigrationTargets.get(record.id).includes(record.circle.id), true);
+    assert.deepEqual(records.circleIdMigrationTargets(record.recordId), [record.circle.id]);
   });
-  assert.equal(new Set(catalog.CIRCLE_RECORDS.map((record) => record.recordId)).size, catalog.CIRCLE_RECORDS.length);
+  assert.equal(new Set(catalog.records.map((record) => record.recordId)).size, catalog.records.length);
+  assert.deepEqual(records.circleIdMigrationTargets("unknown-circle"), ["unknown-circle"]);
 });
 
 test("recognizes canonical planning identities and uses the event data version for source freshness", () => {
-  const record = catalog.CIRCLE_RECORDS.find((item) => item.name === "蒼銀之星" && item.day === 1);
+  const record = catalog.records.find((item) => item.name === "蒼銀之星" && item.day === 1);
   assert.ok(record);
 
-  assert.equal(catalog.CIRCLE_CATALOG_BY_ID.get(record.circle.id), record.circle);
-  assert.equal(catalog.isKnownCircleId(record.circle.id), true);
+  assert.equal(catalog.circlesById.get(record.circle.id), record.circle);
+  assert.equal(records.isKnownCircleId(record.circle.id), true);
   assert.equal(new Set(record.sources.map((source) => source.fetchedAt)).size, 1);
   assert.equal(record.sources[0].fetchedAt, events.FF47_EVENT.dataUpdatedAt);
 });
 
 test("includes every V and W booth slot for all three FF47 days", () => {
   for (const day of [1, 2, 3]) {
-    const codes = new Set(catalog.CIRCLE_RECORDS.filter((record) => record.day === day).map((record) => record.code));
+    const codes = new Set(catalog.records.filter((record) => record.day === day).map((record) => record.code));
     for (const row of ["V", "W"]) {
       const last = row === "V" ? 44 : 42;
       for (let number = 1; number <= last; number += 1) {

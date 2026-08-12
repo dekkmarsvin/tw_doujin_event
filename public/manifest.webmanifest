@@ -1,0 +1,28 @@
+{
+  "name": "FF47 場刊 MAP｜同人展逛攤地圖",
+  "short_name": "場刊 MAP",
+  "description": "搜尋 FF47 三日攤位、收藏社團並規劃你的逛攤路線。",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "start_url": "/?source=installed",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#f6f1e7",
+  "background_color": "#f6f1e7",
+  "categories": ["utilities", "navigation", "events"],
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

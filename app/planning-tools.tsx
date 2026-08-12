@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FF47_EVENT_ID } from "./event-map";
 import { isKnownCircleId } from "./circle-records";
+import { useCircleCatalog } from "./use-circle-catalog";
 import { EMPTY_PLANNING_DOCUMENT, deleteFavoriteGroup, moveFavoriteGroup, moveFavoritesToGroup, removeFromVisitPlan, toggleFavorite, updateFavoriteGroup } from "./planning-store";
 import { exportPlanningCsv, exportPlanningJson } from "./planning-transfer";
 import { usePlanning } from "./use-planning";
@@ -21,7 +22,10 @@ function download(name: string, text: string, type: string) {
 }
 
 export default function PlanningTools() {
-  const { document, update, replace, storageError, unsupportedRaw } = usePlanning(FF47_EVENT_ID);
+  // Subscribe to the catalog so orphan detection re-runs once records arrive,
+  // instead of reporting every favorite as unmatched while the snapshot loads.
+  const { status: catalogStatus } = useCircleCatalog(FF47_EVENT_ID);
+  const { document, update, replace, storageError, unsupportedRaw } = usePlanning(FF47_EVENT_ID, catalogStatus !== "loading");
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
