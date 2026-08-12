@@ -29,7 +29,11 @@ test("accepts the published snapshot and rejects payloads the read model cannot 
 });
 
 test("projects independent circle and placement catalogs into the map read model", () => {
-  assert.equal(catalog.circles.length, 1338);
+  // One circle per reviewed workbook row, with no positional fallbacks: every
+  // booth now matches a template. A number above 1336 means some booth failed
+  // to match and was given a synthetic identity.
+  assert.equal(catalog.circles.length, 1336);
+  assert.equal(catalog.circles.length, payload.templates.length);
   assert.equal(catalog.placements.length, catalog.records.length);
   assert.ok(catalog.circles.length < catalog.placements.length);
 
@@ -107,6 +111,21 @@ test("recognizes canonical planning identities and uses the event data version f
   assert.equal(records.isKnownCircleId(record.circle.id), true);
   assert.equal(new Set(record.sources.map((source) => source.fetchedAt)).size, 1);
   assert.equal(record.sources[0].fetchedAt, events.FF47_EVENT.dataUpdatedAt);
+});
+
+test("no circle is named by a pasted url, and D09 stays one circle across days", () => {
+  // A URL in the workbook's name column produced a circle displayed as a raw
+  // link, while its real booths fell back to positional ids that split the
+  // circle across days. The organizer's daily list is the naming authority.
+  assert.equal(catalog.circles.some((circle) => /^https?:\/\//.test(circle.name)), false);
+
+  const lychee = catalog.circles.filter((circle) => circle.name === "紅色荔枝樹");
+  assert.equal(lychee.length, 1, "the day 1 and day 2 D09 placements must share one circle");
+  assert.deepEqual(
+    (catalog.recordsByCircleId.get(lychee[0].id) ?? []).map((record) => `${record.day}:${record.code}`).sort(),
+    ["1:D09", "2:D09"],
+  );
+  assert.ok(lychee[0].externalLinks.length > 0, "the workbook row's links must survive the name correction");
 });
 
 test("includes every V and W booth slot for all three FF47 days", () => {

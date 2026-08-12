@@ -27,9 +27,21 @@ const known = new Set(catalog.templates.map((template) => template.id));
 const byName = new Map(catalog.templates.map((template) => [template.name, template.id]));
 
 function query(sql) {
-  const args = [wranglerCli, "d1", "execute", "tw-catalog-identity", remote ? "--remote" : "--local", "--json", "--command", sql];
+  // Flags must precede --command; anything after it is swallowed as the query.
+  const args = [wranglerCli, "d1", "execute", "tw-catalog-identity", remote ? "--remote" : "--local"];
   if (!remote) args.push("--persist-to", ".wrangler/state");
-  const stdout = execFileSync(process.execPath, args, { cwd: root, encoding: "utf8" });
+  args.push("--json", "--command", sql);
+
+  let stdout;
+  try {
+    stdout = execFileSync(process.execPath, args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    // The tables are created lazily on first use, so their absence means the
+    // portal has simply never run against this database — not a failure.
+    const detail = `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
+    if (/no such table/i.test(detail)) return [];
+    throw new Error(detail.trim() || (error instanceof Error ? error.message : String(error)));
+  }
   const [execution] = JSON.parse(stdout);
   return execution?.results ?? [];
 }

@@ -53,6 +53,40 @@ const LINK_COLUMNS = [
   [38, "其他連結", "website"], [39, "本次預告", "announcement"], [40, "品書", "catalog"], [41, "預購／通販", "store"], [44, "試閱", "sample"],
 ];
 
+/**
+ * Workbook rows whose 攤位名稱 cell holds something other than a circle name —
+ * here, a pasted announcement URL. The organizer's daily booth list is the
+ * naming authority for these, exactly as it is for the placement supplements in
+ * `app/ff47-official-booths.ts`.
+ *
+ * Keyed on the pasted URL, not the row number: a row inserted upstream would
+ * silently move a row-keyed correction onto a different circle.
+ *
+ * D09 (day 1 and 2) = 紅色荔枝樹, per
+ * https://www.f-2.com.tw/【ff47】第一天攤位編號/
+ */
+const NAME_CORRECTIONS = new Map([
+  ["https://www.facebook.com/akarizu223/posts/pfbid02j1kG39tNgZLhoWtp3uXDD7bz6Hsa3eMD7zACDvoaZCgoPc8nsCpXdA4xtJ92U8mUl", "紅色荔枝樹"],
+]);
+
+/**
+ * A URL in the name column is a data defect, never a name. Left alone it
+ * produces a circle whose displayed name is a raw link, and its booths fall
+ * back to positional ids that split one circle across days. Fail rather than
+ * publish that.
+ */
+function correctedName(raw, sourceRow) {
+  if (!/^https?:\/\//.test(raw)) return raw;
+  const [firstUrl] = raw.match(/https?:\/\/\S+/) ?? [];
+  const corrected = firstUrl && NAME_CORRECTIONS.get(firstUrl);
+  if (corrected) return corrected;
+  throw new Error(
+    `Row ${sourceRow} has a URL where the circle name should be:\n  ${firstUrl ?? raw}\n`
+    + "Look the booth up in the organizer's daily list and add the name to NAME_CORRECTIONS,\n"
+    + "or have the upstream spreadsheet corrected.",
+  );
+}
+
 const workbookBytes = await readFile(WORKBOOK_PATH);
 const thumbnailCsvText = normalizeTextSource(await readFile(THUMBNAIL_INDEX_PATH, "utf8"));
 const thumbnailRows = parseCsv(thumbnailCsvText);
@@ -61,8 +95,9 @@ const rows = parseXlsxWorksheet(unzipXlsx(workbookBytes), SOURCE_SHEET);
 const templates = rows.slice(1).flatMap((row, index) => {
   if (!row) return [];
   const sourceRow = index + 2;
-  const name = text(row[0]);
-  if (!name) return [];
+  const rawName = text(row[0]);
+  if (!rawName) return [];
+  const name = correctedName(rawName, sourceRow);
   const sourceUrl = thumbnails.get(name);
   const driveId = sourceUrl?.match(/\/d\/([^/]+)/)?.[1] ?? sourceUrl?.match(/[?&]id=([^&]+)/)?.[1];
   const links = LINK_COLUMNS.flatMap(([column, provider, kind]) => urls(row[column]).map((url) => ({ provider, kind, url })));

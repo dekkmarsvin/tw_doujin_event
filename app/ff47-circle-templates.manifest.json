@@ -7,7 +7,7 @@
   "thumbnailIndex": "data_source_test/ff47-thumbnail-index.csv",
   "thumbnailIndexSha256": "0858a0ff387957c22df9d913db781e5f03ed16c7335c02ff269a7adc003281e0",
   "output": "app/ff47-circle-templates.generated.json",
-  "outputSha256": "9bac712b9a3e58bbfab47a984491c66b53eb389e8832943a88560d9a4521a9c0",
+  "outputSha256": "3ad0a2cd784d1a55cf61c6505594c0766727eec679de80b4e788a25d3bfd3487",
   "counts": {
     "templates": 1336,
     "links": 5137,

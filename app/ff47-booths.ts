@@ -11,4 +11,3 @@ const OFFICIAL_MISSING_BOOTHS = FF47_OFFICIAL_NAME_BOOTHS.filter((booth) => !BAS
 export const BOOTHS: Booth[] = [...BASE_BOOTHS, ...OFFICIAL_MISSING_BOOTHS, ...V_W_BOOTHS];
 // The creator-category filter vocabulary lives in `event-catalog.ts` so the
 // public bundle can render filters before the catalog snapshot arrives.
-export const DAY_COUNTS = {1:994,2:994,3:989};
