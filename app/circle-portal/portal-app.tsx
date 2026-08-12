@@ -85,7 +85,10 @@ export default function CirclePortalApp() {
         <p>{FF47_EVENT.name}・{FF47_EVENT.dateRangeLabel}</p>
       </div>
       {session && <div className={styles.identity}>
-        <span>{session.email}</span>
+        {/* Shows which identity the server resolved, so a mismatch against
+            ADMIN_EMAILS is visible rather than silently hiding the panel. */}
+        <span>{session.email}{session.isAdmin ? "・管理者" : ""}</span>
+        {session.isAdmin && <a href="#admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(() => { setSession(null); setClaims([]); })}>登出</button>
       </div>}
     </header>
@@ -309,7 +312,7 @@ function AdminPanel() {
 
   useEffect(refresh, [refresh]);
 
-  return <section className={`${styles.card} ${styles.admin}`}>
+  return <section className={`${styles.card} ${styles.admin}`} id="admin">
     <h2>管理：待審認領</h2>
     {pending.length === 0 ? <p>目前沒有待審項目。</p> : <ul className={styles.claimList}>
       {pending.map((claim) => <li key={claim.id}>

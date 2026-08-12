@@ -3,7 +3,7 @@ import type { CircleOverrideFields } from "./circle-overrides";
 /**
  * Every authenticated write in one place, so the boundary is auditable: the
  * public reader clients never import this, and this never touches the
- * `/data/events/` read namespace.
+ * anonymous, edge-cacheable read namespace.
  */
 
 export type PortalSession = { email: string; isAdmin: boolean };
@@ -42,7 +42,24 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
   const text = await response.text();
-  const body = text ? JSON.parse(text) as Record<string, unknown> : {};
+
+  let body: Record<string, unknown> = {};
+  if (text) {
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // An access gate answers a redirect with an HTML login page, which fetch
+      // follows and reports as a 200. Parsing that raises a bare syntax error
+      // that tells the user nothing about what actually happened.
+      throw new PortalError(
+        response.redirected
+          ? "這個操作被存取控制擋下了。請先在同一個瀏覽器開啟本站首頁完成驗證，再回來重試。"
+          : "伺服器回應格式非預期，請稍後再試。",
+        response.status,
+      );
+    }
+  }
+
   if (!response.ok) throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗。", response.status);
   return body as T;
 }
