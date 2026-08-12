@@ -63,6 +63,17 @@ export function signOut() {
   return call<{ ok: true }>("/api/auth/session", { method: "DELETE" });
 }
 
+export type CircleMatch = {
+  id: string;
+  name: string;
+  links: { provider: string; url: string }[];
+  linkCount: number;
+};
+
+export function searchCircles(query: string) {
+  return call<{ circles: CircleMatch[] }>(`/api/circle/search?q=${encodeURIComponent(query)}`);
+}
+
 export function listMyClaims() {
   return call<{ claims: ClaimSummary[] }>("/api/claims");
 }

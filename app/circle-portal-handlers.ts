@@ -48,10 +48,14 @@ export type PortalDependencies = {
   repository: IdentityRepository;
   sendMail: (message: { to: string; subject: string; text: string }) => Promise<void>;
   lookupCircle: (circleId: string) => Promise<CircleLookup | null>;
+  searchCircles: (query: string, limit: number) => Promise<CircleLookup[]>;
   /** Returns page text, or null when the host cannot be read from a Worker. */
   fetchEvidence: (url: string) => Promise<string | null>;
   config: PortalConfig;
 };
+
+const SEARCH_MIN_LENGTH = 2;
+const SEARCH_LIMIT = 8;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -83,7 +87,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, fetchEvidence, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, config }: PortalDependencies) {
   const isAdmin = (email: string) => config.adminEmails.includes(email);
 
   async function clientIpHash(request: Request) {
@@ -204,6 +208,33 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
         targetUrl: claim.target_url,
         evidenceUrl: claim.evidence_url,
         createdAt: claim.created_at,
+      })),
+    });
+  }
+
+  /**
+   * Find a circle to claim, without handing out the catalog.
+   *
+   * The portal used to download `circles.json` and filter it client-side, which
+   * only works if the whole catalog is publicly readable. Keeping the search
+   * server-side and behind a session means the reader's catalog can stay gated
+   * while circles still claim themselves — and saves each of them 1.8 MB.
+   */
+  async function searchCatalog(request: Request) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+
+    const query = (new URL(request.url).searchParams.get("q") ?? "").trim();
+    if (query.length < SEARCH_MIN_LENGTH) return json({ circles: [] });
+
+    const matches = await searchCircles(query, SEARCH_LIMIT);
+    return json({
+      circles: matches.map((circle) => ({
+        id: circle.id,
+        name: circle.name,
+        // Only the links a Worker can verify are useful in the claim form.
+        links: circle.links.filter((link) => FETCHABLE_EVIDENCE_PROVIDERS.has(link.provider)),
+        linkCount: circle.links.length,
       })),
     });
   }
@@ -451,7 +482,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
 
   return {
     requestLink, verify, session, signOut,
-    listClaims, createClaim, runChallenge,
+    listClaims, createClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride,
     adminListClaims, adminDecideClaim, adminTakedown,
     publicOverrides,
