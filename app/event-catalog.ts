@@ -21,9 +21,20 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   areaMode: "single" | "switchable";
   days: readonly EventDayDefinition<TDay>[];
   areas: readonly EventAreaDefinition<TArea>[];
+  /** Creator-category filter vocabulary. The first entry is the unfiltered option. */
+  genres: readonly string[];
 };
 
 export const FF47_DATA_UPDATED_AT = "2026-08-11T00:00:00.000+08:00";
+
+/** Organizer daily booth lists. Placement authority for the catalog snapshot. */
+export const FF47_OFFICIAL_BOOTH_LIST_URLS = {
+  1: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%80%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
+  2: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%BA%8C%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
+  3: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%89%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
+} as const;
+
+export const FF47_OFFICIAL_EVENT_URL = "https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/";
 
 function dataDateLabel(value: string) {
   const [year, month, day] = value.slice(0, 10).split("-").map(Number);
@@ -49,6 +60,7 @@ export const FF47_EVENT = {
     { id: "A", label: "A–K 區", shortLabel: "A–K" },
     { id: "B", label: "L–W 區", shortLabel: "L–W" },
   ],
+  genres: ["全部類別", "繪圖・創作", "Cosplay", "VTuber", "手作・模型", "學生社團", "代理社團"],
 } as const satisfies EventDefinition;
 
 export function eventUsesAreaSwitcher(event: EventDefinition) {

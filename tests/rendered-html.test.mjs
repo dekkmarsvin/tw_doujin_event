@@ -23,6 +23,23 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
   assert.match(publicAssets, /\/data\/events\//);
   assert.doesNotMatch(publicAssets, /\/api\/events\/|發布活動地圖|MapAdminImporter/);
 
+  // The catalog ships as a fetched snapshot, never inlined into the bundle.
+  const scripts = await readTextAssets(new URL("../dist/assets/", import.meta.url));
+  const bundle = scripts.join("\n");
+  assert.doesNotMatch(bundle, /BASE_BOOTHS|V_W_BOOTHS|FF47_OFFICIAL_NAME_BOOTHS/);
+  assert.doesNotMatch(bundle, /"sourceRow":|完整品項與庫存請以現場公告為準/);
+  const bundleBytes = Buffer.byteLength(bundle, "utf8");
+  assert.ok(bundleBytes < 900_000, `public bundle grew to ${bundleBytes} bytes; keep event data in the catalog snapshot.`);
+
+  const catalog = JSON.parse(await readFile(new URL("../dist/data/events/ff47/circles.json", import.meta.url), "utf8"));
+  const sourceCatalog = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
+  assert.equal(catalog.schema, "circle-catalog/1");
+  assert.equal(catalog.eventId, "ff47");
+  assert.equal(catalog.booths.length, sourceCatalog.booths.length);
+  assert.equal(catalog.templates.length, 1336);
+  assert.ok(catalog.booths.length > 2900);
+  assert.ok(catalog.officialSupplementKeys.includes("1:J09"));
+
   const snapshot = JSON.parse(await readFile(new URL("../dist/data/events/ff47/map.json", import.meta.url), "utf8"));
   const sourceSnapshot = JSON.parse(await readFile(new URL("../public/data/events/ff47/map.json", import.meta.url), "utf8"));
   assert.equal(snapshot.eventId, "ff47");
@@ -41,8 +58,8 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
 });
 
 test("separates the public static app from the retained editor implementation", async () => {
-  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx"];
-  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts"];
+  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
   const planningToolsStyles = await readFile(new URL("../app/planning-tools.module.css", import.meta.url), "utf8");
@@ -161,6 +178,13 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(staticClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/map\.json`/);
   assert.doesNotMatch(staticClient, /force-cache/);
   assert.doesNotMatch(staticClient, /\/api\/|method: "PUT"/);
+  assert.match(catalogClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/circles\.json`/);
+  assert.match(catalogClient, /isCircleCatalogPayload/);
+  assert.doesNotMatch(catalogClient, /\/api\/|method: "PUT"/);
+  assert.match(app, /useCircleCatalog\(FF47_EVENT_ID\)/);
+  assert.doesNotMatch(app, /from "\.\/ff47-booths"|from "\.\/ff47-circle-templates"/);
+  assert.match(catalogStore, /export function buildCircleCatalog/);
+  assert.doesNotMatch(catalogStore, /ff47-booths|generated\.json/);
   assert.match(wrangler, /"pages_build_output_dir": "\.\/dist"/);
   assert.doesNotMatch(wrangler, /d1_databases|r2_buckets|main/);
 });

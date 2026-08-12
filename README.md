@@ -20,7 +20,9 @@ npm install
 npm run dev:pages
 ```
 
-開啟終端顯示的本機網址。前台會從 `public/data/events/ff47/map.json` 讀取已驗證的 revision 3 地圖快照。
+開啟終端顯示的本機網址。前台會從 `public/data/events/ff47/map.json` 讀取已驗證的 revision 3 地圖快照，並從 `public/data/events/ff47/circles.json` 讀取社團與攤位快照。
+
+`npm run dev:pages` 不註冊 Service Worker，開發時不會有快取擋在前面。要驗證離線行為請改用 `npm run preview`（先 `npm run build`）。
 
 ## Cloudflare Pages 首次發布
 
@@ -41,7 +43,7 @@ npm run lint
 npx tsc --noEmit --incremental false
 ```
 
-`npm test` 會先建立 Pages production build，再執行所有 Node 測試。測試會確認 `dist/index.html` 與靜態地圖快照存在，且公開產物不含 `_worker.js` 或 vinext server bundle。
+`npm test` 會先建立 Pages production build，再執行所有 Node 測試。測試會確認 `dist/index.html`、靜態地圖與社團快照存在，公開產物不含 `_worker.js` 或 vinext server bundle，主 bundle 不含場刊資料字面值，且 `dist/sw.js` 的 precache 清單涵蓋所有離線必要檔案。
 
 ## 更新 FF47 試算表資料
 
@@ -57,7 +59,7 @@ npm run source:check
 npm run source:update
 ```
 
-更新命令會先下載及驗證 XLSX，再替換本機來源，最後重新產生社團模板與來源 manifest。比對以工作表名稱、儲存格值與公式為準，不會因 Google 每次匯出產生不同的 XLSX 封裝位元而誤判。下載失敗、回傳內容不是 XLSX、缺少主資料工作表或資料列異常過少時都會停止，不會覆寫既有來源。
+更新命令會先下載及驗證 XLSX，再替換本機來源，接著重新產生社團模板與來源 manifest，最後重新輸出 `public/data/events/ff47/circles.json`。快照必須納入版本控制；`npm run build` 會以 `catalog:snapshot:check` 驗證它與來源一致，不一致就中止。比對以工作表名稱、儲存格值與公式為準，不會因 Google 每次匯出產生不同的 XLSX 封裝位元而誤判。下載失敗、回傳內容不是 XLSX、缺少主資料工作表或資料列異常過少時都會停止，不會覆寫既有來源。
 
 ## 本機地圖 authoring
 
@@ -80,7 +82,11 @@ npm test
 - `app/accessible-event-map-renderer.tsx`：可用鍵盤操作的 SVG 地圖 renderer
 - `app/planning-store.ts`：版本化本機收藏與行程狀態
 - `app/static-event-map-client.ts`：公開版靜態地圖讀取與格式驗證
+- `app/static-circle-catalog-client.ts`、`app/circle-records.ts`：社團快照讀取、格式驗證與讀取模型投影
+- `app/use-circle-catalog.ts`：社團快照的共用載入狀態
+- `app/service-worker-source.js`、`scripts/build-service-worker.mjs`：離線 shell 與 build 時產生的 precache 清單
 - `public/data/events/ff47/map.json`：首次公開版地圖快照
+- `public/data/events/ff47/circles.json`：社團與攤位快照（由 `npm run catalog:snapshot` 產生）
 - `public/fonts/`：公開版自託管 Geist / Geist Mono 字型與授權
 - `app/map-recognition.ts`、`app/editor/`：未部署到 Pages 的本機 authoring 工具
 - `vite.pages.config.ts`、`wrangler.jsonc`：Pages 純靜態 build 與部署設定
@@ -91,6 +97,8 @@ npm test
 ## 目前邊界
 
 - 一般使用者公開瀏覽；公開 build 不含管理入口或伺服器寫入 route。
+- 場刊資料以 `circles.json` 靜態快照隨 build 發布，不打包進 JS bundle；首屏先顯示介面骨架，社團清單於快照載入後補上。
+- 站台註冊 Service Worker 作為離線 shell：導覽採 network-first，`/data/events/` 採 stale-while-revalidate，雜湊資產採 cache-first。展場離線可重新載入並繼續使用已下載的場刊與地圖；社團縮圖等外部圖片不在離線範圍。
 - 收藏、群組、備註與行程只儲存在目前瀏覽器。
 - 安全匯出已提供；JSON／CSV 匯入、帳號同步與協作仍屬 P2，尚未在一般介面開放。
 - 外部來源只補充內容與可核對連結，不取代本地社團及攤位身分。

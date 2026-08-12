@@ -1,4 +1,4 @@
-import type { Booth, Tone } from "./ff47-booths";
+import type { Booth, Tone } from "./booth";
 
 type SourceRow = readonly [
   name: string,

@@ -1,10 +1,4 @@
-import type { Booth } from "./ff47-booths";
-
-export const FF47_OFFICIAL_BOOTH_LIST_URLS = {
-  1: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%80%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
-  2: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%BA%8C%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
-  3: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%89%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
-} as const;
+import type { Booth } from "./booth";
 
 type OfficialNameSupplement = {
   day: Booth["day"];
@@ -24,11 +18,8 @@ const OFFICIAL_NAME_SUPPLEMENTS = [
   { day: 3, codes: ["R01", "R02"], name: "+Ely Cosplay+", genre: "Cosplay", tone: "lilac" },
 ] as const satisfies readonly OfficialNameSupplement[];
 
-const OFFICIAL_SUPPLEMENT_KEYS = new Set(OFFICIAL_NAME_SUPPLEMENTS.flatMap(({ day, codes }) => codes.map((code) => `${day}:${code}`)));
-
-export function isFF47OfficialNameSupplement(day: Booth["day"], code: string) {
-  return OFFICIAL_SUPPLEMENT_KEYS.has(`${day}:${code}`);
-}
+/** Day/booth keys whose circle name comes from the organizer's daily list. */
+export const FF47_OFFICIAL_SUPPLEMENT_KEYS: string[] = OFFICIAL_NAME_SUPPLEMENTS.flatMap(({ day, codes }) => codes.map((code) => `${day}:${code}`));
 
 const rowY: Record<string, number> = {
   J: 45.12,

@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "vinext dev",
     "dev:pages": "vite --config vite.pages.config.ts",
-    "build": "npm run catalog:check && npm run pages:prepare && vite build --config vite.pages.config.ts",
+    "build": "npm run catalog:check && npm run catalog:snapshot:check && npm run pages:prepare && vite build --config vite.pages.config.ts && npm run pages:service-worker",
+    "pages:service-worker": "node scripts/build-service-worker.mjs",
     "build:editor": "vinext build",
     "preview": "vite preview --config vite.pages.config.ts",
     "pages:dev": "npm run build && wrangler pages dev dist",
@@ -17,9 +18,11 @@
     "pages:prepare": "node scripts/prepare-pages-build.mjs",
     "map:snapshot": "npm run build:editor && node scripts/export-static-event-map.mjs",
     "source:check": "node scripts/sync-ff47-google-sheet.mjs --check",
-    "source:update": "node scripts/sync-ff47-google-sheet.mjs --update && npm run catalog:generate",
+    "source:update": "node scripts/sync-ff47-google-sheet.mjs --update && npm run catalog:generate && npm run catalog:snapshot",
     "catalog:generate": "node scripts/generate-ff47-circle-templates.mjs",
     "catalog:check": "node scripts/generate-ff47-circle-templates.mjs --check",
+    "catalog:snapshot": "node scripts/export-static-circle-catalog.mjs",
+    "catalog:snapshot:check": "node scripts/export-static-circle-catalog.mjs --check",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .wrangler",
     "db:generate": "drizzle-kit generate"

@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test, { after } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const catalog = await environment.runner.import("/app/circle-records.ts");
+const records = await environment.runner.import("/app/circle-records.ts");
 const transfer = await environment.runner.import("/app/planning-transfer.ts");
 const planning = await environment.runner.import("/app/planning-store.ts");
 after(() => vite.close());
+
+// Transfer resolves circles through the loaded snapshot, so publish it first.
+records.setCircleCatalog(JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8")));
+const catalog = records.getCircleCatalog();
 
 function sample() {
   return planning.parsePlanningDocument({
@@ -73,7 +78,7 @@ test("merge reports and excludes unmatched circles", () => {
 });
 
 test("real canonical circle IDs survive planning backup preview and merge", () => {
-  const record = catalog.CIRCLE_RECORDS.find((item) => item.name === "蒼銀之星" && item.day === 1);
+  const record = catalog.records.find((item) => item.name === "蒼銀之星" && item.day === 1);
   assert.ok(record);
   const canonical = planning.parsePlanningDocument({
     schemaVersion: planning.PLANNING_SCHEMA_VERSION,

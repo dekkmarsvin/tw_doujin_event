@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Generated payloads and static snapshots are compared byte for byte by the
+# build gates (`catalog:check`, `catalog:snapshot:check`). Checking them out
+# with CRLF would fail those gates on a fresh clone.
+*.json text eol=lf

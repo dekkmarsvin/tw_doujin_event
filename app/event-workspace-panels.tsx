@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- FF47 media URLs are source-controlled remote assets, not build-time application images. */
 
 import { useState } from "react";
-import type { CircleMedia, CircleViewRecord } from "./circle-records";
+import type { CircleCatalogStatus, CircleMedia, CircleViewRecord } from "./circle-records";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
 import styles from "./event-workspace-panels.module.css";
@@ -34,8 +34,10 @@ function sourceDate(value: string) {
   return date || "時間不明";
 }
 
-export function SearchResults({ records, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
+export function SearchResults({ records, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
   records: CircleViewRecord[];
+  catalogStatus: CircleCatalogStatus;
+  catalogError: string;
   selectedId: string | null;
   favoriteIds: Set<string>;
   favoriteGroupLabels: Map<string, string>;
@@ -52,9 +54,15 @@ export function SearchResults({ records, selectedId, favoriteIds, favoriteGroupL
   onClearQuery: () => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(RESULT_LIMIT);
+  const loadingCatalog = catalogStatus === "loading";
   return <section className={styles.results} aria-label="搜尋結果" aria-live="polite">
-    <header><div><b>搜尋結果</b><small>{records.length} 個社團</small></div><div className={styles.resultHeaderActions}>{records.length > visibleCount && <span>已顯示 {visibleCount} 筆</span>}{advancedSearchActive && <button type="button" onClick={onResetAdvancedSearch} aria-label="重設詳細搜尋">重設</button>}</div></header>
-    {records.length === 0 ? <div className={styles.empty}><b>找不到符合條件的社團</b><p>{query.trim() ? <>保留搜尋「{query.trim()}」，可先移除下列篩選條件。</> : <>試著移除已套用的篩選條件。</>}</p>{activeFilters.length > 0 && <div className={styles.emptyFilters} aria-label="已套用篩選">{activeFilters.map((filter) => <button key={filter.id} onClick={filter.onClear} aria-label={`移除篩選：${filter.label}`}>{filter.label}<UiIcon name="close" /></button>)}</div>}<button onClick={activeFilters.length > 0 ? onClearFilters : onClearQuery}>{activeFilters.length > 0 ? "清除所有篩選（保留搜尋）" : "清除搜尋"}</button></div> : <div className={styles.resultList}>
+    <header><div><b>搜尋結果</b><small>{loadingCatalog ? "正在讀取社團資料…" : `${records.length} 個社團`}</small></div><div className={styles.resultHeaderActions}>{records.length > visibleCount && <span>已顯示 {visibleCount} 筆</span>}{advancedSearchActive && <button type="button" onClick={onResetAdvancedSearch} aria-label="重設詳細搜尋">重設</button>}</div></header>
+    {loadingCatalog ? <div className={styles.resultList} aria-hidden="true">
+      {Array.from({ length: 8 }, (unused, index) => <article key={index} className={styles.resultSkeleton}><span /><span /></article>)}
+    </div> : catalogStatus === "error" ? <div className={styles.empty}>
+      <b>社團資料讀取失敗</b>
+      <p>{catalogError || "請確認網路連線後重新整理頁面。"}</p>
+    </div> : records.length === 0 ? <div className={styles.empty}><b>找不到符合條件的社團</b><p>{query.trim() ? <>保留搜尋「{query.trim()}」，可先移除下列篩選條件。</> : <>試著移除已套用的篩選條件。</>}</p>{activeFilters.length > 0 && <div className={styles.emptyFilters} aria-label="已套用篩選">{activeFilters.map((filter) => <button key={filter.id} onClick={filter.onClear} aria-label={`移除篩選：${filter.label}`}>{filter.label}<UiIcon name="close" /></button>)}</div>}<button onClick={activeFilters.length > 0 ? onClearFilters : onClearQuery}>{activeFilters.length > 0 ? "清除所有篩選（保留搜尋）" : "清除搜尋"}</button></div> : <div className={styles.resultList}>
       {records.slice(0, visibleCount).map((record) => {
         const plan = plans.get(record.circle.id);
         const thumbnail = record.circle.media[0];

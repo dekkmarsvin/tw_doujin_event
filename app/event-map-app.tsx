@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
-import { GENRES } from "./ff47-booths";
 import AccessibleEventMapRenderer, { type MapSlotView } from "./accessible-event-map-renderer";
 import { loadStaticEventMap } from "./static-event-map-client";
 import { FF47_EVENT_ID, type PublishedEventMap } from "./event-map";
-import { CIRCLE_RECORDS, CIRCLE_RECORDS_BY_CIRCLE_ID, CIRCLE_RECORDS_BY_ID, circleSearchText, type CircleViewRecord } from "./circle-records";
+import { circleSearchText, type CircleViewRecord } from "./circle-records";
+import { useCircleCatalog } from "./use-circle-catalog";
 import { CircleDetails, DayItinerary, SearchResults, type ActiveResultFilter } from "./event-workspace-panels";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
 import {
@@ -44,8 +44,8 @@ type MobilePanel = "filters" | "results" | "details" | "plan";
 type MobileSheetLevel = "peek" | "half" | "full";
 type TextScale = "standard" | "large" | "extra";
 
-const WORK_TOPIC_SUGGESTIONS = buildWorkTopicSuggestions(CIRCLE_RECORDS);
 const TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
+const GENRES: readonly string[] = FF47_EVENT.genres;
 type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
   | ({ kind: "pinch" } & MapPinchOrigin);
@@ -62,6 +62,9 @@ function parseArea(value: string | null): Hall {
 
 export default function EventMapApp() {
   const showAreaSwitcher = eventUsesAreaSwitcher(FF47_EVENT);
+  const { catalog, status: catalogStatus, error: catalogError } = useCircleCatalog(FF47_EVENT_ID);
+  const { records: circleRecords, recordsById: circleRecordsById, recordsByCircleId: circleRecordsByCircleId } = catalog;
+  const catalogReady = catalogStatus === "ready";
   const [day, setDay] = useState<FF47Day>(FF47_EVENT.days[0].id);
   const [hall, setHall] = useState<Hall>("ALL");
   const [genre, setGenre] = useState("全部類別");
@@ -86,7 +89,7 @@ export default function EventMapApp() {
   const [textScale, setTextScale] = useState<TextScale>("standard");
   const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
-  const { document: planning, ready: planningReady, update: updatePlanning, storageError: planningStorageError } = usePlanning(FF47_EVENT_ID);
+  const { document: planning, ready: planningReady, update: updatePlanning, storageError: planningStorageError } = usePlanning(FF47_EVENT_ID, catalogStatus !== "loading");
   const searchRef = useRef<HTMLInputElement | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const floorRef = useRef<HTMLDivElement | null>(null);
@@ -103,6 +106,7 @@ export default function EventMapApp() {
   const suppressUrlWrite = useRef(false);
   const lastAutoSelection = useRef("");
   const pendingRestoreCode = useRef<string | null>(null);
+  const pendingSelection = useRef<{ day: FF47Day; circleId: string | null; boothCode: string | null } | null>(null);
   const previousFitZoom = useRef(0);
   const mapWasFitted = useRef(false);
   const floorHeight = 950;
@@ -168,7 +172,9 @@ export default function EventMapApp() {
       const restoredAdultContent = url.searchParams.get("r18");
       const selectedCircle = url.searchParams.get("selectedCircle");
       const selectedBooth = url.searchParams.get("selectedBooth");
-      const selected = resolveCircleSelection(CIRCLE_RECORDS, CIRCLE_RECORDS_BY_ID, restoredDay, selectedCircle, selectedBooth);
+      // The catalog snapshot may still be in flight. Filters restore now; the
+      // shared circle/booth selection is resolved once records are available.
+      pendingSelection.current = { day: restoredDay, circleId: selectedCircle, boothCode: selectedBooth };
       if (fromHistory) suppressUrlWrite.current = true;
       setDay(restoredDay);
       setHall(nextHall);
@@ -188,10 +194,6 @@ export default function EventMapApp() {
         density: restoredDensity === "compact" ? "compact" : "informative",
         mediaCount: restoredMedia === 1 || restoredMedia === 3 ? restoredMedia : 0,
       });
-      setSelectedRecordId(selected?.recordId ?? null);
-      setMobilePanel(selected ? "details" : "results");
-      setMobileSheetLevel(selected ? "half" : "peek");
-      pendingRestoreCode.current = selected?.code ?? null;
     };
     queueMicrotask(() => {
       restore();
@@ -201,6 +203,19 @@ export default function EventMapApp() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  // Apply a shareable circle/booth link as soon as the catalog can resolve it,
+  // whether it arrives before or after the snapshot download completes.
+  useEffect(() => {
+    const pending = pendingSelection.current;
+    if (!pending || !catalogReady) return;
+    pendingSelection.current = null;
+    const selected = resolveCircleSelection(circleRecords, circleRecordsById, pending.day, pending.circleId, pending.boothCode);
+    setSelectedRecordId(selected?.recordId ?? null);
+    setMobilePanel(selected ? "details" : "results");
+    setMobileSheetLevel(selected ? "half" : "peek");
+    pendingRestoreCode.current = selected?.code ?? null;
+  }, [catalogReady, circleRecords, circleRecordsById]);
 
   useEffect(() => {
     const viewportElement = mapRef.current;
@@ -284,7 +299,9 @@ export default function EventMapApp() {
   }, [getFloorInset, mapMinZoom, setMapView]);
 
   useEffect(() => {
-    if (!urlReady) return;
+    // Hold the URL untouched while the catalog snapshot is still downloading, so
+    // a shared circle link is never rewritten away before it can be resolved.
+    if (!urlReady || catalogStatus === "loading") return;
     if (suppressUrlWrite.current) {
       suppressUrlWrite.current = false;
       return;
@@ -306,7 +323,7 @@ export default function EventMapApp() {
     if (planningDisplay.sort !== "booth") url.searchParams.set("sort", planningDisplay.sort); else url.searchParams.delete("sort");
     if (planningDisplay.density !== "informative") url.searchParams.set("density", planningDisplay.density); else url.searchParams.delete("density");
     if (planningDisplay.mediaCount) url.searchParams.set("media", String(planningDisplay.mediaCount)); else url.searchParams.delete("media");
-    const selected = CIRCLE_RECORDS_BY_ID.get(selectedRecordId ?? "");
+    const selected = circleRecordsById.get(selectedRecordId ?? "");
     if (selected) {
       url.searchParams.set("selectedCircle", selected.circle.id);
       url.searchParams.set("selectedBooth", selected.code);
@@ -317,7 +334,7 @@ export default function EventMapApp() {
     const method = historyIntent.current === "push" ? "pushState" : "replaceState";
     window.history[method](null, "", url);
     historyIntent.current = "replace";
-  }, [advancedSearch, day, favoriteOnly, genre, hall, planningDisplay, query, selectedRecordId, urlReady]);
+  }, [advancedSearch, catalogStatus, circleRecordsById, day, favoriteOnly, genre, hall, planningDisplay, query, selectedRecordId, urlReady]);
 
   const favorites = useMemo(() => planning.favorites.filter((item) => item.eventId === FF47_EVENT_ID), [planning.favorites]);
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => item.circleId)), [favorites]);
@@ -327,10 +344,10 @@ export default function EventMapApp() {
   }, [favorites, planning.favoriteGroups]);
   const dayPlan = useMemo(() => planning.visitPlans.filter((item) => item.eventId === FF47_EVENT_ID && item.day === day).sort((a, b) => a.routeOrder - b.routeOrder), [day, planning.visitPlans]);
   const plansById = useMemo(() => new Map(dayPlan.map((entry) => [entry.circleId, entry])), [dayPlan]);
-  const dayRecordsByCircleId = useMemo(() => new Map(CIRCLE_RECORDS
+  const dayRecordsByCircleId = useMemo(() => new Map(circleRecords
     .filter((record) => record.day === day)
-    .map((record) => [record.circle.id, record] as const)), [day]);
-  const selected = CIRCLE_RECORDS_BY_ID.get(selectedRecordId ?? "") ?? null;
+    .map((record) => [record.circle.id, record] as const)), [circleRecords, day]);
+  const selected = circleRecordsById.get(selectedRecordId ?? "") ?? null;
   const selectedFavorite = selected ? favorites.find((item) => item.circleId === selected.circle.id) ?? null : null;
   const selectedPlan = selected ? plansById.get(selected.circle.id) ?? null : null;
   const nextEntry = dayPlan.find((entry) => entry.status === "next") ?? null;
@@ -338,10 +355,10 @@ export default function EventMapApp() {
   const navigationTargetEntry = nextEntry ?? dayPlan.find((entry) => entry.status !== "visited") ?? null;
   const navigationTargetRecord = navigationTargetEntry ? dayRecordsByCircleId.get(navigationTargetEntry.circleId) ?? null : null;
   const visitedCount = dayPlan.filter((entry) => entry.status === "visited").length;
-  const sharedRecords = selected ? CIRCLE_RECORDS.filter((record) => record.day === selected.day && record.code === selected.code) : [];
+  const sharedRecords = selected ? circleRecords.filter((record) => record.day === selected.day && record.code === selected.code) : [];
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    const visible = CIRCLE_RECORDS.filter((record) => {
+    const visible = circleRecords.filter((record) => {
       const favorite = favorites.find((item) => item.circleId === record.circle.id);
       const plan = plansById.get(record.circle.id);
       const groupMatches = planningDisplay.favoriteGroupId === "ALL" || (planningDisplay.favoriteGroupId === "UNGROUPED" ? !!favorite && !favorite.groupId : favorite?.groupId === planningDisplay.favoriteGroupId);
@@ -362,12 +379,23 @@ export default function EventMapApp() {
       }
       return a.code.localeCompare(b.code, undefined, { numeric: true }) || a.name.localeCompare(b.name, "zh-Hant");
     });
-  }, [advancedSearch, day, favoriteIds, favoriteOnly, favorites, genre, hall, planningDisplay, plansById, query]);
+  }, [advancedSearch, circleRecords, day, favoriteIds, favoriteOnly, favorites, genre, hall, planningDisplay, plansById, query]);
 
   const mapRecords = useMemo(() => navigationMode
-    ? dayPlan.flatMap((entry) => (CIRCLE_RECORDS_BY_CIRCLE_ID.get(entry.circleId) ?? []).filter((record) => record.day === day))
+    ? dayPlan.flatMap((entry) => (circleRecordsByCircleId.get(entry.circleId) ?? []).filter((record) => record.day === day))
     : filtered,
-  [day, dayPlan, filtered, navigationMode]);
+  [circleRecordsByCircleId, day, dayPlan, filtered, navigationMode]);
+
+  const workTopicSuggestions = useMemo(() => buildWorkTopicSuggestions(circleRecords), [circleRecords]);
+  const genreCounts = useMemo(() => {
+    const counts = new Map<string, number>(GENRES.map((value) => [value, 0]));
+    circleRecords.forEach((record) => {
+      if (record.day !== day) return;
+      counts.set("全部類別", (counts.get("全部類別") ?? 0) + 1);
+      if (counts.has(record.genre)) counts.set(record.genre, (counts.get(record.genre) ?? 0) + 1);
+    });
+    return counts;
+  }, [circleRecords, day]);
 
   const markers = useMemo(() => {
     const byCode = new Map<string, CircleViewRecord[]>();
@@ -607,7 +635,7 @@ export default function EventMapApp() {
     ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : planning.favoriteGroups.find((group) => group.id === planningDisplay.favoriteGroupId)?.name ?? "收藏群組", onClear: () => { historyIntent.current = "push"; setPlanningDisplay((current) => ({ ...current, favoriteGroupId: "ALL" })); } }] : []),
     ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus], onClear: () => { historyIntent.current = "push"; setPlanningDisplay((current) => ({ ...current, visitStatus: "ALL" })); } }] : []),
   ];
-  const resultsPanel = <SearchResults key={resultSetKey} records={filtered} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
+  const resultsPanel = <SearchResults key={resultSetKey} records={filtered} catalogStatus={catalogStatus} catalogError={catalogError} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
   const detailActions = {
     onSelectShared: selectRecord,
     onToggleFavorite: () => selected && toggleFavoriteSafely(selected),
@@ -621,9 +649,9 @@ export default function EventMapApp() {
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== "全部類別" ? styles.clearFiltersActive : ""}`;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
     <header><div><small>FILTERS</small><b>篩選攤位</b></div><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></header>
-    <fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{CIRCLE_RECORDS.filter((record) => record.day === day && (value === "全部類別" || record.genre === value)).length}</small></button>)}</div></fieldset>
+    <fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset>
     <label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label>
-    <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={WORK_TOPIC_SUGGESTIONS} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
+    <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
   </section>;
   const mobileDockStyle = mobileSheetDragHeight === null ? undefined : { "--mobile-sheet-height": `${mobileSheetDragHeight}px` } as CSSProperties;
   const mobileSheetActionLabel = mobileSheetLevel === "peek" ? "展開工作面板" : mobileSheetLevel === "half" ? "完整展開工作面板" : "縮小工作面板";
@@ -640,7 +668,7 @@ export default function EventMapApp() {
     <section className="toolbar" aria-label={showAreaSwitcher ? "日期與場館篩選" : "日期篩選"}><div className="days">{FF47_EVENT.days.map((eventDay) => <button key={eventDay.id} className={day === eventDay.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setDay(eventDay.id); setSelectedRecordId(null); }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>{showAreaSwitcher && <div className="mobile-halls">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.label}</button>)}</div>}<div className="open-hours" role="status"><span />{planningStorageError ? "儲存異常，請開啟資料管理" : planningReady ? "資料僅儲存於瀏覽器" : "正在讀取瀏覽器資料"}</div><button className={`${styles.navigationToggle} ${navigationMode ? styles.navigationToggleActive : ""}`} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? "退出導航模式" : "導航模式"}</button></section>
     <div className={`workspace ${styles.workspace} ${navigationMode ? styles.navigationWorkspace : ""}`}>
       <aside className={`filters ${styles.leftRail}`}>
-        {navigationMode ? planningPanel : <><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></div>{showAreaSwitcher && <fieldset><legend>場館／區域</legend><div className="segments">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.shortLabel}</button>)}</div></fieldset>}<fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{CIRCLE_RECORDS.filter((record) => record.day === day && (value === "全部類別" || record.genre === value)).length}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label></div><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={WORK_TOPIC_SUGGESTIONS} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />{resultsPanel}</>}
+        {navigationMode ? planningPanel : <><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></div>{showAreaSwitcher && <fieldset><legend>場館／區域</legend><div className="segments">{FF47_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.shortLabel}</button>)}</div></fieldset>}<fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label></div><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />{resultsPanel}</>}
       </aside>
       <section className="map-region" aria-label="攤位地圖">
         <div className="map-title"><div><small>社團攤位配置圖</small><h1>{FF47_EVENT.venue} <em>{FF47_EVENT.areas.find((area) => area.id === hall)?.label}</em></h1></div></div>

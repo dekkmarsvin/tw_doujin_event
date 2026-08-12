@@ -11,6 +11,14 @@
 .resultList { min-height:0; flex:1; padding:0 8px 12px; overflow:auto; }
 .resultList article { display:grid; grid-template-columns:minmax(0,1fr) 34px; align-items:center; border:1px solid transparent; border-bottom-color:#eceeea; border-radius:8px; }
 .resultList article:hover { background:#f7f8f5; }
+.resultList article.resultSkeleton { display:grid; grid-template-columns:34px minmax(0,1fr); align-items:center; gap:9px; padding:11px 7px; }
+.resultSkeleton span { height:9px; border-radius:5px; background:#eceeea; }
+.resultSkeleton span:first-child { height:22px; }
+.resultSkeleton:nth-child(even) span:last-child { max-width:70%; }
+@media (prefers-reduced-motion:no-preference) {
+  .resultSkeleton span { animation:resultSkeletonPulse 1.4s ease-in-out infinite; }
+  @keyframes resultSkeletonPulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+}
 .resultList .selectedResult { border-color:#c6cdc7; background:#f3f5f1; box-shadow:inset 3px 0 var(--ink); }
 .resultMain { min-width:0; display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:9px; align-items:center; padding:9px 6px 9px 8px; border:0; background:transparent; text-align:left; cursor:pointer; }
 .resultWithMedia { grid-template-columns:58px 40px minmax(0,1fr) auto; }

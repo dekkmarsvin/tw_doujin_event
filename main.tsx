@@ -11,3 +11,13 @@ createRoot(root).render(
     <EventMapApp />
   </StrictMode>,
 );
+
+// Offline shell for venue use. Only the built Pages artifact ships a worker, so
+// `npm run dev:pages` keeps serving fresh modules without a cache in front.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Offline support is an enhancement; the app still works without it.
+    });
+  });
+}
