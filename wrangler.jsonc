@@ -6,11 +6,15 @@
   // Identity and circle-authored overrides only. The reader's catalog and map
   // stay static assets; no advanced-mode `main` entry, so `/`, `/assets/*` and
   // `/fonts/*` are still served straight from the edge.
+  //
+  // One binding, named `DB`, because that is what the Functions read. Leaving
+  // the binding `wrangler d1 create` generates from the database name would
+  // give the same database two names and hide which one the code uses.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "tw-catalog-identity",
-      "database_id": "00000000-0000-4000-8000-000000000000"
+      "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
     }
   ]
 }
