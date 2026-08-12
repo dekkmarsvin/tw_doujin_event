@@ -36,6 +36,9 @@ yarn-error.log*
 .dev.vars
 .dev.vars.*
 
+# Local editor/agent tooling configuration, not project configuration.
+/.claude/
+
 # vercel
 .vercel
 
