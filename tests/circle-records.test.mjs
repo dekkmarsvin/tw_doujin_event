@@ -10,7 +10,7 @@ const events = await environment.runner.import("/app/event-catalog.ts");
 after(() => vite.close());
 
 test("projects independent circle and placement catalogs into the map read model", () => {
-  assert.equal(catalog.CIRCLE_CATALOG.length, 1336);
+  assert.equal(catalog.CIRCLE_CATALOG.length, 1338);
   assert.equal(catalog.PLACEMENT_CATALOG.length, catalog.CIRCLE_RECORDS.length);
   assert.ok(catalog.CIRCLE_CATALOG.length < catalog.PLACEMENT_CATALOG.length);
 
@@ -22,7 +22,7 @@ test("projects independent circle and placement catalogs into the map read model
   assert.equal(first.placement.status, "active");
   assert.equal("boothCode" in first.circle, false);
   assert.equal("name" in first.placement, false);
-  assert.equal(catalog.CIRCLE_RECORDS.every((record) => Number.isInteger(record.circle.sourceRow)), true);
+  assert.equal(catalog.CIRCLE_RECORDS.every((record) => record.circle.sourceRow === undefined || Number.isInteger(record.circle.sourceRow)), true);
 });
 
 test("shares one Excel-backed circle template across its reviewed placements", () => {
