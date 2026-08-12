@@ -58,8 +58,8 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
 });
 
 test("separates the public static app from the retained editor implementation", async () => {
-  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts"];
-  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "use-circle-catalog.ts"];
+  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, catalogHook] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
   const planningToolsStyles = await readFile(new URL("../app/planning-tools.module.css", import.meta.url), "utf8");
@@ -185,6 +185,27 @@ test("separates the public static app from the retained editor implementation", 
   assert.doesNotMatch(app, /from "\.\/ff47-booths"|from "\.\/ff47-circle-templates"/);
   assert.match(catalogStore, /export function buildCircleCatalog/);
   assert.doesNotMatch(catalogStore, /ff47-booths|generated\.json/);
+
+  // Circle-authored content is an optional supplement layered on the reviewed
+  // snapshot. It shares the /data/events/ namespace so it inherits the service
+  // worker's offline rule, and it stays anonymous so it remains edge-cacheable.
+  assert.match(overridesClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/overrides\.json`/);
+  assert.doesNotMatch(overridesClient, /\/api\/|method: "PUT"|credentials|Authorization/);
+  assert.doesNotMatch(catalogClient, /credentials|Authorization/);
+
+  // The base snapshot must paint before the overlay, and an overlay failure
+  // must never put a reader into the error state.
+  assert.match(catalogHook, /setCircleCatalog\(payload\);/);
+  assert.match(catalogHook, /loadStaticCircleOverrides\(eventId\)\.catch\(\(\) => undefined\)/);
+
+  // The override is applied downstream of the booth-matching indexes. Moving it
+  // upstream would silently detach renamed circles from every map placement;
+  // tests/circle-overrides.test.mjs proves the behaviour, this pins the seam.
+  assert.match(catalogStore, /circleFromTemplate\(circleId, template, booth, overridesById\.get\(circleId\)\)/);
+  assert.match(catalogStore, /provider: "社團本人"/);
+  assert.match(catalogStore, /status: "unverified"/);
+  assert.match(workspacePanels, /SOURCE_ORIGIN_LABEL/);
+  assert.match(workspacePanels, /circle: "社團自述"/);
   assert.match(wrangler, /"pages_build_output_dir": "\.\/dist"/);
   assert.doesNotMatch(wrangler, /d1_databases|r2_buckets|main/);
 });

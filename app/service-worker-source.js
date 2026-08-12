@@ -75,11 +75,20 @@ async function networkFirstNavigation(request) {
   }
 }
 
+/**
+ * Everything under `/data/events/` is JSON. A captive portal, an SPA fallback
+ * or a preview server answering an unknown path with a 200 HTML page would
+ * otherwise be stored under a data URL and served offline in its place.
+ */
+function isJson(response) {
+  return (response.headers.get("content-type") ?? "").includes("json");
+}
+
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request, MATCH_OPTIONS);
   const network = fetch(request).then(async (response) => {
-    if (isStorable(response)) await cache.put(request, response.clone());
+    if (isStorable(response) && isJson(response)) await cache.put(request, response.clone());
     return response;
   }).catch(() => undefined);
   if (cached) {

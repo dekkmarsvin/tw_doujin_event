@@ -1,0 +1,151 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test, { after } from "node:test";
+import { createServer, isRunnableDevEnvironment } from "vite";
+
+const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
+const environment = vite.environments.ssr;
+if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
+const records = await environment.runner.import("/app/circle-records.ts");
+const overrides = await environment.runner.import("/app/circle-overrides.ts");
+after(() => vite.close());
+
+const payload = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
+const base = records.buildCircleCatalog(payload);
+
+/** A circle that actually holds placements, so detaching would be observable. */
+const placed = base.circles.find((circle) => (base.recordsByCircleId.get(circle.id)?.length ?? 0) > 1);
+assert.ok(placed, "fixture needs a circle with more than one placement");
+
+function envelope(list) {
+  return { schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-08-13T00:00:00.000Z", revision: 1, overrides: list };
+}
+
+function withFields(circleId, fields) {
+  return envelope([{ circleId, updatedAt: "2026-08-13T00:00:00.000Z", fields }]);
+}
+
+test("renaming a circle never detaches it from its booth placements", () => {
+  // The booth-matching indexes key on the reviewed workbook name. Applying an
+  // override before they are built would silently drop every map placement.
+  const renamed = records.buildCircleCatalog(payload, withFields(placed.id, { name: "完全不同的名字" }));
+
+  assert.equal(renamed.records.length, base.records.length);
+  assert.equal(renamed.placements.length, base.placements.length);
+  assert.equal(renamed.circles.length, base.circles.length);
+  assert.equal(renamed.recordsByCircleId.get(placed.id).length, base.recordsByCircleId.get(placed.id).length);
+  assert.equal(renamed.circlesById.get(placed.id).name, "完全不同的名字");
+
+  // The placement rows themselves are organizer data and must be untouched.
+  assert.deepEqual(
+    renamed.recordsByCircleId.get(placed.id).map((record) => record.placement),
+    base.recordsByCircleId.get(placed.id).map((record) => record.placement),
+  );
+});
+
+test("an absent overlay produces exactly the reviewed catalog", () => {
+  const withEmpty = records.buildCircleCatalog(payload, envelope([]));
+  assert.equal(withEmpty.records.length, base.records.length);
+  assert.deepEqual(withEmpty.records[0], base.records[0]);
+  assert.deepEqual(records.buildCircleCatalog(payload, undefined).records[0], base.records[0]);
+});
+
+test("circle-authored content is labelled as self-reported, never as organizer data", () => {
+  const edited = records.buildCircleCatalog(payload, withFields(placed.id, { saleInfo: "新刊 300 元" }));
+  const circle = edited.circlesById.get(placed.id);
+
+  const self = circle.sources.find((source) => source.provider === "社團本人");
+  assert.ok(self, "an override must add its own provenance entry");
+  assert.equal(self.contentType, "circle");
+  assert.equal(self.status, "unverified");
+  assert.equal(self.url, "", "self-reported content has no external page to link");
+  assert.equal(circle.updatedAt, "2026-08-13T00:00:00.000Z");
+
+  // The organizer source is still present and still first.
+  assert.equal(edited.recordsByCircleId.get(placed.id)[0].sources[0].provider, "開拓動漫");
+  assert.equal(base.circlesById.get(placed.id).sources.some((source) => source.provider === "社團本人"), false);
+});
+
+test("edited text flows into the derived read model and becomes searchable", () => {
+  const edited = records.buildCircleCatalog(payload, withFields(placed.id, {
+    saleInfo: "限定壓克力吊飾",
+    referencedWorks: ["蔚藍檔案"],
+    specialTags: ["新刊"],
+  }));
+  const circle = edited.circlesById.get(placed.id);
+
+  assert.equal(circle.saleInfo, "限定壓克力吊飾");
+  assert.equal(circle.description, "限定壓克力吊飾");
+  assert.equal(circle.work, "蔚藍檔案");
+  assert.ok(circle.categories.includes("蔚藍檔案"));
+  assert.ok(circle.categories.includes("新刊"));
+
+  const record = edited.recordsByCircleId.get(placed.id)[0];
+  assert.ok(records.circleSearchText(record).includes("限定壓克力吊飾"));
+});
+
+test("an override replaces a list wholesale instead of merging it", () => {
+  const edited = records.buildCircleCatalog(payload, withFields(placed.id, { specialTags: ["只剩這個"] }));
+  assert.deepEqual(edited.circlesById.get(placed.id).specialTags, ["只剩這個"]);
+});
+
+test("one malformed entry is dropped without discarding the rest", () => {
+  const parsed = overrides.parseCircleOverridesPayload(envelope([
+    { circleId: placed.id, updatedAt: "2026-08-13T00:00:00.000Z", fields: { saleInfo: "有效" } },
+    { circleId: "ff47-broken", updatedAt: "2026-08-13T00:00:00.000Z", fields: { saleInfo: 42 } },
+  ]));
+  assert.equal(parsed.overrides.length, 1);
+  assert.equal(parsed.overrides[0].circleId, placed.id);
+});
+
+test("rejects a malformed envelope outright", () => {
+  assert.equal(overrides.parseCircleOverridesPayload(null), null);
+  assert.equal(overrides.parseCircleOverridesPayload({ ...envelope([]), schema: "circle-overrides/2" }), null);
+  assert.equal(overrides.parseCircleOverridesPayload({ ...envelope([]), revision: "1" }), null);
+  assert.equal(overrides.parseCircleOverridesPayload({ ...envelope([]), overrides: {} }), null);
+});
+
+test("refuses fields the circle may not author", () => {
+  // Placements and provenance are organizer authority; accepting them would let
+  // a circle relocate itself or forge official attribution.
+  assert.equal(overrides.isCircleOverrideFields({ placements: { 1: ["A01"] } }), false);
+  assert.equal(overrides.isCircleOverrideFields({ sources: [] }), false);
+  assert.equal(overrides.isCircleOverrideFields({ id: "ff47-other" }), false);
+  assert.equal(overrides.isCircleOverrideFields({ sourceRow: 12 }), false);
+});
+
+test("enforces length caps so one circle cannot bloat every reader's download", () => {
+  const { name, saleInfo, listItems, listItemLength, links, serializedFields } = overrides.OVERRIDE_LIMITS;
+  assert.equal(overrides.isCircleOverrideFields({ name: "x".repeat(name) }), true);
+  assert.equal(overrides.isCircleOverrideFields({ name: "x".repeat(name + 1) }), false);
+  assert.equal(overrides.isCircleOverrideFields({ saleInfo: "x".repeat(saleInfo + 1) }), false);
+  assert.equal(overrides.isCircleOverrideFields({ specialTags: Array(listItems + 1).fill("t") }), false);
+  assert.equal(overrides.isCircleOverrideFields({ specialTags: ["x".repeat(listItemLength + 1)] }), false);
+  assert.equal(overrides.isCircleOverrideFields({
+    links: Array(links + 1).fill({ provider: "X", kind: "social", url: "https://example.com/a" }),
+  }), false);
+  assert.ok(JSON.stringify({ saleInfo: "x".repeat(saleInfo) }).length < serializedFields);
+});
+
+test("only https links and allowlisted image hosts are accepted", () => {
+  const link = (url) => overrides.isCircleOverrideFields({ links: [{ provider: "官方網站", kind: "website", url }] });
+  assert.equal(link("https://example.com/a"), true);
+  assert.equal(link("http://example.com/a"), false);
+  assert.equal(link("javascript:alert(1)"), false);
+  assert.equal(link("data:text/html,hi"), false);
+  assert.equal(link("not a url"), false);
+
+  const thumb = (url) => overrides.isCircleOverrideFields({
+    thumbnail: { url, sourceUrl: "https://drive.google.com/file/d/x", provider: "Google Drive" },
+  });
+  assert.equal(thumb("https://drive.google.com/thumbnail?id=x"), true);
+  // An arbitrary host would fire from every reader's browser, logging their IP.
+  assert.equal(thumb("https://tracker.example.com/pixel.png"), false);
+  assert.equal(thumb("http://drive.google.com/thumbnail?id=x"), false);
+});
+
+test("rejects a link kind outside the catalog vocabulary", () => {
+  assert.equal(overrides.isCircleOverrideFields({
+    links: [{ provider: "X", kind: "official", url: "https://example.com/a" }],
+  }), false);
+});

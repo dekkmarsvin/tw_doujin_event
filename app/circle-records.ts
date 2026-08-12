@@ -1,4 +1,6 @@
 import { FF47_EVENT, FF47_OFFICIAL_BOOTH_LIST_URLS, FF47_OFFICIAL_EVENT_URL } from "./event-catalog";
+import { indexCircleOverrides } from "./circle-overrides";
+import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
 import type { Booth, Tone } from "./booth";
 
 export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/1" as const;
@@ -168,47 +170,77 @@ function placementKey(day: number, boothCode: string, nameKey: string) {
   return JSON.stringify([day, boothCode, nameKey]);
 }
 
-function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?: Booth): CircleRecord {
-  const name = template?.name ?? booth?.name ?? "未命名社團";
+/** Circle-authored content is labelled as self-reported, never as organizer-confirmed. */
+function circleSelfSource(override: CircleOverride): SourceLink {
+  return {
+    provider: "社團本人",
+    contentType: "circle",
+    label: "社團自行提供的補充資料",
+    url: "",
+    fetchedAt: override.updatedAt,
+    status: "unverified",
+  };
+}
+
+function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?: Booth, override?: CircleOverride): CircleRecord {
+  // Per-field precedence: what the circle wrote, else the reviewed workbook,
+  // else the booth row. Applying this here rather than in the view layer means
+  // `categories`, `work`, `media` and `circleSearchText` all pick it up, so
+  // edited text becomes searchable without any extra code.
+  const fields = override?.fields;
+  const name = fields?.name ?? template?.name ?? booth?.name ?? "未命名社團";
+  const creatorTypes = fields?.creatorTypes ?? template?.creatorTypes ?? [];
+  const workTypes = fields?.workTypes ?? template?.workTypes ?? [];
+  const referencedWorks = fields?.referencedWorks ?? template?.referencedWorks ?? [];
+  const specialTags = fields?.specialTags ?? template?.specialTags ?? [];
+  const saleInfo = fields?.saleInfo ?? template?.saleInfo;
+  const thumbnail = fields?.thumbnail ?? template?.thumbnail;
   return {
     id: circleId,
     sourceRow: template?.sourceRow,
     name,
-    description: template?.saleInfo ?? booth?.note ?? "尚未提供販售資訊。",
+    description: saleInfo ?? booth?.note ?? "尚未提供販售資訊。",
     categories: [...new Set([
       ...(booth ? [booth.genre, ...booth.tags.map((tag) => tag.trim()).filter(Boolean)] : []),
-      ...(template?.creatorTypes ?? []),
-      ...(template?.workTypes ?? []),
-      ...(template?.referencedWorks ?? []),
-      ...(template?.specialTags ?? []),
+      ...creatorTypes,
+      ...workTypes,
+      ...referencedWorks,
+      ...specialTags,
     ])],
-    pen: template?.pen ?? booth?.pen ?? "",
-    work: template?.referencedWorks.join("、") || booth?.work || template?.creatorTypes.join("、") || "尚未提供作品分類",
-    creatorTypes: template?.creatorTypes ?? [],
-    ageRatings: template?.ageRatings ?? [],
-    workTypes: template?.workTypes ?? [],
-    referencedWorks: template?.referencedWorks ?? [],
-    saleInfo: template?.saleInfo ?? "",
-    specialTags: template?.specialTags ?? [],
-    media: template?.thumbnail ? [{
+    pen: fields?.pen ?? template?.pen ?? booth?.pen ?? "",
+    work: referencedWorks.join("、") || booth?.work || creatorTypes.join("、") || "尚未提供作品分類",
+    creatorTypes,
+    ageRatings: fields?.ageRatings ?? template?.ageRatings ?? [],
+    workTypes,
+    referencedWorks,
+    saleInfo: saleInfo ?? "",
+    specialTags,
+    media: thumbnail ? [{
       id: `${circleId}-thumbnail`,
       kind: "thumbnail",
-      url: template.thumbnail.url,
-      sourceUrl: template.thumbnail.sourceUrl,
-      provider: template.thumbnail.provider,
+      url: thumbnail.url,
+      sourceUrl: thumbnail.sourceUrl,
+      provider: thumbnail.provider,
       alt: `${name} 社團縮圖`,
     }] : [],
-    externalLinks: template?.links.map((link) => ({ ...link })) ?? [],
-    updatedAt: FF47_EVENT.dataUpdatedAt,
-    sources: [...cloneSources(), ...templateSource(template)],
+    externalLinks: (fields?.links ?? template?.links)?.map((link) => ({ ...link })) ?? [],
+    updatedAt: override?.updatedAt ?? FF47_EVENT.dataUpdatedAt,
+    sources: [...cloneSources(), ...templateSource(template), ...(override ? [circleSelfSource(override)] : [])],
   };
 }
 
 /**
  * Project a reviewed snapshot into the catalog read model. Pure: the same
- * payload always produces the same circles, placements and view records.
+ * payload and overrides always produce the same circles, placements and view
+ * records.
+ *
+ * Circle-authored overrides are applied per field inside `circleFromTemplate`,
+ * deliberately downstream of the name indexes below. Rewriting a template name
+ * before those indexes are built would stop `findTemplate` from matching that
+ * circle's booth rows, silently detaching it from every map placement.
  */
-export function buildCircleCatalog(payload: CircleCatalogPayload): CircleCatalog {
+export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: CircleOverridesPayload): CircleCatalog {
+  const overridesById = indexCircleOverrides(overrides);
   const templatesByName = new Map<string, CircleTemplate[]>();
   const templatesByPlacement = new Map<string, CircleTemplate[]>();
   for (const template of payload.templates) {
@@ -240,7 +272,7 @@ export function buildCircleCatalog(payload: CircleCatalogPayload): CircleCatalog
     // One row in the reviewed Excel master is identity evidence. Its booth cells
     // may expand to several event placements without duplicating the circle.
     const circleId = template?.id ?? recordId;
-    const circle = circlesById.get(circleId) ?? circleFromTemplate(circleId, template, booth);
+    const circle = circlesById.get(circleId) ?? circleFromTemplate(circleId, template, booth, overridesById.get(circleId));
     circlesById.set(circleId, circle);
     const placement: PlacementRecord = {
       id: recordId,
@@ -266,7 +298,7 @@ export function buildCircleCatalog(payload: CircleCatalogPayload): CircleCatalog
   // not fabricate a PlacementRecord or map slot.
   for (const template of payload.templates) {
     if (circlesById.has(template.id)) continue;
-    circlesById.set(template.id, circleFromTemplate(template.id, template));
+    circlesById.set(template.id, circleFromTemplate(template.id, template, undefined, overridesById.get(template.id)));
   }
 
   const records = rows.map(({ view }) => view);
@@ -341,7 +373,14 @@ export const EMPTY_CIRCLE_CATALOG: CircleCatalog = {
 
 export type CircleCatalogStatus = "loading" | "ready" | "error";
 
-type CatalogState = { catalog: CircleCatalog; status: CircleCatalogStatus; error: string };
+type CatalogState = {
+  catalog: CircleCatalog;
+  status: CircleCatalogStatus;
+  error: string;
+  /** Kept so a later overlay can rebuild without refetching the 1.8 MB base. */
+  payload?: CircleCatalogPayload;
+  overrides?: CircleOverridesPayload;
+};
 
 const INITIAL_STATE: CatalogState = { catalog: EMPTY_CIRCLE_CATALOG, status: "loading", error: "" };
 
@@ -362,8 +401,18 @@ export function getCircleCatalog() {
   return state.catalog;
 }
 
-export function setCircleCatalog(payload: CircleCatalogPayload) {
-  publish({ catalog: buildCircleCatalog(payload), status: "ready", error: "" });
+export function setCircleCatalog(payload: CircleCatalogPayload, overrides?: CircleOverridesPayload) {
+  publish({ catalog: buildCircleCatalog(payload, overrides), status: "ready", error: "", payload, overrides });
+}
+
+/**
+ * Apply circle-authored content on top of an already-loaded base catalog.
+ * Ignored when the base has not arrived, so the overlay can never be the thing
+ * that puts a reader into a broken state.
+ */
+export function setCircleOverrides(overrides: CircleOverridesPayload) {
+  if (!state.payload) return;
+  publish({ ...state, overrides, catalog: buildCircleCatalog(state.payload, overrides) });
 }
 
 export function failCircleCatalog(error: string) {
