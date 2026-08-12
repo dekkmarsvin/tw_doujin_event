@@ -23,6 +23,10 @@
 `/api/admin/*` **刻意不放行**：管理操作同時受 Access 與 `ADMIN_EMAILS` 兩層保護。`/data/*` 也不放行——社團入口已不需要它。
 - binding 只有一個 D1（`DB`，資料庫 `tw-catalog-identity`），用於帳號、session、認領、社團補充資料與稽核。不建立 R2、KV 或 Durable Objects。
 - 密鑰以 `wrangler pages secret put` 設定，不進 repo、不進 `wrangler.jsonc`、GitHub Actions 也不需要：`SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）。本機開發用 `.dev.vars`，該檔已列入 `.gitignore`。
+- **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰——症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run deploy-pages.yml --ref main` 重跑即可。
+- 產生密鑰時用管線送入，避免值出現在終端記錄或對話中：
+  `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler pages secret put SESSION_SECRET --project-name=tw-catalog`
+- `SESSION_SECRET` 一旦上線就不要更換：它簽署 session cookie，更換等同讓所有已登入的社團同時被登出。
 - `app/editor/`、`app/api/`、`worker/` 與 `drizzle/` 保留在 source tree，供本機地圖 authoring 使用；`vite.pages.config.ts` 不會把它們納入公開 bundle。
 - 公開 build 有兩個 entry：`index.html`（閱讀端，可離線）與 `circle.html`（社團控制面，`noindex`）。社團入口的程式碼不得出現在閱讀端 bundle，`tests/rendered-html.test.mjs` 會以內容比對把關。
 
