@@ -16,5 +16,29 @@
       "database_name": "tw-catalog-identity",
       "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
     }
-  ]
+  ],
+  // Preview (every branch that is not the production branch) gets its own
+  // database. Without this the top-level binding applies to preview too, so a
+  // claim submitted while testing a pull request would take the real circle's
+  // one owner slot, and saving an edit would rewrite the overrides document
+  // that production readers download.
+  //
+  // `d1_databases` is not inherited: an environment either declares the whole
+  // binding or has none at all. Anything added at the top level later — KV, R2,
+  // another database — has to be repeated here or preview simply loses it.
+  //
+  // The binding stays `DB`. `wrangler d1 create` suggests one named after the
+  // database, but the Functions read `env.DB`; a per-environment binding name
+  // would leave preview with no database under the name the code looks for.
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "tw-catalog-identity-preview",
+          "database_id": "88716ee2-4d17-4c93-87aa-bfe9c961a599"
+        }
+      ]
+    }
+  }
 }
