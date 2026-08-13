@@ -62,7 +62,7 @@ web
 - 前台使用可互動向量地圖，不以原始配置圖作為一般使用者的互動底圖。
 - 地圖、社團與作品的可分享檢視狀態以 URL 保存；重新整理、上一頁與分享連結後必須可恢復。
 - 地圖匯入、驗證與細部編輯仍是本機 authoring 流程，不出現在公開 Pages build；地圖快照維持人工審閱後發布。
-- 社團對自己填寫的內容保有退出權：可選擇活動結束後不再公開。主辦公布的社團名、攤位與日期不在此範圍，仍留在場刊。**待確認的條款**：比照 Comic Market 的作法，本站擬保留「學術或研究用途的有限度查閱仍可能包含已退出內容」的例外；此措辭需經營運者確認後寫入使用條款，目前僅在社團端介面說明。
+- 社團對自己填寫的內容保有退出權：可選擇活動結束後不再公開，此機制已上線。主辦公布的社團名、攤位與日期不在此範圍，仍留在場刊。比照 Comic Market 的作法保留「學術或研究用途的有限度查閱仍可能包含已退出內容」的例外，該措辭目前寫在社團端介面；**正式使用條款仍待營運者確認後補上**。
 - 社團自助編輯已在獨立入口實作，具備身分驗證、認領歸屬、管理者角色與稽核記錄。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。社團內容一律標示為社團自述且未經驗證，不得以版面權重或措辭暗示已獲主辦確認。
 - 外部資料匯入列為 P2；實作時必須由使用者主動選檔或連接來源、預覽差異並確認寫入，不做未經啟用的背景自動同步，也不得在未預覽時覆寫本地資料。
 - P0 提供 JSON／CSV 安全匯出作為本機資料復原邊界；一般介面不開放匯入，匯入與衝突處理仍屬 P2。
@@ -81,11 +81,9 @@ web
 
 - FF47 社團與攤位整理資料：`data_source_test/FF47 完整攤位整理.xlsx`。
 - FF47 社團攤位配置圖：`data_source_test/FF47社團攤位配置圖.jpg`。
-- 向量地圖匯入、驗證、版本化發布與前台讀取流程：`docs/event-map-design.md`。
-- Comike WebCatalog 地圖、資訊架構與收藏研究：`docs/comike-webcatalog-map-research.md`、`docs/comike-webcatalog-information-favorites-integration-research.md`。
-- Comike WebCatalog 社團自助編輯研究（社團端與編輯後公開結果的實地檢視）：`docs/comike-webcatalog-circle-editing-research.md`。
-- 研究結論與產品文件採納清單：`docs/comike-webcatalog-product-document-update-recommendations.md`。
-- 收藏／走訪規劃與資料來源／匯入契約：`docs/favorites-and-visit-planning-design.md`、`docs/circle-data-sources-and-import-design.md`。
+- Comike WebCatalog 的實地檢視紀錄（地圖、資訊架構與收藏、社團自助編輯）：[`docs/research/`](docs/research)。
+- 研究結論的採納與拒絕決策：[`docs/adr/`](docs/adr)，尤其是 [ADR-0001](docs/adr/0001-adopt-webcatalog-patterns-selectively.md)。
+- 各模組的現行行為與驗收條件：[`docs/contracts/`](docs/contracts)。
 - 目前沒有可作為宣傳聲稱的使用者研究、滿意度數據、使用量指標、推薦語或合作單位背書；未來工作不得虛構這些證據。
 
 ## Product Principles
