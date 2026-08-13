@@ -36,10 +36,17 @@ export class PortalError extends Error {
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  // Every mutating request declares JSON, body or not. The server requires it
+  // on all of them — an HTML form cannot send that content type, which is what
+  // makes form-based CSRF structurally impossible — and a bodyless DELETE that
+  // omitted it was rejected with a 415 before reaching any handler.
+  const method = (init?.method ?? "GET").toUpperCase();
+  const mutating = method !== "GET" && method !== "HEAD";
+
   const response = await fetch(path, {
     ...init,
     credentials: "same-origin",
-    headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
+    headers: { accept: "application/json", ...(mutating ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
   const text = await response.text();
 
