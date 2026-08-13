@@ -17,6 +17,19 @@ export const accounts = sqliteTable("accounts", {
   disabledAt: integer("disabled_at"),
 }, (table) => [uniqueIndex("accounts_email_idx").on(table.email)]);
 
+/**
+ * Who may review claims and take content down.
+ *
+ * Kept in the database rather than in configuration so the roster can change
+ * without a redeploy. `ADMIN_EMAILS` seeds this table while it is empty, which
+ * doubles as the break-glass path if every admin is somehow removed.
+ */
+export const admins = sqliteTable("admins", {
+  email: text("email").primaryKey(),
+  addedBy: text("added_by"),
+  addedAt: integer("added_at").notNull(),
+});
+
 export const loginTokens = sqliteTable("login_tokens", {
   id: text("id").primaryKey(),
   /** sha256(raw). The raw value only ever exists in the email and the request. */

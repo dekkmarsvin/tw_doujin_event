@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  createClaim, decideClaim, listMyClaims, listPendingClaims, PortalError, readMyOverride,
+  createClaim, decideClaim, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
   readSession, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
-  type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
+  type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import { OVERRIDE_LIMITS, type CircleOverrideFields } from "../circle-overrides";
 import { FF47_EVENT } from "../event-catalog";
@@ -339,5 +339,50 @@ function AdminPanel() {
     }}>撤下</button>
 
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+
+    <AdminRoster />
   </section>;
+}
+
+function AdminRoster() {
+  const [admins, setAdmins] = useState<AdminEntry[]>([]);
+  const [self, setSelf] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<Status>(IDLE);
+
+  const refresh = useCallback(() => {
+    void listAdmins()
+      .then((result) => { setAdmins(result.admins); setSelf(result.self); })
+      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+  }, []);
+
+  useEffect(refresh, [refresh]);
+
+  const run = (target: string, action: "add" | "remove") => {
+    setStatus({ kind: "busy", message: "處理中…" });
+    void manageAdmin(target, action)
+      .then(() => { setStatus({ kind: "ok", message: action === "add" ? "已新增管理者。" : "已移除管理者。" }); setEmail(""); refresh(); })
+      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+  };
+
+  return <>
+    <h2>管理者名單</h2>
+    <p>名單存在資料庫，新增或移除立即生效，不需重新部署。</p>
+    <ul className={styles.claimList}>
+      {admins.map((admin) => <li key={admin.email}>
+        <div>
+          <b>{admin.email}{admin.email === self ? "（你）" : ""}</b>
+          <small>{admin.addedBy === "bootstrap" ? "由設定值建立" : `由 ${admin.addedBy ?? "未知"} 新增`}</small>
+        </div>
+        {admin.email !== self && admins.length > 1
+          && <button type="button" onClick={() => run(admin.email, "remove")}>移除</button>}
+      </li>)}
+    </ul>
+
+    <label htmlFor="admin-email">新增管理者 email</label>
+    <input id="admin-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="someone@example.com" />
+    <button type="button" disabled={status.kind === "busy"} onClick={() => run(email, "add")}>新增</button>
+
+    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+  </>;
 }

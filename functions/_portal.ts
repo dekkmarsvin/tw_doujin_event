@@ -1,6 +1,6 @@
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
-import { createIdentityRepository } from "../db/identity-repository";
+import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
 import { FF47_EVENT } from "../app/event-catalog";
 
 /**
@@ -102,11 +102,38 @@ async function fetchEvidence(url: string): Promise<string | null> {
   }
 }
 
+/** Configured roster, used only to seed an empty table. */
+function bootstrapAdmins(env: PortalEnv) {
+  // Split on whatever a human pasted — comma, semicolon or newline — and drop
+  // quotes carried in from a shell or a prompt. The handler normalizes each
+  // entry, so this only has to separate and unwrap them.
+  return (env.ADMIN_EMAILS ?? "")
+    .split(/[,;\s]+/)
+    .map((entry) => entry.replace(/^["']+|["']+$/g, "").normalize("NFKC").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * One repository per isolate, not per request. `ensureTables` memoizes its DDL
+ * batch on the instance, so building a fresh one each time re-ran twenty
+ * `CREATE TABLE IF NOT EXISTS` statements — and the admin seed check — on every
+ * single request.
+ */
+const repositories = new WeakMap<D1Database, IdentityRepository>();
+
+function repositoryFor(env: PortalEnv) {
+  const existing = repositories.get(env.DB);
+  if (existing) return existing;
+  const created = createIdentityRepository(env.DB, { bootstrapAdmins: bootstrapAdmins(env) });
+  repositories.set(env.DB, created);
+  return created;
+}
+
 export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
   const { request, env } = context;
   const eventId = FF47_EVENT.id;
   return createCirclePortalHandlers({
-    repository: createIdentityRepository(env.DB),
+    repository: repositoryFor(env),
     sendMail: (message) => sendMailgun(env, message),
     lookupCircle: async (circleId) => (await catalogIndex(env, request, eventId)).get(circleId) ?? null,
     searchCircles: async (query, limit) => {
@@ -125,13 +152,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       origin: new URL(request.url).origin,
       sessionSecret: requireSecret(env, "SESSION_SECRET"),
       hashPepper: requireSecret(env, "HASH_PEPPER"),
-      // Split on whatever a human pasted — comma, semicolon or newline — and
-      // drop quotes carried in from a shell or a prompt. The handler normalizes
-      // each entry, so this only has to separate and unwrap them.
-      adminEmails: (env.ADMIN_EMAILS ?? "")
-        .split(/[,;\s]+/)
-        .map((entry) => entry.replace(/^["']+|["']+$/g, ""))
-        .filter(Boolean),
+      adminEmails: bootstrapAdmins(env),
       dataUpdatedAt: FF47_EVENT.dataUpdatedAt,
       now: () => Date.now(),
     },

@@ -50,6 +50,11 @@ const TABLES = [
     disabled_at INTEGER
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS accounts_email_idx ON accounts(email)`,
+  `CREATE TABLE IF NOT EXISTS admins (
+    email TEXT PRIMARY KEY NOT NULL,
+    added_by TEXT,
+    added_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS login_tokens (
     id TEXT PRIMARY KEY NOT NULL,
     token_hash TEXT NOT NULL,
@@ -138,19 +143,66 @@ const TABLES = [
   `CREATE INDEX IF NOT EXISTS audit_subject_idx ON audit_log(subject_type, subject_id, at)`,
 ];
 
-export function createIdentityRepository(database: D1Database) {
+export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
   let tablesReady: Promise<void> | null = null;
 
   async function ensureTables() {
     if (!tablesReady) {
       tablesReady = database.batch(TABLES.map((statement) => database.prepare(statement)))
-        .then(() => undefined)
+        .then(() => seedAdmins())
         .catch((error: unknown) => {
           tablesReady = null;
           throw error;
         });
     }
     return tablesReady;
+  }
+
+  /**
+   * Seed only while the roster is empty. That makes `ADMIN_EMAILS` the
+   * bootstrap for a fresh database and the recovery path if every admin is
+   * somehow removed, without resurrecting anyone who was deliberately deleted
+   * — the last-admin guard keeps the table from legitimately reaching zero.
+   */
+  async function seedAdmins() {
+    const seeds = (options.bootstrapAdmins ?? []).filter(Boolean);
+    if (seeds.length === 0) return;
+    const existing = await database.prepare("SELECT COUNT(*) AS total FROM admins").first<{ total: number }>();
+    if ((existing?.total ?? 0) > 0) return;
+    const now = Date.now();
+    await database.batch(seeds.map((email) => database
+      .prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, 'bootstrap', ?2)")
+      .bind(email, now)));
+  }
+
+  async function listAdmins() {
+    await ensureTables();
+    const result = await database.prepare("SELECT email, added_by, added_at FROM admins ORDER BY added_at ASC")
+      .all<{ email: string; added_by: string | null; added_at: number }>();
+    return result.results;
+  }
+
+  async function isAdminEmail(email: string) {
+    await ensureTables();
+    const row = await database.prepare("SELECT email FROM admins WHERE email = ?1").bind(email).first<{ email: string }>();
+    return !!row;
+  }
+
+  async function addAdmin(email: string, addedBy: string, now: number) {
+    await ensureTables();
+    const result = await database
+      .prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, ?2, ?3)")
+      .bind(email, addedBy, now).run();
+    return result.meta.changes === 1;
+  }
+
+  /** Refuses the final row, so the roster can never be emptied into a lockout. */
+  async function removeAdmin(email: string) {
+    await ensureTables();
+    const total = await database.prepare("SELECT COUNT(*) AS total FROM admins").first<{ total: number }>();
+    if ((total?.total ?? 0) <= 1) return "last" as const;
+    const result = await database.prepare("DELETE FROM admins WHERE email = ?1").bind(email).run();
+    return result.meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
   async function writeAudit(entry: {
@@ -419,6 +471,7 @@ export function createIdentityRepository(database: D1Database) {
 
   return {
     ensureTables, writeAudit,
+    listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, consumeLoginToken,
     upsertAccount, createSession, getSession, revokeSession,
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,

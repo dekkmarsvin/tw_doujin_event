@@ -128,3 +128,13 @@ export function decideClaim(claimId: string, decision: "approve" | "reject" | "r
 export function takedownOverride(circleId: string, reason: string) {
   return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) });
 }
+
+export type AdminEntry = { email: string; addedBy: string | null; addedAt: number };
+
+export function listAdmins() {
+  return call<{ admins: AdminEntry[]; self: string }>("/api/admin/admins");
+}
+
+export function manageAdmin(email: string, action: "add" | "remove") {
+  return call<{ ok: true }>("/api/admin/admins", { method: "POST", body: JSON.stringify({ email, action }) });
+}
