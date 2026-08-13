@@ -50,6 +50,9 @@ beforeEach(async () => {
     searchCircles: async (query, limit) => Object.values(CIRCLES)
       .filter((circle) => circle.nameKey.includes(query.toLocaleLowerCase("zh-Hant")))
       .slice(0, limit),
+    projectCircle: async (circleId, fields) => (CIRCLES[circleId]
+      ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...fields } }]
+      : null),
     fetchEvidence: async () => evidenceBody,
     config: {
       eventId: "ff47",
@@ -366,6 +369,38 @@ test("rejects a malformed roster change", async () => {
   const admin = await signIn("admin@example.com");
   assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "admin@example.com", action: "promote" }, admin))).status, 400);
   assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "not-an-email", action: "add" }, admin))).status, 400);
+});
+
+test("preview renders a draft without storing it", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("previewer@example.com");
+  await approve(owner, "ff47-site", admin);
+
+  const response = await handlers.previewOverride(
+    post("/api/circle/ff47-site/preview", { fields: { saleInfo: "草稿內容" } }, owner), "ff47-site");
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).records[0].circle.saleInfo, "草稿內容");
+
+  // Nothing may reach the published document from a preview.
+  assert.equal(await repository.getOverride("ff47", "ff47-site"), null);
+  const doc = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.deepEqual((await doc.json()).overrides, []);
+});
+
+test("preview refuses a non-owner and an unauthored field", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("preview-owner@example.com");
+  await approve(owner, "ff47-site", admin);
+
+  const stranger = await signIn("preview-stranger@example.com");
+  assert.equal((await handlers.previewOverride(post("/api/circle/ff47-site/preview", { fields: {} }, stranger), "ff47-site")).status, 403);
+  assert.equal((await handlers.previewOverride(post("/api/circle/ff47-site/preview", { fields: {} }), "ff47-site")).status, 401);
+
+  // The same validation as a save: a preview must not show what cannot be saved.
+  assert.equal((await handlers.previewOverride(
+    post("/api/circle/ff47-site/preview", { fields: { name: "改名" } }, owner), "ff47-site")).status, 400);
+  assert.equal((await handlers.previewOverride(
+    post("/api/circle/ff47-site/preview", { fields: { saleInfo: "x".repeat(2001) } }, owner), "ff47-site")).status, 400);
 });
 
 test("only a listed admin reaches the review queue", async () => {

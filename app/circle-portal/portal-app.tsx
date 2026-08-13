@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createClaim, decideClaim, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
-  readSession, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
+  previewOverride, readSession, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import { OVERRIDE_LIMITS, type CircleOverrideFields } from "../circle-overrides";
+import { CircleDetails } from "../event-workspace-panels";
+import type { CircleViewRecord } from "../circle-records";
 import { FF47_EVENT } from "../event-catalog";
 import styles from "./portal.module.css";
 
@@ -255,7 +257,12 @@ function ClaimForm({ onCreated }: { onCreated: () => void }) {
 function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [fields, setFields] = useState<CircleOverrideFields>({});
   const [status, setStatus] = useState<Status>(IDLE);
+  const [preview, setPreview] = useState<CircleViewRecord[] | null>(null);
   const loaded = useRef(false);
+
+  /** Drop empty values so an untouched field keeps inheriting the catalog. */
+  const draft = (): CircleOverrideFields => Object.fromEntries(Object.entries(fields).filter(([, value]) =>
+    Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : !!value));
 
   useEffect(() => {
     if (loaded.current) return;
@@ -270,7 +277,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
 
   return <section className={styles.card}>
     <h2>編輯：{claim.circleName}</h2>
-    <p>販售資訊、連結與作品標籤會即時生效。社團名稱與筆名需經審核，請改用下方說明聯絡管理者。</p>
+    <p>以下欄位儲存後即時生效。社團名稱、攤位與日期由主辦公布，無法在此修改；名稱有誤請聯絡管理者更正來源資料。</p>
 
     <label htmlFor={`sale-${claim.circleId}`}>販售資訊（最多 {OVERRIDE_LIMITS.saleInfo} 字）</label>
     <textarea
@@ -284,15 +291,47 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       <input id={`${key}-${claim.circleId}`} value={(fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
     </div>)}
 
-    <button type="button" disabled={status.kind === "busy"} onClick={() => {
-      setStatus({ kind: "busy", message: "儲存中…" });
-      // Drop empty values so an untouched field keeps inheriting the catalog.
-      const payload = Object.fromEntries(Object.entries(fields).filter(([, value]) =>
-        Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : !!value));
-      void saveOverride(claim.circleId, payload)
-        .then(() => setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }))
-        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-    }}>儲存</button>
+    <div className={styles.editorActions}>
+      <button type="button" disabled={status.kind === "busy"} onClick={() => {
+        setStatus({ kind: "busy", message: "產生預覽中…" });
+        void previewOverride(claim.circleId, draft())
+          .then((result) => { setPreview(result.records as CircleViewRecord[]); setStatus(IDLE); })
+          .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+      }}>預覽</button>
+
+      <button type="button" disabled={status.kind === "busy"} onClick={() => {
+        setStatus({ kind: "busy", message: "儲存中…" });
+        void saveOverride(claim.circleId, draft())
+          .then(() => setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }))
+          .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+      }}>儲存</button>
+    </div>
+
+    {preview && <div className={styles.preview}>
+      <h3>參觀者會看到的樣子</h3>
+      {preview.length === 0
+        ? <p>這個社團目前沒有配置攤位，公開頁面不會顯示。</p>
+        : <>
+          {preview.length > 1 && <p>此社團有 {preview.length} 天配置；以下預覽 DAY {preview[0].day} {preview[0].code}，其他天的內容相同。</p>}
+          <div className={styles.previewFrame} aria-label="刊登預覽">
+            {/* The reader's own component, so the preview cannot drift from the
+                published result. Inert: the planning controls are shown because
+                visitors see them, but must not act from inside a preview.
+                `sharedRecords` means other circles at the same booth on the same
+                day — passing this circle's other days would render it as sharing
+                a booth with itself. */}
+            <CircleDetails
+              record={preview[0]}
+              sharedRecords={preview.filter((record) => record.day === preview[0].day && record.code === preview[0].code)}
+              favorite={null} plan={null} groups={[]}
+              onClose={() => undefined} onOpenFull={() => undefined} onSelectShared={() => undefined}
+              onToggleFavorite={() => undefined} onTogglePlan={() => undefined} onSetNext={() => undefined}
+              onUpdateFavorite={() => undefined} onCreateGroup={() => undefined}
+            />
+          </div>
+        </>}
+      <button type="button" onClick={() => setPreview(null)}>關閉預覽</button>
+    </div>}
 
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;

@@ -1,5 +1,6 @@
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
-import { normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
+import { buildCircleCatalog, normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
+import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
 import { FF47_EVENT } from "../app/event-catalog";
 
@@ -9,10 +10,14 @@ import { FF47_EVENT } from "../app/event-catalog";
  * `wrangler pages secret put`.
  */
 
-/** Compact per-event index; the full 1.8 MB payload is dropped after parsing. */
-const catalogCache = new Map<string, Promise<Map<string, CircleLookup>>>();
+/**
+ * The reviewed snapshot, parsed once per isolate. Preview needs the whole
+ * payload to run the reader's projection; search and claims only need a compact
+ * index, which is derived from the same parse rather than a second fetch.
+ */
+const catalogCache = new Map<string, Promise<{ payload: CircleCatalogPayload; index: Map<string, CircleLookup> }>>();
 
-async function catalogIndex(env: PortalEnv, request: Request, eventId: string) {
+async function catalog(env: PortalEnv, request: Request, eventId: string) {
   const cached = catalogCache.get(eventId);
   if (cached) return cached;
 
@@ -21,13 +26,14 @@ async function catalogIndex(env: PortalEnv, request: Request, eventId: string) {
     const response = await env.ASSETS.fetch(new Request(url.toString()));
     if (!response.ok) throw new Error(`無法讀取活動社團資料（${response.status}）。`);
     const payload = await response.json() as CircleCatalogPayload;
-    return new Map(payload.templates.map((template) => [template.id, {
+    const index = new Map(payload.templates.map((template) => [template.id, {
       id: template.id,
       name: template.name,
       nameKey: normalizeCircleTemplateName(template.name),
       sourceRow: template.sourceRow ?? null,
       links: template.links.map((link) => ({ provider: link.provider, url: link.url })),
     } satisfies CircleLookup]));
+    return { payload, index };
   })().catch((error: unknown) => {
     catalogCache.delete(eventId);
     throw error;
@@ -35,6 +41,10 @@ async function catalogIndex(env: PortalEnv, request: Request, eventId: string) {
 
   catalogCache.set(eventId, pending);
   return pending;
+}
+
+async function catalogIndex(env: PortalEnv, request: Request, eventId: string) {
+  return (await catalog(env, request, eventId)).index;
 }
 
 function requireSecret(env: PortalEnv, name: "SESSION_SECRET" | "HASH_PEPPER") {
@@ -147,6 +157,23 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       return matches;
     },
     fetchEvidence,
+    projectCircle: async (circleId, fields) => {
+      // Runs the same projection the reader runs, against the same snapshot, so
+      // the preview shows the published result rather than an approximation.
+      const { payload } = await catalog(env, request, eventId);
+      const projected = buildCircleCatalog(payload, {
+        schema: CIRCLE_OVERRIDES_SCHEMA,
+        eventId,
+        generatedAt: FF47_EVENT.dataUpdatedAt,
+        revision: 0,
+        overrides: [{ circleId, updatedAt: new Date().toISOString(), fields }],
+      });
+      const records = projected.recordsByCircleId.get(circleId);
+      if (records?.length) return records;
+      // A circle with no numbered booth still has an identity to preview.
+      const circle = projected.circlesById.get(circleId);
+      return circle ? [] : null;
+    },
     config: {
       eventId,
       origin: new URL(request.url).origin,

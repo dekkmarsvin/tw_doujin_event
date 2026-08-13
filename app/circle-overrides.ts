@@ -7,12 +7,18 @@ export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
  * keys are absent by construction: the organizer's booth data is authoritative,
  * and a self-written `SourceLink` would let a circle forge official attribution.
  *
+ * The circle name is absent too, matching Comic Market's circle editor, which
+ * lets a circle correct its credited author but never its own name. Here the
+ * name additionally keys booth matching and the thumbnail index, and is half
+ * the input to the circle id hash — changing it would detach the circle from
+ * its placements and from every reader's saved favorites. A wrong name is
+ * corrected upstream in the reviewed workbook, which is the single source.
+ *
  * An absent key inherits the reviewed catalog value; a present key replaces it
  * wholesale. Arrays are never merged item-by-item — that is impossible to
  * explain to an editor and impossible to test exhaustively.
  */
 export type CircleOverrideFields = {
-  name?: string;
   pen?: string;
   saleInfo?: string;
   creatorTypes?: string[];
@@ -40,7 +46,6 @@ export type CircleOverridesPayload = {
 
 /** Caps exist so one circle cannot bloat the document every reader downloads. */
 export const OVERRIDE_LIMITS = {
-  name: 80,
   pen: 80,
   saleInfo: 2000,
   listItems: 20,
@@ -118,10 +123,11 @@ export function isCircleOverrideFields(value: unknown): value is CircleOverrideF
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const fields = value as Record<string, unknown>;
 
-  const known = new Set(["name", "pen", "saleInfo", "links", "thumbnail", ...LIST_FIELDS]);
+  // `name` is deliberately not here: an override carrying one is refused, not
+  // silently dropped, so a client sending it learns the field is not authorable.
+  const known = new Set(["pen", "saleInfo", "links", "thumbnail", ...LIST_FIELDS]);
   if (Object.keys(fields).some((key) => !known.has(key))) return false;
 
-  if ("name" in fields && !isBoundedString(fields.name, OVERRIDE_LIMITS.name)) return false;
   if ("pen" in fields && !isBoundedString(fields.pen, OVERRIDE_LIMITS.pen)) return false;
   if ("saleInfo" in fields && !isBoundedString(fields.saleInfo, OVERRIDE_LIMITS.saleInfo)) return false;
   if (LIST_FIELDS.some((field) => field in fields && !isBoundedList(fields[field]))) return false;

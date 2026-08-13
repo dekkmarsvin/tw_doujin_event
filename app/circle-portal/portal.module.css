@@ -157,6 +157,25 @@
 
 .admin { border-color: #c9d2cc; background: var(--paper); }
 
+.editorActions { display: flex; gap: 8px; }
+.editorActions button:first-child { border-color: var(--line); background: #fff; color: var(--ink); }
+
+.preview { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.preview h3 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.preview > p { margin-top: 8px; color: var(--muted); font-size: 11px; }
+/* Inert on purpose: the reader's planning controls render so the preview is
+   faithful, but they must not act from inside a preview. */
+.previewFrame {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.previewFrame :global(section) { max-height: 60vh; overflow: hidden; }
+
 .footer { margin-top: 24px; color: var(--muted); font-size: 10px; line-height: 1.7; }
 
 @media (max-width: 520px) {

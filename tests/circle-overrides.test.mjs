@@ -25,20 +25,34 @@ function withFields(circleId, fields) {
   return envelope([{ circleId, updatedAt: "2026-08-13T00:00:00.000Z", fields }]);
 }
 
-test("renaming a circle never detaches it from its booth placements", () => {
-  // The booth-matching indexes key on the reviewed workbook name. Applying an
-  // override before they are built would silently drop every map placement.
-  const renamed = records.buildCircleCatalog(payload, withFields(placed.id, { name: "完全不同的名字" }));
+test("a circle cannot author its own name", () => {
+  // The name keys booth matching, the thumbnail index and the circle id hash.
+  // Refused outright rather than accepted-and-ignored, so a client sending one
+  // learns the field is not authorable.
+  assert.equal(overrides.isCircleOverrideFields({ name: "完全不同的名字" }), false);
+  assert.equal(overrides.parseCircleOverridesPayload(withFields(placed.id, { name: "x" })).overrides.length, 0);
 
-  assert.equal(renamed.records.length, base.records.length);
-  assert.equal(renamed.placements.length, base.placements.length);
-  assert.equal(renamed.circles.length, base.circles.length);
-  assert.equal(renamed.recordsByCircleId.get(placed.id).length, base.recordsByCircleId.get(placed.id).length);
-  assert.equal(renamed.circlesById.get(placed.id).name, "完全不同的名字");
+  // A payload mixing an authorable field with the name is refused whole, not
+  // partially applied.
+  assert.equal(overrides.isCircleOverrideFields({ saleInfo: "有效", name: "x" }), false);
+});
 
-  // The placement rows themselves are organizer data and must be untouched.
+test("an override never moves a circle off its booth placements", () => {
+  // The booth-matching indexes are built from the reviewed sources. This pins
+  // that the merge seam stays downstream of them: whatever a circle writes, the
+  // placement rows are organizer data and must come through byte-identical.
+  const edited = records.buildCircleCatalog(payload, withFields(placed.id, {
+    saleInfo: "新刊 300 元", referencedWorks: ["完全不同的作品"], pen: "另一個筆名",
+  }));
+
+  assert.equal(edited.records.length, base.records.length);
+  assert.equal(edited.placements.length, base.placements.length);
+  assert.equal(edited.circles.length, base.circles.length);
+  assert.equal(edited.recordsByCircleId.get(placed.id).length, base.recordsByCircleId.get(placed.id).length);
+  assert.equal(edited.circlesById.get(placed.id).name, base.circlesById.get(placed.id).name, "the name is not authorable");
+
   assert.deepEqual(
-    renamed.recordsByCircleId.get(placed.id).map((record) => record.placement),
+    edited.recordsByCircleId.get(placed.id).map((record) => record.placement),
     base.recordsByCircleId.get(placed.id).map((record) => record.placement),
   );
 });
@@ -112,12 +126,13 @@ test("refuses fields the circle may not author", () => {
   assert.equal(overrides.isCircleOverrideFields({ sources: [] }), false);
   assert.equal(overrides.isCircleOverrideFields({ id: "ff47-other" }), false);
   assert.equal(overrides.isCircleOverrideFields({ sourceRow: 12 }), false);
+  assert.equal(overrides.isCircleOverrideFields({ name: "改名" }), false);
 });
 
 test("enforces length caps so one circle cannot bloat every reader's download", () => {
-  const { name, saleInfo, listItems, listItemLength, links, serializedFields } = overrides.OVERRIDE_LIMITS;
-  assert.equal(overrides.isCircleOverrideFields({ name: "x".repeat(name) }), true);
-  assert.equal(overrides.isCircleOverrideFields({ name: "x".repeat(name + 1) }), false);
+  const { pen, saleInfo, listItems, listItemLength, links, serializedFields } = overrides.OVERRIDE_LIMITS;
+  assert.equal(overrides.isCircleOverrideFields({ pen: "x".repeat(pen) }), true);
+  assert.equal(overrides.isCircleOverrideFields({ pen: "x".repeat(pen + 1) }), false);
   assert.equal(overrides.isCircleOverrideFields({ saleInfo: "x".repeat(saleInfo + 1) }), false);
   assert.equal(overrides.isCircleOverrideFields({ specialTags: Array(listItems + 1).fill("t") }), false);
   assert.equal(overrides.isCircleOverrideFields({ specialTags: ["x".repeat(listItemLength + 1)] }), false);

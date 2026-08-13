@@ -188,7 +188,9 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
   // `categories`, `work`, `media` and `circleSearchText` all pick it up, so
   // edited text becomes searchable without any extra code.
   const fields = override?.fields;
-  const name = fields?.name ?? template?.name ?? booth?.name ?? "未命名社團";
+  // Not overridable: the name keys booth matching, the thumbnail index and the
+  // circle id hash, so it stays whatever the reviewed sources say.
+  const name = template?.name ?? booth?.name ?? "未命名社團";
   const creatorTypes = fields?.creatorTypes ?? template?.creatorTypes ?? [];
   const workTypes = fields?.workTypes ?? template?.workTypes ?? [];
   const referencedWorks = fields?.referencedWorks ?? template?.referencedWorks ?? [];

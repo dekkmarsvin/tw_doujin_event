@@ -51,6 +51,8 @@ export type PortalDependencies = {
   searchCircles: (query: string, limit: number) => Promise<CircleLookup[]>;
   /** Returns page text, or null when the host cannot be read from a Worker. */
   fetchEvidence: (url: string) => Promise<string | null>;
+  /** Runs the reader's own projection so a preview cannot drift from reality. */
+  projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
   config: PortalConfig;
 };
 
@@ -87,7 +89,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, projectCircle, config }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
   // string against a normalized one silently denies an admin whose address
@@ -377,6 +379,28 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     return json({ ok: true });
   }
 
+  /**
+   * Project a draft through the real read model and return what a visitor would
+   * see. Computed server-side against the same `buildCircleCatalog` the reader
+   * uses, so the preview cannot drift from the published result — and so the
+   * portal still never downloads the catalog.
+   */
+  async function previewOverride(request: Request, circleId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
+      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+    }
+
+    const body = await readJson(request);
+    const fields = body?.fields ?? {};
+    if (!isCircleOverrideFields(fields)) return json({ error: "資料格式不符或超出長度限制。" }, 400);
+
+    const records = await projectCircle(circleId, fields as CircleOverrideFields);
+    if (!records) return json({ error: "找不到這個社團。" }, 404);
+    return json({ records });
+  }
+
   async function getMyOverride(request: Request, circleId: string) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
@@ -531,7 +555,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   return {
     requestLink, verify, session, signOut,
     listClaims, createClaim, runChallenge, searchCatalog,
-    getMyOverride, putOverride,
+    getMyOverride, putOverride, previewOverride,
     adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins,
     publicOverrides,
