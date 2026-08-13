@@ -10,7 +10,7 @@
 |---|---|
 | Pages project | 需要（`tw-catalog`） |
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
-| D1 binding | **需要**——一個，binding 名 `DB`，資料庫 `tw-catalog-identity` |
+| D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
 | Runtime secrets | **需要**——五個，見下 |
 | R2 / KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
@@ -57,6 +57,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
 - **preview 環境不繼承 production 的 secrets。** 要在 PR preview 測社團入口，五個 secret 需另以 `--env preview` 設定一次。
+- **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用
 
@@ -85,6 +86,35 @@ npx wrangler pages project create tw-catalog --production-branch main
 社團控制面的八張表——`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`——由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。Pages Functions 沒有執行 migration 的時機，因此建表發生在請求路徑上，不在部署步驟裡。
 
 `drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 存在是為了讓 `npm run db:generate` 能產出 schema，產物本身不參與部署。
+
+#### preview 必須用另一個資料庫
+
+```bash
+npx wrangler d1 create tw-catalog-identity-preview
+```
+
+在 `wrangler.jsonc` 以 `env.preview` 覆寫，**binding 名維持 `DB`**：
+
+```jsonc
+"env": { "preview": { "d1_databases": [
+  { "binding": "DB", "database_name": "tw-catalog-identity-preview", "database_id": "…" }
+] } }
+```
+
+三件容易做錯的事：
+
+- **`wrangler d1 create` 建議的 binding 名不能用。** 它會依資料庫名產生 `tw_catalog_identity_preview`，但 Functions 讀的是 `env.DB`；照抄會讓 preview 找不到資料庫。
+- **`d1_databases` 不會被繼承。** 環境要嘛宣告完整的 binding、要嘛完全沒有。日後在頂層新增 KV、R2 或第二個資料庫時，`env.preview` 必須同步補上，否則 preview 會靜默地少一個 binding。
+- **不要用 `preview_database_id`。** D1 binding 有這個欄位，但它是 Workers `wrangler dev` 的機制，不是 Pages preview deployment 的。
+
+沒有這層隔離時，頂層 binding 會同時套用到 preview：在 PR 上送出一筆認領會佔用正式資料裡該社團的唯一擁有者名額，儲存一次編輯會讓 `rebuildOverridesDoc()` 改寫正式讀者下載的 overrides 文件。
+
+**驗收不能只看設定檔**，因為 Direct Upload 專案的 binding 也可能在 dashboard 有 per-environment 設定。實際做一次寫入再確認它落在哪邊：
+
+```bash
+npx wrangler d1 execute tw-catalog-identity --remote --command "SELECT COUNT(*) FROM login_tokens"
+npx wrangler d1 execute tw-catalog-identity-preview --remote --command "SELECT COUNT(*) FROM login_tokens"
+```
 
 ### 4. 設定五個 runtime secrets
 
