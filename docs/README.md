@@ -45,13 +45,14 @@
 |---|---|
 | [0001](./adr/0001-adopt-webcatalog-patterns-selectively.md) | 選擇性採納 Comike WebCatalog 的模式 |
 | [0002](./adr/0002-planning-data-stays-on-device.md) | 規劃資料只留在使用者裝置 |
-| [0003](./adr/0003-circle-identity-from-workbook-row.md) | 社團身分以試算表主資料列為準 |
+| [0003](./adr/0003-circle-identity-from-workbook-row.md) | 社團身分以試算表主資料列為準（**已被 0010 取代**） |
 | [0004](./adr/0004-plan-and-next-stop-are-separate-actions.md) | 加入行程與設為下一站是兩個獨立動作 |
 | [0005](./adr/0005-import-stays-p2-export-only.md) | 匯入維持 P2，一般介面只保留安全匯出 |
 | [0006](./adr/0006-split-search-planning-filter-and-display.md) | 把搜尋、規劃篩選與顯示設定拆成三組 |
 | [0007](./adr/0007-circle-name-is-not-circle-editable.md) | 社團名稱不可由社團自行編輯 |
 | [0008](./adr/0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker |
 | [0009](./adr/0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload |
+| [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**提案中**，取代 0003） |
 
 ## 研究
 
