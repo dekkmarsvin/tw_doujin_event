@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   advancedCircleSearchCount,
   CREATOR_TYPE_OPTIONS,
@@ -8,6 +8,7 @@ import {
   type AdvancedCircleSearch,
   type WorkTopicSuggestion,
 } from "./circle-search";
+import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import styles from "./advanced-circle-search.module.css";
 
@@ -38,35 +39,9 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
     window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!open || !panel) return;
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setDraft(value);
-        setOpen(false);
-        setWorkInputFocused(false);
-        window.requestAnimationFrame(() => triggerRef.current?.focus());
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = [...panel.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])")];
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    panel.addEventListener("keydown", handleKeyDown);
-    window.requestAnimationFrame(() => panel.querySelector<HTMLElement>("select, input, button")?.focus());
-    return () => panel.removeEventListener("keydown", handleKeyDown);
-  }, [open, value]);
+  // Focus entry, the Tab ring and Escape all come from the shared hook, so this
+  // panel and the planning one cannot drift apart again.
+  useModalFocus(open, panelRef, closePanel);
 
   const selectSuggestion = (suggestion: WorkTopicSuggestion) => {
     setDraft((current) => ({ ...current, workQuery: suggestion.value }));
