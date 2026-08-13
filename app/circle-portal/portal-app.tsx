@@ -352,7 +352,6 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       </label>
       <p>
         僅影響你自己填寫的補充資料；主辦公布的社團名、攤位與日期不受影響，仍會留在場刊。
-        勾選後，本站於學術或研究用途的有限度查閱仍可能包含這些內容。
       </p>
     </div>
 
