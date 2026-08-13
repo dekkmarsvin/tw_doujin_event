@@ -117,6 +117,13 @@ export function readMyOverride(circleId: string) {
   return call<{ fields: CircleOverrideFields; status: string }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`);
 }
 
+export function previewOverride(circleId: string, fields: CircleOverrideFields) {
+  return call<{ records: unknown[] }>(`/api/circle/${encodeURIComponent(circleId)}/preview`, {
+    method: "POST",
+    body: JSON.stringify({ fields }),
+  });
+}
+
 export function saveOverride(circleId: string, fields: CircleOverrideFields) {
   return call<{ ok: true }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`, {
     method: "PUT",
