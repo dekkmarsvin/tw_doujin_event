@@ -27,6 +27,13 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
 
 export const FF47_DATA_UPDATED_AT = "2026-08-11T00:00:00.000+08:00";
 
+/**
+ * When the event is over for publication purposes. A circle that opted out has
+ * its self-written content withdrawn from the public overlay after this instant;
+ * the reviewed organizer data is unaffected.
+ */
+export const FF47_ENDS_AT = "2026-08-23T23:59:59.999+08:00";
+
 /** Organizer daily booth lists. Placement authority for the catalog snapshot. */
 export const FF47_OFFICIAL_BOOTH_LIST_URLS = {
   1: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%80%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",

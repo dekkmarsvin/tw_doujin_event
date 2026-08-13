@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createClaim, decideClaim, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
-  previewOverride, readSession, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
+  previewOverride, readSession, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import { OVERRIDE_LIMITS, type CircleOverrideFields } from "../circle-overrides";
@@ -258,6 +258,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [fields, setFields] = useState<CircleOverrideFields>({});
   const [status, setStatus] = useState<Status>(IDLE);
   const [preview, setPreview] = useState<CircleViewRecord[] | null>(null);
+  const [hidden, setHidden] = useState(false);
   const loaded = useRef(false);
 
   /** Drop empty values so an untouched field keeps inheriting the catalog. */
@@ -267,7 +268,9 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
-    void readMyOverride(claim.circleId).then((result) => setFields(result.fields ?? {})).catch(() => setFields({}));
+    void readMyOverride(claim.circleId)
+      .then((result) => { setFields(result.fields ?? {}); setHidden(!!result.postEventHidden); })
+      .catch(() => setFields({}));
   }, [claim.circleId]);
 
   const setList = (key: (typeof LIST_FIELDS)[number]["key"], value: string) => {
@@ -332,6 +335,26 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
         </>}
       <button type="button" onClick={() => setPreview(null)}>關閉預覽</button>
     </div>}
+
+    <div className={styles.visibility}>
+      <label>
+        <input
+          type="checkbox" checked={hidden}
+          onChange={(event) => {
+            const next = event.target.checked;
+            setHidden(next);
+            void setPostEventVisibility(claim.circleId, next)
+              .then(() => setStatus({ kind: "ok", message: next ? "活動結束後將不再公開你填寫的內容。" : "活動結束後仍會保留公開。" }))
+              .catch((error: unknown) => { setHidden(!next); setStatus({ kind: "error", message: errorMessage(error) }); });
+          }}
+        />
+        <span>活動結束後，不再公開我在此填寫的內容</span>
+      </label>
+      <p>
+        僅影響你自己填寫的補充資料；主辦公布的社團名、攤位與日期不受影響，仍會留在場刊。
+        勾選後，本站於學術或研究用途的有限度查閱仍可能包含這些內容。
+      </p>
+    </div>
 
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;

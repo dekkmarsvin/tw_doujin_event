@@ -2,7 +2,7 @@ import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandler
 import { buildCircleCatalog, normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
-import { FF47_EVENT } from "../app/event-catalog";
+import { FF47_ENDS_AT, FF47_EVENT } from "../app/event-catalog";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -181,6 +181,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       hashPepper: requireSecret(env, "HASH_PEPPER"),
       adminEmails: bootstrapAdmins(env),
       dataUpdatedAt: FF47_EVENT.dataUpdatedAt,
+      eventEndsAt: FF47_ENDS_AT,
       now: () => Date.now(),
     },
   });
