@@ -1,6 +1,6 @@
-# FF47 場刊 MAP
+# 場刊 MAP
 
-Fancy Frontier 47 的同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，支援桌面與行動版。
+同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，支援桌面與行動版。
 
 公開閱讀路徑是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務，不經過任何 Worker。另有一個獨立入口 `/circle` 供參展社團登入並維護自己的補充資料，由 `functions/` 下的 Pages Functions 與 D1 承載。
 
@@ -86,9 +86,3 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 - `vite.pages.config.ts`、`wrangler.jsonc`：Pages 純靜態 build 與部署設定
 - `public/_headers`：CSP、權限政策與快取規則
 - `.github/workflows/deploy-pages.yml`：驗證、preview 與 production 自動部署
-
-## 資料來源
-
-FF47 社團資料的權威來源是公開的 [FF47 Google 試算表](https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing)，版本化本機快照為 `data_source_test/FF47 完整攤位整理.xlsx`。
-
-外部來源只補充內容與可核對連結，**不取代本地社團及攤位身分**。
