@@ -33,12 +33,15 @@
 
 ## 自動部署架構
 
-本專案選擇 **GitHub Actions + Wrangler Direct Upload**，不使用 Cloudflare Dashboard 的原生 Git integration。Cloudflare 不允許同一個 Pages project 在 Git integration 與 Direct Upload 之間切換，因此首次建立 project 時就必須選定這條路徑。開發與正式環境分別使用 `dev-tw-catalog` 與 `tw-catalog`，避免 preview 與 production deployment 共用回滾歷史。
+本專案選擇 **GitHub Actions + Wrangler Direct Upload**，不使用 Cloudflare Dashboard 的原生 Git integration。Cloudflare 不允許同一個 Pages project 在 Git integration 與 Direct Upload 之間切換，因此首次建立 project 時就必須選定這條路徑。
+
+實際只使用**一個** Pages project：`tw-catalog`。preview 與 production 以 Cloudflare Pages 的 branch deployment 區分，而非兩個 project。`package.json` 仍保留 `pages:deploy:dev` 指向 `dev-tw-catalog`，供需要完全獨立環境時手動使用；CI 不會用到它。
 
 `.github/workflows/deploy-pages.yml` 的行為：
 
-- push 到 `main`：完整 gate 通過後，先發布並 smoke test `dev-tw-catalog.pages.dev`，成功後才發布並 smoke test `tw-catalog.pages.dev`。
-- 同 repository 的 pull request：發布 `pr-<number>.dev-tw-catalog.pages.dev` preview deployment，不觸碰 production project。
+- push 到 `main`：完整 gate 通過後發布到 `tw-catalog`（branch `main`），再 smoke test `tw-catalog.pages.dev`。**只有一次部署**，沒有先發到開發環境再晉升的流程。
+- 同 repository 的 pull request：以 branch `pr-<number>` 發布到同一個 project，網址為 `pr-<number>.tw-catalog.pages.dev`。branch deployment 不會覆蓋 production。
+- **preview 環境不繼承 production 的 secrets。** 要在 PR preview 測社團入口，五個 secret 需另以 `--env preview` 設定一次。
 - fork pull request：只因拿不到 deployment secrets 而不執行 deploy job，避免把 Cloudflare token 暴露給外部程式碼。
 - `workflow_dispatch`：允許從 GitHub Actions 頁面手動重跑目前 branch。
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。

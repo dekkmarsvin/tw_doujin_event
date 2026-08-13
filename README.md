@@ -35,7 +35,7 @@ npm run lint
 npx tsc --noEmit --incremental false
 ```
 
-合併或推送到 GitHub `main` 後，`.github/workflows/deploy-pages.yml` 會重跑以上 gate，先發布並 smoke test `dev-tw-catalog.pages.dev`，再以同一份產物發布 `tw-catalog.pages.dev`；同 repository 的 pull request 會發布 `pr-<number>.dev-tw-catalog.pages.dev` 獨立 preview。首次啟用所需的兩個 repository secrets 見 `docs/cloudflare-pages-deployment.md`。
+合併或推送到 GitHub `main` 後，`.github/workflows/deploy-pages.yml` 會重跑以上 gate，通過後發布到 `tw-catalog` 並 smoke test `tw-catalog.pages.dev`；同 repository 的 pull request 會以 branch `pr-<number>` 發布到同一個 project，網址為 `pr-<number>.tw-catalog.pages.dev`。首次啟用所需的兩個 repository secrets、Pages secrets 與 D1 設定見 `docs/cloudflare-pages-deployment.md`。
 
 ## 驗證
 
