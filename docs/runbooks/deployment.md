@@ -80,7 +80,11 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 ### 3. 建立 D1 與 binding
 
-建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定，並執行 `drizzle/` 下的 migration。
+建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定。**不需要執行任何 migration。**
+
+社團控制面的八張表——`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`——由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。Pages Functions 沒有執行 migration 的時機，因此建表發生在請求路徑上，不在部署步驟裡。
+
+`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 存在是為了讓 `npm run db:generate` 能產出 schema，產物本身不參與部署。
 
 ### 4. 設定五個 runtime secrets
 
