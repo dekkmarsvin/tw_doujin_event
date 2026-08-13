@@ -8,7 +8,8 @@
 - 社團模板來源工作表：`攤位整理表 請在此填寫資訊`，共 1,336 筆具名稱的社團列。
 - `DAY1`、`DAY2`、`DAY3` 只用於核對活動配置；不以同名推測社團身分。
 - Excel 的縮圖欄本身沒有 URL，而是透過 `IMPORTRANGE` 查詢公開縮圖索引：`https://docs.google.com/spreadsheets/d/1f7uHQQgxgff8nh6aFDrh_cqkeFpcVPsvJILesm778_0/`；本次使用的固定快照位於 `data_source_test/ff47-thumbnail-index.csv`。
-- 生成資料包含 5,104 個外部連結、319 筆販售資訊與 262 張具原始 Drive 連結的縮圖。未出現在來源中的欄位不補值；沒有來源圖片時維持文字卡。
+- 生成資料包含 5,137 個外部連結、336 筆販售資訊與 262 張具原始 Drive 連結的縮圖。未出現在來源中的欄位不補值；沒有來源圖片時維持文字卡。
+- 來源第 452 列的「攤位名稱」欄被填入貼文網址而非社團名。生成器以主辦當日攤位清單為權威修正該列（D09 = 紅色荔枝樹），修正表以貼上的網址為鍵而非列號——上游插入一列會讓列號鍵的修正套到別的社團身上。任何名稱欄為網址但無對應修正的列，會讓生成器失敗而非發布出去。
 
 ## 社團模板匹配契約
 
@@ -18,7 +19,9 @@
 4. 同一 Excel 列登錄的跨日或連號攤位共用一個 `CircleRecord`，各自保留 `PlacementRecord`。
 5. 沒有編號攤位的已知社團仍保留於 `CIRCLE_CATALOG`，但不虛構地圖位置。
 
-生成結果位於 `app/ff47-circle-templates.generated.json`；型別、索引與匹配邏輯位於 `app/ff47-circle-templates.ts`。`app/ff47-circle-templates.manifest.json` 記錄生成器版本、兩個輸入檔與輸出檔的 SHA-256，以及資料筆數。
+生成結果位於 `app/ff47-circle-templates.generated.json`；型別、索引與匹配邏輯位於 `app/circle-records.ts`（原 `app/ff47-circle-templates.ts` 已併入該檔，因為場刊資料改以靜態快照傳輸，不再打包進 bundle）。`app/ff47-circle-templates.manifest.json` 記錄生成器版本、兩個輸入檔與輸出檔的 SHA-256，以及資料筆數。
+
+模板再經 `scripts/export-static-circle-catalog.mjs` 併入攤位資料，輸出執行期讀取的 `public/data/events/ff47/circles.json`；`npm run build` 以 `catalog:snapshot:check` 逐位元組驗證該快照與來源一致。
 
 - 重新生成：`npm run catalog:generate`。
 - 驗證工作簿、縮圖快照與輸出未漂移：`npm run catalog:check`。
@@ -44,6 +47,6 @@
 
 ## 驗證摘要
 
-- 自動測試涵蓋 1,336 個模板、2,986 筆配置、跨攤位模板共用、未配置社團保留、縮圖來源、完整場館倍率、置中與圖片門檻。
+- 自動測試涵蓋 1,336 個模板、2,977 筆配置、跨攤位模板共用、未配置社團保留、縮圖來源、完整場館倍率、置中與圖片門檻。投影後的社團數應恰為 1,336——高於此數代表有攤位比不到模板而退回位置式身分。
 - 實際瀏覽器驗證：614 × 430 地圖可視區的完整場館倍率為 38%；再縮小仍維持 38%，且場館四邊均在可視區內。
 - 實際瀏覽器驗證：148% 時 DAY 1 地圖呈現 211 個來源縮圖攤位；縮圖成功載入為 800 × 400。

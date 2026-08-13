@@ -214,7 +214,7 @@ components:
 
 元件語氣是克制、精準、工具優先。互動元件必須具有 default、hover、focus-visible、active、disabled 與 loading 狀態；任何資料狀態不可只靠顏色表達。
 
-本章描述現行實作。尚未實作的 minimap、OAuth、帳號、雲端同步與多人協作不得出現在一般操作流程中。
+本章描述現行實作。尚未實作的 minimap、OAuth、使用者帳號、雲端同步與多人協作不得出現在一般操作流程中。社團自助維護所需的登入只存在於獨立入口 `/circle`，不得滲入一般參觀者的瀏覽、收藏或行程流程。
 
 ### Buttons
 
