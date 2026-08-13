@@ -24,6 +24,9 @@ const CIRCLES = {
   "ff47-domain": { id: "ff47-domain", name: "同網域社團", nameKey: "同網域社團", sourceRow: 12, links: [{ provider: "官方網站", url: "https://owner.example/" }] },
 };
 
+/** Comfortably after the fixture clock, so tests start in the "during" phase. */
+const EVENT_ENDS_AT = "2026-08-23T23:59:59.999+08:00";
+
 let clock = 1_786_500_000_000;
 let sent = [];
 let evidenceBody = null;
@@ -61,6 +64,7 @@ beforeEach(async () => {
       hashPepper: "test-pepper",
       adminEmails: ["admin@example.com"],
       dataUpdatedAt: "2026-08-11T00:00:00.000+08:00",
+      eventEndsAt: EVENT_ENDS_AT,
       now: () => clock,
     },
   });
@@ -401,6 +405,73 @@ test("preview refuses a non-owner and an unauthored field", async () => {
     post("/api/circle/ff47-site/preview", { fields: { name: "改名" } }, owner), "ff47-site")).status, 400);
   assert.equal((await handlers.previewOverride(
     post("/api/circle/ff47-site/preview", { fields: { saleInfo: "x".repeat(2001) } }, owner), "ff47-site")).status, 400);
+});
+
+test("a circle can withdraw its own content from after the event", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("optout@example.com");
+  await approve(owner, "ff47-site", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "展期內容" } }, owner), "ff47-site");
+
+  const opted = await handlers.setPostEventVisibility(post("/api/circle/ff47-site/visibility", { hidden: true }, owner), "ff47-site");
+  assert.equal(opted.status, 200);
+
+  // During the event nothing changes: the opt-out is about afterwards.
+  const during = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal((await during.json()).overrides.length, 1);
+
+  // Past the end, the circle's own content is gone from the document entirely,
+  // not merely hidden by the client.
+  clock = Date.parse(EVENT_ENDS_AT) + 1000;
+  const after = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.deepEqual((await after.json()).overrides, []);
+  clock = 1_786_500_000_000;
+});
+
+test("a circle that did not opt out stays published after the event", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("stays@example.com");
+  await approve(owner, "ff47-social", admin);
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "保留" } }, owner), "ff47-social");
+
+  clock = Date.parse(EVENT_ENDS_AT) + 1000;
+  const after = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal((await after.json()).overrides.length, 1);
+  clock = 1_786_500_000_000;
+});
+
+test("the phase change alone rewrites the document and its etag", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("phase@example.com");
+  await approve(owner, "ff47-site", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "內容" } }, owner), "ff47-site");
+  await handlers.setPostEventVisibility(post("/api/circle/ff47-site/visibility", { hidden: true }, owner), "ff47-site");
+
+  const beforeTag = (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).headers.get("etag");
+
+  // The event ending is not an edit, so nothing writes. The read path has to
+  // notice the phase moved and rebuild, or withdrawn content keeps serving.
+  clock = Date.parse(EVENT_ENDS_AT) + 1000;
+  const afterResponse = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.notEqual(afterResponse.headers.get("etag"), beforeTag, "a stale etag would keep caches serving withdrawn content");
+  assert.deepEqual((await afterResponse.json()).overrides, []);
+  clock = 1_786_500_000_000;
+});
+
+test("visibility cannot be set by a non-owner or before any content exists", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("novis@example.com");
+  await approve(owner, "ff47-domain", admin);
+
+  // Nothing saved yet, so there is no row to flag.
+  assert.equal((await handlers.setPostEventVisibility(post("/api/circle/ff47-domain/visibility", { hidden: true }, owner), "ff47-domain")).status, 409);
+
+  const stranger = await signIn("vis-stranger@example.com");
+  assert.equal((await handlers.setPostEventVisibility(post("/api/circle/ff47-domain/visibility", { hidden: true }, stranger), "ff47-domain")).status, 403);
+  assert.equal((await handlers.setPostEventVisibility(post("/api/circle/ff47-domain/visibility", { hidden: true }), "ff47-domain")).status, 401);
+
+  await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "x" } }, owner), "ff47-domain");
+  assert.equal((await handlers.setPostEventVisibility(post("/api/circle/ff47-domain/visibility", { hidden: "yes" }, owner), "ff47-domain")).status, 400);
 });
 
 test("only a listed admin reaches the review queue", async () => {

@@ -1,6 +1,6 @@
 import { isCircleOverrideFields, type CircleOverrideFields } from "./circle-overrides";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
-import type { ClaimMethod, IdentityRepository } from "../db/identity-repository";
+import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -41,6 +41,8 @@ export type PortalConfig = {
   hashPepper: string;
   adminEmails: string[];
   dataUpdatedAt: string;
+  /** ISO instant after which an opted-out circle's content is withdrawn. */
+  eventEndsAt: string;
   now: () => number;
 };
 
@@ -95,6 +97,9 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   // string against a normalized one silently denies an admin whose address
   // differs only in case or Unicode width.
   const isAdmin = (email: string) => repository.isAdminEmail(normalizeEmail(email));
+
+  /** Publication phase. Only the circle's own content is withdrawn afterwards. */
+  const currentPhase = (): OverridesPhase => (config.now() > Date.parse(config.eventEndsAt) ? "after" : "during");
 
   async function clientIpHash(request: Request) {
     const address = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "";
@@ -408,12 +413,43 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
     }
     const row = await repository.getOverride(config.eventId, circleId);
-    return json({ fields: row ? JSON.parse(row.fields_json) as unknown : {}, status: row?.status ?? "none" });
+    return json({
+      fields: row ? JSON.parse(row.fields_json) as unknown : {},
+      status: row?.status ?? "none",
+      postEventHidden: !!row?.post_event_hidden,
+    });
   }
 
   type AdminGate =
     | { ok: false; response: Response }
     | { ok: true; session: NonNullable<Awaited<ReturnType<typeof currentSession>>> };
+
+  /**
+   * A circle decides whether its own contributions stay public once the event
+   * is over. The organizer's booth data is unaffected — only what the circle
+   * wrote here is withdrawn.
+   */
+  async function setPostEventVisibility(request: Request, circleId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
+      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+    }
+
+    const body = await readJson(request);
+    if (typeof body?.hidden !== "boolean") return json({ error: "hidden 必須是 true 或 false。" }, 400);
+
+    const now = config.now();
+    const applied = await repository.setPostEventHidden(config.eventId, circleId, body.hidden);
+    if (!applied) return json({ error: "請先儲存一次內容再設定。" }, 409);
+
+    await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now, currentPhase());
+    await repository.writeAudit({
+      at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.post_event_visibility",
+      subjectType: "override", subjectId: circleId, detail: { hidden: body.hidden }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, hidden: body.hidden });
+  }
 
   async function requireFreshAdmin(request: Request): Promise<AdminGate> {
     const current = await requireSession(request);
@@ -538,11 +574,20 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
    * minute, which is what keeps this inside the D1 free tier.
    */
   async function publicOverrides(request: Request, eventId: string) {
-    const doc = await repository.getOverridesDoc(eventId);
+    let doc = await repository.getOverridesDoc(eventId);
+
+    // The document is written on edit, but the event ending is not an edit.
+    // Rebuilding on a phase change keeps the steady-state read a single row
+    // lookup instead of filtering the document on every request.
+    const phase = currentPhase();
+    if (doc && doc.phase !== phase) {
+      await repository.rebuildOverridesDoc(eventId, config.dataUpdatedAt, config.now(), phase);
+      doc = await repository.getOverridesDoc(eventId);
+    }
     const body = doc?.json ?? JSON.stringify({
       schema: "circle-overrides/1", eventId, generatedAt: config.dataUpdatedAt, revision: 0, overrides: [],
     });
-    const etag = `"circle-overrides-${eventId}-${doc?.revision ?? 0}"`;
+    const etag = `"circle-overrides-${eventId}-${phase}-${doc?.revision ?? 0}"`;
     const headers = {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "public, max-age=60, must-revalidate",
@@ -555,7 +600,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   return {
     requestLink, verify, session, signOut,
     listClaims, createClaim, runChallenge, searchCatalog,
-    getMyOverride, putOverride, previewOverride,
+    getMyOverride, putOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins,
     publicOverrides,

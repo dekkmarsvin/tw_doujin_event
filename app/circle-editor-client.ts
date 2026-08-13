@@ -114,7 +114,14 @@ export function runChallenge(claimId: string) {
 }
 
 export function readMyOverride(circleId: string) {
-  return call<{ fields: CircleOverrideFields; status: string }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`);
+  return call<{ fields: CircleOverrideFields; status: string; postEventHidden: boolean }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`);
+}
+
+export function setPostEventVisibility(circleId: string, hidden: boolean) {
+  return call<{ ok: true; hidden: boolean }>(`/api/circle/${encodeURIComponent(circleId)}/visibility`, {
+    method: "POST",
+    body: JSON.stringify({ hidden }),
+  });
 }
 
 export function previewOverride(circleId: string, fields: CircleOverrideFields) {

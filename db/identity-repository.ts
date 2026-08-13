@@ -11,6 +11,7 @@ import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
  * Schema of record lives in `db/identity-schema.ts` for `npm run db:generate`.
  */
 
+export type OverridesPhase = "during" | "after";
 export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked";
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
 
@@ -39,6 +40,7 @@ export type OverrideRow = {
   fields_json: string;
   status: string;
   updated_at: number;
+  post_event_hidden?: number;
 };
 
 const TABLES = [
@@ -116,6 +118,7 @@ const TABLES = [
     updated_by TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
+    post_event_hidden INTEGER NOT NULL DEFAULT 0,
     takedown_reason TEXT,
     takendown_by TEXT,
     takendown_at INTEGER
@@ -126,7 +129,8 @@ const TABLES = [
     event_id TEXT PRIMARY KEY NOT NULL,
     revision INTEGER NOT NULL DEFAULT 1,
     json TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    phase TEXT NOT NULL DEFAULT 'during'
   )`,
   `CREATE TABLE IF NOT EXISTS audit_log (
     id TEXT PRIMARY KEY NOT NULL,
@@ -143,12 +147,25 @@ const TABLES = [
   `CREATE INDEX IF NOT EXISTS audit_subject_idx ON audit_log(subject_type, subject_id, at)`,
 ];
 
+/**
+ * Columns added after a table already existed somewhere. `CREATE TABLE IF NOT
+ * EXISTS` silently does nothing to an existing table, so a new column in the
+ * definitions above would never appear in a live database. SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so each runs on its own and a duplicate-column
+ * error is the success case.
+ */
+const COLUMN_MIGRATIONS = [
+  `ALTER TABLE circle_overrides ADD COLUMN post_event_hidden INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE overrides_doc ADD COLUMN phase TEXT NOT NULL DEFAULT 'during'`,
+];
+
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
   let tablesReady: Promise<void> | null = null;
 
   async function ensureTables() {
     if (!tablesReady) {
       tablesReady = database.batch(TABLES.map((statement) => database.prepare(statement)))
+        .then(() => addMissingColumns())
         .then(() => seedAdmins())
         .catch((error: unknown) => {
           tablesReady = null;
@@ -156,6 +173,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         });
     }
     return tablesReady;
+  }
+
+  async function addMissingColumns() {
+    for (const statement of COLUMN_MIGRATIONS) {
+      try {
+        await database.prepare(statement).run();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/duplicate column name/i.test(message)) throw error;
+      }
+    }
   }
 
   /**
@@ -425,13 +453,24 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1;
   }
 
-  async function listLiveOverrides(eventId: string) {
+  async function listLiveOverrides(eventId: string, phase: OverridesPhase = "during") {
     await ensureTables();
+    // After the event, a circle that opted out is simply absent from the query,
+    // so its content never reaches the published document at all.
+    const hiddenClause = phase === "after" ? " AND post_event_hidden = 0" : "";
     const result = await database.prepare(
       `SELECT circle_id, fields_json, status, updated_at FROM circle_overrides
-       WHERE event_id = ?1 AND status = 'live' ORDER BY circle_id ASC`,
+       WHERE event_id = ?1 AND status = 'live'${hiddenClause} ORDER BY circle_id ASC`,
     ).bind(eventId).all<OverrideRow>();
     return result.results;
+  }
+
+  async function setPostEventHidden(eventId: string, circleId: string, hidden: boolean) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE circle_overrides SET post_event_hidden = ?1 WHERE event_id = ?2 AND circle_id = ?3`,
+    ).bind(hidden ? 1 : 0, eventId, circleId).run();
+    return result.meta.changes === 1;
   }
 
   /**
@@ -439,8 +478,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * is trivial, and it turns each edge-cache miss into a single row read
    * instead of a scan — which is what keeps venue traffic inside the D1 quota.
    */
-  async function rebuildOverridesDoc(eventId: string, generatedAt: string, now: number) {
-    const rows = await listLiveOverrides(eventId);
+  async function rebuildOverridesDoc(eventId: string, generatedAt: string, now: number, phase: OverridesPhase = "during") {
+    const rows = await listLiveOverrides(eventId, phase);
     const overrides = rows.map((row) => ({
       circleId: row.circle_id,
       updatedAt: new Date(row.updated_at).toISOString(),
@@ -457,16 +496,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       overrides,
     });
     await database.prepare(
-      `INSERT INTO overrides_doc (event_id, revision, json, updated_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT(event_id) DO UPDATE SET revision = excluded.revision, json = excluded.json, updated_at = excluded.updated_at`,
-    ).bind(eventId, revision, json, now).run();
-    return { revision, json };
+      `INSERT INTO overrides_doc (event_id, revision, json, updated_at, phase) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT(event_id) DO UPDATE SET revision = excluded.revision, json = excluded.json,
+         updated_at = excluded.updated_at, phase = excluded.phase`,
+    ).bind(eventId, revision, json, now, phase).run();
+    return { revision, json, phase };
   }
 
   async function getOverridesDoc(eventId: string) {
     await ensureTables();
-    return database.prepare(`SELECT revision, json, updated_at FROM overrides_doc WHERE event_id = ?1`)
-      .bind(eventId).first<{ revision: number; json: string; updated_at: number }>();
+    return database.prepare(`SELECT revision, json, updated_at, phase FROM overrides_doc WHERE event_id = ?1`)
+      .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
   }
 
   return {
@@ -476,7 +516,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, createSession, getSession, revokeSession,
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
-    getOverride, putOverride, takedownOverride, listLiveOverrides,
+    getOverride, putOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
   };
 }
