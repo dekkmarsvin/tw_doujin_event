@@ -30,16 +30,19 @@ let evidenceBody = null;
 let handlers;
 let repository;
 
-const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log"];
+const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "admins"];
 
 beforeEach(async () => {
   sent = [];
   evidenceBody = null;
-  repository = createIdentityRepository(database);
+  repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.com"] });
   // Isolation matters here: claim ownership and the login rate-limit window are
   // both persistent, so a shared database would make tests order-dependent.
   await repository.ensureTables();
   await database.batch(TABLES.map((table) => database.prepare(`DELETE FROM ${table}`)));
+  // The wipe clears the roster too, and ensureTables has already memoized its
+  // seed, so restore the baseline admin explicitly.
+  await repository.addAdmin("admin@example.com", "bootstrap", clock);
   handlers = createCirclePortalHandlers({
     repository,
     sendMail: async (message) => { sent.push(message); },
@@ -279,29 +282,90 @@ test("rejects payloads the reader could not project", async () => {
   }
 });
 
-test("an admin address matches regardless of case or padding", async () => {
-  // Configuration is typed by a human and the stored address is normalized, so
-  // the two must be compared after the same normalization, not literally.
-  const padded = createCirclePortalHandlers({
-    repository,
-    sendMail: async (message) => { sent.push(message); },
-    lookupCircle: async (circleId) => CIRCLES[circleId] ?? null,
-    searchCircles: async () => [],
-    fetchEvidence: async () => null,
-    config: {
-      eventId: "ff47", origin: ORIGIN,
-      sessionSecret: "test-session-secret", hashPepper: "test-pepper",
-      adminEmails: ["  Admin@Example.COM  "],
-      dataUpdatedAt: "2026-08-11T00:00:00.000+08:00", now: () => clock,
-    },
-  });
-
-  const cookie = await signIn("admin@example.com");
-  const response = await padded.session(get("/api/auth/session", cookie));
-  assert.equal((await response.json()).isAdmin, true);
+test("an admin address matches regardless of case or width", async () => {
+  // The stored address is normalized, so the roster must be compared after the
+  // same normalization rather than literally.
+  await repository.addAdmin("mixed@example.com", "test", clock);
+  const cookie = await signIn("Mixed@Example.COM");
+  assert.equal((await (await handlers.session(get("/api/auth/session", cookie))).json()).isAdmin, true);
 
   const stranger = await signIn("nobody@example.com");
-  assert.equal((await (await padded.session(get("/api/auth/session", stranger))).json()).isAdmin, false);
+  assert.equal((await (await handlers.session(get("/api/auth/session", stranger))).json()).isAdmin, false);
+});
+
+test("the configured roster seeds an empty table and is not reapplied after", async () => {
+  await database.prepare("DELETE FROM admins").run();
+
+  // An empty roster is the break-glass state: configuration refills it.
+  const fresh = createIdentityRepository(database, { bootstrapAdmins: ["seeded@example.com"] });
+  await fresh.ensureTables();
+  const seeded = await fresh.listAdmins();
+  assert.deepEqual(seeded.map((admin) => admin.email), ["seeded@example.com"]);
+  assert.equal(seeded[0].added_by, "bootstrap");
+
+  // A different configuration over a populated table must not re-seed, or a
+  // deliberately removed admin would keep coming back.
+  const other = createIdentityRepository(database, { bootstrapAdmins: ["someone-else@example.com"] });
+  await other.ensureTables();
+  assert.deepEqual((await other.listAdmins()).map((admin) => admin.email), ["seeded@example.com"]);
+});
+
+test("an admin can add another admin, who gains access immediately", async () => {
+  const admin = await signIn("admin@example.com");
+  assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "second@example.com", action: "add" }, admin))).status, 200);
+
+  // No redeploy in between: the new admin is authorised on their next request.
+  const second = await signIn("second@example.com");
+  assert.equal((await handlers.adminListClaims(get("/api/admin/claims", second))).status, 200);
+  assert.equal((await (await handlers.session(get("/api/auth/session", second))).json()).isAdmin, true);
+});
+
+test("adding the same admin twice is reported rather than duplicated", async () => {
+  const admin = await signIn("admin@example.com");
+  await handlers.adminManageAdmins(post("/api/admin/admins", { email: "dupe@example.com", action: "add" }, admin));
+  assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "dupe@example.com", action: "add" }, admin))).status, 409);
+  assert.equal((await repository.listAdmins()).filter((entry) => entry.email === "dupe@example.com").length, 1);
+});
+
+test("the roster cannot be emptied into a lockout", async () => {
+  const admin = await signIn("admin@example.com");
+
+  // Removing yourself is the easiest accidental lockout.
+  const self = await handlers.adminManageAdmins(post("/api/admin/admins", { email: "admin@example.com", action: "remove" }, admin));
+  assert.equal(self.status, 409);
+  assert.match((await self.json()).error, /不能移除自己/);
+
+  // And the final remaining admin is refused even from another account.
+  await handlers.adminManageAdmins(post("/api/admin/admins", { email: "temp@example.com", action: "add" }, admin));
+  const temp = await signIn("temp@example.com");
+  assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "admin@example.com", action: "remove" }, temp))).status, 200);
+
+  const last = await handlers.adminManageAdmins(post("/api/admin/admins", { email: "temp@example.com", action: "remove" }, temp));
+  assert.equal(last.status, 409, "the last admin must not be removable");
+  assert.equal((await repository.listAdmins()).length, 1);
+});
+
+test("a removed admin loses access at once", async () => {
+  const admin = await signIn("admin@example.com");
+  await handlers.adminManageAdmins(post("/api/admin/admins", { email: "fired@example.com", action: "add" }, admin));
+  const fired = await signIn("fired@example.com");
+  assert.equal((await handlers.adminListClaims(get("/api/admin/claims", fired))).status, 200);
+
+  await handlers.adminManageAdmins(post("/api/admin/admins", { email: "fired@example.com", action: "remove" }, admin));
+  assert.equal((await handlers.adminListClaims(get("/api/admin/claims", fired))).status, 403);
+});
+
+test("only an admin may read or change the roster", async () => {
+  const ordinary = await signIn("ordinary-roster@example.com");
+  assert.equal((await handlers.adminListAdmins(get("/api/admin/admins", ordinary))).status, 403);
+  assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "x@example.com", action: "add" }, ordinary))).status, 403);
+  assert.equal((await handlers.adminListAdmins(get("/api/admin/admins"))).status, 401);
+});
+
+test("rejects a malformed roster change", async () => {
+  const admin = await signIn("admin@example.com");
+  assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "admin@example.com", action: "promote" }, admin))).status, 400);
+  assert.equal((await handlers.adminManageAdmins(post("/api/admin/admins", { email: "not-an-email", action: "add" }, admin))).status, 400);
 });
 
 test("only a listed admin reaches the review queue", async () => {

@@ -88,11 +88,11 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, config }: PortalDependencies) {
-  // Both sides go through the same normalization as a stored account email.
-  // Comparing a raw configured string against a normalized one silently denies
-  // an admin whose address differs only in case or Unicode width.
-  const adminEmails = new Set(config.adminEmails.map(normalizeEmail).filter(Boolean));
-  const isAdmin = (email: string) => adminEmails.has(normalizeEmail(email));
+  // The roster lives in the database so it can change without a redeploy.
+  // Normalized on both sides, as a stored account email is: comparing a raw
+  // string against a normalized one silently denies an admin whose address
+  // differs only in case or Unicode width.
+  const isAdmin = (email: string) => repository.isAdminEmail(normalizeEmail(email));
 
   async function clientIpHash(request: Request) {
     const address = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "";
@@ -178,7 +178,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const signature = await hmacSign(config.sessionSecret, sessionId);
     await repository.writeAudit({ at: now, actorAccountId: accountId, actorRole: "circle", action: "auth.session_created", subjectType: "account", subjectId: accountId, ipHash: await clientIpHash(request) });
 
-    return json({ email, isAdmin: isAdmin(email) }, 200, {
+    return json({ email, isAdmin: await isAdmin(email) }, 200, {
       "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(SESSION_TTL_MS / 1000)),
     });
   }
@@ -186,7 +186,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   async function session(request: Request) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
-    return json({ email: current.email, isAdmin: isAdmin(current.email) });
+    return json({ email: current.email, isAdmin: await isAdmin(current.email) });
   }
 
   async function signOut(request: Request) {
@@ -394,7 +394,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   async function requireFreshAdmin(request: Request): Promise<AdminGate> {
     const current = await requireSession(request);
     if (!current) return { ok: false, response: json({ error: "尚未登入。" }, 401) };
-    if (!isAdmin(current.email)) return { ok: false, response: json({ error: "沒有權限。" }, 403) };
+    if (!await isAdmin(current.email)) return { ok: false, response: json({ error: "沒有權限。" }, 403) };
     if (config.now() - current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
       return { ok: false, response: json({ error: "管理操作需要重新登入。" }, 401) };
     }
@@ -444,6 +444,50 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     return ok ? json({ ok: true }) : json({ error: "此社團已有通過的認領。" }, 409);
   }
 
+  async function adminListAdmins(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const admins = await repository.listAdmins();
+    return json({
+      admins: admins.map((admin) => ({ email: admin.email, addedBy: admin.added_by, addedAt: admin.added_at })),
+      self: gate.session.email,
+    });
+  }
+
+  async function adminManageAdmins(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+
+    const body = await readJson(request);
+    const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+    const action = body?.action;
+    if (action !== "add" && action !== "remove") return json({ error: "action 必須是 add 或 remove。" }, 400);
+    if (!isEmailShaped(email)) return json({ error: "email 格式無效。" }, 400);
+
+    const now = config.now();
+    if (action === "add") {
+      const added = await repository.addAdmin(email, gate.session.email, now);
+      await repository.writeAudit({
+        at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "admin.added",
+        subjectType: "admin", subjectId: email, detail: { applied: added }, ipHash: await clientIpHash(request),
+      });
+      return added ? json({ ok: true }) : json({ error: "這個 email 已經是管理者。" }, 409);
+    }
+
+    // Removing yourself is the easiest way to lose the console by accident, and
+    // the roster must never be emptied. Another admin can always remove you.
+    if (email === normalizeEmail(gate.session.email)) {
+      return json({ error: "不能移除自己，請由其他管理者操作。" }, 409);
+    }
+    const result = await repository.removeAdmin(email);
+    await repository.writeAudit({
+      at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "admin.removed",
+      subjectType: "admin", subjectId: email, detail: { result }, ipHash: await clientIpHash(request),
+    });
+    if (result === "removed") return json({ ok: true });
+    return json({ error: result === "last" ? "這是最後一位管理者，無法移除。" : "找不到這位管理者。" }, 409);
+  }
+
   async function adminTakedown(request: Request) {
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
@@ -489,6 +533,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     listClaims, createClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride,
     adminListClaims, adminDecideClaim, adminTakedown,
+    adminListAdmins, adminManageAdmins,
     publicOverrides,
   };
 }
