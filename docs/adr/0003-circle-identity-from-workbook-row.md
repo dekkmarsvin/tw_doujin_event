@@ -1,6 +1,6 @@
 # ADR-0003：社團身分以試算表主資料列為準
 
-- 狀態：**已被 [ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 取代**（提案中，尚未實作）。在 ADR-0010 實作完成前，本文所述仍是現行實作。
+- 狀態：**已被 [ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 取代**（2026-08-13 決議，尚未實作）。在 ADR-0010 實作完成前，本文所述仍是現行實作。
 - 原狀態：已定案（2026-08-09 實作完成）
 - 相關契約：[社團目錄契約](../contracts/circle-catalog.md#社團身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)
 
