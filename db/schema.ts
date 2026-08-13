@@ -1,8 +1,15 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-// `drizzle.config.ts` points at this file alone, so the identity tables are
-// re-exported here to stay visible to `npm run db:generate`.
+// Re-exported so one import path covers every table's types.
+//
+// No table in this project reaches D1 through a migration. Pages Functions have
+// no migration step, so each repository creates what it needs on the request
+// path: `ensureTables()` in `db/identity-repository.ts` for the eight identity
+// tables, `ensureTable()` in `db/event-map-repository.ts` for `event_maps`.
+// These definitions and `drizzle/` are therefore a schema record, not a
+// deployment input — changing a column here changes nothing until the
+// corresponding DDL changes too.
 export * from "./identity-schema";
 
 export const eventMaps = sqliteTable("event_maps", {
