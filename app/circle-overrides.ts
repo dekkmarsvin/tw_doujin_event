@@ -56,7 +56,8 @@ export const OVERRIDE_LIMITS = {
 
 const LIST_FIELDS = ["creatorTypes", "ageRatings", "workTypes", "referencedWorks", "specialTags"] as const;
 
-const LINK_KINDS: readonly CircleTemplateLinkKind[] = ["social", "support", "website", "announcement", "catalog", "store", "sample"];
+/** The only accepted kinds. Exported so the editor cannot offer a value this file would reject. */
+export const LINK_KINDS: readonly CircleTemplateLinkKind[] = ["social", "support", "website", "announcement", "catalog", "store", "sample"];
 
 /**
  * Remote images are fetched by every reader who views the circle, so an
@@ -71,7 +72,8 @@ export const THUMBNAIL_HOST_ALLOWLIST: readonly string[] = [
   "i.imgur.com",
 ];
 
-function isHttpsUrl(value: unknown): value is string {
+/** Exported so the editor's inline warnings cannot disagree with this validator. */
+export function isHttpsUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   let url: URL;
   try {
@@ -84,7 +86,8 @@ function isHttpsUrl(value: unknown): value is string {
   return url.protocol === "https:";
 }
 
-function isAllowedThumbnailHost(value: string) {
+/** Exported for the same reason as `isHttpsUrl`: one host rule, not two. */
+export function isAllowedThumbnailHost(value: string) {
   try {
     return THUMBNAIL_HOST_ALLOWLIST.includes(new URL(value).hostname);
   } catch {
