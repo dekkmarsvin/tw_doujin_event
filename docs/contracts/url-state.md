@@ -34,6 +34,7 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 ## 規則
 
 - **`selectedCircle` 與 `selectedBooth` 必須互相驗證。** 兩者都在時取交集；只有 `selectedCircle` 時取該社團在該日的第一筆配置；無效或已變更的關聯降級為只開啟仍有效的活動與區域，**不顯示錯誤社團**。
+- **舊 hash deep link 在 selection seam 遷移。** `selectedCircle=ff47-*` 先經版本控制的 legacy mapping 解析為 allocated ID，再與日期／攤位取交集；成功恢復後只會重新序列化 canonical `c-*`，未知 legacy ID fail closed。
 - **採多活動資料模型、單一 active-event UI。** codec 與 workspace projection 都接受 event definition；`event` 缺少時使用 active event，等於其他活動時整份 query fail closed 回 active event defaults，不讓篩選或選取跨活動洩漏。加入第二個活動前不先顯示活動選擇器。
 - **defaults 從 event definition 推導。** `day`、`area` 與 genre 預設分別取活動定義的第一筆，不在 codec 內硬編碼 FF47 的 `1`、`ALL` 或「全部類別」。
 - **恢復時機**：初始化、重新整理與 `popstate` 必須恢復篩選及選取。地圖資料延後完成時，以保存的攤位代碼重新聚焦。

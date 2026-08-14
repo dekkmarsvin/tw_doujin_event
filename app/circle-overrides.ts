@@ -9,10 +9,11 @@ export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
  *
  * The circle name is absent too, matching Comic Market's circle editor, which
  * lets a circle correct its credited author but never its own name. Here the
- * name additionally keys booth matching and the thumbnail index, and is half
- * the input to the circle id hash — changing it would detach the circle from
- * its placements and from every reader's saved favorites. A wrong name is
- * corrected upstream in the reviewed workbook, which is the single source.
+ * name additionally keys booth matching and the thumbnail index. ADR-0010
+ * removed it from identity allocation, but did not remove those two reviewed
+ * joins; changing it here could still detach a circle from organizer data. A
+ * wrong name is corrected in the reviewed source rather than by an unverified
+ * self-authored overlay.
  *
  * An absent key inherits the reviewed catalog value; a present key replaces it
  * wholesale. Arrays are never merged item-by-item — that is impossible to
