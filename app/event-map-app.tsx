@@ -1,18 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
-import AccessibleEventMapRenderer, { type MapSlotView } from "./accessible-event-map-renderer";
+import AccessibleEventMapRenderer from "./accessible-event-map-renderer";
 import { loadStaticEventMap } from "./static-event-map-client";
 import { FF47_EVENT_ID, type PublishedEventMap } from "./event-map";
-import { circleIdMigrationTargets, circleSearchText, type CircleViewRecord } from "./circle-records";
+import { circleIdMigrationTargets, type CircleViewRecord } from "./circle-records";
 import { useCircleCatalog } from "./use-circle-catalog";
 import { CircleDetails, DayItinerary, SearchResults, type ActiveResultFilter } from "./event-workspace-panels";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
 import {
   DEFAULT_ADVANCED_CIRCLE_SEARCH,
   advancedCircleSearchCount,
-  buildWorkTopicSuggestions,
-  matchesAdvancedCircleSearch,
   type AdvancedCircleSearch,
 } from "./circle-search";
 import PlanningDisplayControls, { DEFAULT_PLANNING_DISPLAY_FILTERS, type PlanningDisplayFilters } from "./display-filter-controls";
@@ -36,6 +34,8 @@ import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
 import { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin, type MapView } from "./map-viewport";
 import { eventUsesAreaSwitcher, FF47_EVENT, type FF47Area, type FF47Day } from "./event-catalog";
+import { historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
+import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
 import styles from "./event-map-app.module.css";
 
@@ -50,24 +50,14 @@ type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
   | ({ kind: "pinch" } & MapPinchOrigin);
 
-function parseDay(value: string | null): FF47Day | null {
-  const day = Number(value);
-  return FF47_EVENT.days.some((item) => item.id === day) ? day as FF47Day : null;
-}
-
-function parseArea(value: string | null): Hall {
-  if (!eventUsesAreaSwitcher(FF47_EVENT)) return "ALL";
-  return FF47_EVENT.areas.some((area) => area.id === value) ? value as Hall : "ALL";
-}
-
 export default function EventMapApp() {
   const showAreaSwitcher = eventUsesAreaSwitcher(FF47_EVENT);
   const { catalog, status: catalogStatus, error: catalogError } = useCircleCatalog(FF47_EVENT_ID);
   const { records: circleRecords, recordsById: circleRecordsById, recordsByCircleId: circleRecordsByCircleId } = catalog;
   const catalogReady = catalogStatus === "ready";
   const [day, setDay] = useState<FF47Day>(FF47_EVENT.days[0].id);
-  const [hall, setHall] = useState<Hall>("ALL");
-  const [genre, setGenre] = useState("全部類別");
+  const [hall, setHall] = useState<Hall>(FF47_EVENT.areas[0].id);
+  const [genre, setGenre] = useState<string>(FF47_EVENT.genres[0]);
   const [query, setQuery] = useState("");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [advancedSearch, setAdvancedSearch] = useState<AdvancedCircleSearch>(DEFAULT_ADVANCED_CIRCLE_SEARCH);
@@ -106,7 +96,7 @@ export default function EventMapApp() {
   const suppressUrlWrite = useRef(false);
   const lastAutoSelection = useRef("");
   const pendingRestoreCode = useRef<string | null>(null);
-  const pendingSelection = useRef<{ day: FF47Day; circleId: string | null; boothCode: string | null } | null>(null);
+  const pendingSelection = useRef<PendingCircleSelection<FF47Day> | null>(null);
   const previousFitZoom = useRef(0);
   const mapWasFitted = useRef(false);
   const floorHeight = 950;
@@ -158,42 +148,18 @@ export default function EventMapApp() {
 
   useEffect(() => {
     const restore = (fromHistory = false) => {
-      const url = new URL(window.location.href);
-      const restoredDay = parseDay(url.searchParams.get("day")) ?? 1;
-      const restoredArea = url.searchParams.get("area") ?? url.searchParams.get("hall");
-      const nextHall = parseArea(restoredArea);
-      const restoredQuery = url.searchParams.get("query") ?? "";
-      const restoredGenre = url.searchParams.get("genre");
-      const restoredVisit = url.searchParams.get("visit");
-      const restoredSort = url.searchParams.get("sort");
-      const restoredDensity = url.searchParams.get("density");
-      const restoredMedia = Number(url.searchParams.get("media"));
-      const restoredWorkType = url.searchParams.get("workType");
-      const restoredAdultContent = url.searchParams.get("r18");
-      const selectedCircle = url.searchParams.get("selectedCircle");
-      const selectedBooth = url.searchParams.get("selectedBooth");
+      const { state } = parseEventUrlState(FF47_EVENT, window.location.href);
       // The catalog snapshot may still be in flight. Filters restore now; the
       // shared circle/booth selection is resolved once records are available.
-      pendingSelection.current = { day: restoredDay, circleId: selectedCircle, boothCode: selectedBooth };
+      pendingSelection.current = state.selection;
       if (fromHistory) suppressUrlWrite.current = true;
-      setDay(restoredDay);
-      setHall(nextHall);
-      setQuery(restoredQuery);
-      setGenre(restoredGenre && GENRES.includes(restoredGenre) ? restoredGenre : "全部類別");
-      setFavoriteOnly(url.searchParams.get("favorite") === "1");
-      setAdvancedSearch({
-        creatorType: url.searchParams.get("creator") ?? "ALL",
-        workQuery: url.searchParams.get("work") ?? "",
-        workType: restoredWorkType === "original" ? "原創" : restoredWorkType === "derivative" ? "二創" : "ALL",
-        adultContent: restoredAdultContent === "include" ? "R18" : restoredAdultContent === "general" || restoredAdultContent === "exclude" ? "GENERAL" : "ALL",
-      });
-      setPlanningDisplay({
-        favoriteGroupId: url.searchParams.get("favoriteGroup") ?? "ALL",
-        visitStatus: restoredVisit === "planned" || restoredVisit === "next" || restoredVisit === "visited" || restoredVisit === "not-planned" ? restoredVisit : "ALL",
-        sort: restoredSort === "name" || restoredSort === "updated" ? restoredSort : "booth",
-        density: restoredDensity === "compact" ? "compact" : "informative",
-        mediaCount: restoredMedia === 1 || restoredMedia === 3 ? restoredMedia : 0,
-      });
+      setDay(state.day);
+      setHall(state.area);
+      setQuery(state.query);
+      setGenre(state.genre);
+      setFavoriteOnly(state.favoriteOnly);
+      setAdvancedSearch(state.advancedSearch);
+      setPlanningDisplay(state.planningDisplay);
     };
     queueMicrotask(() => {
       restore();
@@ -303,107 +269,43 @@ export default function EventMapApp() {
     // Hold the URL untouched while the catalog snapshot is still downloading, so
     // a shared circle link is never rewritten away before it can be resolved.
     if (!urlReady || catalogStatus === "loading") return;
-    if (suppressUrlWrite.current) {
+    if (!shouldWriteEventUrl({ urlReady, catalogStatus, restoringFromPopstate: suppressUrlWrite.current })) {
       suppressUrlWrite.current = false;
       return;
     }
-    const url = new URL(window.location.href);
-    url.searchParams.set("event", FF47_EVENT_ID);
-    url.searchParams.set("day", String(day));
-    url.searchParams.set("area", hall);
-    url.searchParams.delete("hall");
-    if (query.trim()) url.searchParams.set("query", query.trim()); else url.searchParams.delete("query");
-    if (genre !== "全部類別") url.searchParams.set("genre", genre); else url.searchParams.delete("genre");
-    if (favoriteOnly) url.searchParams.set("favorite", "1"); else url.searchParams.delete("favorite");
-    if (advancedSearch.creatorType !== "ALL") url.searchParams.set("creator", advancedSearch.creatorType); else url.searchParams.delete("creator");
-    if (advancedSearch.workQuery.trim()) url.searchParams.set("work", advancedSearch.workQuery.trim()); else url.searchParams.delete("work");
-    if (advancedSearch.workType !== "ALL") url.searchParams.set("workType", advancedSearch.workType === "原創" ? "original" : "derivative"); else url.searchParams.delete("workType");
-    if (advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", advancedSearch.adultContent === "R18" ? "include" : "general"); else url.searchParams.delete("r18");
-    if (planningDisplay.favoriteGroupId !== "ALL") url.searchParams.set("favoriteGroup", planningDisplay.favoriteGroupId); else url.searchParams.delete("favoriteGroup");
-    if (planningDisplay.visitStatus !== "ALL") url.searchParams.set("visit", planningDisplay.visitStatus); else url.searchParams.delete("visit");
-    if (planningDisplay.sort !== "booth") url.searchParams.set("sort", planningDisplay.sort); else url.searchParams.delete("sort");
-    if (planningDisplay.density !== "informative") url.searchParams.set("density", planningDisplay.density); else url.searchParams.delete("density");
-    if (planningDisplay.mediaCount) url.searchParams.set("media", String(planningDisplay.mediaCount)); else url.searchParams.delete("media");
     const selected = circleRecordsById.get(selectedRecordId ?? "");
-    if (selected) {
-      url.searchParams.set("selectedCircle", selected.circle.id);
-      url.searchParams.set("selectedBooth", selected.code);
-    } else {
-      url.searchParams.delete("selectedCircle");
-      url.searchParams.delete("selectedBooth");
-    }
-    const method = historyIntent.current === "push" ? "pushState" : "replaceState";
+    const url = serializeEventUrlState(FF47_EVENT, {
+      eventId: FF47_EVENT.id, day, area: hall, query, genre, favoriteOnly, advancedSearch, planningDisplay,
+      selection: { day, circleId: selected?.circle.id ?? null, boothCode: selected?.code ?? null },
+    }, window.location.href);
+    const method = historyMethod(historyIntent.current, false);
+    if (method === "none") return;
     window.history[method](null, "", url);
     historyIntent.current = "replace";
   }, [advancedSearch, catalogStatus, circleRecordsById, day, favoriteOnly, genre, hall, planningDisplay, query, selectedRecordId, urlReady]);
 
-  const favorites = useMemo(() => planning.favorites.filter((item) => item.eventId === FF47_EVENT_ID), [planning.favorites]);
-  const favoriteIds = useMemo(() => new Set(favorites.map((item) => item.circleId)), [favorites]);
-  const favoriteGroupLabels = useMemo(() => {
-    const groups = new Map(planning.favoriteGroups.map((group) => [group.id, group.name]));
-    return new Map(favorites.flatMap((favorite) => favorite.groupId && groups.has(favorite.groupId) ? [[favorite.circleId, groups.get(favorite.groupId)!] as const] : []));
-  }, [favorites, planning.favoriteGroups]);
-  const dayPlan = useMemo(() => planning.visitPlans.filter((item) => item.eventId === FF47_EVENT_ID && item.day === day).sort((a, b) => a.routeOrder - b.routeOrder), [day, planning.visitPlans]);
-  const plansById = useMemo(() => new Map(dayPlan.map((entry) => [entry.circleId, entry])), [dayPlan]);
-  const dayRecordsByCircleId = useMemo(() => new Map(circleRecords
-    .filter((record) => record.day === day)
-    .map((record) => [record.circle.id, record] as const)), [circleRecords, day]);
-  const selected = circleRecordsById.get(selectedRecordId ?? "") ?? null;
-  const selectedFavorite = selected ? favorites.find((item) => item.circleId === selected.circle.id) ?? null : null;
-  const selectedPlan = selected ? plansById.get(selected.circle.id) ?? null : null;
-  const nextEntry = dayPlan.find((entry) => entry.status === "next") ?? null;
-  const nextRecord = nextEntry ? dayRecordsByCircleId.get(nextEntry.circleId) ?? null : null;
-  const navigationTargetEntry = nextEntry ?? dayPlan.find((entry) => entry.status !== "visited") ?? null;
-  const navigationTargetRecord = navigationTargetEntry ? dayRecordsByCircleId.get(navigationTargetEntry.circleId) ?? null : null;
-  const visitedCount = dayPlan.filter((entry) => entry.status === "visited").length;
-  const sharedRecords = selected ? circleRecords.filter((record) => record.day === selected.day && record.code === selected.code) : [];
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    const visible = circleRecords.filter((record) => {
-      const favorite = favorites.find((item) => item.circleId === record.circle.id);
-      const plan = plansById.get(record.circle.id);
-      const groupMatches = planningDisplay.favoriteGroupId === "ALL" || (planningDisplay.favoriteGroupId === "UNGROUPED" ? !!favorite && !favorite.groupId : favorite?.groupId === planningDisplay.favoriteGroupId);
-      const visitMatches = planningDisplay.visitStatus === "ALL" || (planningDisplay.visitStatus === "not-planned" ? !plan : plan?.status === planningDisplay.visitStatus);
-      return record.day === day
-      && (hall === "ALL" || record.hall === hall)
-      && (genre === "全部類別" || record.genre === genre)
-      && (!favoriteOnly || favoriteIds.has(record.circle.id))
-      && groupMatches && visitMatches
-      && matchesAdvancedCircleSearch(record, advancedSearch)
-      && (!needle || circleSearchText(record).includes(needle));
-    });
-    return visible.sort((a, b) => {
-      if (planningDisplay.sort === "name") return a.name.localeCompare(b.name, "zh-Hant");
-      if (planningDisplay.sort === "updated") {
-        const updated = (record: CircleViewRecord) => favorites.find((item) => item.circleId === record.circle.id)?.updatedAt ?? plansById.get(record.circle.id)?.updatedAt ?? record.sources[0]?.fetchedAt ?? "";
-        return updated(b).localeCompare(updated(a)) || a.code.localeCompare(b.code, undefined, { numeric: true });
-      }
-      return a.code.localeCompare(b.code, undefined, { numeric: true }) || a.name.localeCompare(b.name, "zh-Hant");
-    });
-  }, [advancedSearch, circleRecords, day, favoriteIds, favoriteOnly, favorites, genre, hall, planningDisplay, plansById, query]);
-
-  const mapRecords = useMemo(() => navigationMode
-    ? dayPlan.flatMap((entry) => (circleRecordsByCircleId.get(entry.circleId) ?? []).filter((record) => record.day === day))
-    : filtered,
-  [circleRecordsByCircleId, day, dayPlan, filtered, navigationMode]);
-
-  const workTopicSuggestions = useMemo(() => buildWorkTopicSuggestions(circleRecords), [circleRecords]);
-  const genreCounts = useMemo(() => {
-    const counts = new Map<string, number>(GENRES.map((value) => [value, 0]));
-    circleRecords.forEach((record) => {
-      if (record.day !== day) return;
-      counts.set("全部類別", (counts.get("全部類別") ?? 0) + 1);
-      if (counts.has(record.genre)) counts.set(record.genre, (counts.get(record.genre) ?? 0) + 1);
-    });
-    return counts;
-  }, [circleRecords, day]);
-
-  const markers = useMemo(() => {
-    const byCode = new Map<string, CircleViewRecord[]>();
-    mapRecords.forEach((record) => byCode.set(record.code, [...(byCode.get(record.code) ?? []), record]));
-    return [...byCode.entries()].map(([code, records]) => ({ code, records }));
-  }, [mapRecords]);
-  const markersByCode = useMemo(() => new Map(markers.map((marker) => [marker.code, marker])), [markers]);
+  const workspace = useMemo(() => projectEventWorkspace({
+    event: FF47_EVENT,
+    records: circleRecords,
+    recordsById: circleRecordsById,
+    recordsByCircleId: circleRecordsByCircleId,
+    planning,
+    day,
+    area: hall,
+    genre,
+    query,
+    favoriteOnly,
+    advancedSearch,
+    planningDisplay,
+    navigationMode,
+    selectedRecordId,
+  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, favoriteOnly, genre, hall, navigationMode, planning, planningDisplay, query, selectedRecordId]);
+  const {
+    favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
+    selected, selectedFavorite, selectedPlan, nextRecord, navigationTargetRecord,
+    visitedCount, sharedRecords, filtered, workTopicSuggestions, genreCounts, markersByCode, slots,
+    activeFilterDescriptors,
+  } = workspace;
 
   const focusCode = useCallback((code: string) => {
     if (!publishedMap || !mapRef.current) return;
@@ -444,30 +346,7 @@ export default function EventMapApp() {
     selectRecord(filtered[0], "details", false);
   }, [day, favoriteOnly, filtered, genre, hall, query, selectRecord]);
 
-  const slots = useMemo(() => Object.fromEntries(markers.map((marker): [string, MapSlotView] => {
-    const representative = marker.records[0];
-    const planEntries = marker.records.flatMap((record) => plansById.get(record.circle.id) ?? []);
-    const favorite = marker.records.some((record) => favoriteIds.has(record.circle.id));
-    const statusLabels = [
-      favorite ? "已收藏" : "",
-      planEntries.some((entry) => entry.status === "next") ? "下一站" : "",
-      planEntries.some((entry) => entry.status === "visited") ? "已走訪" : "",
-      planEntries.some((entry) => entry.status === "planned") ? "待前往" : "",
-    ].filter(Boolean);
-    return [marker.code, {
-      tone: representative.tone,
-      label: marker.records.map((record) => record.name).join("、"),
-      ariaLabel: [marker.code, marker.records.map((record) => record.name).join("、"), ...statusLabels, marker.records.map((record) => record.genre).join("、")].join("，"),
-      selected: selected?.day === day && selected.code === marker.code,
-      favorite,
-      planned: planEntries.length > 0,
-      next: planEntries.some((entry) => entry.status === "next"),
-      visited: planEntries.some((entry) => entry.status === "visited"),
-      thumbnailUrl: representative.circle.media[0]?.url,
-    }];
-  })), [day, favoriteIds, markers, plansById, selected]);
-
-  const clearResultFilters = () => { historyIntent.current = "push"; setGenre("全部類別"); setFavoriteOnly(false); setHall("ALL"); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
+  const clearResultFilters = () => { historyIntent.current = "push"; setGenre(FF47_EVENT.genres[0]); setFavoriteOnly(false); setHall(FF47_EVENT.areas[0].id); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
   const clearFilters = () => { clearResultFilters(); setQuery(""); };
   const resetAdvancedSearch = () => { historyIntent.current = "push"; setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); };
   const resetMap = () => {
@@ -494,7 +373,7 @@ export default function EventMapApp() {
     const enabled = !navigationMode;
     setNavigationMode(enabled);
     if (!enabled) return;
-    setHall("ALL");
+    setHall(FF47_EVENT.areas[0].id);
     setMobilePanel(navigationTargetRecord ? "details" : "plan");
     setMobileSheetLevel("half");
     if (navigationTargetRecord) selectRecord(navigationTargetRecord, "details", false);
@@ -625,17 +504,21 @@ export default function EventMapApp() {
   const planningControls = <PlanningDisplayControls value={planningDisplay} groups={planning.favoriteGroups} onApply={(next) => { historyIntent.current = "push"; setPlanningDisplay(next); }} />;
   const planningPanel = <div className={styles.planningPanel}>{planningControls}{fullItineraryPanel}</div>;
   const resultSetKey = `${day}|${hall}|${genre}|${favoriteOnly}|${advancedSearch.creatorType}|${advancedSearch.workQuery}|${advancedSearch.workType}|${advancedSearch.adultContent}|${planningDisplay.favoriteGroupId}|${planningDisplay.visitStatus}|${planningDisplay.sort}|${planningDisplay.density}|${planningDisplay.mediaCount}|${query}`;
-  const activeResultFilters: ActiveResultFilter[] = [
-    ...(showAreaSwitcher && hall !== "ALL" ? [{ id: "area", label: hall === "A" ? "A–K 區" : "L–W 區", onClear: () => { historyIntent.current = "push"; setHall("ALL"); } }] : []),
-    ...(genre !== "全部類別" ? [{ id: "genre", label: genre, onClear: () => { historyIntent.current = "push"; setGenre("全部類別"); } }] : []),
-    ...(favoriteOnly ? [{ id: "favorite", label: "只看收藏", onClear: () => { historyIntent.current = "push"; setFavoriteOnly(false); } }] : []),
-    ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", label: `創作者：${advancedSearch.creatorType}`, onClear: () => { historyIntent.current = "push"; setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" })); } }] : []),
-    ...(advancedSearch.workQuery ? [{ id: "work", label: `作品：${advancedSearch.workQuery}`, onClear: () => { historyIntent.current = "push"; setAdvancedSearch((current) => ({ ...current, workQuery: "" })); } }] : []),
-    ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type", label: advancedSearch.workType, onClear: () => { historyIntent.current = "push"; setAdvancedSearch((current) => ({ ...current, workType: "ALL" })); } }] : []),
-    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", label: advancedSearch.adultContent === "R18" ? "只看 R18" : "只看一般", onClear: () => { historyIntent.current = "push"; setAdvancedSearch((current) => ({ ...current, adultContent: "ALL" })); } }] : []),
-    ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : planning.favoriteGroups.find((group) => group.id === planningDisplay.favoriteGroupId)?.name ?? "收藏群組", onClear: () => { historyIntent.current = "push"; setPlanningDisplay((current) => ({ ...current, favoriteGroupId: "ALL" })); } }] : []),
-    ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus], onClear: () => { historyIntent.current = "push"; setPlanningDisplay((current) => ({ ...current, visitStatus: "ALL" })); } }] : []),
-  ];
+  const activeResultFilters: ActiveResultFilter[] = activeFilterDescriptors.map((filter) => ({
+    ...filter,
+    onClear: () => {
+      historyIntent.current = "push";
+      if (filter.id === "area") setHall(FF47_EVENT.areas[0].id);
+      if (filter.id === "genre") setGenre(FF47_EVENT.genres[0]);
+      if (filter.id === "favorite") setFavoriteOnly(false);
+      if (filter.id === "creator") setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" }));
+      if (filter.id === "work") setAdvancedSearch((current) => ({ ...current, workQuery: "" }));
+      if (filter.id === "work-type") setAdvancedSearch((current) => ({ ...current, workType: "ALL" }));
+      if (filter.id === "adult") setAdvancedSearch((current) => ({ ...current, adultContent: "ALL" }));
+      if (filter.id === "favorite-group") setPlanningDisplay((current) => ({ ...current, favoriteGroupId: "ALL" }));
+      if (filter.id === "visit") setPlanningDisplay((current) => ({ ...current, visitStatus: "ALL" }));
+    },
+  }));
   const resultsPanel = <SearchResults key={resultSetKey} records={filtered} catalogStatus={catalogStatus} catalogError={catalogError} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
   const detailActions = {
     onSelectShared: selectRecord,
@@ -647,7 +530,7 @@ export default function EventMapApp() {
   };
   const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact onClose={() => { historyIntent.current = "push"; setSelectedRecordId(null); setShowFullDetail(false); }} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
   const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
-  const clearFiltersClassName = `${styles.clearFilters} ${genre !== "全部類別" ? styles.clearFiltersActive : ""}`;
+  const clearFiltersClassName = `${styles.clearFilters} ${genre !== FF47_EVENT.genres[0] ? styles.clearFiltersActive : ""}`;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
     <header><div><small>FILTERS</small><b>篩選攤位</b></div><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></header>
     <fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset>

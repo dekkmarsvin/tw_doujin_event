@@ -54,6 +54,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 **閱讀端**
 
 - `app/event-map-app.tsx`：搜尋、地圖、詳情與行程工作區
+- `app/event-url-state.ts`、`app/event-workspace-projection.ts`：多活動 URL round-trip 與桌機／手機／地圖共用的衍生狀態
 - `app/accessible-event-map-renderer.tsx`：可用鍵盤操作的 SVG 地圖 renderer
 - `app/circle-records.ts`：社團與配置的型別、索引與讀取模型投影
 - `app/circle-search.ts`、`app/advanced-circle-search.tsx`：探索搜尋與詳細搜尋
