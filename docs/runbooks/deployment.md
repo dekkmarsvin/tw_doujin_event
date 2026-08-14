@@ -27,9 +27,10 @@ production 的五個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 `SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）
 
-preview 不使用 production Mailgun，也不寄外部郵件。`wrangler.jsonc` 的 `env.preview.vars` 明確啟用 D1 mail sink，只允許 `preview-admin@example.test` 與 `preview-circle@example.test`，並以第一個地址作 preview admin seed。這些都是保留的 `.test` 假地址，不是真實收件人。preview 另需三個與 production 分離的 secret：
+preview 不使用 production Mailgun，也不寄外部郵件。`wrangler.jsonc` 的 `env.preview.vars` 明確啟用 D1 mail sink，只允許 `preview-admin@example.test` 與 `preview-circle@example.test`。這些都是保留的 `.test` 假地址，不是真實收件人。preview 另需四個與 production 分離的 secret：
 
 - `SESSION_SECRET`、`HASH_PEPPER`：preview 專用亂數。
+- `ADMIN_EMAILS`：固定設為 `preview-admin@example.test`；使用 secret binding，避免與 Pages 既有 binding 衝突。
 - `PREVIEW_E2E_TOKEN`：只授權 CI 讀取／清空 preview mail sink；同一值同時設定為 Pages preview secret 與 GitHub Actions secret。
 
 ```bash
