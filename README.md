@@ -2,7 +2,7 @@
 
 同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，支援桌面與行動版。
 
-公開閱讀路徑是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務，不經過任何 Worker。另有一個獨立入口 `/circle` 供參展社團登入並維護自己的補充資料，由 `functions/` 下的 Pages Functions 與 D1 承載。
+公開閱讀的 reviewed base 是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務。社團自填資料則由公開的 Pages Function overlay 疊加；overlay 無法讀取時仍顯示完整 base。另有一個獨立入口 `/circle` 供參展社團登入並維護補充資料，由 `functions/` 與 D1 承載。publication 與離線邊界見[交付與離線契約](docs/contracts/delivery-and-offline.md)。
 
 地圖辨識與細部編輯器是本機 authoring 工具，不是公開 Pages 入口的一部分。
 
@@ -75,7 +75,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 - `public/data/events/ff47/map.json`：地圖快照
 - `public/fonts/`：自託管 Geist / Geist Mono 字型與授權
 - `data_source_test/`：FF47 公開整理資料與配置圖測試輸入
-- `scripts/`：資料生成、快照匯出、來源同步與認領檢查
+- `scripts/`：資料生成、快照匯出、來源同步、identity registry 與 cutover 工具
 
 **本機 authoring（不部署到 Pages）**
 

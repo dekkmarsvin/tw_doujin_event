@@ -190,8 +190,9 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
   // `categories`, `work`, `media` and `circleSearchText` all pick it up, so
   // edited text becomes searchable without any extra code.
   const fields = override?.fields;
-  // Not overridable: the name keys booth matching, the thumbnail index and the
-  // circle id hash, so it stays whatever the reviewed sources say.
+  // Not overridable: ADR-0010 removed the name from identity allocation, but
+  // it still keys booth matching and the thumbnail index (ADR-0007), so it
+  // stays whatever the reviewed sources say.
   const name = template?.name ?? booth?.name ?? "未命名社團";
   const creatorTypes = fields?.creatorTypes ?? template?.creatorTypes ?? [];
   const workTypes = fields?.workTypes ?? template?.workTypes ?? [];
