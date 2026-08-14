@@ -28,7 +28,7 @@
 
 ## 可編輯範圍
 
-**可編輯，儲存後即時生效**：販售資訊、筆名、連結、縮圖、作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
+**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
 
 **永不開放**：攤位、日期、`SourceLink`。
 
@@ -67,7 +67,7 @@
 
 ## 儲存前預覽
 
-編輯即時生效，**因此預覽更重要而非更不重要**：錯誤會立刻對外，社團沒有機會先看到自己寫的內容長什麼樣。
+編輯會在公開 overlay 下一次 revalidation（最長約一分鐘）生效，**因此預覽更重要而非更不重要**：錯誤會很快對外，社團沒有機會先看到自己寫的內容長什麼樣。
 
 `POST /api/circle/:circleId/preview` 以**閱讀端自己的投影元件**渲染草稿，唯讀、不寫入任何資料。預覽必須重用閱讀端元件，否則預覽會與實際呈現漂移。
 
@@ -93,7 +93,7 @@
 - **不得移除自己，也不得移除最後一位管理者**——兩者都是把自己鎖在門外的最短路徑。
 - 名單為空時由 `ADMIN_EMAILS` 設定值重新灌入，作為救援路徑。上面兩道限制讓它不會正常地走到那一步。
 - 管理者位址比對前先做與儲存時相同的正規化。
-- 管理者可**即時撤下**任何社團補充資料；撤下後該筆立刻自公開文件消失，不需用戶端邏輯配合。
+- 管理者可撤下任何社團補充資料；D1 公開文件立即移除，讀者端最長約一分鐘 revalidation 後不再顯示，不需額外用戶端內容過濾。
 
 ## 媒體安全
 
@@ -101,7 +101,7 @@
 
 ## 公開端點
 
-`/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 ETag。閱讀端把它疊加在靜態 `circles.json` 之上。
+`/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 strong ETag，使用 `public, max-age=60, must-revalidate`。閱讀端把它疊加在靜態 `circles.json` 之上；讀取失敗或 event mismatch 時只用 reviewed base。
 
 ## 驗收條件
 

@@ -487,6 +487,12 @@ test("only a listed admin reaches the review queue", async () => {
   assert.equal((await handlers.adminListClaims(get("/api/admin/claims", admin))).status, 200);
 });
 
+test("the generic public route rejects an event that does not match handler config", async () => {
+  const response = await handlers.publicOverrides(get("/data/events/other/overrides.json"), "other");
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
 test("a fresh admin can run the explicit identity cutover and safely retry it", async () => {
   const admin = await signIn("admin@example.com");
   const owner = await signIn("migration-owner@example.com");

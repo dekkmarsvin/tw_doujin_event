@@ -176,7 +176,7 @@ export default function EventMapApp() {
     const pending = pendingSelection.current;
     if (!pending || !catalogReady) return;
     pendingSelection.current = null;
-    const canonicalCircleId = pending.circleId ? circleIdMigrationTargets(pending.circleId)[0] ?? pending.circleId : null;
+    const canonicalCircleId = pending.circleId ? circleIdMigrationTargets(pending.circleId, FF47_EVENT_ID)[0] ?? pending.circleId : null;
     const selected = resolveCircleSelection(circleRecords, circleRecordsById, pending.day, canonicalCircleId, pending.boothCode);
     setSelectedRecordId(selected?.recordId ?? null);
     setMobilePanel(selected ? "details" : "results");

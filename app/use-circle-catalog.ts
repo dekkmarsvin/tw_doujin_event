@@ -1,34 +1,24 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
-import { failCircleCatalog, getCircleCatalogState, setCircleCatalog, setCircleOverrides, subscribeCircleCatalog } from "./circle-records";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { createCatalogPublication } from "./catalog-publication";
 import { loadStaticCircleCatalog } from "./static-circle-catalog-client";
 import { loadStaticCircleOverrides } from "./static-circle-overrides-client";
 
-let started = false;
+/** Production-shaped HTTP adapter; tests inject the same two-port interface. */
+export const browserCatalogPublication = createCatalogPublication({
+  loadBase: loadStaticCircleCatalog,
+  loadOverlay: loadStaticCircleOverrides,
+});
 
 /**
- * Read the shared catalog and start its one-time fetch. The store lives outside
- * React so non-component callers (planning migration, transfer) see the same
- * snapshot, while every mounted surface re-renders when it arrives.
- *
- * The reviewed base snapshot paints first; circle-authored content is layered
- * on afterwards and its failure is non-fatal. An offline first load, a 500, or
- * an expired Access session therefore degrades to the full base catalog rather
- * than to an error state.
+ * Read one event's shared catalog and start that event's one-time publication
+ * load. Base paints first; an unavailable overlay leaves the reviewed catalog
+ * complete and records that freshness could not be confirmed.
  */
 export function useCircleCatalog(eventId: string) {
-  useEffect(() => {
-    if (started) return;
-    started = true;
-    void loadStaticCircleCatalog(eventId)
-      .then(async (payload) => {
-        setCircleCatalog(payload);
-        const overrides = await loadStaticCircleOverrides(eventId).catch(() => undefined);
-        if (overrides) setCircleOverrides(overrides);
-      })
-      .catch((error) => failCircleCatalog(error instanceof Error ? error.message : "讀取社團資料失敗。"));
-  }, [eventId]);
-
-  return useSyncExternalStore(subscribeCircleCatalog, getCircleCatalogState, getCircleCatalogState);
+  useEffect(() => { void browserCatalogPublication.load(eventId); }, [eventId]);
+  const subscribe = useCallback((listener: () => void) => browserCatalogPublication.subscribe(eventId, listener), [eventId]);
+  const snapshot = useCallback(() => browserCatalogPublication.getSnapshot(eventId), [eventId]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
 }

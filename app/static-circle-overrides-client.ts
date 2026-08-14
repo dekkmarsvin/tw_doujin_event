@@ -1,18 +1,19 @@
 import { parseCircleOverridesPayload, type CircleOverridesPayload } from "./circle-overrides";
+import type { PublicationResource } from "./catalog-publication";
 
 function endpoint(eventId: string) {
   return `/data/events/${encodeURIComponent(eventId)}/overrides.json`;
 }
 
 /**
- * Read circle-authored content. Served from the `/data/events/` namespace so it
- * inherits the service worker's stale-while-revalidate rule and the same cache
- * headers as the base snapshot — the overlay is offline-capable for free.
+ * Read circle-authored content. The service worker gives the namespace the same
+ * stale-while-revalidate offline strategy as static data, but freshness is not
+ * the same: this Function response owns max-age=60 + a strong ETag.
  *
  * Deliberately anonymous — the request carries no session, so the response
  * stays edge-cacheable and the public read path never authenticates.
  */
-export async function loadStaticCircleOverrides(eventId: string): Promise<CircleOverridesPayload> {
+export async function loadStaticCircleOverrides(eventId: string): Promise<PublicationResource<CircleOverridesPayload>> {
   const response = await fetch(endpoint(eventId), {
     headers: { accept: "application/json" },
   });
@@ -20,5 +21,6 @@ export async function loadStaticCircleOverrides(eventId: string): Promise<Circle
 
   const payload = parseCircleOverridesPayload(await response.json());
   if (!payload) throw new Error("社團補充資料格式無效。");
-  return payload;
+  if (payload.eventId !== eventId) throw new Error(`社團補充資料屬於 ${payload.eventId}，不是要求的 ${eventId}。`);
+  return { payload, cacheControl: response.headers.get("cache-control"), etag: response.headers.get("etag") };
 }

@@ -1,5 +1,5 @@
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
-import { buildCircleCatalog, normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
+import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
 import { FF47_ENDS_AT, FF47_EVENT } from "../app/event-catalog";
@@ -25,7 +25,9 @@ async function catalog(env: PortalEnv, request: Request, eventId: string) {
     const url = new URL(`/data/events/${encodeURIComponent(eventId)}/circles.json`, request.url);
     const response = await env.ASSETS.fetch(new Request(url.toString()));
     if (!response.ok) throw new Error(`無法讀取活動社團資料（${response.status}）。`);
-    const payload = await response.json() as CircleCatalogPayload;
+    const value: unknown = await response.json();
+    if (!isCircleCatalogPayload(value) || value.eventId !== eventId) throw new Error(`活動 ${eventId} 的靜態社團資料格式或 identity 無效。`);
+    const payload: CircleCatalogPayload = value;
     const index = new Map(payload.templates.map((template) => [template.id, {
       id: template.id,
       name: template.name,

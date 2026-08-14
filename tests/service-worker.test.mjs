@@ -33,6 +33,8 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   // than a slightly slower one, so data revalidates while rendering from cache.
   assert.match(worker, /url\.pathname\.startsWith\("\/data\/events\/"\)/);
   assert.match(worker, /event\.respondWith\(staleWhileRevalidate\(request\)\)/);
+  assert.match(worker, /\/overrides\\\.json\$\/\.test\(url\.pathname\)/);
+  assert.match(worker, /event\.respondWith\(fetch\(request\)\)/, "dynamic overlays must not be served from an arbitrarily stale offline cache");
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /event\.respondWith\(networkFirstNavigation\(request\)\)/);
   assert.doesNotMatch(worker, /\/api\//);
