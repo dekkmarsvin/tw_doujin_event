@@ -104,5 +104,11 @@ jobs:
             echo "attempt $attempt: /api/auth/session returned $code"
             sleep 3
           done
-          echo "::error::/api/auth/session returned $code, expected 401. 503 means this environment is missing SESSION_SECRET or HASH_PEPPER; see docs/runbooks/deployment.md."
+          case "$code" in
+            5*) reason="the environment is missing SESSION_SECRET or HASH_PEPPER" ;;
+            3*) reason="something redirected the request before the Function ran — a Cloudflare Access policy covering this hostname will do this, and CI carries no Access credential" ;;
+            000) reason="the host could not be reached at all" ;;
+            *) reason="the Function answered unexpectedly" ;;
+          esac
+          echo "::error::/api/auth/session returned $code, expected 401: $reason. See docs/runbooks/deployment.md."
           exit 1
