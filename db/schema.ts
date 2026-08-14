@@ -1,16 +1,13 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-// Re-exported so one import path covers every table's types.
-//
 // No table in this project reaches D1 through a migration. Pages Functions have
 // no migration step, so each repository creates what it needs on the request
 // path: `ensureTables()` in `db/identity-repository.ts` for the eight identity
 // tables, `ensureTable()` in `db/event-map-repository.ts` for `event_maps`.
-// These definitions and `drizzle/` are therefore a schema record, not a
-// deployment input — changing a column here changes nothing until the
-// corresponding DDL changes too.
-export * from "./identity-schema";
+// This Drizzle entrypoint deliberately covers only local map authoring. Identity
+// schema authority is `db/identity-runtime-schema.ts` and is consumed directly
+// by Pages Functions; maintaining a second Drizzle copy caused real drift.
 
 export const eventMaps = sqliteTable("event_maps", {
   eventId: text("event_id").primaryKey(),

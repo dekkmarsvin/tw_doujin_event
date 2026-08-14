@@ -96,7 +96,7 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 社團控制面的八張表——`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`——由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。Pages Functions 沒有執行 migration 的時機，因此建表發生在請求路徑上，不在部署步驟裡。
 
-`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 存在是為了讓 `npm run db:generate` 能產出 schema，產物本身不參與部署。
+identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 只服務本機地圖 authoring，不是 identity schema 的第二份 representation，也不參與部署。
 
 #### preview 必須用另一個資料庫
 

@@ -7,14 +7,16 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
+const { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } = await environment.runner.import("/db/identity-runtime-schema.ts");
 const { parseCircleOverridesPayload } = await environment.runner.import("/app/circle-overrides.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
   script: "export default { fetch() { return new Response('ok'); } }",
-  d1Databases: { DB: "identity-test" },
+  d1Databases: { DB: "identity-test", LEGACY_DB: "identity-legacy-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+const legacyDatabase = await miniflare.getD1Database("LEGACY_DB");
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
@@ -24,10 +26,45 @@ test("creates every table and index on first use", async () => {
   await repository.ensureTables();
   // Idempotent: a second call must not throw on the IF NOT EXISTS statements.
   await repository.ensureTables();
-  const tables = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all();
-  const names = tables.results.map((row) => row.name);
-  for (const expected of ["accounts", "audit_log", "circle_claims", "circle_overrides", "login_tokens", "overrides_doc", "sessions"]) {
-    assert.ok(names.includes(expected), `missing table ${expected}`);
+  const tables = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").all();
+  assert.deepEqual(
+    tables.results.map((row) => row.name),
+    IDENTITY_TABLES.map((table) => table.name).sort(),
+    "runtime tables must exactly match the schema authority",
+  );
+
+  const indexes = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  assert.deepEqual(
+    indexes.results.map((row) => row.name),
+    IDENTITY_INDEXES.map((index) => index.name).sort(),
+    "runtime indexes must exactly match the schema authority",
+  );
+
+  for (const expected of IDENTITY_TABLES) {
+    const info = await database.prepare(`PRAGMA table_info(${expected.name})`).all();
+    assert.deepEqual(
+      info.results.map((column) => column.name),
+      [...expected.columnNames],
+      `${expected.name} columns must match the schema authority`,
+    );
+  }
+});
+
+test("additive column migrations upgrade an existing database idempotently", async () => {
+  for (const [tableName, missingColumn] of [["circle_overrides", "post_event_hidden"], ["overrides_doc", "phase"]]) {
+    const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
+    assert.ok(definition);
+    const oldColumns = definition.columns.filter((column) => !column.startsWith(`${missingColumn} `));
+    await legacyDatabase.prepare(`CREATE TABLE ${tableName} (${oldColumns.join(", ")})`).run();
+  }
+
+  const legacyRepository = createIdentityRepository(legacyDatabase);
+  await legacyRepository.ensureTables();
+  await legacyRepository.ensureTables();
+
+  for (const migration of IDENTITY_COLUMN_MIGRATIONS) {
+    const info = await legacyDatabase.prepare(`PRAGMA table_info(${migration.table})`).all();
+    assert.ok(info.results.some((column) => column.name === migration.column), `missing upgraded column ${migration.table}.${migration.column}`);
   }
 });
 
