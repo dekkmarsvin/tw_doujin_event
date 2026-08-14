@@ -18,6 +18,8 @@ export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
  * wholesale. Arrays are never merged item-by-item — that is impossible to
  * explain to an editor and impossible to test exhaustively.
  */
+export type CircleOverrideThumbnail = { sourceUrl: string; url: string; provider: string };
+
 export type CircleOverrideFields = {
   pen?: string;
   saleInfo?: string;
@@ -27,7 +29,8 @@ export type CircleOverrideFields = {
   referencedWorks?: string[];
   specialTags?: string[];
   links?: CircleExternalLink[];
-  thumbnail?: { sourceUrl: string; url: string; provider: string };
+  /** `null` is an explicit tombstone; absence keeps inheriting the reviewed snapshot. */
+  thumbnail?: CircleOverrideThumbnail | null;
 };
 
 export type CircleOverride = {
@@ -54,7 +57,43 @@ export const OVERRIDE_LIMITS = {
   serializedFields: 8192,
 } as const;
 
-const LIST_FIELDS = ["creatorTypes", "ageRatings", "workTypes", "referencedWorks", "specialTags"] as const;
+export const CIRCLE_OVERRIDE_LIST_FIELDS = [
+  { key: "referencedWorks", label: "參考作品／題材" },
+  { key: "creatorTypes", label: "創作者類型" },
+  { key: "workTypes", label: "作品類型" },
+  { key: "ageRatings", label: "年齡分級" },
+  { key: "specialTags", label: "特殊標籤" },
+] as const;
+
+const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
+const TEXT_FIELDS = ["pen", "saleInfo"] as const;
+
+/** One editable-scope authority shared by validation, editor controls and tests. */
+export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, ...LIST_FIELDS, "links", "thumbnail"] as const satisfies readonly (keyof CircleOverrideFields)[];
+
+export type CircleOverrideFieldKey = (typeof CIRCLE_OVERRIDE_FIELD_KEYS)[number];
+export type CircleOverrideFieldMode = "inherit" | "replace" | "clear";
+
+export function circleOverrideFieldMode(fields: CircleOverrideFields, key: CircleOverrideFieldKey): CircleOverrideFieldMode {
+  if (!Object.prototype.hasOwnProperty.call(fields, key)) return "inherit";
+  const value = fields[key];
+  return value === null || value === "" || (Array.isArray(value) && value.length === 0) ? "clear" : "replace";
+}
+
+/** Remove the key entirely so the reviewed snapshot remains authoritative. */
+export function inheritCircleOverrideField(fields: CircleOverrideFields, key: CircleOverrideFieldKey): CircleOverrideFields {
+  const next = { ...fields };
+  delete next[key];
+  return next;
+}
+
+/** Encode an explicit tombstone without making the editor duplicate field kinds. */
+export function clearCircleOverrideField(fields: CircleOverrideFields, key: CircleOverrideFieldKey): CircleOverrideFields {
+  if (key === "thumbnail") return { ...fields, thumbnail: null };
+  if (key === "links") return { ...fields, links: [] };
+  if (LIST_FIELDS.includes(key as (typeof LIST_FIELDS)[number])) return { ...fields, [key]: [] };
+  return { ...fields, [key]: "" };
+}
 
 /** The only accepted kinds. Exported so the editor cannot offer a value this file would reject. */
 export const LINK_KINDS: readonly CircleTemplateLinkKind[] = ["social", "support", "website", "announcement", "catalog", "store", "sample"];
@@ -113,7 +152,7 @@ function isLink(value: unknown): value is CircleExternalLink {
     && isHttpsUrl(link.url);
 }
 
-function isThumbnail(value: unknown): value is CircleOverrideFields["thumbnail"] {
+function isThumbnail(value: unknown): value is CircleOverrideThumbnail {
   if (!value || typeof value !== "object") return false;
   const thumbnail = value as Record<string, unknown>;
   return isHttpsUrl(thumbnail.url) && isAllowedThumbnailHost(thumbnail.url)
@@ -128,14 +167,14 @@ export function isCircleOverrideFields(value: unknown): value is CircleOverrideF
 
   // `name` is deliberately not here: an override carrying one is refused, not
   // silently dropped, so a client sending it learns the field is not authorable.
-  const known = new Set(["pen", "saleInfo", "links", "thumbnail", ...LIST_FIELDS]);
+  const known = new Set<string>(CIRCLE_OVERRIDE_FIELD_KEYS);
   if (Object.keys(fields).some((key) => !known.has(key))) return false;
 
   if ("pen" in fields && !isBoundedString(fields.pen, OVERRIDE_LIMITS.pen)) return false;
   if ("saleInfo" in fields && !isBoundedString(fields.saleInfo, OVERRIDE_LIMITS.saleInfo)) return false;
   if (LIST_FIELDS.some((field) => field in fields && !isBoundedList(fields[field]))) return false;
   if ("links" in fields && !(Array.isArray(fields.links) && fields.links.length <= OVERRIDE_LIMITS.links && fields.links.every(isLink))) return false;
-  if ("thumbnail" in fields && !isThumbnail(fields.thumbnail)) return false;
+  if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) return false;
 
   return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields;
 }

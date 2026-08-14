@@ -196,7 +196,11 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
   const referencedWorks = fields?.referencedWorks ?? template?.referencedWorks ?? [];
   const specialTags = fields?.specialTags ?? template?.specialTags ?? [];
   const saleInfo = fields?.saleInfo ?? template?.saleInfo;
-  const thumbnail = fields?.thumbnail ?? template?.thumbnail;
+  // `null` is a deliberate tombstone. A missing key inherits the reviewed
+  // thumbnail; null must not fall through via `??` and resurrect it.
+  const thumbnail = fields && Object.prototype.hasOwnProperty.call(fields, "thumbnail")
+    ? fields.thumbnail
+    : template?.thumbnail;
   return {
     id: circleId,
     sourceRow: template?.sourceRow,

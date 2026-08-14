@@ -6,7 +6,11 @@ import {
   previewOverride, readSession, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
-import { LINK_KINDS, OVERRIDE_LIMITS, THUMBNAIL_HOST_ALLOWLIST, type CircleOverrideFields } from "../circle-overrides";
+import {
+  CIRCLE_OVERRIDE_LIST_FIELDS, LINK_KINDS, OVERRIDE_LIMITS, THUMBNAIL_HOST_ALLOWLIST,
+  circleOverrideFieldMode, clearCircleOverrideField, inheritCircleOverrideField,
+  type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail,
+} from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
@@ -16,18 +20,25 @@ import styles from "./portal.module.css";
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
 
 const IDLE: Status = { kind: "idle", message: "" };
-const LIST_FIELDS = [
-  { key: "referencedWorks", label: "參考作品／題材" },
-  { key: "creatorTypes", label: "創作者類型" },
-  { key: "workTypes", label: "作品類型" },
-  { key: "ageRatings", label: "年齡分級" },
-  { key: "specialTags", label: "特殊標籤" },
-] as const;
-
 /** The map side panel renders `externalLinks.slice(0, 6)`; the rest move to full detail. */
 const SIDE_PANEL_LINK_LIMIT = 6;
 
 const EMPTY_LINK: CircleExternalLink = { provider: "", kind: "social", url: "" };
+
+const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
+
+function FieldModeControls({ mode, label, onInherit, onClear }: {
+  mode: keyof typeof FIELD_MODE_LABEL;
+  label: string;
+  onInherit: () => void;
+  onClear: () => void;
+}) {
+  return <div className={styles.fieldMode} role="group" aria-label={`${label}的資料來源`}>
+    <span>目前：<b>{FIELD_MODE_LABEL[mode]}</b></span>
+    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit"} onClick={onInherit}>沿用場刊</button>
+    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear"} onClick={onClear}>清除此欄</button>
+  </div>;
+}
 
 function errorMessage(error: unknown) {
   return error instanceof PortalError || error instanceof Error ? error.message : "操作失敗，請稍後再試。";
@@ -267,13 +278,9 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [hidden, setHidden] = useState(false);
   const loaded = useRef(false);
 
-  /** Drop empty values so an untouched field keeps inheriting the catalog. */
-  const draft = (): CircleOverrideFields => Object.fromEntries(Object.entries(fields).filter(([key, value]) => {
-    // A half-filled thumbnail is an object, and every object is truthy — without
-    // this the editor would post `{url: "", ...}` and get back a bare 400.
-    if (key === "thumbnail") return !!(value as CircleOverrideFields["thumbnail"])?.url?.trim();
-    return Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : !!value;
-  }));
+  // State contains only fields the author has deliberately touched. Empty
+  // strings/arrays and a null thumbnail are tombstones, not values to discard.
+  const draft = (): CircleOverrideFields => ({ ...fields });
 
 
   useEffect(() => {
@@ -284,10 +291,14 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       .catch(() => setFields({}));
   }, [claim.circleId]);
 
-  const setList = (key: (typeof LIST_FIELDS)[number]["key"], value: string) => {
+  const setList = (key: (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"], value: string) => {
     const items = value.split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean);
     setFields((current) => ({ ...current, [key]: items }));
   };
+
+  const inheritField = (key: CircleOverrideFieldKey) => setFields((current) => inheritCircleOverrideField(current, key));
+  const clearField = (key: CircleOverrideFieldKey) => setFields((current) => clearCircleOverrideField(current, key));
+  const modeFor = (key: CircleOverrideFieldKey) => circleOverrideFieldMode(fields, key);
 
   const links = fields.links ?? [];
   const setLinks = (next: CircleExternalLink[]) => setFields((current) => ({ ...current, links: next }));
@@ -301,11 +312,11 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     setLinks(next);
   };
 
-  const thumbnail = fields.thumbnail;
-  const editThumbnail = (patch: Partial<NonNullable<CircleOverrideFields["thumbnail"]>>) =>
+  const thumbnail = fields.thumbnail ?? undefined;
+  const editThumbnail = (patch: Partial<CircleOverrideThumbnail>) =>
     setFields((current) => ({
       ...current,
-      thumbnail: { url: "", sourceUrl: "", provider: "", ...current.thumbnail, ...patch },
+      thumbnail: { url: "", sourceUrl: "", provider: "", ...(current.thumbnail ?? {}), ...patch },
     }));
 
   // Block the round trip rather than let the shared validator answer with one
@@ -315,14 +326,23 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       const problem = linkUrlProblem(link.url) || (link.provider.trim() ? "" : "請填寫平台名稱。");
       return problem ? `第 ${index + 1} 個連結：${problem}` : "";
     }),
-    thumbnail?.url?.trim() ? thumbnailUrlProblem(thumbnail.url) : "",
-    thumbnail?.url?.trim() && !thumbnail.sourceUrl?.trim() ? "代表圖需要填寫出處頁面。" : "",
+    thumbnail ? thumbnailUrlProblem(thumbnail.url) : "",
+    thumbnail && !thumbnail.sourceUrl.trim() ? "代表圖需要填寫出處頁面。" : "",
     thumbnail?.sourceUrl?.trim() ? linkUrlProblem(thumbnail.sourceUrl) : "",
+    thumbnail && !thumbnail.provider.trim() ? "代表圖需要填寫來源標示。" : "",
   ].filter(Boolean);
 
   return <section className={styles.card}>
     <h2>編輯：{claim.circleName}</h2>
     <p>以下欄位儲存後即時生效。社團名稱、攤位與日期由主辦公布，無法在此修改；名稱有誤請聯絡管理者更正來源資料。</p>
+
+    <label htmlFor={`pen-${claim.circleId}`}>筆名（最多 {OVERRIDE_LIMITS.pen} 字）</label>
+    <input
+      id={`pen-${claim.circleId}`} maxLength={OVERRIDE_LIMITS.pen}
+      value={fields.pen ?? ""}
+      onChange={(event) => setFields((current) => ({ ...current, pen: event.target.value }))}
+    />
+    <FieldModeControls mode={modeFor("pen")} label="筆名" onInherit={() => inheritField("pen")} onClear={() => clearField("pen")} />
 
     <label htmlFor={`sale-${claim.circleId}`}>販售資訊（最多 {OVERRIDE_LIMITS.saleInfo} 字）</label>
     <textarea
@@ -330,10 +350,12 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       value={fields.saleInfo ?? ""}
       onChange={(event) => setFields((current) => ({ ...current, saleInfo: event.target.value }))}
     />
+    <FieldModeControls mode={modeFor("saleInfo")} label="販售資訊" onInherit={() => inheritField("saleInfo")} onClear={() => clearField("saleInfo")} />
 
-    {LIST_FIELDS.map(({ key, label }) => <div key={key}>
+    {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <div key={key}>
       <label htmlFor={`${key}-${claim.circleId}`}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
       <input id={`${key}-${claim.circleId}`} value={(fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
+      <FieldModeControls mode={modeFor(key)} label={label} onInherit={() => inheritField(key)} onClear={() => clearField(key)} />
     </div>)}
 
     <h3 className={styles.editorSection}>外部連結</h3>
@@ -342,8 +364,10 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       側欄是參觀者決定「要不要去這攤」的地方，所以把最重要的排在前面。最多 {OVERRIDE_LIMITS.links} 個，網址必須是 https。
     </p>
 
+    <FieldModeControls mode={modeFor("links")} label="外部連結" onInherit={() => inheritField("links")} onClear={() => clearField("links")} />
+
     {links.length === 0
-      ? <p className={styles.editorHint}>目前沿用場刊整理的連結。新增一筆之後，這裡的清單會整組取代它們。</p>
+      ? <p className={styles.editorHint}>{modeFor("links") === "clear" ? "已明確清除場刊整理的連結。" : "目前沿用場刊整理的連結。新增一筆之後，這裡的清單會整組取代它們。"}</p>
       : <ol className={styles.linkList}>
         {links.map((link, index) => {
           const problem = linkUrlProblem(link.url);
@@ -394,6 +418,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       圖片由參觀者的瀏覽器直接載入，因此只接受下列主機：{THUMBNAIL_HOST_ALLOWLIST.join("、")}。
       這是內容安全限制——任意主機會讓每一位讀者的 IP 暴露給該站。
     </p>
+    <FieldModeControls mode={modeFor("thumbnail")} label="代表圖" onInherit={() => inheritField("thumbnail")} onClear={() => clearField("thumbnail")} />
 
     <label htmlFor={`thumb-url-${claim.circleId}`}>圖片網址</label>
     <input
