@@ -82,3 +82,27 @@ jobs:
           curl --fail --silent --show-error
           --retry 8 --retry-all-errors --retry-delay 2
           https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev/
+
+      # The step above only proves the static assets are live; they are served
+      # straight from the edge and answer 200 whether or not the Functions have
+      # a usable environment. An unauthenticated session lookup separates the
+      # two: 401 means the handlers were constructed and ran, 503 means
+      # `requireSecret` threw because the environment is missing SESSION_SECRET
+      # or HASH_PEPPER. Preview does not inherit production secrets, so this is
+      # the check that catches a preview deployment whose portal is dead.
+      - name: Smoke test Functions
+        env:
+          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
+        run: |
+          for attempt in $(seq 1 5); do
+            code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              "$BASE_URL/api/auth/session" || echo 000)
+            if [ "$code" = "401" ]; then
+              echo "Functions reachable and configured (401 for an unauthenticated session)."
+              exit 0
+            fi
+            echo "attempt $attempt: /api/auth/session returned $code"
+            sleep 3
+          done
+          echo "::error::/api/auth/session returned $code, expected 401. 503 means this environment is missing SESSION_SECRET or HASH_PEPPER; see docs/runbooks/deployment.md."
+          exit 1
