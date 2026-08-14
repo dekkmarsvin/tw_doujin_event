@@ -37,8 +37,7 @@
       // preview secret and is intentionally absent here.
       "vars": {
         "PREVIEW_MAIL_SINK": "d1",
-        "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
-        "ADMIN_EMAILS": "preview-admin@example.test"
+        "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test"
       },
       "d1_databases": [
         {
