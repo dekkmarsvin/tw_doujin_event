@@ -2,8 +2,8 @@
 
 URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。
 
-**實作**：[`app/event-map-app.tsx`](../../app/event-map-app.tsx)（讀取與寫入）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）
-**測試**：`tests/map-view-state.test.mjs`
+**實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec 與 history intent）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）
+**測試**：`tests/event-url-state.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`
 
 ## 參數
 
@@ -34,11 +34,14 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 ## 規則
 
 - **`selectedCircle` 與 `selectedBooth` 必須互相驗證。** 兩者都在時取交集；只有 `selectedCircle` 時取該社團在該日的第一筆配置；無效或已變更的關聯降級為只開啟仍有效的活動與區域，**不顯示錯誤社團**。
+- **採多活動資料模型、單一 active-event UI。** codec 與 workspace projection 都接受 event definition；`event` 缺少時使用 active event，等於其他活動時整份 query fail closed 回 active event defaults，不讓篩選或選取跨活動洩漏。加入第二個活動前不先顯示活動選擇器。
+- **defaults 從 event definition 推導。** `day`、`area` 與 genre 預設分別取活動定義的第一筆，不在 codec 內硬編碼 FF47 的 `1`、`ALL` 或「全部類別」。
 - **恢復時機**：初始化、重新整理與 `popstate` 必須恢復篩選及選取。地圖資料延後完成時，以保存的攤位代碼重新聚焦。
 - **延後套用選取**：可分享連結的社團與攤位選取要等社團快照可解析後才套用。**在此之前不得改寫 URL**，否則會把使用者分享的深層連結洗掉。
 - **不寫入 URL 的狀態**：hover、拖曳中的 viewport、動畫進度、尚未套用的篩選草稿。
 - **歷史紀錄**：只有使用者透過明確操作改變選取或篩選時才建立歷史紀錄；連續平移與縮放不得淹沒瀏覽器上一頁。
 - **桌機與手機使用相同的 URL 狀態與結果集合**，不建立第二套參數語意。
+- 搜尋結果、地圖 markers、selection、planning、active filters 與桌機／手機 panels 都消費同一份 event-scoped workspace projection；rendering 與 pointer gestures 不進入該 domain seam。
 
 ## 驗收條件
 
