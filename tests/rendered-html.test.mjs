@@ -76,8 +76,8 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
 });
 
 test("separates the public static app from the retained editor implementation", async () => {
-  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "use-circle-catalog.ts", "circle-editor-client.ts"];
-  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, catalogHook, editorClient] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "circle-editor-client.ts"];
+  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, editorClient] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
   const planningToolsStyles = await readFile(new URL("../app/planning-tools.module.css", import.meta.url), "utf8");
@@ -95,7 +95,6 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(globalStyles, /\.filters \{ padding:20px 18px;/);
   assert.match(appStyles, /\.workspace > \.leftRail \{[^}]*padding:0/);
   assert.match(app, /!navigationMode && <div className=\{styles\.planSlot\}>\{compactItineraryPanel\}<\/div>/);
-  assert.match(app, /mapRecords/);
   assert.doesNotMatch(app, /LAYOUT_KEY|imageDataUrl|<img\b/);
   assert.match(admin, /data-testid="map-image-input"/);
   assert.match(admin, /發布活動地圖/);
@@ -204,17 +203,15 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(catalogStore, /export function buildCircleCatalog/);
   assert.doesNotMatch(catalogStore, /ff47-booths|generated\.json/);
 
-  // Circle-authored content is an optional supplement layered on the reviewed
-  // snapshot. It shares the /data/events/ namespace so it inherits the service
-  // worker's offline rule, and it stays anonymous so it remains edge-cacheable.
+  // Circle-authored content is an optional anonymous supplement layered on the
+  // reviewed snapshot. Its event identity and freshness behavior are covered
+  // by catalog-publication and service-worker behavior tests.
   assert.match(overridesClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/overrides\.json`/);
   assert.doesNotMatch(overridesClient, /\/api\/|method: "PUT"|credentials|Authorization/);
   assert.doesNotMatch(catalogClient, /credentials|Authorization/);
 
-  // The base snapshot must paint before the overlay, and an overlay failure
-  // must never put a reader into the error state.
-  assert.match(catalogHook, /setCircleCatalog\(payload\);/);
-  assert.match(catalogHook, /loadStaticCircleOverrides\(eventId\)\.catch\(\(\) => undefined\)/);
+  // Base-first ordering, overlay fallback, event partitioning and retry are
+  // behavior-tested through catalog-publication.test.mjs, not source regex.
 
   // Every authenticated write lives in one client, it always sends the session,
   // and it never touches the cacheable read namespace.

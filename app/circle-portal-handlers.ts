@@ -1,6 +1,7 @@
 import { isCircleOverrideFields, type CircleOverrideFields } from "./circle-overrides";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
+import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -592,6 +593,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
    * minute, which is what keeps this inside the D1 free tier.
    */
   async function publicOverrides(request: Request, eventId: string) {
+    if (eventId !== config.eventId) return json({ error: "找不到這個活動的社團補充資料。" }, 404, { "cache-control": "no-store" });
     let doc = await repository.getOverridesDoc(eventId);
 
     // The document is written on edit, but the event ending is not an edit.
@@ -608,7 +610,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const etag = `"circle-overrides-${eventId}-${phase}-${doc?.revision ?? 0}"`;
     const headers = {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "public, max-age=60, must-revalidate",
+      "cache-control": DYNAMIC_OVERLAY_CACHE_POLICY,
       etag,
     };
     if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });

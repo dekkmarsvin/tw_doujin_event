@@ -390,36 +390,61 @@ export const EMPTY_CIRCLE_CATALOG: CircleCatalog = {
 
 export type CircleCatalogStatus = "loading" | "ready" | "error";
 
-type CatalogState = {
+export type CatalogState = {
+  eventId: string;
   catalog: CircleCatalog;
   status: CircleCatalogStatus;
   error: string;
+  overlayStatus: "idle" | "loading" | "applied" | "unavailable";
+  overlayError: string;
   /** Kept so a later overlay can rebuild without refetching the 1.8 MB base. */
   payload?: CircleCatalogPayload;
   overrides?: CircleOverridesPayload;
 };
 
-const INITIAL_STATE: CatalogState = { catalog: EMPTY_CIRCLE_CATALOG, status: "loading", error: "" };
+const states = new Map<string, CatalogState>();
+const listeners = new Map<string, Set<() => void>>();
+let defaultEventId = "";
 
-let state: CatalogState = INITIAL_STATE;
-const listeners = new Set<() => void>();
+function initialState(eventId: string): CatalogState {
+  return { eventId, catalog: EMPTY_CIRCLE_CATALOG, status: "loading", error: "", overlayStatus: "idle", overlayError: "" };
+}
 
-function publish(next: CatalogState) {
-  state = next;
-  listeners.forEach((listener) => listener());
+function stateFor(eventId: string) {
+  const current = states.get(eventId);
+  if (current) return current;
+  const created = initialState(eventId);
+  states.set(eventId, created);
+  return created;
+}
+
+function publish(eventId: string, next: CatalogState) {
+  states.set(eventId, next);
+  listeners.get(eventId)?.forEach((listener) => listener());
 }
 
 /** Snapshot getter. React reads this through `useCircleCatalog`. */
-export function getCircleCatalogState() {
-  return state;
+export function getCircleCatalogState(eventId = defaultEventId) {
+  return stateFor(eventId);
 }
 
-export function getCircleCatalog() {
-  return state.catalog;
+export function getCircleCatalog(eventId = defaultEventId) {
+  return stateFor(eventId).catalog;
 }
 
 export function setCircleCatalog(payload: CircleCatalogPayload, overrides?: CircleOverridesPayload) {
-  publish({ catalog: buildCircleCatalog(payload, overrides), status: "ready", error: "", payload, overrides });
+  if (overrides && overrides.eventId !== payload.eventId) throw new Error(`Overlay event ${overrides.eventId} does not match base event ${payload.eventId}.`);
+  defaultEventId ||= payload.eventId;
+  publish(payload.eventId, {
+    eventId: payload.eventId,
+    catalog: buildCircleCatalog(payload, overrides),
+    status: "ready",
+    error: "",
+    overlayStatus: overrides ? "applied" : "idle",
+    overlayError: "",
+    payload,
+    overrides,
+  });
 }
 
 /**
@@ -428,30 +453,51 @@ export function setCircleCatalog(payload: CircleCatalogPayload, overrides?: Circ
  * that puts a reader into a broken state.
  */
 export function setCircleOverrides(overrides: CircleOverridesPayload) {
-  if (!state.payload) return;
-  publish({ ...state, overrides, catalog: buildCircleCatalog(state.payload, overrides) });
+  const current = stateFor(overrides.eventId);
+  if (!current.payload) throw new Error(`Cannot apply an overlay before base catalog ${overrides.eventId}.`);
+  publish(overrides.eventId, { ...current, overrides, overlayStatus: "applied", overlayError: "", catalog: buildCircleCatalog(current.payload, overrides) });
 }
 
-export function failCircleCatalog(error: string) {
-  publish({ catalog: EMPTY_CIRCLE_CATALOG, status: "error", error });
+export function markCircleOverlayLoading(eventId: string) {
+  const current = stateFor(eventId);
+  if (current.status === "ready") publish(eventId, { ...current, overlayStatus: "loading", overlayError: "" });
+}
+
+export function failCircleOverlay(eventId: string, error: string) {
+  const current = stateFor(eventId);
+  if (current.status === "ready") publish(eventId, { ...current, overlayStatus: "unavailable", overlayError: error });
+}
+
+export function failCircleCatalog(eventId: string, error: string) {
+  publish(eventId, { ...initialState(eventId), status: "error", error, overlayStatus: "unavailable" });
 }
 
 /** Test and authoring seam: drop back to the pre-load state. */
-export function resetCircleCatalog() {
-  publish(INITIAL_STATE);
+export function resetCircleCatalog(eventId?: string) {
+  if (eventId) {
+    publish(eventId, initialState(eventId));
+    return;
+  }
+  const eventIds = [...states.keys()];
+  states.clear();
+  defaultEventId = "";
+  eventIds.forEach((id) => listeners.get(id)?.forEach((listener) => listener()));
 }
 
-export function subscribeCircleCatalog(listener: () => void) {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
+export function subscribeCircleCatalog(eventId: string, listener: () => void) {
+  const scoped = listeners.get(eventId) ?? new Set<() => void>();
+  scoped.add(listener);
+  listeners.set(eventId, scoped);
+  return () => { scoped.delete(listener); };
 }
 
-export function circleIdMigrationTargets(circleId: string) {
-  return state.catalog.idMigrationTargets.get(circleId) ?? [circleId];
+export function circleIdMigrationTargets(circleId: string, eventId = defaultEventId) {
+  return stateFor(eventId).catalog.idMigrationTargets.get(circleId) ?? [circleId];
 }
 
-export function isKnownCircleId(circleId: string) {
-  return state.catalog.circlesById.has(circleId) || state.catalog.recordsById.has(circleId);
+export function isKnownCircleId(circleId: string, eventId = defaultEventId) {
+  const catalog = stateFor(eventId).catalog;
+  return catalog.circlesById.has(circleId) || catalog.recordsById.has(circleId);
 }
 
 export function circleSearchText(record: CircleViewRecord) {
