@@ -479,6 +479,28 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return { migratedIds: activeMappings.size, remainingLegacyIds: [] as string[] };
   }
 
+  async function storePreviewMail(message: { email: string; subject: string; text: string; now: number }) {
+    await ensureTables();
+    await database.prepare(
+      "INSERT INTO preview_mail_sink (id, email, subject, text, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+    ).bind(crypto.randomUUID(), message.email, message.subject, message.text, message.now).run();
+  }
+
+  async function latestPreviewMail(email: string) {
+    await ensureTables();
+    return database.prepare(
+      "SELECT id, email, subject, text, created_at FROM preview_mail_sink WHERE email = ?1 ORDER BY created_at DESC LIMIT 1",
+    ).bind(email).first<{ id: string; email: string; subject: string; text: string; created_at: number }>();
+  }
+
+  /** Disposable preview reset. Admin roster is deliberately retained. */
+  async function clearPreviewData() {
+    await ensureTables();
+    await database.batch([
+      "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
+    ].map((table) => database.prepare(`DELETE FROM ${table}`)));
+  }
+
   return {
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
@@ -488,6 +510,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc, migrateCircleIds,
+    storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }
 

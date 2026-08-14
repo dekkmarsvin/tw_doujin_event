@@ -33,7 +33,7 @@ let evidenceBody = null;
 let handlers;
 let repository;
 
-const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "admins"];
+const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "admins"];
 
 beforeEach(async () => {
   sent = [];
@@ -272,10 +272,10 @@ test("the public document is anonymous, revalidatable, and answers 304", async (
   assert.equal(revalidated.headers.get("etag"), etag);
 });
 
-test("an unknown event serves an empty document rather than failing", async () => {
+test("an unknown event cannot masquerade as an empty reviewed overlay", async () => {
   const response = await handlers.publicOverrides(get("/data/events/ff48/overrides.json"), "ff48");
-  assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).overrides, []);
+  assert.equal(response.status, 404);
+  assert.match((await response.json()).error, /找不到/);
 });
 
 test("rejects payloads the reader could not project", async () => {
