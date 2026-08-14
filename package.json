@@ -23,7 +23,6 @@
     "catalog:check": "node scripts/generate-ff47-circle-templates.mjs --check",
     "catalog:snapshot": "node scripts/export-static-circle-catalog.mjs",
     "catalog:snapshot:check": "node scripts/export-static-circle-catalog.mjs --check",
-    "claims:check": "node scripts/check-claimed-circles.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .wrangler",
     "db:generate": "drizzle-kit generate"

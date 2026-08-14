@@ -395,6 +395,90 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
   }
 
+  /**
+   * Atomically cut claims, editable rows, the public document and its audit
+   * marker over to permanent circle IDs. Unknown and colliding identities fail
+   * closed before any write; rerunning after success is a verified no-op.
+   */
+  async function migrateCircleIds(input: {
+    eventId: string;
+    mappings: Readonly<Record<string, string>>;
+    generatedAt: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const [claimResult, overrideResult, currentDoc] = await Promise.all([
+      database.prepare("SELECT DISTINCT circle_id FROM circle_claims WHERE event_id = ?1").bind(input.eventId).all<{ circle_id: string }>(),
+      database.prepare("SELECT * FROM circle_overrides WHERE event_id = ?1").bind(input.eventId).all<OverrideRow & { previous_fields_json: string | null; revision: number }>(),
+      getOverridesDoc(input.eventId),
+    ]);
+    const claimIds = new Set(claimResult.results.map((row) => row.circle_id));
+    const overrideIds = new Set(overrideResult.results.map((row) => row.circle_id));
+    const storedIds = new Set([...claimIds, ...overrideIds]);
+    const legacyIds = [...storedIds].filter((circleId) => !/^c-\d{6}$/.test(circleId));
+
+    const activeMappings = new Map<string, string>();
+    for (const legacyId of legacyIds) {
+      const circleId = input.mappings[legacyId];
+      if (!circleId || !/^c-\d{6}$/.test(circleId)) {
+        throw new Error(`No permanent circle ID is registered for stored identity ${legacyId}.`);
+      }
+      activeMappings.set(legacyId, circleId);
+    }
+    for (const ids of [claimIds, overrideIds]) {
+      const targets = new Set<string>();
+      for (const [legacyId, circleId] of activeMappings) {
+        if (!ids.has(legacyId)) continue;
+        if (ids.has(circleId) || targets.has(circleId)) {
+          throw new Error(`Circle ID migration would collide at ${circleId}; review the stored rows manually.`);
+        }
+        targets.add(circleId);
+      }
+    }
+    if (activeMappings.size === 0) return { migratedIds: 0, remainingLegacyIds: [] as string[] };
+
+    const phase = currentDoc?.phase ?? "during";
+    const publishedOverrides = overrideResult.results
+      .filter((row) => row.status === "live" && (phase !== "after" || !row.post_event_hidden))
+      .map((row) => ({
+        circleId: activeMappings.get(row.circle_id) ?? row.circle_id,
+        updatedAt: new Date(row.updated_at).toISOString(),
+        fields: JSON.parse(row.fields_json) as unknown,
+      }))
+      .sort((left, right) => left.circleId.localeCompare(right.circleId));
+    const revision = (currentDoc?.revision ?? 0) + 1;
+    const json = JSON.stringify({
+      schema: CIRCLE_OVERRIDES_SCHEMA,
+      eventId: input.eventId,
+      generatedAt: input.generatedAt,
+      revision,
+      overrides: publishedOverrides,
+    });
+    const statements = [...activeMappings].flatMap(([legacyId, circleId]) => [
+      database.prepare("UPDATE circle_claims SET circle_id = ?1 WHERE event_id = ?2 AND circle_id = ?3").bind(circleId, input.eventId, legacyId),
+      database.prepare("UPDATE circle_overrides SET circle_id = ?1 WHERE event_id = ?2 AND circle_id = ?3").bind(circleId, input.eventId, legacyId),
+    ]);
+    statements.push(
+      database.prepare(
+        `INSERT INTO overrides_doc (event_id, revision, json, updated_at, phase) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(event_id) DO UPDATE SET revision = excluded.revision, json = excluded.json,
+           updated_at = excluded.updated_at, phase = excluded.phase`,
+      ).bind(input.eventId, revision, json, input.now, phase),
+      database.prepare(
+        `INSERT INTO audit_log (id, at, actor_role, action, subject_type, subject_id, detail_json)
+         VALUES (?1, ?2, 'system', 'circle_id.migrated', 'event', ?3, ?4)`,
+      ).bind(crypto.randomUUID(), input.now, input.eventId, JSON.stringify({ mappings: Object.fromEntries(activeMappings) })),
+    );
+    await database.batch(statements);
+
+    const remaining = await database.prepare(
+      `SELECT circle_id FROM circle_claims WHERE event_id = ?1 AND circle_id NOT GLOB 'c-[0-9][0-9][0-9][0-9][0-9][0-9]'
+       UNION SELECT circle_id FROM circle_overrides WHERE event_id = ?1 AND circle_id NOT GLOB 'c-[0-9][0-9][0-9][0-9][0-9][0-9]'`,
+    ).bind(input.eventId).all<{ circle_id: string }>();
+    if (remaining.results.length > 0) throw new Error("Circle ID migration verification found orphaned legacy identities.");
+    return { migratedIds: activeMappings.size, remainingLegacyIds: [] as string[] };
+  }
+
   return {
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
@@ -403,7 +487,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
-    rebuildOverridesDoc, getOverridesDoc,
+    rebuildOverridesDoc, getOverridesDoc, migrateCircleIds,
   };
 }
 

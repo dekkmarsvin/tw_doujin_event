@@ -19,7 +19,7 @@
 以下型別與 `app/planning-store.ts` 同步。欄位變更必須同時更新本文。
 
 ```ts
-const PLANNING_SCHEMA_VERSION = 2;
+const PLANNING_SCHEMA_VERSION = 3;
 const PLANNING_STORAGE_KEY = "event-map-planning-v1";
 const PLANNING_CHANGED_EVENT = "event-map-planning-changed";
 
@@ -51,7 +51,7 @@ type VisitPlanEntry = {
 };
 
 type PlanningDocument = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   favoriteGroups: FavoriteGroup[];
   favorites: FavoriteRecord[];
   visitPlans: VisitPlanEntry[];
@@ -75,7 +75,8 @@ type PlanningDocument = {
 
 - 以 versioned `localStorage` 文件保存於 `PLANNING_STORAGE_KEY`；讀取時先驗證與遷移，再提供給 UI。
 - 寫入使用單一 transaction 或等效原子更新，避免群組、收藏與行程在多個 key 之間部分成功。
-- **schema 1 → 2 遷移**：schema 1 的 placement-scoped ID 會先合併備註再遷移到 canonical circle ID。收藏衝突保留所有不同備註，並採最近更新的群組與時間；行程依日期合併到同一社團。不靜默清空本機資料。
+- **schema 1／2 → 3 遷移**：schema 1 的 placement-scoped ID 與 schema 2 的 FF47 hash ID 都經 catalog 的永久 mapping 轉成 allocated circle ID。收藏衝突先合併不同備註並採最近更新的群組與時間；行程依日期合併到同一社團。群組、備註、購買項目與預算都保留，不靜默清空本機資料。
+- schema 3 重讀是 no-op；重試不得重複收藏、備註或行程。不相容版本仍保留原始字串且停止覆寫。
 - **遷移時機**：舊版 ID 遷移必須在社團快照可用後才執行並寫回。不得在空目錄上判定孤立，也不得凍結未遷移的 ID。
 - `circleId` 是關聯鍵；社團名稱、攤位與圖片**不複製進規劃資料**，顯示時從目前 `CircleRecord` 解析。
 - 不相容或損壞的內容必須保留原始字串、停止覆寫並提供下載。寫入失敗時保留本分頁狀態，顯示儲存異常與匯出備份指引。
@@ -137,7 +138,7 @@ type PlanningDocument = {
 - 第一次加入行程後顯示「待前往」，下一站提示不出現；按「設為下一站」後才切換。
 - 取消含備註的收藏不會無提示地遺失使用者輸入，七秒內可完整復原。
 - 設定新下一站只改變同活動的行程狀態，不新增、移除或重新分類收藏。
-- 重新載入後可恢復資料；schema 1 資料可遷移，且遷移不丟失備註。
+- 重新載入後可恢復資料；schema 1／2 資料可遷移至 schema 3，且重試不丟失或重複備註與行程。
 - catalog 找不到對應社團時，管理介面仍可看見未匹配收藏／行程的 ID、備註或狀態並個別移除；匯出保留原記錄。
 - 清除全部資料前可看見受影響數量，取消確認不會改變任何資料。
 - 匯出後在空白瀏覽器環境重新匯入（P2 實作後），可還原群組、收藏、備註與行程，並回報無法匹配的社團。
