@@ -187,3 +187,35 @@
   .masthead { flex-direction: column; align-items: start; }
   .claimList li { flex-wrap: wrap; }
 }
+
+/* Links and thumbnail editor. Ordering is meaningful here — the reader's side
+   panel shows the first six — so each row carries its position and the cut line
+   is drawn where the side panel stops. */
+.editorSection { margin: 22px 0 0; font-size: 12px; }
+.editorHint { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.editorHint b { color: var(--ink); }
+
+.linkList { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.linkList > li { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.linkRow { display: grid; grid-template-columns: 22px 1fr; gap: 4px 8px; align-items: center; }
+.linkRow label { margin-top: 0; grid-column: 1 / -1; }
+.linkRow :is(input, select) { grid-column: 1 / -1; margin-top: 0; }
+.linkPosition {
+  grid-column: 1; grid-row: 1; width: 22px; height: 22px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--ink); color: #fff;
+  font: 700 10px "Geist Mono", ui-monospace, monospace;
+}
+.linkActions { grid-column: 1 / -1; display: flex; gap: 6px; }
+.linkActions button { margin-top: 8px; padding: 6px 10px; font-size: 10px; }
+.linkCut {
+  margin: 10px -10px -10px; padding: 6px 10px;
+  border-top: 1px dashed var(--line); color: var(--muted); font-size: 9px; letter-spacing: .08em;
+}
+.problemList { margin: 10px 0 0; padding-left: 18px; color: var(--danger, #a43e30); font-size: 11px; line-height: 1.7; }
+
+@media (min-width: 560px) {
+  .linkRow { grid-template-columns: 22px minmax(0, 1fr) 130px; }
+  .linkRow label { grid-column: auto; }
+  .linkRow > label:nth-of-type(1) { grid-column: 2; }
+  .linkRow :is(input, select) { grid-column: auto; }
+}
