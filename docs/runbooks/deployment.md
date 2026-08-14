@@ -69,6 +69,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - **preview 環境不繼承 production 的 secrets。** 要在 PR preview 測社團入口，五個 secret 需另以 `--env preview` 設定一次。
 - **兩個 smoke test 檢查不同的東西。** 「Smoke test deployment」只證明靜態資產上線——那些由邊緣直送，Functions 有沒有環境都回 200。「Smoke test Functions」打未登入的 `/api/auth/session`：**401 = handlers 建構並執行成功；503 = `requireSecret` 因缺少 `SESSION_SECRET` 或 `HASH_PEPPER` 而拋錯**。只設這兩個 secret 就足以讓它變 401，缺 Mailgun 只影響寄信。
 - **兩個 smoke test 都帶 Access service token**，見下節。
+- **preview 與 production 使用不同的 D1 資料庫**，見[建立 D1 與 binding](#3-建立-d1-與-binding)。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## CI 通過 Cloudflare Access
 
@@ -103,7 +104,6 @@ Workflow 以 `CF-Access-Client-Id` 與 `CF-Access-Client-Secret` 兩個 header �
 | 根路徑 200、Functions 401 | 正常 |
 
 **token 失效或輪替後 CI 會全面轉紅**，症狀與「站台掛了」相同但原因無關；先看狀態碼是不是 302。
-- **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用
 
