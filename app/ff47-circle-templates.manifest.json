@@ -1,13 +1,18 @@
 {
   "schemaVersion": 1,
-  "generatorVersion": 1,
+  "generatorVersion": 2,
   "sourceWorkbook": "data_source_test/FF47 完整攤位整理.xlsx",
   "sourceSheet": "攤位整理表 請在此填寫資訊",
   "sourceWorkbookSha256": "ead78dff3b55d023c2eacb42dcd46c020ed802b68c141d703436cd8af2c3bbb6",
   "thumbnailIndex": "data_source_test/ff47-thumbnail-index.csv",
   "thumbnailIndexSha256": "0858a0ff387957c22df9d913db781e5f03ed16c7335c02ff269a7adc003281e0",
   "output": "app/ff47-circle-templates.generated.json",
-  "outputSha256": "3ad0a2cd784d1a55cf61c6505594c0766727eec679de80b4e788a25d3bfd3487",
+  "outputSha256": "1d8b910d4ff5173d7e69834204a4abbfbc477d963c3a193e91ab13b71e9db91c",
+  "identityRegistry": {
+    "allocations": "data/circle-identities/allocations.json",
+    "evidence": "data/circle-identities/evidence.json",
+    "legacyIdMap": "data/circle-identities/legacy-id-map.json"
+  },
   "counts": {
     "templates": 1336,
     "links": 5137,

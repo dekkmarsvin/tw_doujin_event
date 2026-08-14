@@ -1,5 +1,5 @@
-export const PLANNING_SCHEMA_VERSION = 2 as const;
-const LEGACY_PLANNING_SCHEMA_VERSION = 1;
+export const PLANNING_SCHEMA_VERSION = 3 as const;
+const MIGRATABLE_PLANNING_SCHEMA_VERSIONS = new Set([1, 2]);
 export const PLANNING_STORAGE_KEY = "event-map-planning-v1";
 export const LEGACY_FAVORITES_KEY = "event-map-favorites";
 export const PLANNING_CHANGED_EVENT = "event-map-planning-changed";
@@ -151,12 +151,12 @@ export function inspectPlanningStorage(storage: Pick<Storage, "getItem">, eventI
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      if (!isObject(parsed) || (parsed.schemaVersion !== PLANNING_SCHEMA_VERSION && parsed.schemaVersion !== LEGACY_PLANNING_SCHEMA_VERSION)) {
+      if (!isObject(parsed) || (parsed.schemaVersion !== PLANNING_SCHEMA_VERSION && !MIGRATABLE_PLANNING_SCHEMA_VERSIONS.has(Number(parsed.schemaVersion)))) {
         return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: "偵測到不相容的規劃資料版本；原始資料已保留，尚未覆寫。" };
       }
       const document = parsePlanningDocument({ ...parsed, schemaVersion: PLANNING_SCHEMA_VERSION });
       return {
-        document: parsed.schemaVersion === LEGACY_PLANNING_SCHEMA_VERSION ? migratePlanningCircleIds(document, migrateLegacyCircleId) : document,
+        document: parsed.schemaVersion === PLANNING_SCHEMA_VERSION ? document : migratePlanningCircleIds(document, migrateLegacyCircleId),
         writable: true,
         raw: saved,
         error: "",

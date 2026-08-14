@@ -3,6 +3,7 @@
 社團身分、活動配置與外部來源的權威關係，以及同一筆社團資料在三種介面的呈現規則。
 
 **實作**：[`app/circle-records.ts`](../../app/circle-records.ts)、[`app/booth.ts`](../../app/booth.ts)、[`app/event-catalog.ts`](../../app/event-catalog.ts)
+**身分權威**：`data/circle-identities/allocations.json` + `evidence.json`
 **產物**：`app/ff47-circle-templates.generated.json` → `public/data/events/ff47/circles.json`
 **流程**：[社團資料更新](../runbooks/catalog-data-update.md)
 
@@ -93,8 +94,10 @@ type CircleViewRecord = Booth & {
 
 ## 社團身分規則
 
-- **一個 `CircleRecord` 可對應多筆 `PlacementRecord`。** 同一 Excel 主資料列登錄的跨日或連號攤位共用同一個 `CircleRecord.id`，各自保留自己的 `PlacementRecord`。決策見 [ADR-0003](../adr/0003-circle-identity-from-workbook-row.md)。
-- **`CircleRecord.id` 是 `FNV-1a(試算表列號 + 社團名)`。** 上游插入一列或社團改名都會讓其後所有 ID 改變——這是重建場刊後必須執行 `npm run claims:check` 的原因，也是社團名稱不開放社團自行編輯的原因之一。
+- **一個 `CircleRecord` 可對應多筆 `PlacementRecord`。** 同一份已裁決的 identity evidence 可跨日期、攤位與活動沿用一個 `CircleRecord.id`，各配置保留自己的 `PlacementRecord`。決策見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md)。
+- **`CircleRecord.id` 是配發式 `c-xxxxxx` 流水號。** `allocations.json` 只增不減、不重排、不重用；名稱、列號與活動變更都不得重算 ID。
+- **識別證據與配號分層。** `evidence.json` 可審閱更新目前名稱、歷史別名與跨活動來源；若只有名稱相符、來源衝突或一對多，生成器 fail closed 並輸出人工裁決資料，不自動合併。
+- **`legacy-id-map.json` 永久保存舊 FF47 hash ID 對照。** 它由靜態 catalog 按需載入，供 planning schema 3 與舊 `selectedCircle` URL 使用，不進入閱讀端主 bundle。
 - **同名不是合併依據。** 沒有人工核對證據時，同名的公開列維持分離。
 - **沒有編號攤位的已知社團仍保留在目錄中**，但不虛構地圖位置。
 

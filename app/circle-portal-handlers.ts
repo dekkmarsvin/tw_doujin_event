@@ -1,6 +1,7 @@
 import { isCircleOverrideFields, type CircleOverrideFields } from "./circle-overrides";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
+import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -55,6 +56,8 @@ export type PortalDependencies = {
   fetchEvidence: (url: string) => Promise<string | null>;
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
+  /** Loads the permanent legacy map from the static catalog only for cutover. */
+  loadLegacyCircleIds: () => Promise<Record<string, string>>;
   config: PortalConfig;
 };
 
@@ -91,7 +94,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, projectCircle, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, projectCircle, loadLegacyCircleIds, config }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
   // string against a normalized one silently denies an admin whose address
@@ -568,12 +571,29 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     return ok ? json({ ok: true }) : json({ error: "這個社團目前沒有上線中的補充資料。" }, 404);
   }
 
+  async function adminMigrateCircleIds(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    if (body?.confirm !== "migrate-to-allocated-circle-ids") {
+      return json({ error: "缺少明確的 migration confirm。" }, 400);
+    }
+    const result = await repository.migrateCircleIds({
+      eventId: config.eventId,
+      mappings: await loadLegacyCircleIds(),
+      generatedAt: config.dataUpdatedAt,
+      now: config.now(),
+    });
+    return json({ ok: true, ...result });
+  }
+
   /**
    * The public overlay. A strong ETag keyed on the stored revision lets the
    * Pages edge collapse venue traffic to roughly one row read per PoP per
    * minute, which is what keeps this inside the D1 free tier.
    */
   async function publicOverrides(request: Request, eventId: string) {
+    if (eventId !== config.eventId) return json({ error: "找不到這個活動的社團補充資料。" }, 404, { "cache-control": "no-store" });
     let doc = await repository.getOverridesDoc(eventId);
 
     // The document is written on edit, but the event ending is not an edit.
@@ -590,7 +610,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const etag = `"circle-overrides-${eventId}-${phase}-${doc?.revision ?? 0}"`;
     const headers = {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "public, max-age=60, must-revalidate",
+      "cache-control": DYNAMIC_OVERLAY_CACHE_POLICY,
       etag,
     };
     if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
@@ -601,7 +621,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     requestLink, verify, session, signOut,
     listClaims, createClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride, previewOverride, setPostEventVisibility,
-    adminListClaims, adminDecideClaim, adminTakedown,
+    adminListClaims, adminDecideClaim, adminTakedown, adminMigrateCircleIds,
     adminListAdmins, adminManageAdmins,
     publicOverrides,
   };

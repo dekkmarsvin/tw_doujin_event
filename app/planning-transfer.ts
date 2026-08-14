@@ -95,8 +95,8 @@ function parseCsv(text: string) {
 
 function preview(document: PlanningDocument, format: "json" | "csv", errors: string[], current?: PlanningDocument): ImportPreview {
   const unmatchedCircleIds = [...new Set([...document.favorites, ...document.visitPlans]
-    .map((item) => item.circleId)
-    .filter((circleId) => !isKnownCircleId(circleId)))];
+    .filter((item) => !isKnownCircleId(item.circleId, item.eventId))
+    .map((item) => item.circleId))];
   const favoriteKeys = new Set(current?.favorites.map((item) => `${item.eventId}\u0000${item.circleId}`));
   const planKeys = new Set(current?.visitPlans.map((item) => `${item.eventId}\u0000${item.day}\u0000${item.circleId}`));
   const conflicts = document.favorites.filter((item) => favoriteKeys.has(`${item.eventId}\u0000${item.circleId}`)).length
@@ -144,7 +144,8 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
     if (!circleId) { errors.push(`第 ${line} 列：circle_id 為必填。`); return; }
     if (row.some((value) => /^[\s]*[=+\-@]/.test(value))) { errors.push(`第 ${line} 列：包含可能的公式注入內容。`); return; }
     if (sourceUrl && (!sourceUrl.startsWith("https://") || (() => { try { new URL(sourceUrl); return false; } catch { return true; } })())) { errors.push(`第 ${line} 列：source_url 必須是有效 HTTPS URL。`); return; }
-    const catalog = getCircleCatalog();
+    const targetEventId = eventId || "ff47";
+    const catalog = getCircleCatalog(targetEventId);
     const record = catalog.recordsByCircleId.get(circleId)?.[0] ?? catalog.recordsById.get(circleId);
     const resolvedDay = record?.day ?? 1;
     const updatedAt = new Date().toISOString();
@@ -173,8 +174,8 @@ export function parsePlanningFile(name: string, text: string, current?: Planning
 }
 
 export function mergePlanningImport(current: PlanningDocument, incoming: PlanningDocument, conflict: "keep" | "incoming" | "replace") {
-  const validFavorites = incoming.favorites.filter((item) => isKnownCircleId(item.circleId));
-  const validPlans = incoming.visitPlans.filter((item) => isKnownCircleId(item.circleId));
+  const validFavorites = incoming.favorites.filter((item) => isKnownCircleId(item.circleId, item.eventId));
+  const validPlans = incoming.visitPlans.filter((item) => isKnownCircleId(item.circleId, item.eventId));
   if (conflict === "replace") return parsePlanningDocument({ ...incoming, favorites: validFavorites, visitPlans: validPlans });
   const favoriteMap = new Map(current.favorites.map((item) => [`${item.eventId}\u0000${item.circleId}`, item]));
   validFavorites.forEach((item) => { const key = `${item.eventId}\u0000${item.circleId}`; if (conflict === "incoming" || !favoriteMap.has(key)) favoriteMap.set(key, item); });

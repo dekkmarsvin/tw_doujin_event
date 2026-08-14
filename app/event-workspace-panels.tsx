@@ -28,7 +28,8 @@ const SOURCE_ORIGIN_LABEL = {
   media: "外部媒體",
 } as const;
 
-const LINK_KIND_LABEL = {
+/** Shared with the circle portal so an author picks kinds by the name readers see. */
+export const LINK_KIND_LABEL = {
   social: "社群與作者",
   support: "贊助平台",
   website: "網站與其他連結",

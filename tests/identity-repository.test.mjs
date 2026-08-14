@@ -7,14 +7,16 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
+const { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } = await environment.runner.import("/db/identity-runtime-schema.ts");
 const { parseCircleOverridesPayload } = await environment.runner.import("/app/circle-overrides.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
   script: "export default { fetch() { return new Response('ok'); } }",
-  d1Databases: { DB: "identity-test" },
+  d1Databases: { DB: "identity-test", LEGACY_DB: "identity-legacy-test" },
 }));
 const database = await miniflare.getD1Database("DB");
+const legacyDatabase = await miniflare.getD1Database("LEGACY_DB");
 const repository = createIdentityRepository(database);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
@@ -24,10 +26,45 @@ test("creates every table and index on first use", async () => {
   await repository.ensureTables();
   // Idempotent: a second call must not throw on the IF NOT EXISTS statements.
   await repository.ensureTables();
-  const tables = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all();
-  const names = tables.results.map((row) => row.name);
-  for (const expected of ["accounts", "audit_log", "circle_claims", "circle_overrides", "login_tokens", "overrides_doc", "sessions"]) {
-    assert.ok(names.includes(expected), `missing table ${expected}`);
+  const tables = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").all();
+  assert.deepEqual(
+    tables.results.map((row) => row.name),
+    IDENTITY_TABLES.map((table) => table.name).sort(),
+    "runtime tables must exactly match the schema authority",
+  );
+
+  const indexes = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  assert.deepEqual(
+    indexes.results.map((row) => row.name),
+    IDENTITY_INDEXES.map((index) => index.name).sort(),
+    "runtime indexes must exactly match the schema authority",
+  );
+
+  for (const expected of IDENTITY_TABLES) {
+    const info = await database.prepare(`PRAGMA table_info(${expected.name})`).all();
+    assert.deepEqual(
+      info.results.map((column) => column.name),
+      [...expected.columnNames],
+      `${expected.name} columns must match the schema authority`,
+    );
+  }
+});
+
+test("additive column migrations upgrade an existing database idempotently", async () => {
+  for (const [tableName, missingColumn] of [["circle_overrides", "post_event_hidden"], ["overrides_doc", "phase"]]) {
+    const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
+    assert.ok(definition);
+    const oldColumns = definition.columns.filter((column) => !column.startsWith(`${missingColumn} `));
+    await legacyDatabase.prepare(`CREATE TABLE ${tableName} (${oldColumns.join(", ")})`).run();
+  }
+
+  const legacyRepository = createIdentityRepository(legacyDatabase);
+  await legacyRepository.ensureTables();
+  await legacyRepository.ensureTables();
+
+  for (const migration of IDENTITY_COLUMN_MIGRATIONS) {
+    const info = await legacyDatabase.prepare(`PRAGMA table_info(${migration.table})`).all();
+    assert.ok(info.results.some((column) => column.name === migration.column), `missing upgraded column ${migration.table}.${migration.column}`);
   }
 });
 
@@ -157,4 +194,44 @@ test("no raw login token is recoverable from the database", async () => {
   for (const row of rows.results) {
     assert.equal(Object.keys(row).includes("token"), false, "only the hash may be stored");
   }
+});
+
+test("migrates claims, overrides and the public document together and is retry-safe", async () => {
+  const owner = await repository.upsertAccount("identity-migration@example.com", NOW + 10_000);
+  await repository.createClaim({
+    id: "claim-migrate", accountId: owner, eventId: "migration-event", circleId: "ff47-legacy",
+    circleNameKey: "legacy", circleNameAtClaim: "Legacy", sourceRowAtClaim: 20,
+    status: "verified", method: "admin", targetUrl: null, challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 10_000,
+  });
+  await repository.putOverride({ eventId: "migration-event", circleId: "ff47-legacy", fieldsJson: JSON.stringify({ saleInfo: "保留" }), updatedBy: owner, now: NOW + 10_000 });
+
+  const first = await repository.migrateCircleIds({
+    eventId: "migration-event", mappings: { "ff47-legacy": "c-000999" },
+    generatedAt: "2026-08-14T00:00:00.000Z", now: NOW + 11_000,
+  });
+  assert.deepEqual(first, { migratedIds: 1, remainingLegacyIds: [] });
+  assert.equal(await repository.ownsCircle(owner, "migration-event", "c-000999"), true);
+  assert.equal((await repository.getOverride("migration-event", "c-000999"))?.circle_id, "c-000999");
+  assert.equal(JSON.parse((await repository.getOverridesDoc("migration-event")).json).overrides[0].circleId, "c-000999");
+
+  const retry = await repository.migrateCircleIds({
+    eventId: "migration-event", mappings: { "ff47-legacy": "c-000999" },
+    generatedAt: "2026-08-14T00:00:00.000Z", now: NOW + 12_000,
+  });
+  assert.deepEqual(retry, { migratedIds: 0, remainingLegacyIds: [] });
+});
+
+test("preview mail is captured in D1 and disposable data can be reset without deleting admins", async () => {
+  await repository.storePreviewMail({ email: "preview-admin@example.test", subject: "login", text: "secret link", now: NOW + 20_000 });
+  assert.equal((await repository.latestPreviewMail("preview-admin@example.test"))?.text, "secret link");
+  await repository.upsertAccount("disposable@example.test", NOW + 20_000);
+  await repository.addAdmin("preview-admin@example.test", "bootstrap", NOW + 20_000);
+  await repository.writeAudit({ at: NOW + 20_000, actorRole: "system", action: "preview.fixture", subjectType: "preview", subjectId: "fixture" });
+
+  await repository.clearPreviewData();
+  assert.equal(await repository.latestPreviewMail("preview-admin@example.test"), null);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM accounts").first()).total, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM audit_log").first()).total, 0);
+  assert.equal(await repository.isAdminEmail("preview-admin@example.test"), true);
 });
