@@ -45,6 +45,9 @@ interface PortalEnv {
   SESSION_SECRET?: string;
   HASH_PEPPER?: string;
   ADMIN_EMAILS?: string;
+  PREVIEW_MAIL_SINK?: string;
+  PREVIEW_TEST_RECIPIENTS?: string;
+  PREVIEW_E2E_TOKEN?: string;
 }
 
 interface EventContext<Env, Params extends string, Data> {

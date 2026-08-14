@@ -221,3 +221,17 @@ test("migrates claims, overrides and the public document together and is retry-s
   });
   assert.deepEqual(retry, { migratedIds: 0, remainingLegacyIds: [] });
 });
+
+test("preview mail is captured in D1 and disposable data can be reset without deleting admins", async () => {
+  await repository.storePreviewMail({ email: "preview-admin@example.test", subject: "login", text: "secret link", now: NOW + 20_000 });
+  assert.equal((await repository.latestPreviewMail("preview-admin@example.test"))?.text, "secret link");
+  await repository.upsertAccount("disposable@example.test", NOW + 20_000);
+  await repository.addAdmin("preview-admin@example.test", "bootstrap", NOW + 20_000);
+  await repository.writeAudit({ at: NOW + 20_000, actorRole: "system", action: "preview.fixture", subjectType: "preview", subjectId: "fixture" });
+
+  await repository.clearPreviewData();
+  assert.equal(await repository.latestPreviewMail("preview-admin@example.test"), null);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM accounts").first()).total, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM audit_log").first()).total, 0);
+  assert.equal(await repository.isAdminEmail("preview-admin@example.test"), true);
+});

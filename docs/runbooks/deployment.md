@@ -11,7 +11,7 @@
 | Pages project | 需要（`tw-catalog`） |
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
-| Runtime secrets | **需要**——五個，見下 |
+| Runtime secrets | **需要**——production 五個；preview 使用隔離的 session／pepper、E2E token 與 D1 mail sink，見下 |
 | R2 / KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
@@ -23,9 +23,22 @@
 
 ## Secrets
 
-五個 runtime secret 以 `wrangler pages secret put` 設定。**不進 repo、不進 `wrangler.jsonc`、GitHub Actions 也不需要**：
+production 的五個 runtime secret 以 `wrangler pages secret put` 設定。**不進 repo、不進 `wrangler.jsonc`**：
 
 `SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）
+
+preview 不使用 production Mailgun，也不寄外部郵件。`wrangler.jsonc` 的 `env.preview.vars` 明確啟用 D1 mail sink，只允許 `preview-admin@example.test` 與 `preview-circle@example.test`，並以第一個地址作 preview admin seed。這些都是保留的 `.test` 假地址，不是真實收件人。preview 另需三個與 production 分離的 secret：
+
+- `SESSION_SECRET`、`HASH_PEPPER`：preview 專用亂數。
+- `PREVIEW_E2E_TOKEN`：只授權 CI 讀取／清空 preview mail sink；同一值同時設定為 Pages preview secret 與 GitHub Actions secret。
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler pages secret put PREVIEW_E2E_TOKEN --project-name=tw-catalog --env preview
+```
+
+```bash
+gh secret set PREVIEW_E2E_TOKEN
+```
 
 本機開發用 `.dev.vars`，該檔已列入 `.gitignore`。
 
@@ -66,8 +79,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
 - Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
-- **preview 環境不繼承 production 的 secrets。** 要在 PR preview 測社團入口，五個 secret 需另以 `--env preview` 設定一次。
-- **兩個 smoke test 檢查不同的東西。** 「Smoke test deployment」只證明靜態資產上線——那些由邊緣直送，Functions 有沒有環境都回 200。「Smoke test Functions」打未登入的 `/api/auth/session`：**401 = handlers 建構並執行成功；503 = `requireSecret` 因缺少 `SESSION_SECRET` 或 `HASH_PEPPER` 而拋錯**。只設這兩個 secret 就足以讓它變 401，缺 Mailgun 只影響寄信。
+- **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；不設定 preview Mailgun credentials。
+- **401 wiring smoke 與完整 portal E2E 是兩件事。** 「Smoke test deployment」只證明靜態資產上線；「Smoke test Functions」的 401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
+- E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、公開文件、audit 與 captured mail；admins roster 保留供下一次重跑。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用
@@ -94,7 +108,7 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定。**不需要執行任何 migration。**
 
-社團控制面的八張表——`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`——由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。Pages Functions 沒有執行 migration 的時機，因此建表發生在請求路徑上，不在部署步驟裡。
+社團控制面的八張核心表——`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`——以及 preview-only mail sink 使用的 `preview_mail_sink`，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
 
 identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 只服務本機地圖 authoring，不是 identity schema 的第二份 representation，也不參與部署。
 
@@ -127,9 +141,9 @@ npx wrangler d1 execute tw-catalog-identity --remote --command "SELECT COUNT(*) 
 npx wrangler d1 execute tw-catalog-identity-preview --remote --command "SELECT COUNT(*) FROM login_tokens"
 ```
 
-### 4. 設定五個 runtime secrets
+### 4. 設定 production 與 preview runtime secrets
 
-見上節。
+見上節。設定後重部署一次 preview，再確認 `/api/auth/session` 是 401；完整 E2E 由 PR workflow 執行。mail sink 只接受 `PREVIEW_TEST_RECIPIENTS` allowlist，任何其他地址都在寫入 D1 前被拒絕，絕不退回 production Mailgun。
 
 ### 5. 建立最小權限 token
 

@@ -132,6 +132,16 @@ export const IDENTITY_TABLES = [
     "detail_json TEXT",
     "ip_hash TEXT",
   ]),
+  // Used only when the preview environment explicitly selects the D1 mail
+  // sink. The production database has the empty table but no route can write
+  // to or read it without preview-only environment flags and a separate token.
+  table("preview_mail_sink", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "email TEXT NOT NULL",
+    "subject TEXT NOT NULL",
+    "text TEXT NOT NULL",
+    "created_at INTEGER NOT NULL",
+  ]),
 ] as const;
 
 export const IDENTITY_INDEXES = [
@@ -151,6 +161,7 @@ export const IDENTITY_INDEXES = [
   index("circle_overrides_live_idx", "circle_overrides", "event_id, status, updated_at"),
   index("audit_at_idx", "audit_log", "at"),
   index("audit_subject_idx", "audit_log", "subject_type, subject_id, at"),
+  index("preview_mail_sink_email_idx", "preview_mail_sink", "email, created_at"),
 ] as const;
 
 export const IDENTITY_SCHEMA_STATEMENTS = [...IDENTITY_TABLES, ...IDENTITY_INDEXES].map(({ sql }) => sql);

@@ -32,6 +32,14 @@
   // would leave preview with no database under the name the code looks for.
   "env": {
     "preview": {
+      // Preview mail never leaves Cloudflare: allowlisted .test recipients are
+      // captured in the preview D1 for E2E. PREVIEW_E2E_TOKEN remains a Pages
+      // preview secret and is intentionally absent here.
+      "vars": {
+        "PREVIEW_MAIL_SINK": "d1",
+        "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
+        "ADMIN_EMAILS": "preview-admin@example.test"
+      },
       "d1_databases": [
         {
           "binding": "DB",

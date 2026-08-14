@@ -106,3 +106,73 @@ jobs:
           done
           echo "::error::/api/auth/session returned $code, expected 401. 503 means this environment is missing SESSION_SECRET or HASH_PEPPER; see docs/runbooks/deployment.md."
           exit 1
+
+
+  # Every PR uses the same disposable preview D1. A separate globally serialized
+  # job prevents one PR's cleanup from deleting another PR's in-flight fixture.
+  preview-e2e:
+    name: Full preview portal E2E
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: preview-portal-e2e
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Full request-to-public-overlay flow
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PREVIEW_BASE_URL: https://pr-${{ github.event.number }}.tw-catalog.pages.dev
+          PREVIEW_E2E_TOKEN: ${{ secrets.PREVIEW_E2E_TOKEN }}
+        run: |
+          if [ -z "$PREVIEW_E2E_TOKEN" ]; then
+            echo "::error::PREVIEW_E2E_TOKEN must be set in GitHub Actions and as a Pages preview secret."
+            exit 1
+          fi
+          token="$CLOUDFLARE_API_TOKEN"
+          if [[ "$token" == *"Authorization: Bearer "* ]]; then
+            token="$(printf '%s' "$token" | sed -n 's/.*Authorization: Bearer \([^"[:space:]]*\).*/\1/p' | head -n 1)"
+          fi
+          token="$(printf '%s' "$token" | tr -d '\r\n')"
+          if [[ ${#token} -lt 20 || ! "$token" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Cloudflare API token has an unsupported format." >&2
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          export CLOUDFLARE_API_TOKEN="$token"
+          fingerprint() {
+            npx wrangler d1 execute tw-catalog-identity --remote --json --command \
+              "SELECT (SELECT COUNT(*) FROM accounts) AS accounts, (SELECT COUNT(*) FROM circle_claims) AS claims, (SELECT COUNT(*) FROM circle_overrides) AS overrides, COALESCE((SELECT SUM(revision) FROM overrides_doc), 0) AS revisions" \
+              | jq -c '.[0].results[0]'
+          }
+          production_before="$(fingerprint)"
+          set +e
+          node scripts/preview-portal-e2e.mjs
+          e2e_status=$?
+          set -e
+          production_after="$(fingerprint)"
+          if [ "$production_before" != "$production_after" ]; then
+            echo "::error::Preview E2E changed production D1 counts or revisions."
+            exit 1
+          fi
+          if [ "$e2e_status" -ne 0 ]; then
+            echo "::error::Preview portal E2E failed; production fingerprint remained unchanged."
+            exit "$e2e_status"
+          fi
+          echo "Preview E2E used isolated D1; production fingerprint is unchanged."

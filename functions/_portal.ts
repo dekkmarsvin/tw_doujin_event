@@ -133,7 +133,7 @@ function bootstrapAdmins(env: PortalEnv) {
  */
 const repositories = new WeakMap<D1Database, IdentityRepository>();
 
-function repositoryFor(env: PortalEnv) {
+export function repositoryFor(env: PortalEnv) {
   const existing = repositories.get(env.DB);
   if (existing) return existing;
   const created = createIdentityRepository(env.DB, { bootstrapAdmins: bootstrapAdmins(env) });
@@ -141,12 +141,37 @@ function repositoryFor(env: PortalEnv) {
   return created;
 }
 
+function previewRecipients(env: PortalEnv) {
+  return new Set((env.PREVIEW_TEST_RECIPIENTS ?? "").split(/[,;\s]+/).map((entry) => entry.normalize("NFKC").trim().toLowerCase()).filter(Boolean));
+}
+
+export function previewRecipientAllowed(env: PortalEnv, email: string) {
+  return env.PREVIEW_MAIL_SINK === "d1" && previewRecipients(env).has(email.normalize("NFKC").trim().toLowerCase());
+}
+
+export function previewE2eAuthorized(env: PortalEnv, request: Request) {
+  const expected = env.PREVIEW_E2E_TOKEN ?? "";
+  const actual = request.headers.get("x-preview-e2e-token") ?? "";
+  if (env.PREVIEW_MAIL_SINK !== "d1" || !expected || actual.length !== expected.length) return false;
+  let different = 0;
+  for (let index = 0; index < expected.length; index += 1) different |= expected.charCodeAt(index) ^ actual.charCodeAt(index);
+  return different === 0;
+}
+
 export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
   const { request, env } = context;
   const eventId = FF47_EVENT.id;
+  const repository = repositoryFor(env);
   return createCirclePortalHandlers({
-    repository: repositoryFor(env),
-    sendMail: (message) => sendMailgun(env, message),
+    repository,
+    sendMail: async (message) => {
+      if (env.PREVIEW_MAIL_SINK === "d1") {
+        if (!previewRecipientAllowed(env, message.to)) throw new Error("Preview mail recipient is not allowlisted.");
+        await repository.storePreviewMail({ email: message.to, subject: message.subject, text: message.text, now: Date.now() });
+        return;
+      }
+      await sendMailgun(env, message);
+    },
     lookupCircle: async (circleId) => (await catalogIndex(env, request, eventId)).get(circleId) ?? null,
     searchCircles: async (query, limit) => {
       const needle = query.normalize("NFKC").toLocaleLowerCase("zh-Hant");
