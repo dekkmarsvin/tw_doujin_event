@@ -195,6 +195,28 @@
 .editorHint { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .editorHint b { color: var(--ink); }
 
+.fieldMode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.fieldMode span { margin-right: auto; }
+.fieldMode b { color: var(--ink); }
+.fieldMode button {
+  min-height: 30px;
+  margin-top: 0;
+  padding: 4px 9px;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 9px;
+}
+.fieldMode button[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); }
+
 .linkList { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .linkList > li { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
 .linkRow { display: grid; grid-template-columns: 22px 1fr; gap: 4px 8px; align-items: center; }

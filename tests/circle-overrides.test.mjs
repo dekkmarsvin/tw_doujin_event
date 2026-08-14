@@ -17,6 +17,12 @@ const base = records.buildCircleCatalog(payload);
 /** A circle that actually holds placements, so detaching would be observable. */
 const placed = base.circles.find((circle) => (base.recordsByCircleId.get(circle.id)?.length ?? 0) > 1);
 assert.ok(placed, "fixture needs a circle with more than one placement");
+const linked = base.circles.find((circle) => circle.externalLinks.length > 0);
+const pictured = base.circles.find((circle) => circle.media.length > 0);
+const credited = base.circles.find((circle) => circle.pen.length > 0);
+assert.ok(linked, "fixture needs a circle with reviewed links");
+assert.ok(pictured, "fixture needs a circle with a reviewed thumbnail");
+assert.ok(credited, "fixture needs a circle with a reviewed pen name");
 
 function envelope(list) {
   return { schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-08-13T00:00:00.000Z", revision: 1, overrides: list };
@@ -102,6 +108,44 @@ test("edited text flows into the derived read model and becomes searchable", () 
 test("an override replaces a list wholesale instead of merging it", () => {
   const edited = records.buildCircleCatalog(payload, withFields(placed.id, { specialTags: ["只剩這個"] }));
   assert.deepEqual(edited.circlesById.get(placed.id).specialTags, ["只剩這個"]);
+});
+
+test("one field authority defines inherit, replace and clear encodings", () => {
+  assert.deepEqual(overrides.CIRCLE_OVERRIDE_FIELD_KEYS, [
+    "pen", "saleInfo", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail",
+  ]);
+
+  let fields = {};
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "inherit");
+  fields = { ...fields, pen: "刊登筆名" };
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "replace");
+  fields = overrides.clearCircleOverrideField(fields, "pen");
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "clear");
+  fields = overrides.inheritCircleOverrideField(fields, "pen");
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "inherit");
+
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "links"), { links: [] });
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "thumbnail"), { thumbnail: null });
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "specialTags"), { specialTags: [] });
+});
+
+test("explicit tombstones clear reviewed text, links and thumbnail", () => {
+  const clearedPen = records.buildCircleCatalog(payload, withFields(credited.id, { pen: "" }));
+  assert.equal(clearedPen.circlesById.get(credited.id).pen, "");
+
+  const clearedLinks = records.buildCircleCatalog(payload, withFields(linked.id, { links: [] }));
+  assert.deepEqual(clearedLinks.circlesById.get(linked.id).externalLinks, []);
+
+  const clearedThumbnail = records.buildCircleCatalog(payload, withFields(pictured.id, { thumbnail: null }));
+  assert.deepEqual(clearedThumbnail.circlesById.get(pictured.id).media, []);
+
+  assert.equal(overrides.isCircleOverrideFields({ pen: "", links: [], thumbnail: null }), true);
+});
+
+test("removing a tombstone returns the field to reviewed inheritance", () => {
+  const inherited = overrides.inheritCircleOverrideField({ links: [] }, "links");
+  const catalog = records.buildCircleCatalog(payload, withFields(linked.id, inherited));
+  assert.deepEqual(catalog.circlesById.get(linked.id).externalLinks, linked.externalLinks);
 });
 
 test("one malformed entry is dropped without discarding the rest", () => {
