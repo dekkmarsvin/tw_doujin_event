@@ -174,6 +174,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       const circle = projected.circlesById.get(circleId);
       return circle ? [] : null;
     },
+    loadLegacyCircleIds: async () => (await catalog(env, request, eventId)).payload.legacyCircleIds,
     config: {
       eventId,
       origin: new URL(request.url).origin,

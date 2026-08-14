@@ -1,6 +1,6 @@
 # 社團資料更新
 
-從上游試算表同步 FF47 社團資料，重新生成場刊快照，並確認既有認領沒有被打斷。
+從上游試算表同步 FF47 社團資料，透過永久 identity registry 重新生成場刊快照。
 
 資料模型與身分規則見[社團目錄契約](../contracts/circle-catalog.md)。
 
@@ -23,6 +23,7 @@
 Google 試算表
   └─ npm run source:update
        └─ data_source_test/*.xlsx           版本化來源快照
+            ├─ data/circle-identities/{allocations,evidence,legacy-id-map}.json
             └─ npm run catalog:generate
                  └─ app/ff47-circle-templates.generated.json   （+ .manifest.json 記錄 SHA-256）
                       └─ npm run catalog:snapshot
@@ -51,21 +52,11 @@ npm run source:update
 
 會依序下載並驗證 XLSX、替換本機來源、重新產生社團模板與來源 manifest，最後重新輸出 `circles.json`。
 
-### 3. 檢查認領是否還指得到社團
+### 3. 審閱 identity registry 差異
 
-```bash
-npm run claims:check
-```
+`catalog:generate` 對同一 `eventId + source kind + source value` 沿用既有 `c-xxxxxx`。全新且沒有名稱候選的證據才會追加配號；只有名稱相符、來源重複或其他衝突時會 fail closed，輸出人工裁決報告。此時先確認是既有社團或新社團，再編輯 `evidence.json`，不得用名稱自動合併。
 
-**這一步不能跳過。** `CircleRecord.id` 是 `FNV-1a(試算表列號 + 社團名)`，上游插入一列或社團改名都會讓其後**所有** ID 改變。這個檢查會列出失效的認領與補充資料，並用認領當下記錄的名稱建議新的 ID。
-
-加上 `-- --remote` 可檢查正式環境的 D1：
-
-```bash
-npm run claims:check -- --remote
-```
-
-它刻意不放在 `npm run build` 裡——CI 沒有 D1 binding，放進去只會讓每次部署失敗，而不是抓到真正的漂移。
+檢查 diff 時確認：`allocations.json` 只在尾端追加、`nextSequence` 單調增加；`evidence.json` 的來源不重複；`legacy-id-map.json` 永久保留且不因本次生成刪除。`npm run catalog:check` 會驗證 registry、manifest 與產物同步。
 
 ### 4. 走完共同 gate 再 commit
 

@@ -195,3 +195,29 @@ test("no raw login token is recoverable from the database", async () => {
     assert.equal(Object.keys(row).includes("token"), false, "only the hash may be stored");
   }
 });
+
+test("migrates claims, overrides and the public document together and is retry-safe", async () => {
+  const owner = await repository.upsertAccount("identity-migration@example.com", NOW + 10_000);
+  await repository.createClaim({
+    id: "claim-migrate", accountId: owner, eventId: "migration-event", circleId: "ff47-legacy",
+    circleNameKey: "legacy", circleNameAtClaim: "Legacy", sourceRowAtClaim: 20,
+    status: "verified", method: "admin", targetUrl: null, challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 10_000,
+  });
+  await repository.putOverride({ eventId: "migration-event", circleId: "ff47-legacy", fieldsJson: JSON.stringify({ saleInfo: "保留" }), updatedBy: owner, now: NOW + 10_000 });
+
+  const first = await repository.migrateCircleIds({
+    eventId: "migration-event", mappings: { "ff47-legacy": "c-000999" },
+    generatedAt: "2026-08-14T00:00:00.000Z", now: NOW + 11_000,
+  });
+  assert.deepEqual(first, { migratedIds: 1, remainingLegacyIds: [] });
+  assert.equal(await repository.ownsCircle(owner, "migration-event", "c-000999"), true);
+  assert.equal((await repository.getOverride("migration-event", "c-000999"))?.circle_id, "c-000999");
+  assert.equal(JSON.parse((await repository.getOverridesDoc("migration-event")).json).overrides[0].circleId, "c-000999");
+
+  const retry = await repository.migrateCircleIds({
+    eventId: "migration-event", mappings: { "ff47-legacy": "c-000999" },
+    generatedAt: "2026-08-14T00:00:00.000Z", now: NOW + 12_000,
+  });
+  assert.deepEqual(retry, { migratedIds: 0, remainingLegacyIds: [] });
+});

@@ -69,9 +69,8 @@ npx tsc --noEmit --incremental false
 | 命令 | 何時執行 | 為什麼不在 gate 裡 |
 |---|---|---|
 | `npm run source:check` | 懷疑上游試算表有更新時 | 需要對外網路 |
-| `npm run claims:check` | **重建場刊後、commit 之前** | CI 沒有 D1 binding，放進去只會讓每次部署失敗，而不是抓到真正的漂移 |
 
-兩者的用法見[社團資料更新](./catalog-data-update.md)。
+用法見[社團資料更新](./catalog-data-update.md)。identity registry 與產物一致性已由共同 build 內的 `catalog:check` 驗證。
 
 ## 測試必須涵蓋的資料形狀
 

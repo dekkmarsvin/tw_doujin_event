@@ -67,6 +67,8 @@ export type CircleCatalogPayload = {
   eventId: string;
   generatedAt: string;
   officialSupplementKeys: string[];
+  /** Permanent compatibility map. Kept in the lazy static snapshot, not the JS bundle. */
+  legacyCircleIds: Record<string, string>;
   booths: Booth[];
   templates: CircleTemplate[];
 };
@@ -310,6 +312,9 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
   const records = rows.map(({ view }) => view);
   const recordsByCircleId = new Map<string, CircleViewRecord[]>();
   const idMigrationTargets = new Map<string, string[]>();
+  Object.entries(payload.legacyCircleIds).forEach(([legacyId, circleId]) => {
+    idMigrationTargets.set(legacyId, [circleId]);
+  });
   records.forEach((record) => {
     recordsByCircleId.set(record.circle.id, [...(recordsByCircleId.get(record.circle.id) ?? []), record]);
     idMigrationTargets.set(record.circle.id, [record.circle.id]);
@@ -332,6 +337,11 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isCircleIdMap(value: unknown): value is Record<string, string> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+    && Object.entries(value).every(([legacyId, circleId]) => legacyId.startsWith("ff47-") && /^c-\d{6}$/.test(circleId));
 }
 
 function isBooth(value: unknown): value is Booth {
@@ -362,6 +372,7 @@ export function isCircleCatalogPayload(value: unknown): value is CircleCatalogPa
   return payload.schema === CIRCLE_CATALOG_SCHEMA
     && typeof payload.eventId === "string" && typeof payload.generatedAt === "string"
     && isStringArray(payload.officialSupplementKeys)
+    && isCircleIdMap(payload.legacyCircleIds)
     && Array.isArray(payload.booths) && payload.booths.length > 0 && payload.booths.every(isBooth)
     && Array.isArray(payload.templates) && payload.templates.every(isTemplate);
 }

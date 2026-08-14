@@ -47,7 +47,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 | 要重新產生地圖快照 | [地圖 authoring](docs/runbooks/map-authoring.md) |
 | 首次部署、改密鑰、回滾 | [部署](docs/runbooks/deployment.md) |
 
-> 重建場刊後、commit 之前必須跑 `npm run claims:check`——社團 ID 對上游列號敏感，插入一列會讓其後所有 ID 改變。原因見 [ADR-0003](docs/adr/0003-circle-identity-from-workbook-row.md)。
+> 社團 ID 由版本化 registry 配發且永不重算；更新場刊時必須審閱 identity registry 與 legacy mapping 的差異。規則見 [ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)。
 
 ## 專案結構
 

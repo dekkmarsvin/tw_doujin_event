@@ -32,7 +32,9 @@
 
 **永不開放**：攤位、日期、`SourceLink`。
 
-**社團名稱不可由社團編輯。** 它同時是攤位比對鍵、縮圖索引 join key 與 `circle.id` 雜湊輸入的一半；改動會讓社團脫離自己的攤位並使既有收藏失效。名稱錯誤由管理者在**上游來源**更正——那才是單一來源。決策與 Comiket 對照見 [ADR-0007](../adr/0007-circle-name-is-not-circle-editable.md)。
+**社團名稱不可由社團編輯。** 它仍是攤位比對鍵與縮圖索引 join key；但依 ADR-0010，名稱已不再參與 `circle.id`。名稱錯誤由管理者在**上游來源與 identity evidence registry** 更正。是否開放自行改名仍由 ADR-0007 管理，不能因 ID 穩定就順帶放寬。
+
+`circle_name_key`、`circle_name_at_claim`、`source_row_at_claim` 保留為認領當時的稽核快照，不再用名稱推測或修復 identity。D1 cutover 只接受與靜態 catalog 相同的永久 mapping；受保護的管理端遷移會一起更新 claims、overrides、公開文件與 audit，未知或碰撞 ID 在寫入前拒絕。
 
 ### 連結順序有語意
 

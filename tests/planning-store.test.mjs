@@ -72,6 +72,24 @@ test("migrates schema-1 placement planning to canonical circle IDs without losin
   assert.deepEqual(snapshot.document.visitPlans.map(({ circleId, status }) => [circleId, status]), [["canonical-origin", "next"]]);
 });
 
+test("migrates schema-2 hash IDs to schema 3 and a retry does not duplicate planning data", () => {
+  const raw = JSON.stringify({
+    schemaVersion: 2,
+    favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
+    favorites: [{ eventId, circleId: "ff47-old", groupId: "priority", memo: "保留", createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z" }],
+    visitPlans: [{ eventId, day: 2, circleId: "ff47-old", status: "next", routeOrder: 0, purchaseMemo: "新刊", budget: 500, updatedAt: "2026-08-13T00:00:00.000Z" }],
+  });
+  const storage = { getItem: (key) => key === store.PLANNING_STORAGE_KEY ? raw : null };
+  const first = store.inspectPlanningStorage(storage, eventId, (circleId) => [circleId === "ff47-old" ? "c-000001" : circleId]);
+  assert.equal(first.document.schemaVersion, 3);
+  assert.deepEqual(first.document.favorites.map(({ circleId, memo }) => [circleId, memo]), [["c-000001", "保留"]]);
+  assert.deepEqual(first.document.visitPlans.map(({ circleId, purchaseMemo, budget }) => [circleId, purchaseMemo, budget]), [["c-000001", "新刊", 500]]);
+
+  const saved = JSON.stringify(first.document);
+  const retry = store.inspectPlanningStorage({ getItem: (key) => key === store.PLANNING_STORAGE_KEY ? saved : null }, eventId, () => { throw new Error("schema 3 must not remigrate"); });
+  assert.deepEqual(retry.document, first.document);
+});
+
 test("moves visit plan entries and compacts route order", () => {
   let document = store.addToVisitPlan(empty(), eventId, 2, "a");
   document = store.addToVisitPlan(document, eventId, 2, "b");
