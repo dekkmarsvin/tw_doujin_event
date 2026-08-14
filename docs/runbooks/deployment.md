@@ -68,6 +68,39 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
 - **preview 環境不繼承 production 的 secrets。** 要在 PR preview 測社團入口，五個 secret 需另以 `--env preview` 設定一次。
 - **兩個 smoke test 檢查不同的東西。** 「Smoke test deployment」只證明靜態資產上線——那些由邊緣直送，Functions 有沒有環境都回 200。「Smoke test Functions」打未登入的 `/api/auth/session`：**401 = handlers 建構並執行成功；503 = `requireSecret` 因缺少 `SESSION_SECRET` 或 `HASH_PEPPER` 而拋錯**。只設這兩個 secret 就足以讓它變 401，缺 Mailgun 只影響寄信。
+- **兩個 smoke test 都帶 Access service token**，見下節。
+
+## CI 通過 Cloudflare Access
+
+站台受 Cloudflare Access 保護，包含 `*.tw-catalog.pages.dev` 的 preview 主機。CI runner 沒有瀏覽器、沒有 Cloudflare One client，因此需要**service token**才能到達原站。
+
+沒有 token 時 Access 會對每個請求回 302 導向登入頁。**這個 302 不會被 `curl --fail` 視為失敗**——它只對 4xx 與 5xx 失敗——所以在補上這道防線之前，根路徑的 smoke test 實際上是「成功地取得了 Access 登入頁」，看起來一切正常。現在根路徑改為明確要求 200。
+
+### 設定
+
+1. Zero Trust → **Access → Service Auth** 建立 service token，記下 Client ID 與 Client Secret（**secret 只顯示一次**）。
+2. 在涵蓋 `tw-catalog.pages.dev` 與 `*.tw-catalog.pages.dev` 的 Access application 裡新增一條 policy：Action **Service Auth**、規則 **Service Token** 選剛才那個。Service Auth policy 與既有的人員 policy 並存，不影響你自己用 Cloudflare One client 登入。
+3. GitHub repository **Settings → Secrets and variables → Actions** 建立：
+
+```bash
+gh secret set CF_ACCESS_CLIENT_ID
+```
+
+```bash
+gh secret set CF_ACCESS_CLIENT_SECRET
+```
+
+Workflow 以 `CF-Access-Client-Id` 與 `CF-Access-Client-Secret` 兩個 header 送出，值來自環境變數而不寫在命令列。
+
+### 症狀對照
+
+| smoke test 回應 | 意義 |
+|---|---|
+| 302（兩個 test 皆是） | token 未設定、值不對，或 policy 沒涵蓋這個主機 |
+| 根路徑 200、Functions 503 | Access 通過了，但該環境缺 `SESSION_SECRET` 或 `HASH_PEPPER` |
+| 根路徑 200、Functions 401 | 正常 |
+
+**token 失效或輪替後 CI 會全面轉紅**，症狀與「站台掛了」相同但原因無關；先看狀態碼是不是 302。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用

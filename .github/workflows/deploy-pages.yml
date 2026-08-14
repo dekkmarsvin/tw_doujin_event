@@ -77,11 +77,33 @@ jobs:
             --project-name=tw-catalog
             --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
 
+      # Both checks send a Cloudflare Access service token. Without it an Access
+      # policy answers every request with a 302 to its login page, and the
+      # origin is never reached — which `curl --fail` treats as success, because
+      # a redirect is not an error status. That is why the root check asserts
+      # 200 rather than relying on --fail.
       - name: Smoke test deployment
-        run: >-
-          curl --fail --silent --show-error
-          --retry 8 --retry-all-errors --retry-delay 2
-          https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev/
+        env:
+          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          code=$(curl --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 \
+            --output /dev/null --write-out '%{http_code}' \
+            --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+            --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+            "$BASE_URL/" || echo 000)
+          if [ "$code" = "200" ]; then
+            echo "Site root served (200)."
+            exit 0
+          fi
+          case "$code" in
+            3*) reason="Cloudflare Access intercepted it — check CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET, and that the service token is allowed on this hostname" ;;
+            000) reason="the host could not be reached at all" ;;
+            *) reason="the deployment did not serve the site root" ;;
+          esac
+          echo "::error::$BASE_URL/ returned $code, expected 200: $reason. See docs/runbooks/deployment.md."
+          exit 1
 
       # The step above only proves the static assets are live; they are served
       # straight from the edge and answer 200 whether or not the Functions have
@@ -93,9 +115,13 @@ jobs:
       - name: Smoke test Functions
         env:
           BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           for attempt in $(seq 1 5); do
             code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
               "$BASE_URL/api/auth/session" || echo 000)
             if [ "$code" = "401" ]; then
               echo "Functions reachable and configured (401 for an unauthenticated session)."
@@ -106,7 +132,7 @@ jobs:
           done
           case "$code" in
             5*) reason="the environment is missing SESSION_SECRET or HASH_PEPPER" ;;
-            3*) reason="something redirected the request before the Function ran — a Cloudflare Access policy covering this hostname will do this, and CI carries no Access credential" ;;
+            3*) reason="Cloudflare Access intercepted the request before the Function ran — check CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET, and that the service token is allowed on this hostname" ;;
             000) reason="the host could not be reached at all" ;;
             *) reason="the Function answered unexpectedly" ;;
           esac
