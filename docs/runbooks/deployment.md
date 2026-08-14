@@ -32,8 +32,18 @@
 產生密鑰時用管線送入，避免值出現在終端記錄或對話中：
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler pages secret put SESSION_SECRET --project-name=tw-catalog
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler pages secret put SESSION_SECRET --project-name=tw-catalog --env production
 ```
+
+**`--env` 一定要寫。** `wrangler pages secret put --help` 不會列出這個旗標——wrangler 4.120.1 把它設為 `hideGlobalFlags`——但它存在，而且**省略時預設是 `production`**（原始碼：`env ??= "production"`）。只接受 `production` 與 `preview`。
+
+指令成功時會印出目標環境，這是唯一的即時確認：
+
+```
+🌀 Creating the secret for the Pages project "tw-catalog" (preview)
+```
+
+括號裡不是你要的環境就代表寫錯地方了。事後可用 `wrangler pages secret list --project-name=tw-catalog --env <環境>` 分別核對兩邊。
 
 三件必須知道的事：
 
@@ -57,6 +67,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
 - **preview 環境不繼承 production 的 secrets。** 要在 PR preview 測社團入口，五個 secret 需另以 `--env preview` 設定一次。
+- **兩個 smoke test 檢查不同的東西。** 「Smoke test deployment」只證明靜態資產上線——那些由邊緣直送，Functions 有沒有環境都回 200。「Smoke test Functions」打未登入的 `/api/auth/session`：**401 = handlers 建構並執行成功；503 = `requireSecret` 因缺少 `SESSION_SECRET` 或 `HASH_PEPPER` 而拋錯**。只設這兩個 secret 就足以讓它變 401，缺 Mailgun 只影響寄信。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用
