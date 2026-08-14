@@ -8,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const records = await environment.runner.import("/app/circle-records.ts");
 const overrides = await environment.runner.import("/app/circle-overrides.ts");
+const messages = await environment.runner.import("/app/circle-override-messages.ts");
 after(() => vite.close());
 
 const payload = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
@@ -163,4 +164,55 @@ test("rejects a link kind outside the catalog vocabulary", () => {
   assert.equal(overrides.isCircleOverrideFields({
     links: [{ provider: "X", kind: "official", url: "https://example.com/a" }],
   }), false);
+});
+
+/**
+ * The editor blocks saving whenever it can name a problem, so its idea of valid
+ * has to match the validator the write route runs. Stricter, and an author is
+ * told to fix a field the server would have accepted. Looser, and they get the
+ * shared 400 with no clue which row caused it — the exact failure the per-field
+ * messages exist to prevent. Compared directly rather than restating either rule.
+ */
+const ALLOWED_HOST = overrides.THUMBNAIL_HOST_ALLOWLIST[0];
+const URL_CASES = [
+  "https://example.com/circle",
+  `https://${ALLOWED_HOST}/file/abc`,
+  "http://example.com/insecure",
+  "javascript:alert(1)",
+  "data:text/html,hi",
+  "example.com/no-protocol",
+  "",
+  "   ",
+];
+
+test("the editor accepts a link URL exactly when the validator does", () => {
+  for (const url of URL_CASES) {
+    assert.equal(
+      messages.linkUrlProblem(url) === "",
+      overrides.isCircleOverrideFields({ links: [{ provider: "p", kind: "social", url }] }),
+      `disagreement on ${JSON.stringify(url)}`,
+    );
+  }
+});
+
+test("the editor accepts a thumbnail URL exactly when the validator does", () => {
+  for (const url of [...URL_CASES, "https://not-on-the-allowlist.example/img.png"]) {
+    assert.equal(
+      messages.thumbnailUrlProblem(url) === "",
+      overrides.isCircleOverrideFields({ thumbnail: { url, sourceUrl: "https://example.com/s", provider: "p" } }),
+      `disagreement on ${JSON.stringify(url)}`,
+    );
+  }
+});
+
+test("an off-allowlist thumbnail host is refused with the usable hosts named", () => {
+  const problem = messages.thumbnailUrlProblem("https://not-on-the-allowlist.example/img.png");
+  // "Rejected" alone leaves the author guessing which hosts would work.
+  assert.match(problem, /允許清單/);
+  assert.ok(problem.includes(ALLOWED_HOST), "the message should name at least one usable host");
+});
+
+test("an empty URL reads as missing rather than malformed", () => {
+  assert.match(messages.linkUrlProblem(""), /請填寫/);
+  assert.match(messages.thumbnailUrlProblem("   "), /請填寫/);
 });
