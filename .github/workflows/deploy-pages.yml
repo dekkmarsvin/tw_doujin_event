@@ -107,7 +107,16 @@ jobs:
                 --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
                 "$BASE_URL/" || true)
               echo "redirected to: ${location:-<no Location header>}"
-              reason="Cloudflare Access intercepted it. A service token only works on a policy whose action is Service Auth — an Allow policy with a service-token rule still demands interactive login. Check that, and that the policy belongs to the application covering this hostname" ;;
+              # A service token Client ID ends in `.access`; copying only the part
+              # before it is a documented cause of exactly this 302, and Access
+              # cannot tell you so because it never recognised the header. Report
+              # the shape, never the value — the value is a secret.
+              case "$CF_ACCESS_CLIENT_ID" in
+                "") echo "CF_ACCESS_CLIENT_ID is empty." ;;
+                *.access) echo "CF_ACCESS_CLIENT_ID has the expected .access suffix." ;;
+                *) echo "::warning::CF_ACCESS_CLIENT_ID does not end in '.access'. A service token Client ID looks like <id>.access; copying only the part before the suffix produces this redirect." ;;
+              esac
+              reason="Cloudflare Access intercepted it. Check the note above about the Client ID suffix, that the policy action is Service Auth, and that the policy belongs to the application covering this hostname" ;;
             000) reason="the host could not be reached at all" ;;
             *) reason="the deployment did not serve the site root" ;;
           esac

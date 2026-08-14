@@ -92,6 +92,8 @@ gh secret set CF_ACCESS_CLIENT_SECRET
 
 Workflow 以 `CF-Access-Client-Id` 與 `CF-Access-Client-Secret` 兩個 header 送出，值來自環境變數而不寫在命令列。
 
+> **Client ID 結尾必須是 `.access`。** service token 的 Client ID 長成 `<英數字串>.access`，複製時漏掉後綴是「policy 設定正確卻仍回 302」最常見的成因——Access 根本沒認出那是 service token，於是照常導向登入頁，錯誤訊息也不會提到 token。CI 在 3xx 時會檢查這個後綴並提示（只回報格式，不印出值）。
+
 ### 症狀對照
 
 | smoke test 回應 | 意義 |
