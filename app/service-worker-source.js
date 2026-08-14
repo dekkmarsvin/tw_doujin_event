@@ -7,7 +7,8 @@
  *
  * Strategies:
  *   navigations    network-first, cached shell on failure
- *   /data/events   stale-while-revalidate — instant catalog, refreshed in place
+ *   static event data stale-while-revalidate — instant catalog, refreshed in place
+ *   overrides.json network-only — failed freshness confirmation falls back to base
  *   hashed assets  cache-first — the filename already carries the version
  */
 
@@ -120,6 +121,13 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirstNavigation(request));
+    return;
+  }
+  if (/^\/data\/events\/[^/]+\/overrides\.json$/.test(url.pathname)) {
+    // A cached overlay can be arbitrarily stale while offline. The publication
+    // contract prefers the complete reviewed base over presenting old authored
+    // content as current, so only the edge's 60-second/ETag response is used.
+    event.respondWith(fetch(request));
     return;
   }
   if (url.pathname.startsWith("/data/events/")) {

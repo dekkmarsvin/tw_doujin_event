@@ -28,11 +28,29 @@
 
 ## 可編輯範圍
 
-**可編輯，儲存後即時生效**：販售資訊、筆名、連結、縮圖、作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
+**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
 
 **永不開放**：攤位、日期、`SourceLink`。
 
-**社團名稱不可由社團編輯。** 它同時是攤位比對鍵、縮圖索引 join key 與 `circle.id` 雜湊輸入的一半；改動會讓社團脫離自己的攤位並使既有收藏失效。名稱錯誤由管理者在**上游來源**更正——那才是單一來源。決策與 Comiket 對照見 [ADR-0007](../adr/0007-circle-name-is-not-circle-editable.md)。
+**社團名稱不可由社團編輯。** 它仍是攤位比對鍵與縮圖索引 join key；但依 ADR-0010，名稱已不再參與 `circle.id`。名稱錯誤由管理者在**上游來源與 identity evidence registry** 更正。是否開放自行改名仍由 ADR-0007 管理，不能因 ID 穩定就順帶放寬。
+
+`circle_name_key`、`circle_name_at_claim`、`source_row_at_claim` 保留為認領當時的稽核快照，不再用名稱推測或修復 identity。D1 cutover 只接受與靜態 catalog 相同的永久 mapping；受保護的管理端遷移會一起更新 claims、overrides、公開文件與 audit，未知或碰撞 ID 在寫入前拒絕。
+
+### 連結順序有語意
+
+連結清單的順序**就是顯示順序**。地圖側欄只顯示前六個，其餘留在完整詳細資訊（見[社團目錄契約](./circle-catalog.md#資訊密度契約)），因此編輯器必須讓作者**看得到並改得動**這個順序，並說明第六個之後的界線在哪。
+
+側欄是參觀者決定「要不要去這攤」的地方；把排序交給作者，等於把那個決定的依據交給最清楚的人。
+
+### 欄位有三種狀態
+
+每個可編輯欄位都明確區分三種狀態：
+
+1. **沿用場刊**：override 不含該鍵，繼續使用 reviewed snapshot。
+2. **社團自填**：override 含非空值，整組取代 snapshot；陣列不逐項合併。
+3. **清除此欄**：空字串、空陣列或 thumbnail tombstone 明確移除 snapshot 的既有值。
+
+編輯器必須顯示目前狀態，並提供「沿用場刊」與「清除此欄」動作。不得在送出前丟掉 tombstone，否則社團只能改寫、不能移除錯誤內容，工作簿就仍然控制欄位是否存在。
 
 ### 欄位上限
 
@@ -49,7 +67,7 @@
 
 ## 儲存前預覽
 
-編輯即時生效，**因此預覽更重要而非更不重要**：錯誤會立刻對外，社團沒有機會先看到自己寫的內容長什麼樣。
+編輯會在公開 overlay 下一次 revalidation（最長約一分鐘）生效，**因此預覽更重要而非更不重要**：錯誤會很快對外，社團沒有機會先看到自己寫的內容長什麼樣。
 
 `POST /api/circle/:circleId/preview` 以**閱讀端自己的投影元件**渲染草稿，唯讀、不寫入任何資料。預覽必須重用閱讀端元件，否則預覽會與實際呈現漂移。
 
@@ -75,7 +93,7 @@
 - **不得移除自己，也不得移除最後一位管理者**——兩者都是把自己鎖在門外的最短路徑。
 - 名單為空時由 `ADMIN_EMAILS` 設定值重新灌入，作為救援路徑。上面兩道限制讓它不會正常地走到那一步。
 - 管理者位址比對前先做與儲存時相同的正規化。
-- 管理者可**即時撤下**任何社團補充資料；撤下後該筆立刻自公開文件消失，不需用戶端邏輯配合。
+- 管理者可撤下任何社團補充資料；D1 公開文件立即移除，讀者端最長約一分鐘 revalidation 後不再顯示，不需額外用戶端內容過濾。
 
 ## 媒體安全
 
@@ -83,7 +101,7 @@
 
 ## 公開端點
 
-`/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 ETag。閱讀端把它疊加在靜態 `circles.json` 之上。
+`/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 strong ETag，使用 `public, max-age=60, must-revalidate`。閱讀端把它疊加在靜態 `circles.json` 之上；讀取失敗或 event mismatch 時只用 reviewed base。
 
 ## 驗收條件
 

@@ -1,4 +1,5 @@
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
+import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_SCHEMA_STATEMENTS } from "./identity-runtime-schema";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -8,7 +9,8 @@ import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
  * conditional writes checked through `meta.changes` (single-use tokens, one
  * verified owner per circle), and those read far more clearly as SQL.
  *
- * Schema of record lives in `db/identity-schema.ts` for `npm run db:generate`.
+ * Runtime schema authority lives in `db/identity-runtime-schema.ts`. Pages has
+ * no migration step, so the repository consumes its generated SQL on first use.
  */
 
 export type OverridesPhase = "during" | "after";
@@ -43,128 +45,12 @@ export type OverrideRow = {
   post_event_hidden?: number;
 };
 
-const TABLES = [
-  `CREATE TABLE IF NOT EXISTS accounts (
-    id TEXT PRIMARY KEY NOT NULL,
-    email TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    last_login_at INTEGER,
-    disabled_at INTEGER
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS accounts_email_idx ON accounts(email)`,
-  `CREATE TABLE IF NOT EXISTS admins (
-    email TEXT PRIMARY KEY NOT NULL,
-    added_by TEXT,
-    added_at INTEGER NOT NULL
-  )`,
-  `CREATE TABLE IF NOT EXISTS login_tokens (
-    id TEXT PRIMARY KEY NOT NULL,
-    token_hash TEXT NOT NULL,
-    email TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    consumed_at INTEGER,
-    request_ip_hash TEXT
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS login_tokens_hash_idx ON login_tokens(token_hash)`,
-  `CREATE INDEX IF NOT EXISTS login_tokens_email_idx ON login_tokens(email, created_at)`,
-  `CREATE INDEX IF NOT EXISTS login_tokens_ip_idx ON login_tokens(request_ip_hash, created_at)`,
-  `CREATE INDEX IF NOT EXISTS login_tokens_expiry_idx ON login_tokens(expires_at)`,
-  `CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY NOT NULL,
-    account_id TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    last_seen_at INTEGER NOT NULL,
-    revoked_at INTEGER
-  )`,
-  `CREATE INDEX IF NOT EXISTS sessions_account_idx ON sessions(account_id)`,
-  `CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at)`,
-  `CREATE TABLE IF NOT EXISTS circle_claims (
-    id TEXT PRIMARY KEY NOT NULL,
-    account_id TEXT NOT NULL,
-    event_id TEXT NOT NULL,
-    circle_id TEXT NOT NULL,
-    circle_name_key TEXT NOT NULL,
-    circle_name_at_claim TEXT NOT NULL,
-    source_row_at_claim INTEGER,
-    status TEXT NOT NULL,
-    method TEXT,
-    target_url TEXT,
-    challenge_token_hash TEXT,
-    challenge_expires_at INTEGER,
-    challenge_attempts INTEGER NOT NULL DEFAULT 0,
-    evidence_url TEXT,
-    evidence_note TEXT,
-    created_at INTEGER NOT NULL,
-    verified_at INTEGER,
-    reviewed_by TEXT,
-    reviewed_at INTEGER
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS circle_claims_account_circle_idx ON circle_claims(event_id, circle_id, account_id)`,
-  // The invariant that matters: at most one owner per circle, enforced by the
-  // database rather than by application code that could be raced.
-  `CREATE UNIQUE INDEX IF NOT EXISTS circle_claims_one_owner_idx ON circle_claims(event_id, circle_id) WHERE status = 'verified'`,
-  `CREATE INDEX IF NOT EXISTS circle_claims_status_idx ON circle_claims(status, created_at)`,
-  `CREATE INDEX IF NOT EXISTS circle_claims_account_idx ON circle_claims(account_id)`,
-  `CREATE TABLE IF NOT EXISTS circle_overrides (
-    id TEXT PRIMARY KEY NOT NULL,
-    event_id TEXT NOT NULL,
-    circle_id TEXT NOT NULL,
-    fields_json TEXT NOT NULL,
-    previous_fields_json TEXT,
-    revision INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'live',
-    updated_by TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    post_event_hidden INTEGER NOT NULL DEFAULT 0,
-    takedown_reason TEXT,
-    takendown_by TEXT,
-    takendown_at INTEGER
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS circle_overrides_key_idx ON circle_overrides(event_id, circle_id)`,
-  `CREATE INDEX IF NOT EXISTS circle_overrides_live_idx ON circle_overrides(event_id, status, updated_at)`,
-  `CREATE TABLE IF NOT EXISTS overrides_doc (
-    event_id TEXT PRIMARY KEY NOT NULL,
-    revision INTEGER NOT NULL DEFAULT 1,
-    json TEXT NOT NULL,
-    updated_at INTEGER NOT NULL,
-    phase TEXT NOT NULL DEFAULT 'during'
-  )`,
-  `CREATE TABLE IF NOT EXISTS audit_log (
-    id TEXT PRIMARY KEY NOT NULL,
-    at INTEGER NOT NULL,
-    actor_account_id TEXT,
-    actor_role TEXT NOT NULL,
-    action TEXT NOT NULL,
-    subject_type TEXT NOT NULL,
-    subject_id TEXT NOT NULL,
-    detail_json TEXT,
-    ip_hash TEXT
-  )`,
-  `CREATE INDEX IF NOT EXISTS audit_at_idx ON audit_log(at)`,
-  `CREATE INDEX IF NOT EXISTS audit_subject_idx ON audit_log(subject_type, subject_id, at)`,
-];
-
-/**
- * Columns added after a table already existed somewhere. `CREATE TABLE IF NOT
- * EXISTS` silently does nothing to an existing table, so a new column in the
- * definitions above would never appear in a live database. SQLite has no
- * `ADD COLUMN IF NOT EXISTS`, so each runs on its own and a duplicate-column
- * error is the success case.
- */
-const COLUMN_MIGRATIONS = [
-  `ALTER TABLE circle_overrides ADD COLUMN post_event_hidden INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE overrides_doc ADD COLUMN phase TEXT NOT NULL DEFAULT 'during'`,
-];
-
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
   let tablesReady: Promise<void> | null = null;
 
   async function ensureTables() {
     if (!tablesReady) {
-      tablesReady = database.batch(TABLES.map((statement) => database.prepare(statement)))
+      tablesReady = database.batch(IDENTITY_SCHEMA_STATEMENTS.map((statement) => database.prepare(statement)))
         .then(() => addMissingColumns())
         .then(() => seedAdmins())
         .catch((error: unknown) => {
@@ -176,9 +62,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function addMissingColumns() {
-    for (const statement of COLUMN_MIGRATIONS) {
+    for (const migration of IDENTITY_COLUMN_MIGRATIONS) {
       try {
-        await database.prepare(statement).run();
+        await database.prepare(migration.sql).run();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (!/duplicate column name/i.test(message)) throw error;
@@ -509,6 +395,112 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
   }
 
+  /**
+   * Atomically cut claims, editable rows, the public document and its audit
+   * marker over to permanent circle IDs. Unknown and colliding identities fail
+   * closed before any write; rerunning after success is a verified no-op.
+   */
+  async function migrateCircleIds(input: {
+    eventId: string;
+    mappings: Readonly<Record<string, string>>;
+    generatedAt: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const [claimResult, overrideResult, currentDoc] = await Promise.all([
+      database.prepare("SELECT DISTINCT circle_id FROM circle_claims WHERE event_id = ?1").bind(input.eventId).all<{ circle_id: string }>(),
+      database.prepare("SELECT * FROM circle_overrides WHERE event_id = ?1").bind(input.eventId).all<OverrideRow & { previous_fields_json: string | null; revision: number }>(),
+      getOverridesDoc(input.eventId),
+    ]);
+    const claimIds = new Set(claimResult.results.map((row) => row.circle_id));
+    const overrideIds = new Set(overrideResult.results.map((row) => row.circle_id));
+    const storedIds = new Set([...claimIds, ...overrideIds]);
+    const legacyIds = [...storedIds].filter((circleId) => !/^c-\d{6}$/.test(circleId));
+
+    const activeMappings = new Map<string, string>();
+    for (const legacyId of legacyIds) {
+      const circleId = input.mappings[legacyId];
+      if (!circleId || !/^c-\d{6}$/.test(circleId)) {
+        throw new Error(`No permanent circle ID is registered for stored identity ${legacyId}.`);
+      }
+      activeMappings.set(legacyId, circleId);
+    }
+    for (const ids of [claimIds, overrideIds]) {
+      const targets = new Set<string>();
+      for (const [legacyId, circleId] of activeMappings) {
+        if (!ids.has(legacyId)) continue;
+        if (ids.has(circleId) || targets.has(circleId)) {
+          throw new Error(`Circle ID migration would collide at ${circleId}; review the stored rows manually.`);
+        }
+        targets.add(circleId);
+      }
+    }
+    if (activeMappings.size === 0) return { migratedIds: 0, remainingLegacyIds: [] as string[] };
+
+    const phase = currentDoc?.phase ?? "during";
+    const publishedOverrides = overrideResult.results
+      .filter((row) => row.status === "live" && (phase !== "after" || !row.post_event_hidden))
+      .map((row) => ({
+        circleId: activeMappings.get(row.circle_id) ?? row.circle_id,
+        updatedAt: new Date(row.updated_at).toISOString(),
+        fields: JSON.parse(row.fields_json) as unknown,
+      }))
+      .sort((left, right) => left.circleId.localeCompare(right.circleId));
+    const revision = (currentDoc?.revision ?? 0) + 1;
+    const json = JSON.stringify({
+      schema: CIRCLE_OVERRIDES_SCHEMA,
+      eventId: input.eventId,
+      generatedAt: input.generatedAt,
+      revision,
+      overrides: publishedOverrides,
+    });
+    const statements = [...activeMappings].flatMap(([legacyId, circleId]) => [
+      database.prepare("UPDATE circle_claims SET circle_id = ?1 WHERE event_id = ?2 AND circle_id = ?3").bind(circleId, input.eventId, legacyId),
+      database.prepare("UPDATE circle_overrides SET circle_id = ?1 WHERE event_id = ?2 AND circle_id = ?3").bind(circleId, input.eventId, legacyId),
+    ]);
+    statements.push(
+      database.prepare(
+        `INSERT INTO overrides_doc (event_id, revision, json, updated_at, phase) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(event_id) DO UPDATE SET revision = excluded.revision, json = excluded.json,
+           updated_at = excluded.updated_at, phase = excluded.phase`,
+      ).bind(input.eventId, revision, json, input.now, phase),
+      database.prepare(
+        `INSERT INTO audit_log (id, at, actor_role, action, subject_type, subject_id, detail_json)
+         VALUES (?1, ?2, 'system', 'circle_id.migrated', 'event', ?3, ?4)`,
+      ).bind(crypto.randomUUID(), input.now, input.eventId, JSON.stringify({ mappings: Object.fromEntries(activeMappings) })),
+    );
+    await database.batch(statements);
+
+    const remaining = await database.prepare(
+      `SELECT circle_id FROM circle_claims WHERE event_id = ?1 AND circle_id NOT GLOB 'c-[0-9][0-9][0-9][0-9][0-9][0-9]'
+       UNION SELECT circle_id FROM circle_overrides WHERE event_id = ?1 AND circle_id NOT GLOB 'c-[0-9][0-9][0-9][0-9][0-9][0-9]'`,
+    ).bind(input.eventId).all<{ circle_id: string }>();
+    if (remaining.results.length > 0) throw new Error("Circle ID migration verification found orphaned legacy identities.");
+    return { migratedIds: activeMappings.size, remainingLegacyIds: [] as string[] };
+  }
+
+  async function storePreviewMail(message: { email: string; subject: string; text: string; now: number }) {
+    await ensureTables();
+    await database.prepare(
+      "INSERT INTO preview_mail_sink (id, email, subject, text, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+    ).bind(crypto.randomUUID(), message.email, message.subject, message.text, message.now).run();
+  }
+
+  async function latestPreviewMail(email: string) {
+    await ensureTables();
+    return database.prepare(
+      "SELECT id, email, subject, text, created_at FROM preview_mail_sink WHERE email = ?1 ORDER BY created_at DESC LIMIT 1",
+    ).bind(email).first<{ id: string; email: string; subject: string; text: string; created_at: number }>();
+  }
+
+  /** Disposable preview reset. Admin roster is deliberately retained. */
+  async function clearPreviewData() {
+    await ensureTables();
+    await database.batch([
+      "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
+    ].map((table) => database.prepare(`DELETE FROM ${table}`)));
+  }
+
   return {
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
@@ -517,7 +509,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
-    rebuildOverridesDoc, getOverridesDoc,
+    rebuildOverridesDoc, getOverridesDoc, migrateCircleIds,
+    storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }
 

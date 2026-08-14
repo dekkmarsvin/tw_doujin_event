@@ -6,10 +6,12 @@ export function resolveCircleSelection(
   day: 1 | 2 | 3,
   selectedCircleId: string | null,
   selectedBoothCode: string | null,
+  migrateCircleId: (circleId: string) => readonly string[] = (circleId) => [circleId],
 ) {
   const legacyById = selectedCircleId ? recordsById.get(selectedCircleId) : undefined;
+  const circleIds = selectedCircleId ? migrateCircleId(selectedCircleId) : [];
   const circleMatches = selectedCircleId ? records.filter((record) => record.day === day
-    && (record.circle.id === selectedCircleId || record.recordId === selectedCircleId)) : [];
+    && (circleIds.includes(record.circle.id) || record.recordId === selectedCircleId)) : [];
 
   if (selectedCircleId && selectedBoothCode) {
     return circleMatches.find((record) => record.code === selectedBoothCode) ?? null;

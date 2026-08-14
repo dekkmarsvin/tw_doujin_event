@@ -8,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const records = await environment.runner.import("/app/circle-records.ts");
 const overrides = await environment.runner.import("/app/circle-overrides.ts");
+const messages = await environment.runner.import("/app/circle-override-messages.ts");
 after(() => vite.close());
 
 const payload = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
@@ -16,6 +17,12 @@ const base = records.buildCircleCatalog(payload);
 /** A circle that actually holds placements, so detaching would be observable. */
 const placed = base.circles.find((circle) => (base.recordsByCircleId.get(circle.id)?.length ?? 0) > 1);
 assert.ok(placed, "fixture needs a circle with more than one placement");
+const linked = base.circles.find((circle) => circle.externalLinks.length > 0);
+const pictured = base.circles.find((circle) => circle.media.length > 0);
+const credited = base.circles.find((circle) => circle.pen.length > 0);
+assert.ok(linked, "fixture needs a circle with reviewed links");
+assert.ok(pictured, "fixture needs a circle with a reviewed thumbnail");
+assert.ok(credited, "fixture needs a circle with a reviewed pen name");
 
 function envelope(list) {
   return { schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-08-13T00:00:00.000Z", revision: 1, overrides: list };
@@ -26,7 +33,8 @@ function withFields(circleId, fields) {
 }
 
 test("a circle cannot author its own name", () => {
-  // The name keys booth matching, the thumbnail index and the circle id hash.
+  // ADR-0010 removed the name from identity allocation. It remains locked
+  // because it still keys booth matching and the thumbnail index (ADR-0007).
   // Refused outright rather than accepted-and-ignored, so a client sending one
   // learns the field is not authorable.
   assert.equal(overrides.isCircleOverrideFields({ name: "完全不同的名字" }), false);
@@ -103,6 +111,119 @@ test("an override replaces a list wholesale instead of merging it", () => {
   assert.deepEqual(edited.circlesById.get(placed.id).specialTags, ["只剩這個"]);
 });
 
+test("one field authority defines inherit, replace and clear encodings", () => {
+  assert.deepEqual(overrides.CIRCLE_OVERRIDE_FIELD_KEYS, [
+    "pen", "saleInfo", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail",
+  ]);
+
+  let fields = {};
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "inherit");
+  fields = { ...fields, pen: "刊登筆名" };
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "replace");
+  fields = overrides.clearCircleOverrideField(fields, "pen");
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "clear");
+  fields = overrides.inheritCircleOverrideField(fields, "pen");
+  assert.equal(overrides.circleOverrideFieldMode(fields, "pen"), "inherit");
+
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "links"), { links: [] });
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "thumbnail"), { thumbnail: null });
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "specialTags"), { specialTags: [] });
+});
+
+test("every editable field projects inherit, replace and clear from the same authority", () => {
+  const reviewedThumbnail = { url: "https://drive.google.com/thumbnail?id=reviewed", sourceUrl: "https://drive.google.com/file/d/reviewed", provider: "reviewed" };
+  const replacementThumbnail = { url: "https://drive.google.com/thumbnail?id=replacement", sourceUrl: "https://drive.google.com/file/d/replacement", provider: "replacement" };
+  const reviewedTemplate = {
+    ...payload.templates.find((template) => template.id === placed.id),
+    pen: "reviewed pen",
+    saleInfo: "reviewed sale",
+    referencedWorks: ["reviewed work"],
+    creatorTypes: ["reviewed creator"],
+    workTypes: ["reviewed type"],
+    ageRatings: ["reviewed rating"],
+    specialTags: ["reviewed tag"],
+    links: [{ provider: "reviewed", kind: "website", url: "https://example.com/reviewed" }],
+    thumbnail: reviewedThumbnail,
+  };
+  const fixturePayload = {
+    ...payload,
+    templates: payload.templates.map((template) => template.id === placed.id ? reviewedTemplate : template),
+  };
+  const valueOf = {
+    pen: (circle) => circle.pen,
+    saleInfo: (circle) => circle.saleInfo,
+    referencedWorks: (circle) => circle.referencedWorks,
+    creatorTypes: (circle) => circle.creatorTypes,
+    workTypes: (circle) => circle.workTypes,
+    ageRatings: (circle) => circle.ageRatings,
+    specialTags: (circle) => circle.specialTags,
+    links: (circle) => circle.externalLinks,
+    thumbnail: (circle) => circle.media.map(({ url, sourceUrl, provider }) => ({ url, sourceUrl, provider })),
+  };
+  const replacement = {
+    pen: "replacement pen",
+    saleInfo: "replacement sale",
+    referencedWorks: ["replacement work"],
+    creatorTypes: ["replacement creator"],
+    workTypes: ["replacement type"],
+    ageRatings: ["replacement rating"],
+    specialTags: ["replacement tag"],
+    links: [{ provider: "replacement", kind: "website", url: "https://example.com/replacement" }],
+    thumbnail: replacementThumbnail,
+  };
+  const reviewed = {
+    pen: "reviewed pen",
+    saleInfo: "reviewed sale",
+    referencedWorks: ["reviewed work"],
+    creatorTypes: ["reviewed creator"],
+    workTypes: ["reviewed type"],
+    ageRatings: ["reviewed rating"],
+    specialTags: ["reviewed tag"],
+    links: [{ provider: "reviewed", kind: "website", url: "https://example.com/reviewed" }],
+    thumbnail: [reviewedThumbnail],
+  };
+
+  for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS) {
+    const inherited = records.buildCircleCatalog(fixturePayload, withFields(placed.id, {})).circlesById.get(placed.id);
+    assert.deepEqual(valueOf[key](inherited), reviewed[key], `${key} must inherit reviewed data`);
+
+    const replacementFields = { [key]: replacement[key] };
+    assert.equal(overrides.isCircleOverrideFields(replacementFields), true, `${key} replacement must validate`);
+    const replaced = records.buildCircleCatalog(fixturePayload, withFields(placed.id, replacementFields)).circlesById.get(placed.id);
+    const expectedReplacement = key === "thumbnail" ? [replacementThumbnail] : replacement[key];
+    assert.deepEqual(valueOf[key](replaced), expectedReplacement, `${key} must replace reviewed data`);
+
+    const clearedFields = overrides.clearCircleOverrideField(replacementFields, key);
+    assert.equal(overrides.circleOverrideFieldMode(clearedFields, key), "clear", `${key} must expose clear mode`);
+    assert.equal(overrides.isCircleOverrideFields(clearedFields), true, `${key} tombstone must validate`);
+    const cleared = records.buildCircleCatalog(fixturePayload, withFields(placed.id, clearedFields)).circlesById.get(placed.id);
+    assert.deepEqual(valueOf[key](cleared), key === "pen" || key === "saleInfo" ? "" : [], `${key} must clear reviewed data`);
+
+    const restoredFields = overrides.inheritCircleOverrideField(clearedFields, key);
+    const restored = records.buildCircleCatalog(fixturePayload, withFields(placed.id, restoredFields)).circlesById.get(placed.id);
+    assert.deepEqual(valueOf[key](restored), reviewed[key], `${key} must return to inheritance`);
+  }
+});
+
+test("explicit tombstones clear reviewed text, links and thumbnail", () => {
+  const clearedPen = records.buildCircleCatalog(payload, withFields(credited.id, { pen: "" }));
+  assert.equal(clearedPen.circlesById.get(credited.id).pen, "");
+
+  const clearedLinks = records.buildCircleCatalog(payload, withFields(linked.id, { links: [] }));
+  assert.deepEqual(clearedLinks.circlesById.get(linked.id).externalLinks, []);
+
+  const clearedThumbnail = records.buildCircleCatalog(payload, withFields(pictured.id, { thumbnail: null }));
+  assert.deepEqual(clearedThumbnail.circlesById.get(pictured.id).media, []);
+
+  assert.equal(overrides.isCircleOverrideFields({ pen: "", links: [], thumbnail: null }), true);
+});
+
+test("removing a tombstone returns the field to reviewed inheritance", () => {
+  const inherited = overrides.inheritCircleOverrideField({ links: [] }, "links");
+  const catalog = records.buildCircleCatalog(payload, withFields(linked.id, inherited));
+  assert.deepEqual(catalog.circlesById.get(linked.id).externalLinks, linked.externalLinks);
+});
+
 test("one malformed entry is dropped without discarding the rest", () => {
   const parsed = overrides.parseCircleOverridesPayload(envelope([
     { circleId: placed.id, updatedAt: "2026-08-13T00:00:00.000Z", fields: { saleInfo: "有效" } },
@@ -163,4 +284,55 @@ test("rejects a link kind outside the catalog vocabulary", () => {
   assert.equal(overrides.isCircleOverrideFields({
     links: [{ provider: "X", kind: "official", url: "https://example.com/a" }],
   }), false);
+});
+
+/**
+ * The editor blocks saving whenever it can name a problem, so its idea of valid
+ * has to match the validator the write route runs. Stricter, and an author is
+ * told to fix a field the server would have accepted. Looser, and they get the
+ * shared 400 with no clue which row caused it — the exact failure the per-field
+ * messages exist to prevent. Compared directly rather than restating either rule.
+ */
+const ALLOWED_HOST = overrides.THUMBNAIL_HOST_ALLOWLIST[0];
+const URL_CASES = [
+  "https://example.com/circle",
+  `https://${ALLOWED_HOST}/file/abc`,
+  "http://example.com/insecure",
+  "javascript:alert(1)",
+  "data:text/html,hi",
+  "example.com/no-protocol",
+  "",
+  "   ",
+];
+
+test("the editor accepts a link URL exactly when the validator does", () => {
+  for (const url of URL_CASES) {
+    assert.equal(
+      messages.linkUrlProblem(url) === "",
+      overrides.isCircleOverrideFields({ links: [{ provider: "p", kind: "social", url }] }),
+      `disagreement on ${JSON.stringify(url)}`,
+    );
+  }
+});
+
+test("the editor accepts a thumbnail URL exactly when the validator does", () => {
+  for (const url of [...URL_CASES, "https://not-on-the-allowlist.example/img.png"]) {
+    assert.equal(
+      messages.thumbnailUrlProblem(url) === "",
+      overrides.isCircleOverrideFields({ thumbnail: { url, sourceUrl: "https://example.com/s", provider: "p" } }),
+      `disagreement on ${JSON.stringify(url)}`,
+    );
+  }
+});
+
+test("an off-allowlist thumbnail host is refused with the usable hosts named", () => {
+  const problem = messages.thumbnailUrlProblem("https://not-on-the-allowlist.example/img.png");
+  // "Rejected" alone leaves the author guessing which hosts would work.
+  assert.match(problem, /允許清單/);
+  assert.ok(problem.includes(ALLOWED_HOST), "the message should name at least one usable host");
+});
+
+test("an empty URL reads as missing rather than malformed", () => {
+  assert.match(messages.linkUrlProblem(""), /請填寫/);
+  assert.match(messages.thumbnailUrlProblem("   "), /請填寫/);
 });

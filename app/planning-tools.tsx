@@ -37,8 +37,8 @@ export default function PlanningTools() {
   const memoCount = document.favorites.filter((item) => item.memo.trim()).length;
   const batchSourceId = batchSource === "ALL" ? "ALL" : batchSource || null;
   const batchCount = document.favorites.filter((favorite) => favorite.eventId === FF47_EVENT_ID && (batchSourceId === "ALL" || favorite.groupId === batchSourceId)).length;
-  const orphanFavorites = document.favorites.filter((favorite) => favorite.eventId === FF47_EVENT_ID && !isKnownCircleId(favorite.circleId));
-  const orphanPlans = document.visitPlans.filter((entry) => entry.eventId === FF47_EVENT_ID && !isKnownCircleId(entry.circleId));
+  const orphanFavorites = document.favorites.filter((favorite) => favorite.eventId === FF47_EVENT_ID && !isKnownCircleId(favorite.circleId, favorite.eventId));
+  const orphanPlans = document.visitPlans.filter((entry) => entry.eventId === FF47_EVENT_ID && !isKnownCircleId(entry.circleId, entry.eventId));
 
   return <>
     <button className={styles.launcher} onClick={() => setOpen(true)}>資料管理</button>

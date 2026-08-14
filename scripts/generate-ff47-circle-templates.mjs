@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { normalizeTextSource } from "./catalog-source-utils.mjs";
+import { CircleIdentityAdjudicationError, createCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import { parseXlsxWorksheet, unzipXlsx } from "./xlsx-source-utils.mjs";
 
 const WORKBOOK_PATH = "data_source_test/FF47 完整攤位整理.xlsx";
 const THUMBNAIL_INDEX_PATH = "data_source_test/ff47-thumbnail-index.csv";
 const OUTPUT_PATH = "app/ff47-circle-templates.generated.json";
 const MANIFEST_PATH = "app/ff47-circle-templates.manifest.json";
+const ALLOCATIONS_PATH = "data/circle-identities/allocations.json";
+const EVIDENCE_PATH = "data/circle-identities/evidence.json";
+const LEGACY_ID_MAP_PATH = "data/circle-identities/legacy-id-map.json";
 const SOURCE_SHEET = "攤位整理表 請在此填寫資訊";
-const GENERATOR_VERSION = 1;
+const GENERATOR_VERSION = 2;
+const check = process.argv.includes("--check");
 
 function parseCsv(text) {
   const rows = [];
@@ -34,15 +39,6 @@ const list = (value) => [...new Set(text(value).split(/[\n,，、;；]+/).map((i
 const urls = (value) => [...new Set(text(value).match(/https?:\/\/[^\s]+/g) ?? [])];
 const placements = (value) => [...new Set((text(value).toUpperCase().match(/[A-W]\d{2}/g) ?? []))];
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-
-function stableId(sourceRow, name) {
-  let hash = 0x811c9dc5;
-  for (const byte of Buffer.from(`${sourceRow}\0${name}`, "utf8")) {
-    hash ^= byte;
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return `ff47-${hash.toString(36)}`;
-}
 
 const LINK_COLUMNS = [
   [18, "Facebook", "social"], [19, "Facebook", "social"], [20, "Bluesky", "social"], [21, "Bluesky", "social"],
@@ -89,6 +85,27 @@ function correctedName(raw, sourceRow) {
 
 const workbookBytes = await readFile(WORKBOOK_PATH);
 const thumbnailCsvText = normalizeTextSource(await readFile(THUMBNAIL_INDEX_PATH, "utf8"));
+const [allocationsRegistry, evidenceRegistry, legacyIdMap] = await Promise.all([
+  readFile(ALLOCATIONS_PATH, "utf8").then(JSON.parse),
+  readFile(EVIDENCE_PATH, "utf8").then(JSON.parse),
+  readFile(LEGACY_ID_MAP_PATH, "utf8").then(JSON.parse),
+]);
+const identityRegistry = createCircleIdentityRegistry({
+  allocations: allocationsRegistry,
+  evidence: evidenceRegistry,
+  legacyIdMap,
+  check,
+});
+
+function circleIdentity(sourceRow, name) {
+  try {
+    return identityRegistry.resolve({ eventId: "ff47", kind: "workbook-row", value: String(sourceRow) }, name);
+  } catch (error) {
+    if (error instanceof CircleIdentityAdjudicationError) console.error(JSON.stringify(error.report, null, 2));
+    throw error;
+  }
+}
+
 const thumbnailRows = parseCsv(thumbnailCsvText);
 const thumbnails = new Map(thumbnailRows.slice(1).flatMap((row) => text(row[0]) && text(row[1]) ? [[text(row[0]), text(row[1])]] : []));
 const rows = parseXlsxWorksheet(unzipXlsx(workbookBytes), SOURCE_SHEET);
@@ -102,7 +119,7 @@ const templates = rows.slice(1).flatMap((row, index) => {
   const driveId = sourceUrl?.match(/\/d\/([^/]+)/)?.[1] ?? sourceUrl?.match(/[?&]id=([^&]+)/)?.[1];
   const links = LINK_COLUMNS.flatMap(([column, provider, kind]) => urls(row[column]).map((url) => ({ provider, kind, url })));
   const entry = {
-    id: stableId(sourceRow, name),
+    id: circleIdentity(sourceRow, name),
     sourceRow,
     name,
     ...(text(row[1]) ? { pen: text(row[1]) } : {}),
@@ -137,6 +154,11 @@ const manifest = {
   thumbnailIndexSha256: sha256(thumbnailCsvText),
   output: OUTPUT_PATH,
   outputSha256: sha256(output),
+  identityRegistry: {
+    allocations: ALLOCATIONS_PATH,
+    evidence: EVIDENCE_PATH,
+    legacyIdMap: LEGACY_ID_MAP_PATH,
+  },
   counts: {
     templates: templates.length,
     links: templates.reduce((sum, entry) => sum + entry.links.length, 0),
@@ -144,9 +166,18 @@ const manifest = {
   },
 };
 
-if (process.argv.includes("--check")) {
-  const [currentOutput, currentManifest] = await Promise.all([readFile(OUTPUT_PATH, "utf8"), readFile(MANIFEST_PATH, "utf8")]);
-  if (currentOutput !== output || currentManifest !== `${JSON.stringify(manifest, null, 2)}\n`) {
+const serializedAllocations = `${JSON.stringify(identityRegistry.allocations, null, 2)}\n`;
+const serializedEvidence = `${JSON.stringify(identityRegistry.evidence, null, 2)}\n`;
+
+if (check) {
+  const [currentOutput, currentManifest, currentAllocations, currentEvidence] = await Promise.all([
+    readFile(OUTPUT_PATH, "utf8"),
+    readFile(MANIFEST_PATH, "utf8"),
+    readFile(ALLOCATIONS_PATH, "utf8"),
+    readFile(EVIDENCE_PATH, "utf8"),
+  ]);
+  if (identityRegistry.changed || currentAllocations !== serializedAllocations || currentEvidence !== serializedEvidence
+    || currentOutput !== output || currentManifest !== `${JSON.stringify(manifest, null, 2)}\n`) {
     throw new Error("FF47 circle templates are stale. Run npm run catalog:generate.");
   }
   console.log(`Verified ${manifest.counts.templates} FF47 circle templates (${manifest.outputSha256.slice(0, 12)}).`);
@@ -154,6 +185,8 @@ if (process.argv.includes("--check")) {
   await Promise.all([
     writeFile(OUTPUT_PATH, output),
     writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`),
+    writeFile(ALLOCATIONS_PATH, serializedAllocations),
+    writeFile(EVIDENCE_PATH, serializedEvidence),
   ]);
   console.log(`Generated ${manifest.counts.templates} FF47 circle templates.`);
 }

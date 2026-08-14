@@ -1,6 +1,6 @@
 # ADR-0010：社團身分改用配發的流水號
 
-- 狀態：已定案（2026-08-13 決議，尚未實作）
+- 狀態：已實作（2026-08-14）
 - 取代：[ADR-0003：社團身分以試算表主資料列為準](./0003-circle-identity-from-workbook-row.md)
 - 相關契約：[社團目錄契約](../contracts/circle-catalog.md#社團身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)、[社團自助控制面契約](../contracts/circle-portal.md)
 

@@ -27,8 +27,9 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
   useEffect(() => {
     if (!catalogSettled) return;
     let cancelled = false;
+    const migrateCircleId = (circleId: string) => circleIdMigrationTargets(circleId, eventId);
     const reload = () => {
-      const snapshot = inspectPlanningStorage(localStorage, eventId, circleIdMigrationTargets);
+      const snapshot = inspectPlanningStorage(localStorage, eventId, migrateCircleId);
       writable.current = snapshot.writable;
       setDocument(snapshot.document);
       setStorageError(snapshot.error);
@@ -37,7 +38,7 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
     const onStorage = (event: StorageEvent) => { if (event.key === PLANNING_STORAGE_KEY) reload(); };
     queueMicrotask(() => {
       if (cancelled) return;
-      const initial = inspectPlanningStorage(localStorage, eventId, circleIdMigrationTargets);
+      const initial = inspectPlanningStorage(localStorage, eventId, migrateCircleId);
       writable.current = initial.writable;
       setStorageError(initial.error);
       setUnsupportedRaw(initial.writable ? null : initial.raw);

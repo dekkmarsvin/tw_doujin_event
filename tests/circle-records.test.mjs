@@ -103,6 +103,16 @@ test("creates unique record IDs and maps legacy placement IDs to canonical circl
   assert.deepEqual(records.circleIdMigrationTargets("unknown-circle"), ["unknown-circle"]);
 });
 
+test("maps every permanent legacy hash ID from the lazy catalog snapshot", () => {
+  assert.equal(Object.keys(payload.legacyCircleIds).length, payload.templates.length);
+  for (const [legacyId, circleId] of Object.entries(payload.legacyCircleIds)) {
+    assert.match(legacyId, /^ff47-/);
+    assert.match(circleId, /^c-\d{6}$/);
+    assert.deepEqual(records.circleIdMigrationTargets(legacyId), [circleId]);
+    assert.equal(catalog.circlesById.has(circleId), true);
+  }
+});
+
 test("recognizes canonical planning identities and uses the event data version for source freshness", () => {
   const record = catalog.records.find((item) => item.name === "蒼銀之星" && item.day === 1);
   assert.ok(record);

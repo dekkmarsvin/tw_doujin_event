@@ -2,7 +2,7 @@
 
 同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，支援桌面與行動版。
 
-公開閱讀路徑是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務，不經過任何 Worker。另有一個獨立入口 `/circle` 供參展社團登入並維護自己的補充資料，由 `functions/` 下的 Pages Functions 與 D1 承載。
+公開閱讀的 reviewed base 是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務。社團自填資料則由公開的 Pages Function overlay 疊加；overlay 無法讀取時仍顯示完整 base。另有一個獨立入口 `/circle` 供參展社團登入並維護補充資料，由 `functions/` 與 D1 承載。publication 與離線邊界見[交付與離線契約](docs/contracts/delivery-and-offline.md)。
 
 地圖辨識與細部編輯器是本機 authoring 工具，不是公開 Pages 入口的一部分。
 
@@ -47,13 +47,14 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 | 要重新產生地圖快照 | [地圖 authoring](docs/runbooks/map-authoring.md) |
 | 首次部署、改密鑰、回滾 | [部署](docs/runbooks/deployment.md) |
 
-> 重建場刊後、commit 之前必須跑 `npm run claims:check`——社團 ID 對上游列號敏感，插入一列會讓其後所有 ID 改變。原因見 [ADR-0003](docs/adr/0003-circle-identity-from-workbook-row.md)。
+> 社團 ID 由版本化 registry 配發且永不重算；更新場刊時必須審閱 identity registry 與 legacy mapping 的差異。規則見 [ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)。
 
 ## 專案結構
 
 **閱讀端**
 
 - `app/event-map-app.tsx`：搜尋、地圖、詳情與行程工作區
+- `app/event-url-state.ts`、`app/event-workspace-projection.ts`：多活動 URL round-trip 與桌機／手機／地圖共用的衍生狀態
 - `app/accessible-event-map-renderer.tsx`：可用鍵盤操作的 SVG 地圖 renderer
 - `app/circle-records.ts`：社團與配置的型別、索引與讀取模型投影
 - `app/circle-search.ts`、`app/advanced-circle-search.tsx`：探索搜尋與詳細搜尋
@@ -74,7 +75,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 - `public/data/events/ff47/map.json`：地圖快照
 - `public/fonts/`：自託管 Geist / Geist Mono 字型與授權
 - `data_source_test/`：FF47 公開整理資料與配置圖測試輸入
-- `scripts/`：資料生成、快照匯出、來源同步與認領檢查
+- `scripts/`：資料生成、快照匯出、來源同步、identity registry 與 cutover 工具
 
 **本機 authoring（不部署到 Pages）**
 

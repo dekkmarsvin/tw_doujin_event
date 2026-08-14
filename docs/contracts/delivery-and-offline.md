@@ -2,8 +2,8 @@
 
 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。
 
-**實作**：[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)
-**測試**：`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs`
+**實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)
+**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs`
 **設定**：[`public/_headers`](../../public/_headers)
 
 ## Payload 邊界
@@ -12,6 +12,7 @@
 - 公開 bundle 只承載介面與投影邏輯。**場刊資料字面值不得回流到 bundle**，由測試把關。
 - 公開產物不得包含 `_worker.js` 或 server bundle。理由與整體取捨見 [ADR-0008](../adr/0008-static-public-reading-path.md)。
 - 社團補充資料由 `/data/events/:eventId/overrides.json` 這個 Pages Function 提供，疊加在靜態快照之上。
+- request、base payload、overlay payload 與 event config 的 `eventId` 必須一致；任何 mismatch fail closed。store、listener、in-flight request 與 server catalog cache 都按 event 分區。
 
 ## 載入行為
 
@@ -21,6 +22,7 @@
 - **延後套用選取**：可分享連結的社團與攤位選取在快照可解析後才套用；在此之前不得改寫 URL。見 [URL 檢視狀態契約](./url-state.md)。
 - **遷移閘門**：收藏與行程的舊版 ID 遷移必須在快照可用後才執行並寫回，不得在空目錄上判定孤立。見 [收藏與走訪規劃契約](./planning.md#儲存與版本)。
 - **失敗狀態**：快照讀取失敗時保留介面結構，明確說明是**社團資料讀取失敗**並提示重新整理。**不得偽裝成「查無結果」。**
+- **base first、overlay optional**：reviewed base 驗證成功就先進入 ready；overlay 的離線、Access、500、格式或 event mismatch 只將 overlay 標成 unavailable，完整 base 不進入 error。重試按 event 執行，不會鎖住其他活動。
 
 ## 離線
 
@@ -29,7 +31,8 @@
 | 資源 | 策略 |
 |---|---|
 | 導覽 | network-first，回退已快取 shell |
-| `/data/events/*` | stale-while-revalidate |
+| static `/data/events/*`（`circles.json`、`map.json`） | stale-while-revalidate |
+| Function `/data/events/:eventId/overrides.json` | network-only；失敗時 publication module 使用 reviewed base |
 | 雜湊資產 | cache-first |
 
 - precache 清單由 build 時產生，**只涵蓋 `index.html` 實際載入的資源**，不含社團入口。
@@ -45,11 +48,12 @@
 | 路徑 | Cache-Control |
 |---|---|
 | `/assets/*` | `public, max-age=31536000, immutable`（檔名含 content hash） |
-| `/data/events/*` | `public, max-age=300, must-revalidate` |
+| static `/data/events/*` | `public, max-age=300, must-revalidate` |
+| Function `/data/events/:eventId/overrides.json` | `public, max-age=60, must-revalidate` + strong ETag（Function response 明確覆寫 static `_headers` 規則） |
 | `/sw.js` | `no-cache`（另帶 `Service-Worker-Allowed: /`） |
 | `/manifest.webmanifest` | `public, max-age=3600` |
 
-`/data/events/*` 只有五分鐘且要求 revalidation，是為了日後把 authoring 發布拆成獨立控制面時不需要改快取策略。
+reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓社團儲存與管理者 takedown 約一分鐘內可見。Service Worker 不保存 overlay：離線或 freshness 無法確認時使用完整 base，不把可能任意過期的 overlay 描述成即時資料。
 
 同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。外部社團縮圖目前只允許 HTTPS（`img-src 'self' data: https:`）；縮圖主機允許清單收緊後可再收緊此項，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
