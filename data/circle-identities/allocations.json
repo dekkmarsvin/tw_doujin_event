@@ -1,6 +1,6 @@
 {
   "schema": "circle-id-allocations/1",
-  "nextSequence": 1337,
+  "nextSequence": 1342,
   "allocations": [
     {
       "id": "c-000001",
@@ -6681,6 +6681,31 @@
       "id": "c-001336",
       "allocatedAt": "2026-08-14",
       "reason": "FF47 identity registry bootstrap"
+    },
+    {
+      "id": "c-001337",
+      "allocatedAt": "2026-08-17",
+      "reason": "New reviewed catalog evidence"
+    },
+    {
+      "id": "c-001338",
+      "allocatedAt": "2026-08-17",
+      "reason": "New reviewed catalog evidence"
+    },
+    {
+      "id": "c-001339",
+      "allocatedAt": "2026-08-17",
+      "reason": "New reviewed catalog evidence"
+    },
+    {
+      "id": "c-001340",
+      "allocatedAt": "2026-08-17",
+      "reason": "New reviewed catalog evidence"
+    },
+    {
+      "id": "c-001341",
+      "allocatedAt": "2026-08-17",
+      "reason": "New reviewed catalog evidence"
     }
   ]
 }
