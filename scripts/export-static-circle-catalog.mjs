@@ -14,7 +14,6 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatesPath = resolve(root, "app", "ff47-circle-templates.generated.json");
-const legacyIdMapPath = resolve(root, "data", "circle-identities", "legacy-id-map.json");
 const outputPath = resolve(root, "public", "data", "events", "ff47", "circles.json");
 const check = process.argv.includes("--check");
 
@@ -26,20 +25,16 @@ try {
   const { BOOTHS } = await environment.runner.import("/app/ff47-booths.ts");
   const { FF47_OFFICIAL_SUPPLEMENT_KEYS } = await environment.runner.import("/app/ff47-official-booths.ts");
   const { FF47_EVENT } = await environment.runner.import("/app/event-catalog.ts");
-  const [templates, legacyIdMap] = await Promise.all([
-    readFile(templatesPath, "utf8").then(JSON.parse),
-    readFile(legacyIdMapPath, "utf8").then(JSON.parse),
-  ]);
+  const templates = JSON.parse(await readFile(templatesPath, "utf8"));
 
   if (!Array.isArray(BOOTHS) || BOOTHS.length === 0) throw new Error("The reviewed booth source is empty.");
   if (!Array.isArray(templates) || templates.length === 0) throw new Error("The generated circle templates file is empty.");
 
   const payload = {
-    schema: "circle-catalog/1",
+    schema: "circle-catalog/2",
     eventId: FF47_EVENT.id,
     generatedAt: FF47_EVENT.dataUpdatedAt,
     officialSupplementKeys: FF47_OFFICIAL_SUPPLEMENT_KEYS,
-    legacyCircleIds: legacyIdMap.mappings,
     booths: BOOTHS,
     templates,
   };

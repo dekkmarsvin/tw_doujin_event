@@ -57,7 +57,6 @@ export type PortalDependencies = {
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
   /** Loads the permanent legacy map from the static catalog only for cutover. */
-  loadLegacyCircleIds: () => Promise<Record<string, string>>;
   config: PortalConfig;
 };
 
@@ -94,7 +93,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, projectCircle, loadLegacyCircleIds, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, projectCircle, config }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
   // string against a normalized one silently denies an admin whose address
@@ -571,22 +570,6 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     return ok ? json({ ok: true }) : json({ error: "這個社團目前沒有上線中的補充資料。" }, 404);
   }
 
-  async function adminMigrateCircleIds(request: Request) {
-    const gate = await requireFreshAdmin(request);
-    if (!gate.ok) return gate.response;
-    const body = await readJson(request);
-    if (body?.confirm !== "migrate-to-allocated-circle-ids") {
-      return json({ error: "缺少明確的 migration confirm。" }, 400);
-    }
-    const result = await repository.migrateCircleIds({
-      eventId: config.eventId,
-      mappings: await loadLegacyCircleIds(),
-      generatedAt: config.dataUpdatedAt,
-      now: config.now(),
-    });
-    return json({ ok: true, ...result });
-  }
-
   /**
    * The public overlay. A strong ETag keyed on the stored revision lets the
    * Pages edge collapse venue traffic to roughly one row read per PoP per
@@ -621,7 +604,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     requestLink, verify, session, signOut,
     listClaims, createClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride, previewOverride, setPostEventVisibility,
-    adminListClaims, adminDecideClaim, adminTakedown, adminMigrateCircleIds,
+    adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins,
     publicOverrides,
   };

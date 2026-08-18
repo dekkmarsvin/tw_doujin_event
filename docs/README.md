@@ -55,6 +55,7 @@
 | [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**已實作**，取代 0003） |
 | [0011](./adr/0011-ff47-is-not-a-public-launch.md) | FF47 期間全站不公開，含社團端 |
 | [0012](./adr/0012-first-party-sources-only.md) | 資料來源只留主辦官網與社團本人 |
+| [0013](./adr/0013-drop-the-legacy-circle-id-compatibility-path.md) | 移除舊 circle ID 的相容路徑（**部分取代 0010**） |
 
 ## 研究
 

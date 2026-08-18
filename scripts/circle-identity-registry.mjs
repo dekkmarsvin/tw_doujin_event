@@ -12,19 +12,16 @@ export class CircleIdentityAdjudicationError extends Error {
 }
 
 /**
- * The single lifecycle seam for allocation, evidence matching and legacy map
- * validation. Callers provide parsed version-controlled files and receive a
- * canonical ID or a structured adjudication report; they never guess by name.
+ * The single lifecycle seam for allocation and evidence matching. Callers
+ * provide parsed version-controlled files and receive a canonical ID or a
+ * structured adjudication report; they never guess by name.
  */
-export function createCircleIdentityRegistry({ allocations, evidence, legacyIdMap, check = false, today = () => new Date().toISOString().slice(0, 10) }) {
+export function createCircleIdentityRegistry({ allocations, evidence, check = false, today = () => new Date().toISOString().slice(0, 10) }) {
   if (allocations?.schema !== "circle-id-allocations/1" || !Array.isArray(allocations.allocations)) {
     throw new Error("Identity allocations have an unsupported schema.");
   }
   if (evidence?.schema !== "circle-identity-evidence/1" || !Array.isArray(evidence.entries)) {
     throw new Error("Identity evidence has an unsupported schema.");
-  }
-  if (legacyIdMap?.schema !== "legacy-circle-id-map/1" || !legacyIdMap.mappings || typeof legacyIdMap.mappings !== "object") {
-    throw new Error("Legacy circle ID map has an unsupported schema.");
   }
 
   const allocationIds = new Set();
@@ -59,12 +56,6 @@ export function createCircleIdentityRegistry({ allocations, evidence, legacyIdMa
       entriesByName.set(key, [...(entriesByName.get(key) ?? []), entry]);
     }
   }
-  for (const [legacyId, circleId] of Object.entries(legacyIdMap.mappings)) {
-    if (!legacyId.startsWith("ff47-") || !allocationIds.has(circleId)) {
-      throw new Error(`Legacy circle ID mapping is invalid: ${legacyId} -> ${circleId}.`);
-    }
-  }
-
   let changed = false;
   function resolve(source, name) {
     const existing = evidenceBySource.get(sourceKey(source));
@@ -109,6 +100,5 @@ export function createCircleIdentityRegistry({ allocations, evidence, legacyIdMa
     get changed() { return changed; },
     allocations,
     evidence,
-    legacyMappings: legacyIdMap.mappings,
   };
 }
