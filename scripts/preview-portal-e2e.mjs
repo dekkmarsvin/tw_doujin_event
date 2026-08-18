@@ -4,17 +4,31 @@ const adminEmail = process.env.PREVIEW_ADMIN_EMAIL ?? "preview-admin@example.tes
 const circleEmail = process.env.PREVIEW_CIRCLE_EMAIL ?? "preview-circle@example.test";
 if (!baseUrl || !e2eToken) throw new Error("PREVIEW_BASE_URL and PREVIEW_E2E_TOKEN are required.");
 
+// Preview hosts sit behind Cloudflare Access with no Bypass path (ADR-0011).
+// A non-browser client authenticates with a service token instead; without it
+// every call below is answered by the Access login redirect, not the portal.
+const accessHeaders = process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET
+  ? { "cf-access-client-id": process.env.CF_ACCESS_CLIENT_ID, "cf-access-client-secret": process.env.CF_ACCESS_CLIENT_SECRET }
+  : {};
+
+function rejectAccessLogin(response, label) {
+  if (!(response.headers.get("location") ?? "").includes("cloudflareaccess.com")) return;
+  throw new Error(`${label} was intercepted by Cloudflare Access (${response.status}). CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must name a service token that a Service Auth policy admits on *.tw-catalog.pages.dev.`);
+}
+
 async function request(path, { method = "GET", body, cookie, previewToken = false } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     redirect: "manual",
     headers: {
+      ...accessHeaders,
       ...(body === undefined ? {} : { "content-type": "application/json" }),
       ...(cookie ? { cookie } : {}),
       ...(previewToken ? { "x-preview-e2e-token": e2eToken } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  rejectAccessLogin(response, `${method} ${path}`);
   const contentType = response.headers.get("content-type") ?? "";
   const payload = contentType.includes("json") ? await response.json() : null;
   if (!response.ok) throw new Error(`${method} ${path} returned ${response.status}${payload?.error ? `: ${payload.error}` : ""}.`);
@@ -24,8 +38,9 @@ async function request(path, { method = "GET", body, cookie, previewToken = fals
 async function capturedLoginToken(email) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const response = await fetch(`${baseUrl}/api/preview/mail?email=${encodeURIComponent(email)}`, {
-      headers: { "x-preview-e2e-token": e2eToken }, redirect: "manual",
+      headers: { ...accessHeaders, "x-preview-e2e-token": e2eToken }, redirect: "manual",
     });
+    rejectAccessLogin(response, `GET /api/preview/mail for ${email}`);
     if (response.ok) {
       const { message } = await response.json();
       const match = message?.text?.match(/login=([^\s]+)/);
