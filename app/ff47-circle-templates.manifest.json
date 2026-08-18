@@ -10,8 +10,7 @@
   "outputSha256": "cc9c345795121bfc39470589784257cb7b67640d7ab379577215dafb56a865e4",
   "identityRegistry": {
     "allocations": "data/circle-identities/allocations.json",
-    "evidence": "data/circle-identities/evidence.json",
-    "legacyIdMap": "data/circle-identities/legacy-id-map.json"
+    "evidence": "data/circle-identities/evidence.json"
   },
   "counts": {
     "templates": 1341,

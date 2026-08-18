@@ -51,10 +51,10 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
 
   const catalog = JSON.parse(await readFile(new URL("../dist/data/events/ff47/circles.json", import.meta.url), "utf8"));
   const sourceCatalog = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
-  assert.equal(catalog.schema, "circle-catalog/1");
+  assert.equal(catalog.schema, "circle-catalog/2");
   assert.equal(catalog.eventId, "ff47");
   assert.equal(catalog.booths.length, sourceCatalog.booths.length);
-  assert.equal(catalog.templates.length, 1336);
+  assert.equal(catalog.templates.length, sourceCatalog.templates.length);
   assert.ok(catalog.booths.length > 2900);
   assert.ok(catalog.officialSupplementKeys.includes("1:J09"));
 

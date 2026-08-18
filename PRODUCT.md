@@ -42,13 +42,16 @@ web
 
 這不只是場館平面圖或社團名錄，而是把作品探索、社團資訊、向量攤位地圖、收藏與當日行程收於同一套可雙向定位的工具中。作品或社團搜尋結果應能直接導向地圖位置，地圖上的攤位也應能直接回到作品與社團內容。
 
-產品先以 FF47 作為已實作的資料與地圖範例，但資料模型與操作流程應可延伸至未來的 Fancy Frontier 與其他台灣同人展。
+產品先以 FF47 作為已實作、已驗證的資料與地圖範例，但資料模型與操作流程應可延伸至未來的 Fancy Frontier 與其他台灣同人展。**FF47 是驗證資料，不是發表場合**——FF47 期間站台不公開（[ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)）。
+
+這是一個 MIT 授權的開源專案，以長期維護的同人展地圖網站為目標，不是單一活動的一次性場刊。因此每一項決定都以「下一場活動仍然成立」為準，不以「這次撐過去就好」為準。
 
 ## Operating Context
 
 - 展前規劃：以桌面或手機搜尋社團、攤位、作品與題材，檢視詳細資訊、收藏攤位並安排走訪順序。
 - 展場導航：以手機查看地圖、目前行程與下一站，在高密度場館中快速定位。
-- 資料發布：一般使用者從 Cloudflare Pages 靜態站公開瀏覽；首次發布以已驗證、版本化的向量地圖 JSON 快照隨 build 發布。
+- 資料發布：場刊與地圖以已驗證、版本化的 JSON 快照隨 build 發布到 Cloudflare Pages 靜態站。
+- **公開瀏覽目前是設計目標，不是現行狀態。** 站台全站在 Cloudflare Access 閘控下，含社團端；重新開放需要先完成來源授權與正式條款，見 [ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)。
 - 功能與資訊架構以 Comike WebCatalog 為具約束力的熟悉參考，但內容、語言、活動資料與場館模型面向台灣同人展。
 
 ## Capabilities and Constraints
@@ -68,6 +71,7 @@ web
 - P0 提供 JSON／CSV 安全匯出作為本機資料復原邊界；一般介面不開放匯入，匯入與衝突處理仍屬 P2。
 - 不複製 Comike WebCatalog 的付費牆、時限解鎖或活動倒數限制；參考範圍是資訊架構、地圖定位、收藏與資料來源呈現模式。
 - 資料來源必須是公開可取得的活動、社團或作品資料；未驗證內容不得表述為官方或已確認資訊。
+- 長期只保留兩類來源：**活動主辦官網**（配置與活動事實）與**社團本人自填**（內容）。所有非官網第三方來源逐步退場，且不再新增，見 [ADR-0012](docs/adr/0012-first-party-sources-only.md)。
 - 未來活動的場館、排號與地圖元素可能不同；資料模型不得把 FF47 的 A–W、988 格或特定場館幾何當成所有活動的固定規則。
 
 ## Brand Commitments
@@ -79,8 +83,9 @@ web
 
 ## Evidence on Hand
 
-- FF47 社團與攤位整理資料：`data_source_test/FF47 完整攤位整理.xlsx`。
+- FF47 社團與攤位整理資料：`data_source_test/FF47 完整攤位整理.xlsx`（社群維護的試算表快照，**退場中的過渡輸入**）。
 - FF47 社團攤位配置圖：`data_source_test/FF47社團攤位配置圖.jpg`。
+- FF47 三日攤位編號公佈（主辦官網）：`https://www.f-2.com.tw/`，是配置的權威來源。
 - Comike WebCatalog 的實地檢視紀錄（地圖、資訊架構與收藏、社團自助編輯）：[`docs/research/`](docs/research)。
 - 研究結論的採納與拒絕決策：[`docs/adr/`](docs/adr)，尤其是 [ADR-0001](docs/adr/0001-adopt-webcatalog-patterns-selectively.md)。
 - 各模組的現行行為與驗收條件：[`docs/contracts/`](docs/contracts)。

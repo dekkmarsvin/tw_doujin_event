@@ -8,6 +8,12 @@
 
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
+## 目前不對外開放
+
+**FF47 期間 `/circle` 在 Cloudflare Access 閘控內，沒有 Bypass。** 本契約描述的行為全部已實作且有測試覆蓋，但沒有任何真實社團可以到達它——決策見 [ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)。
+
+因此社團端的功能驗收只能在 preview 環境進行，見[部署 runbook](../runbooks/deployment.md)。邀請真實社團之前，還需要先完成隱私告知、保存期限與刪除政策。
+
 ## 入口分離
 
 - **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/rendered-html.test.mjs` 以內容比對把關。
@@ -34,7 +40,7 @@
 
 **社團名稱不可由社團編輯。** 它仍是攤位比對鍵與縮圖索引 join key；但依 ADR-0010，名稱已不再參與 `circle.id`。名稱錯誤由管理者在**上游來源與 identity evidence registry** 更正。是否開放自行改名仍由 ADR-0007 管理，不能因 ID 穩定就順帶放寬。
 
-`circle_name_key`、`circle_name_at_claim`、`source_row_at_claim` 保留為認領當時的稽核快照，不再用名稱推測或修復 identity。D1 cutover 只接受與靜態 catalog 相同的永久 mapping；受保護的管理端遷移會一起更新 claims、overrides、公開文件與 audit，未知或碰撞 ID 在寫入前拒絕。
+`circle_name_key`、`circle_name_at_claim`、`source_row_at_claim` 保留為認領當時的稽核快照，不再用名稱推測或修復 identity。認領與補充資料一律以 `c-xxxxxx` 為鍵；舊 ID 的管理端 cutover 已隨相容路徑一併移除（[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)）。
 
 ### 連結順序有語意
 

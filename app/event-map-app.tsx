@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import AccessibleEventMapRenderer from "./accessible-event-map-renderer";
 import { loadStaticEventMap } from "./static-event-map-client";
 import { FF47_EVENT_ID, type PublishedEventMap } from "./event-map";
-import { circleIdMigrationTargets, type CircleViewRecord } from "./circle-records";
+import { resolveCircleIdAliases, type CircleViewRecord } from "./circle-records";
 import { useCircleCatalog } from "./use-circle-catalog";
 import { CircleDetails, DayItinerary, SearchResults, type ActiveResultFilter } from "./event-workspace-panels";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
@@ -178,7 +178,7 @@ export default function EventMapApp() {
     pendingSelection.current = null;
     const selected = resolveCircleSelection(
       circleRecords, circleRecordsById, pending.day, pending.circleId, pending.boothCode,
-      (circleId) => circleIdMigrationTargets(circleId, FF47_EVENT_ID),
+      (circleId) => resolveCircleIdAliases(circleId, FF47_EVENT_ID),
     );
     setSelectedRecordId(selected?.recordId ?? null);
     setMobilePanel(selected ? "details" : "results");

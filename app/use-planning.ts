@@ -9,7 +9,6 @@ import {
   savePlanningDocument,
   type PlanningDocument,
 } from "./planning-store";
-import { circleIdMigrationTargets } from "./circle-records";
 
 /**
  * Load planning data once the catalog has settled. Legacy favorites are
@@ -27,9 +26,8 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
   useEffect(() => {
     if (!catalogSettled) return;
     let cancelled = false;
-    const migrateCircleId = (circleId: string) => circleIdMigrationTargets(circleId, eventId);
     const reload = () => {
-      const snapshot = inspectPlanningStorage(localStorage, eventId, migrateCircleId);
+      const snapshot = inspectPlanningStorage(localStorage, eventId);
       writable.current = snapshot.writable;
       setDocument(snapshot.document);
       setStorageError(snapshot.error);
@@ -38,7 +36,7 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
     const onStorage = (event: StorageEvent) => { if (event.key === PLANNING_STORAGE_KEY) reload(); };
     queueMicrotask(() => {
       if (cancelled) return;
-      const initial = inspectPlanningStorage(localStorage, eventId, migrateCircleId);
+      const initial = inspectPlanningStorage(localStorage, eventId);
       writable.current = initial.writable;
       setStorageError(initial.error);
       setUnsupportedRaw(initial.writable ? null : initial.raw);

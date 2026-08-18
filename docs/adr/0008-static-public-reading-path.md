@@ -6,7 +6,7 @@
 
 ## 脈絡
 
-場刊資料很大：`circles.json` 約 1.8 MB，涵蓋 1,336 個社團與 2,977 筆配置。地圖 layout 是另一份版本化 JSON。
+場刊資料很大：`circles.json` 約 1.9 MB，涵蓋一千三百多個社團與近三千筆配置。地圖 layout 是另一份版本化 JSON。
 
 Cloudflare Pages 的 advanced mode（產生 `dist/_worker.js`）會讓**每一個請求都經過 Worker**，包含這 1.8 MB 的靜態檔案。同時，把場刊打包進 JS bundle 也會讓首屏必須等整包下載完。
 
