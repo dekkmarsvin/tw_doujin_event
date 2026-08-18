@@ -69,8 +69,9 @@ npx tsc --noEmit --incremental false
 | 命令 | 何時執行 | 為什麼不在 gate 裡 |
 |---|---|---|
 | `npm run source:check` | 懷疑上游試算表有更新時 | 需要對外網路 |
+| `npm run official:check` | 懷疑主辦官網攤位清單有更新時 | 需要對外網路 |
 
-用法見[社團資料更新](./catalog-data-update.md)。identity registry 與產物一致性已由共同 build 內的 `catalog:check` 驗證。
+用法見[社團資料更新](./catalog-data-update.md)。identity registry 與產物一致性已由共同 build 內的 `catalog:check` 驗證；場刊與官網的一致性由 `official:agreement` 驗證，它是離線的，所以留在 gate 裡。
 
 ## 測試必須涵蓋的資料形狀
 

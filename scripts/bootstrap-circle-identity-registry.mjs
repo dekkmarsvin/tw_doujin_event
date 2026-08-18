@@ -27,16 +27,10 @@ const evidence = {
   })),
 };
 
-const legacyIdMap = {
-  schema: "legacy-circle-id-map/1",
-  mappings: Object.fromEntries(templates.map((template, index) => [template.id, allocations.allocations[index].id])),
-};
-
 await mkdir(registryDir, { recursive: true });
 await Promise.all([
   ["allocations.json", allocations],
   ["evidence.json", evidence],
-  ["legacy-id-map.json", legacyIdMap],
 ].map(async ([name, value]) => {
   const path = resolve(registryDir, name);
   try {

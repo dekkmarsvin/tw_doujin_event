@@ -10,7 +10,6 @@ const OUTPUT_PATH = "app/ff47-circle-templates.generated.json";
 const MANIFEST_PATH = "app/ff47-circle-templates.manifest.json";
 const ALLOCATIONS_PATH = "data/circle-identities/allocations.json";
 const EVIDENCE_PATH = "data/circle-identities/evidence.json";
-const LEGACY_ID_MAP_PATH = "data/circle-identities/legacy-id-map.json";
 const SOURCE_SHEET = "攤位整理表 請在此填寫資訊";
 const GENERATOR_VERSION = 2;
 const check = process.argv.includes("--check");
@@ -85,15 +84,13 @@ function correctedName(raw, sourceRow) {
 
 const workbookBytes = await readFile(WORKBOOK_PATH);
 const thumbnailCsvText = normalizeTextSource(await readFile(THUMBNAIL_INDEX_PATH, "utf8"));
-const [allocationsRegistry, evidenceRegistry, legacyIdMap] = await Promise.all([
+const [allocationsRegistry, evidenceRegistry] = await Promise.all([
   readFile(ALLOCATIONS_PATH, "utf8").then(JSON.parse),
   readFile(EVIDENCE_PATH, "utf8").then(JSON.parse),
-  readFile(LEGACY_ID_MAP_PATH, "utf8").then(JSON.parse),
 ]);
 const identityRegistry = createCircleIdentityRegistry({
   allocations: allocationsRegistry,
   evidence: evidenceRegistry,
-  legacyIdMap,
   check,
 });
 
@@ -157,7 +154,6 @@ const manifest = {
   identityRegistry: {
     allocations: ALLOCATIONS_PATH,
     evidence: EVIDENCE_PATH,
-    legacyIdMap: LEGACY_ID_MAP_PATH,
   },
   counts: {
     templates: templates.length,

@@ -3,7 +3,7 @@ import { indexCircleOverrides } from "./circle-overrides";
 import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
 import type { Booth, Tone } from "./booth";
 
-export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/1" as const;
+export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/2" as const;
 
 export type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
 export type SourceContentType = "official" | "circle" | "catalog" | "social" | "media";
@@ -67,8 +67,6 @@ export type CircleCatalogPayload = {
   eventId: string;
   generatedAt: string;
   officialSupplementKeys: string[];
-  /** Permanent compatibility map. Kept in the lazy static snapshot, not the JS bundle. */
-  legacyCircleIds: Record<string, string>;
   booths: Booth[];
   templates: CircleTemplate[];
 };
@@ -125,7 +123,7 @@ export type CircleCatalog = {
   records: CircleViewRecord[];
   recordsById: Map<string, CircleViewRecord>;
   recordsByCircleId: Map<string, CircleViewRecord[]>;
-  idMigrationTargets: Map<string, string[]>;
+  circleIdAliases: Map<string, string[]>;
 };
 
 const CATALOG_SOURCE = {
@@ -312,15 +310,15 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
 
   const records = rows.map(({ view }) => view);
   const recordsByCircleId = new Map<string, CircleViewRecord[]>();
-  const idMigrationTargets = new Map<string, string[]>();
-  Object.entries(payload.legacyCircleIds).forEach(([legacyId, circleId]) => {
-    idMigrationTargets.set(legacyId, [circleId]);
-  });
+  // Booth-scoped ids stay resolvable because a shared link may carry one; they
+  // are derived from the records in hand, not from a stored table. The `ff47-`
+  // content hashes are gone with their map (ADR-0013).
+  const circleIdAliases = new Map<string, string[]>();
   records.forEach((record) => {
     recordsByCircleId.set(record.circle.id, [...(recordsByCircleId.get(record.circle.id) ?? []), record]);
-    idMigrationTargets.set(record.circle.id, [record.circle.id]);
-    idMigrationTargets.set(record.recordId, [record.circle.id]);
-    idMigrationTargets.set(record.id, [...new Set([...(idMigrationTargets.get(record.id) ?? []), record.circle.id])]);
+    circleIdAliases.set(record.circle.id, [record.circle.id]);
+    circleIdAliases.set(record.recordId, [record.circle.id]);
+    circleIdAliases.set(record.id, [...new Set([...(circleIdAliases.get(record.id) ?? []), record.circle.id])]);
   });
 
   const circles = [...circlesById.values()];
@@ -332,17 +330,12 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
     records,
     recordsById: new Map(records.map((record) => [record.recordId, record])),
     recordsByCircleId,
-    idMigrationTargets,
+    circleIdAliases,
   };
 }
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isCircleIdMap(value: unknown): value is Record<string, string> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-    && Object.entries(value).every(([legacyId, circleId]) => legacyId.startsWith("ff47-") && /^c-\d{6}$/.test(circleId));
 }
 
 function isBooth(value: unknown): value is Booth {
@@ -373,7 +366,6 @@ export function isCircleCatalogPayload(value: unknown): value is CircleCatalogPa
   return payload.schema === CIRCLE_CATALOG_SCHEMA
     && typeof payload.eventId === "string" && typeof payload.generatedAt === "string"
     && isStringArray(payload.officialSupplementKeys)
-    && isCircleIdMap(payload.legacyCircleIds)
     && Array.isArray(payload.booths) && payload.booths.length > 0 && payload.booths.every(isBooth)
     && Array.isArray(payload.templates) && payload.templates.every(isTemplate);
 }
@@ -386,7 +378,7 @@ export const EMPTY_CIRCLE_CATALOG: CircleCatalog = {
   records: [],
   recordsById: new Map(),
   recordsByCircleId: new Map(),
-  idMigrationTargets: new Map(),
+  circleIdAliases: new Map(),
 };
 
 export type CircleCatalogStatus = "loading" | "ready" | "error";
@@ -492,8 +484,9 @@ export function subscribeCircleCatalog(eventId: string, listener: () => void) {
   return () => { scoped.delete(listener); };
 }
 
-export function circleIdMigrationTargets(circleId: string, eventId = defaultEventId) {
-  return stateFor(eventId).catalog.idMigrationTargets.get(circleId) ?? [circleId];
+/** Resolve a booth-scoped id from a shared link to the circle it belongs to. */
+export function resolveCircleIdAliases(circleId: string, eventId = defaultEventId) {
+  return stateFor(eventId).catalog.circleIdAliases.get(circleId) ?? [circleId];
 }
 
 export function isKnownCircleId(circleId: string, eventId = defaultEventId) {

@@ -18,10 +18,10 @@ const catalog = records.getCircleCatalog();
 
 test("accepts the published snapshot and rejects payloads the read model cannot project", () => {
   assert.equal(records.isCircleCatalogPayload(payload), true);
-  assert.equal(payload.schema, "circle-catalog/1");
+  assert.equal(payload.schema, "circle-catalog/2");
   assert.equal(payload.eventId, "ff47");
 
-  assert.equal(records.isCircleCatalogPayload({ ...payload, schema: "circle-catalog/2" }), false);
+  assert.equal(records.isCircleCatalogPayload({ ...payload, schema: "circle-catalog/1" }), false);
   assert.equal(records.isCircleCatalogPayload({ ...payload, booths: [] }), false);
   assert.equal(records.isCircleCatalogPayload({ ...payload, booths: [{ ...payload.booths[0], day: 4 }] }), false);
   assert.equal(records.isCircleCatalogPayload({ ...payload, templates: [{ ...payload.templates[0], placements: undefined }] }), false);
@@ -29,10 +29,10 @@ test("accepts the published snapshot and rejects payloads the read model cannot 
 });
 
 test("projects independent circle and placement catalogs into the map read model", () => {
-  // One circle per reviewed workbook row, with no positional fallbacks: every
-  // booth now matches a template. A number above 1336 means some booth failed
-  // to match and was given a synthetic identity.
-  assert.equal(catalog.circles.length, 1336);
+  // One circle per reviewed workbook row, with no positional fallbacks. The
+  // count itself is upstream's to change, so the invariant is the equality:
+  // more circles than templates means a booth failed to match and was given a
+  // synthetic identity.
   assert.equal(catalog.circles.length, payload.templates.length);
   assert.equal(catalog.placements.length, catalog.records.length);
   assert.ok(catalog.circles.length < catalog.placements.length);
@@ -91,26 +91,24 @@ test("fills only the organizer-listed booth gaps with their existing circle temp
   assert.doesNotMatch(existingOrganizer?.url ?? "", /%E7%AC%AC%E4%B8%80%E5%A4%A9/i);
 });
 
-test("creates unique record IDs and maps legacy placement IDs to canonical circles", () => {
+test("creates unique record IDs and resolves booth-scoped ids from shared links", () => {
   catalog.records.slice(0, 20).forEach((record, index) => {
     assert.equal(record.recordId, `${record.id}-${index}`);
     assert.equal(catalog.recordsById.get(record.recordId), record);
-    assert.deepEqual(catalog.idMigrationTargets.get(record.recordId), [record.circle.id]);
-    assert.equal(catalog.idMigrationTargets.get(record.id).includes(record.circle.id), true);
-    assert.deepEqual(records.circleIdMigrationTargets(record.recordId), [record.circle.id]);
+    assert.deepEqual(catalog.circleIdAliases.get(record.recordId), [record.circle.id]);
+    assert.equal(catalog.circleIdAliases.get(record.id).includes(record.circle.id), true);
+    assert.deepEqual(records.resolveCircleIdAliases(record.recordId), [record.circle.id]);
   });
   assert.equal(new Set(catalog.records.map((record) => record.recordId)).size, catalog.records.length);
-  assert.deepEqual(records.circleIdMigrationTargets("unknown-circle"), ["unknown-circle"]);
+  assert.deepEqual(records.resolveCircleIdAliases("unknown-circle"), ["unknown-circle"]);
 });
 
-test("maps every permanent legacy hash ID from the lazy catalog snapshot", () => {
-  assert.equal(Object.keys(payload.legacyCircleIds).length, payload.templates.length);
-  for (const [legacyId, circleId] of Object.entries(payload.legacyCircleIds)) {
-    assert.match(legacyId, /^ff47-/);
-    assert.match(circleId, /^c-\d{6}$/);
-    assert.deepEqual(records.circleIdMigrationTargets(legacyId), [circleId]);
-    assert.equal(catalog.circlesById.has(circleId), true);
-  }
+test("every circle identity is an allocated serial and nothing carries the old hash", () => {
+  // ADR-0013 removed the `ff47-` compatibility map, so a hash reaching the read
+  // model would resolve to nothing rather than to the circle it once named.
+  assert.equal(Object.hasOwn(payload, "legacyCircleIds"), false);
+  for (const circle of catalog.circles) assert.match(circle.id, /^c-\d{6}$/);
+  assert.deepEqual(records.resolveCircleIdAliases("ff47-3f2a1b"), ["ff47-3f2a1b"]);
 });
 
 test("recognizes canonical planning identities and uses the event data version for source freshness", () => {
