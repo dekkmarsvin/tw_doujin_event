@@ -57,6 +57,10 @@ reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓�
 
 同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 只允許 `'self'`、`data:` 與 `THUMBNAIL_HOST_ALLOWLIST` 的主機，**不含裸 `https:`**。這份清單的唯一權威在 `app/circle-overrides.ts`，`_headers` 與它不一致時 `tests/circle-overrides.test.mjs` 失敗，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
+`/circle*` 另有一份放寬的 CSP：`script-src` 與 `frame-src` 加入 `https://challenges.cloudflare.com`，供登入表單的 Turnstile 使用（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)）。**閱讀端的策略不變**——這是全站唯一的第三方 script，且只在社團入口。Cloudflare 對多條命中的 `_headers` 規則採合併而非覆寫，所以該區塊先以 `! Content-Security-Policy` 移除站台層的策略再重新宣告；兩份策略同時生效會被瀏覽器取交集，反而擋掉元件。兩份策略的關係（站台層 + 恰好兩個 Turnstile 來源）由 `tests/circle-overrides.test.mjs` 斷言。
+
+Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.com` 直接落到網路。
+
 ## 驗收條件
 
 - `dist/index.html` 存在；`dist/_worker.js` 與 `dist/server/index.js` 不存在。

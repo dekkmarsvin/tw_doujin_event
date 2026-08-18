@@ -49,10 +49,43 @@ async function catalogIndex(env: PortalEnv, request: Request, eventId: string) {
   return (await catalog(env, request, eventId)).index;
 }
 
-function requireSecret(env: PortalEnv, name: "SESSION_SECRET" | "HASH_PEPPER") {
+function requireSecret(env: PortalEnv, name: "SESSION_SECRET" | "HASH_PEPPER" | "TURNSTILE_SECRET" | "TURNSTILE_SITEKEY") {
   const value = env[name];
-  if (!value) throw new Error(`Missing Pages secret ${name}.`);
+  // `TURNSTILE_SITEKEY` is a plain variable, not a secret — it ships to the
+  // browser. It is required the same way because a portal that cannot render
+  // the widget cannot produce a token the server will accept, and an unset
+  // sitekey must surface as "not configured yet" rather than as a sign-in that
+  // silently never works.
+  if (!value) throw new Error(`Missing Pages secret or variable ${name}.`);
   return value;
+}
+
+/**
+ * Cloudflare Turnstile siteverify.
+ *
+ * Fails closed on every uncertainty — non-2xx, unparseable body, timeout — so a
+ * verifier outage stops sign-ins rather than waving them through. That is the
+ * safe direction here: the site has no anonymous write path other than this one,
+ * and a login link the user can request again in a minute is a cheaper failure
+ * than a mailer anyone can drive.
+ */
+async function verifyTurnstile(env: PortalEnv, token: string, remoteIp: string | null) {
+  const form = new URLSearchParams({ secret: requireSecret(env, "TURNSTILE_SECRET"), response: token });
+  if (remoteIp) form.set("remoteip", remoteIp);
+
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form,
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) return false;
+    const result: unknown = await response.json();
+    return typeof result === "object" && result !== null && (result as { success?: unknown }).success === true;
+  } catch {
+    return false;
+  }
 }
 
 async function sendMailgun(env: PortalEnv, message: { to: string; subject: string; text: string }) {
@@ -184,6 +217,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       return matches;
     },
     fetchEvidence,
+    verifyHuman: (token, remoteIp) => verifyTurnstile(env, token, remoteIp),
+    turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     projectCircle: async (circleId, fields) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.

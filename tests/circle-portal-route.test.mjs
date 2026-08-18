@@ -30,6 +30,9 @@ const EVENT_ENDS_AT = "2026-08-23T23:59:59.999+08:00";
 let clock = 1_786_500_000_000;
 let sent = [];
 let evidenceBody = null;
+let humanVerified = true;
+let verifiedTokens = [];
+let sitekey = () => "test-sitekey";
 let handlers;
 let repository;
 
@@ -38,6 +41,9 @@ const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle
 beforeEach(async () => {
   sent = [];
   evidenceBody = null;
+  humanVerified = true;
+  verifiedTokens = [];
+  sitekey = () => "test-sitekey";
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.com"] });
   // Isolation matters here: claim ownership and the login rate-limit window are
   // both persistent, so a shared database would make tests order-dependent.
@@ -57,6 +63,11 @@ beforeEach(async () => {
       ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...fields } }]
       : null),
     fetchEvidence: async () => evidenceBody,
+    verifyHuman: async (token, remoteIp) => {
+      verifiedTokens.push({ token, remoteIp });
+      return humanVerified;
+    },
+    turnstileSitekey: () => sitekey(),
     config: {
       eventId: "ff47",
       origin: ORIGIN,
@@ -89,7 +100,7 @@ function cookieFrom(response) {
 
 /** Drive the real magic-link flow rather than forging a session. */
 async function signIn(email) {
-  await handlers.requestLink(post("/api/auth/request-link", { email }));
+  await handlers.requestLink(post("/api/auth/request-link", { email, turnstileToken: "solved" }));
   const link = sent.at(-1).text.match(/login=([^\s]+)/)[1];
   const response = await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(link) }));
   assert.equal(response.status, 200, `sign-in failed for ${email}`);
@@ -104,9 +115,9 @@ async function approve(cookieOwner, circleId, adminCookie) {
 }
 
 test("a login request answers identically whether or not the inbox is known", async () => {
-  const fresh = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com" }));
+  const fresh = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com", turnstileToken: "solved" }));
   await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]) }));
-  const known = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com" }));
+  const known = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com", turnstileToken: "solved" }));
 
   assert.equal(fresh.status, 202);
   assert.equal(known.status, 202);
@@ -114,13 +125,61 @@ test("a login request answers identically whether or not the inbox is known", as
 
   // A malformed address is accepted silently too, and sends nothing.
   const before = sent.length;
-  const bad = await handlers.requestLink(post("/api/auth/request-link", { email: "not-an-email" }));
+  const bad = await handlers.requestLink(post("/api/auth/request-link", { email: "not-an-email", turnstileToken: "solved" }));
   assert.equal(bad.status, 202);
   assert.equal(sent.length, before);
 });
 
+test("a login request without a solved challenge reaches neither the mailer nor the database", async () => {
+  const missing = await handlers.requestLink(post("/api/auth/request-link", { email: "unverified@example.com" }));
+  assert.equal(missing.status, 403);
+  assert.equal(verifiedTokens.length, 0, "an absent token must not cost a siteverify call");
+
+  humanVerified = false;
+  const rejected = await handlers.requestLink(post("/api/auth/request-link", { email: "unverified@example.com", turnstileToken: "forged" }));
+  assert.equal(rejected.status, 403);
+  assert.deepEqual(verifiedTokens.map(({ token }) => token), ["forged"]);
+
+  assert.equal(sent.length, 0);
+  const rows = await database.prepare("SELECT COUNT(*) AS total FROM login_tokens").first();
+  assert.equal(rows.total, 0, "a refused request must not consume the address's hourly allowance either");
+});
+
+test("the challenge is checked before the address, so refusing it reveals nothing", async () => {
+  // The address-shaped answer is deliberately indistinguishable (202 either
+  // way). Verifying first keeps that property: a 403 is about the challenge
+  // alone, which is why it can be reported honestly.
+  humanVerified = false;
+  const malformed = await handlers.requestLink(post("/api/auth/request-link", { email: "not-an-email", turnstileToken: "forged" }));
+  assert.equal(malformed.status, 403);
+
+  humanVerified = true;
+  const wellFormed = await handlers.requestLink(post("/api/auth/request-link", { email: "someone@example.com", turnstileToken: "solved" }));
+  const stillMalformed = await handlers.requestLink(post("/api/auth/request-link", { email: "not-an-email", turnstileToken: "solved" }));
+  assert.equal(wellFormed.status, 202);
+  assert.equal(stillMalformed.status, 202);
+  assert.deepEqual(await wellFormed.json(), await stillMalformed.json());
+});
+
+test("the sign-in page can read the public sitekey without a session", async () => {
+  const response = await handlers.authConfig();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { turnstileSitekey: "test-sitekey" });
+});
+
+test("an unconfigured sitekey stops sign-in and nothing else", async () => {
+  // The reader's overlay is built from the same wiring as the portal. Reading
+  // the sitekey eagerly would have made a Turnstile that nobody has configured
+  // yet take down the public document too.
+  sitekey = () => { throw new Error("Missing Pages secret or variable TURNSTILE_SITEKEY."); };
+
+  const doc = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal(doc.status, 200);
+  assert.throws(() => handlers.authConfig(), /TURNSTILE_SITEKEY/);
+});
+
 test("a magic link works once and never again", async () => {
-  await handlers.requestLink(post("/api/auth/request-link", { email: "replay@example.com" }));
+  await handlers.requestLink(post("/api/auth/request-link", { email: "replay@example.com", turnstileToken: "solved" }));
   const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
 
   assert.equal((await handlers.verify(post("/api/auth/verify", { token }))).status, 200);
@@ -129,7 +188,7 @@ test("a magic link works once and never again", async () => {
 });
 
 test("the raw token never reaches the database", async () => {
-  await handlers.requestLink(post("/api/auth/request-link", { email: "secrets@example.com" }));
+  await handlers.requestLink(post("/api/auth/request-link", { email: "secrets@example.com", turnstileToken: "solved" }));
   const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
 
   const rows = await database.prepare("SELECT * FROM login_tokens").all();
@@ -139,13 +198,13 @@ test("the raw token never reaches the database", async () => {
 
 test("the sixth link request within an hour is refused", async () => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    assert.equal((await handlers.requestLink(post("/api/auth/request-link", { email: "flood@example.com" }))).status, 202);
+    assert.equal((await handlers.requestLink(post("/api/auth/request-link", { email: "flood@example.com", turnstileToken: "solved" }))).status, 202);
   }
-  assert.equal((await handlers.requestLink(post("/api/auth/request-link", { email: "flood@example.com" }))).status, 429);
+  assert.equal((await handlers.requestLink(post("/api/auth/request-link", { email: "flood@example.com", turnstileToken: "solved" }))).status, 429);
 });
 
 test("the session cookie is host-locked, http-only and not readable by script", async () => {
-  await handlers.requestLink(post("/api/auth/request-link", { email: "cookie@example.com" }));
+  await handlers.requestLink(post("/api/auth/request-link", { email: "cookie@example.com", turnstileToken: "solved" }));
   const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
   const response = await handlers.verify(post("/api/auth/verify", { token }));
   const header = response.headers.get("set-cookie");

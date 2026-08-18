@@ -55,6 +55,44 @@ test("the served CSP admits exactly the thumbnail hosts the validator accepts", 
   assert.deepEqual(sources.filter((source) => !source.startsWith("https://")), ["'self'", "data:"]);
 });
 
+/**
+ * The portal needs Cloudflare Turnstile; the reader must not carry the widening.
+ * Cloudflare combines every matching `_headers` rule rather than letting the
+ * more specific one win, so the portal rule has to remove the site-wide policy
+ * by name and restate it — and a restated policy is a policy that can drift.
+ * Assert the exact relationship instead of the text.
+ */
+test("the portal CSP is the site-wide one plus exactly the Turnstile sources", async () => {
+  const headers = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
+  const [sitewide, portal] = [...headers.matchAll(/Content-Security-Policy: ([^\r\n]+)/g)].map((match) => match[1]);
+  assert.ok(portal, "_headers must declare a portal-scoped policy");
+
+  const rule = headers.split(/\r?\n/).findIndex((line) => line.trim() === "/circle*");
+  assert.ok(rule >= 0, "the portal policy must be scoped to /circle*");
+  assert.equal(headers.split(/\r?\n/)[rule + 1].trim(), "! Content-Security-Policy",
+    "without removing the inherited header both policies are enforced, which blocks the widget");
+
+  const directives = (policy) => new Map(policy.split(";").map((directive) => directive.trim())
+    .filter(Boolean).map((directive) => [directive.split(/\s+/)[0], directive.split(/\s+/).slice(1)]));
+  const base = directives(sitewide);
+  const widened = directives(portal);
+
+  const TURNSTILE = "https://challenges.cloudflare.com";
+  assert.deepEqual([...widened.keys()].sort(), [...base.keys(), "frame-src"].sort());
+  assert.deepEqual(widened.get("frame-src"), [TURNSTILE]);
+  assert.deepEqual(widened.get("script-src"), [...base.get("script-src"), TURNSTILE]);
+
+  for (const [name, sources] of widened) {
+    if (name === "frame-src" || name === "script-src") continue;
+    assert.deepEqual(sources, base.get(name), `${name} must not differ between the two policies`);
+  }
+  // Nothing else may reach the third-party origin — no XHR, no images, no fonts.
+  for (const [name, sources] of widened) {
+    if (name === "frame-src" || name === "script-src") continue;
+    assert.equal(sources.includes(TURNSTILE), false, `${name} must not admit ${TURNSTILE}`);
+  }
+});
+
 test("a circle cannot author its own name", () => {
   // ADR-0010 removed the name from identity allocation. It remains locked
   // because it still keys booth matching against the organizer's lists (ADR-0007).

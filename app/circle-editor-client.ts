@@ -71,8 +71,14 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function requestLoginLink(email: string) {
-  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email }) });
+/** The sitekey is public by design; it is served rather than built in so that
+ * preview and production can hold different keys without a separate bundle. */
+export function readTurnstileSitekey() {
+  return call<{ turnstileSitekey: string }>("/api/auth/config").then((body) => body.turnstileSitekey);
+}
+
+export function requestLoginLink(email: string, turnstileToken: string) {
+  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken }) });
 }
 
 export function verifyLoginToken(token: string) {

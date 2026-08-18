@@ -35,9 +35,19 @@
       // Preview mail never leaves Cloudflare: allowlisted .test recipients are
       // captured in the preview D1 for E2E. PREVIEW_E2E_TOKEN remains a Pages
       // preview secret and is intentionally absent here.
+      //
+      // Turnstile runs on Cloudflare's documented dummy keys here. The E2E
+      // driver is not a browser and cannot solve a real widget, and preview is
+      // the only environment the circle portal is exercised in, so the pair has
+      // to be the always-passes one — visible widget `1x…AA`, secret `1x…AA`.
+      // The dummy secret accepts any token by design, which is exactly why it
+      // must never reach production: there it is a real secret, set with
+      // `wrangler pages secret put`.
       "vars": {
         "PREVIEW_MAIL_SINK": "d1",
-        "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test"
+        "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
+        "TURNSTILE_SITEKEY": "1x00000000000000000000AA",
+        "TURNSTILE_SECRET": "1x0000000000000000000000000000000AA"
       },
       "d1_databases": [
         {
