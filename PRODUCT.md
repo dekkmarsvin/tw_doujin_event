@@ -51,7 +51,7 @@ web
 - 展前規劃：以桌面或手機搜尋社團、攤位、作品與題材，檢視詳細資訊、收藏攤位並安排走訪順序。
 - 展場導航：以手機查看地圖、目前行程與下一站，在高密度場館中快速定位。
 - 資料發布：場刊與地圖以已驗證、版本化的 JSON 快照隨 build 發布到 Cloudflare Pages 靜態站。
-- **公開瀏覽目前是設計目標，不是現行狀態。** 站台全站在 Cloudflare Access 閘控下，含社團端；重新開放需要先完成來源授權與正式條款，見 [ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)。
+- **公開瀏覽目前是設計目標，不是現行狀態。** 站台全站在 Cloudflare Access 閘控下，含社團端（[ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)）。解除條件是本 repo 完全不含第三方試算表資料——包含 git 歷史——見 [ADR-0015](docs/adr/0015-access-lifts-when-no-third-party-bytes-remain.md)。
 - 功能與資訊架構以 Comike WebCatalog 為具約束力的熟悉參考，但內容、語言、活動資料與場館模型面向台灣同人展。
 
 ## Capabilities and Constraints
