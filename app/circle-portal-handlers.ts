@@ -54,6 +54,17 @@ export type PortalDependencies = {
   searchCircles: (query: string, limit: number) => Promise<CircleLookup[]>;
   /** Returns page text, or null when the host cannot be read from a Worker. */
   fetchEvidence: (url: string) => Promise<string | null>;
+  /**
+   * Turnstile siteverify. Fails closed: an unreachable verifier is a `false`,
+   * not a pass, so an outage stops sign-ins instead of opening the mailer.
+   */
+  verifyHuman: (token: string, remoteIp: string | null) => Promise<boolean>;
+  /**
+   * The public half of the Turnstile pair. Resolved on call, not on
+   * construction: the reader's public overlay is built from this same wiring,
+   * and a sitekey nobody has configured yet must not take that down too.
+   */
+  turnstileSitekey: () => string;
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
   /** Loads the permanent legacy map from the static catalog only for cutover. */
@@ -93,7 +104,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, projectCircle, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey, projectCircle, config }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
   // string against a normalized one silently denies an admin whose address
@@ -126,8 +137,24 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     return session ?? null;
   }
 
+  /** The public half of the Turnstile pair, so the sign-in page can render it. */
+  function authConfig() {
+    return json({ turnstileSitekey: turnstileSitekey() });
+  }
+
   async function requestLink(request: Request) {
     const body = await readJson(request);
+
+    // Human verification runs first, before the address is even read. It is the
+    // only check here whose outcome does not depend on the mailbox, so it can
+    // answer honestly without telling an attacker which inboxes exist — and
+    // nothing past it, neither the rate-limit counters nor the mailer, is
+    // reachable by a script that cannot solve it.
+    const humanToken = typeof body?.turnstileToken === "string" ? body.turnstileToken : "";
+    if (!humanToken || !await verifyHuman(humanToken, request.headers.get("cf-connecting-ip"))) {
+      return json({ error: "真人驗證未通過，請重新驗證後再送出。" }, 403);
+    }
+
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
     const now = config.now();
 
@@ -601,7 +628,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   return {
-    requestLink, verify, session, signOut,
+    authConfig, requestLink, verify, session, signOut,
     listClaims, createClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,

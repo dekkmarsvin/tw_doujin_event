@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createClaim, decideClaim, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
-  previewOverride, readSession, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
+  previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import {
@@ -15,6 +15,7 @@ import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { FF47_EVENT } from "../event-catalog";
+import { TurnstileWidget } from "./turnstile-widget";
 import styles from "./portal.module.css";
 
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
@@ -132,20 +133,46 @@ export default function CirclePortalApp() {
 function SignIn() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
+  const [sitekey, setSitekey] = useState<string | null>(null);
+  const [humanToken, setHumanToken] = useState<string | null>(null);
+  // A Turnstile token is single-use and short-lived. Remounting the widget is
+  // what issues the next one, so every submit bumps this.
+  const [widgetGeneration, setWidgetGeneration] = useState(0);
+
+  // Only the sign-in view asks for the sitekey; a signed-in circle never pays
+  // for the round trip, and the reader entry never imports this module at all.
+  useEffect(() => {
+    void readTurnstileSitekey()
+      .then(setSitekey)
+      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+  }, []);
+
+  const onUnavailable = useCallback(() => setStatus({
+    kind: "error",
+    message: "真人驗證元件載入失敗，請檢查網路或內容封鎖設定後重新整理。",
+  }), []);
 
   return <section className={styles.card}>
     <h2>登入</h2>
-    <p>輸入 email，我們會寄一封只能使用一次的登入連結給你（15 分鐘內有效）。</p>
+    <p>輸入 email，我們會寄一封只能使用一次的登入連結給你（15 分鐘內有效）。送出前需要通過真人驗證。</p>
     <form onSubmit={(event) => {
       event.preventDefault();
+      if (!humanToken) return;
       setStatus({ kind: "busy", message: "寄送中…" });
-      void requestLoginLink(email)
+      void requestLoginLink(email, humanToken)
         .then(() => setStatus({ kind: "ok", message: "若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。" }))
-        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
+        .finally(() => {
+          // Spent either way: the server verifies the token before it decides
+          // anything else, so it is never reusable for a second attempt.
+          setHumanToken(null);
+          setWidgetGeneration((generation) => generation + 1);
+        });
     }}>
       <label htmlFor="portal-email">Email</label>
       <input id="portal-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
-      <button type="submit" disabled={status.kind === "busy"}>{status.kind === "busy" ? "寄送中…" : "寄出登入連結"}</button>
+      {sitekey && <TurnstileWidget key={widgetGeneration} sitekey={sitekey} onToken={setHumanToken} onUnavailable={onUnavailable} />}
+      <button type="submit" disabled={!humanToken || status.kind === "busy"}>{status.kind === "busy" ? "寄送中…" : "寄出登入連結"}</button>
     </form>
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;

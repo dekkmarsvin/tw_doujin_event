@@ -151,6 +151,10 @@
 .challenge span { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
 .challenge code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 14px; font-weight: 700; letter-spacing: .06em; user-select: all; }
 
+/* Turnstile renders its own 300×65 iframe. Reserving the box keeps the submit
+   button from jumping down once the challenge finishes loading. */
+.turnstile { margin-top: 12px; min-height: 65px; }
+
 .notice, .error { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 11px; }
 .notice { border: 1px solid #cfe4da; background: #edf8f3; color: var(--success); }
 .error { border: 1px solid #f0cdc6; background: #fff3f1; color: var(--danger); }
