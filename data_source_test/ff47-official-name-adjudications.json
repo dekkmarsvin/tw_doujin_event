@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "conflicts": [
+    {
+      "key": "1:G16",
+      "official": "電諾丘工訪",
+      "catalog": "電諾丘工坊",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "1:K02",
+      "official": "布來沒Bremen",
+      "catalog": "羅波田",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "1:K21",
+      "official": "阿不思1號",
+      "catalog": "小狗咪出沒注意 (阿不思1號)",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "1:P43",
+      "official": "迷你翠",
+      "catalog": "RIN",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "1:P44",
+      "official": "迷你翠",
+      "catalog": "RIN",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "1:Q01",
+      "official": "Eagle鷹式本攝",
+      "catalog": "妤叔yusu",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "1:U17",
+      "official": "日初翱祥-陌千",
+      "catalog": "魚燒",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:B43",
+      "official": "伊羅的畫廊",
+      "catalog": "魚鵝不足",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:D10",
+      "official": "星球蛋糕捲",
+      "catalog": "星球蛋糕捲☆",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:D30",
+      "official": "神奇回收站",
+      "catalog": "LemonQOQ畫不完 想睡覺",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:E27",
+      "official": "色彩不耐症",
+      "catalog": "蒼之翼",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:F32",
+      "official": "霓聲工作室NeonVoice",
+      "catalog": "ISKM伊聲懸命舖",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:G17",
+      "official": "電諾丘工訪",
+      "catalog": "電諾丘工坊",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:I35",
+      "official": "粹心齋 模創空間",
+      "catalog": "妤叔yusu",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:I36",
+      "official": "粹心齋 模創空間",
+      "catalog": "妤叔yusu",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:O44",
+      "official": "比雕飛飛",
+      "catalog": "原核Henzer",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:R01",
+      "official": "‘+Ely Cosplay+",
+      "catalog": "+Ely Cosplay+",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "2:R02",
+      "official": "‘+Ely Cosplay+",
+      "catalog": "+Ely Cosplay+",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:E37",
+      "official": "記得繳房貸",
+      "catalog": "雪倫來睏",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:F30",
+      "official": "霓聲工作室NeonVoice",
+      "catalog": "ISKM伊聲懸命舖",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:H27",
+      "official": "幻想布萊梅",
+      "catalog": "Kakela*Hane",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:L09",
+      "official": "阿不思1號",
+      "catalog": "小狗咪出沒注意 (阿不思1號)",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:N09",
+      "official": "星球蛋糕捲",
+      "catalog": "星球蛋糕捲☆",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:R01",
+      "official": "‘+Ely Cosplay+",
+      "catalog": "+Ely Cosplay+",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:R02",
+      "official": "‘+Ely Cosplay+",
+      "catalog": "+Ely Cosplay+",
+      "decision": "unadjudicated",
+      "note": ""
+    },
+    {
+      "key": "3:T27",
+      "official": "尊尊快樂狗園",
+      "catalog": "妤叔yusu",
+      "decision": "unadjudicated",
+      "note": ""
+    }
+  ]
+}
