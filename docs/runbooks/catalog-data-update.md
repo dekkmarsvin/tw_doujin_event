@@ -12,7 +12,7 @@
 |---|---|---|
 | 配置權威（主辦官網） | [FF47 三日攤位編號公佈](https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/)，版本化快照為 `data_source_test/ff47-official-booths.json` | 保留 |
 | 內容來源 | [FF47 Google 試算表](https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing)，版本化快照為 `data_source_test/FF47 完整攤位整理.xlsx` | 過渡 |
-| 社團模板來源工作表 | `攤位整理表 請在此填寫資訊`（FF47 為 1,336 筆具名稱的社團列） | 過渡 |
+| 社團模板來源工作表 | `攤位整理表 請在此填寫資訊`（一列一個具名稱的社團） | 過渡 |
 | 縮圖索引 | Excel 以 `IMPORTRANGE` 查詢的[公開縮圖索引](https://docs.google.com/spreadsheets/d/1f7uHQQgxgff8nh6aFDrh_cqkeFpcVPsvJILesm778_0/)，固定快照為 `data_source_test/ff47-thumbnail-index.csv` | 過渡 |
 
 `DAY1`、`DAY2`、`DAY3` 工作表只用於核對活動配置，**不以同名推測社團身分**。
@@ -56,7 +56,7 @@ FF47 目前的狀態：2,953 個攤位網格完全一致，26 筆名稱衝突全
 Google 試算表
   └─ npm run source:update
        └─ data_source_test/*.xlsx           版本化來源快照
-            ├─ data/circle-identities/{allocations,evidence,legacy-id-map}.json
+            ├─ data/circle-identities/{allocations,evidence}.json
             └─ npm run catalog:generate
                  └─ app/ff47-circle-templates.generated.json   （+ .manifest.json 記錄 SHA-256）
                       └─ npm run catalog:snapshot
@@ -89,7 +89,7 @@ npm run source:update
 
 `catalog:generate` 對同一 `eventId + source kind + source value` 沿用既有 `c-xxxxxx`。全新且沒有名稱候選的證據才會追加配號；只有名稱相符、來源重複或其他衝突時會 fail closed，輸出人工裁決報告。此時先確認是既有社團或新社團，再編輯 `evidence.json`，不得用名稱自動合併。
 
-檢查 diff 時確認：`allocations.json` 只在尾端追加、`nextSequence` 單調增加；`evidence.json` 的來源不重複；`legacy-id-map.json` 永久保留且不因本次生成刪除。`npm run catalog:check` 會驗證 registry、manifest 與產物同步。
+檢查 diff 時確認：`allocations.json` 只在尾端追加、`nextSequence` 單調增加；`evidence.json` 的來源不重複。`npm run catalog:check` 會驗證 registry、manifest 與產物同步。
 
 ### 4. 走完共同 gate 再 commit
 
@@ -119,12 +119,12 @@ npm run catalog:check
 
 | 項目 | 數量 |
 |---|---|
-| 社團模板 | 1,336 |
+| 社團模板 | 1,341 |
 | 配置 | 2,977 |
-| 外部連結 | 5,137 |
-| 販售資訊 | 336 |
+| 外部連結 | 5,791 |
+| 販售資訊 | 500 |
 | 具原始 Drive 連結的縮圖 | 262 |
 
-投影後的社團數應**恰為 1,336**。高於此數代表有攤位比不到模板而退回位置式身分，是必須修的漂移。
+投影後的社團數應**恰為模板數**。高於此數代表有攤位比不到模板而退回位置式身分，是必須修的漂移。上表是 2026-08-18 的實際數字，供對照用——它會隨上游成長，不是驗收門檻。
 
 未出現在來源中的欄位不補值；沒有來源圖片時維持文字卡。

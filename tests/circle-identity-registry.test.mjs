@@ -18,7 +18,6 @@ function fixture(extraSources = []) {
         sources: [{ eventId: "ff47", kind: "workbook-row", value: "10" }, ...extraSources],
       }],
     },
-    legacyIdMap: { schema: "legacy-circle-id-map/1", mappings: { "ff47-old": "c-000001" } },
   };
 }
 

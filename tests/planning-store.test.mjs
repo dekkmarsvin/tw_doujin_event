@@ -42,51 +42,47 @@ test("stores purchase notes and budgets with each itinerary entry", () => {
   assert.equal(document.visitPlans[0].updatedAt, "2026-08-06T00:01:00.000Z");
 });
 
-test("migrates favorites from the legacy storage key through the catalog ID map", () => {
-  const storage = { getItem: (key) => key === "event-map-favorites" ? JSON.stringify(["1-a01"]) : null };
-  assert.deepEqual(store.loadPlanningDocument(storage, eventId, (circleId) => [`${circleId}-canonical`]).favorites.map((favorite) => favorite.circleId), ["1-a01-canonical"]);
+test("adopts favorites from the pre-schema storage key as they are", () => {
+  const storage = { getItem: (key) => key === "event-map-favorites" ? JSON.stringify(["c-000001"]) : null };
+  assert.deepEqual(store.loadPlanningDocument(storage, eventId).favorites.map((favorite) => favorite.circleId), ["c-000001"]);
 });
 
-test("migrates schema-1 placement planning to canonical circle IDs without losing notes", () => {
-  const raw = JSON.stringify({
-    schemaVersion: 1,
-    favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
-    favorites: [
-      { eventId, circleId: "1-a01-0", groupId: "priority", memo: "買新刊", createdAt: "2026-08-06T00:00:00.000Z", updatedAt: "2026-08-06T00:01:00.000Z" },
-      { eventId, circleId: "1-a02-1", groupId: null, memo: "拿無料", createdAt: "2026-08-06T00:00:30.000Z", updatedAt: "2026-08-06T00:02:00.000Z" },
-    ],
-    visitPlans: [
-      { eventId, day: 1, circleId: "1-a01-0", status: "planned", routeOrder: 0, updatedAt: "2026-08-06T00:01:00.000Z" },
-      { eventId, day: 1, circleId: "1-a02-1", status: "next", routeOrder: 1, updatedAt: "2026-08-06T00:02:00.000Z" },
-    ],
-  });
-  const snapshot = store.inspectPlanningStorage(
-    { getItem: (key) => key === store.PLANNING_STORAGE_KEY ? raw : null },
-    eventId,
-    (circleId) => [circleId === "1-a01-0" || circleId === "1-a02-1" ? "canonical-origin" : circleId],
-  );
-  assert.equal(snapshot.document.schemaVersion, store.PLANNING_SCHEMA_VERSION);
-  assert.equal(snapshot.document.favorites.length, 1);
-  assert.match(snapshot.document.favorites[0].memo, /買新刊/);
-  assert.match(snapshot.document.favorites[0].memo, /拿無料/);
-  assert.deepEqual(snapshot.document.visitPlans.map(({ circleId, status }) => [circleId, status]), [["canonical-origin", "next"]]);
+test("an older planning schema is preserved and reported, never guessed at", () => {
+  // Schema 1 keyed planning on booth positions and schema 2 on the `ff47-`
+  // content hash. The table that translated either into an allocated circle ID
+  // is gone (ADR-0013), so the only safe answer is to refuse and keep the raw
+  // document where the user can still export it.
+  for (const schemaVersion of [1, 2]) {
+    const raw = JSON.stringify({
+      schemaVersion,
+      favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
+      favorites: [{ eventId, circleId: "ff47-old", groupId: "priority", memo: "保留", createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z" }],
+      visitPlans: [],
+    });
+    const snapshot = store.inspectPlanningStorage({ getItem: (key) => key === store.PLANNING_STORAGE_KEY ? raw : null }, eventId);
+
+    assert.equal(snapshot.writable, false, `schema ${schemaVersion} must not become writable`);
+    assert.equal(snapshot.raw, raw);
+    assert.match(snapshot.error, /不相容/);
+    assert.deepEqual(snapshot.document.favorites, []);
+  }
 });
 
-test("migrates schema-2 hash IDs to schema 3 and a retry does not duplicate planning data", () => {
+test("a schema 3 document loads unchanged and a reload does not duplicate it", () => {
   const raw = JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     favoriteGroups: [{ id: "priority", name: "必逛", color: "coral", sortOrder: 0 }],
-    favorites: [{ eventId, circleId: "ff47-old", groupId: "priority", memo: "保留", createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z" }],
-    visitPlans: [{ eventId, day: 2, circleId: "ff47-old", status: "next", routeOrder: 0, purchaseMemo: "新刊", budget: 500, updatedAt: "2026-08-13T00:00:00.000Z" }],
+    favorites: [{ eventId, circleId: "c-000001", groupId: "priority", memo: "保留", createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z" }],
+    visitPlans: [{ eventId, day: 2, circleId: "c-000001", status: "next", routeOrder: 0, purchaseMemo: "新刊", budget: 500, updatedAt: "2026-08-13T00:00:00.000Z" }],
   });
-  const storage = { getItem: (key) => key === store.PLANNING_STORAGE_KEY ? raw : null };
-  const first = store.inspectPlanningStorage(storage, eventId, (circleId) => [circleId === "ff47-old" ? "c-000001" : circleId]);
-  assert.equal(first.document.schemaVersion, 3);
+  const first = store.inspectPlanningStorage({ getItem: (key) => key === store.PLANNING_STORAGE_KEY ? raw : null }, eventId);
+
+  assert.equal(first.writable, true);
   assert.deepEqual(first.document.favorites.map(({ circleId, memo }) => [circleId, memo]), [["c-000001", "保留"]]);
   assert.deepEqual(first.document.visitPlans.map(({ circleId, purchaseMemo, budget }) => [circleId, purchaseMemo, budget]), [["c-000001", "新刊", 500]]);
 
   const saved = JSON.stringify(first.document);
-  const retry = store.inspectPlanningStorage({ getItem: (key) => key === store.PLANNING_STORAGE_KEY ? saved : null }, eventId, () => { throw new Error("schema 3 must not remigrate"); });
+  const retry = store.inspectPlanningStorage({ getItem: (key) => key === store.PLANNING_STORAGE_KEY ? saved : null }, eventId);
   assert.deepEqual(retry.document, first.document);
 });
 

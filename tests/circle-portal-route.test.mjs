@@ -56,11 +56,6 @@ beforeEach(async () => {
     projectCircle: async (circleId, fields) => (CIRCLES[circleId]
       ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...fields } }]
       : null),
-    loadLegacyCircleIds: async () => ({
-      "ff47-site": "c-000001",
-      "ff47-social": "c-000002",
-      "ff47-domain": "c-000003",
-    }),
     fetchEvidence: async () => evidenceBody,
     config: {
       eventId: "ff47",
@@ -491,24 +486,6 @@ test("the generic public route rejects an event that does not match handler conf
   const response = await handlers.publicOverrides(get("/data/events/other/overrides.json"), "other");
   assert.equal(response.status, 404);
   assert.equal(response.headers.get("cache-control"), "no-store");
-});
-
-test("a fresh admin can run the explicit identity cutover and safely retry it", async () => {
-  const admin = await signIn("admin@example.com");
-  const owner = await signIn("migration-owner@example.com");
-  await approve(owner, "ff47-site", admin);
-  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "遷移內容" } }, owner), "ff47-site");
-
-  assert.equal((await handlers.adminMigrateCircleIds(post("/api/admin/circle-id-migration", {}, admin))).status, 400);
-  const first = await handlers.adminMigrateCircleIds(post("/api/admin/circle-id-migration", { confirm: "migrate-to-allocated-circle-ids" }, admin));
-  assert.deepEqual(await first.json(), { ok: true, migratedIds: 1, remainingLegacyIds: [] });
-  const rows = await database.prepare("SELECT circle_id FROM circle_claims UNION SELECT circle_id FROM circle_overrides").all();
-  assert.deepEqual([...new Set(rows.results.map((row) => row.circle_id))], ["c-000001"]);
-  const published = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
-  assert.equal((await published.json()).overrides[0].circleId, "c-000001");
-
-  const retry = await handlers.adminMigrateCircleIds(post("/api/admin/circle-id-migration", { confirm: "migrate-to-allocated-circle-ids" }, admin));
-  assert.deepEqual(await retry.json(), { ok: true, migratedIds: 0, remainingLegacyIds: [] });
 });
 
 test("admin actions require a recently created session", async () => {

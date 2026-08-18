@@ -97,7 +97,7 @@ type CircleViewRecord = Booth & {
 - **一個 `CircleRecord` 可對應多筆 `PlacementRecord`。** 同一份已裁決的 identity evidence 可跨日期、攤位與活動沿用一個 `CircleRecord.id`，各配置保留自己的 `PlacementRecord`。決策見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md)。
 - **`CircleRecord.id` 是配發式 `c-xxxxxx` 流水號。** `allocations.json` 只增不減、不重排、不重用；名稱、列號與活動變更都不得重算 ID。
 - **識別證據與配號分層。** `evidence.json` 可審閱更新目前名稱、歷史別名與跨活動來源；若只有名稱相符、來源衝突或一對多，生成器 fail closed 並輸出人工裁決資料，不自動合併。
-- **`legacy-id-map.json` 永久保存舊 FF47 hash ID 對照。** 它由靜態 catalog 按需載入，供 planning schema 3 與舊 `selectedCircle` URL 使用，不進入閱讀端主 bundle。
+- **舊 `ff47-<hash>` ID 沒有相容路徑。** 對照表已移除，快照不再帶 `legacyCircleIds`，見 [ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。攤位範圍 ID（`1-e19`、`1-e19-0`）仍可解析為 circle ID，但那是從 records 即時推導的別名，不是儲存的對照表。
 - **同名不是合併依據。** 沒有人工核對證據時，同名的公開列維持分離。
 - **沒有編號攤位的已知社團仍保留在目錄中**，但不虛構地圖位置。
 
@@ -109,7 +109,7 @@ type CircleViewRecord = Booth & {
 2. 優先以「正規化名稱 + 活動日 + 攤位代碼」比對同一 Excel 列。
 3. 只有名稱在主表中唯一時，才允許退回單一名稱匹配。
 4. 名稱正規化只用於產生候選，**不回寫原始名稱**；日文、中文、空白與符號差異都保留可追溯的來源值。
-5. 投影後的社團數必須恰為模板數（FF47 為 1,336）。高於此數代表有攤位比不到模板而退回位置式身分，屬於必須修的漂移，不是可接受的降級。
+5. 投影後的社團數必須**恰為模板數**。高於此數代表有攤位比不到模板而退回位置式身分，屬於必須修的漂移，不是可接受的降級。模板數本身由上游決定，不是固定值——寫死它只會在上游正常成長時誤報。
 
 ## 資訊密度契約
 
