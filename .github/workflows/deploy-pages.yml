@@ -106,7 +106,20 @@ jobs:
             sleep 3
           done
           if [ "$code" = "301" ] || [ "$code" = "302" ]; then
-            echo "::error::/ redirected to the Access login page. The service token was rejected: check that a Service Auth policy on the application covering *.tw-catalog.pages.dev includes it, and that the CF_ACCESS_* secrets match a live token."
+            # Access states in the login redirect whether it recognized the
+            # credentials at all. That separates the two failures a redirect
+            # otherwise hides: bad secrets versus a policy that admits nobody.
+            redirect=$(curl --silent --output /dev/null --write-out '%{redirect_url}' \
+              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+              "$BASE_URL/")
+            token_status=$(node -e '
+              const found = /[?&]meta=([^&]+)/.exec(process.argv[1]);
+              if (!found) { console.log("unknown"); process.exit(0); }
+              const claims = JSON.parse(Buffer.from(found[1].split(".")[1], "base64url").toString());
+              console.log(String(claims.service_token_status));
+            ' "$redirect" 2>/dev/null || echo unknown)
+            echo "::error::/ redirected to the Access login page; Access reports service_token_status=$token_status. false means CF_ACCESS_CLIENT_ID/SECRET are not a live token (wrong value, stray whitespace, or revoked). true means the token is valid but no Service Auth policy on the application covering *.tw-catalog.pages.dev admits it. See docs/runbooks/deployment.md."
           else
             echo "::error::/ returned $code, expected 200."
           fi
