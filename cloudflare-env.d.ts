@@ -44,6 +44,9 @@ interface PortalEnv {
   MAILGUN_SENDER?: string;
   SESSION_SECRET?: string;
   HASH_PEPPER?: string;
+  /** Public Turnstile sitekey. A plain variable: it is served to the browser. */
+  TURNSTILE_SITEKEY?: string;
+  TURNSTILE_SECRET?: string;
   ADMIN_EMAILS?: string;
   PREVIEW_MAIL_SINK?: string;
   PREVIEW_TEST_RECIPIENTS?: string;

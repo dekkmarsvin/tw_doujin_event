@@ -11,7 +11,7 @@
 | Pages project | 需要（`tw-catalog`） |
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
-| Runtime secrets | **需要**——production 五個；preview 使用隔離的 session／pepper、E2E token 與 D1 mail sink，見下 |
+| Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink 與 Turnstile dummy 金鑰，見下 |
 | R2 / KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
@@ -23,15 +23,19 @@
 
 ## Secrets
 
-production 的五個 runtime secret 以 `wrangler pages secret put` 設定。**不進 repo、不進 `wrangler.jsonc`**：
+production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**不進 repo、不進 `wrangler.jsonc`**：
 
-`SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）
+`SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）、`TURNSTILE_SECRET`
+
+另有一個**不是 secret 的變數** `TURNSTILE_SITEKEY`：它會經 `GET /api/auth/config` 送到瀏覽器，公開是它的用途。它**已經寫在 `wrangler.jsonc` 的頂層 `vars`**，不在 dashboard，部署者不需要另外設定——理由見[真人驗證](#真人驗證turnstile)。缺它時 `GET /api/auth/config` 回 503，登入頁因此拿不到 sitekey；其餘路由不受影響。
 
 preview 不使用 production Mailgun，也不寄外部郵件。`wrangler.jsonc` 的 `env.preview.vars` 明確啟用 D1 mail sink，只允許 `preview-admin@example.test` 與 `preview-circle@example.test`。這些都是保留的 `.test` 假地址，不是真實收件人。preview 另需四個與 production 分離的 secret：
 
 - `SESSION_SECRET`、`HASH_PEPPER`：preview 專用亂數。
 - `ADMIN_EMAILS`：固定設為 `preview-admin@example.test`；使用 secret binding，避免與 Pages 既有 binding 衝突。
 - `PREVIEW_E2E_TOKEN`：只授權 CI 讀取／清空 preview mail sink；同一值同時設定為 Pages preview secret 與 GitHub Actions secret。
+
+preview 的 Turnstile **不需要設定任何東西**：`wrangler.jsonc` 已把 dummy 金鑰寫在 `env.preview.vars`（sitekey `1x00000000000000000000AA`、secret `1x0000000000000000000000000000000AA`）。那組 secret 依設計接受任何 token，所以它只能留在 preview。
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler pages secret put PREVIEW_E2E_TOKEN --project-name=tw-catalog --env preview
@@ -64,6 +68,64 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰。症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run deploy-pages.yml --ref main` 重跑即可。
 - **`SESSION_SECRET` 一旦上線就不要更換。** 它簽署 session cookie，更換等同讓所有已登入的社團同時被登出。
 - **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/circle` 的管理面板增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/circle-portal.md#管理者)。
+
+## 真人驗證（Turnstile）
+
+`POST /api/auth/request-link` 要求一枚 Turnstile token，決策見 [ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)，行為見[社團自助控制面契約](../contracts/circle-portal.md#索取登入連結需要通過真人驗證)。
+
+### 建立 widget
+
+production 的 widget 已建立，sitekey `0x4AAAAAAET9rAWIzjOckkSc`。要換一個時：
+
+1. Cloudflare dashboard → **Turnstile** → Add widget。Turnstile 不需要申請或審核，有帳號就能建。
+2. Hostname 填**正式網域與 `tw-catalog.pages.dev`**。hostname 自動涵蓋子網域，所以後者一條就包含 `pr-*.tw-catalog.pages.dev`；免費方案每個 widget 上限 10 個 hostname。
+3. 模式選 **Managed**。本專案不使用 pre-clearance。
+4. 取得 Site Key 與 Secret Key。**Secret Key 只顯示一次。**
+
+### Secret Key 進 Pages secret
+
+```bash
+npx wrangler pages secret put TURNSTILE_SECRET --project-name=tw-catalog --env production
+```
+
+`--env` 一定要寫，理由見 [Secrets](#secrets)。
+
+### Site Key 在 `wrangler.jsonc`，不在 dashboard
+
+Site Key 公開是它的用途，所以它屬於版本控制，不屬於 dashboard 狀態。現值已在**頂層** `vars`，換 widget 時改這裡：
+
+```jsonc
+"vars": {
+  "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc"
+},
+```
+
+**頂層是 production 專用。** `vars` 是 non-inheritable key，named environment 不繼承它——preview 的那份已經在 `env.preview.vars`（dummy 金鑰）。兩邊各自宣告是正確的，不是重複。
+
+不放 dashboard 有實際理由：帶著設定檔部署時，wrangler 會以檔案內容覆寫 dashboard 上的變數（除非設 `keep_vars`）。只設在 dashboard 而設定檔沒有的話，下一次部署可能把它清掉，症狀是登入頁忽然拿不到 sitekey。**Secret 不受影響**——它們存在另一個地方，設定檔不會覆寫。
+
+改完**必須重新部署**：Pages 的變數與密鑰都是在建立 deployment 時綁定的。
+
+```bash
+gh workflow run deploy-pages.yml --ref main
+```
+
+### 這件事只能用瀏覽器驗
+
+CI 的 E2E 不是瀏覽器：它在 preview 用 dummy 金鑰直接送 token，因此**不會**發現 widget 載入失敗。真正要確認的是 CSP——`public/_headers` 在 `/circle*` 先移除站台層的 `Content-Security-Policy` 再重新宣告一份放寬版，Cloudflare 對多條命中的規則是合併而非覆寫，移除若沒生效，瀏覽器會取兩份策略的交集並擋掉元件。
+
+部署後以瀏覽器開啟 `/circle`（preview 或 production 皆可），確認：
+
+- 登入表單下方出現 Turnstile 元件，且 console 沒有 CSP 違規。
+- 回應標頭只有**一個** `content-security-policy`，且含 `https://challenges.cloudflare.com`：
+
+```bash
+curl -sI https://tw-catalog.pages.dev/circle | grep -ci '^content-security-policy'
+```
+
+輸出 `1` 才是對的；`2` 代表移除沒生效，元件會被擋。
+
+**Turnstile 不可達時登入會停擺，這是刻意的。** siteverify 逾時或回非 2xx 一律視為未通過；症狀是登入表單回「真人驗證未通過」，而 Mailgun 與 D1 都沒有動靜。
 
 ## CI 行為
 

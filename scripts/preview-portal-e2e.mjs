@@ -58,7 +58,12 @@ async function capturedLoginToken(email) {
 }
 
 async function signIn(email) {
-  await request("/api/auth/request-link", { method: "POST", body: { email } });
+  // Preview runs Turnstile on Cloudflare's always-passes dummy secret (see
+  // `wrangler.jsonc`), which accepts any non-empty token. This driver is not a
+  // browser and could not solve a real widget; if preview is ever pointed at a
+  // live key, this call starts failing with 403 rather than silently skipping
+  // the check.
+  await request("/api/auth/request-link", { method: "POST", body: { email, turnstileToken: "preview-dummy-token" } });
   const token = await capturedLoginToken(email);
   const { response } = await request("/api/auth/verify", { method: "POST", body: { token } });
   const setCookie = response.headers.get("set-cookie") ?? "";
