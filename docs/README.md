@@ -64,6 +64,7 @@
 - [Comike WebCatalog：地圖功能](./research/comike-webcatalog-map.md)
 - [Comike WebCatalog：資訊介面、收藏與資料串接](./research/comike-webcatalog-information-and-favorites.md)
 - [Comike WebCatalog：社團自助編輯](./research/comike-webcatalog-circle-editing.md)
+- [日本同人／コミケ周邊服務功能盤點](./research/doujin-service-landscape.md)（**二手檢索，未實地操作**——可信度低於上面三份）
 
 ## 維護規則
 
