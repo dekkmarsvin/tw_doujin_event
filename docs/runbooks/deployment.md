@@ -148,7 +148,11 @@ npx wrangler d1 execute tw-catalog-identity-preview --remote --command "SELECT C
 
 ### 5. 建立最小權限 token
 
-在 Cloudflare Dashboard 建立 Custom API Token，權限只給目標 account 的 **Cloudflare Pages: Edit**。記下 Account ID 與 token；不要寫進 repository、`.env` 或 workflow YAML。
+在 Cloudflare Dashboard 建立 Custom API Token，權限給目標 account 的 **Cloudflare Pages: Edit** 與 **D1: Read**。記下 Account ID 與 token；不要寫進 repository、`.env` 或 workflow YAML。
+
+D1 權限不是為了部署，而是為了 PR 的 E2E job：它在跑之前與跑之後各查一次 production D1 的 row counts 與 revision，用來證明 preview 沒有寫到正式資料（見[CI 行為](#ci-行為)）。**只給 Pages: Edit 的 token 可以部署成功，卻會讓那道保護無法執行**——症狀是 E2E job 回報 `The given account is not valid or is not authorized to access this service [code: 7403]`，而同一個 workflow 的 deploy job 一切正常。看到這個錯誤時要補的是 token 權限，不是 Account ID。
+
+若 `D1: Read` 仍被 7403 拒絕，改用 `D1: Edit`——`wrangler d1 execute --remote` 走的是 D1 的 query endpoint，即使 SQL 只有 `SELECT` 也可能被歸類為需要寫入權限。
 
 ### 6. 設定 GitHub Actions secrets
 
