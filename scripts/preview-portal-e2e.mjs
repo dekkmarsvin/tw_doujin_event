@@ -16,13 +16,19 @@ function rejectAccessLogin(response, label) {
   throw new Error(`${label} was intercepted by Cloudflare Access (${response.status}). CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must name a service token that a Service Auth policy admits on *.tw-catalog.pages.dev.`);
 }
 
+// `functions/_middleware.ts` refuses every mutation that does not carry both a
+// same-origin `Origin` header and a JSON content type — bodyless ones included.
+// A browser supplies `Origin` on its own; this script has to say it itself, and
+// keying the content type on the body would miss the bodyless DELETE.
+const MUTATION_HEADERS = { origin: new URL(baseUrl).origin, "content-type": "application/json" };
+
 async function request(path, { method = "GET", body, cookie, previewToken = false } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     redirect: "manual",
     headers: {
       ...accessHeaders,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...(method === "GET" || method === "HEAD" ? {} : MUTATION_HEADERS),
       ...(cookie ? { cookie } : {}),
       ...(previewToken ? { "x-preview-e2e-token": e2eToken } : {}),
     },
