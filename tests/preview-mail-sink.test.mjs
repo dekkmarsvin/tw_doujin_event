@@ -6,7 +6,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { previewE2eAuthorized, previewRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
+const { previewE2eAuthorized, previewMailRouteFor, previewSinkRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
 const { onRequestDelete, onRequestGet } = await environment.runner.import("/functions/api/preview/mail.ts");
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -19,16 +19,31 @@ after(async () => { await miniflare.dispose(); await vite.close(); });
 const env = {
   PREVIEW_MAIL_SINK: "d1",
   PREVIEW_TEST_RECIPIENTS: "preview-admin@example.test, preview-circle@example.test",
+  PREVIEW_SANDBOX_RECIPIENTS: "maintainer@example.com",
   PREVIEW_E2E_TOKEN: "a-private-preview-token",
   ADMIN_EMAILS: "preview-admin@example.test",
   DB: database,
 };
 
 test("preview mail sink accepts only explicit test recipients", () => {
-  assert.equal(previewRecipientAllowed(env, "PREVIEW-ADMIN@example.test"), true);
-  assert.equal(previewRecipientAllowed(env, "preview-circle@example.test"), true);
-  assert.equal(previewRecipientAllowed(env, "real-user@example.com"), false);
-  assert.equal(previewRecipientAllowed({ ...env, PREVIEW_MAIL_SINK: undefined }, "preview-admin@example.test"), false);
+  assert.equal(previewSinkRecipientAllowed(env, "PREVIEW-ADMIN@example.test"), true);
+  assert.equal(previewSinkRecipientAllowed(env, "preview-circle@example.test"), true);
+  assert.equal(previewSinkRecipientAllowed(env, "real-user@example.com"), false);
+  assert.equal(previewSinkRecipientAllowed({ ...env, PREVIEW_MAIL_SINK: undefined }, "preview-admin@example.test"), false);
+});
+
+test("preview picks a mailbox by recipient, and refuses the addresses on neither list", () => {
+  // The two lists are what keeps CI and a human out of each other’s way on
+  // the same deployment: the E2E driver only ever signs in as a .test
+  // address, so adding a real inbox cannot change what CI observes.
+  assert.equal(previewMailRouteFor(env, "preview-circle@example.test"), "sink");
+  assert.equal(previewMailRouteFor(env, " Maintainer@Example.com "), "sandbox");
+  assert.equal(previewMailRouteFor(env, "someone-else@example.com"), null);
+  assert.equal(previewMailRouteFor({ ...env, PREVIEW_MAIL_SINK: undefined }, "maintainer@example.com"), null);
+
+  // Sandbox mail is delivered, never captured, so there is nothing for the
+  // E2E reader to hand back for that address.
+  assert.equal(previewSinkRecipientAllowed(env, "maintainer@example.com"), false);
 });
 
 test("mail retrieval requires the separate preview token and hides when disabled", () => {
