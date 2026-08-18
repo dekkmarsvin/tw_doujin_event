@@ -228,7 +228,10 @@ deploy job 的兩個 smoke test 與 `scripts/preview-portal-e2e.mjs` 都會帶�
 
 **沒有 header 的 CI 會量錯東西。** Access 對未認證請求回 302 到 `*.cloudflareaccess.com`，不是 4xx；`curl --fail` 不會因此失敗，所以「靜態資源 smoke test 通過」也可能只是通過了登入頁。兩個 smoke test 因此改為斷言明確的狀態碼（`/` 要 200、`/api/auth/session` 要 401），並把 301／302 當成 service token 被拒絕來報錯。
 
-token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI 報 `redirected to the Access login page`。
+token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI 報 `redirected to the Access login page`。錯誤訊息會附上 Access 在登入導向裡宣告的 `service_token_status`，用來分辨兩者：
+
+- `false`：Access 根本不認得這組憑證——secret 值錯誤、混入空白或換行、或 token 已被撤銷。重設 GitHub secrets。
+- `true`：token 有效，但沒有任何 Service Auth policy 放行它。回頭檢查 policy 的 action 與 include。
 
 ## 發布前 gate
 
