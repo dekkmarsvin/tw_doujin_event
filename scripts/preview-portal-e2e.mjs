@@ -16,13 +16,19 @@ function rejectAccessLogin(response, label) {
   throw new Error(`${label} was intercepted by Cloudflare Access (${response.status}). CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must name a service token that a Service Auth policy admits on *.tw-catalog.pages.dev.`);
 }
 
+// `functions/_middleware.ts` refuses every mutation that does not carry both a
+// same-origin `Origin` header and a JSON content type — bodyless ones included.
+// A browser supplies `Origin` on its own; this script has to say it itself, and
+// keying the content type on the body would miss the bodyless DELETE.
+const MUTATION_HEADERS = { origin: new URL(baseUrl).origin, "content-type": "application/json" };
+
 async function request(path, { method = "GET", body, cookie, previewToken = false } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     redirect: "manual",
     headers: {
       ...accessHeaders,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...(method === "GET" || method === "HEAD" ? {} : MUTATION_HEADERS),
       ...(cookie ? { cookie } : {}),
       ...(previewToken ? { "x-preview-e2e-token": e2eToken } : {}),
     },
@@ -61,6 +67,24 @@ async function signIn(email) {
   return cookie;
 }
 
+/**
+ * Signing in proves the mailbox, not the role. Without this the flow reaches
+ * `POST /api/admin/claims` and fails there with a bare `沒有權限。`, which reads
+ * like a bug in claim approval rather than a roster that never contained this
+ * address. The roster cannot be read from here — listing admins is itself an
+ * admin-only route — so name both causes and the query that separates them.
+ */
+async function requireAdmin(cookie, email) {
+  const { payload } = await request("/api/auth/session", { cookie });
+  if (payload?.isAdmin) return;
+  throw new Error([
+    `${email} signed in but is not on the preview admin roster, so approval cannot be exercised.`,
+    "Either ADMIN_EMAILS is unset on the preview environment, or the roster is non-empty with a different address:",
+    "`seedAdmins()` inserts only while `admins` is empty, and the E2E cleanup deliberately keeps the roster, so a wrong first value is permanent until removed by hand.",
+    "Inspect it with: npx wrangler d1 execute tw-catalog-identity-preview --remote --command 'SELECT email, added_by FROM admins'",
+  ].join("\n  "));
+}
+
 async function cleanup() {
   await request("/api/preview/mail", { method: "DELETE", previewToken: true });
 }
@@ -68,6 +92,7 @@ async function cleanup() {
 await cleanup();
 try {
   const adminCookie = await signIn(adminEmail);
+  await requireAdmin(adminCookie, adminEmail);
   const circleCookie = await signIn(circleEmail);
   const { payload: search } = await request(`/api/circle/search?q=${encodeURIComponent("33号")}`, { cookie: circleCookie });
   const circle = search.circles?.[0];
