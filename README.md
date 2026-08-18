@@ -49,7 +49,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 | 要重新產生地圖快照 | [地圖 authoring](docs/runbooks/map-authoring.md) |
 | 首次部署、改密鑰、回滾 | [部署](docs/runbooks/deployment.md) |
 
-> 社團 ID 由版本化 registry 配發且永不重算；更新場刊時必須審閱 identity registry 與 legacy mapping 的差異。規則見 [ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)。
+> 社團 ID 由版本化 registry 配發且永不重算；更新場刊時必須審閱 `data/circle-identities/` 的 `allocations.json` 與 `evidence.json` 差異。規則見 [ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)；舊 `ff47-<hash>` ID 的對照表與相容路徑已移除，見 [ADR-0013](docs/adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。
 
 ## 專案結構
 
@@ -77,7 +77,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 - `public/data/events/ff47/map.json`：地圖快照
 - `public/fonts/`：自託管 Geist / Geist Mono 字型與授權
 - `data_source_test/`：FF47 公開整理資料與配置圖測試輸入
-- `scripts/`：資料生成、快照匯出、來源同步、identity registry 與 cutover 工具
+- `scripts/`：資料生成、快照匯出、來源同步、identity registry 與 preview portal E2E 工具
 
 **本機 authoring（不部署到 Pages）**
 

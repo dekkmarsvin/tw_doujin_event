@@ -56,7 +56,6 @@ export type PortalDependencies = {
   fetchEvidence: (url: string) => Promise<string | null>;
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
-  /** Loads the permanent legacy map from the static catalog only for cutover. */
   config: PortalConfig;
 };
 
