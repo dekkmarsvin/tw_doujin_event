@@ -1,37 +1,16 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { normalizeTextSource } from "./catalog-source-utils.mjs";
 import { CircleIdentityAdjudicationError, createCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import { parseXlsxWorksheet, unzipXlsx } from "./xlsx-source-utils.mjs";
 
 const WORKBOOK_PATH = "data_source_test/FF47 完整攤位整理.xlsx";
-const THUMBNAIL_INDEX_PATH = "data_source_test/ff47-thumbnail-index.csv";
 const OUTPUT_PATH = "app/ff47-circle-templates.generated.json";
 const MANIFEST_PATH = "app/ff47-circle-templates.manifest.json";
 const ALLOCATIONS_PATH = "data/circle-identities/allocations.json";
 const EVIDENCE_PATH = "data/circle-identities/evidence.json";
 const SOURCE_SHEET = "攤位整理表 請在此填寫資訊";
-const GENERATOR_VERSION = 2;
+const GENERATOR_VERSION = 3;
 const check = process.argv.includes("--check");
-
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (quoted && char === '"' && text[index + 1] === '"') { field += '"'; index += 1; }
-    else if (char === '"') quoted = !quoted;
-    else if (!quoted && char === ",") { row.push(field); field = ""; }
-    else if (!quoted && (char === "\n" || char === "\r")) {
-      if (char === "\r" && text[index + 1] === "\n") index += 1;
-      row.push(field); rows.push(row); row = []; field = "";
-    } else field += char;
-  }
-  if (field || row.length) { row.push(field); rows.push(row); }
-  return rows;
-}
 
 const text = (value) => value === null || value === undefined ? "" : String(value).normalize("NFKC").trim();
 const list = (value) => [...new Set(text(value).split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean))];
@@ -83,7 +62,6 @@ function correctedName(raw, sourceRow) {
 }
 
 const workbookBytes = await readFile(WORKBOOK_PATH);
-const thumbnailCsvText = normalizeTextSource(await readFile(THUMBNAIL_INDEX_PATH, "utf8"));
 const [allocationsRegistry, evidenceRegistry] = await Promise.all([
   readFile(ALLOCATIONS_PATH, "utf8").then(JSON.parse),
   readFile(EVIDENCE_PATH, "utf8").then(JSON.parse),
@@ -103,8 +81,6 @@ function circleIdentity(sourceRow, name) {
   }
 }
 
-const thumbnailRows = parseCsv(thumbnailCsvText);
-const thumbnails = new Map(thumbnailRows.slice(1).flatMap((row) => text(row[0]) && text(row[1]) ? [[text(row[0]), text(row[1])]] : []));
 const rows = parseXlsxWorksheet(unzipXlsx(workbookBytes), SOURCE_SHEET);
 const templates = rows.slice(1).flatMap((row, index) => {
   if (!row) return [];
@@ -112,8 +88,6 @@ const templates = rows.slice(1).flatMap((row, index) => {
   const rawName = text(row[0]);
   if (!rawName) return [];
   const name = correctedName(rawName, sourceRow);
-  const sourceUrl = thumbnails.get(name);
-  const driveId = sourceUrl?.match(/\/d\/([^/]+)/)?.[1] ?? sourceUrl?.match(/[?&]id=([^&]+)/)?.[1];
   const links = LINK_COLUMNS.flatMap(([column, provider, kind]) => urls(row[column]).map((url) => ({ provider, kind, url })));
   const entry = {
     id: circleIdentity(sourceRow, name),
@@ -129,11 +103,6 @@ const templates = rows.slice(1).flatMap((row, index) => {
     specialTags: list(row[11]),
     surveyUrls: urls(row[17]),
     links,
-    ...(sourceUrl && driveId ? { thumbnail: {
-      sourceUrl,
-      url: `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`,
-      provider: "Google Drive 縮圖索引",
-    } } : {}),
   };
   return [entry];
 });
@@ -147,8 +116,6 @@ const manifest = {
   sourceWorkbook: WORKBOOK_PATH,
   sourceSheet: SOURCE_SHEET,
   sourceWorkbookSha256: sha256(workbookBytes),
-  thumbnailIndex: THUMBNAIL_INDEX_PATH,
-  thumbnailIndexSha256: sha256(thumbnailCsvText),
   output: OUTPUT_PATH,
   outputSha256: sha256(output),
   identityRegistry: {
@@ -158,7 +125,6 @@ const manifest = {
   counts: {
     templates: templates.length,
     links: templates.reduce((sum, entry) => sum + entry.links.length, 0),
-    thumbnails: templates.filter((entry) => entry.thumbnail).length,
   },
 };
 
