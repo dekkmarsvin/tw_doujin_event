@@ -1,6 +1,6 @@
 # ADR-0011：FF47 期間全站不公開
 
-- 狀態：已定案（2026-08-18）；「FF47 的資料與地圖留在 repo 內」一句已由 [ADR-0014](./0014-event-data-lives-outside-the-code-repo.md) 取代，閘控本身不變
+- 狀態：已定案（2026-08-18）；「FF47 的資料與地圖留在 repo 內」一句已由 [ADR-0014](./0014-event-data-lives-outside-the-code-repo.md) 取代，重新開放的條件已由 [ADR-0015](./0015-access-lifts-when-no-third-party-bytes-remain.md) 取代，閘控本身不變
 - 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)
 - 相關流程：[部署](../runbooks/deployment.md)
 
