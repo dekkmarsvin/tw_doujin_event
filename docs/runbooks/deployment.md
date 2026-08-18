@@ -27,7 +27,7 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 `SESSION_SECRET`、`HASH_PEPPER`、`ADMIN_EMAILS`、`MAILGUN_API_KEY`、`MAILGUN_DOMAIN`（選填 `MAILGUN_SENDER`）、`TURNSTILE_SECRET`
 
-另有一個**不是 secret 的變數** `TURNSTILE_SITEKEY`：它會經 `GET /api/auth/config` 送到瀏覽器，公開是它的用途。以 Pages 的 environment variable（不是 secret）設定即可，但**必須設定**——缺它時 `/api/*` 一律回 503，與缺任何一個 secret 相同，見[真人驗證](#真人驗證turnstile)。
+另有一個**不是 secret 的變數** `TURNSTILE_SITEKEY`：它會經 `GET /api/auth/config` 送到瀏覽器，公開是它的用途。它寫在 `wrangler.jsonc` 的 `vars` 裡，不在 dashboard——理由與設定方式見[真人驗證](#真人驗證turnstile)。缺它時 `GET /api/auth/config` 回 503，登入頁因此拿不到 sitekey；其餘路由不受影響。
 
 preview 不使用 production Mailgun，也不寄外部郵件。`wrangler.jsonc` 的 `env.preview.vars` 明確啟用 D1 mail sink，只允許 `preview-admin@example.test` 與 `preview-circle@example.test`。這些都是保留的 `.test` 假地址，不是真實收件人。preview 另需四個與 production 分離的 secret：
 
@@ -76,14 +76,39 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 ### 建立 widget
 
 1. Cloudflare dashboard → **Turnstile** → Add widget，模式 **Managed**。
-2. Hostname 只填**正式網域與 `tw-catalog.pages.dev`**。preview 走 dummy 金鑰，不需要把 `pr-*.tw-catalog.pages.dev` 加進來。
-3. 取得 Site Key 與 Secret Key，分別設定：
+2. Hostname 填**正式網域與 `tw-catalog.pages.dev`**。hostname 自動涵蓋子網域，所以後者一條就包含 `pr-*.tw-catalog.pages.dev`；免費方案每個 widget 上限 10 個 hostname。
+3. 模式選 **Managed**。本專案不使用 pre-clearance。
+4. 取得 Site Key 與 Secret Key。**Secret Key 只顯示一次。**
+
+Turnstile 本身不需要申請或審核，有 Cloudflare 帳號就能建立 widget。
+
+### Secret Key 進 Pages secret
 
 ```bash
 npx wrangler pages secret put TURNSTILE_SECRET --project-name=tw-catalog --env production
 ```
 
-Site Key 以 Pages 的 environment variable 設定為 `TURNSTILE_SITEKEY`（production 環境）。它不是 secret，但**改了一樣要重新部署**才會生效。
+`--env` 一定要寫，理由見 [Secrets](#secrets)。
+
+### Site Key 進 `wrangler.jsonc`，不要進 dashboard
+
+Site Key 公開是它的用途，所以它屬於版本控制，不屬於 dashboard 狀態。加在**頂層** `vars`：
+
+```jsonc
+"vars": {
+  "TURNSTILE_SITEKEY": "0x4AAA…"
+},
+```
+
+**頂層是 production 專用。** `vars` 是 non-inheritable key，named environment 不繼承它——preview 的那份已經在 `env.preview.vars`（dummy 金鑰）。兩邊各自宣告是正確的，不是重複。
+
+不放 dashboard 有實際理由：帶著設定檔部署時，wrangler 會以檔案內容覆寫 dashboard 上的變數（除非設 `keep_vars`）。只設在 dashboard 而設定檔沒有的話，下一次部署可能把它清掉，症狀是登入頁忽然拿不到 sitekey。**Secret 不受影響**——它們存在另一個地方，設定檔不會覆寫。
+
+改完**必須重新部署**：Pages 的變數與密鑰都是在建立 deployment 時綁定的。
+
+```bash
+gh workflow run deploy-pages.yml --ref main
+```
 
 ### 這件事只能用瀏覽器驗
 
