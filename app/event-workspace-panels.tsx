@@ -80,7 +80,7 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
           <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
             {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
-            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <><small>{record.circle.creatorTypes.join("、") || record.genre} · {record.circle.work}</small><small className={styles.sourceHint}>來源：FF47 公開整理表{thumbnail ? " · 有縮圖" : ""}</small></>}</span>
+            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <><small>{record.circle.creatorTypes.join("、") || record.genre} · {record.circle.work}</small><small className={styles.sourceHint}>來源：FF47 公開整理表{thumbnail ? " · 社團自填縮圖" : ""}</small></>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>

@@ -65,6 +65,30 @@ test("all workspace projections are event-scoped across catalog and planning dat
   assert.deepEqual(b.dayPlan.map((item) => item.circleId), ["c-z"]);
 });
 
+/**
+ * The map paints a booth as an image only when the slot carries a thumbnail.
+ * Since ADR-0012 retired the reviewed thumbnail index almost no slot does, so
+ * the projection has to leave `thumbnailUrl` absent rather than pass along an
+ * empty string the renderer would treat as a value and draw a blank cell for.
+ */
+test("a map slot carries a thumbnail only when the circle supplied one", () => {
+  const plain = project("event-a");
+  assert.deepEqual(Object.values(plain.slots).map((slot) => slot.thumbnailUrl), [undefined, undefined]);
+
+  const pictured = records.map((item) => item.circle.id !== "c-a" ? item : {
+    ...item,
+    circle: { ...item.circle, media: [{ id: "m", kind: "thumbnail", url: "https://i.imgur.com/self.png", sourceUrl: "https://example.com/self", provider: "社團本人", alt: "" }] },
+  });
+  const projected = projectEventWorkspace({
+    event: event("event-a"), records: pictured,
+    recordsById: new Map(pictured.map((item) => [item.recordId, item])),
+    recordsByCircleId: new Map(pictured.map((item) => [item.circle.id, [item]])),
+    planning, ...defaults,
+  });
+  assert.equal(projected.slots.A01.thumbnailUrl, "https://i.imgur.com/self.png");
+  assert.equal(projected.slots.A02.thumbnailUrl, undefined);
+});
+
 test("desktop results, mobile results and map markers consume the same projected ID set", () => {
   const result = project("event-a", { favoriteOnly: true });
   const resultIds = result.filtered.map((item) => item.circle.id);

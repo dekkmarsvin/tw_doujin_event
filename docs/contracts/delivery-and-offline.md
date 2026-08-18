@@ -55,7 +55,7 @@
 
 reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓社團儲存與管理者 takedown 約一分鐘內可見。Service Worker 不保存 overlay：離線或 freshness 無法確認時使用完整 base，不把可能任意過期的 overlay 描述成即時資料。
 
-同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。外部社團縮圖目前只允許 HTTPS（`img-src 'self' data: https:`）；縮圖主機允許清單收緊後可再收緊此項，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
+同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 只允許 `'self'`、`data:` 與 `THUMBNAIL_HOST_ALLOWLIST` 的主機，**不含裸 `https:`**。這份清單的唯一權威在 `app/circle-overrides.ts`，`_headers` 與它不一致時 `tests/circle-overrides.test.mjs` 失敗，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
 ## 驗收條件
 
