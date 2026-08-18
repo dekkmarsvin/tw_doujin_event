@@ -50,11 +50,6 @@ export type CircleTemplate = {
   confidence?: string;
   surveyUrls: string[];
   links: CircleExternalLink[];
-  thumbnail?: {
-    sourceUrl: string;
-    url: string;
-    provider: string;
-  };
 };
 
 /**
@@ -150,17 +145,6 @@ function cloneSources(): SourceLink[] {
   return [buildOfficialSource(), { ...CATALOG_SOURCE }];
 }
 
-function templateSource(template?: CircleTemplate): SourceLink[] {
-  return template?.thumbnail ? [{
-    provider: template.thumbnail.provider,
-    contentType: "media",
-    label: `${template.name} 公開縮圖`,
-    url: template.thumbnail.sourceUrl,
-    fetchedAt: FF47_EVENT.dataUpdatedAt,
-    status: "linked",
-  }] : [];
-}
-
 export function normalizeCircleTemplateName(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase("zh-Hant");
 }
@@ -189,19 +173,18 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
   // edited text becomes searchable without any extra code.
   const fields = override?.fields;
   // Not overridable: ADR-0010 removed the name from identity allocation, but
-  // it still keys booth matching and the thumbnail index (ADR-0007), so it
-  // stays whatever the reviewed sources say.
+  // it still keys booth matching against the organizer's booth lists
+  // (ADR-0007), so it stays whatever the reviewed sources say.
   const name = template?.name ?? booth?.name ?? "未命名社團";
   const creatorTypes = fields?.creatorTypes ?? template?.creatorTypes ?? [];
   const workTypes = fields?.workTypes ?? template?.workTypes ?? [];
   const referencedWorks = fields?.referencedWorks ?? template?.referencedWorks ?? [];
   const specialTags = fields?.specialTags ?? template?.specialTags ?? [];
   const saleInfo = fields?.saleInfo ?? template?.saleInfo;
-  // `null` is a deliberate tombstone. A missing key inherits the reviewed
-  // thumbnail; null must not fall through via `??` and resurrect it.
-  const thumbnail = fields && Object.prototype.hasOwnProperty.call(fields, "thumbnail")
-    ? fields.thumbnail
-    : template?.thumbnail;
+  // Since ADR-0012 retired the workbook thumbnail index, the only producer of
+  // a thumbnail is the circle itself, so there is nothing beneath an override
+  // to inherit or to tombstone — an absent field and a `null` both mean none.
+  const thumbnail = fields?.thumbnail;
   return {
     id: circleId,
     sourceRow: template?.sourceRow,
@@ -232,7 +215,7 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
     }] : [],
     externalLinks: (fields?.links ?? template?.links)?.map((link) => ({ ...link })) ?? [],
     updatedAt: override?.updatedAt ?? FF47_EVENT.dataUpdatedAt,
-    sources: [...cloneSources(), ...templateSource(template), ...(override ? [circleSelfSource(override)] : [])],
+    sources: [...cloneSources(), ...(override ? [circleSelfSource(override)] : [])],
   };
 }
 

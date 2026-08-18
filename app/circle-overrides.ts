@@ -9,11 +9,11 @@ export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
  *
  * The circle name is absent too, matching Comic Market's circle editor, which
  * lets a circle correct its credited author but never its own name. Here the
- * name additionally keys booth matching and the thumbnail index. ADR-0010
- * removed it from identity allocation, but did not remove those two reviewed
- * joins; changing it here could still detach a circle from organizer data. A
- * wrong name is corrected in the reviewed source rather than by an unverified
- * self-authored overlay.
+ * name additionally keys booth matching against the organizer's published
+ * lists. ADR-0010 removed it from identity allocation, but did not remove that
+ * reviewed join; changing it here could still detach a circle from organizer
+ * data. A wrong name is corrected in the reviewed source rather than by an
+ * unverified self-authored overlay.
  *
  * An absent key inherits the reviewed catalog value; a present key replaces it
  * wholesale. Arrays are never merged item-by-item — that is impossible to
@@ -30,7 +30,12 @@ export type CircleOverrideFields = {
   referencedWorks?: string[];
   specialTags?: string[];
   links?: CircleExternalLink[];
-  /** `null` is an explicit tombstone; absence keeps inheriting the reviewed snapshot. */
+  /**
+   * `null` is an explicit tombstone. Since ADR-0012 retired the workbook
+   * thumbnail index there is no reviewed thumbnail left to inherit, so absence
+   * and `null` now yield the same reader-visible result; the tombstone stays
+   * accepted so an editor clearing the field is never answered with a 400.
+   */
   thumbnail?: CircleOverrideThumbnail | null;
 };
 
@@ -102,7 +107,9 @@ export const LINK_KINDS: readonly CircleTemplateLinkKind[] = ["social", "support
 /**
  * Remote images are fetched by every reader who views the circle, so an
  * arbitrary host would be an IP-logging beacon aimed at the whole audience.
- * Restricting the host is what later lets `img-src` tighten from `https:`.
+ * This list is the sole authority for `img-src` in `public/_headers`, which no
+ * longer admits bare `https:`; `tests/circle-overrides.test.mjs` fails if the
+ * two disagree.
  */
 export const THUMBNAIL_HOST_ALLOWLIST: readonly string[] = [
   "drive.google.com",

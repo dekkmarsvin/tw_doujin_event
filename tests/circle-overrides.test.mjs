@@ -18,11 +18,12 @@ const base = records.buildCircleCatalog(payload);
 const placed = base.circles.find((circle) => (base.recordsByCircleId.get(circle.id)?.length ?? 0) > 1);
 assert.ok(placed, "fixture needs a circle with more than one placement");
 const linked = base.circles.find((circle) => circle.externalLinks.length > 0);
-const pictured = base.circles.find((circle) => circle.media.length > 0);
 const credited = base.circles.find((circle) => circle.pen.length > 0);
 assert.ok(linked, "fixture needs a circle with reviewed links");
-assert.ok(pictured, "fixture needs a circle with a reviewed thumbnail");
 assert.ok(credited, "fixture needs a circle with a reviewed pen name");
+// No `pictured` counterpart: since ADR-0012 the reviewed catalog has no
+// thumbnails at all, which `tests/circle-records.test.mjs` pins on the payload.
+assert.deepEqual(base.circles.filter((circle) => circle.media.length > 0), []);
 
 function envelope(list) {
   return { schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-08-13T00:00:00.000Z", revision: 1, overrides: list };
@@ -32,9 +33,31 @@ function withFields(circleId, fields) {
   return envelope([{ circleId, updatedAt: "2026-08-13T00:00:00.000Z", fields }]);
 }
 
+/**
+ * The host rule exists in two files that cannot import each other: the
+ * validator in TypeScript, and the CSP the edge serves from `public/_headers`.
+ * A host added to one and not the other fails in a way no page test would show
+ * — the image is accepted on save and then silently blocked in the reader's
+ * browser. So the agreement is asserted directly.
+ */
+test("the served CSP admits exactly the thumbnail hosts the validator accepts", async () => {
+  const headers = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
+  const policy = headers.match(/Content-Security-Policy: ([^\r\n]+)/)?.[1];
+  assert.ok(policy, "_headers must declare a Content-Security-Policy");
+  const imgSrc = policy.split(";").map((directive) => directive.trim()).find((directive) => directive.startsWith("img-src "));
+  assert.ok(imgSrc, "the policy must declare img-src");
+
+  const sources = imgSrc.split(/\s+/).slice(1);
+  // Bare `https:` would readmit every host the allowlist exists to exclude.
+  assert.equal(sources.includes("https:"), false, "img-src must not admit all of HTTPS");
+  assert.deepEqual(sources.filter((source) => source.startsWith("https://")).sort(),
+    overrides.THUMBNAIL_HOST_ALLOWLIST.map((host) => `https://${host}`).sort());
+  assert.deepEqual(sources.filter((source) => !source.startsWith("https://")), ["'self'", "data:"]);
+});
+
 test("a circle cannot author its own name", () => {
   // ADR-0010 removed the name from identity allocation. It remains locked
-  // because it still keys booth matching and the thumbnail index (ADR-0007).
+  // because it still keys booth matching against the organizer's lists (ADR-0007).
   // Refused outright rather than accepted-and-ignored, so a client sending one
   // learns the field is not authorable.
   assert.equal(overrides.isCircleOverrideFields({ name: "完全不同的名字" }), false);
@@ -131,8 +154,7 @@ test("one field authority defines inherit, replace and clear encodings", () => {
 });
 
 test("every editable field projects inherit, replace and clear from the same authority", () => {
-  const reviewedThumbnail = { url: "https://drive.google.com/thumbnail?id=reviewed", sourceUrl: "https://drive.google.com/file/d/reviewed", provider: "reviewed" };
-  const replacementThumbnail = { url: "https://drive.google.com/thumbnail?id=replacement", sourceUrl: "https://drive.google.com/file/d/replacement", provider: "replacement" };
+  const replacementThumbnail = { url: "https://i.imgur.com/replacement.png", sourceUrl: "https://example.com/replacement", provider: "replacement" };
   const reviewedTemplate = {
     ...payload.templates.find((template) => template.id === placed.id),
     pen: "reviewed pen",
@@ -143,7 +165,6 @@ test("every editable field projects inherit, replace and clear from the same aut
     ageRatings: ["reviewed rating"],
     specialTags: ["reviewed tag"],
     links: [{ provider: "reviewed", kind: "website", url: "https://example.com/reviewed" }],
-    thumbnail: reviewedThumbnail,
   };
   const fixturePayload = {
     ...payload,
@@ -180,7 +201,10 @@ test("every editable field projects inherit, replace and clear from the same aut
     ageRatings: ["reviewed rating"],
     specialTags: ["reviewed tag"],
     links: [{ provider: "reviewed", kind: "website", url: "https://example.com/reviewed" }],
-    thumbnail: [reviewedThumbnail],
+    // ADR-0012 left no reviewed thumbnail beneath an override, so "inherit"
+    // here means inherit nothing. Asserted through the same loop as the other
+    // eight fields so the asymmetry is stated, not quietly skipped.
+    thumbnail: [],
   };
 
   for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS) {
@@ -205,15 +229,21 @@ test("every editable field projects inherit, replace and clear from the same aut
   }
 });
 
-test("explicit tombstones clear reviewed text, links and thumbnail", () => {
+test("explicit tombstones clear reviewed text and links, and a self-supplied thumbnail", () => {
   const clearedPen = records.buildCircleCatalog(payload, withFields(credited.id, { pen: "" }));
   assert.equal(clearedPen.circlesById.get(credited.id).pen, "");
 
   const clearedLinks = records.buildCircleCatalog(payload, withFields(linked.id, { links: [] }));
   assert.deepEqual(clearedLinks.circlesById.get(linked.id).externalLinks, []);
 
-  const clearedThumbnail = records.buildCircleCatalog(payload, withFields(pictured.id, { thumbnail: null }));
-  assert.deepEqual(clearedThumbnail.circlesById.get(pictured.id).media, []);
+  // The thumbnail a tombstone removes is the circle's own: it is the only
+  // producer left, so the field has to be supplied before it can be cleared.
+  const thumbnail = { url: "https://i.imgur.com/self.png", sourceUrl: "https://example.com/self", provider: "社團本人" };
+  const supplied = records.buildCircleCatalog(payload, withFields(placed.id, { thumbnail }));
+  assert.deepEqual(supplied.circlesById.get(placed.id).media.map(({ url }) => url), [thumbnail.url]);
+
+  const clearedThumbnail = records.buildCircleCatalog(payload, withFields(placed.id, { thumbnail: null }));
+  assert.deepEqual(clearedThumbnail.circlesById.get(placed.id).media, []);
 
   assert.equal(overrides.isCircleOverrideFields({ pen: "", links: [], thumbnail: null }), true);
 });
