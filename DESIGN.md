@@ -1,5 +1,5 @@
 ---
-name: "場刊 MAP"
+name: "場刊 Map"
 description: "高密度、可搜尋、可規劃的同人展電子場刊與向量地圖工具"
 colors:
   shell-ink: "#202a35"
@@ -101,7 +101,7 @@ components:
     rounded: "{rounded.xs}"
 ---
 
-# Design System: 場刊 MAP
+# Design System: 場刊 Map
 
 ## Overview
 
