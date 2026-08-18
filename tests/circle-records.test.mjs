@@ -63,14 +63,32 @@ test("shares one Excel-backed circle template across its reviewed placements", (
   assert.equal(new Set(duplicates.map((record) => record.recordId)).size, duplicates.length);
 });
 
-test("integrates Excel profile links and the sourced thumbnail index", () => {
+test("integrates Excel profile links but no reviewed thumbnail", () => {
   const record = catalog.records.find((item) => item.name === "33号部屋");
   assert.ok(record);
   assert.ok(record.circle.externalLinks.some((link) => link.provider === "X"));
-  assert.equal(record.circle.media.length, 1);
-  assert.match(record.circle.media[0].url, /^https:\/\/drive\.google\.com\/thumbnail\?/);
-  assert.match(record.circle.media[0].sourceUrl, /^https:\/\/drive\.google\.com\/file\/d\//);
+  assert.deepEqual(record.circle.media, []);
 });
+
+/**
+ * ADR-0012 left the circle as the only producer of a thumbnail. A reviewed one
+ * would reach every reader as an automatic request to a third-party host, so
+ * the absence is checked on the published payload rather than on the generator:
+ * a snapshot committed before the retirement would otherwise still ship them.
+ */
+test("the published snapshot carries no reviewed thumbnail", () => {
+  assert.equal(payload.templates.length > 1000, true);
+  assert.deepEqual(payload.templates.filter((template) => template.thumbnail), []);
+  assert.deepEqual(catalog.records.filter((record) => record.circle.media.length > 0), []);
+  assert.deepEqual(catalog.records.flatMap((record) => record.sources.filter((source) => source.contentType === "media")), []);
+
+  // Anchors a reader chooses to follow are a different question from images the
+  // browser fetches unasked; retiring the image host does not delete a circle-
+  // supplied 品書 link. Kept explicit so a future sweep does not assume it slipped through.
+  const driveLinks = payload.templates.flatMap((template) => template.links.filter((link) => link.url.includes("drive.google.com")));
+  assert.equal(driveLinks.every((link) => link.kind === "catalog"), true);
+});
+
 
 test("fills only the organizer-listed booth gaps with their existing circle templates", () => {
   const expected = [

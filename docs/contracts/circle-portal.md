@@ -38,7 +38,7 @@
 
 **永不開放**：攤位、日期、`SourceLink`。
 
-**社團名稱不可由社團編輯。** 它仍是攤位比對鍵與縮圖索引 join key；但依 ADR-0010，名稱已不再參與 `circle.id`。名稱錯誤由管理者在**上游來源與 identity evidence registry** 更正。是否開放自行改名仍由 ADR-0007 管理，不能因 ID 穩定就順帶放寬。
+**社團名稱不可由社團編輯。** 它仍是與主辦公布攤位清單的比對鍵；但依 ADR-0010，名稱已不再參與 `circle.id`。名稱錯誤由管理者在**上游來源與 identity evidence registry** 更正。是否開放自行改名仍由 ADR-0007 管理，不能因 ID 穩定就順帶放寬。
 
 `circle_name_key`、`circle_name_at_claim`、`source_row_at_claim` 保留為認領當時的稽核快照，不再用名稱推測或修復 identity。認領與補充資料一律以 `c-xxxxxx` 為鍵；舊 ID 的管理端 cutover 已隨相容路徑一併移除（[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)）。
 
@@ -103,7 +103,9 @@
 
 ## 媒體安全
 
-社團提供的縮圖來源限於**允許清單內的主機**（`THUMBNAIL_HOST_ALLOWLIST`）。任意主機會讓每位讀者的瀏覽器對外發出請求並暴露 IP——這是內容安全問題，不是樣式問題。收緊主機清單也是未來讓 CSP `img-src` 從 `https:` 收緊的前提。
+社團提供的縮圖來源限於**允許清單內的主機**（`THUMBNAIL_HOST_ALLOWLIST`）。任意主機會讓每位讀者的瀏覽器對外發出請求並暴露 IP——這是內容安全問題，不是樣式問題。
+
+依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**，這份清單因此同時是 CSP `img-src` 的主機集合，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)。
 
 ## 公開端點
 

@@ -6,18 +6,18 @@
 
 ## 來源
 
-依 [ADR-0012](../adr/0012-first-party-sources-only.md)，長期只保留主辦官網與社團本人兩類來源。工作簿與縮圖索引是**退場中的過渡輸入**，目前仍供應內容欄位。
+依 [ADR-0012](../adr/0012-first-party-sources-only.md)，長期只保留主辦官網與社團本人兩類來源。工作簿是**退場中的過渡輸入**，目前仍供應內容欄位。縮圖索引已退場：縮圖現在只有社團自填一個來源。
 
 | 角色 | 位置 | 長期地位 |
 |---|---|---|
 | 配置權威（主辦官網） | [FF47 三日攤位編號公佈](https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/)，版本化快照為 `data_source_test/ff47-official-booths.json` | 保留 |
 | 內容來源 | [FF47 Google 試算表](https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing)，版本化快照為 `data_source_test/FF47 完整攤位整理.xlsx` | 過渡 |
 | 社團模板來源工作表 | `攤位整理表 請在此填寫資訊`（一列一個具名稱的社團） | 過渡 |
-| 縮圖索引 | Excel 以 `IMPORTRANGE` 查詢的[公開縮圖索引](https://docs.google.com/spreadsheets/d/1f7uHQQgxgff8nh6aFDrh_cqkeFpcVPsvJILesm778_0/)，固定快照為 `data_source_test/ff47-thumbnail-index.csv` | 過渡 |
+| 縮圖 | 社團在 `/circle` 自填，主機限於 `THUMBNAIL_HOST_ALLOWLIST` | 保留 |
 
 `DAY1`、`DAY2`、`DAY3` 工作表只用於核對活動配置，**不以同名推測社團身分**。
 
-生成器（`scripts/generate-ff47-circle-templates.mjs`）只使用 Node.js 內建模組解析 XLSX／CSV，不依賴未鎖定的全域套件或即時網路資料。
+生成器（`scripts/generate-ff47-circle-templates.mjs`）只使用 Node.js 內建模組解析 XLSX，不依賴未鎖定的全域套件或即時網路資料。
 
 ## 官網攤位清單
 
@@ -103,7 +103,7 @@ npm run source:update
 npm run catalog:generate
 ```
 
-驗證工作簿、縮圖快照與輸出未漂移：
+驗證工作簿與輸出未漂移：
 
 ```bash
 npm run catalog:check
@@ -123,8 +123,8 @@ npm run catalog:check
 | 配置 | 2,977 |
 | 外部連結 | 5,791 |
 | 販售資訊 | 500 |
-| 具原始 Drive 連結的縮圖 | 262 |
+| 工作簿供應的縮圖 | 0（[ADR-0012](../adr/0012-first-party-sources-only.md) 退場，改由社團自填） |
 
 投影後的社團數應**恰為模板數**。高於此數代表有攤位比不到模板而退回位置式身分，是必須修的漂移。上表是 2026-08-18 的實際數字，供對照用——它會隨上游成長，不是驗收門檻。
 
-未出現在來源中的欄位不補值；沒有來源圖片時維持文字卡。
+未出現在來源中的欄位不補值；沒有縮圖時維持文字卡。縮圖索引退場後這是**多數社團的常態**，不是少數例外。
