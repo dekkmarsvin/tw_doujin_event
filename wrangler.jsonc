@@ -44,9 +44,19 @@
   // would leave preview with no database under the name the code looks for.
   "env": {
     "preview": {
-      // Preview mail never leaves Cloudflare: allowlisted .test recipients are
-      // captured in the preview D1 for E2E. PREVIEW_E2E_TOKEN remains a Pages
-      // preview secret and is intentionally absent here.
+      // Preview has two mailboxes and picks between them by recipient. The
+      // .test addresses below are captured in the preview D1 for E2E and never
+      // leave Cloudflare. A person testing by hand uses an address on
+      // PREVIEW_SANDBOX_RECIPIENTS instead, delivered through the Mailgun
+      // sandbox domain bound to this environment. Picking by recipient rather
+      // than by branch is not a preference: Pages knows only `production` and
+      // `preview`, so anything set here applies to every preview deployment,
+      // and CI needs the sink on the same ones a human needs an inbox on.
+      //
+      // That list is a Pages preview secret rather than a variable here — it
+      // holds real personal addresses and this repository is public. So are
+      // the sandbox MAILGUN_* pair and PREVIEW_E2E_TOKEN, all intentionally
+      // absent from this file.
       //
       // Turnstile runs on Cloudflare's documented dummy keys here. The E2E
       // driver is not a browser and cannot solve a real widget, and preview is

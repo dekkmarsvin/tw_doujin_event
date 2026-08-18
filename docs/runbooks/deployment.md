@@ -11,7 +11,7 @@
 | Pages project | 需要（`tw-catalog`） |
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
-| Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink 與 Turnstile dummy 金鑰，見下 |
+| Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
 | R2 / KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
@@ -29,11 +29,31 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 另有一個**不是 secret 的變數** `TURNSTILE_SITEKEY`：它會經 `GET /api/auth/config` 送到瀏覽器，公開是它的用途。它**已經寫在 `wrangler.jsonc` 的頂層 `vars`**，不在 dashboard，部署者不需要另外設定——理由見[真人驗證](#真人驗證turnstile)。缺它時 `GET /api/auth/config` 回 503，登入頁因此拿不到 sitekey；其餘路由不受影響。
 
-preview 不使用 production Mailgun，也不寄外部郵件。`wrangler.jsonc` 的 `env.preview.vars` 明確啟用 D1 mail sink，只允許 `preview-admin@example.test` 與 `preview-circle@example.test`。這些都是保留的 `.test` 假地址，不是真實收件人。preview 另需四個與 production 分離的 secret：
+### preview 的兩個信箱
+
+preview 永遠不碰 production Mailgun，但它會寄信——只寄給兩份名單上的地址，並且**依收件人**決定寄法：
+
+| 收件人在哪份名單 | 信去哪裡 | 誰在用 |
+|---|---|---|
+| `PREVIEW_TEST_RECIPIENTS`（`wrangler.jsonc` 的 `env.preview.vars`，兩個保留的 `.test` 假地址） | 寫進 preview D1 的 `preview_mail_sink`，以 `GET /api/preview/mail` 讀回 | CI 的 E2E |
+| `PREVIEW_SANDBOX_RECIPIENTS`（Pages preview secret） | 由 Mailgun **sandbox** 網域實際寄出 | 人工測試 |
+| 兩份都不在 | 兩邊都不碰，直接拒絕 | —— |
+
+**依收件人而不依 branch 是被迫的，也是剛好的。** Pages 只有 `production` 與 `preview` 兩個環境，沒有 per-branch 變數，所以任何「這個 branch 改寄真信」的設定實際上都會套用到全部 preview deployment；而 CI 與人工測試本來就需要在同一批 deployment 上共存。兩份名單不重疊，因此在 sandbox 名單上加一個真實信箱，不會改變 CI 觀察到的任何東西。
+
+`PREVIEW_SANDBOX_RECIPIENTS` 放 secret 而不放 `wrangler.jsonc`，因為它裝的是真實個人信箱，而這個 repository 是公開的。名單上的地址還必須**同時**是 Mailgun sandbox 的 Authorized Recipient——sandbox 網域只寄得到它自己授權過的信箱，兩邊都有才收得到信。
+
+preview 因此需要七個與 production 分離的 secret：
 
 - `SESSION_SECRET`、`HASH_PEPPER`：preview 專用亂數。
 - `ADMIN_EMAILS`：固定設為 `preview-admin@example.test`；使用 secret binding，避免與 Pages 既有 binding 衝突。
 - `PREVIEW_E2E_TOKEN`：只授權 CI 讀取／清空 preview mail sink；同一值同時設定為 Pages preview secret 與 GitHub Actions secret。
+- `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`：**sandbox 的那一組**，不是 production 的。secret 不跨環境繼承，所以 preview 讀到的必然是這裡設的值，沒有誤用正式網域的路徑。
+- `PREVIEW_SANDBOX_RECIPIENTS`：逗號、分號或空白分隔，大小寫與前後空白都會正規化。
+
+```bash
+npx wrangler pages secret put PREVIEW_SANDBOX_RECIPIENTS --project-name=tw-catalog --env preview
+```
 
 preview 的 Turnstile **不需要設定任何東西**：`wrangler.jsonc` 已把 dummy 金鑰寫在 `env.preview.vars`（sitekey `1x00000000000000000000AA`、secret `1x0000000000000000000000000000000AA`）。那組 secret 依設計接受任何 token，所以它只能留在 preview。
 
@@ -68,6 +88,24 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 - **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰。症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run deploy-pages.yml --ref main` 重跑即可。
 - **`SESSION_SECRET` 一旦上線就不要更換。** 它簽署 session cookie，更換等同讓所有已登入的社團同時被登出。
 - **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/circle` 的管理面板增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/circle-portal.md#管理者)。
+
+## 在 preview 用真實信箱登入
+
+CI 走 D1 mail sink，人不必。把自己的信箱掛上 sandbox 那條路之後，preview 的登入信會像正式站一樣寄到收件匣，**不需要 `PREVIEW_E2E_TOKEN`**——那條路只服務 CI。
+
+1. Mailgun dashboard → sandbox 網域 → **Authorized Recipients** 加入該信箱，並到信箱點開 Mailgun 寄出的確認信。沒點確認，sandbox 一律拒收。
+2. 把同一個地址加進 `PREVIEW_SANDBOX_RECIPIENTS`（見上節），**然後重新部署一次 preview**——secret 是在建立 deployment 時綁定的。
+3. 到 `https://pr-<N>.tw-catalog.pages.dev/circle` 索取登入連結。Turnstile 在 preview 是永遠通過的 dummy widget，按下去即可。
+
+沒收到信時，寄信端的原因只有一個地方看得到：
+
+```bash
+npx wrangler pages deployment tail --project-name=tw-catalog --environment=preview
+```
+
+Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 preview sandbox 這條路徑會印內文**，因為它的收件人是這個環境自己列的名單；production 只印狀態碼，避免把使用者的地址寫進 log。常見的是 sandbox 未授權該收件人（400）、金鑰或區域不符（401——本專案寫死 `https://api.mailgun.net`，EU 帳號不適用）、網域名稱打錯（404）。
+
+瀏覽器端如果連「請查收信件」都沒出現，那就不是寄信問題：503 是該環境缺 secret，500 才是寄信失敗或收件人不在任何一份名單上。
 
 ## 真人驗證（Turnstile）
 
@@ -142,7 +180,7 @@ curl -sI https://tw-catalog.pages.dev/circle | grep -ci '^content-security-polic
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
 - Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
-- **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；不設定 preview Mailgun credentials。
+- **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；preview 的 Mailgun 用 sandbox 那一組，永遠不是 production 的。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** 「Smoke test deployment」只證明靜態資產上線；「Smoke test Functions」的 401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
 - E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、公開文件、audit 與 captured mail；admins roster 保留供下一次重跑。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
@@ -206,7 +244,7 @@ npx wrangler d1 execute tw-catalog-identity-preview --remote --command "SELECT C
 
 ### 4. 設定 production 與 preview runtime secrets
 
-見上節。設定後重部署一次 preview，再確認 `/api/auth/session` 是 401；完整 E2E 由 PR workflow 執行。mail sink 只接受 `PREVIEW_TEST_RECIPIENTS` allowlist，任何其他地址都在寫入 D1 前被拒絕，絕不退回 production Mailgun。
+見上節。設定後重部署一次 preview，再確認 `/api/auth/session` 是 401；完整 E2E 由 PR workflow 執行。兩份收件人名單以外的地址，在寫入 D1 或呼叫 Mailgun **之前**就被拒絕，絕不退回 production Mailgun。
 
 ### 5. 建立最小權限 token
 

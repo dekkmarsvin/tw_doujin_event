@@ -88,7 +88,11 @@ async function verifyTurnstile(env: PortalEnv, token: string, remoteIp: string |
   }
 }
 
-async function sendMailgun(env: PortalEnv, message: { to: string; subject: string; text: string }) {
+async function sendMailgun(
+  env: PortalEnv,
+  message: { to: string; subject: string; text: string },
+  options: { logRejectionBody?: boolean } = {},
+) {
   const { MAILGUN_API_KEY: key, MAILGUN_DOMAIN: domain } = env;
   if (!key || !domain) throw new Error("Missing Mailgun configuration.");
 
@@ -106,8 +110,17 @@ async function sendMailgun(env: PortalEnv, message: { to: string; subject: strin
     },
     body: form,
   });
-  // Surface the status only; the body can echo the recipient address.
-  if (!response.ok) throw new Error(`Mailgun rejected the message (${response.status}).`);
+  if (!response.ok) {
+    // The status alone rarely identifies the mistake — a key from the wrong
+    // region, a domain typo, an address the sandbox has not authorized all
+    // arrive as one number — and nothing else in this Worker records the
+    // attempt. The body names it, but it can echo the recipient address, so it
+    // is only read back for preview sandbox mail, whose recipients this
+    // environment put on its own allowlist. What is thrown stays status-only.
+    const detail = options.logRejectionBody ? ` ${(await response.text()).slice(0, 300)}` : "";
+    console.error(`Mailgun rejected the message (${response.status}).${detail}`);
+    throw new Error(`Mailgun rejected the message (${response.status}).`);
+  }
 }
 
 /**
@@ -174,12 +187,40 @@ export function repositoryFor(env: PortalEnv) {
   return created;
 }
 
-function previewRecipients(env: PortalEnv) {
-  return new Set((env.PREVIEW_TEST_RECIPIENTS ?? "").split(/[,;\s]+/).map((entry) => entry.normalize("NFKC").trim().toLowerCase()).filter(Boolean));
+function addressList(value: string | undefined) {
+  return new Set((value ?? "").split(/[,;\s]+/).map((entry) => entry.normalize("NFKC").trim().toLowerCase()).filter(Boolean));
 }
 
-export function previewRecipientAllowed(env: PortalEnv, email: string) {
-  return env.PREVIEW_MAIL_SINK === "d1" && previewRecipients(env).has(email.normalize("NFKC").trim().toLowerCase());
+/**
+ * Which mailbox a preview login link for this address goes to, or `null` for
+ * "none of them".
+ *
+ * Preview has two and chooses by recipient rather than by branch. Pages knows
+ * only `production` and `preview`, so a branch-scoped choice would in fact be
+ * one setting shared by every preview deployment — and CI needs the D1 sink on
+ * the same deployments a human needs a readable inbox on.
+ *
+ * - `sink`: the reserved `.test` addresses the E2E driver signs in as. Captured
+ *   in preview D1 and read back through `/api/preview/mail`.
+ * - `sandbox`: addresses a person actually reads, delivered through the Mailgun
+ *   sandbox domain bound to this environment. Mailgun accepts only its own
+ *   authorized recipients, so an address has to be on both lists to arrive.
+ *
+ * Anything else is refused before either mailbox is touched, and preview never
+ * falls back to the production mailer: the `MAILGUN_*` secrets it reads are the
+ * sandbox pair, because secrets are not inherited between environments.
+ */
+export function previewMailRouteFor(env: PortalEnv, email: string): "sink" | "sandbox" | null {
+  if (env.PREVIEW_MAIL_SINK !== "d1") return null;
+  const address = email.normalize("NFKC").trim().toLowerCase();
+  if (addressList(env.PREVIEW_TEST_RECIPIENTS).has(address)) return "sink";
+  if (addressList(env.PREVIEW_SANDBOX_RECIPIENTS).has(address)) return "sandbox";
+  return null;
+}
+
+/** Only captured mail is readable back; sandbox mail lives in a real inbox. */
+export function previewSinkRecipientAllowed(env: PortalEnv, email: string) {
+  return previewMailRouteFor(env, email) === "sink";
 }
 
 export function previewE2eAuthorized(env: PortalEnv, request: Request) {
@@ -199,9 +240,16 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     repository,
     sendMail: async (message) => {
       if (env.PREVIEW_MAIL_SINK === "d1") {
-        if (!previewRecipientAllowed(env, message.to)) throw new Error("Preview mail recipient is not allowlisted.");
-        await repository.storePreviewMail({ email: message.to, subject: message.subject, text: message.text, now: Date.now() });
-        return;
+        switch (previewMailRouteFor(env, message.to)) {
+          case "sink":
+            await repository.storePreviewMail({ email: message.to, subject: message.subject, text: message.text, now: Date.now() });
+            return;
+          case "sandbox":
+            await sendMailgun(env, message, { logRejectionBody: true });
+            return;
+          default:
+            throw new Error("Preview mail recipient is not allowlisted.");
+        }
       }
       await sendMailgun(env, message);
     },
