@@ -212,10 +212,30 @@ jobs:
           fi
           echo "::add-mask::$token"
           export CLOUDFLARE_API_TOKEN="$token"
+          # Capture rather than pipe. Piping wrangler straight into jq replaces
+          # whatever wrangler said — success payload or error payload — with a jq
+          # parse error, so a failed remote call is reported as an unrelated jq
+          # message and the reason never reaches the log.
           fingerprint() {
-            npx wrangler d1 execute tw-catalog-identity --remote --json --command \
-              "SELECT (SELECT COUNT(*) FROM accounts) AS accounts, (SELECT COUNT(*) FROM circle_claims) AS claims, (SELECT COUNT(*) FROM circle_overrides) AS overrides, COALESCE((SELECT SUM(revision) FROM overrides_doc), 0) AS revisions" \
-              | jq -c '.[0].results[0]'
+            # `|| status=$?` and not a bare assignment: under `set -e` a failing
+            # command substitution aborts the step immediately, which would skip
+            # the reporting below and reproduce the very blindness being fixed.
+            local raw status=0
+            raw="$(npx wrangler d1 execute tw-catalog-identity --remote --json --command \
+              "SELECT (SELECT COUNT(*) FROM accounts) AS accounts, (SELECT COUNT(*) FROM circle_claims) AS claims, (SELECT COUNT(*) FROM circle_overrides) AS overrides, COALESCE((SELECT SUM(revision) FROM overrides_doc), 0) AS revisions")" || status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "::error::Could not read the production D1 fingerprint; wrangler exited $status. Anything it wrote to stderr is above." >&2
+              [ -n "$raw" ] && { echo "wrangler stdout was:" >&2; printf '%s\n' "$raw" >&2; }
+              return "$status"
+            fi
+            # A successful single statement comes back as a one-element array.
+            # Anything else — notably an error payload, which is a bare object —
+            # must be printed rather than blindly indexed.
+            printf '%s' "$raw" | jq -ce 'if type == "array" then .[0].results[0] else error("not a d1 result array") end' || {
+              echo "::error::wrangler --json returned a shape this check does not understand; it was expected to be a one-element array of statement results. Its stdout follows." >&2
+              printf '%s\n' "$raw" >&2
+              return 1
+            }
           }
           production_before="$(fingerprint)"
           set +e
