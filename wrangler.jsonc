@@ -17,6 +17,18 @@
       "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
     }
   ],
+  // The Turnstile sitekey the sign-in form renders, handed to the browser by
+  // `GET /api/auth/config`. Public by definition, so it belongs in version
+  // control rather than in dashboard state: a deployment made with this config
+  // file overwrites dashboard variables unless `keep_vars` is set, so a value
+  // that lives only there can vanish on an unrelated deploy. Its secret half is
+  // a Pages secret and never appears in this file.
+  //
+  // Top level is production only — `vars` is non-inheritable, which is why the
+  // preview environment declares its own dummy pair below.
+  "vars": {
+    "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc"
+  },
   // Preview (every branch that is not the production branch) gets its own
   // database. Without this the top-level binding applies to preview too, so a
   // claim submitted while testing a pull request would take the real circle's
