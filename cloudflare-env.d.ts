@@ -50,6 +50,10 @@ interface PortalEnv {
   ADMIN_EMAILS?: string;
   PREVIEW_MAIL_SINK?: string;
   PREVIEW_TEST_RECIPIENTS?: string;
+  /** Preview only. Real inboxes the Mailgun sandbox is allowed to write to,
+   * kept in a secret rather than in `wrangler.jsonc` because they are real
+   * personal addresses and the repository is public. */
+  PREVIEW_SANDBOX_RECIPIENTS?: string;
   PREVIEW_E2E_TOKEN?: string;
 }
 
