@@ -164,11 +164,15 @@ gh secret set CLOUDFLARE_API_TOKEN
 
 完成後 push `main`，第一次 workflow 會建立 production deployment。驗證 `tw-catalog.pages.dev` 後，再綁定正式網域。
 
-## Cloudflare Access 例外路徑
+## Cloudflare Access：全站閘控，沒有例外路徑
 
-在來源授權確認前，`/` 與 `/data/*` 維持閘控，但**社團入口必須可達**，否則社團無法登入或認領。Zero Trust 需要 Bypass 的路徑：
+FF47 期間**全站不公開，含社團端**。決策與理由見 [ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)。
 
-| 路徑 | 用途 |
+Zero Trust 的 application 涵蓋整個 `tw-catalog.pages.dev`（以及日後綁定的正式網域），policy 只放行維護者帳號。**不保留任何 Bypass 路徑。**
+
+早期為了讓社團登入而放行過七條路徑，現在全部移除：
+
+| 已移除的 Bypass | 原本用途 |
 |---|---|
 | `/circle`、`/circle.html` | 社團入口頁 |
 | `/assets/*`、`/fonts/*` | 入口頁的 JS／CSS／字型（與閱讀端共用） |
@@ -176,7 +180,25 @@ gh secret set CLOUDFLARE_API_TOKEN
 | `/api/claims/*` | 送出認領與執行連結驗證 |
 | `/api/circle/*` | 社團搜尋與自己的補充資料讀寫 |
 
-`/api/admin/*` **刻意不放行**：管理操作同時受 Access 與管理者名單兩層保護。`/data/*` 也不放行——社團入口不需要它。
+`/api/admin/*` 從來就沒有放行過；管理操作本來就同時受 Access 與管理者名單兩層保護。
+
+### 移除步驟
+
+1. Zero Trust → **Access → Applications**，開啟涵蓋 Pages 網域的 application。
+2. 刪除上表列出的每一條 Bypass policy。保留放行維護者帳號的 Allow policy。
+3. 確認 application 的 domain 涵蓋 `*.tw-catalog.pages.dev`——preview deployment 也在閘控內。
+
+### 驗證
+
+以**未登入的瀏覽器**（或無痕視窗）實測，三個路徑都必須落在 Access 登入頁而不是站台內容：
+
+```bash
+for path in / /circle /api/auth/session; do curl -s -o /dev/null -w "$path %{http_code} %{redirect_url}\n" "https://tw-catalog.pages.dev$path"; done
+```
+
+三者都應導向 `*.cloudflareaccess.com`。任何一個回傳站台自己的內容，代表還有 Bypass 沒清掉。再以維護者帳號確認全站可達。
+
+社團端的功能驗收因此只能在 preview 環境進行，見[社團自助控制面契約](../contracts/circle-portal.md)。
 
 ## 發布前 gate
 

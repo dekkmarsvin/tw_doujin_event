@@ -8,6 +8,12 @@
 
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
+## 目前不對外開放
+
+**FF47 期間 `/circle` 在 Cloudflare Access 閘控內，沒有 Bypass。** 本契約描述的行為全部已實作且有測試覆蓋，但沒有任何真實社團可以到達它——決策見 [ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)。
+
+因此社團端的功能驗收只能在 preview 環境進行，見[部署 runbook](../runbooks/deployment.md)。邀請真實社團之前，還需要先完成隱私告知、保存期限與刪除政策。
+
 ## 入口分離
 
 - **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/rendered-html.test.mjs` 以內容比對把關。
