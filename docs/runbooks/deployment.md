@@ -162,6 +162,8 @@ gh secret set CLOUDFLARE_ACCOUNT_ID
 gh secret set CLOUDFLARE_API_TOKEN
 ```
 
+部署以外，CI 還需要 `PREVIEW_E2E_TOKEN` 與一組 Access service token（`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`），後者見 [CI 用 service token 通過 Access](#ci-用-service-token-通過-access)。
+
 完成後 push `main`，第一次 workflow 會建立 production deployment。驗證 `tw-catalog.pages.dev` 後，再綁定正式網域。
 
 ## Cloudflare Access：全站閘控，沒有例外路徑
@@ -199,6 +201,37 @@ for path in / /circle /api/auth/session; do curl -s -o /dev/null -w "$path %{htt
 三者都應導向 `*.cloudflareaccess.com`。任何一個回傳站台自己的內容，代表還有 Bypass 沒清掉。再以維護者帳號確認全站可達。
 
 社團端的功能驗收因此只能在 preview 環境進行，見[社團自助控制面契約](../contracts/circle-portal.md)。
+
+### CI 用 service token 通過 Access
+
+閘控涵蓋 `*.tw-catalog.pages.dev`，preview deployment 也在內。GitHub Actions 不是瀏覽器，走不完 identity 登入流程，所以它以 **Access service token** 認證：CI 對站台的每一個請求都帶上兩個 header。
+
+```
+CF-Access-Client-Id: <CLIENT_ID>
+CF-Access-Client-Secret: <CLIENT_SECRET>
+```
+
+兩邊都要設定才會生效：
+
+1. Zero Trust → **Access → Service credentials → Service Tokens** 建立 token（本專案為 `tw-catalog - action`）。Client Secret 只顯示一次。
+2. 在涵蓋 `*.tw-catalog.pages.dev` 的 application 上新增一條 policy，**action 必須是 Service Auth**：
+
+   | Action | Rule type | Selector | Value |
+   |---|---|---|---|
+   | Service Auth | Include | Service Token | `tw-catalog - action` |
+
+   action 設成 Allow 不會生效——Access 仍會要求 identity 登入。
+
+3. 以 `gh secret set CF_ACCESS_CLIENT_ID` 與 `gh secret set CF_ACCESS_CLIENT_SECRET` 設定 GitHub Actions secrets。
+
+deploy job 的兩個 smoke test 與 `scripts/preview-portal-e2e.mjs` 都會帶這組 header；缺任一個 secret 時 job 直接失敗，不會靜默地量到登入頁。
+
+**沒有 header 的 CI 會量錯東西。** Access 對未認證請求回 302 到 `*.cloudflareaccess.com`，不是 4xx；`curl --fail` 不會因此失敗，所以「靜態資源 smoke test 通過」也可能只是通過了登入頁。兩個 smoke test 因此改為斷言明確的狀態碼（`/` 要 200、`/api/auth/session` 要 401），並把 301／302 當成 service token 被拒絕來報錯。
+
+token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI 報 `redirected to the Access login page`。錯誤訊息會附上 Access 在登入導向裡宣告的 `service_token_status`，用來分辨兩者：
+
+- `false`：Access 根本不認得這組憑證——secret 值錯誤、混入空白或換行、或 token 已被撤銷。重設 GitHub secrets。
+- `true`：token 有效，但沒有任何 Service Auth policy 放行它。回頭檢查 policy 的 action 與 include。
 
 ## 發布前 gate
 

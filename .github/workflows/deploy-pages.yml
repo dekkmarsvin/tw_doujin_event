@@ -77,11 +77,53 @@ jobs:
             --project-name=tw-catalog
             --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
 
+      # Every host under tw-catalog.pages.dev, production and preview alike, is
+      # behind Cloudflare Access with no Bypass path (ADR-0011). CI is not a
+      # browser and cannot complete an identity login, so it authenticates with
+      # an Access service token instead; without the headers Access answers 302
+      # to the login page and both smoke tests below measure the login screen
+      # rather than the deployment.
       - name: Smoke test deployment
-        run: >-
-          curl --fail --silent --show-error
-          --retry 8 --retry-all-errors --retry-delay 2
-          https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev/
+        env:
+          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          if [ -z "$CF_ACCESS_CLIENT_ID" ] || [ -z "$CF_ACCESS_CLIENT_SECRET" ]; then
+            echo "::error::CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must be set; the whole site is behind Cloudflare Access. See docs/runbooks/deployment.md."
+            exit 1
+          fi
+          for attempt in $(seq 1 8); do
+            code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+              "$BASE_URL/" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Static assets are live and the service token passed Access."
+              exit 0
+            fi
+            echo "attempt $attempt: / returned $code"
+            sleep 3
+          done
+          if [ "$code" = "301" ] || [ "$code" = "302" ]; then
+            # Access states in the login redirect whether it recognized the
+            # credentials at all. That separates the two failures a redirect
+            # otherwise hides: bad secrets versus a policy that admits nobody.
+            redirect=$(curl --silent --output /dev/null --write-out '%{redirect_url}' \
+              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+              "$BASE_URL/")
+            token_status=$(node -e '
+              const found = /[?&]meta=([^&]+)/.exec(process.argv[1]);
+              if (!found) { console.log("unknown"); process.exit(0); }
+              const claims = JSON.parse(Buffer.from(found[1].split(".")[1], "base64url").toString());
+              console.log(String(claims.service_token_status));
+            ' "$redirect" 2>/dev/null || echo unknown)
+            echo "::error::/ redirected to the Access login page; Access reports service_token_status=$token_status. false means CF_ACCESS_CLIENT_ID/SECRET are not a live token (wrong value, stray whitespace, or revoked). true means the token is valid but no Service Auth policy on the application covering *.tw-catalog.pages.dev admits it. See docs/runbooks/deployment.md."
+          else
+            echo "::error::/ returned $code, expected 200."
+          fi
+          exit 1
 
       # The step above only proves the static assets are live; they are served
       # straight from the edge and answer 200 whether or not the Functions have
@@ -93,9 +135,13 @@ jobs:
       - name: Smoke test Functions
         env:
           BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           for attempt in $(seq 1 5); do
             code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
               "$BASE_URL/api/auth/session" || echo 000)
             if [ "$code" = "401" ]; then
               echo "Functions reachable and configured (401 for an unauthenticated session)."
@@ -104,7 +150,11 @@ jobs:
             echo "attempt $attempt: /api/auth/session returned $code"
             sleep 3
           done
-          echo "::error::/api/auth/session returned $code, expected 401. 503 means this environment is missing SESSION_SECRET or HASH_PEPPER; see docs/runbooks/deployment.md."
+          if [ "$code" = "301" ] || [ "$code" = "302" ]; then
+            echo "::error::/api/auth/session redirected to the Access login page, so the service token was rejected before the Functions ran; see docs/runbooks/deployment.md."
+          else
+            echo "::error::/api/auth/session returned $code, expected 401. 503 means this environment is missing SESSION_SECRET or HASH_PEPPER; see docs/runbooks/deployment.md."
+          fi
           exit 1
 
 
@@ -140,9 +190,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PREVIEW_BASE_URL: https://pr-${{ github.event.number }}.tw-catalog.pages.dev
           PREVIEW_E2E_TOKEN: ${{ secrets.PREVIEW_E2E_TOKEN }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           if [ -z "$PREVIEW_E2E_TOKEN" ]; then
             echo "::error::PREVIEW_E2E_TOKEN must be set in GitHub Actions and as a Pages preview secret."
+            exit 1
+          fi
+          if [ -z "$CF_ACCESS_CLIENT_ID" ] || [ -z "$CF_ACCESS_CLIENT_SECRET" ]; then
+            echo "::error::CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must be set; the preview host is behind Cloudflare Access."
             exit 1
           fi
           token="$CLOUDFLARE_API_TOKEN"
