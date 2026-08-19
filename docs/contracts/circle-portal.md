@@ -119,6 +119,10 @@
 
 依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**，這份清單因此同時是 CSP `img-src` 的主機集合，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)。
 
+**目前社團只能貼網址，沒有上傳能力**：代表圖是三個文字欄位（圖片網址、出處頁面、來源標示），沒有 file input 也沒有 multipart 處理。允許清單裡只有 `i.imgur.com` 與 `drive.google.com` 是社團能主動上傳的圖床，另外三個是別的服務的 CDN，貼進來的通常是熱連結——失效時本站無法補救，降級行為是維持文字卡。
+
+[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 已決定改為**本站代管為主、外部網址為輔**的雙線，**尚未實作**。實作時的硬約束記在這裡，避免日後被無意違反：代管圖片以 R2 public bucket 加自訂網域服務、**絕不經 Pages Function**（見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)）；上傳只做 MIME 與容量把關，不在 Worker 內做影像處理；檔名為內容 SHA-256；格式限 JPEG／PNG／WebP，單檔 2 MB，每個社團每個活動一張。代管圖片的保存期限與刪除規則屬於 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的資料 inventory。
+
 ## 公開端點
 
 `/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 strong ETag，使用 `public, max-age=60, must-revalidate`。閱讀端把它疊加在靜態 `circles.json` 之上；讀取失敗或 event mismatch 時只用 reviewed base。
