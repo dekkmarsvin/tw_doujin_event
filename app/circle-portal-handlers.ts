@@ -67,7 +67,6 @@ export type PortalDependencies = {
   turnstileSitekey: () => string;
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
-  /** Loads the permanent legacy map from the static catalog only for cutover. */
   config: PortalConfig;
 };
 
@@ -185,7 +184,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     // on every link they see, and a GET-consumes design burns the token first.
     await sendMail({
       to: email,
-      subject: "FF47 場刊 MAP 登入連結",
+      subject: "場刊 Map 登入連結",
       text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/circle?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
     });
     await repository.writeAudit({ at: now, actorRole: "system", action: "auth.link_requested", subjectType: "email", subjectId: await sha256Hex(email), ipHash });

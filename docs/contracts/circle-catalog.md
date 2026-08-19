@@ -73,7 +73,7 @@ type PlacementRecord = {
   eventId: string;
   circleId: string;
   day: Booth["day"];    // FF47 為 1 | 2 | 3
-  area: Booth["hall"];  // 展區代碼；FF47 只有一個展區，見活動地圖契約
+  area: Booth["hall"];  // 展區代碼，非場館；欄位名是歷史遺留，見 CONTEXT.md 與活動地圖契約
   boothCode: string;
   status: "active" | "cancelled" | "moved";
   x: number;

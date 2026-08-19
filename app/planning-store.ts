@@ -113,10 +113,40 @@ export function loadPlanningDocument(storage: Pick<Storage, "getItem">, eventId:
 }
 
 /**
+ * Favorites as they were stored before schema 1 existed: a bare array of circle
+ * ids under `event-map-favorites`, with no envelope and no version.
+ *
+ * It is older than the schemas ADR-0013 stopped reading, but it is not one of
+ * them, which is why it is still read here. Schemas 1 and 2 keyed favorites on
+ * booth positions and on the `ff47-` content hash, so restoring one meant
+ * translating its keys, and the table that did that is gone. This array needs
+ * no translation — the strings are carried across exactly as written. Ids that
+ * no longer name a circle are not filtered out either: they surface through the
+ * orphan rules, where the user can see and export them.
+ *
+ * Only reachable when `PLANNING_STORAGE_KEY` is absent, and `savePlanningDocument`
+ * clears the key on the first write, so it runs at most once per browser.
+ */
+function readPreSchemaFavorites(storage: Pick<Storage, "getItem">, eventId: string): PlanningDocument {
+  try {
+    const stored = JSON.parse(storage.getItem(LEGACY_FAVORITES_KEY) || "[]");
+    if (!Array.isArray(stored)) return EMPTY_PLANNING_DOCUMENT;
+    const updatedAt = nowIso();
+    return normalize({
+      ...EMPTY_PLANNING_DOCUMENT,
+      favorites: stored.filter((id): id is string => typeof id === "string").map((circleId) => ({ eventId, circleId, groupId: null, memo: "", createdAt: updatedAt, updatedAt })),
+    });
+  } catch {
+    return EMPTY_PLANNING_DOCUMENT;
+  }
+}
+
+/**
  * Only schema 3 is readable. Schemas 1 and 2 keyed planning data on booth
  * positions and on the `ff47-` content hash, and the table that translated
  * those into allocated circle IDs is gone (ADR-0013) — so an older document is
- * preserved and reported, never guessed at.
+ * preserved and reported, never guessed at. The pre-schema favorites array is a
+ * separate case; see `readPreSchemaFavorites`.
  */
 export function inspectPlanningStorage(storage: Pick<Storage, "getItem">, eventId: string): PlanningLoadSnapshot {
   const saved = storage.getItem(PLANNING_STORAGE_KEY);
@@ -131,17 +161,7 @@ export function inspectPlanningStorage(storage: Pick<Storage, "getItem">, eventI
       return { document: EMPTY_PLANNING_DOCUMENT, writable: false, raw: saved, error: "規劃資料無法解析；原始資料已保留，尚未覆寫。" };
     }
   }
-  try {
-    const legacy = JSON.parse(storage.getItem(LEGACY_FAVORITES_KEY) || "[]");
-    if (!Array.isArray(legacy)) return { document: EMPTY_PLANNING_DOCUMENT, writable: true, raw: null, error: "" };
-    const updatedAt = nowIso();
-    return { document: normalize({
-      ...EMPTY_PLANNING_DOCUMENT,
-      favorites: legacy.filter((id): id is string => typeof id === "string").map((circleId) => ({ eventId, circleId, groupId: null, memo: "", createdAt: updatedAt, updatedAt })),
-    }), writable: true, raw: null, error: "" };
-  } catch {
-    return { document: EMPTY_PLANNING_DOCUMENT, writable: true, raw: null, error: "" };
-  }
+  return { document: readPreSchemaFavorites(storage, eventId), writable: true, raw: null, error: "" };
 }
 
 export function savePlanningDocument(storage: Pick<Storage, "setItem" | "removeItem">, document: PlanningDocument) {
