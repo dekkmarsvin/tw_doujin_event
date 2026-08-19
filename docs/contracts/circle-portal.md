@@ -12,7 +12,9 @@
 
 **FF47 期間 `/circle` 在 Cloudflare Access 閘控內，沒有 Bypass。** 本契約描述的行為全部已實作且有測試覆蓋，但沒有任何真實社團可以到達它——決策見 [ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)。
 
-因此社團端的功能驗收只能在 preview 環境進行，見[部署 runbook](../runbooks/deployment.md)。邀請真實社團之前，還需要先完成隱私告知、保存期限與刪除政策。
+因此社團端的功能驗收只能在 preview 環境進行，見[部署 runbook](../runbooks/deployment.md)。
+
+閘控**不留 Bypass**，所以解除的那一刻 `/circle` 與 `/api/auth/*` 同時對外可達，任何人都能索取登入連結並送出 email。隱私告知、保存期限與刪除政策因此**不能晚於解除**，而不只是邀請真實社團前的前置，見 [ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)。
 
 ## 入口分離
 

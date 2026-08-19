@@ -97,7 +97,7 @@ async function sendMailgun(
   if (!key || !domain) throw new Error("Missing Mailgun configuration.");
 
   const form = new URLSearchParams({
-    from: env.MAILGUN_SENDER ?? `FF47 場刊 MAP <noreply@${domain}>`,
+    from: env.MAILGUN_SENDER ?? `場刊 Map <noreply@${domain}>`,
     to: message.to,
     subject: message.subject,
     text: message.text,

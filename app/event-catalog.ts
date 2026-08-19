@@ -51,7 +51,7 @@ function dataDateLabel(value: string) {
 export const FF47_EVENT = {
   id: "ff47",
   name: "Fancy Frontier 47",
-  venue: "花博公園爭艷館",
+  venue: "花博公園爭豔館",
   dateRangeLabel: "8.21–23",
   dataUpdatedAt: FF47_DATA_UPDATED_AT,
   dataLastUpdatedLabel: dataDateLabel(FF47_DATA_UPDATED_AT),

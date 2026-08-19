@@ -28,9 +28,9 @@ test("supports a valid circle-only or booth-only deep link", () => {
   assert.equal(resolveCircleSelection(records, byId, 1, null, "Z99"), null);
 });
 
-test("migrates a legacy hash deep link before resolving its circle and booth", () => {
-  const migrate = (circleId) => circleId === "ff47-old-hash" ? ["circle-a"] : [circleId];
-  assert.equal(resolveCircleSelection(records, byId, 1, "ff47-old-hash", "A02", migrate)?.recordId, "d1-a02");
-  assert.equal(resolveCircleSelection(records, byId, 2, "ff47-old-hash", null, migrate)?.recordId, "d2-a01");
-  assert.equal(resolveCircleSelection(records, byId, 1, "ff47-unknown", null, migrate), null);
+test("resolves a booth-scoped alias before matching its circle and booth", () => {
+  const aliases = (circleId) => circleId === "1-a02-0" ? ["circle-a"] : [circleId];
+  assert.equal(resolveCircleSelection(records, byId, 1, "1-a02-0", "A02", aliases)?.recordId, "d1-a02");
+  assert.equal(resolveCircleSelection(records, byId, 2, "1-a02-0", null, aliases)?.recordId, "d2-a01");
+  assert.equal(resolveCircleSelection(records, byId, 1, "1-zz9-0", null, aliases), null);
 });

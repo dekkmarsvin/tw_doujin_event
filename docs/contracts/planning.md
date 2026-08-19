@@ -76,6 +76,8 @@ type PlanningDocument = {
 - 以 versioned `localStorage` 文件保存於 `PLANNING_STORAGE_KEY`；讀取時先驗證與遷移，再提供給 UI。
 - 寫入使用單一 transaction 或等效原子更新，避免群組、收藏與行程在多個 key 之間部分成功。
 - **只讀 schema 3。** schema 1 以攤位位置為鍵、schema 2 以 `ff47-` 內容雜湊為鍵，能把兩者翻成 allocated circle ID 的對照表已移除（[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)）。
+- **`PLANNING_STORAGE_KEY` 不存在時，另讀一次 `LEGACY_FAVORITES_KEY`（`event-map-favorites`）**：schema 1 之前的裸收藏 ID 陣列，由 `readPreSchemaFavorites()` 包成 schema 3 文件，字串原樣當作 `circleId`，第一次寫入時移除該 key，因此每個瀏覽器最多跑一次。
+- **它與 schema 1／2 被拒絕不衝突。** schema 1／2 的鍵需要一份已移除的對照表才能翻譯，這個陣列不需要翻譯；已不存在的 ID 不在此處過濾，交由孤兒規則呈現與匯出。
 - **不相容版本保留原始字串並停止覆寫**，回報明確訊息讓使用者仍可匯出。不猜測、不靜默清空。
 - schema 3 重讀是 no-op；重試不得重複收藏、備註或行程。
 - `circleId` 是關聯鍵；社團名稱、攤位與圖片**不複製進規劃資料**，顯示時從目前 `CircleRecord` 解析。

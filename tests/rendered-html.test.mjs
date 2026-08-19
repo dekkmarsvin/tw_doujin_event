@@ -15,7 +15,7 @@ async function readTextAssets(directory) {
 
 test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
-  assert.match(html, /<title>FF47 場刊 MAP｜同人展逛攤地圖<\/title>/i);
+  assert.match(html, /<title>場刊 Map｜同人展逛攤地圖<\/title>/i);
   assert.match(html, /<div id="root"><\/div>/);
   assert.match(html, /\/assets\/index-[^"']+\.js/);
 
