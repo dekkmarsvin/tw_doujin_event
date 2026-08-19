@@ -59,6 +59,7 @@
 | [0014](./adr/0014-event-data-lives-outside-the-code-repo.md) | 活動資料移出程式碼 repo，以固定 commit 引用（**部分取代 0011**） |
 | [0015](./adr/0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含有第三方位元組時解除（**部分取代 0011**） |
 | [0016](./adr/0016-human-verification-guards-the-mailer.md) | 真人驗證擋在寄信入口，不擋全站 |
+| [0017](./adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 |
 
 ## 研究
 
