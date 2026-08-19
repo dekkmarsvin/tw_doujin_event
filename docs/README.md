@@ -59,6 +59,7 @@
 | [0014](./adr/0014-event-data-lives-outside-the-code-repo.md) | 活動資料移出程式碼 repo，以固定 commit 引用（**部分取代 0011**） |
 | [0015](./adr/0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含有第三方位元組時解除（**部分取代 0011**） |
 | [0016](./adr/0016-human-verification-guards-the-mailer.md) | 真人驗證擋在寄信入口，不擋全站 |
+| [0017](./adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 |
 
 ## 研究
 
@@ -68,6 +69,7 @@
 - [Comike WebCatalog：資訊介面、收藏與資料串接](./research/comike-webcatalog-information-and-favorites.md)
 - [Comike WebCatalog：社團自助編輯](./research/comike-webcatalog-circle-editing.md)
 - [日本同人／コミケ周邊服務功能盤點](./research/doujin-service-landscape.md)（**二手檢索，未實地操作**——可信度低於上面三份）
+- [性質相近的服務與開源專案如何公開自己的資料收集](./research/data-collection-policies-in-comparable-projects.md)（17 個對象，全部原文已讀；為 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的基礎研究）
 
 ## 維護規則
 

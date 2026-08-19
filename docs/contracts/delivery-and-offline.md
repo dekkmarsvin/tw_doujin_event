@@ -55,6 +55,10 @@
 
 reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓社團儲存與管理者 takedown 約一分鐘內可見。Service Worker 不保存 overlay：離線或 freshness 無法確認時使用完整 base，不把可能任意過期的 overlay 描述成即時資料。
 
+**overlay 的每一次 revalidation 都是一次 Function 呼叫，包含回 304 的那些。** strong ETag 省的是頻寬，不是配額：304 的分支在 Function 內部，且在算出 ETag 之前已經讀過一次 D1。Cloudflare 的邊緣不會在 Function 之前擋下這些請求——Workers Cache 是 `wrangler.jsonc` 的 `cache.enabled` 選項，目前沒有開；zone 層的預設快取副檔名清單也不含 `.json`。因此免費方案每日 100,000 次的上限，換算是每天 100,000 個「活躍讀者分鐘」，而不是十萬名讀者。實測見 [#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)。
+
+由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份配額，而 Error 1027 的後果是 overlay 消失。社團縮圖代管因此走 R2 public bucket 加自訂網域，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
+
 同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 只允許 `'self'`、`data:` 與 `THUMBNAIL_HOST_ALLOWLIST` 的主機，**不含裸 `https:`**。這份清單的唯一權威在 `app/circle-overrides.ts`，`_headers` 與它不一致時 `tests/circle-overrides.test.mjs` 失敗，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
 `/circle*` 另有一份放寬的 CSP：`script-src` 與 `frame-src` 加入 `https://challenges.cloudflare.com`，供登入表單的 Turnstile 使用（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)）。**閱讀端的策略不變**——這是全站唯一的第三方 script，且只在社團入口。Cloudflare 對多條命中的 `_headers` 規則採合併而非覆寫，所以該區塊先以 `! Content-Security-Policy` 移除站台層的策略再重新宣告；兩份策略同時生效會被瀏覽器取交集，反而擋掉元件。兩份策略的關係（站台層 + 恰好兩個 Turnstile 來源）由 `tests/circle-overrides.test.mjs` 斷言。
