@@ -597,9 +597,12 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   /**
-   * The public overlay. A strong ETag keyed on the stored revision lets the
-   * Pages edge collapse venue traffic to roughly one row read per PoP per
-   * minute, which is what keeps this inside the D1 free tier.
+   * The public overlay. The strong ETag is keyed on the stored revision so a
+   * reader that already has the current document gets a bodyless 304 — but the
+   * saving is bandwidth, not quota. Nothing collapses this at the edge: the
+   * 304 is decided here, one D1 read later, and Workers Cache is off. Every
+   * revalidation is one Function request against the daily limit, which is why
+   * `max-age` is the only lever on the bill. See issue #48.
    */
   async function publicOverrides(request: Request, eventId: string) {
     if (eventId !== config.eventId) return json({ error: "找不到這個活動的社團補充資料。" }, 404, { "cache-control": "no-store" });
