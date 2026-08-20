@@ -107,11 +107,34 @@
 - **ETag 必須含活動階段**，否則快取會繼續提供已撤回的內容。
 - **目前不主張任何例外。** 社團勾選退出，內容就從公開文件消失，沒有附帶條件。介面上不得出現本站尚無條款可依據的保留條款——曾經寫過一句比照 Comic Market 的「學術或研究用途的有限度查閱」例外，已於使用條款就緒前移除。日後若要主張任何例外，先有條款，再改介面。
 
-**退出目前的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著；`db/identity-repository.ts` 的 `DELETE FROM` 只出現在刪管理者與測試清空兩處，**沒有任何依到期時間清除資料的機制**。
+**退出的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著。補充資料的保存期限見下一節，目前**尚未實作**。
 
-[ADR-0018](../adr/0018-retention-is-the-circles-choice.md) 已決定在這之外**再加一個獨立的座標軸**——保存期限，**尚未實作**：「保留」（預設）不主動刪除；「活動後清除」在活動結束滿 90 天時刪除該筆補充資料與其代管縮圖，**但在那 90 天內維持公開**。期限與退出是兩件事：退出管的是活動後還公不公開，期限管的是資料還留多久，四種組合裡三種都有人會用。要更早消失的社團自己在控制面刪即可，不必等期限。
+## 保存期限與清除
 
-實作時的硬約束：期限與到期時間存成 `circle_overrides` 的欄位而非程式裡的常數、90 天自活動結束時間起算、清除是刪除資料列而非再加一個旗標、`audit_log` 記下刪除發生過但不留下被刪除的內容。清除跑在獨立的排程 Worker 上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）——Cron Trigger 是 Workers 的功能，Pages 沒有——而**絕不得掛在 `/data/events/:eventId/overrides.json` 上**，那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)）。其餘各表的保存期限見 [ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)：憑證類（`login_tokens` 24 小時、`sessions` 到期後 7 天、`preview_mail_sink` 7 天）到期即刪，紀錄類（`accounts`、`circle_claims`、`audit_log`）不設期限。**`login_tokens` 的清除門檻必須大於一小時**，那張表同時是每小時速率限制的計數來源。
+**憑證到期就清掉，紀錄類保留不設期限**（[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)）。
+
+**實作**：[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`workers/retention-purge/`](../../workers/retention-purge)
+**測試**：`tests/retention-purge.test.mjs`
+
+| 資料 | 保存期限 | 已實作 |
+|---|---|---|
+| `login_tokens` | 建立後 24 小時 | 是 |
+| `sessions` | 到期或撤銷後 7 天 | 是 |
+| `preview_mail_sink` | 7 天 | 是 |
+| `accounts`、`circle_claims`、`audit_log`、`admins` | 不設期限 | 不適用 |
+| `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | **否** |
+
+- **清除跑在獨立的排程 Worker 上**，每天一次，不掛在任何使用者請求的路徑上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。Cron Trigger 是 Workers 的功能，Pages 沒有；而機會性清除會讓保存期限變成流量的函數。部署方式見[部署 runbook](../runbooks/deployment.md#排程清除-worker)。
+- **`login_tokens` 依 `created_at` 清除，門檻必須大於一小時。** 那張表同時是每小時速率限制的計數來源（每信箱 5 次、每 IP 20 次），依「已使用」清除會把限制打穿。`purgeExpiredRecords` 對過短的視窗直接拋錯，不是靜靜照做。
+- **排程 Worker 不建立 schema。** 建表仍由 repository 首次使用時完成；找不到的表列進 `skipped` 並跳過。這條由測試把關：對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。
+- **每次執行寫一筆 `audit_log` 摘要**（`action = "retention.purged"`），包含什麼都沒刪的那些。這是「清除還在跑嗎」唯一的答案。
+- 刪掉憑證不會失去證據：`auth.link_requested` 已把 IP 雜湊與 email 的 SHA-256 寫進 `audit_log`。
+
+### 社團補充資料的保存期限（尚未實作）
+
+[ADR-0018](../adr/0018-retention-is-the-circles-choice.md) 在活動後退出**之外再加一個獨立的座標軸**：「保留」（預設）不主動刪除；「活動後清除」在活動結束滿 90 天時刪除該筆補充資料與其代管縮圖，**但在那 90 天內維持公開**。退出管的是活動後還公不公開，期限管的是資料還留多久，四種組合裡三種都有人會用。要更早消失的社團自己在控制面刪即可，不必等期限。
+
+實作時的硬約束：期限與到期時間存成 `circle_overrides` 的欄位而非程式裡的常數、90 天自活動結束時間起算、清除是刪除資料列而非再加一個旗標、`audit_log` 記下刪除發生過但不留下被刪除的內容，並且**絕不得掛在 `/data/events/:eventId/overrides.json` 上**——那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)）。
 
 ## 管理者
 
@@ -151,3 +174,5 @@
 - 管理者無法移除自己或最後一位管理者。
 - 縮圖主機不在允許清單時被拒絕，且錯誤訊息可讓社團理解原因。
 - 所有認領與撤下決策都可在稽核記錄中查到。
+- 過期的登入權杖、session 與 preview 信件會被清除，而清除不會動到速率限制視窗內的列。
+- 對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。

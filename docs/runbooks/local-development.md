@@ -70,6 +70,7 @@ npx tsc --noEmit --incremental false
 |---|---|---|
 | `npm run source:check` | 懷疑上游試算表有更新時 | 需要對外網路 |
 | `npm run official:check` | 懷疑主辦官網攤位清單有更新時 | 需要對外網路 |
+| `npm run purge:dev` | 要手動觸發一次排程清除時 | 是獨立部署單位的本機執行，不是測試；清除邏輯本身由 `tests/retention-purge.test.mjs` 涵蓋 |
 
 用法見[社團資料更新](./catalog-data-update.md)。identity registry 與產物一致性已由共同 build 內的 `catalog:check` 驗證；場刊與官網的一致性由 `official:agreement` 驗證，它是離線的，所以留在 gate 裡。
 

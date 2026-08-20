@@ -1,0 +1,43 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "tw-catalog-retention-purge",
+  "main": "./index.ts",
+  "compatibility_date": "2026-05-22",
+  // Daily, at an off-peak minute that is not the top of an hour — cron
+  // triggers cluster there, and nothing here needs a particular time of day.
+  // UTC, like every Cloudflare cron.
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
+  // The same database the Pages Functions write, under the same binding name.
+  // This Worker only deletes: the schema is still created by the repository on
+  // first use, because Pages has no migration step (ADR-0009).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tw-catalog-identity",
+      "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
+    }
+  ],
+  // Deployed as `tw-catalog-retention-purge-preview`. Bindings are not
+  // inherited by named environments — the same rule that makes the Pages
+  // config repeat its D1 block — so preview declares its own, pointing at the
+  // preview database. `triggers` is inheritable but repeated here on purpose:
+  // preview is the only place `preview_mail_sink` is written, and that table
+  // holds the text of real login mails, so its purge is the one that must not
+  // silently fail to be scheduled.
+  "env": {
+    "preview": {
+      "triggers": {
+        "crons": ["17 3 * * *"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "tw-catalog-identity-preview",
+          "database_id": "88716ee2-4d17-4c93-87aa-bfe9c961a599"
+        }
+      ]
+    }
+  }
+}

@@ -12,6 +12,7 @@
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
 | Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
+| 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker) |
 | R2 / KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
@@ -336,6 +337,45 @@ token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI
 
 - `false`：Access 根本不認得這組憑證——secret 值錯誤、混入空白或換行、或 token 已被撤銷。重設 GitHub secrets。
 - `true`：token 有效，但沒有任何 Service Auth policy 放行它。回頭檢查 policy 的 action 與 include。
+
+## 排程清除 Worker
+
+保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
+
+它每天 UTC 03:17 執行一次，刪除過期的 `login_tokens`（建立後 24 小時）、`sessions`（到期或撤銷後 7 天）與 `preview_mail_sink`（7 天），並寫一筆 `audit_log` 摘要。**它只刪，不建表**——schema 仍由 Pages 端的 repository 首次使用時建立。
+
+```bash
+npm run purge:deploy
+```
+
+preview 是另一個部署，指向 preview 的 D1：
+
+```bash
+npm run purge:deploy:preview
+```
+
+**preview 這一份不是可選的。** `preview_mail_sink` 是全站唯一存有信件內文的地方，而 preview 的沙盒收件人是真實個人信箱。
+
+### 驗證它有在跑
+
+```bash
+npx wrangler d1 execute tw-catalog-identity --remote --command "SELECT at, detail_json FROM audit_log WHERE action = 'retention.purged' ORDER BY at DESC LIMIT 5"
+```
+
+沒有任何一列，就是它沒跑過——不是「沒有東西要刪」。什麼都沒刪的執行同樣會留下一列。
+
+本機要手動觸發一次：
+
+```bash
+npm run purge:dev
+```
+
+再對 `http://localhost:8787/cdn-cgi/handler/scheduled` 發一個請求即可。
+
+### 兩件容易踩到的事
+
+- **它不在 GitHub Actions 的部署流程裡。** Pages 的 CI 不會連帶更新這個 Worker；改了 `db/retention-purge.ts` 之後要自己重跑 `npm run purge:deploy`。
+- **bindings 不會被 named environment 繼承。** `env.preview` 必須自己宣告一份 `d1_databases`，理由與 Pages 的 `wrangler.jsonc` 完全相同；漏掉的話 preview 那份會直接沒有資料庫。
 
 ## 發布前 gate
 
