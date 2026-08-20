@@ -9,6 +9,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test envir
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers, SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
 const { OVERRIDE_RETENTION_PURGE_AFTER_MS } = await environment.runner.import("/app/circle-overrides.ts");
+const { purgeExpiredRecords } = await environment.runner.import("/db/retention-purge.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -596,6 +597,29 @@ test("the retention choice is refused when it is not one of the two options", as
   // The rejected save must not have created a row at all.
   const row = await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = ?1").bind("ff47-domain").first();
   assert.equal(row.total, 0);
+});
+
+test("the purge takes the content off the public route, and the etag with it", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("purged@example.com");
+  await approve(owner, "ff47-site", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "會過期的內容" }, retention: "purge" }, owner), "ff47-site");
+
+  // Past the deadline but before the nightly purge has run: still published.
+  // The 90 days are a lifespan, not an early withdrawal (ADR-0018).
+  clock = Date.parse(EVENT_ENDS_AT) + OVERRIDE_RETENTION_PURGE_AFTER_MS + 1000;
+  const waiting = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal((await waiting.json()).overrides.length, 1);
+  const waitingTag = waiting.headers.get("etag");
+
+  await purgeExpiredRecords(database, clock);
+
+  // Same phase as the read above, so nothing but the purge can have moved the
+  // etag — and a stale one would keep caches serving what was just deleted.
+  const purged = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.deepEqual((await purged.json()).overrides, []);
+  assert.notEqual(purged.headers.get("etag"), waitingTag);
+  clock = 1_786_500_000_000;
 });
 
 test("only a listed admin reaches the review queue", async () => {

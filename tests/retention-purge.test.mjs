@@ -8,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { LOGIN_RATE_LIMIT_WINDOW_MS, RETENTION_WINDOWS, purgeExpiredRecords } = await environment.runner.import("/db/retention-purge.ts");
+const { OVERRIDE_RETENTION_PURGE_AFTER_MS } = await environment.runner.import("/app/circle-overrides.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -101,14 +102,82 @@ test("records every run in the audit log, including the empty ones", async () =>
   assert.equal(entry.actor_role, "system");
   assert.equal(entry.subject_type, "retention");
   assert.equal(entry.at, NOW);
-  assert.deepEqual(JSON.parse(entry.detail_json).deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0 });
+  assert.deepEqual(JSON.parse(entry.detail_json).deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0 });
+});
+
+/** The event ended long enough ago that a `purge` row written then is now due. */
+const EVENT_ENDED_AT = NOW - OVERRIDE_RETENTION_PURGE_AFTER_MS - DAY;
+const DATA_UPDATED_AT = "2026-08-13T00:00:00.000Z";
+
+async function writeOverride(circleId, { choice, expiresAt }) {
+  await repository.putOverride({
+    eventId: "ff47", circleId, fieldsJson: JSON.stringify({ saleInfo: `${circleId} 的販售資訊` }),
+    updatedBy: "account-1", now: NOW - DAY,
+    ...(choice ? { retention: { choice, expiresAt } } : {}),
+  });
+}
+
+test("deletes the rows whose own deadline has passed, and only those", async () => {
+  await writeOverride("ff47-due", { choice: "purge", expiresAt: EVENT_ENDED_AT + OVERRIDE_RETENTION_PURGE_AFTER_MS });
+  await writeOverride("ff47-not-yet", { choice: "purge", expiresAt: NOW + DAY });
+  await writeOverride("ff47-keeps", { choice: "keep", expiresAt: null });
+  await writeOverride("ff47-unanswered", {});
+
+  const summary = await purgeExpiredRecords(database, NOW);
+
+  assert.equal(summary.deleted.circle_overrides, 1);
+  const remaining = await database.prepare("SELECT circle_id FROM circle_overrides ORDER BY circle_id").all();
+  assert.deepEqual(
+    remaining.results.map((row) => row.circle_id),
+    ["ff47-keeps", "ff47-not-yet", "ff47-unanswered"],
+    "a row that never answered must not be treated as having chosen deletion",
+  );
+
+  // Deleted, not flagged: nothing of the row survives to be un-deleted later.
+  const columns = await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = ?1").bind("ff47-due").first();
+  assert.equal(columns.total, 0);
+});
+
+test("the published document loses the purged circle and gets a new revision", async () => {
+  await writeOverride("ff47-due", { choice: "purge", expiresAt: NOW - DAY });
+  await writeOverride("ff47-keeps", { choice: "keep", expiresAt: null });
+  const before = await repository.rebuildOverridesDoc("ff47", DATA_UPDATED_AT, NOW - HOUR);
+  assert.deepEqual(JSON.parse(before.json).overrides.map((override) => override.circleId).sort(), ["ff47-due", "ff47-keeps"]);
+
+  await purgeExpiredRecords(database, NOW);
+
+  const after = await repository.getOverridesDoc("ff47");
+  const document = JSON.parse(after.json);
+  assert.deepEqual(document.overrides.map((override) => override.circleId), ["ff47-keeps"]);
+  assert.doesNotMatch(after.json, /ff47-due/, "the deleted content must not survive inside the published document");
+  // The revision is in the ETag; without a bump caches keep serving what was
+  // deleted. The phase and generatedAt stay as the last rebuild left them.
+  assert.equal(document.revision, before.revision + 1);
+  assert.equal(document.generatedAt, DATA_UPDATED_AT);
+  assert.equal(after.phase, before.phase);
+});
+
+test("a purge records that it happened without recording what it deleted", async () => {
+  await writeOverride("ff47-due", { choice: "purge", expiresAt: NOW - DAY });
+
+  await purgeExpiredRecords(database, NOW);
+
+  const entry = await database.prepare("SELECT actor_role, subject_type, subject_id, detail_json FROM audit_log WHERE action = 'override.purged'").first();
+  assert.equal(entry.actor_role, "system");
+  assert.equal(entry.subject_type, "override");
+  assert.equal(entry.subject_id, "ff47-due");
+  assert.deepEqual(JSON.parse(entry.detail_json), { eventId: "ff47" });
+  assert.doesNotMatch(entry.detail_json, /販售資訊/, "the audit trail keeps the deletion, never the deleted content");
+
+  const summary = await database.prepare("SELECT detail_json FROM audit_log WHERE action = 'retention.purged'").first();
+  assert.equal(JSON.parse(summary.detail_json).deleted.circle_overrides, 1);
 });
 
 test("never creates a table it does not find", async () => {
   const summary = await purgeExpiredRecords(untouched, NOW);
 
-  assert.deepEqual(summary.deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0 });
-  assert.deepEqual(summary.skipped.sort(), ["audit_log", "login_tokens", "preview_mail_sink", "sessions"]);
+  assert.deepEqual(summary.deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0 });
+  assert.deepEqual(summary.skipped.sort(), ["audit_log", "circle_overrides", "login_tokens", "overrides_doc", "preview_mail_sink", "sessions"]);
   const tables = await untouched.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all();
   assert.deepEqual(tables.results, [], "the purge must not be able to create the database it purges");
 });
