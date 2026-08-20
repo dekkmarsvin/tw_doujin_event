@@ -11,6 +11,7 @@
 | **怎麼做某件事** | [`runbooks/`](#流程) |
 | **為什麼當初這樣決定** | [`adr/`](#決策紀錄) |
 | 外部產品實際長什麼樣 | [`research/`](#研究) |
+| **對外承諾了什麼** | [`policy/`](#對外文件) |
 | 代理人的 issue tracker 與標籤設定 | [`agents/`](./agents) |
 
 ## 契約
@@ -60,6 +61,20 @@
 | [0015](./adr/0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含有第三方位元組時解除（**部分取代 0011**） |
 | [0016](./adr/0016-human-verification-guards-the-mailer.md) | 真人驗證擋在寄信入口，不擋全站 |
 | [0017](./adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 |
+| [0018](./adr/0018-retention-is-the-circles-choice.md) | 保存期限由社團自己選，選了清除就真的刪除 |
+| [0019](./adr/0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md) | 個資請求走維運信箱，功能問題走公開 issue |
+| [0020](./adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md) | 自助刪除沿用既有的擁有權鏈，不另發編輯連結 |
+| [0021](./adr/0021-credentials-expire-and-are-purged-records-are-kept.md) | 憑證到期就清掉，紀錄類保留不設期限 |
+| [0022](./adr/0022-expiry-runs-in-a-separate-cron-worker.md) | 清除跑在獨立的排程 Worker，不掛在使用者請求上 |
+| [0023](./adr/0023-the-privacy-notice-ships-without-professional-review.md) | 隱私告知自行撰寫、隨 repo 版控，不送專業審閱 |
+
+## 對外文件
+
+使用者看得到的承諾。**描述的必須是實際行為**，行為改了就在同一個 commit 改它；git 版本歷史即為變更史（[ADR-0023](./adr/0023-the-privacy-notice-ships-without-professional-review.md)）。
+
+| 文件 | 涵蓋 |
+|---|---|
+| [隱私權與資料使用告知](./policy/privacy-notice.md) | 蒐集哪些資料、目的、保留期限、查詢與刪除、聯絡窗口（**草案，尚未公開**） |
 
 ## 研究
 
@@ -77,4 +92,5 @@
 - **改行為就改契約，同一個 commit。** 契約落後於實作，下一個人就會拿它當真相。
 - 契約裡的型別必須與 `app/` 的實際型別同步；欄位名稱不一致是 bug，不是措辭差異。
 - **研究文件不改。** 觀察結果是歷史，要更新就重新觀察並註明日期。
+- **對外文件不得落後於行為。** `policy/` 裡的每一句都是對使用者的承諾；改行為卻沒改它，是做了做不到的承諾，不是文件過期。
 - ADR 不改，只新增。推翻舊決策時寫新的 ADR 並在舊的標註被取代。
