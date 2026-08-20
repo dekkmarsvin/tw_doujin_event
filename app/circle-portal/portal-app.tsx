@@ -174,6 +174,14 @@ function SignIn() {
       {sitekey && <TurnstileWidget key={widgetGeneration} sitekey={sitekey} onToken={setHumanToken} onUnavailable={onUnavailable} />}
       <button type="submit" disabled={!humanToken || status.kind === "busy"}>{status.kind === "busy" ? "寄送中…" : "寄出登入連結"}</button>
     </form>
+    {/* Before the address is handed over, not after. A notice that lives only
+        in the repo does not exist for the person filling in this field
+        (ADR-0011, #30). Plain anchor rather than a router link: the page is
+        static and is not part of this bundle. */}
+    <p className={styles.policyLink}>
+      送出即表示你已閱讀<a href="/privacy">隱私權與資料使用告知</a>。
+      個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，控制面使用問題請寄 <code>circle@kotoban.top</code>。
+    </p>
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;
 }

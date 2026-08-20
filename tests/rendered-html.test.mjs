@@ -72,6 +72,21 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
   await assert.rejects(readFile(new URL("../dist/server/index.js", import.meta.url), "utf8"), { code: "ENOENT" });
   await assert.rejects(readFile(new URL("../dist/_redirects", import.meta.url), "utf8"), { code: "ENOENT" });
   assert.match(await readFile(new URL("../dist/404.html", import.meta.url), "utf8"), /找不到這個頁面/);
+
+  // The notice ships as part of the build, and the portal links to it from the
+  // sign-in card — before the address is handed over, which is the whole point
+  // (#30). Deliberately absent from the precache manifest: a policy document
+  // pinned into an offline shell is a policy document a reader can be shown
+  // after it has been superseded.
+  const privacy = await readFile(new URL("../dist/privacy.html", import.meta.url), "utf8");
+  assert.match(privacy, /<title>隱私權與資料使用告知｜場刊 Map<\/title>/);
+  assert.doesNotMatch(privacy, /<script/i);
+  assert.ok(portalAssets.some((path) => path.endsWith(".js")), "the portal must ship a script");
+  const portalJs = (await Promise.all(portalAssets.filter((path) => path.endsWith(".js"))
+    .map((path) => readFile(new URL(`../dist${path}`, import.meta.url), "utf8")))).join("\n");
+  // Quoting is the minifier's choice, so match either form.
+  assert.match(portalJs, /["'`]\/privacy["'`]/, "the sign-in card must link to the notice");
+  assert.doesNotMatch(await readFile(new URL("../dist/sw.js", import.meta.url), "utf8"), /"\/privacy\.html"/);
   assert.match(await readFile(new URL("../dist/fonts/geist.css", import.meta.url), "utf8"), /font-family: "Geist"/);
 });
 
