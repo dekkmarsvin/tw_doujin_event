@@ -28,6 +28,19 @@ interface D1Database {
   batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
+/** Bindings the scheduled retention purge reads. It is deployed on its own,
+ * outside the Pages project, because Pages has no Cron Trigger (ADR-0022). */
+interface RetentionEnv {
+  DB: D1Database;
+}
+
+/** The argument a Cron Trigger hands to `scheduled()`. */
+interface ScheduledController {
+  readonly scheduledTime: number;
+  readonly cron: string;
+  noRetry(): void;
+}
+
 declare module "cloudflare:workers" {
   export const env: {
     DB: D1Database;
