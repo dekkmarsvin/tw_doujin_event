@@ -92,7 +92,7 @@
 | `post_event_hidden` | 活動後退出旗標 |
 | `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
 
-**目的**：讓社團供應比公開整理更即時的內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：由社團自選，選了 `purge` 的列在活動結束滿 90 天時由排程 Worker **刪除資料列**；未表態與選 `keep` 的列不設期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過。 **owner**：待決。
+**目的**：讓社團供應比公開整理更即時的內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：由社團自選，選了 `purge` 的列在活動結束滿 90 天時由排程 Worker **刪除資料列**；未表態與選 `keep` 的列不設期限。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 **owner**：社團本人。
 
 ### `overrides_doc` — 公開的 overlay 文件
 
@@ -108,7 +108,7 @@
 
 - 登入：`auth.link_requested`、`auth.session_created`、`auth.signed_out`
 - 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`
-- 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
+- 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
 - 管理者名冊：`admin.added`、`admin.removed`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
