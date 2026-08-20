@@ -1,6 +1,6 @@
 # 隱私權與資料使用告知
 
-- **狀態：草案，尚未對外公開。** 依 [ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)，本站在 Access 閘控解除、社團端對外可達之前必須先公開本文件。
+- **狀態：已上線。** 站上版本在 `/privacy`，由本檔案在建置時產生——兩者同源，不會分歧。依 [ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)，本告知不得晚於 Access 閘控解除。
 - **最後更新日期：2026-08-20**
 - 適用服務：場刊 Map（開源專案原始碼：<https://github.com/dekkmarsvin/tw_doujin_event>）
 - 聯絡信箱：
