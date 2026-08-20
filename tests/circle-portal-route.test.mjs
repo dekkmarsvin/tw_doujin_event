@@ -8,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers, SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
+const { OVERRIDE_RETENTION_PURGE_AFTER_MS } = await environment.runner.import("/app/circle-overrides.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -531,6 +532,70 @@ test("visibility cannot be set by a non-owner or before any content exists", asy
 
   await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "x" } }, owner), "ff47-domain");
   assert.equal((await handlers.setPostEventVisibility(post("/api/circle/ff47-domain/visibility", { hidden: "yes" }, owner), "ff47-domain")).status, 400);
+});
+
+test("a circle chooses how long its own contribution lives, and the row carries the deadline", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("retention@example.com");
+  await approve(owner, "ff47-site", admin);
+
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "新刊" }, retention: "purge" }, owner), "ff47-site");
+  const chosen = await (await handlers.getMyOverride(get("/api/circle/ff47-site/overrides", owner), "ff47-site")).json();
+  assert.equal(chosen.retention, "purge");
+  // Counted from the end of the event, not from this edit (ADR-0018).
+  assert.equal(chosen.retentionExpiresAt, Date.parse(EVENT_ENDS_AT) + OVERRIDE_RETENTION_PURGE_AFTER_MS);
+
+  // Waiting to be deleted is not the same as being withdrawn: the content stays
+  // public for the whole of the window.
+  const during = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal((await during.json()).overrides.length, 1);
+
+  const audit = await database.prepare("SELECT detail_json FROM audit_log WHERE action = 'override.retention' AND subject_id = ?1").bind("ff47-site").all();
+  assert.equal(audit.results.length, 1, "the purge records that it happened but not what it deleted, so the choice is recorded here");
+  assert.equal(JSON.parse(audit.results[0].detail_json).choice, "purge");
+
+  // Switching back drops the deadline rather than leaving a stale one behind.
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "新刊" }, retention: "keep" }, owner), "ff47-site");
+  const kept = await (await handlers.getMyOverride(get("/api/circle/ff47-site/overrides", owner), "ff47-site")).json();
+  assert.equal(kept.retention, "keep");
+  assert.equal(kept.retentionExpiresAt, null);
+});
+
+test("a save that does not answer is not an answer", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("unanswered@example.com");
+  await approve(owner, "ff47-social", admin);
+
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "沒表態" } }, owner), "ff47-social");
+  const unanswered = await (await handlers.getMyOverride(get("/api/circle/ff47-social/overrides", owner), "ff47-social")).json();
+  assert.equal(unanswered.retention, null, "an unanswered row must be distinguishable from one that chose to keep");
+  assert.equal(unanswered.retentionExpiresAt, null);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action = 'override.retention'").first()).total, 0);
+
+  // Answering once, then saving content again without repeating the answer.
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "選清除" }, retention: "purge" }, owner), "ff47-social");
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "只改內容" } }, owner), "ff47-social");
+  const still = await (await handlers.getMyOverride(get("/api/circle/ff47-social/overrides", owner), "ff47-social")).json();
+  assert.equal(still.retention, "purge", "a content-only save must not revert the choice");
+  // Unchanged answers do not write a second audit row.
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action = 'override.retention'").first()).total, 1);
+});
+
+test("the retention choice is refused when it is not one of the two options", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("badretention@example.com");
+  await approve(owner, "ff47-domain", admin);
+
+  const body = { fields: { saleInfo: "x" }, retention: "delete-now" };
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", body, owner), "ff47-domain")).status, 400);
+
+  const stranger = await signIn("retention-stranger@example.com");
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: {}, retention: "purge" }, stranger), "ff47-domain")).status, 403);
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: {}, retention: "purge" }), "ff47-domain")).status, 401);
+
+  // The rejected save must not have created a row at all.
+  const row = await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = ?1").bind("ff47-domain").first();
+  assert.equal(row.total, 0);
 });
 
 test("only a listed admin reaches the review queue", async () => {

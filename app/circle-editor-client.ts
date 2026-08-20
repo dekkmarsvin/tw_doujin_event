@@ -1,4 +1,4 @@
-import type { CircleOverrideFields } from "./circle-overrides";
+import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
 
 /**
  * Every authenticated write in one place, so the boundary is auditable: the
@@ -120,7 +120,14 @@ export function runChallenge(claimId: string) {
 }
 
 export function readMyOverride(circleId: string) {
-  return call<{ fields: CircleOverrideFields; status: string; postEventHidden: boolean }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`);
+  return call<{
+    fields: CircleOverrideFields;
+    status: string;
+    postEventHidden: boolean;
+    /** `null` where the circle has not answered the retention question yet. */
+    retention: CircleRetentionChoice | null;
+    retentionExpiresAt: number | null;
+  }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`);
 }
 
 export function setPostEventVisibility(circleId: string, hidden: boolean) {
@@ -137,10 +144,12 @@ export function previewOverride(circleId: string, fields: CircleOverrideFields) 
   });
 }
 
-export function saveOverride(circleId: string, fields: CircleOverrideFields) {
+/** `retention` is omitted rather than guessed when the circle has not chosen:
+ * the server leaves the stored answer alone, and no answer is never a purge. */
+export function saveOverride(circleId: string, fields: CircleOverrideFields, retention: CircleRetentionChoice | null) {
   return call<{ ok: true }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`, {
     method: "PUT",
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify(retention ? { fields, retention } : { fields }),
   });
 }
 

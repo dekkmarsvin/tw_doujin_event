@@ -63,6 +63,36 @@ export const OVERRIDE_LIMITS = {
   serializedFields: 8192,
 } as const;
 
+/**
+ * How long a circle's own contributions live, chosen by the circle while it
+ * writes them (ADR-0018).
+ *
+ * `keep` is the default because the irreversible side must never be the one
+ * nobody chose. `purge` deletes the row once the event has been over for
+ * `OVERRIDE_RETENTION_PURGE_AFTER_MS` — and stays public for the whole of that
+ * window: the deadline is a lifespan, not an early withdrawal. A circle that
+ * wants to be gone sooner deletes it itself.
+ *
+ * These are the values written onto the row, not a rule applied at read time:
+ * every row carries its own deadline so it can be queried, not derived.
+ */
+export const OVERRIDE_RETENTION_CHOICES = ["keep", "purge"] as const;
+
+export type CircleRetentionChoice = (typeof OVERRIDE_RETENTION_CHOICES)[number];
+
+/** Counted from the end of the event, never from the last edit: the reason for
+ * the deadline is that the event is over, not that the circle stopped editing. */
+export const OVERRIDE_RETENTION_PURGE_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function isRetentionChoice(value: unknown): value is CircleRetentionChoice {
+  return typeof value === "string" && (OVERRIDE_RETENTION_CHOICES as readonly string[]).includes(value);
+}
+
+/** The instant a row disappears, or `null` for the rows that never do. */
+export function circleRetentionExpiresAt(choice: CircleRetentionChoice, eventEndsAt: number) {
+  return choice === "purge" ? eventEndsAt + OVERRIDE_RETENTION_PURGE_AFTER_MS : null;
+}
+
 export const CIRCLE_OVERRIDE_LIST_FIELDS = [
   { key: "referencedWorks", label: "參考作品／題材" },
   { key: "creatorTypes", label: "創作者類型" },
