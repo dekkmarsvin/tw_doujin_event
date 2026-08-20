@@ -44,6 +44,8 @@
 
 資料庫層保證**一個社團同時只有一位擁有者**。所有認領與撤下決策寫入稽核記錄。
 
+**自助刪除沿用這條鏈，尚未實作。** [ADR-0020](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md) 決定不為刪除另發「持有即代表授權」的編輯連結——既有的登入加已驗證認領已經更強。目前沒有任何刪除端點：欄位的「清除此欄」是寫入空值或 tombstone，不是刪除資料列。實作時的硬約束記在這裡：介面必須把「清空內容」與「刪除這筆資料」呈現為兩件事、刪除前顯示即將刪除的內容、確認不得是單一按鈕（session 有效期 30 天）、擁有權移轉後新擁有者可刪前任內容但 `audit_log` 要留下是誰刪的。帳號本身的刪除不在自助範圍。
+
 ## 可編輯範圍
 
 **可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
@@ -105,6 +107,12 @@
 - **ETag 必須含活動階段**，否則快取會繼續提供已撤回的內容。
 - **目前不主張任何例外。** 社團勾選退出，內容就從公開文件消失，沒有附帶條件。介面上不得出現本站尚無條款可依據的保留條款——曾經寫過一句比照 Comic Market 的「學術或研究用途的有限度查閱」例外，已於使用條款就緒前移除。日後若要主張任何例外，先有條款，再改介面。
 
+**退出目前的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著；`db/identity-repository.ts` 的 `DELETE FROM` 只出現在刪管理者與測試清空兩處，**沒有任何依到期時間清除資料的機制**。
+
+[ADR-0018](../adr/0018-retention-is-the-circles-choice.md) 已決定在這之外**再加一個獨立的座標軸**——保存期限，**尚未實作**：「保留」（預設）不主動刪除；「活動後清除」在活動結束滿 90 天時刪除該筆補充資料與其代管縮圖，**但在那 90 天內維持公開**。期限與退出是兩件事：退出管的是活動後還公不公開，期限管的是資料還留多久，四種組合裡三種都有人會用。要更早消失的社團自己在控制面刪即可，不必等期限。
+
+實作時的硬約束：期限與到期時間存成 `circle_overrides` 的欄位而非程式裡的常數、90 天自活動結束時間起算、清除是刪除資料列而非再加一個旗標、`audit_log` 記下刪除發生過但不留下被刪除的內容。清除跑在獨立的排程 Worker 上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）——Cron Trigger 是 Workers 的功能，Pages 沒有——而**絕不得掛在 `/data/events/:eventId/overrides.json` 上**，那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)）。其餘各表的保存期限見 [ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)：憑證類（`login_tokens` 24 小時、`sessions` 到期後 7 天、`preview_mail_sink` 7 天）到期即刪，紀錄類（`accounts`、`circle_claims`、`audit_log`）不設期限。**`login_tokens` 的清除門檻必須大於一小時**，那張表同時是每小時速率限制的計數來源。
+
 ## 管理者
 
 - **管理者名單存在資料庫（`admins` 表）而非設定值**，可在控制面即時增減、不需重新部署。
@@ -122,6 +130,12 @@
 **目前社團只能貼網址，沒有上傳能力**：代表圖是三個文字欄位（圖片網址、出處頁面、來源標示），沒有 file input 也沒有 multipart 處理。允許清單裡只有 `i.imgur.com` 與 `drive.google.com` 是社團能主動上傳的圖床，另外三個是別的服務的 CDN，貼進來的通常是熱連結——失效時本站無法補救，降級行為是維持文字卡。
 
 [ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 已決定改為**本站代管為主、外部網址為輔**的雙線，**尚未實作**。實作時的硬約束記在這裡，避免日後被無意違反：代管圖片以 R2 public bucket 加自訂網域服務、**絕不經 Pages Function**（見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)）；上傳只做 MIME 與容量把關，不在 Worker 內做影像處理；檔名為內容 SHA-256；格式限 JPEG／PNG／WebP，單檔 2 MB，每個社團每個活動一張。代管圖片的保存期限與刪除規則屬於 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的資料 inventory。
+
+## 聯絡窗口
+
+依 [ADR-0019](../adr/0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md)：功能問題、資料顯示錯誤與 bug 回報走公開 GitHub issue；**涉及個人資料的查詢、更正與刪除走維運信箱**，不走公開 issue——那會讓一筆刪除請求本身變成永久公開紀錄。兩個位址，都是網域信箱而非個人信箱：**個人資料與著作權爭議走 `maintain@kotoban.top`**，**控制面的使用問題與認領協助走 `circle@kotoban.top`**。兩者都必須出現在隱私告知與 `/circle` 上——只寫在 repo 裡的窗口，對不讀 repo 的人等於不存在。
+
+**著作權與內容爭議走同一個信箱**，這是社團自述內容與代管縮圖的撤下入口。對外的完整說法見[隱私權與資料使用告知](../policy/privacy-notice.md)（草案，尚未公開），它必須在閘控解除前上線，且描述的是實際行為——行為改了就在同一個 commit 改它。
 
 ## 公開端點
 
