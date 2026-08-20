@@ -1,5 +1,6 @@
 /**
- * The scheduled credential purge.
+ * The scheduled purge: expired credentials, and circle content whose retention
+ * deadline has passed.
  *
  * A Worker of its own rather than a Pages Function: Cron Triggers exist on
  * Workers and not on Pages, and an opportunistic purge riding on user requests

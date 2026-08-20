@@ -122,7 +122,7 @@
 | `sessions` | 到期或撤銷後 7 天 | 是 |
 | `preview_mail_sink` | 7 天 | 是 |
 | `accounts`、`circle_claims`、`audit_log`、`admins` | 不設期限 | 不適用 |
-| `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | 欄位是；**清除尚未實作**（[#55](https://github.com/dekkmarsvin/tw_doujin_event/issues/55)） |
+| `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | 是 |
 
 - **清除跑在獨立的排程 Worker 上**，每天一次，不掛在任何使用者請求的路徑上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。Cron Trigger 是 Workers 的功能，Pages 沒有；而機會性清除會讓保存期限變成流量的函數。部署方式見[部署 runbook](../runbooks/deployment.md#排程清除-worker)。
 - **`login_tokens` 依 `created_at` 清除，門檻必須大於一小時。** 那張表同時是每小時速率限制的計數來源（每信箱 5 次、每 IP 20 次），依「已使用」清除會把限制打穿。`purgeExpiredRecords` 對過短的視窗直接拋錯，不是靜靜照做。
@@ -141,7 +141,13 @@
 - **選了清除的資料在等待刪除期間維持公開。** `listLiveOverrides` 與公開文件不看這兩個欄位；任何在讀取端過濾它們的作法都是錯的。
 - **選擇改變時寫一筆 `audit_log`**（`action = "override.retention"`，含 `choice` 與到期時間）。清除本身只記錄發生過、不留下內容，所以「當事人要求過、在哪一天」只會留在這裡。
 
-清除行為本身尚未實作（[#55](https://github.com/dekkmarsvin/tw_doujin_event/issues/55)），其硬約束：清除是刪除資料列而非再加一個旗標、`audit_log` 記下刪除發生過但不留下被刪除的內容，並且**絕不得掛在 `/data/events/:eventId/overrides.json` 上**——那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)）。
+**清除接進上面那個排程 Worker**（`db/retention-purge.ts` 的 `purgeExpiredOverrides`），與憑證清除同一個部署單位、同一次執行，不另建，每天一次，**不掛在 `/data/events/:eventId/overrides.json` 上**——那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)），把清除掛上去等於把它變成流量的函數。清除的三條硬約束：
+
+- **刪的是資料列，不是加一個旗標。** `fields_json` 與 `previous_fields_json` 一併消失，沒有可以還原的殘骸。刪除以 `DELETE ... RETURNING` 一次完成，回傳的 id 同時用來更新公開文件——分成兩句 SQL 會留下「已刪除但仍公開」的時間差。
+- **公開文件同步失去該筆，且 revision 遞增。** `overrides_doc` 是衍生資料；revision 進 ETag，不遞增的話快取會繼續提供剛被刪掉的內容。
+- **`audit_log` 留下刪除發生過，但不留下被刪除的內容**：每筆刪除寫一列 `override.purged`（`subject_id` 為社團 id，`detail_json` 只有 `eventId`），每次執行另有一列 `retention.purged` 摘要。與 #54 寫入的 `override.retention` 併讀，就能回答「當事人哪天要求、系統哪天執行」。
+
+[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 的代管縮圖實作之後，**位元組必須在同一次作業裡刪除**——刪了列卻仍在服務圖片，正是這段機制要防的事。
 
 ## 管理者
 
