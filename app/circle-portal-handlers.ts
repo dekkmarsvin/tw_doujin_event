@@ -436,6 +436,49 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   /**
+   * The circle deletes its own contribution.
+   *
+   * Same chain as every other write here — session, then verified claim — and
+   * no bearer link of its own (ADR-0020): a forwardable URL is the weakest
+   * credential in the system and this is the only action with no way back.
+   *
+   * Ownership is checked against the claim, not against who wrote the row, so a
+   * circle that changed hands can delete what its predecessor wrote. The
+   * account that did it is in `audit_log`, which is what keeps the two apart
+   * after a transfer.
+   */
+  async function deleteMyOverride(request: Request, circleId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
+      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+    }
+
+    // The confirmation is the circle's own id, echoed back. A boolean would be
+    // one button on the wire whatever the interface looks like, and a session
+    // lasts 30 days — long enough for the click to be a stale tab's, not a
+    // decision. Re-sending a mail was the alternative, and it would have made
+    // an irreversible action depend on deliverability.
+    const body = await readJson(request);
+    if (body?.confirm !== circleId) return json({ error: "請輸入社團代號以確認刪除。" }, 400);
+
+    const now = config.now();
+    const previous = await repository.getOverride(config.eventId, circleId);
+    if (!await repository.deleteOverride({ eventId: config.eventId, circleId })) {
+      return json({ error: "沒有可刪除的內容。" }, 404);
+    }
+    await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now, currentPhase());
+    // What was deleted is deliberately absent; that it was, and by whom, is not.
+    await repository.writeAudit({
+      at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.deleted",
+      subjectType: "override", subjectId: circleId,
+      detail: { previousRevision: previous?.revision ?? 0, retention: previous?.retention_choice ?? null },
+      ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true });
+  }
+
+  /**
    * Project a draft through the real read model and return what a visitor would
    * see. Computed server-side against the same `buildCircleCatalog` the reader
    * uses, so the preview cannot drift from the published result — and so the
@@ -659,7 +702,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   return {
     authConfig, requestLink, verify, session, signOut,
     listClaims, createClaim, runChallenge, searchCatalog,
-    getMyOverride, putOverride, previewOverride, setPostEventVisibility,
+    getMyOverride, putOverride, deleteMyOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins,
     publicOverrides,

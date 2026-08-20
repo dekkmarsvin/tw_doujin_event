@@ -351,6 +351,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).run();
   }
 
+  /**
+   * Self-service deletion: the row goes, not a flag on it.
+   *
+   * The same thing the scheduled purge does to an expired row, so "I deleted
+   * it" and "its deadline passed" cannot leave different remains — including
+   * `previous_fields_json`, which a status change would have kept.
+   */
+  async function deleteOverride(input: { eventId: string; circleId: string }) {
+    await ensureTables();
+    const result = await database.prepare(`DELETE FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2`)
+      .bind(input.eventId, input.circleId).run();
+    return (result.meta.changes ?? 0) === 1;
+  }
+
   async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number }) {
     await ensureTables();
     const result = await database.prepare(
@@ -445,7 +459,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, createSession, getSession, revokeSession,
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
-    getOverride, putOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
+    getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
