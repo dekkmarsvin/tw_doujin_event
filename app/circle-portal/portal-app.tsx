@@ -8,13 +8,13 @@ import {
 } from "../circle-editor-client";
 import {
   CIRCLE_OVERRIDE_LIST_FIELDS, LINK_KINDS, OVERRIDE_LIMITS, THUMBNAIL_HOST_ALLOWLIST,
-  circleOverrideFieldMode, clearCircleOverrideField, inheritCircleOverrideField,
-  type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail,
+  circleOverrideFieldMode, circleRetentionExpiresAt, clearCircleOverrideField, inheritCircleOverrideField,
+  type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail, type CircleRetentionChoice,
 } from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
-import { FF47_EVENT } from "../event-catalog";
+import { FF47_ENDS_AT, FF47_EVENT } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
 import styles from "./portal.module.css";
 
@@ -298,11 +298,21 @@ function ClaimForm({ onCreated }: { onCreated: () => void }) {
   </section>;
 }
 
+/** The deadline is a pure function of the event's end, so the portal can show a
+ * date the moment the circle picks the option, before anything is saved. */
+const EVENT_END_MS = Date.parse(FF47_ENDS_AT);
+const RETENTION_DATE = new Intl.DateTimeFormat("zh-Hant", { dateStyle: "long", timeZone: "Asia/Taipei" });
+
 function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [fields, setFields] = useState<CircleOverrideFields>({});
   const [status, setStatus] = useState<Status>(IDLE);
   const [preview, setPreview] = useState<CircleViewRecord[] | null>(null);
   const [hidden, setHidden] = useState(false);
+  // `null` is a third state, not a default: a circle that has not answered must
+  // be asked rather than assumed to have chosen either side (ADR-0018).
+  const [retention, setRetention] = useState<CircleRetentionChoice | null>(null);
+  const [retentionExpiresAt, setRetentionExpiresAt] = useState<number | null>(null);
+  const [saved, setSaved] = useState(false);
   const loaded = useRef(false);
 
   // State contains only fields the author has deliberately touched. Empty
@@ -314,7 +324,13 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     if (loaded.current) return;
     loaded.current = true;
     void readMyOverride(claim.circleId)
-      .then((result) => { setFields(result.fields ?? {}); setHidden(!!result.postEventHidden); })
+      .then((result) => {
+        setFields(result.fields ?? {});
+        setHidden(!!result.postEventHidden);
+        setRetention(result.retention ?? null);
+        setRetentionExpiresAt(result.retentionExpiresAt ?? null);
+        setSaved(result.status !== "none");
+      })
       .catch(() => setFields({}));
   }, [claim.circleId]);
 
@@ -469,6 +485,37 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       placeholder="例如：Pixiv" onChange={(event) => editThumbnail({ provider: event.target.value })}
     />
 
+    {/* Inside the form, answered while the content is written (ADR-0018). The
+        two options carry the same weight on purpose: folding the deleting one
+        into an "advanced" disclosure would make the default everyone's real
+        answer. Nothing is preselected — no answer is not an answer. */}
+    <fieldset className={styles.retention}>
+      <legend>這筆資料要留多久</legend>
+      {saved && retention === null && <p className={styles.retentionAsk}>
+        這筆資料是在這個選項出現之前填寫的，目前一律視為「保留」。請選一個，儲存後生效。
+      </p>}
+      <div className={styles.retentionChoices}>
+        {([
+          { value: "keep", title: "保留", detail: "活動結束後繼續公開，本站不會主動刪除。" },
+          { value: "purge", title: "活動後清除", detail: "活動結束滿 90 天時刪除這筆補充資料；在那之前維持公開。" },
+        ] as const).map((option) => <label key={option.value}>
+          <input
+            type="radio" name={`retention-${claim.circleId}`} value={option.value}
+            checked={retention === option.value}
+            onChange={() => {
+              setRetention(option.value);
+              setRetentionExpiresAt(circleRetentionExpiresAt(option.value, EVENT_END_MS));
+            }}
+          />
+          <span>{option.title}</span>
+          <small>{option.detail}</small>
+        </label>)}
+      </div>
+      <p>{retention === "purge" && retentionExpiresAt !== null
+        ? `預定刪除日期：${RETENTION_DATE.format(new Date(retentionExpiresAt))}。要更早消失不必等期限，寫信到 maintain@kotoban.top 即可。`
+        : "只影響你自己填寫的補充資料；主辦公布的社團名、攤位與日期不受影響。"}</p>
+    </fieldset>
+
     <div className={styles.editorActions}>
       <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
         setStatus({ kind: "busy", message: "產生預覽中…" });
@@ -479,8 +526,8 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
 
       <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
         setStatus({ kind: "busy", message: "儲存中…" });
-        void saveOverride(claim.circleId, draft())
-          .then(() => setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }))
+        void saveOverride(claim.circleId, draft(), retention)
+          .then(() => { setSaved(true); setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }); })
           .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
       }}>儲存</button>
     </div>

@@ -1,4 +1,4 @@
-import { isCircleOverrideFields, type CircleOverrideFields } from "./circle-overrides";
+import { circleRetentionExpiresAt, isCircleOverrideFields, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -399,16 +399,39 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const fields = body?.fields;
     if (!isCircleOverrideFields(fields)) return json({ error: "資料格式不符或超出長度限制。" }, 400);
 
+    // Chosen while writing, in the same submission as the content (ADR-0018).
+    // Absent means "did not answer this time", which leaves any earlier choice
+    // alone and never becomes a choice to delete.
+    const choice = body?.retention;
+    if (choice !== undefined && !isRetentionChoice(choice)) {
+      return json({ error: "保存期限必須是「保留」或「活動後清除」。" }, 400);
+    }
+    const retention = choice === undefined
+      ? undefined
+      : { choice, expiresAt: circleRetentionExpiresAt(choice, Date.parse(config.eventEndsAt)) };
+
     const now = config.now();
+    const ipHash = await clientIpHash(request);
     const previous = await repository.getOverride(config.eventId, circleId);
-    await repository.putOverride({ eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now });
+    await repository.putOverride({ eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention });
     await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now);
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.updated",
       subjectType: "override", subjectId: circleId,
       detail: { changedFields: Object.keys(fields as CircleOverrideFields), previousRevision: previous?.revision ?? 0 },
-      ipHash: await clientIpHash(request),
+      ipHash,
     });
+    // A second entry, only when the answer actually changed: the purge that
+    // eventually deletes this row records that it happened but not what it
+    // held, so this is where "the circle asked for it, on this date" survives.
+    if (retention && retention.choice !== (previous?.retention_choice ?? null)) {
+      await repository.writeAudit({
+        at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.retention",
+        subjectType: "override", subjectId: circleId,
+        detail: { choice: retention.choice, expiresAt: retention.expiresAt },
+        ipHash,
+      });
+    }
     return json({ ok: true });
   }
 
@@ -445,6 +468,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       fields: row ? JSON.parse(row.fields_json) as unknown : {},
       status: row?.status ?? "none",
       postEventHidden: !!row?.post_event_hidden,
+      // `null` reaches the client as `null`: the portal has to be able to tell
+      // "has not answered" from "chose to keep" so it can ask.
+      retention: row?.retention_choice ?? null,
+      retentionExpiresAt: row?.retention_expires_at ?? null,
     });
   }
 
