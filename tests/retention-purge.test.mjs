@@ -1,0 +1,114 @@
+import assert from "node:assert/strict";
+import test, { after, beforeEach } from "node:test";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { createServer, isRunnableDevEnvironment } from "vite";
+
+const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
+const environment = vite.environments.ssr;
+if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
+const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
+const { LOGIN_RATE_LIMIT_WINDOW_MS, RETENTION_WINDOWS, purgeExpiredRecords } = await environment.runner.import("/db/retention-purge.ts");
+
+const miniflare = new Miniflare(convertV4MiniflareOptions({
+  modules: true,
+  script: "export default { fetch() { return new Response('ok'); } }",
+  // UNTOUCHED is never handed to the repository: it stands in for a database
+  // no Function has reached yet, which is what preview looks like on day one.
+  d1Databases: { DB: "retention-test", UNTOUCHED: "retention-untouched" },
+}));
+const database = await miniflare.getD1Database("DB");
+const untouched = await miniflare.getD1Database("UNTOUCHED");
+const repository = createIdentityRepository(database);
+after(async () => { await miniflare.dispose(); await vite.close(); });
+
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const NOW = 1_786_500_000_000;
+
+beforeEach(async () => {
+  await repository.ensureTables();
+  await repository.clearPreviewData();
+});
+
+const countIn = async (table) => {
+  const row = await database.prepare(`SELECT COUNT(*) AS total FROM ${table}`).first();
+  return row.total;
+};
+
+test("deletes login tokens older than the retention window", async () => {
+  await repository.createLoginToken({ tokenHash: "old", email: "a@example.test", now: NOW - 25 * HOUR, expiresAt: NOW - 25 * HOUR + 900_000, ipHash: "ip" });
+  await repository.createLoginToken({ tokenHash: "fresh", email: "a@example.test", now: NOW - 2 * HOUR, expiresAt: NOW - 2 * HOUR + 900_000, ipHash: "ip" });
+
+  const summary = await purgeExpiredRecords(database, NOW);
+
+  assert.equal(summary.deleted.login_tokens, 1);
+  const remaining = await database.prepare("SELECT token_hash FROM login_tokens").all();
+  assert.deepEqual(remaining.results.map((row) => row.token_hash), ["fresh"]);
+});
+
+test("leaves the rate limiter's counting window intact", async () => {
+  // A consumed token still holds a slot: five requests in an hour is five
+  // rows, whether or not the links were clicked. Purging on use would hand the
+  // sender a fresh quota, which is why retention is measured from created_at.
+  for (let index = 0; index < 5; index += 1) {
+    await repository.createLoginToken({ tokenHash: `t${index}`, email: "b@example.test", now: NOW - 30 * 60 * 1000, expiresAt: NOW, ipHash: "ip-b" });
+  }
+  await repository.consumeLoginToken("t0", NOW - 29 * 60 * 1000);
+
+  await purgeExpiredRecords(database, NOW);
+
+  assert.equal(await repository.countLoginTokensSince("email", "b@example.test", NOW - LOGIN_RATE_LIMIT_WINDOW_MS), 5);
+  assert.equal(await repository.countLoginTokensSince("request_ip_hash", "ip-b", NOW - LOGIN_RATE_LIMIT_WINDOW_MS), 5);
+});
+
+test("refuses a retention window shorter than the rate-limit window", async () => {
+  await assert.rejects(
+    () => purgeExpiredRecords(database, NOW, { ...RETENTION_WINDOWS, loginTokens: 30 * 60 * 1000 }),
+    /rate-limit window/,
+  );
+});
+
+test("deletes sessions past expiry or revocation, keeps live ones", async () => {
+  const account = await repository.upsertAccount("c@example.test", NOW - 40 * DAY);
+  await repository.createSession(account, NOW - 40 * DAY, NOW - 10 * DAY, "long-expired");
+  await repository.createSession(account, NOW - 31 * DAY, NOW - 1 * DAY, "recently-expired");
+  await repository.createSession(account, NOW - 20 * DAY, NOW + 10 * DAY, "revoked-long-ago");
+  await repository.createSession(account, NOW - 1 * DAY, NOW + 29 * DAY, "live");
+  await repository.revokeSession("revoked-long-ago", NOW - 8 * DAY);
+
+  const summary = await purgeExpiredRecords(database, NOW);
+
+  assert.equal(summary.deleted.sessions, 2);
+  const remaining = await database.prepare("SELECT id FROM sessions ORDER BY id").all();
+  assert.deepEqual(remaining.results.map((row) => row.id), ["live", "recently-expired"]);
+});
+
+test("deletes preview mail older than a week", async () => {
+  await repository.storePreviewMail({ email: "d@example.test", subject: "old", text: "link", now: NOW - 8 * DAY });
+  await repository.storePreviewMail({ email: "d@example.test", subject: "recent", text: "link", now: NOW - 6 * DAY });
+
+  const summary = await purgeExpiredRecords(database, NOW);
+
+  assert.equal(summary.deleted.preview_mail_sink, 1);
+  assert.equal(await countIn("preview_mail_sink"), 1);
+});
+
+test("records every run in the audit log, including the empty ones", async () => {
+  await purgeExpiredRecords(database, NOW);
+
+  const entry = await database.prepare("SELECT actor_role, action, subject_type, subject_id, detail_json, at FROM audit_log").first();
+  assert.equal(entry.action, "retention.purged");
+  assert.equal(entry.actor_role, "system");
+  assert.equal(entry.subject_type, "retention");
+  assert.equal(entry.at, NOW);
+  assert.deepEqual(JSON.parse(entry.detail_json).deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0 });
+});
+
+test("never creates a table it does not find", async () => {
+  const summary = await purgeExpiredRecords(untouched, NOW);
+
+  assert.deepEqual(summary.deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0 });
+  assert.deepEqual(summary.skipped.sort(), ["audit_log", "login_tokens", "preview_mail_sink", "sessions"]);
+  const tables = await untouched.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all();
+  assert.deepEqual(tables.results, [], "the purge must not be able to create the database it purges");
+});

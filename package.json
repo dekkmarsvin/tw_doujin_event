@@ -28,7 +28,10 @@
     "catalog:snapshot:check": "node scripts/export-static-circle-catalog.mjs --check",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .wrangler",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "purge:dev": "wrangler dev --config workers/retention-purge/wrangler.jsonc --test-scheduled",
+    "purge:deploy": "wrangler deploy --config workers/retention-purge/wrangler.jsonc",
+    "purge:deploy:preview": "wrangler deploy --config workers/retention-purge/wrangler.jsonc --env preview"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
