@@ -1,5 +1,6 @@
 /**
- * Emit `dist/privacy.html` from `docs/policy/privacy-notice.md`.
+ * Emit `dist/privacy/index.html` from `docs/policy/privacy-notice.md`, served at
+ * `/privacy`.
  *
  * The notice has to be reachable by someone who will never read this repo — a
  * notice that exists only as a Markdown file does not exist for the person
@@ -16,13 +17,20 @@
  * source grows a construct this cannot render, rather than letting a section
  * quietly vanish from the published page.
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = resolve(root, "docs", "policy", "privacy-notice.md");
-const OUTPUT = resolve(root, "dist", "privacy.html");
+/**
+ * A directory index, not `privacy.html`. `/privacy` then resolves the way every
+ * static host resolves a directory, instead of relying on Pages stripping the
+ * extension — the link is printed under a sign-in form, and a policy link that
+ * 404s is worse than no link.
+ */
+const OUTPUT_DIR = resolve(root, "dist", "privacy");
+const OUTPUT = resolve(OUTPUT_DIR, "index.html");
 
 /** Repo-relative links have no meaning on the site; they resolve to GitHub. */
 const REPO_BLOB = "https://github.com/dekkmarsvin/tw_doujin_event/blob/main/docs/policy/";
@@ -205,6 +213,7 @@ ${body}
 const modulePath = fileURLToPath(import.meta.url);
 if (process.argv[1] && resolve(process.argv[1]) === resolve(modulePath)) {
   const markdown = await readFile(SOURCE, "utf8");
+  await mkdir(OUTPUT_DIR, { recursive: true });
   await writeFile(OUTPUT, buildPrivacyPage(markdown), "utf8");
-  console.log(`Generated dist/privacy.html from docs/policy/privacy-notice.md (updated ${lastUpdatedFrom(markdown)}).`);
+  console.log(`Generated dist/privacy/index.html from docs/policy/privacy-notice.md (updated ${lastUpdatedFrom(markdown)}).`);
 }
