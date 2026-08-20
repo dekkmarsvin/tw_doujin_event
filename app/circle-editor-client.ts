@@ -137,6 +137,14 @@ export function setPostEventVisibility(circleId: string, hidden: boolean) {
   });
 }
 
+/** `confirm` is the circle id typed back — see the handler for why. */
+export function deleteMyOverride(circleId: string) {
+  return call<{ ok: true }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirm: circleId }),
+  });
+}
+
 export function previewOverride(circleId: string, fields: CircleOverrideFields) {
   return call<{ records: unknown[] }>(`/api/circle/${encodeURIComponent(circleId)}/preview`, {
     method: "POST",
