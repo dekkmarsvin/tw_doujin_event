@@ -51,10 +51,15 @@ test("creates every table and index on first use", async () => {
 });
 
 test("additive column migrations upgrade an existing database idempotently", async () => {
-  for (const [tableName, missingColumn] of [["circle_overrides", "post_event_hidden"], ["overrides_doc", "phase"]]) {
+  // One CREATE per table, listing every column added after it existed: a table
+  // can be behind by more than one migration, and `circle_overrides` now is.
+  for (const [tableName, missingColumns] of [
+    ["circle_overrides", ["post_event_hidden", "retention_choice", "retention_expires_at"]],
+    ["overrides_doc", ["phase"]],
+  ]) {
     const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
     assert.ok(definition);
-    const oldColumns = definition.columns.filter((column) => !column.startsWith(`${missingColumn} `));
+    const oldColumns = definition.columns.filter((column) => !missingColumns.some((missing) => column.startsWith(`${missing} `)));
     await legacyDatabase.prepare(`CREATE TABLE ${tableName} (${oldColumns.join(", ")})`).run();
   }
 
@@ -178,6 +183,48 @@ test("a later edit republishes after a takedown", async () => {
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "重新填寫" }), updatedBy: "account-1", now: NOW + 4_000 });
   const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000);
   assert.equal(JSON.parse(doc.json).overrides.length, 1);
+});
+
+test("a content-only save leaves the circle's retention choice alone", async () => {
+  const row = () => database.prepare("SELECT retention_choice, retention_expires_at FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2")
+    .bind("ff47", "ff47-retention").first();
+
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-retention", fieldsJson: JSON.stringify({ saleInfo: "初次填寫" }),
+    updatedBy: "account-1", now: NOW,
+  });
+  assert.deepEqual(await row(), { retention_choice: null, retention_expires_at: null }, "no answer must not be stored as one");
+
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-retention", fieldsJson: JSON.stringify({ saleInfo: "選了清除" }),
+    updatedBy: "account-1", now: NOW + 1_000, retention: { choice: "purge", expiresAt: NOW + 90_000 },
+  });
+  assert.deepEqual(await row(), { retention_choice: "purge", retention_expires_at: NOW + 90_000 });
+
+  // The editor can save content without re-answering; that must not silently
+  // revert a choice the circle already made.
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-retention", fieldsJson: JSON.stringify({ saleInfo: "只改內容" }),
+    updatedBy: "account-1", now: NOW + 2_000,
+  });
+  assert.deepEqual(await row(), { retention_choice: "purge", retention_expires_at: NOW + 90_000 });
+
+  // Switching back to keep clears the deadline rather than leaving a stale one.
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-retention", fieldsJson: JSON.stringify({ saleInfo: "改回保留" }),
+    updatedBy: "account-1", now: NOW + 3_000, retention: { choice: "keep", expiresAt: null },
+  });
+  assert.deepEqual(await row(), { retention_choice: "keep", retention_expires_at: null });
+});
+
+test("a row waiting to be purged is still published", async () => {
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-waiting", fieldsJson: JSON.stringify({ saleInfo: "會在 90 天後消失" }),
+    updatedBy: "account-1", now: NOW + 4_000, retention: { choice: "purge", expiresAt: NOW + 90_000 },
+  });
+  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000);
+  const published = JSON.parse(doc.json).overrides.map((override) => override.circleId);
+  assert.ok(published.includes("ff47-waiting"), "the deadline is a lifespan, not an early withdrawal (ADR-0018)");
 });
 
 test("audit rows are written and retrievable by subject", async () => {

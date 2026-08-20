@@ -1,4 +1,4 @@
-import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
+import { CIRCLE_OVERRIDES_SCHEMA, type CircleRetentionChoice } from "../app/circle-overrides";
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_SCHEMA_STATEMENTS } from "./identity-runtime-schema";
 
 /**
@@ -43,6 +43,9 @@ export type OverrideRow = {
   status: string;
   updated_at: number;
   post_event_hidden?: number;
+  /** `null` where the circle has not answered yet; never defaulted here. */
+  retention_choice?: CircleRetentionChoice | null;
+  retention_expires_at?: number | null;
 };
 
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
@@ -314,11 +317,23 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId, circleId).first<OverrideRow & { fields_json: string; revision: number }>();
   }
 
-  async function putOverride(input: { eventId: string; circleId: string; fieldsJson: string; updatedBy: string; now: number }) {
+  /**
+   * `retention` is optional, and its absence means "unchanged" rather than
+   * "none": a save that only carries content must not wipe a choice the circle
+   * made earlier, so the update coalesces onto the stored value.
+   */
+  async function putOverride(input: {
+    eventId: string;
+    circleId: string;
+    fieldsJson: string;
+    updatedBy: string;
+    now: number;
+    retention?: { choice: CircleRetentionChoice; expiresAt: number | null };
+  }) {
     await ensureTables();
     await database.prepare(
-      `INSERT INTO circle_overrides (id, event_id, circle_id, fields_json, updated_by, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+      `INSERT INTO circle_overrides (id, event_id, circle_id, fields_json, updated_by, created_at, updated_at, retention_choice, retention_expires_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8)
        ON CONFLICT(event_id, circle_id) DO UPDATE SET
          previous_fields_json = circle_overrides.fields_json,
          fields_json = excluded.fields_json,
@@ -326,8 +341,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          status = 'live',
          updated_by = excluded.updated_by,
          updated_at = excluded.updated_at,
+         retention_choice = COALESCE(excluded.retention_choice, circle_overrides.retention_choice),
+         retention_expires_at = CASE WHEN excluded.retention_choice IS NULL
+           THEN circle_overrides.retention_expires_at ELSE excluded.retention_expires_at END,
          takedown_reason = NULL, takendown_by = NULL, takendown_at = NULL`,
-    ).bind(crypto.randomUUID(), input.eventId, input.circleId, input.fieldsJson, input.updatedBy, input.now).run();
+    ).bind(
+      crypto.randomUUID(), input.eventId, input.circleId, input.fieldsJson, input.updatedBy, input.now,
+      input.retention?.choice ?? null, input.retention?.expiresAt ?? null,
+    ).run();
   }
 
   async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number }) {
