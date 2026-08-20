@@ -110,6 +110,14 @@ export const IDENTITY_TABLES = [
     "created_at INTEGER NOT NULL",
     "updated_at INTEGER NOT NULL",
     "post_event_hidden INTEGER NOT NULL DEFAULT 0",
+    // Retention is the circle's own choice (ADR-0018), and deliberately has no
+    // DEFAULT: NULL is "has not answered yet", which the portal has to tell
+    // apart from an explicit "keep" so it can ask. Absence is never read as a
+    // choice to delete. `retention_expires_at` carries the deadline on the row
+    // itself — counted from the end of the event, not from the last edit — so
+    // an operator can query which rows disappear when without reading code.
+    "retention_choice TEXT",
+    "retention_expires_at INTEGER",
     "takedown_reason TEXT",
     "takendown_by TEXT",
     "takendown_at INTEGER",
@@ -172,5 +180,7 @@ export const IDENTITY_SCHEMA_STATEMENTS = [...IDENTITY_TABLES, ...IDENTITY_INDEX
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
   { table: "circle_overrides", column: "post_event_hidden", sql: "ALTER TABLE circle_overrides ADD COLUMN post_event_hidden INTEGER NOT NULL DEFAULT 0" },
+  { table: "circle_overrides", column: "retention_choice", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_choice TEXT" },
+  { table: "circle_overrides", column: "retention_expires_at", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_expires_at INTEGER" },
   { table: "overrides_doc", column: "phase", sql: "ALTER TABLE overrides_doc ADD COLUMN phase TEXT NOT NULL DEFAULT 'during'" },
 ] as const;

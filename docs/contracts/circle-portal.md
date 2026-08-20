@@ -107,7 +107,7 @@
 - **ETag 必須含活動階段**，否則快取會繼續提供已撤回的內容。
 - **目前不主張任何例外。** 社團勾選退出，內容就從公開文件消失，沒有附帶條件。介面上不得出現本站尚無條款可依據的保留條款——曾經寫過一句比照 Comic Market 的「學術或研究用途的有限度查閱」例外，已於使用條款就緒前移除。日後若要主張任何例外，先有條款，再改介面。
 
-**退出的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著。補充資料的保存期限見下一節，目前**尚未實作**。
+**退出的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著。補充資料的保存期限是另一個座標軸，見下一節。
 
 ## 保存期限與清除
 
@@ -122,7 +122,7 @@
 | `sessions` | 到期或撤銷後 7 天 | 是 |
 | `preview_mail_sink` | 7 天 | 是 |
 | `accounts`、`circle_claims`、`audit_log`、`admins` | 不設期限 | 不適用 |
-| `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | **否** |
+| `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | 欄位是；**清除尚未實作**（[#55](https://github.com/dekkmarsvin/tw_doujin_event/issues/55)） |
 
 - **清除跑在獨立的排程 Worker 上**，每天一次，不掛在任何使用者請求的路徑上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。Cron Trigger 是 Workers 的功能，Pages 沒有；而機會性清除會讓保存期限變成流量的函數。部署方式見[部署 runbook](../runbooks/deployment.md#排程清除-worker)。
 - **`login_tokens` 依 `created_at` 清除，門檻必須大於一小時。** 那張表同時是每小時速率限制的計數來源（每信箱 5 次、每 IP 20 次），依「已使用」清除會把限制打穿。`purgeExpiredRecords` 對過短的視窗直接拋錯，不是靜靜照做。
@@ -130,11 +130,18 @@
 - **每次執行寫一筆 `audit_log` 摘要**（`action = "retention.purged"`），包含什麼都沒刪的那些。這是「清除還在跑嗎」唯一的答案。
 - 刪掉憑證不會失去證據：`auth.link_requested` 已把 IP 雜湊與 email 的 SHA-256 寫進 `audit_log`。
 
-### 社團補充資料的保存期限（尚未實作）
+### 社團補充資料的保存期限
 
 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md) 在活動後退出**之外再加一個獨立的座標軸**：「保留」（預設）不主動刪除；「活動後清除」在活動結束滿 90 天時刪除該筆補充資料與其代管縮圖，**但在那 90 天內維持公開**。退出管的是活動後還公不公開，期限管的是資料還留多久，四種組合裡三種都有人會用。要更早消失的社團自己在控制面刪即可，不必等期限。
 
-實作時的硬約束：期限與到期時間存成 `circle_overrides` 的欄位而非程式裡的常數、90 天自活動結束時間起算、清除是刪除資料列而非再加一個旗標、`audit_log` 記下刪除發生過但不留下被刪除的內容，並且**絕不得掛在 `/data/events/:eventId/overrides.json` 上**——那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)）。
+**選擇存在資料列上**：`circle_overrides.retention_choice`（`keep`／`purge`）與 `circle_overrides.retention_expires_at`。兩欄都可為 NULL 且**沒有 DEFAULT**——NULL 是「尚未表態」，與「已選擇保留」是不同的狀態，控制面靠這個差別決定要不要問。到期時間**自活動結束時間起算**，不是最後編輯時間，並且在寫入時就算好存進資料列，維運端因此能直接查出哪些列在什麼時候會消失，不必讀程式碼推論。90 天的值是 `app/circle-overrides.ts` 的 `OVERRIDE_RETENTION_PURGE_AFTER_MS`。
+
+- **選擇隨內容一起送出**（`PUT /api/circle/:circleId/overrides` 的 `retention`），因為它是填寫時的決定，不是事後的設定。欄位缺席代表「這次沒有回答」，伺服器保留既有選擇，**永遠不會被解讀成選擇了清除**。
+- **介面上兩個選項並列、同樣的視覺權重**，不預選任何一項，不得把清除收進摺疊或進階區塊。既有資料列讀回 `null` 時，控制面顯示一則請其表態的提示，但不擋住編輯。
+- **選了清除的資料在等待刪除期間維持公開。** `listLiveOverrides` 與公開文件不看這兩個欄位；任何在讀取端過濾它們的作法都是錯的。
+- **選擇改變時寫一筆 `audit_log`**（`action = "override.retention"`，含 `choice` 與到期時間）。清除本身只記錄發生過、不留下內容，所以「當事人要求過、在哪一天」只會留在這裡。
+
+清除行為本身尚未實作（[#55](https://github.com/dekkmarsvin/tw_doujin_event/issues/55)），其硬約束：清除是刪除資料列而非再加一個旗標、`audit_log` 記下刪除發生過但不留下被刪除的內容，並且**絕不得掛在 `/data/events/:eventId/overrides.json` 上**——那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)）。
 
 ## 管理者
 
