@@ -204,6 +204,20 @@
 .editorActions { display: flex; gap: 8px; }
 .editorActions button:first-child { border-color: var(--line); background: #fff; color: var(--ink); }
 
+/* The only irreversible action in the portal, and the only place that says so
+   in red. Kept visually apart from the per-field "clear" controls: ADR-0020
+   requires clearing and deleting to read as two different things. */
+.danger { margin-top: 16px; padding: 12px; border: 1px solid #e7c4bd; border-radius: 10px; background: #fdf6f4; }
+.danger h3 { margin: 0; color: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.danger p { margin-top: 8px; color: var(--ink); font-size: 11px; line-height: 1.7; }
+.danger label { margin-top: 10px; }
+.danger code { padding: 1px 5px; border-radius: 4px; background: #f4e3df; font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
+.dangerSummary { margin: 6px 0 0; padding-left: 18px; color: var(--ink); font-size: 11px; line-height: 1.7; }
+/* Scoped through `.danger` so it outranks `.card button`, which would otherwise
+   paint the only irreversible action in the portal the same ink as Save. */
+.danger .dangerButton { margin-top: 10px; border-color: var(--danger); background: var(--danger); color: #fff; }
+.danger .dangerButton:disabled { border-color: #e7c4bd; background: #e7c4bd; color: #fff; cursor: not-allowed; }
+
 .preview { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .preview h3 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
 .preview > p { margin-top: 8px; color: var(--muted); font-size: 11px; }

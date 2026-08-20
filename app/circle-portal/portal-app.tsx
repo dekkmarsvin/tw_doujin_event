@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  createClaim, decideClaim, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
+  createClaim, decideClaim, deleteMyOverride, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
   previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
@@ -298,6 +298,26 @@ function ClaimForm({ onCreated }: { onCreated: () => void }) {
   </section>;
 }
 
+/**
+ * What deleting would remove, in the circle's own terms.
+ *
+ * Shown before the button rather than after the fact: pretix makes an export
+ * mandatory before a deletion, and this is the weaker version of the same idea
+ * — nobody should be able to delete something they cannot see (ADR-0020).
+ */
+function deletionSummary(fields: CircleOverrideFields) {
+  const lines: string[] = [];
+  if (fields.pen) lines.push(`筆名：${fields.pen}`);
+  if (fields.saleInfo) lines.push(`販售資訊 ${[...fields.saleInfo].length} 字`);
+  for (const { key, label } of CIRCLE_OVERRIDE_LIST_FIELDS) {
+    const items = fields[key];
+    if (items?.length) lines.push(`${label} ${items.length} 項`);
+  }
+  if (fields.links?.length) lines.push(`外部連結 ${fields.links.length} 條`);
+  if (fields.thumbnail) lines.push("代表圖 1 張");
+  return lines;
+}
+
 /** The deadline is a pure function of the event's end, so the portal can show a
  * date the moment the circle picks the option, before anything is saved. */
 const EVENT_END_MS = Date.parse(FF47_ENDS_AT);
@@ -313,6 +333,10 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [retention, setRetention] = useState<CircleRetentionChoice | null>(null);
   const [retentionExpiresAt, setRetentionExpiresAt] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
+  // What the server holds, as opposed to the draft in `fields`: the deletion
+  // summary has to describe what would actually be deleted, not unsaved edits.
+  const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
+  const [confirmText, setConfirmText] = useState("");
   const loaded = useRef(false);
 
   // State contains only fields the author has deliberately touched. Empty
@@ -326,6 +350,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     void readMyOverride(claim.circleId)
       .then((result) => {
         setFields(result.fields ?? {});
+        setSavedFields(result.fields ?? {});
         setHidden(!!result.postEventHidden);
         setRetention(result.retention ?? null);
         setRetentionExpiresAt(result.retentionExpiresAt ?? null);
@@ -527,7 +552,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
         setStatus({ kind: "busy", message: "儲存中…" });
         void saveOverride(claim.circleId, draft(), retention)
-          .then(() => { setSaved(true); setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }); })
+          .then(() => { setSaved(true); setSavedFields(draft()); setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }); })
           .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
       }}>儲存</button>
     </div>
@@ -580,6 +605,50 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
         僅影響你自己填寫的補充資料；主辦公布的社團名、攤位與日期不受影響，仍會留在場刊。
       </p>
     </div>
+
+    {saved && <div className={styles.danger}>
+      <h3>刪除這筆資料</h3>
+      {/* Clearing a field writes an empty value and leaves the row; this
+          removes the row. ADR-0020 requires the two to read as different
+          things, because only one of them is undoable. */}
+      <p>
+        這與各欄位的「清除此欄」不同：清除是把內容留空，資料列還在；這裡是把整筆補充資料從資料庫刪掉，
+        包含上一版的備份與你選的保存期限，<b>無法復原</b>。主辦公布的社團名、攤位與日期不受影響。
+        不想等到期限自動清除的話，這裡隨時可以自己來。
+      </p>
+      <p>將被刪除的內容：</p>
+      {deletionSummary(savedFields).length === 0
+        ? <ul className={styles.dangerSummary}><li>（目前沒有任何欄位有內容，但資料列仍然存在）</li></ul>
+        : <ul className={styles.dangerSummary}>{deletionSummary(savedFields).map((line) => <li key={line}>{line}</li>)}</ul>}
+      {/* Not a single button: a session lasts 30 days, and one click from a
+          stale tab must not be able to do this. Re-sending a mail would have
+          been the other option, and it would put an irreversible action behind
+          deliverability. */}
+      <label htmlFor={`confirm-${claim.circleId}`}>請輸入社團代號 <code>{claim.circleId}</code> 以確認</label>
+      <input
+        id={`confirm-${claim.circleId}`} value={confirmText} autoComplete="off" spellCheck={false}
+        onChange={(event) => setConfirmText(event.target.value)} placeholder={claim.circleId}
+      />
+      <button
+        type="button" className={styles.dangerButton}
+        disabled={confirmText.trim() !== claim.circleId || status.kind === "busy"}
+        onClick={() => {
+          setStatus({ kind: "busy", message: "刪除中…" });
+          void deleteMyOverride(claim.circleId)
+            .then(() => {
+              setFields({});
+              setSavedFields({});
+              setRetention(null);
+              setRetentionExpiresAt(null);
+              setHidden(false);
+              setSaved(false);
+              setConfirmText("");
+              setStatus({ kind: "ok", message: "已刪除。公開頁面會在一分鐘內不再顯示這筆內容。" });
+            })
+            .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+        }}
+      >刪除這筆資料</button>
+    </div>}
 
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;

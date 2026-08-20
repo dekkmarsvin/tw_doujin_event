@@ -622,6 +622,80 @@ test("the purge takes the content off the public route, and the etag with it", a
   clock = 1_786_500_000_000;
 });
 
+test("a circle deletes its own contribution, and the same row the purge would have taken", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("selfdelete@example.com");
+  await approve(owner, "ff47-site", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "要刪掉的內容" }, retention: "purge" }, owner), "ff47-site");
+
+  // Not a single button: the confirmation is the circle id echoed back, so a
+  // stale tab cannot delete by being clicked once (ADR-0020).
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", { confirm: true }, owner), "ff47-site")).status, 400);
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", {}, owner), "ff47-site")).status, 400);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides").first()).total, 1, "a refused confirmation must not delete");
+
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", { confirm: "ff47-site" }, owner), "ff47-site")).status, 200);
+
+  // The row is gone, not flagged — the same thing the scheduled purge does, so
+  // "I deleted it" and "its deadline passed" leave no different remains.
+  const rows = await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = ?1").bind("ff47-site").first();
+  assert.equal(rows.total, 0);
+  const published = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.deepEqual((await published.json()).overrides, []);
+
+  // Who did it survives; what they deleted does not.
+  const entry = await database.prepare("SELECT actor_account_id, actor_role, detail_json FROM audit_log WHERE action = 'override.deleted'").first();
+  assert.ok(entry.actor_account_id, "after a transfer the account is the only way to tell who deleted what");
+  assert.equal(entry.actor_role, "circle");
+  assert.doesNotMatch(entry.detail_json, /要刪掉的內容/);
+
+  // Nothing left to delete.
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", { confirm: "ff47-site" }, owner), "ff47-site")).status, 404);
+});
+
+test("deletion needs the ownership chain, and follows it after a transfer", async () => {
+  const admin = await signIn("admin@example.com");
+  const first = await signIn("first-owner@example.com");
+  const firstClaim = await approve(first, "ff47-domain", admin);
+  await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "前任寫的" } }, first), "ff47-domain");
+
+  const stranger = await signIn("delete-stranger@example.com");
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-domain/overrides", { confirm: "ff47-domain" }, stranger), "ff47-domain")).status, 403);
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-domain/overrides", { confirm: "ff47-domain" }), "ff47-domain")).status, 401);
+
+  // Hand the circle over: the content belongs to the circle, not to the
+  // account that typed it, so the new owner can delete what the old one wrote.
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: firstClaim, decision: "revoke" }, admin));
+  const second = await signIn("second-owner@example.com");
+  await approve(second, "ff47-domain", admin);
+
+  assert.equal((await handlers.deleteMyOverride(post("/api/circle/ff47-domain/overrides", { confirm: "ff47-domain" }, second), "ff47-domain")).status, 200);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides").first()).total, 0);
+});
+
+test("self-service deletion and the scheduled purge leave the same nothing behind", async () => {
+  const admin = await signIn("admin@example.com");
+  const byHand = await signIn("by-hand@example.com");
+  const byClock = await signIn("by-clock@example.com");
+  await approve(byHand, "ff47-site", admin);
+  await approve(byClock, "ff47-social", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "自己刪" }, retention: "keep" }, byHand), "ff47-site");
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "等期限" }, retention: "purge" }, byClock), "ff47-social");
+
+  await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", { confirm: "ff47-site" }, byHand), "ff47-site");
+  clock = Date.parse(EVENT_ENDS_AT) + OVERRIDE_RETENTION_PURGE_AFTER_MS + 1000;
+  await purgeExpiredRecords(database, clock);
+
+  // Two routes to the same end state. If they diverged, "I deleted it myself"
+  // and "the deadline came" would leave different remains, and only one of
+  // them would be the one anybody tested.
+  const remaining = await database.prepare("SELECT COUNT(*) AS total FROM circle_overrides").first();
+  assert.equal(remaining.total, 0);
+  const document = await repository.getOverridesDoc("ff47");
+  assert.doesNotMatch(document.json, /自己刪|等期限/, "neither route may leave content inside the published document");
+  clock = 1_786_500_000_000;
+});
+
 test("only a listed admin reaches the review queue", async () => {
   const ordinary = await signIn("ordinary@example.com");
   assert.equal((await handlers.adminListClaims(get("/api/admin/claims", ordinary))).status, 403);
