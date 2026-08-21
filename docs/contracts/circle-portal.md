@@ -8,13 +8,11 @@
 
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
-## 目前不對外開放
+## 公開入口與 preview 邊界
 
-**FF47 期間 `/circle` 在 Cloudflare Access 閘控內，沒有 Bypass。** 本契約描述的行為全部已實作且有測試覆蓋，但沒有任何真實社團可以到達它——決策見 [ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)。
+正式入口是 <https://map.kotoban.top/circle>，不在 Cloudflare Access 內；任何人都能到達登入表單，但 Turnstile、email 一次性連結、session、認領證據與管理者角色仍逐層限制實際操作。隱私告知、保存期限與刪除機制已隨公開入口上線。
 
-因此社團端的功能驗收只能在 preview 環境進行，見[部署 runbook](../runbooks/deployment.md)。
-
-閘控**不留 Bypass**，所以解除的那一刻 `/circle` 與 `/api/auth/*` 同時對外可達，任何人都能索取登入連結並送出 email。隱私告知、保存期限與刪除政策因此**不能晚於解除**，而不只是邀請真實社團前的前置，見 [ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)。
+Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，繼續由 Cloudflare Access 保護。CI 使用 Service Auth token 穿過 Access 後，才執行隔離 preview D1 上的完整流程；人工測試則使用維護者身分登入 Access。production 公開、preview 閘控的決策見 [ADR-0029](../adr/0029-public-production-gated-preview.md)，驗證方式見[部署 runbook](../runbooks/deployment.md#cloudflare-accessproduction-公開preview-閘控)。
 
 ## 入口分離
 

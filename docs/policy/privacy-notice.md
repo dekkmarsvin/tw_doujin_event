@@ -2,6 +2,7 @@
 
 - **最後更新日期：2026-08-21**
 - 適用服務：場刊 Map（開源專案原始碼：<https://github.com/dekkmarsvin/tw_doujin_event>）
+- 正式網站：<https://map.kotoban.top/>
 - 聯絡信箱：
   - 個人資料與著作權爭議：**maintain@kotoban.top**
   - 社團自助控制面的使用問題與認領協助：**circle@kotoban.top**

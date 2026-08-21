@@ -4,7 +4,7 @@
 
 公開閱讀的 reviewed base 是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務。社團自填資料則由公開的 Pages Function overlay 疊加；overlay 無法讀取時仍顯示完整 base。另有一個獨立入口 `/circle` 供參展社團登入並維護補充資料，由 `functions/` 與 D1 承載。publication 與離線邊界見[交付與離線契約](docs/contracts/delivery-and-offline.md)。
 
-**站台目前不對外開放。** FF47 期間全站在 Cloudflare Access 閘控下，社團端也不例外——決策見 [ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)，Zero Trust 的實際設定與驗證方式見[部署 runbook](docs/runbooks/deployment.md#cloudflare-access全站閘控沒有例外路徑)。
+正式公開網站：<https://map.kotoban.top/>。一般閱讀與社團入口皆可公開到達；一般讀者不需登入，社團端仍以 Turnstile、email 一次性連結與應用程式權限保護。Pull request 與不可變 preview deployment 則繼續由 Cloudflare Access 閘控，決策見 [ADR-0029](docs/adr/0029-public-production-gated-preview.md)，實際設定與驗證方式見[部署 runbook](docs/runbooks/deployment.md#cloudflare-accessproduction-公開preview-閘控)。
 
 地圖辨識與細部編輯器是本機 authoring 工具，不是公開 Pages 入口的一部分。
 

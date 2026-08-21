@@ -2,6 +2,14 @@
 
 公開站與社團入口都部署到**同一個** Cloudflare Pages project：`tw-catalog`。
 
+| 用途 | 網址 | Access |
+|---|---|---|
+| 正式公開入口 | <https://map.kotoban.top/> | 無；一般閱讀公開，社團端由應用層驗證 |
+| Pages production origin | <https://tw-catalog.pages.dev/> | 無；可直接存取，但不是文件與 CI 的正式網址 |
+| PR alias／不可變 deployment | `https://pr-<N>.tw-catalog.pages.dev`／`https://<hash>.tw-catalog.pages.dev` | 有；維護者登入或 CI Service Auth |
+
+`map.kotoban.top` 必須在 Pages project 的 **Custom domains** 顯示 Active，並使用 Cloudflare proxy。該 hostname 不啟用 Browser Insights／Web Analytics：專案不使用分析追蹤，既有 CSP 也會阻擋 Cloudflare 注入的 beacon；看到 `static.cloudflareinsights.com` 的 CSP console error 時應關閉 zone 設定，不得為它放寬 `script-src`。
+
 產物邊界與快取策略見[資料傳輸與離線契約](../contracts/delivery-and-offline.md)。為什麼公開閱讀路徑不走 Worker，見 [ADR-0008](../adr/0008-static-public-reading-path.md)；為什麼用 GitHub Actions Direct Upload 而非 Dashboard Git integration，見 [ADR-0009](../adr/0009-single-pages-project-direct-upload.md)。
 
 ## 這個專案需要什麼
@@ -13,7 +21,8 @@
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
 | Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
 | 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker) |
-| R2 / KV / Durable Objects | 不需要 |
+| R2 | **需要**——production `tw-doujin-event-thumbnails`、preview `tw-doujin-event-thumbnails-preview`，由 `THUMBNAILS` binding 提供社團代管縮圖 |
+| KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
 不使用 advanced mode 是硬邊界：它會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker。Pages 自動產生的路由表只涵蓋 `functions/` 下實際存在的路徑，其餘靜態資源仍由邊緣直送。
@@ -117,7 +126,7 @@ Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 prev
 production 的 widget 已建立，sitekey `0x4AAAAAAET9rAWIzjOckkSc`。要換一個時：
 
 1. Cloudflare dashboard → **Turnstile** → Add widget。Turnstile 不需要申請或審核，有帳號就能建。
-2. Hostname 填**正式網域與 `tw-catalog.pages.dev`**。hostname 自動涵蓋子網域，所以後者一條就包含 `pr-*.tw-catalog.pages.dev`；免費方案每個 widget 上限 10 個 hostname。
+2. Hostname 填 `map.kotoban.top` 與 `tw-catalog.pages.dev`。前者是 production 正式入口，後者保留給 Pages origin；preview 使用 dummy widget，不依賴 production hostname 清單。
 3. 模式選 **Managed**。本專案不使用 pre-clearance。
 4. 取得 Site Key 與 Secret Key。**Secret Key 只顯示一次。**
 
@@ -159,7 +168,7 @@ CI 的 E2E 不是瀏覽器：它在 preview 用 dummy 金鑰直接送 token，�
 - 回應標頭只有**一個** `content-security-policy`，且含 `https://challenges.cloudflare.com`：
 
 ```bash
-curl -sI https://tw-catalog.pages.dev/circle | grep -ci '^content-security-policy'
+curl -sI https://map.kotoban.top/circle | grep -ci '^content-security-policy'
 ```
 
 輸出 `1` 才是對的；`2` 代表移除沒生效，元件會被擋。
@@ -172,7 +181,7 @@ curl -sI https://tw-catalog.pages.dev/circle | grep -ci '^content-security-polic
 
 | 觸發 | 行為 |
 |---|---|
-| push 到 `main` | 完整 gate 通過後以 branch `main` 發布到 `tw-catalog`，再 smoke test `tw-catalog.pages.dev` |
+| push 到 `main` | 完整 gate 通過後以 branch `main` 發布到 `tw-catalog`，再匿名 smoke test 正式入口 `map.kotoban.top` |
 | 同 repository 的 pull request | 以 branch `pr-<number>` 發布到**同一個 project**，網址 `pr-<number>.tw-catalog.pages.dev`；不覆蓋 production |
 | fork pull request | **不執行 deploy job**，避免把 Cloudflare token 暴露給外部程式碼 |
 | `workflow_dispatch` | 從 GitHub Actions 頁面手動重跑目前 branch |
@@ -287,49 +296,43 @@ gh secret set CLOUDFLARE_ACCOUNT_ID
 gh secret set CLOUDFLARE_API_TOKEN
 ```
 
-部署以外，CI 還需要 `PREVIEW_E2E_TOKEN` 與一組 Access service token（`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`），後者見 [CI 用 service token 通過 Access](#ci-用-service-token-通過-access)。
+部署以外，CI 還需要 `PREVIEW_E2E_TOKEN` 與一組 Access service token（`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`），後者見 [CI 用 service token 通過 preview Access](#ci-用-service-token-通過-preview-access)。
 
-完成後 push `main`，第一次 workflow 會建立 production deployment。驗證 `tw-catalog.pages.dev` 後，再綁定正式網域。
+完成後 push `main`，第一次 workflow 會建立 production deployment。在 Pages project 的 **Custom domains** 將 `map.kotoban.top` 設為 Active，然後以正式網域完成匿名 smoke；`tw-catalog.pages.dev` 只作為 Pages origin 與故障排查入口。
 
-## Cloudflare Access：全站閘控，沒有例外路徑
+## Cloudflare Access：production 公開，preview 閘控
 
-FF47 期間**全站不公開，含社團端**。決策與理由見 [ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)。
+[ADR-0029](../adr/0029-public-production-gated-preview.md) 的現行邊界是：
 
-Zero Trust 的 application 涵蓋整個 `tw-catalog.pages.dev`（以及日後綁定的正式網域），policy 只放行維護者帳號。**不保留任何 Bypass 路徑。**
+- `map.kotoban.top` 與 `tw-catalog.pages.dev` 不掛 Access application；一般讀者與社團登入表單都可公開到達。
+- `*.tw-catalog.pages.dev` 掛一個 preview Access application。Wildcard 只匹配下一層 hostname，因此涵蓋 `pr-<N>.tw-catalog.pages.dev` 與 `<hash>.tw-catalog.pages.dev`，不涵蓋 `tw-catalog.pages.dev` 本身。
+- `map.kotoban.top` 不得被精確 hostname 或 `*.kotoban.top` 的其他 Access application 涵蓋。若帳號內有較廣規則，必須縮小其 hostname，而不是為正式站加入 Bypass。
 
-早期為了讓社團登入而放行過七條路徑，現在全部移除：
+preview application 不設 Bypass；它同時持有維護者 Allow policy 與 GitHub Actions 的 Service Auth policy。production 的管理 API 仍由 session 與管理者名單保護，不依賴 Access。
 
-| 已移除的 Bypass | 原本用途 |
-|---|---|
-| `/circle`、`/circle.html` | 社團入口頁 |
-| `/assets/*`、`/fonts/*` | 入口頁的 JS／CSS／字型（與閱讀端共用） |
-| `/api/auth/*` | 索取與驗證登入連結、查詢與登出 session |
-| `/api/claims/*` | 送出認領與執行連結驗證 |
-| `/api/circle/*` | 社團搜尋與自己的補充資料讀寫 |
+### 匿名驗證
 
-`/api/admin/*` 從來就沒有放行過；管理操作本來就同時受 Access 與管理者名單兩層保護。
-
-### 移除步驟
-
-1. Zero Trust → **Access → Applications**，開啟涵蓋 Pages 網域的 application。
-2. 刪除上表列出的每一條 Bypass policy。保留放行維護者帳號的 Allow policy。
-3. 確認 application 的 domain 涵蓋 `*.tw-catalog.pages.dev`——preview deployment 也在閘控內。
-
-### 驗證
-
-以**未登入的瀏覽器**（或無痕視窗）實測，三個路徑都必須落在 Access 登入頁而不是站台內容：
+production 不帶任何 Access header：
 
 ```bash
-for path in / /circle /api/auth/session; do curl -s -o /dev/null -w "$path %{http_code} %{redirect_url}\n" "https://tw-catalog.pages.dev$path"; done
+for path in / /circle /privacy/; do curl -s -o /dev/null -w "$path %{http_code}\n" "https://map.kotoban.top$path"; done
+curl -s -o /dev/null -w "/api/auth/session %{http_code}\n" https://map.kotoban.top/api/auth/session
 ```
 
-三者都應導向 `*.cloudflareaccess.com`。任何一個回傳站台自己的內容，代表還有 Bypass 沒清掉。再以維護者帳號確認全站可達。
+前三個路徑必須是 `200`，未登入 session 必須是應用程式自己的 `401`，不得導向 `*.cloudflareaccess.com`。
 
-社團端的功能驗收因此只能在 preview 環境進行，見[社團自助控制面契約](../contracts/circle-portal.md)。
+preview 不帶 header：
 
-### CI 用 service token 通過 Access
+```bash
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://pr-<N>.tw-catalog.pages.dev/
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://<hash>.tw-catalog.pages.dev/
+```
 
-閘控涵蓋 `*.tw-catalog.pages.dev`，preview deployment 也在內。GitHub Actions 不是瀏覽器，走不完 identity 登入流程，所以它以 **Access service token** 認證：CI 對站台的每一個請求都帶上兩個 header。
+兩者都必須 `302` 到 `*.cloudflareaccess.com`。PR alias 與該次 deployment hash 都要測；只測 alias 無法證明不可變 URL 沒有繞過 Access。
+
+### CI 用 service token 通過 preview Access
+
+GitHub Actions 不是瀏覽器，走不完 identity 登入流程，所以 preview smoke 與 portal E2E 以 **Access service token** 認證；production smoke 不得帶這組 header。
 
 ```
 CF-Access-Client-Id: <CLIENT_ID>
@@ -339,7 +342,7 @@ CF-Access-Client-Secret: <CLIENT_SECRET>
 兩邊都要設定才會生效：
 
 1. Zero Trust → **Access → Service credentials → Service Tokens** 建立 token（本專案為 `tw-catalog - action`）。Client Secret 只顯示一次。
-2. 在涵蓋 `*.tw-catalog.pages.dev` 的 application 上新增一條 policy，**action 必須是 Service Auth**：
+2. 在涵蓋 `*.tw-catalog.pages.dev` 的 preview application 上新增一條 policy，**action 必須是 Service Auth**：
 
    | Action | Rule type | Selector | Value |
    |---|---|---|---|
@@ -349,11 +352,11 @@ CF-Access-Client-Secret: <CLIENT_SECRET>
 
 3. 以 `gh secret set CF_ACCESS_CLIENT_ID` 與 `gh secret set CF_ACCESS_CLIENT_SECRET` 設定 GitHub Actions secrets。
 
-deploy job 的兩個 smoke test 與 `scripts/preview-portal-e2e.mjs` 都會帶這組 header；缺任一個 secret 時 job 直接失敗，不會靜默地量到登入頁。
+PR deploy job 的 preview smoke 與 `scripts/preview-portal-e2e.mjs` 都會帶這組 header；缺任一個 secret 時 preview job 直接失敗。production job 不讀這兩個 secret。
 
-**沒有 header 的 CI 會量錯東西。** Access 對未認證請求回 302 到 `*.cloudflareaccess.com`，不是 4xx；`curl --fail` 不會因此失敗，所以「靜態資源 smoke test 通過」也可能只是通過了登入頁。兩個 smoke test 因此改為斷言明確的狀態碼（`/` 要 200、`/api/auth/session` 要 401），並把 301／302 當成 service token 被拒絕來報錯。
+preview 若只看 `curl --fail` 會量錯東西：Access 對未認證請求回 302 而不是 4xx。CI 因此先斷言匿名請求確實導向 Access，再帶 service token 斷言 `/` 是 200、`/api/auth/session` 是應用程式自己的 401。production 則全程匿名斷言同一組狀態碼。
 
-token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI 報 `redirected to the Access login page`。錯誤訊息會附上 Access 在登入導向裡宣告的 `service_token_status`，用來分辨兩者：
+token 過期或被撤銷、或 policy 被改成 Allow 時，CI 會報 `Service token was redirected by Access`。錯誤訊息會附上 Access 在登入導向裡宣告的 `service_token_status`，用來分辨兩者：
 
 - `false`：Access 根本不認得這組憑證——secret 值錯誤、混入空白或換行、或 token 已被撤銷。重設 GitHub secrets。
 - `true`：token 有效，但沒有任何 Service Auth policy 放行它。回頭檢查 policy 的 action 與 include。
