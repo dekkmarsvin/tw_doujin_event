@@ -1,0 +1,26 @@
+name: 文件問題
+description: 回報文件不一致、缺漏或難以操作之處
+title: "[Docs] "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: 文件位置
+      placeholder: docs/contracts/... 或頁面連結
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題
+      description: 說明哪一段與實作矛盾、缺少必要步驟，或會讓讀者誤解。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 實作或其他權威依據
+      description: 若是矛盾，請連到目前程式、contract、ADR 或可重現結果。
+    validations:
+      required: true

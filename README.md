@@ -28,6 +28,8 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 
 完整說明見[本機開發與驗證](docs/runbooks/local-development.md)。
 
+要回報問題或送出改動，請先閱讀[貢獻指南](CONTRIBUTING.md)與[行為準則](CODE_OF_CONDUCT.md)。
+
 ## 文件
 
 | 想知道 | 去哪裡 |
@@ -37,6 +39,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 | 這個詞在本專案是什麼意思 | [CONTEXT.md](CONTEXT.md) |
 | 各模組現在的行為與驗收條件 | [docs/contracts/](docs/contracts) |
 | 怎麼更新資料、發布地圖、部署 | [docs/runbooks/](docs/runbooks) |
+| 怎麼回報問題與貢獻程式碼 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 為什麼當初這樣決定 | [docs/adr/](docs/adr) |
 
 完整索引見 [docs/README.md](docs/README.md)。

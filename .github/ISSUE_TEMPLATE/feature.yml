@@ -1,0 +1,52 @@
+name: 功能提案
+description: 說明使用者問題與可驗收的改善方向
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解決的使用者問題
+      description: 誰在什麼情境下無法完成什麼事？
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望結果
+      description: 描述可觀察的結果，不必先指定技術方案。
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 主要範圍
+      options:
+        - 公開閱讀端
+        - 社團自助控制面
+        - 本機 authoring
+        - 資料與發布流程
+        - 文件或貢獻流程
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 已知契約或限制
+      description: 若提案會碰到既有 contract、ADR、資料來源或隱私邊界，請附連結。
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 驗收方式
+      description: 哪些結果成立時可以關閉這個 issue？
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 送出前確認
+      options:
+        - label: 我已搜尋過現有 issues 與 PRODUCT.md。
+          required: true
+        - label: 提案沒有新增主辦官網與社團本人以外的資料來源。
+          required: true
