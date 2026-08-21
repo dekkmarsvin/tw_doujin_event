@@ -86,6 +86,8 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
     .map((path) => readFile(new URL(`../dist${path}`, import.meta.url), "utf8")))).join("\n");
   // Quoting is the minifier's choice, so match either form.
   assert.match(portalJs, /["'`]\/privacy["'`]/, "the sign-in card must link to the notice");
+  assert.match(portalJs, /代表圖網址限使用以下圖片主機/, "the portal must explain the supported image hosts");
+  assert.doesNotMatch(portalJs, /IP 暴露/, "the portal must not turn ordinary image loading into an IP-exposure warning");
   assert.doesNotMatch(await readFile(new URL("../dist/sw.js", import.meta.url), "utf8"), /privacy/);
   assert.match(await readFile(new URL("../dist/fonts/geist.css", import.meta.url), "utf8"), /font-family: "Geist"/);
 });

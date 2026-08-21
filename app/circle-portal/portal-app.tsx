@@ -491,8 +491,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
 
     <h3 className={styles.editorSection}>代表圖</h3>
     <p className={styles.editorHint}>
-      圖片由參觀者的瀏覽器直接載入，因此只接受下列主機：{THUMBNAIL_HOST_ALLOWLIST.join("、")}。
-      這是內容安全限制——任意主機會讓每一位讀者的 IP 暴露給該站。
+      代表圖網址限使用以下圖片主機：{THUMBNAIL_HOST_ALLOWLIST.join("、")}。
     </p>
     <FieldModeControls mode={modeFor("thumbnail")} label="代表圖" onInherit={() => inheritField("thumbnail")} onClear={() => clearField("thumbnail")} />
 

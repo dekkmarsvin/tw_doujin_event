@@ -204,7 +204,7 @@ export function buildPrivacyPage(markdown) {
     <main>
 ${body}
     </main>
-    <footer>最後更新：${updated}．本頁由 docs/policy/privacy-notice.md 於建置時產生，兩者不會分歧。</footer>
+    <footer>最後更新：${updated}</footer>
   </body>
 </html>
 `;

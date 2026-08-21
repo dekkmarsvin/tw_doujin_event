@@ -59,6 +59,18 @@ test("carries both contact mailboxes, since the notice is where they reach a per
   assert.ok(page.includes("circle@kotoban.top"));
 });
 
+test("uses minimum-necessary disclosure without defensive disclaimers or build provenance", () => {
+  for (const phrase of [
+    "未經法律專業人士審閱",
+    "非正式法律意見",
+    "無法保證絕對的資安防護水準",
+    "IP 暴露",
+    "docs/policy/privacy-notice.md 於建置時產生",
+  ]) {
+    assert.ok(!page.includes(phrase), `the published notice must not include ${JSON.stringify(phrase)}`);
+  }
+});
+
 test("claims no research-use exception, because no terms grant one", () => {
   // Removed in #11 and not to reappear in any user-facing surface until there
   // are terms behind it (#30).
@@ -85,5 +97,4 @@ test("renders the constructs the notice uses, and marks up rather than swallows 
   assert.equal(renderInline("`**not bold**`"), "<code>**not bold**</code>");
   assert.equal(renderInline("<script>"), "&lt;script&gt;");
   assert.ok(page.includes("<table>"), "the retention tables have to render as tables");
-  assert.ok(page.includes("<blockquote>"), "the not-legal-advice notice is a blockquote");
 });

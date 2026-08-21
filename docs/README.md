@@ -67,15 +67,16 @@
 | [0020](./adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md) | 自助刪除沿用既有的擁有權鏈，不另發編輯連結 |
 | [0021](./adr/0021-credentials-expire-and-are-purged-records-are-kept.md) | 憑證到期就清掉，紀錄類保留不設期限 |
 | [0022](./adr/0022-expiry-runs-in-a-separate-cron-worker.md) | 清除跑在獨立的排程 Worker，不掛在使用者請求上 |
-| [0023](./adr/0023-the-privacy-notice-ships-without-professional-review.md) | 隱私告知自行撰寫、隨 repo 版控，不送專業審閱 |
+| [0023](./adr/0023-the-privacy-notice-ships-without-professional-review.md) | 隱私告知自行撰寫、隨 repo 版控，不送專業審閱（**揭露方式已被 0024 部分取代**） |
+| [0024](./adr/0024-user-facing-copy-uses-minimum-necessary-disclosure.md) | 對外文案採最少必要揭露 |
 
 ## 對外文件
 
-使用者看得到的承諾。**描述的必須是實際行為**，行為改了就在同一個 commit 改它；git 版本歷史即為變更史（[ADR-0023](./adr/0023-the-privacy-notice-ships-without-professional-review.md)）。
+使用者看得到的承諾。**描述的必須是實際行為**，行為改了就在同一個 commit 更新。
 
 | 文件 | 涵蓋 |
 |---|---|
-| [隱私權與資料使用告知](./policy/privacy-notice.md) | 蒐集哪些資料、目的、保留期限、查詢與刪除、聯絡窗口（**草案，尚未公開**） |
+| [隱私權與資料使用告知](./policy/privacy-notice.md) | 蒐集哪些資料、目的、保留期限、查詢與刪除、聯絡窗口（**已上線**） |
 
 ## 研究
 
