@@ -136,7 +136,7 @@ test("recognizes canonical planning identities and uses the event data version f
   assert.equal(catalog.circlesById.get(record.circle.id), record.circle);
   assert.equal(records.isKnownCircleId(record.circle.id), true);
   assert.equal(new Set(record.sources.map((source) => source.fetchedAt)).size, 1);
-  assert.equal(record.sources[0].fetchedAt, events.FF47_EVENT.dataUpdatedAt);
+  assert.equal(record.sources[0].fetchedAt, events.ACTIVE_EVENT.dataUpdatedAt);
 });
 
 test("no circle is named by a pasted url, and D09 stays one circle across days", () => {

@@ -12,7 +12,7 @@ import { diffOfficialSnapshots, indexOfficialBooths, parseOfficialBoothTable } f
 
 /**
  * The reading side already links to these pages through
- * `FF47_OFFICIAL_BOOTH_LIST_URLS` in `app/event-catalog.ts`; scripts cannot
+ * the organizer URLs in `data/events/ff47/event.json`; scripts cannot
  * import TypeScript, so the URLs are repeated here. Changing one means
  * changing both.
  */

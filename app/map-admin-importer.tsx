@@ -5,7 +5,9 @@ import { publishEventMap } from "./event-map-client";
 import EventMapRenderer from "./event-map-renderer";
 import MapLayoutEditor from "./map-layout-editor";
 import { LANDMARK_RECOGNITION_WARNING, recognizeFF47Map } from "./map-recognition";
-import { scaleMapLandmarks, validateFF47EventMapLayout, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
+import { scaleMapLandmarks, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
+import { getEventDefinition } from "./event-catalog";
+import { validateMapTemplateLayout } from "./map-template-registry";
 import { UiIcon } from "./ui-icons";
 import { useModalFocus } from "./use-modal-focus";
 import styles from "./map-admin-importer.module.css";
@@ -102,7 +104,8 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
   };
 
   const currentDiagnostics = report ? diagnostics(report.layout) : null;
-  const layoutValidation = report ? validateFF47EventMapLayout(report.layout) : null;
+  const eventDefinition = getEventDefinition(eventId);
+  const layoutValidation = report ? validateMapTemplateLayout(eventDefinition?.mapTemplate ?? report.layout.template, report.layout) : null;
   const canPublish = !!report && report.confidence >= .85 && !!layoutValidation?.ok;
   const visibleWarnings = [...new Set([...(report?.warnings ?? []), ...(layoutValidation && !layoutValidation.ok ? layoutValidation.errors : [])])];
 

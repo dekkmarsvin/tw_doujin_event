@@ -14,7 +14,7 @@ import {
 import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
-import { FF47_ENDS_AT, FF47_EVENT } from "../event-catalog";
+import { ACTIVE_EVENT } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
 import styles from "./portal.module.css";
 
@@ -102,7 +102,7 @@ export default function CirclePortalApp() {
       <div>
         <small>CIRCLE PORTAL</small>
         <h1>社團資料維護</h1>
-        <p>{FF47_EVENT.name}・{FF47_EVENT.dateRangeLabel}</p>
+        <p>{ACTIVE_EVENT.name}・{ACTIVE_EVENT.dateRangeLabel}</p>
       </div>
       {session && <div className={styles.identity}>
         {/* Shows which identity the server resolved, so a mismatch against
@@ -351,7 +351,7 @@ function deletionSummary(fields: CircleOverrideFields) {
 
 /** The deadline is a pure function of the event's end, so the portal can show a
  * date the moment the circle picks the option, before anything is saved. */
-const EVENT_END_MS = Date.parse(FF47_ENDS_AT);
+const EVENT_END_MS = Date.parse(ACTIVE_EVENT.eventEndsAt);
 const RETENTION_DATE = new Intl.DateTimeFormat("zh-Hant", { dateStyle: "long", timeZone: "Asia/Taipei" });
 
 function CircleEditor({ claim }: { claim: ClaimSummary }) {

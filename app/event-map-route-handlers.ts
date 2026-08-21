@@ -1,4 +1,6 @@
-import { FF47_EVENT_ID, validateEventMapLayout, validateFF47EventMapLayout, type EventMapLayout } from "./event-map";
+import { validateEventMapLayout, type EventMapLayout } from "./event-map";
+import { getEventDefinition } from "./event-catalog";
+import { validateMapTemplateLayout } from "./map-template-registry";
 import type { EventMapRepository } from "../db/event-map-repository";
 
 type RouteContext = { params: Promise<{ eventId: string }> };
@@ -35,7 +37,8 @@ export function createEventMapHandlers(repository: Pick<EventMapRepository, "get
       const sourceName = payload.sourceName?.trim() ?? "";
       if (!sourceName) return Response.json({ error: "sourceName 是必填欄位。" }, { status: 400 });
       if (typeof payload.confidence !== "number" || payload.confidence < .85 || payload.confidence > 1) return Response.json({ error: "辨識信心必須介於 0.85 與 1 之間。" }, { status: 400 });
-      const validation = eventId === FF47_EVENT_ID ? validateFF47EventMapLayout(payload.layout) : validateEventMapLayout(payload.layout);
+      const event = getEventDefinition(eventId);
+      const validation = event ? validateMapTemplateLayout(event.mapTemplate, payload.layout) : validateEventMapLayout(payload.layout);
       if (!validation.ok) return Response.json({ error: "地圖資料驗證失敗。", details: validation.errors }, { status: 400 });
       const map = await repository.publishEventMap({ eventId, sourceName, confidence: payload.confidence, layout: payload.layout as EventMapLayout });
       return Response.json({ map });

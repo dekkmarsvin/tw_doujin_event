@@ -101,8 +101,8 @@ test("separates the public static app from the retained editor implementation", 
   const globalStyles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const pagesEntry = await readFile(new URL("../main.tsx", import.meta.url), "utf8");
   const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
-  assert.match(app, /loadStaticEventMap\(FF47_EVENT_ID\)/);
-  assert.match(app, /<AccessibleEventMapRenderer eventName=\{FF47_EVENT\.name\} layout=\{publishedMap\.layout\}/);
+  assert.match(app, /loadStaticEventMap\(ACTIVE_EVENT_ID\)/);
+  assert.match(app, /<AccessibleEventMapRenderer eventName=\{ACTIVE_EVENT\.name\} layout=\{publishedMap\.layout\}/);
   assert.match(app, /showFullDetail/);
   assert.match(app, /fullDetailsPanel/);
   assert.match(app, /導航模式/);
@@ -171,7 +171,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(eventCatalog, /parseEventDefinition\(ff47Definition\)/);
   assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/1"/);
   assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
-  assert.match(editorPage, /loadPublishedEventMap\(FF47_EVENT_ID\)/);
+  assert.match(editorPage, /loadPublishedEventMap\(ACTIVE_EVENT_ID\)/);
   assert.match(editorPage, /<MapAdminImporter/);
   assert.doesNotMatch(app, /className=\{styles\.mapMeta\}/);
   assert.doesNotMatch(app, /publishedMap && <div className=\{styles\.layoutStatus\}/);
@@ -214,7 +214,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(catalogClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/circles\.json`/);
   assert.match(catalogClient, /isCircleCatalogPayload/);
   assert.doesNotMatch(catalogClient, /\/api\/|method: "PUT"/);
-  assert.match(app, /useCircleCatalog\(FF47_EVENT_ID\)/);
+  assert.match(app, /useCircleCatalog\(ACTIVE_EVENT_ID\)/);
   assert.doesNotMatch(app, /from "\.\/ff47-booths"|from "\.\/ff47-circle-templates"/);
   assert.match(catalogStore, /export function buildCircleCatalog/);
   assert.doesNotMatch(catalogStore, /ff47-booths|generated\.json/);

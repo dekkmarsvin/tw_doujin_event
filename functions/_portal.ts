@@ -2,7 +2,7 @@ import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandler
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
-import { FF47_ENDS_AT, FF47_EVENT } from "../app/event-catalog";
+import { ACTIVE_EVENT } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 
 /**
@@ -235,7 +235,7 @@ export function previewE2eAuthorized(env: PortalEnv, request: Request) {
 
 export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
   const { request, env } = context;
-  const eventId = FF47_EVENT.id;
+  const eventId = ACTIVE_EVENT.id;
   const repository = repositoryFor(env);
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
@@ -243,7 +243,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     put: async (key, value, contentType) => {
       await env.THUMBNAILS.put(key, value, {
         httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
-        customMetadata: { event: FF47_EVENT.id },
+        customMetadata: { event: ACTIVE_EVENT.id },
       });
     },
     delete: (keys) => env.THUMBNAILS.delete(keys),
@@ -287,7 +287,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       const projected = buildCircleCatalog(payload, {
         schema: CIRCLE_OVERRIDES_SCHEMA,
         eventId,
-        generatedAt: FF47_EVENT.dataUpdatedAt,
+        generatedAt: ACTIVE_EVENT.dataUpdatedAt,
         revision: 0,
         overrides: [{ circleId, updatedAt: new Date().toISOString(), fields }],
       });
@@ -303,8 +303,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       sessionSecret: requireSecret(env, "SESSION_SECRET"),
       hashPepper: requireSecret(env, "HASH_PEPPER"),
       adminEmails: bootstrapAdmins(env),
-      dataUpdatedAt: FF47_EVENT.dataUpdatedAt,
-      eventEndsAt: FF47_ENDS_AT,
+      dataUpdatedAt: ACTIVE_EVENT.dataUpdatedAt,
+      eventEndsAt: ACTIVE_EVENT.eventEndsAt,
       now: () => Date.now(),
     },
   });

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { loadPublishedEventMap } from "./event-map-client";
-import { FF47_EVENT_ID, type PublishedEventMap } from "./event-map";
+import type { PublishedEventMap } from "./event-map";
+import { ACTIVE_EVENT_ID } from "./event-catalog";
 import MapAdminImporter from "./map-admin-importer";
 
 export default function EditorPage() {
@@ -13,7 +14,7 @@ export default function EditorPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadPublishedEventMap(FF47_EVENT_ID)
+    void loadPublishedEventMap(ACTIVE_EVENT_ID)
       .then((map) => { if (!cancelled) setPublishedMap(map); })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "讀取活動地圖失敗。"); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -26,7 +27,7 @@ export default function EditorPage() {
   return <main>
     {error && <p role="alert">{error}</p>}
     <MapAdminImporter
-      eventId={FF47_EVENT_ID}
+      eventId={ACTIVE_EVENT_ID}
       initialMap={publishedMap}
       onPublished={(map) => { setPublishedMap(map); setError(""); }}
       onClose={() => setOpen(false)}

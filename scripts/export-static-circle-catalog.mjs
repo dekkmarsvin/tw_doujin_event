@@ -24,7 +24,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR environmen
 try {
   const { BOOTHS } = await environment.runner.import("/app/ff47-booths.ts");
   const { FF47_OFFICIAL_SUPPLEMENT_KEYS } = await environment.runner.import("/app/ff47-official-booths.ts");
-  const { FF47_EVENT } = await environment.runner.import("/app/event-catalog.ts");
+  const { ACTIVE_EVENT } = await environment.runner.import("/app/event-catalog.ts");
   const templates = JSON.parse(await readFile(templatesPath, "utf8"));
 
   if (!Array.isArray(BOOTHS) || BOOTHS.length === 0) throw new Error("The reviewed booth source is empty.");
@@ -32,8 +32,8 @@ try {
 
   const payload = {
     schema: "circle-catalog/2",
-    eventId: FF47_EVENT.id,
-    generatedAt: FF47_EVENT.dataUpdatedAt,
+    eventId: ACTIVE_EVENT.id,
+    generatedAt: ACTIVE_EVENT.dataUpdatedAt,
     officialSupplementKeys: FF47_OFFICIAL_SUPPLEMENT_KEYS,
     booths: BOOTHS,
     templates,

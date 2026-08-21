@@ -6,8 +6,8 @@ import {
   type MapAccessPoint,
   type MapPillar,
   type MapRecognitionReport,
-  validateFF47EventMapLayout,
 } from "./event-map";
+import { validateLayout } from "./ff47-map-template-validator";
 
 export type PixelSource = { data: Uint8ClampedArray; width: number; height: number };
 
@@ -341,7 +341,7 @@ export function recognizeFF47Map(source: PixelSource): MapRecognitionReport {
   if (accessPoints.length !== 5) warnings.push(`辨識到 ${accessPoints.length} 個出入口，預期為 5。`);
   if (!layout.landmarks.length) warnings.push(LANDMARK_RECOGNITION_WARNING);
 
-  const validation = validateFF47EventMapLayout(layout);
+  const validation = validateLayout(layout);
   if (!validation.ok) warnings.push(...validation.errors);
   const rowCoverage = Math.min(1, rows.length / 23);
   const slotCoverage = Math.min(1, slotCount / 988);

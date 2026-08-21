@@ -14,7 +14,7 @@ export type Booth = {
   genre: string;
   tags: string[];
   day: string | number;
-  hall: "A" | "B";
+  hall: string;
   x: number;
   y: number;
   tone: Tone;

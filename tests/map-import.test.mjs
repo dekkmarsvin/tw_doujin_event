@@ -7,7 +7,8 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
-const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout, validateFF47EventMapLayout } = await environment.runner.import("/app/event-map.ts");
+const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
+const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { resizeRectFromCorner, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 after(() => vite.close());
 
@@ -15,7 +16,7 @@ test("validates the exported FF47 Pages snapshot", async () => {
   const snapshot = JSON.parse(await readFile(new URL("../public/data/events/ff47/map.json", import.meta.url), "utf8"));
   assert.equal(snapshot.eventId, "ff47");
   assert.ok(Number.isSafeInteger(snapshot.revision) && snapshot.revision > 0);
-  assert.equal(validateFF47EventMapLayout(snapshot.layout).ok, true);
+  assert.equal(validateFf47Layout(snapshot.layout).ok, true);
 });
 
 function syntheticFF47Image() {
@@ -55,7 +56,7 @@ test("recognizes A-W with horizontal W, pillars, and access points", () => {
   const report = recognizeFF47Map(syntheticFF47Image());
   assert.deepEqual(report.diagnostics, { rowCount: 23, slotCount: 988, pillarCount: 28, accessPointCount: 5 });
   assert.equal(validateEventMapLayout(report.layout).ok, true);
-  assert.equal(validateFF47EventMapLayout(report.layout).ok, true);
+  assert.equal(validateFf47Layout(report.layout).ok, true);
   const rows = Object.fromEntries(report.layout.rows.map((row) => [row.label, row]));
   assert.equal(rows.A.orientation, "vertical");
   assert.equal(rows.A.slots.length, 22);
@@ -72,7 +73,7 @@ test("recognizes A-W with horizontal W, pillars, and access points", () => {
 test("accepts a generic future event layout without FF47-specific counts", () => {
   const layout = { version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 100, floor: { x: 0, y: 0, width: 100, height: 100 }, rows: [{ label: "創作區", orientation: "horizontal", confidence: 1, slots: [{ code: "創01", rect: { x: 10, y: 10, width: 10, height: 10 } }] }], pillars: [], accessPoints: [], landmarks: [] };
   assert.equal(validateEventMapLayout(layout).ok, true);
-  assert.equal(validateFF47EventMapLayout(layout).ok, false);
+  assert.equal(validateFf47Layout(layout).ok, false);
 });
 
 test("rejects malformed or duplicate non-booth landmarks", () => {

@@ -1,4 +1,4 @@
-import { FF47_EVENT, FF47_OFFICIAL_BOOTH_LIST_URLS, FF47_OFFICIAL_EVENT_URL } from "./event-catalog";
+import { ACTIVE_EVENT } from "./event-catalog";
 import { indexCircleOverrides } from "./circle-overrides";
 import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
 import type { Booth, Tone } from "./booth";
@@ -40,7 +40,7 @@ export type CircleTemplate = {
   sourceRow: number;
   name: string;
   pen?: string;
-  placements: Record<"1" | "2" | "3", string[]>;
+  placements: Record<string, string[]>;
   creatorTypes: string[];
   ageRatings: string[];
   workTypes: string[];
@@ -126,7 +126,7 @@ const CATALOG_SOURCE = {
     contentType: "catalog",
     label: "FF47 社團公開整理資料",
     url: "https://www.facebook.com/JapariWeatherBureau/",
-    fetchedAt: FF47_EVENT.dataUpdatedAt,
+    fetchedAt: ACTIVE_EVENT.dataUpdatedAt,
     status: "linked",
 } as const satisfies SourceLink;
 
@@ -135,8 +135,8 @@ function buildOfficialSource(day?: Booth["day"]): SourceLink {
     provider: "開拓動漫",
     contentType: "official",
     label: day ? `FF47 第 ${day} 天攤位清單` : "FF47 活動與攤位配置",
-    url: day ? FF47_OFFICIAL_BOOTH_LIST_URLS[day] : FF47_OFFICIAL_EVENT_URL,
-    fetchedAt: FF47_EVENT.dataUpdatedAt,
+    url: day ? ACTIVE_EVENT.organizer.boothListUrls[day] : ACTIVE_EVENT.organizer.eventUrl,
+    fetchedAt: ACTIVE_EVENT.dataUpdatedAt,
     status: "linked",
   };
 }
@@ -214,7 +214,7 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
       alt: `${name} 社團縮圖`,
     }] : [],
     externalLinks: (fields?.links ?? template?.links)?.map((link) => ({ ...link })) ?? [],
-    updatedAt: override?.updatedAt ?? FF47_EVENT.dataUpdatedAt,
+    updatedAt: override?.updatedAt ?? ACTIVE_EVENT.dataUpdatedAt,
     sources: [...cloneSources(), ...(override ? [circleSelfSource(override)] : [])],
   };
 }

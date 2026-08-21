@@ -84,17 +84,20 @@ export function parseEventDefinition(value: unknown): EventDefinition {
   };
 }
 
-export const ACTIVE_EVENT = parseEventDefinition(ff47Definition);
+const EVENT_DEFINITIONS = [parseEventDefinition(ff47Definition)] as const;
 
-/** Migration aliases. New shared code uses EventDefinition/ACTIVE_EVENT; these
- * stay until the remaining FF47-named callers are migrated under issue #35. */
-export const FF47_EVENT = ACTIVE_EVENT;
-export const FF47_DATA_UPDATED_AT = ACTIVE_EVENT.dataUpdatedAt;
-export const FF47_ENDS_AT = ACTIVE_EVENT.eventEndsAt;
-export const FF47_OFFICIAL_BOOTH_LIST_URLS = ACTIVE_EVENT.organizer.boothListUrls;
-export const FF47_OFFICIAL_EVENT_URL = ACTIVE_EVENT.organizer.eventUrl;
-export type FF47Day = EventDayDefinition["id"];
-export type FF47Area = EventAreaDefinition["id"];
+/** The registry is the only shared-code list that changes when an event is
+ * added. Existing event definitions and organizer adapters remain untouched. */
+export const EVENT_REGISTRY: ReadonlyMap<string, EventDefinition> = new Map(
+  EVENT_DEFINITIONS.map((event) => [event.id, event]),
+);
+
+export function getEventDefinition(eventId: string) {
+  return EVENT_REGISTRY.get(eventId) ?? null;
+}
+
+export const ACTIVE_EVENT = EVENT_DEFINITIONS[0];
+export const ACTIVE_EVENT_ID = ACTIVE_EVENT.id;
 
 export function eventUsesAreaSwitcher(event: EventDefinition) {
   return event.areaMode === "switchable" && event.areas.length > 1;
