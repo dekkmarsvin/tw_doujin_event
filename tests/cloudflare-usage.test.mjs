@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildUsageReport, classifyOperations, emptyHistory, parseR2Analytics, upsertUsageDay } from "../scripts/cloudflare-usage-core.mjs";
 
 const classes = { classA: ["PutObject"], classB: ["GetObject"], free: ["DeleteObject"] };
+const productionConfig = JSON.parse(readFileSync(new URL("../monitoring/cloudflare-usage.config.json", import.meta.url), "utf8"));
 const resource = { id: "r2:production", kind: "r2", environment: "production", bucketName: "production-bucket" };
 const config = { resources: [resource], operationClasses: classes };
 
@@ -35,6 +37,15 @@ test("operation classes count potentially billable failures, exempt 401, and pre
   ], classes);
   assert.deepEqual(result.totals, { all: 14, classA: 4, classB: 2, free: 0, unknown: 3, failed: 7 });
   assert.equal(result.status, "ok");
+});
+
+test("observed read-only bucket configuration actions are conservatively Class B", () => {
+  const result = classifyOperations([
+    { dimensions: { actionType: "GetBucketNotificationConfiguration", actionStatus: "success", responseStatusCode: 200 }, sum: { requests: 2 } },
+    { dimensions: { actionType: "GetBucketSippyConfiguration", actionStatus: "success", responseStatusCode: 200 }, sum: { requests: 3 } },
+  ], productionConfig.operationClasses);
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.totals, { all: 5, classA: 0, classB: 5, free: 0, unknown: 0, failed: 0 });
 });
 
 test("missing metrics are marked delayed and malformed groups expose schema drift", () => {

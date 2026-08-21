@@ -7,6 +7,7 @@
 - `r2StorageAdaptiveGroups`：物件數、upload count、payload bytes、metadata bytes。
 - `r2OperationsAdaptiveGroups`：依 action、action status、HTTP status 彙整 requests。
 - 所有可能計費的 action 都進 Class A／B 趨勢估算，失敗請求另以 `failed` 診斷量保留；只有 Cloudflare pricing 明確列為不收費的未授權 HTTP 401 排除。這是趨勢估算，不是帳單明細。
+- `GetBucketNotificationConfiguration` 與 `GetBucketSippyConfiguration` 是實測出現、但官方 pricing 表未分類的唯讀 action；為避免低估，依維護者決策保守納入 Class B。
 - 未知的成功 action 不會被猜測分類；報表列出名稱並讓排程失敗，提醒依 Cloudflare 最新 pricing 文件更新 `monitoring/cloudflare-usage.config.json`。
 - storage 缺列、GraphQL error 或 response schema 改變都保存明確狀態並使 job 失敗。storage 已有當日列而 operations 沒有任何 group 時視為零次操作；兩個 dataset 都沒有資料才標示延遲。
 
