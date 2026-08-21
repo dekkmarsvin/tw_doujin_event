@@ -28,7 +28,7 @@
 | [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
 | [資料匯入](./contracts/data-import.md) | **P2，尚未實作**。身分比對、預覽、CSV v1、外部服務串接 |
-| [資料 inventory](./contracts/data-inventory.md) | 實際持有的資料、欄位、有效期與第三方；保存期限與處置**待決**（#30） |
+| [資料 inventory](./contracts/data-inventory.md) | 實際持有的資料、欄位、有效期與第三方；保存期限、到期處置與清除機制 |
 
 ## 流程
 
