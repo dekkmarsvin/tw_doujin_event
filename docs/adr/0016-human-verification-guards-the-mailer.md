@@ -1,6 +1,6 @@
 # ADR-0016：真人驗證擋在寄信入口，不擋全站
 
-- 狀態：已定案（2026-08-18）
+- 狀態：已定案（2026-08-18）；「全站入口維持 Access」部分已由 [ADR-0029](./0029-public-production-gated-preview.md) 取代，寄信入口的 Turnstile 決策不變
 - 延續：[ADR-0011](./0011-ff47-is-not-a-public-launch.md)、[ADR-0015](./0015-access-lifts-when-no-third-party-bytes-remain.md)
 - 相關契約：[社團自助控制面](../contracts/circle-portal.md#索取登入連結需要通過真人驗證)、[資料傳輸與離線](../contracts/delivery-and-offline.md#快取標頭)
 - 相關流程：[部署](../runbooks/deployment.md#真人驗證turnstile)

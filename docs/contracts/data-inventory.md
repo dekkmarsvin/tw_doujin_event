@@ -9,7 +9,7 @@
 
 ## 三件要先知道的事
 
-1. **目前沒有任何真實個人資料。** FF47 期間全站在 Access 閘控內、含社團端（[ADR-0011](../adr/0011-ff47-is-not-a-public-launch.md)），沒有真實社團到得了 `/circle`。這份 inventory 描述的是**閘控解除當天就會開始累積**的東西。
+1. **production 已公開並可能持有真實個人資料。** 正式入口 <https://map.kotoban.top/circle> 可公開到達；本 inventory 描述的是現行 production 實際可能累積的資料，不得再以過去的 Access 閘控假設資料庫為空。preview 仍受 Access 保護且使用隔離資源（[ADR-0029](../adr/0029-public-production-gated-preview.md)）。
 2. **有效期不等於保存期。** 下表的 TTL 常數決定的是「這筆還算不算數」，保存期決定的是「這一列還在不在」。兩者不同源：有效期寫在 `app/circle-portal-handlers.ts`，保存期寫在 [`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `RETENTION_WINDOWS`，或（社團自述內容）寫在資料列自己身上。
 3. **憑證會被清除，紀錄不會。** 每天 03:17 UTC 由獨立的排程 Worker（[`workers/retention-purge/`](../../workers/retention-purge)）刪除過期憑證與到期的社團自述內容；`accounts`、`circle_claims`、`audit_log` 不設期限。分類的標準見 [ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)：**這筆資料過了今天還有沒有用**。
 
@@ -155,7 +155,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 | **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（含一次性登入連結） | 每次索取登入連結 |
 | **Cloudflare Turnstile**（`challenges.cloudflare.com`） | 瀏覽器載入 widget；伺服器 siteverify 送 token 與**原始 IP** | 每次索取登入連結（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)） |
 | **Cloudflare**（Pages／Workers／D1／R2） | 平台本身，承載全部上述資料與代管縮圖 | 全時 |
-| **Cloudflare Access** | 維護者身分 | 閘控期間；解除後消失（[ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)） |
+| **Cloudflare Access** | preview 的維護者身分與 CI service token | 存取 `*.tw-catalog.pages.dev` preview deployment 時；production 正式網域不使用（[ADR-0029](../adr/0029-public-production-gated-preview.md)） |
 
 認領證據抓取（`fetchEvidence()`）由 Worker 主動連向社團自己登錄的 URL，**對該主機揭露的是本站，不是使用者**。
 

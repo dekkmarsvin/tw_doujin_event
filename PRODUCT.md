@@ -42,7 +42,7 @@ web
 
 這不只是場館平面圖或社團名錄，而是把作品探索、社團資訊、向量攤位地圖、收藏與當日行程收於同一套可雙向定位的工具中。作品或社團搜尋結果應能直接導向地圖位置，地圖上的攤位也應能直接回到作品與社團內容。
 
-產品先以 FF47 作為已實作、已驗證的資料與地圖範例，但資料模型與操作流程應可延伸至未來的 Fancy Frontier 與其他台灣同人展。**FF47 是驗證資料，不是發表場合**——FF47 期間站台不公開（[ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)）。
+產品先以 FF47 作為已實作、已驗證且公開使用的第一份資料與地圖，但資料模型與操作流程應可延伸至未來的 Fancy Frontier 與其他台灣同人展。正式公開入口是 <https://map.kotoban.top/>；早期不公開決策與解除條件的演進依序見 [ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)、[ADR-0015](docs/adr/0015-access-lifts-when-no-third-party-bytes-remain.md) 與 [ADR-0029](docs/adr/0029-public-production-gated-preview.md)。
 
 這是一個 MIT 授權的開源專案，以長期維護的同人展地圖網站為目標，不是單一活動的一次性場刊。因此每一項決定都以「下一場活動仍然成立」為準，不以「這次撐過去就好」為準。
 
@@ -51,7 +51,7 @@ web
 - 展前規劃：以桌面或手機搜尋社團、攤位、作品與題材，檢視詳細資訊、收藏攤位並安排走訪順序。
 - 展場導航：以手機查看地圖、目前行程與下一站，在高密度場館中快速定位。
 - 資料發布：場刊與地圖以已驗證、版本化的 JSON 快照隨 build 發布到 Cloudflare Pages 靜態站。
-- **公開瀏覽目前是設計目標，不是現行狀態。** 站台全站在 Cloudflare Access 閘控下，含社團端（[ADR-0011](docs/adr/0011-ff47-is-not-a-public-launch.md)）。程式與現行 tree 已改為第一方來源；解除前仍需完成 ADR-0015 要求的 git 歷史清理與人工 Access 驗證。
+- **公開瀏覽是現行狀態。** `map.kotoban.top` 的閱讀端與 `/circle` 公開可達；一般閱讀不需登入，社團端在應用層驗證身分與擁有權。只有 `*.tw-catalog.pages.dev` 的 preview deployment 留在 Cloudflare Access 內（[ADR-0029](docs/adr/0029-public-production-gated-preview.md)）。
 - 功能與資訊架構以 Comike WebCatalog 為具約束力的熟悉參考，但內容、語言、活動資料與場館模型面向台灣同人展。
 
 ## Capabilities and Constraints

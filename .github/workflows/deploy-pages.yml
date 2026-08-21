@@ -80,38 +80,81 @@ jobs:
             --project-name=tw-catalog
             --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
 
-      # Every host under tw-catalog.pages.dev, production and preview alike, is
-      # behind Cloudflare Access with no Bypass path (ADR-0011). CI is not a
-      # browser and cannot complete an identity login, so it authenticates with
-      # an Access service token instead; without the headers Access answers 302
-      # to the login page and both smoke tests below measure the login screen
-      # rather than the deployment.
-      - name: Smoke test deployment
+      # Production is public at the custom domain. These requests intentionally
+      # carry no Access headers: a 302 would mean the public hostname was gated
+      # again, while 401 from the session route proves the Functions ran.
+      - name: Smoke test public production
+        if: github.event_name != 'pull_request' && github.ref_name == 'main'
         env:
-          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
+          BASE_URL: https://map.kotoban.top
+        run: |
+          for attempt in $(seq 1 8); do
+            static_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/" || echo 000)
+            session_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/auth/session" || echo 000)
+            if [ "$static_code" = "200" ] && [ "$session_code" = "401" ]; then
+              echo "Public production is live; static assets returned 200 and Functions returned the expected anonymous 401."
+              exit 0
+            fi
+            echo "attempt $attempt: / returned $static_code; /api/auth/session returned $session_code"
+            sleep 3
+          done
+          if [ "$static_code" = "301" ] || [ "$static_code" = "302" ]; then
+            echo "::error::Public production redirected instead of returning 200; verify map.kotoban.top is not covered by Access."
+          else
+            echo "::error::Public production returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401."
+          fi
+          exit 1
+
+      # Every non-main deployment is a preview. First prove that an anonymous
+      # request is intercepted by Access, then use the service token to reach
+      # both static assets and Functions. This catches an exposed immutable or
+      # branch URL as well as a broken Service Auth policy.
+      - name: Smoke test preview Access and application
+        if: github.event_name == 'pull_request' || github.ref_name != 'main'
+        env:
+          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || format('{0}.', github.ref_name) }}tw-catalog.pages.dev
+          IMMUTABLE_URL: ${{ steps.deploy.outputs.deployment-url }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           if [ -z "$CF_ACCESS_CLIENT_ID" ] || [ -z "$CF_ACCESS_CLIENT_SECRET" ]; then
-            echo "::error::CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must be set; the whole site is behind Cloudflare Access. See docs/runbooks/deployment.md."
+            echo "::error::CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must be set for preview Access. See docs/runbooks/deployment.md."
             exit 1
           fi
+
+          for preview_url in "$BASE_URL" "$IMMUTABLE_URL"; do
+            if [ -z "$preview_url" ]; then
+              echo "::error::Wrangler did not report an immutable preview deployment URL."
+              exit 1
+            fi
+            anonymous=$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{redirect_url}' "$preview_url/" || echo '000 ')
+            anonymous_code=${anonymous%% *}
+            anonymous_redirect=${anonymous#* }
+            if { [ "$anonymous_code" != "301" ] && [ "$anonymous_code" != "302" ]; } || [[ "$anonymous_redirect" != https://*.cloudflareaccess.com/* ]]; then
+              echo "::error::Anonymous preview $preview_url returned $anonymous_code and did not redirect to Cloudflare Access."
+              exit 1
+            fi
+            echo "Anonymous preview $preview_url is protected by Access."
+          done
+
           for attempt in $(seq 1 8); do
-            code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            static_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
               --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
               --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
               "$BASE_URL/" || echo 000)
-            if [ "$code" = "200" ]; then
-              echo "Static assets are live and the service token passed Access."
+            session_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+              "$BASE_URL/api/auth/session" || echo 000)
+            if [ "$static_code" = "200" ] && [ "$session_code" = "401" ]; then
+              echo "Service token passed Access; static assets returned 200 and Functions returned the expected anonymous 401."
               exit 0
             fi
-            echo "attempt $attempt: / returned $code"
+            echo "attempt $attempt: / returned $static_code; /api/auth/session returned $session_code"
             sleep 3
           done
-          if [ "$code" = "301" ] || [ "$code" = "302" ]; then
-            # Access states in the login redirect whether it recognized the
-            # credentials at all. That separates the two failures a redirect
-            # otherwise hides: bad secrets versus a policy that admits nobody.
+
+          if [ "$static_code" = "301" ] || [ "$static_code" = "302" ]; then
             redirect=$(curl --silent --output /dev/null --write-out '%{redirect_url}' \
               --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
               --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
@@ -122,41 +165,9 @@ jobs:
               const claims = JSON.parse(Buffer.from(found[1].split(".")[1], "base64url").toString());
               console.log(String(claims.service_token_status));
             ' "$redirect" 2>/dev/null || echo unknown)
-            echo "::error::/ redirected to the Access login page; Access reports service_token_status=$token_status. false means CF_ACCESS_CLIENT_ID/SECRET are not a live token (wrong value, stray whitespace, or revoked). true means the token is valid but no Service Auth policy on the application covering *.tw-catalog.pages.dev admits it. See docs/runbooks/deployment.md."
+            echo "::error::Service token was redirected by Access; service_token_status=$token_status. See docs/runbooks/deployment.md."
           else
-            echo "::error::/ returned $code, expected 200."
-          fi
-          exit 1
-
-      # The step above only proves the static assets are live; they are served
-      # straight from the edge and answer 200 whether or not the Functions have
-      # a usable environment. An unauthenticated session lookup separates the
-      # two: 401 means the handlers were constructed and ran, 503 means
-      # `requireSecret` threw because the environment is missing SESSION_SECRET
-      # or HASH_PEPPER. Preview does not inherit production secrets, so this is
-      # the check that catches a preview deployment whose portal is dead.
-      - name: Smoke test Functions
-        env:
-          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || github.ref_name != 'main' && format('{0}.', github.ref_name) || '' }}tw-catalog.pages.dev
-          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-        run: |
-          for attempt in $(seq 1 5); do
-            code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
-              --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
-              "$BASE_URL/api/auth/session" || echo 000)
-            if [ "$code" = "401" ]; then
-              echo "Functions reachable and configured (401 for an unauthenticated session)."
-              exit 0
-            fi
-            echo "attempt $attempt: /api/auth/session returned $code"
-            sleep 3
-          done
-          if [ "$code" = "301" ] || [ "$code" = "302" ]; then
-            echo "::error::/api/auth/session redirected to the Access login page, so the service token was rejected before the Functions ran; see docs/runbooks/deployment.md."
-          else
-            echo "::error::/api/auth/session returned $code, expected 401. 503 means this environment is missing SESSION_SECRET or HASH_PEPPER; see docs/runbooks/deployment.md."
+            echo "::error::Preview returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401 after Access."
           fi
           exit 1
 
