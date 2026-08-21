@@ -69,7 +69,7 @@ Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.
 ## 驗收條件
 
 - `dist/index.html` 存在；`dist/_worker.js` 與 `dist/server/index.js` 不存在。
-- `dist/data/events/ff47/map.json` 通過完整 layout 驗證。
+- `dist/data/events/<active-event>/event.json`、`circles.json` 與 `map.json` 的 event ID 一致，且 map 通過該活動 template 的完整 layout 驗證。
 - 主 bundle 不含場刊資料字面值。
 - 公開 bundle 不包含 `/api/events/`、地圖管理匯入器或管理發布文案。
 - `dist/sw.js` 的 precache 清單涵蓋所有離線必要檔案。

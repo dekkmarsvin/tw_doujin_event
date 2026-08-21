@@ -11,22 +11,16 @@ const overrides = await environment.runner.import("/app/circle-overrides.ts");
 const messages = await environment.runner.import("/app/circle-override-messages.ts");
 after(() => vite.close());
 
-const payload = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
+const payload = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
 const base = records.buildCircleCatalog(payload);
 
 /** A circle that actually holds placements, so detaching would be observable. */
 const placed = base.circles.find((circle) => (base.recordsByCircleId.get(circle.id)?.length ?? 0) > 1);
 assert.ok(placed, "fixture needs a circle with more than one placement");
-const linked = base.circles.find((circle) => circle.externalLinks.length > 0);
-const credited = base.circles.find((circle) => circle.pen.length > 0);
-assert.ok(linked, "fixture needs a circle with reviewed links");
-assert.ok(credited, "fixture needs a circle with a reviewed pen name");
-// No `pictured` counterpart: since ADR-0012 the reviewed catalog has no
-// thumbnails at all, which `tests/circle-records.test.mjs` pins on the payload.
 assert.deepEqual(base.circles.filter((circle) => circle.media.length > 0), []);
 
 function envelope(list) {
-  return { schema: "circle-overrides/1", eventId: "ff47", generatedAt: "2026-08-13T00:00:00.000Z", revision: 1, overrides: list };
+  return { schema: "circle-overrides/1", eventId: "sample", generatedAt: "2026-08-13T00:00:00.000Z", revision: 1, overrides: list };
 }
 
 function withFields(circleId, fields) {
@@ -145,7 +139,7 @@ test("circle-authored content is labelled as self-reported, never as organizer d
   assert.equal(circle.updatedAt, "2026-08-13T00:00:00.000Z");
 
   // The organizer source is still present and still first.
-  assert.equal(edited.recordsByCircleId.get(placed.id)[0].sources[0].provider, "開拓動漫");
+  assert.equal(edited.recordsByCircleId.get(placed.id)[0].sources[0].provider, "活動主辦單位");
   assert.equal(base.circlesById.get(placed.id).sources.some((source) => source.provider === "社團本人"), false);
 });
 
@@ -191,23 +185,8 @@ test("one field authority defines inherit, replace and clear encodings", () => {
   assert.deepEqual(overrides.clearCircleOverrideField({}, "specialTags"), { specialTags: [] });
 });
 
-test("every editable field projects inherit, replace and clear from the same authority", () => {
+test("every editable field projects empty base, replace and clear from the same authority", () => {
   const replacementThumbnail = { url: "https://i.imgur.com/replacement.png", sourceUrl: "https://example.com/replacement", provider: "replacement" };
-  const reviewedTemplate = {
-    ...payload.templates.find((template) => template.id === placed.id),
-    pen: "reviewed pen",
-    saleInfo: "reviewed sale",
-    referencedWorks: ["reviewed work"],
-    creatorTypes: ["reviewed creator"],
-    workTypes: ["reviewed type"],
-    ageRatings: ["reviewed rating"],
-    specialTags: ["reviewed tag"],
-    links: [{ provider: "reviewed", kind: "website", url: "https://example.com/reviewed" }],
-  };
-  const fixturePayload = {
-    ...payload,
-    templates: payload.templates.map((template) => template.id === placed.id ? reviewedTemplate : template),
-  };
   const valueOf = {
     pen: (circle) => circle.pen,
     saleInfo: (circle) => circle.saleInfo,
@@ -230,52 +209,34 @@ test("every editable field projects inherit, replace and clear from the same aut
     links: [{ provider: "replacement", kind: "website", url: "https://example.com/replacement" }],
     thumbnail: replacementThumbnail,
   };
-  const reviewed = {
-    pen: "reviewed pen",
-    saleInfo: "reviewed sale",
-    referencedWorks: ["reviewed work"],
-    creatorTypes: ["reviewed creator"],
-    workTypes: ["reviewed type"],
-    ageRatings: ["reviewed rating"],
-    specialTags: ["reviewed tag"],
-    links: [{ provider: "reviewed", kind: "website", url: "https://example.com/reviewed" }],
-    // ADR-0012 left no reviewed thumbnail beneath an override, so "inherit"
-    // here means inherit nothing. Asserted through the same loop as the other
-    // eight fields so the asymmetry is stated, not quietly skipped.
-    thumbnail: [],
-  };
+  const emptyBase = { pen: "", saleInfo: "", referencedWorks: [], creatorTypes: [], workTypes: [], ageRatings: [], specialTags: [], links: [], thumbnail: [] };
 
   for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS) {
-    const inherited = records.buildCircleCatalog(fixturePayload, withFields(placed.id, {})).circlesById.get(placed.id);
-    assert.deepEqual(valueOf[key](inherited), reviewed[key], `${key} must inherit reviewed data`);
+    const inherited = records.buildCircleCatalog(payload, withFields(placed.id, {})).circlesById.get(placed.id);
+    assert.deepEqual(valueOf[key](inherited), emptyBase[key], `${key} must inherit the empty official base`);
 
     const replacementFields = { [key]: replacement[key] };
     assert.equal(overrides.isCircleOverrideFields(replacementFields), true, `${key} replacement must validate`);
-    const replaced = records.buildCircleCatalog(fixturePayload, withFields(placed.id, replacementFields)).circlesById.get(placed.id);
+    const replaced = records.buildCircleCatalog(payload, withFields(placed.id, replacementFields)).circlesById.get(placed.id);
     const expectedReplacement = key === "thumbnail" ? [replacementThumbnail] : replacement[key];
-    assert.deepEqual(valueOf[key](replaced), expectedReplacement, `${key} must replace reviewed data`);
+    assert.deepEqual(valueOf[key](replaced), expectedReplacement, `${key} must publish circle-authored data`);
 
     const clearedFields = overrides.clearCircleOverrideField(replacementFields, key);
     assert.equal(overrides.circleOverrideFieldMode(clearedFields, key), "clear", `${key} must expose clear mode`);
     assert.equal(overrides.isCircleOverrideFields(clearedFields), true, `${key} tombstone must validate`);
-    const cleared = records.buildCircleCatalog(fixturePayload, withFields(placed.id, clearedFields)).circlesById.get(placed.id);
-    assert.deepEqual(valueOf[key](cleared), key === "pen" || key === "saleInfo" ? "" : [], `${key} must clear reviewed data`);
+    const cleared = records.buildCircleCatalog(payload, withFields(placed.id, clearedFields)).circlesById.get(placed.id);
+    assert.deepEqual(valueOf[key](cleared), emptyBase[key], `${key} must clear circle-authored data`);
 
     const restoredFields = overrides.inheritCircleOverrideField(clearedFields, key);
-    const restored = records.buildCircleCatalog(fixturePayload, withFields(placed.id, restoredFields)).circlesById.get(placed.id);
-    assert.deepEqual(valueOf[key](restored), reviewed[key], `${key} must return to inheritance`);
+    const restored = records.buildCircleCatalog(payload, withFields(placed.id, restoredFields)).circlesById.get(placed.id);
+    assert.deepEqual(valueOf[key](restored), emptyBase[key], `${key} must return to the official-only base`);
   }
 });
 
-test("explicit tombstones clear reviewed text and links, and a self-supplied thumbnail", () => {
-  const clearedPen = records.buildCircleCatalog(payload, withFields(credited.id, { pen: "" }));
-  assert.equal(clearedPen.circlesById.get(credited.id).pen, "");
-
-  const clearedLinks = records.buildCircleCatalog(payload, withFields(linked.id, { links: [] }));
-  assert.deepEqual(clearedLinks.circlesById.get(linked.id).externalLinks, []);
-
-  // The thumbnail a tombstone removes is the circle's own: it is the only
-  // producer left, so the field has to be supplied before it can be cleared.
+test("explicit tombstones clear circle-authored text, links and thumbnail", () => {
+  const cleared = records.buildCircleCatalog(payload, withFields(placed.id, { pen: "", links: [] }));
+  assert.equal(cleared.circlesById.get(placed.id).pen, "");
+  assert.deepEqual(cleared.circlesById.get(placed.id).externalLinks, []);
   const thumbnail = { url: "https://i.imgur.com/self.png", sourceUrl: "https://example.com/self", provider: "社團本人" };
   const supplied = records.buildCircleCatalog(payload, withFields(placed.id, { thumbnail }));
   assert.deepEqual(supplied.circlesById.get(placed.id).media.map(({ url }) => url), [thumbnail.url]);
@@ -286,10 +247,10 @@ test("explicit tombstones clear reviewed text and links, and a self-supplied thu
   assert.equal(overrides.isCircleOverrideFields({ pen: "", links: [], thumbnail: null }), true);
 });
 
-test("removing a tombstone returns the field to reviewed inheritance", () => {
+test("removing a tombstone returns the field to the empty official base", () => {
   const inherited = overrides.inheritCircleOverrideField({ links: [] }, "links");
-  const catalog = records.buildCircleCatalog(payload, withFields(linked.id, inherited));
-  assert.deepEqual(catalog.circlesById.get(linked.id).externalLinks, linked.externalLinks);
+  const catalog = records.buildCircleCatalog(payload, withFields(placed.id, inherited));
+  assert.deepEqual(catalog.circlesById.get(placed.id).externalLinks, []);
 });
 
 test("one malformed entry is dropped without discarding the rest", () => {

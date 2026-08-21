@@ -15,7 +15,7 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
 }));
 const database = await miniflare.getD1Database("DB");
 const repository = createEventMapRepository(database);
-const handlers = createEventMapHandlers(repository);
+const handlers = createEventMapHandlers(repository, (eventId) => eventId === "ff47" ? { mapTemplate: "FF47" } : null);
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const layout = {

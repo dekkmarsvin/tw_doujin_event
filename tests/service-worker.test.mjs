@@ -17,7 +17,7 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   assert.match(version[1], /^[0-9a-f]{12}$/);
 
   const manifest = JSON.parse(worker.match(/const PRECACHE_MANIFEST = (\[[^\]]*\]);/)[1]);
-  for (const required of ["/index.html", "/manifest.webmanifest", "/data/events/ff47/circles.json", "/data/events/ff47/map.json", "/app-icon.svg"]) {
+  for (const required of ["/index.html", "/manifest.webmanifest", "/data/events/sample/circles.json", "/data/events/sample/map.json", "/app-icon.svg"]) {
     assert.ok(manifest.includes(required), `precache manifest is missing ${required}`);
   }
   assert.ok(manifest.some((path) => /^\/assets\/index-.+\.js$/.test(path)), "the application script must be precached");

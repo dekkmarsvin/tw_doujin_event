@@ -1,4 +1,7 @@
-import ff47Definition from "../data/events/ff47/event.json";
+import sampleDefinition from "../fixtures/events/sample/event.json";
+import sampleTwoDefinition from "../fixtures/events/sample-two/event.json";
+
+declare const __ACTIVE_EVENT_DEFINITION__: unknown;
 
 export const EVENT_DEFINITION_SCHEMA = "event-definition/1" as const;
 
@@ -84,7 +87,10 @@ export function parseEventDefinition(value: unknown): EventDefinition {
   };
 }
 
-const EVENT_DEFINITIONS = [parseEventDefinition(ff47Definition)] as const;
+const injectedDefinition = typeof __ACTIVE_EVENT_DEFINITION__ === "undefined" ? sampleDefinition : __ACTIVE_EVENT_DEFINITION__;
+const activeDefinition = parseEventDefinition(injectedDefinition);
+const fixtureDefinitions = [parseEventDefinition(sampleDefinition), parseEventDefinition(sampleTwoDefinition)];
+const EVENT_DEFINITIONS = [activeDefinition, ...fixtureDefinitions.filter((event) => event.id !== activeDefinition.id)] as const;
 
 /** The registry is the only shared-code list that changes when an event is
  * added. Existing event definitions and organizer adapters remain untouched. */

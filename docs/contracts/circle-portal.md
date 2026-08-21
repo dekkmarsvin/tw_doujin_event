@@ -78,7 +78,7 @@
 2. **社團自填**：override 含非空值，整組取代 snapshot；陣列不逐項合併。
 3. **清除此欄**：空字串、空陣列或 thumbnail tombstone 明確移除 snapshot 的既有值。
 
-編輯器必須顯示目前狀態，並提供「沿用場刊」與「清除此欄」動作。不得在送出前丟掉 tombstone，否則社團只能改寫、不能移除錯誤內容，工作簿就仍然控制欄位是否存在。
+編輯器必須顯示目前狀態，並提供「沿用場刊」與「清除此欄」動作。不得在送出前丟掉 tombstone，否則社團只能改寫、不能明確撤下自己先前提供的內容。
 
 ### 欄位上限
 
@@ -185,7 +185,7 @@
 
 ## 公開端點
 
-`/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 strong ETag，使用 `public, max-age=60, must-revalidate`。閱讀端把它疊加在靜態 `circles.json` 之上；讀取失敗或 event mismatch 時只用 reviewed base。
+`/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 strong ETag，使用 `public, max-age=60, must-revalidate`。閱讀端把它疊加在靜態 `circles.json` 之上；讀取失敗或 event mismatch 時只用 official base。
 
 ## 驗收條件
 

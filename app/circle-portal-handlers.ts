@@ -42,9 +42,9 @@ export type PortalConfig = {
   sessionSecret: string;
   hashPepper: string;
   adminEmails: string[];
-  dataUpdatedAt: string;
+  dataUpdatedAt: string | (() => Promise<string>);
   /** ISO instant after which an opted-out circle's content is withdrawn. */
-  eventEndsAt: string;
+  eventEndsAt: string | (() => Promise<string>);
   now: () => number;
 };
 
@@ -121,7 +121,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   const isAdmin = (email: string) => repository.isAdminEmail(normalizeEmail(email));
 
   /** Publication phase. Only the circle's own content is withdrawn afterwards. */
-  const currentPhase = (): OverridesPhase => (config.now() > Date.parse(config.eventEndsAt) ? "after" : "during");
+  const configValue = async (value: string | (() => Promise<string>)) => typeof value === "string" ? value : value();
+  const dataUpdatedAt = () => configValue(config.dataUpdatedAt);
+  const eventEndsAt = () => configValue(config.eventEndsAt);
+  const currentPhase = async (): Promise<OverridesPhase> => (config.now() > Date.parse(await eventEndsAt()) ? "after" : "during");
 
   async function clientIpHash(request: Request) {
     const address = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "";
@@ -358,7 +361,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     // when its host is one a Worker can actually read.
     const recorded = targetUrl ? circle.links.find((link) => link.url === targetUrl) : undefined;
     const challengeable = !!recorded && FETCHABLE_EVIDENCE_PROVIDERS.has(recorded.provider);
-    const challenge = challengeable ? randomChallengeCode() : null;
+    const challenge = challengeable ? randomChallengeCode(config.eventId) : null;
 
     const id = crypto.randomUUID();
     await repository.createClaim({
@@ -425,7 +428,8 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   function extractChallenge(body: string) {
-    return body.match(/ff47-[23456789BCDFGHJKLMNPQRSTVWXYZ]{10}/)?.[0] ?? null;
+    const eventPrefix = config.eventId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return body.match(new RegExp(`${eventPrefix}-[23456789BCDFGHJKLMNPQRSTVWXYZ]{10}`))?.[0] ?? null;
   }
 
   async function putOverride(request: Request, circleId: string) {
@@ -448,7 +452,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     }
     const retention = choice === undefined
       ? undefined
-      : { choice, expiresAt: circleRetentionExpiresAt(choice, Date.parse(config.eventEndsAt)) };
+      : { choice, expiresAt: circleRetentionExpiresAt(choice, Date.parse(await eventEndsAt())) };
 
     const now = config.now();
     const ipHash = await clientIpHash(request);
@@ -464,7 +468,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
       ...(previousKey && !keepsHostedThumbnail ? { hostedThumbnailKey: null } : {}),
     });
-    await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now);
+    await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.updated",
       subjectType: "override", subjectId: circleId,
@@ -527,7 +531,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
         eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now,
         hostedThumbnailKey: prepared.key,
       });
-      await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now, currentPhase());
+      await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
       await repository.writeAudit({
         at: now, actorAccountId: current.accountId, actorRole: "circle", action: "thumbnail.uploaded",
         subjectType: "override", subjectId: circleId,
@@ -578,7 +582,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     if (!await repository.deleteOverride({ eventId: config.eventId, circleId })) {
       return json({ error: "沒有可刪除的內容。" }, 404);
     }
-    await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now, currentPhase());
+    await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     // What was deleted is deliberately absent; that it was, and by whom, is not.
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.deleted",
@@ -652,7 +656,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const applied = await repository.setPostEventHidden(config.eventId, circleId, body.hidden);
     if (!applied) return json({ error: "請先儲存一次內容再設定。" }, 409);
 
-    await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now, currentPhase());
+    await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.post_event_visibility",
       subjectType: "override", subjectId: circleId, detail: { hidden: body.hidden }, ipHash: await clientIpHash(request),
@@ -703,7 +707,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       ? await repository.markClaimVerified(claimId, method, now, gate.session.email)
       : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email);
 
-    if (decision !== "approve" && ok) await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now);
+    if (decision !== "approve" && ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
     await repository.writeAudit({
       at: now, actorAccountId: gate.session.accountId, actorRole: "admin",
       action: `claim.admin_${decision}`, subjectType: "claim", subjectId: claimId,
@@ -795,7 +799,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       ? JSON.stringify({ ...(JSON.parse(previous.fields_json) as CircleOverrideFields), thumbnail: null })
       : undefined;
     const ok = await repository.takedownOverride({ eventId: config.eventId, circleId, reason, by: gate.session.email, now, fieldsJson });
-    if (ok) await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now);
+    if (ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
     await repository.writeAudit({
       at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "override.takendown",
       subjectType: "override", subjectId: circleId, detail: { reason, applied: ok },
@@ -819,13 +823,13 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     // The document is written on edit, but the event ending is not an edit.
     // Rebuilding on a phase change keeps the steady-state read a single row
     // lookup instead of filtering the document on every request.
-    const phase = currentPhase();
+    const phase = await currentPhase();
     if (doc && doc.phase !== phase) {
-      await repository.rebuildOverridesDoc(eventId, config.dataUpdatedAt, config.now(), phase);
+      await repository.rebuildOverridesDoc(eventId, await dataUpdatedAt(), config.now(), phase);
       doc = await repository.getOverridesDoc(eventId);
     }
     const body = doc?.json ?? JSON.stringify({
-      schema: "circle-overrides/1", eventId, generatedAt: config.dataUpdatedAt, revision: 0, overrides: [],
+      schema: "circle-overrides/1", eventId, generatedAt: await dataUpdatedAt(), revision: 0, overrides: [],
     });
     const etag = `"circle-overrides-${eventId}-${phase}-${doc?.revision ?? 0}"`;
     const headers = {

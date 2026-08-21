@@ -1,6 +1,6 @@
 {
   "schema": "circle-id-allocations/1",
-  "nextSequence": 1342,
+  "nextSequence": 1349,
   "allocations": [
     {
       "id": "c-000001",
@@ -6706,6 +6706,41 @@
       "id": "c-001341",
       "allocatedAt": "2026-08-17",
       "reason": "New reviewed catalog evidence"
+    },
+    {
+      "id": "c-001342",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 布來沒Bremen"
+    },
+    {
+      "id": "c-001343",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 迷你翠"
+    },
+    {
+      "id": "c-001344",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 日初翱祥-陌千"
+    },
+    {
+      "id": "c-001345",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 伊羅的畫廊"
+    },
+    {
+      "id": "c-001346",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 神奇回收站"
+    },
+    {
+      "id": "c-001347",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 霓聲工作室NeonVoice"
+    },
+    {
+      "id": "c-001348",
+      "allocatedAt": "2026-08-21",
+      "reason": "FF47 organizer identity split: 幻想布萊梅"
     }
   ]
 }

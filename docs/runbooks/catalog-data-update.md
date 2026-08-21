@@ -1,130 +1,95 @@
-# 社團資料更新
+# 社團與活動資料更新
 
-從上游試算表同步 FF47 社團資料，透過永久 identity registry 重新生成場刊快照。
+真實活動資料由獨立、公開的 data repo 維護；程式 repo 只保存不可變 pin、社團身分 registry 與 fictional fixtures。FF47 data repo 是 [`dekkmarsvin/tw_doujin_event-data-ff47`](https://github.com/dekkmarsvin/tw_doujin_event-data-ff47)。
 
-資料模型與身分規則見[社團目錄契約](../contracts/circle-catalog.md)。
+## 權威來源
 
-## 來源
+| 資料 | 權威 |
+|---|---|
+| 活動名稱、日期、場館、主辦 URL | data repo `event.json` |
+| 官方社團名與攤位配置 | data repo `official-booths.json`，來源為活動主辦單位 |
+| 向量地圖 | data repo `map.json`，由人工審閱的 authoring revision 匯出 |
+| 永久社團 ID | 本 repo `data/circle-identities/allocations.json` |
+| booth 到永久 ID 的證據 | 本 repo `data/circle-identities/evidence.json` |
+| 社團介紹、作品、連結、代表圖 | 社團本人透過 overlay 提供 |
 
-依 [ADR-0012](../adr/0012-first-party-sources-only.md)，長期只保留主辦官網與社團本人兩類來源。工作簿是**退場中的過渡輸入**，目前仍供應內容欄位。縮圖索引已退場：縮圖現在只有社團自填一個來源。
-
-| 角色 | 位置 | 長期地位 |
-|---|---|---|
-| 配置權威（主辦官網） | [FF47 三日攤位編號公佈](https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/)，已發布到公開的 [FF47 data repo](https://github.com/dekkmarsvin/tw_doujin_event-data-ff47) | 保留 |
-| 內容來源 | [FF47 Google 試算表](https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing)，版本化快照為 `data_source_test/FF47 完整攤位整理.xlsx` | 過渡 |
-| 社團模板來源工作表 | `攤位整理表 請在此填寫資訊`（一列一個具名稱的社團） | 過渡 |
-| 縮圖 | 社團在 `/circle` 自填，主機限於 `THUMBNAIL_HOST_ALLOWLIST` | 保留 |
-
-`DAY1`、`DAY2`、`DAY3` 工作表只用於核對活動配置，**不以同名推測社團身分**。
-
-生成器（`scripts/generate-ff47-circle-templates.mjs`）只使用 Node.js 內建模組解析 XLSX，不依賴未鎖定的全域套件或即時網路資料。
-
-## 官網攤位清單
-
-官網頁面只公布「攤位編號 → 社團名」，沒有座標，因此它**不取代**帶幾何的 `BOOTHS`。它能執行的權威是另一件事：**場刊不得在沒有人記錄原因的情況下偏離官網。**
-
-```bash
-npm run official:check
-```
-
-比對線上三日頁面與本機快照，有差異就列出新增／移除／改名並以非零狀態結束，不修改檔案。確認後：
-
-```bash
-npm run official:update
-```
-
-解析對版面變動 fail closed：抓不到 `<table>`、單日列數低於 600、攤位編號不符 `[A-W]\d{2}`、同一攤位兩個名字，都會中止而不是寫入半份清單。
-
-### 場刊與官網的一致性
-
-```bash
-npm run official:agreement
-```
-
-離線比對已提交的官網快照與 `circles.json`，已納入 `npm run build`。它會失敗於：
-
-- 任一側獨有的攤位（`day:code` 網格不一致）。
-- **未記錄的名稱衝突**——官網與工作簿對同一攤位給出不同社團名，而 `data_source_test/ff47-official-name-adjudications.json` 裡沒有這一筆。
-
-已記錄的衝突不會擋 build，只會計入「尚未裁決」數。這是刻意的：擋在已知的積欠上，只會讓人把檢查刪掉。裁決一筆就把該筆的 `decision` 從 `unadjudicated` 改為 `official` 或 `catalog` 並寫下 `note`；衝突消失後，該筆要從檔案移除，否則檢查會報 stale。
-
-FF47 目前的狀態：2,953 個攤位網格完全一致，26 筆名稱衝突已全部裁決（16 筆採主辦、10 筆保留 catalog 裁決）。依 [ADR-0025](../adr/0025-open-with-an-official-only-thin-catalog.md)，official-only 切換後不再維護工作簿側的逐筆修正。
-
-## 管線
-
-```
-Google 試算表
-  └─ npm run source:update
-       └─ data_source_test/*.xlsx           版本化來源快照
-            ├─ data/circle-identities/{allocations,evidence}.json
-            └─ npm run catalog:generate
-                 └─ app/ff47-circle-templates.generated.json   （+ .manifest.json 記錄 SHA-256）
-                      └─ npm run catalog:snapshot
-                           └─ public/data/events/ff47/circles.json   執行期讀取的快照
-```
-
-`npm run build` 目前仍以 `catalog:check` 與 `catalog:snapshot:check` 逐位元組驗證過渡快照。資料 repo 搬移後，活動資料變更先在 data repo 合併，再於本 repo 更新 `data/event-data-pins/<event>.json` 的完整 commit 與逐檔 SHA-256；build 只能消費已驗證的 pin，不追浮動 branch。
+第三方工作簿與原始配置圖不在本 repo，也不參與 production catalog 生成。
 
 ## 更新流程
 
-### 1. 先看差異
+### 1. 在 data repo 更新官方資料
 
-```bash
-npm run source:check
+更新 `event.json`、`official-booths.json` 或 `map.json`，依 data repo 的 provenance 說明檢查來源與差異，提交並推送。不要在程式 repo 直接建立真實活動快照。
+
+### 2. 更新 identity evidence
+
+每個官方 booth 以以下證據鍵連到一個永久 ID：
+
+```json
+{ "eventId": "ff47", "kind": "organizer-booth", "value": "1:A01" }
 ```
 
-若有差異，命令會列出各工作表新增、移除與變更的儲存格數量及最多 20 筆樣本，並以非零狀態結束，**但不修改檔案**。
+規則：
 
-比對以工作表名稱、儲存格值與公式為準，不會因 Google 每次匯出產生不同的 XLSX 封裝位元而誤判。下載失敗、回傳內容不是 XLSX、缺少主資料工作表或資料列異常過少時都會停止，不覆寫既有來源。
+- 既有 booth 與既有社團沿用既有 ID。
+- 新社團先在 `allocations.json` 追加下一個序號，再在 `evidence.json` 增加 entry。
+- 只有名稱相同不足以合併；跨活動沿用或一對多情形必須人工核對可追溯證據。
+- 改名保留 `previousNames`，並更新 `currentName`。
+- 不刪除或重用已配發 ID。
 
-### 2. 確認後更新
+FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀錄保存在 `ff47-official-migration-decisions.json`。它只說明已完成的裁決，不應在日常更新時修改。
 
-```bash
-npm run source:update
+### 3. 更新 pin
+
+把 data repo 的完整 40 字元 commit SHA 與三個 raw blob 的 SHA-256 寫入 `data/event-data-pins/<event>.json`：
+
+```json
+{
+  "schema": "event-data-pin/1",
+  "eventId": "ff47",
+  "repository": "dekkmarsvin/tw_doujin_event-data-ff47",
+  "commit": "<40-char commit>",
+  "files": {
+    "event.json": "<sha256>",
+    "official-booths.json": "<sha256>",
+    "map.json": "<sha256>"
+  }
+}
 ```
 
-會依序下載並驗證 XLSX、替換本機來源、重新產生社團模板與來源 manifest，最後重新輸出 `circles.json`。
+不得 pin branch、tag 或未逐檔核對的內容。
 
-### 3. 審閱 identity registry 差異
-
-`catalog:generate` 對同一 `eventId + source kind + source value` 沿用既有 `c-xxxxxx`。全新且沒有名稱候選的證據才會追加配號；只有名稱相符、來源重複或其他衝突時會 fail closed，輸出人工裁決報告。此時先確認是既有社團或新社團，再編輯 `evidence.json`，不得用名稱自動合併。
-
-檢查 diff 時確認：`allocations.json` 只在尾端追加、`nextSequence` 單調增加；`evidence.json` 的來源不重複。`npm run catalog:check` 會驗證 registry、manifest 與產物同步。
-
-### 4. 走完共同 gate 再 commit
-
-見[本機開發與驗證](./local-development.md#驗證-gate)。
-
-## 只重新生成、不同步來源
-
-上游沒變但生成邏輯改了時：
+### 4. 本機驗證 production staging
 
 ```bash
-npm run catalog:generate
+npm run data:fetch -- ff47
+npm run data:stage -- ff47
+npm run event-data:check
+npm run build:production
 ```
 
-驗證工作簿與輸出未漂移：
+`data:fetch` 先下載到暫存位置、核對 SHA-256，再原子替換 `.event-data/<event>/`。`data:stage` 由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`circles.json`、`map.json` staging 到忽略版控的 `public/data/events/<event>/`。
+
+以下任一情形會 fail closed：
+
+- pin 的 commit 或 hash 不符；
+- 官方 booth 缺 identity evidence；
+- 同一 booth 證據屬於多個 ID；
+- 官網群組內的 booth 被拆到不同 ID；
+- evidence 名稱與官方名稱漂移；
+- staged tree 同時含多個活動；
+- catalog 帶有工作簿時代欄位或無法解析的 placement。
+
+### 5. 跑共同 gate
 
 ```bash
-npm run catalog:check
+npm test
+npm run lint
+npx tsc --noEmit --incremental false
 ```
 
-## 已知的來源修正
+`npm test` 固定使用 fictional fixture，不需要網路；`build:production` 是真實資料的額外發行 gate。Review 時同時檢查 data repo commit、pin hash、identity registry 差異與生成摘要。
 
-來源第 452 列的「攤位名稱」欄被填入貼文網址而非社團名。生成器以主辦當日攤位清單為權威修正該列（D09 = 紅色荔枝樹）。
+## 本機 fixture
 
-**修正表以貼上的網址為鍵，不以列號為鍵**——上游插入一列會讓列號鍵的修正套到別的社團身上。任何名稱欄為網址但無對應修正的列，會讓生成器**失敗**而非發布出去。
-
-## 生成結果的規模參考（FF47）
-
-| 項目 | 數量 |
-|---|---|
-| 社團模板 | 1,341 |
-| 配置 | 2,977 |
-| 外部連結 | 5,791 |
-| 販售資訊 | 500 |
-| 工作簿供應的縮圖 | 0（[ADR-0012](../adr/0012-first-party-sources-only.md) 退場，改由社團自填） |
-
-投影後的社團數應**恰為模板數**。高於此數代表有攤位比不到模板而退回位置式身分，是必須修的漂移。上表是 2026-08-18 的實際數字，供對照用——它會隨上游成長，不是驗收門檻。
-
-未出現在來源中的欄位不補值；沒有縮圖時維持文字卡。縮圖索引退場後這是**多數社團的常態**，不是少數例外。
+`fixtures/events/sample` 是共同 gate 的最小活動，`sample-two` 用來證明不同日期型別與地圖模板不需要修改既有活動實作。fixture 必須是虛構資料，不得複製真實社團、攤位或原始圖片。

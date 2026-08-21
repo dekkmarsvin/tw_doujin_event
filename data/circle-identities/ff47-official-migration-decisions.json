@@ -1,0 +1,26 @@
+{
+  "schema": "official-identity-migration/1",
+  "description": "Exceptional decisions from the one-time FF47 workbook-to-organizer-booth identity migration. Straight exact-name matches are intentionally omitted.",
+  "decisions": [
+    { "day": 1, "codes": ["G16"], "name": "電諾丘工訪", "circleId": "c-000725", "candidateIds": ["c-000725"], "basis": "single-placement-identity" },
+    { "day": 1, "codes": ["K02"], "name": "布來沒Bremen", "circleId": "c-001342", "candidateIds": ["c-000847"], "basis": "allocated-split" },
+    { "day": 1, "codes": ["K21"], "name": "阿不思1號", "circleId": "c-000077", "candidateIds": ["c-000077"], "basis": "single-placement-identity" },
+    { "day": 1, "codes": ["P43", "P44"], "name": "迷你翠", "circleId": "c-001343", "candidateIds": ["c-001164"], "basis": "allocated-split" },
+    { "day": 1, "codes": ["U17"], "name": "日初翱祥-陌千", "circleId": "c-001344", "candidateIds": ["c-000596"], "basis": "allocated-split" },
+    { "day": 2, "codes": ["B43"], "name": "伊羅的畫廊", "circleId": "c-001345", "candidateIds": ["c-000597"], "basis": "allocated-split" },
+    { "day": 2, "codes": ["D10"], "name": "星球蛋糕捲", "circleId": "c-000430", "candidateIds": ["c-000430"], "basis": "single-placement-identity" },
+    { "day": 2, "codes": ["D30"], "name": "神奇回收站", "circleId": "c-001346", "candidateIds": ["c-001069"], "basis": "allocated-split" },
+    { "day": 2, "codes": ["E27"], "name": "色彩不耐症", "circleId": "c-001336", "candidateIds": ["c-001336"], "basis": "single-placement-identity" },
+    { "day": 2, "codes": ["F32"], "name": "霓聲工作室NeonVoice", "circleId": "c-001347", "candidateIds": ["c-001027"], "basis": "allocated-split" },
+    { "day": 2, "codes": ["G17"], "name": "電諾丘工訪", "circleId": "c-000725", "candidateIds": ["c-000725"], "basis": "same-official-group" },
+    { "day": 2, "codes": ["I35", "I36"], "name": "粹心齋 模創空間", "circleId": "c-001335", "candidateIds": ["c-001335"], "basis": "single-placement-identity" },
+    { "day": 2, "codes": ["O44"], "name": "比雕飛飛", "circleId": "c-001334", "candidateIds": ["c-001334"], "basis": "single-placement-identity" },
+    { "day": 2, "codes": ["R01", "R02"], "name": "‘+Ely Cosplay+", "circleId": "c-000012", "candidateIds": ["c-000012"], "basis": "single-placement-identity" },
+    { "day": 3, "codes": ["E37"], "name": "記得繳房貸", "circleId": "c-000593", "candidateIds": ["c-000593"], "basis": "single-placement-identity" },
+    { "day": 3, "codes": ["F30"], "name": "霓聲工作室NeonVoice", "circleId": "c-001347", "candidateIds": ["c-001027"], "basis": "same-official-group" },
+    { "day": 3, "codes": ["H27"], "name": "幻想布萊梅", "circleId": "c-001348", "candidateIds": ["c-001044"], "basis": "allocated-split" },
+    { "day": 3, "codes": ["L09"], "name": "阿不思1號", "circleId": "c-000077", "candidateIds": ["c-000077"], "basis": "same-official-group" },
+    { "day": 3, "codes": ["N09"], "name": "星球蛋糕捲", "circleId": "c-000430", "candidateIds": ["c-000430"], "basis": "same-official-group" },
+    { "day": 3, "codes": ["R01", "R02"], "name": "‘+Ely Cosplay+", "circleId": "c-000012", "candidateIds": ["c-000012"], "basis": "same-official-group" }
+  ]
+}

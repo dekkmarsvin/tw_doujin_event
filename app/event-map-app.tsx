@@ -45,7 +45,8 @@ type MobilePanel = "filters" | "results" | "details" | "plan";
 type MobileSheetLevel = "peek" | "half" | "full";
 type TextScale = "standard" | "large" | "extra";
 
-const TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
+const TEXT_SCALE_STORAGE_KEY = "event-map-text-scale";
+const LEGACY_TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
 const GENRES: readonly string[] = ACTIVE_EVENT.genres;
 type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
@@ -112,7 +113,7 @@ export default function EventMapApp() {
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(TEXT_SCALE_STORAGE_KEY);
+      const stored = window.localStorage.getItem(TEXT_SCALE_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_TEXT_SCALE_STORAGE_KEY);
       if (stored === "standard" || stored === "large" || stored === "extra") queueMicrotask(() => setTextScale(stored));
     } catch {
       // Font scaling remains available for this session when storage is blocked.

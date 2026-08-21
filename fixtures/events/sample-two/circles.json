@@ -1,0 +1,1 @@
+{"schema":"circle-catalog/3","eventId":"sample-two","generatedAt":"2026-01-02T00:00:00.000+08:00","circles":[{"id":"c-900003","name":"四日設計室"}],"placements":[{"id":"thu-t01","circleId":"c-900003","day":"thu","area":"all","boothCode":"T01","status":"active","tone":"amber"}]}

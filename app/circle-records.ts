@@ -1,9 +1,9 @@
-import { ACTIVE_EVENT } from "./event-catalog";
+import { ACTIVE_EVENT, getEventDefinition, type EventDefinition } from "./event-catalog";
 import { indexCircleOverrides } from "./circle-overrides";
 import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
 import type { Booth, Tone } from "./booth";
 
-export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/2" as const;
+export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/3" as const;
 
 export type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
 export type SourceContentType = "official" | "circle" | "catalog" | "social" | "media";
@@ -34,36 +34,29 @@ export type CircleExternalLink = {
   url: string;
 };
 
-/** One reviewed workbook row: a circle's identity evidence before placement. */
-export type CircleTemplate = {
+/** Organizer-confirmed identity included in an event's thin base catalog. */
+export type CatalogCircle = {
   id: string;
-  sourceRow: number;
   name: string;
-  pen?: string;
-  placements: Record<string, string[]>;
-  creatorTypes: string[];
-  ageRatings: string[];
-  workTypes: string[];
-  referencedWorks: string[];
-  saleInfo?: string;
-  specialTags: string[];
-  confidence?: string;
-  surveyUrls: string[];
-  links: CircleExternalLink[];
 };
 
-/**
- * Versioned static catalog snapshot. Exported from the reviewed workbook and
- * booth sources by `scripts/export-static-circle-catalog.mjs`, then fetched at
- * runtime so the event payload stays out of the application bundle.
- */
+export type CatalogPlacement = {
+  id: string;
+  circleId: string;
+  day: string | number;
+  area: string;
+  boothCode: string;
+  status: "active" | "cancelled" | "moved";
+  tone: Tone;
+};
+
+/** Versioned official-only base. Circle-authored fields arrive via overlay. */
 export type CircleCatalogPayload = {
   schema: typeof CIRCLE_CATALOG_SCHEMA;
   eventId: string;
   generatedAt: string;
-  officialSupplementKeys: string[];
-  booths: Booth[];
-  templates: CircleTemplate[];
+  circles: CatalogCircle[];
+  placements: CatalogPlacement[];
 };
 
 /** A circle's reusable identity and catalog metadata, independent of a booth. */
@@ -97,8 +90,6 @@ export type PlacementRecord = {
   area: Booth["hall"];
   boothCode: string;
   status: "active" | "cancelled" | "moved";
-  x: number;
-  y: number;
   tone: Tone;
 };
 
@@ -121,37 +112,19 @@ export type CircleCatalog = {
   circleIdAliases: Map<string, string[]>;
 };
 
-const CATALOG_SOURCE = {
-    provider: "加帕利天藍怪預警中心",
-    contentType: "catalog",
-    label: "FF47 社團公開整理資料",
-    url: "https://www.facebook.com/JapariWeatherBureau/",
-    fetchedAt: ACTIVE_EVENT.dataUpdatedAt,
-    status: "linked",
-} as const satisfies SourceLink;
-
-function buildOfficialSource(day?: Booth["day"]): SourceLink {
-  return {
-    provider: "開拓動漫",
-    contentType: "official",
-    label: day ? `FF47 第 ${day} 天攤位清單` : "FF47 活動與攤位配置",
-    url: day ? ACTIVE_EVENT.organizer.boothListUrls[day] : ACTIVE_EVENT.organizer.eventUrl,
-    fetchedAt: ACTIVE_EVENT.dataUpdatedAt,
-    status: "linked",
-  };
-}
-
-function cloneSources(): SourceLink[] {
-  return [buildOfficialSource(), { ...CATALOG_SOURCE }];
-}
-
-export function normalizeCircleTemplateName(value: string) {
+export function normalizeCircleName(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase("zh-Hant");
 }
 
-/** Unambiguous composite key: no separator can appear inside a JSON member. */
-function placementKey(day: string | number, boothCode: string, nameKey: string) {
-  return JSON.stringify([day, boothCode, nameKey]);
+function buildOfficialSource(event: EventDefinition, fetchedAt: string, day?: Booth["day"]): SourceLink {
+  return {
+    provider: "活動主辦單位",
+    contentType: "official",
+    label: day ? `${event.name} ${day} 日攤位清單` : `${event.name} 活動與攤位配置`,
+    url: day ? event.organizer.boothListUrls[day] : event.organizer.eventUrl,
+    fetchedAt,
+    status: "linked",
+  };
 }
 
 /** Circle-authored content is labelled as self-reported, never as organizer-confirmed. */
@@ -166,56 +139,38 @@ function circleSelfSource(override: CircleOverride): SourceLink {
   };
 }
 
-function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?: Booth, override?: CircleOverride): CircleRecord {
-  // Per-field precedence: what the circle wrote, else the reviewed workbook,
-  // else the booth row. Applying this here rather than in the view layer means
-  // `categories`, `work`, `media` and `circleSearchText` all pick it up, so
-  // edited text becomes searchable without any extra code.
+function circleFromBase(base: CatalogCircle, event: EventDefinition, generatedAt: string, override?: CircleOverride): CircleRecord {
   const fields = override?.fields;
-  // Not overridable: ADR-0010 removed the name from identity allocation, but
-  // it still keys booth matching against the organizer's booth lists
-  // (ADR-0007), so it stays whatever the reviewed sources say.
-  const name = template?.name ?? booth?.name ?? "未命名社團";
-  const creatorTypes = fields?.creatorTypes ?? template?.creatorTypes ?? [];
-  const workTypes = fields?.workTypes ?? template?.workTypes ?? [];
-  const referencedWorks = fields?.referencedWorks ?? template?.referencedWorks ?? [];
-  const specialTags = fields?.specialTags ?? template?.specialTags ?? [];
-  const saleInfo = fields?.saleInfo ?? template?.saleInfo;
-  // Since ADR-0012 retired the workbook thumbnail index, the only producer of
-  // a thumbnail is the circle itself, so there is nothing beneath an override
-  // to inherit or to tombstone — an absent field and a `null` both mean none.
+  const creatorTypes = fields?.creatorTypes ?? [];
+  const workTypes = fields?.workTypes ?? [];
+  const referencedWorks = fields?.referencedWorks ?? [];
+  const specialTags = fields?.specialTags ?? [];
+  const saleInfo = fields?.saleInfo ?? "";
   const thumbnail = fields?.thumbnail;
   return {
-    id: circleId,
-    sourceRow: template?.sourceRow,
-    name,
-    description: saleInfo ?? booth?.note ?? "尚未提供販售資訊。",
-    categories: [...new Set([
-      ...(booth ? [booth.genre, ...booth.tags.map((tag) => tag.trim()).filter(Boolean)] : []),
-      ...creatorTypes,
-      ...workTypes,
-      ...referencedWorks,
-      ...specialTags,
-    ])],
-    pen: fields?.pen ?? template?.pen ?? booth?.pen ?? "",
-    work: referencedWorks.join("、") || booth?.work || creatorTypes.join("、") || "尚未提供作品分類",
+    id: base.id,
+    name: base.name,
+    description: saleInfo,
+    categories: [...new Set([...creatorTypes, ...workTypes, ...referencedWorks, ...specialTags])],
+    pen: fields?.pen ?? "",
+    work: referencedWorks.join("、") || creatorTypes.join("、"),
     creatorTypes,
-    ageRatings: fields?.ageRatings ?? template?.ageRatings ?? [],
+    ageRatings: fields?.ageRatings ?? [],
     workTypes,
     referencedWorks,
-    saleInfo: saleInfo ?? "",
+    saleInfo,
     specialTags,
     media: thumbnail ? [{
-      id: `${circleId}-thumbnail`,
+      id: `${base.id}-thumbnail`,
       kind: "thumbnail",
       url: thumbnail.url,
       sourceUrl: thumbnail.sourceUrl,
       provider: thumbnail.provider,
-      alt: `${name} 社團縮圖`,
+      alt: `${base.name} 社團縮圖`,
     }] : [],
-    externalLinks: (fields?.links ?? template?.links)?.map((link) => ({ ...link })) ?? [],
-    updatedAt: override?.updatedAt ?? ACTIVE_EVENT.dataUpdatedAt,
-    sources: [...cloneSources(), ...(override ? [circleSelfSource(override)] : [])],
+    externalLinks: fields?.links?.map((link) => ({ ...link })) ?? [],
+    updatedAt: override?.updatedAt ?? generatedAt,
+    sources: [buildOfficialSource(event, generatedAt), ...(override ? [circleSelfSource(override)] : [])],
   };
 }
 
@@ -229,67 +184,40 @@ function circleFromTemplate(circleId: string, template?: CircleTemplate, booth?:
  * before those indexes are built would stop `findTemplate` from matching that
  * circle's booth rows, silently detaching it from every map placement.
  */
-export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: CircleOverridesPayload): CircleCatalog {
+export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: CircleOverridesPayload, eventDefinition?: EventDefinition): CircleCatalog {
   const overridesById = indexCircleOverrides(overrides);
-  const templatesByName = new Map<string, CircleTemplate[]>();
-  const templatesByPlacement = new Map<string, CircleTemplate[]>();
-  for (const template of payload.templates) {
-    const nameKey = normalizeCircleTemplateName(template.name);
-    templatesByName.set(nameKey, [...(templatesByName.get(nameKey) ?? []), template]);
-    for (const day of [1, 2, 3] as const) {
-      for (const code of template.placements[String(day) as "1" | "2" | "3"] ?? []) {
-        const key = placementKey(day, code, nameKey);
-        templatesByPlacement.set(key, [...(templatesByPlacement.get(key) ?? []), template]);
-      }
-    }
-  }
+  const event = eventDefinition ?? getEventDefinition(payload.eventId) ?? ACTIVE_EVENT;
+  const circlesById = new Map(payload.circles.map((base) => [
+    base.id,
+    circleFromBase(base, event, payload.generatedAt, overridesById.get(base.id)),
+  ]));
 
-  /** Match only exact workbook evidence: same normalized name and, when present, the same day/booth. */
-  const findTemplate = (name: string, day: string | number, boothCode: string) => {
-    const nameKey = normalizeCircleTemplateName(name);
-    const placementMatches = templatesByPlacement.get(placementKey(day, boothCode.toUpperCase(), nameKey)) ?? [];
-    if (placementMatches.length === 1) return placementMatches[0];
-    const nameMatches = templatesByName.get(nameKey) ?? [];
-    return nameMatches.length === 1 ? nameMatches[0] : undefined;
-  };
-
-  const officialSupplementKeys = new Set(payload.officialSupplementKeys);
-  const circlesById = new Map<string, CircleRecord>();
-
-  const rows = payload.booths.map((booth, index) => {
-    const recordId = `${booth.id}-${index}`;
-    const template = findTemplate(booth.name, booth.day, booth.code);
-    // One row in the reviewed Excel master is identity evidence. Its booth cells
-    // may expand to several event placements without duplicating the circle.
-    const circleId = template?.id ?? recordId;
-    const circle = circlesById.get(circleId) ?? circleFromTemplate(circleId, template, booth, overridesById.get(circleId));
-    circlesById.set(circleId, circle);
-    const placement: PlacementRecord = {
-      id: recordId,
-      eventId: payload.eventId,
-      circleId,
-      day: booth.day,
-      area: booth.hall,
-      boothCode: booth.code,
-      status: "active",
-      x: booth.x,
-      y: booth.y,
-      tone: booth.tone,
+  const rows = payload.placements.map((sourcePlacement) => {
+    const circle = circlesById.get(sourcePlacement.circleId);
+    if (!circle) throw new Error(`Placement ${sourcePlacement.id} refers to unknown circle ${sourcePlacement.circleId}.`);
+    const placement: PlacementRecord = { ...sourcePlacement, eventId: payload.eventId };
+    const booth: Booth = {
+      id: placement.id,
+      code: placement.boothCode,
+      name: circle.name,
+      pen: "",
+      genre: event.genres[0],
+      tags: [],
+      day: placement.day,
+      hall: placement.area,
+      x: 0,
+      y: 0,
+      tone: placement.tone,
+      work: "",
+      note: "",
     };
-
-    const organizerSource = officialSupplementKeys.has(`${booth.day}:${booth.code}`) ? buildOfficialSource(booth.day) : buildOfficialSource();
-    const placementSources = [organizerSource, ...circle.sources.filter((source) => source.provider !== "開拓動漫")];
-    const view: CircleViewRecord = { ...booth, recordId, sources: placementSources, circle, placement };
-    return { circle, placement, view };
+    const sources = [
+      buildOfficialSource(event, payload.generatedAt, placement.day),
+      ...circle.sources.filter((source) => source.contentType === "circle"),
+    ];
+    const view: CircleViewRecord = { ...booth, recordId: placement.id, sources, circle, placement };
+    return { placement, view };
   });
-
-  // Keep known Excel circles even when their row currently has no numbered booth
-  // (for example an enterprise/guest entry). They remain searchable data, but do
-  // not fabricate a PlacementRecord or map slot.
-  for (const template of payload.templates) {
-    if (circlesById.has(template.id)) continue;
-    circlesById.set(template.id, circleFromTemplate(template.id, template, undefined, overridesById.get(template.id)));
-  }
 
   const records = rows.map(({ view }) => view);
   const recordsByCircleId = new Map<string, CircleViewRecord[]>();
@@ -317,40 +245,40 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
   };
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+const TONES: readonly string[] = ["coral", "mint", "blue", "amber", "lilac"];
+
+function isCatalogCircle(value: unknown): value is CatalogCircle {
+  if (!value || typeof value !== "object") return false;
+  const circle = value as Record<string, unknown>;
+  return Object.keys(circle).every((key) => key === "id" || key === "name")
+    && /^c-\d{6}$/.test(String(circle.id ?? "")) && typeof circle.name === "string" && circle.name.trim().length > 0;
 }
 
-function isBooth(value: unknown): value is Booth {
+function isCatalogPlacement(value: unknown): value is CatalogPlacement {
   if (!value || typeof value !== "object") return false;
-  const booth = value as Record<string, unknown>;
-  return typeof booth.id === "string" && typeof booth.code === "string" && typeof booth.name === "string"
-    && typeof booth.pen === "string" && typeof booth.genre === "string" && isStringArray(booth.tags)
-    && (booth.day === 1 || booth.day === 2 || booth.day === 3) && (booth.hall === "A" || booth.hall === "B")
-    && typeof booth.x === "number" && typeof booth.y === "number" && typeof booth.tone === "string"
-    && typeof booth.work === "string" && typeof booth.note === "string";
-}
-
-function isTemplate(value: unknown): value is CircleTemplate {
-  if (!value || typeof value !== "object") return false;
-  const template = value as Record<string, unknown>;
-  const placements = template.placements as Record<string, unknown> | undefined;
-  return typeof template.id === "string" && typeof template.name === "string" && Number.isInteger(template.sourceRow)
-    && !!placements && (["1", "2", "3"] as const).every((day) => isStringArray(placements[day]))
-    && isStringArray(template.creatorTypes) && isStringArray(template.ageRatings) && isStringArray(template.workTypes)
-    && isStringArray(template.referencedWorks) && isStringArray(template.specialTags) && isStringArray(template.surveyUrls)
-    && Array.isArray(template.links);
+  const placement = value as Record<string, unknown>;
+  const allowed = new Set(["id", "circleId", "day", "area", "boothCode", "status", "tone"]);
+  return Object.keys(placement).every((key) => allowed.has(key))
+    && typeof placement.id === "string" && /^c-\d{6}$/.test(String(placement.circleId ?? ""))
+    && (typeof placement.day === "string" || typeof placement.day === "number")
+    && typeof placement.area === "string" && typeof placement.boothCode === "string"
+    && ["active", "cancelled", "moved"].includes(String(placement.status))
+    && TONES.includes(String(placement.tone));
 }
 
 /** Reject any snapshot the read model cannot project, rather than half-rendering it. */
 export function isCircleCatalogPayload(value: unknown): value is CircleCatalogPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Record<string, unknown>;
+  const circles = Array.isArray(payload.circles) ? payload.circles : [];
+  const placements = Array.isArray(payload.placements) ? payload.placements : [];
   return payload.schema === CIRCLE_CATALOG_SCHEMA
     && typeof payload.eventId === "string" && typeof payload.generatedAt === "string"
-    && isStringArray(payload.officialSupplementKeys)
-    && Array.isArray(payload.booths) && payload.booths.length > 0 && payload.booths.every(isBooth)
-    && Array.isArray(payload.templates) && payload.templates.every(isTemplate);
+    && circles.length > 0 && circles.every(isCatalogCircle)
+    && new Set(circles.map((circle) => (circle as CatalogCircle).id)).size === circles.length
+    && placements.length > 0 && placements.every(isCatalogPlacement)
+    && new Set(placements.map((placement) => (placement as CatalogPlacement).id)).size === placements.length
+    && placements.every((placement) => circles.some((circle) => (circle as CatalogCircle).id === (placement as CatalogPlacement).circleId));
 }
 
 export const EMPTY_CIRCLE_CATALOG: CircleCatalog = {

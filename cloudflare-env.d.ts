@@ -61,6 +61,7 @@ declare module "cloudflare:workers" {
 /** Bindings and secrets the Pages Functions read. Secrets are set with
  * `wrangler pages secret put` and never live in the repository. */
 interface PortalEnv {
+  EVENT_ID: string;
   DB: D1Database;
   THUMBNAILS: R2Bucket;
   THUMBNAIL_PUBLIC_ORIGIN?: string;

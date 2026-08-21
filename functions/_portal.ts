@@ -1,8 +1,8 @@
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
-import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleTemplateName, type CircleCatalogPayload } from "../app/circle-records";
+import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
-import { ACTIVE_EVENT } from "../app/event-catalog";
+import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 
 /**
@@ -16,27 +16,32 @@ import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
  * payload to run the reader's projection; search and claims only need a compact
  * index, which is derived from the same parse rather than a second fetch.
  */
-const catalogCache = new Map<string, Promise<{ payload: CircleCatalogPayload; index: Map<string, CircleLookup> }>>();
+const catalogCache = new Map<string, Promise<{ payload: CircleCatalogPayload; event: EventDefinition; index: Map<string, CircleLookup> }>>();
 
 async function catalog(env: PortalEnv, request: Request, eventId: string) {
   const cached = catalogCache.get(eventId);
   if (cached) return cached;
 
   const pending = (async () => {
-    const url = new URL(`/data/events/${encodeURIComponent(eventId)}/circles.json`, request.url);
-    const response = await env.ASSETS.fetch(new Request(url.toString()));
-    if (!response.ok) throw new Error(`無法讀取活動社團資料（${response.status}）。`);
-    const value: unknown = await response.json();
+    const base = `/data/events/${encodeURIComponent(eventId)}`;
+    const [response, eventResponse] = await Promise.all([
+      env.ASSETS.fetch(new Request(new URL(`${base}/circles.json`, request.url).toString())),
+      env.ASSETS.fetch(new Request(new URL(`${base}/event.json`, request.url).toString())),
+    ]);
+    if (!response.ok || !eventResponse.ok) throw new Error(`無法讀取活動資料（catalog=${response.status}, event=${eventResponse.status}）。`);
+    const [value, eventValue]: [unknown, unknown] = await Promise.all([response.json(), eventResponse.json()]);
     if (!isCircleCatalogPayload(value) || value.eventId !== eventId) throw new Error(`活動 ${eventId} 的靜態社團資料格式或 identity 無效。`);
+    const event = parseEventDefinition(eventValue);
+    if (event.id !== eventId) throw new Error(`活動 ${eventId} 的定義 identity 無效。`);
     const payload: CircleCatalogPayload = value;
-    const index = new Map(payload.templates.map((template) => [template.id, {
-      id: template.id,
-      name: template.name,
-      nameKey: normalizeCircleTemplateName(template.name),
-      sourceRow: template.sourceRow ?? null,
-      links: template.links.map((link) => ({ provider: link.provider, url: link.url })),
+    const index = new Map(payload.circles.map((circle) => [circle.id, {
+      id: circle.id,
+      name: circle.name,
+      nameKey: normalizeCircleName(circle.name),
+      sourceRow: null,
+      links: [],
     } satisfies CircleLookup]));
-    return { payload, index };
+    return { payload, event, index };
   })().catch((error: unknown) => {
     catalogCache.delete(eventId);
     throw error;
@@ -235,7 +240,7 @@ export function previewE2eAuthorized(env: PortalEnv, request: Request) {
 
 export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
   const { request, env } = context;
-  const eventId = ACTIVE_EVENT.id;
+  const eventId = env.EVENT_ID;
   const repository = repositoryFor(env);
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
@@ -243,7 +248,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     put: async (key, value, contentType) => {
       await env.THUMBNAILS.put(key, value, {
         httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
-        customMetadata: { event: ACTIVE_EVENT.id },
+        customMetadata: { event: eventId },
       });
     },
     delete: (keys) => env.THUMBNAILS.delete(keys),
@@ -283,14 +288,14 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     projectCircle: async (circleId, fields) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.
-      const { payload } = await catalog(env, request, eventId);
+      const { payload, event } = await catalog(env, request, eventId);
       const projected = buildCircleCatalog(payload, {
         schema: CIRCLE_OVERRIDES_SCHEMA,
         eventId,
-        generatedAt: ACTIVE_EVENT.dataUpdatedAt,
+        generatedAt: event.dataUpdatedAt,
         revision: 0,
         overrides: [{ circleId, updatedAt: new Date().toISOString(), fields }],
-      });
+      }, event);
       const records = projected.recordsByCircleId.get(circleId);
       if (records?.length) return records;
       // A circle with no numbered booth still has an identity to preview.
@@ -303,8 +308,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       sessionSecret: requireSecret(env, "SESSION_SECRET"),
       hashPepper: requireSecret(env, "HASH_PEPPER"),
       adminEmails: bootstrapAdmins(env),
-      dataUpdatedAt: ACTIVE_EVENT.dataUpdatedAt,
-      eventEndsAt: ACTIVE_EVENT.eventEndsAt,
+      dataUpdatedAt: async () => (await catalog(env, request, eventId)).event.dataUpdatedAt,
+      eventEndsAt: async () => (await catalog(env, request, eventId)).event.eventEndsAt,
       now: () => Date.now(),
     },
   });

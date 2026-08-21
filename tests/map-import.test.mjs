@@ -7,16 +7,24 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
+const { recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { resizeRectFromCorner, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
 
-test("validates the exported FF47 Pages snapshot", async () => {
-  const snapshot = JSON.parse(await readFile(new URL("../public/data/events/ff47/map.json", import.meta.url), "utf8"));
-  assert.equal(snapshot.eventId, "ff47");
+test("validates the staged fixture map without FF47-specific counts", async () => {
+  const event = JSON.parse(await readFile(new URL("../fixtures/events/sample/event.json", import.meta.url), "utf8"));
+  const catalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
+  const snapshot = JSON.parse(await readFile(new URL("../fixtures/events/sample/map.json", import.meta.url), "utf8"));
+  assert.equal(snapshot.eventId, "sample");
   assert.ok(Number.isSafeInteger(snapshot.revision) && snapshot.revision > 0);
-  assert.equal(validateFf47Layout(snapshot.layout).ok, true);
+  assert.equal(validateEventMapLayout(snapshot.layout).ok, true);
+  assert.equal(validateFf47Layout(snapshot.layout).ok, false);
+  assert.equal(validateStagedEventArtifacts(event, catalog, snapshot, "sample").map, snapshot);
+  assert.throws(() => validateStagedEventArtifacts(event, catalog, { ...snapshot, layout: { ...snapshot.layout, template: "FF47" } }, "sample"), /does not match/);
+  assert.throws(() => validateStagedEventArtifacts(event, { ...catalog, placements: [...catalog.placements, catalog.placements[0]] }, snapshot, "sample"), /duplicate placement/);
 });
 
 function syntheticFF47Image() {
@@ -53,7 +61,7 @@ function syntheticFF47Image() {
 }
 
 test("recognizes A-W with horizontal W, pillars, and access points", () => {
-  const report = recognizeFF47Map(syntheticFF47Image());
+  const report = recognizeMapTemplate("FF47", syntheticFF47Image());
   assert.deepEqual(report.diagnostics, { rowCount: 23, slotCount: 988, pillarCount: 28, accessPointCount: 5 });
   assert.equal(validateEventMapLayout(report.layout).ok, true);
   assert.equal(validateFf47Layout(report.layout).ok, true);
@@ -68,6 +76,13 @@ test("recognizes A-W with horizontal W, pillars, and access points", () => {
   assert.ok(rows.A.slots.find((slot) => slot.code === "A01").rect.y > rows.A.slots.find((slot) => slot.code === "A22").rect.y);
   assert.ok(rows.B.slots.find((slot) => slot.code === "B23").rect.y < rows.B.slots.find((slot) => slot.code === "B44").rect.y);
   assert.ok(rows.W.slots.find((slot) => slot.code === "W42").rect.x < rows.W.slots.find((slot) => slot.code === "W01").rect.x);
+});
+
+test("template registry dispatches event-specific adapters without making them global invariants", () => {
+  const fixture = JSON.parse('{"version":2,"template":"SAMPLE","width":10,"height":10,"floor":{"x":0,"y":0,"width":10,"height":10},"rows":[{"label":"S","orientation":"horizontal","confidence":1,"slots":[{"code":"S01","rect":{"x":1,"y":1,"width":2,"height":2}}]}],"pillars":[],"accessPoints":[],"landmarks":[]}');
+  assert.equal(validateMapTemplateLayout("SAMPLE", fixture).ok, true);
+  assert.equal(validateMapTemplateLayout("FF47", fixture).ok, false);
+  assert.throws(() => recognizeMapTemplate("SAMPLE", syntheticFF47Image()), /尚未提供圖片辨識 adapter/);
 });
 
 test("accepts a generic future event layout without FF47-specific counts", () => {

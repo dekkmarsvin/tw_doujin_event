@@ -1,4 +1,5 @@
 import { getCircleCatalog, isKnownCircleId } from "./circle-records";
+import { ACTIVE_EVENT_ID } from "./event-catalog";
 import {
   EMPTY_PLANNING_DOCUMENT,
   PLANNING_SCHEMA_VERSION,
@@ -144,7 +145,7 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
     if (!circleId) { errors.push(`第 ${line} 列：circle_id 為必填。`); return; }
     if (row.some((value) => /^[\s]*[=+\-@]/.test(value))) { errors.push(`第 ${line} 列：包含可能的公式注入內容。`); return; }
     if (sourceUrl && (!sourceUrl.startsWith("https://") || (() => { try { new URL(sourceUrl); return false; } catch { return true; } })())) { errors.push(`第 ${line} 列：source_url 必須是有效 HTTPS URL。`); return; }
-    const targetEventId = eventId || "ff47";
+    const targetEventId = eventId || ACTIVE_EVENT_ID;
     const catalog = getCircleCatalog(targetEventId);
     const record = catalog.recordsByCircleId.get(circleId)?.[0] ?? catalog.recordsById.get(circleId);
     const resolvedDay = record?.day ?? 1;
@@ -156,13 +157,13 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
       if (!group) { group = { id: `csv-group-${groupByLabel.size + 1}`, name: groupLabel, color: "coral", sortOrder: groupByLabel.size }; groupByLabel.set(groupLabel, group); }
       groupId = group.id;
     }
-    if (!visitStatus) favorites.push({ eventId: eventId || "ff47", circleId, groupId, memo: memoRaw, createdAt: updatedAt, updatedAt });
+    if (!visitStatus) favorites.push({ eventId: targetEventId, circleId, groupId, memo: memoRaw, createdAt: updatedAt, updatedAt });
     else if (visitStatus === "planned" || visitStatus === "next" || visitStatus === "visited") {
       const routeOrder = Number(routeOrderRaw);
       if (!Number.isInteger(routeOrder) || routeOrder < 1) { errors.push(`第 ${line} 列：route_order 必須是正整數。`); return; }
       const budget = budgetRaw.trim() ? Number(budgetRaw) : null;
       if (budget !== null && (!Number.isInteger(budget) || budget < 0)) { errors.push(`第 ${line} 列：budget 必須是零或正整數。`); return; }
-      visitPlans.push({ eventId: eventId || "ff47", day: resolvedDay, circleId, status: visitStatus, routeOrder: routeOrder - 1, purchaseMemo: purchaseMemoRaw, budget, updatedAt });
+      visitPlans.push({ eventId: targetEventId, day: resolvedDay, circleId, status: visitStatus, routeOrder: routeOrder - 1, purchaseMemo: purchaseMemoRaw, budget, updatedAt });
     } else errors.push(`第 ${line} 列：visit_status 無效。`);
   });
   const document = parsePlanningDocument({ schemaVersion: PLANNING_SCHEMA_VERSION, favoriteGroups: [...groupByLabel.values()], favorites, visitPlans });

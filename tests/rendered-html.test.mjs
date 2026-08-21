@@ -13,7 +13,7 @@ async function readTextAssets(directory) {
   return contents.flat();
 }
 
-test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
+test("builds the staged application as a Cloudflare Pages SPA", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>場刊 Map｜同人展逛攤地圖<\/title>/i);
   assert.match(html, /<div id="root"><\/div>/);
@@ -49,24 +49,24 @@ test("builds the FF47 application as a Cloudflare Pages SPA", async () => {
   assert.doesNotMatch(readerJs, /\/api\/auth\/|\/api\/claims|\/api\/admin\//, "the reader must not carry write endpoints");
   assert.doesNotMatch(readerJs, /寄出登入連結|認領社團|__Host-ff47_session/);
 
-  const catalog = JSON.parse(await readFile(new URL("../dist/data/events/ff47/circles.json", import.meta.url), "utf8"));
-  const sourceCatalog = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
-  assert.equal(catalog.schema, "circle-catalog/2");
-  assert.equal(catalog.eventId, "ff47");
-  assert.equal(catalog.booths.length, sourceCatalog.booths.length);
-  assert.equal(catalog.templates.length, sourceCatalog.templates.length);
-  assert.ok(catalog.booths.length > 2900);
-  assert.ok(catalog.officialSupplementKeys.includes("1:J09"));
+  const catalog = JSON.parse(await readFile(new URL("../dist/data/events/sample/circles.json", import.meta.url), "utf8"));
+  const sourceCatalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
+  assert.equal(catalog.schema, "circle-catalog/3");
+  assert.equal(catalog.eventId, "sample");
+  assert.deepEqual(catalog.circles, sourceCatalog.circles);
+  assert.deepEqual(catalog.placements, sourceCatalog.placements);
+  assert.equal(catalog.circles.length, 2);
+  for (const retired of ["booths", "templates", "officialSupplementKeys"]) assert.equal(Object.hasOwn(catalog, retired), false);
 
-  const snapshot = JSON.parse(await readFile(new URL("../dist/data/events/ff47/map.json", import.meta.url), "utf8"));
-  const sourceSnapshot = JSON.parse(await readFile(new URL("../public/data/events/ff47/map.json", import.meta.url), "utf8"));
-  assert.equal(snapshot.eventId, "ff47");
+  const snapshot = JSON.parse(await readFile(new URL("../dist/data/events/sample/map.json", import.meta.url), "utf8"));
+  const sourceSnapshot = JSON.parse(await readFile(new URL("../fixtures/events/sample/map.json", import.meta.url), "utf8"));
+  assert.equal(snapshot.eventId, "sample");
   assert.ok(Number.isSafeInteger(snapshot.revision) && snapshot.revision > 0);
   assert.equal(snapshot.revision, sourceSnapshot.revision);
-  assert.equal(snapshot.layout.rows.reduce((total, row) => total + row.slots.length, 0), 988);
-  assert.equal(snapshot.layout.pillars.length, 28);
-  assert.equal(snapshot.layout.accessPoints.length, 5);
-  assert.equal(snapshot.layout.landmarks.length, 21);
+  assert.equal(snapshot.layout.rows.reduce((total, row) => total + row.slots.length, 0), 2);
+  assert.equal(snapshot.layout.pillars.length, 0);
+  assert.equal(snapshot.layout.accessPoints.length, 0);
+  assert.equal(snapshot.layout.landmarks.length, 0);
 
   await assert.rejects(readFile(new URL("../dist/_worker.js", import.meta.url), "utf8"), { code: "ENOENT" });
   await assert.rejects(readFile(new URL("../dist/server/index.js", import.meta.url), "utf8"), { code: "ENOENT" });
@@ -135,7 +135,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(admin, /scaleMapLandmarks/);
   assert.match(editor, /onPointerMove=\{moveDrag\}/);
   assert.match(editor, /Shift \+ 方向鍵/);
-  assert.match(eventCatalog, /areaMode: "single"/);
+  assert.match(eventCatalog, /sampleTwoDefinition/);
   assert.match(app, /showAreaSwitcher && <fieldset/);
   assert.match(app, /data-text-scale=\{textScale\}/);
   assert.match(app, /網頁字體大小/);
@@ -168,7 +168,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /role="tabpanel" aria-labelledby=\{activeMobileTabId\}/);
   assert.match(app, /onFocusCapture=\{handleMobilePanelFocus\}/);
   assert.match(app, /setMobileSheetLevel\("full"\)/);
-  assert.match(eventCatalog, /parseEventDefinition\(ff47Definition\)/);
+  assert.match(eventCatalog, /parseEventDefinition\(injectedDefinition\)/);
   assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/1"/);
   assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
   assert.match(editorPage, /loadPublishedEventMap\(ACTIVE_EVENT_ID\)/);
@@ -240,7 +240,7 @@ test("separates the public static app from the retained editor implementation", 
   // The override is applied downstream of the booth-matching indexes. Moving it
   // upstream would silently detach renamed circles from every map placement;
   // tests/circle-overrides.test.mjs proves the behaviour, this pins the seam.
-  assert.match(catalogStore, /circleFromTemplate\(circleId, template, booth, overridesById\.get\(circleId\)\)/);
+  assert.match(catalogStore, /circleFromBase\(base, event, payload\.generatedAt, overridesById\.get\(base\.id\)\)/);
   assert.match(catalogStore, /provider: "社團本人"/);
   assert.match(catalogStore, /status: "unverified"/);
   assert.match(workspacePanels, /SOURCE_ORIGIN_LABEL/);

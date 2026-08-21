@@ -1,0 +1,29 @@
+{
+  "schema": "event-definition/1",
+  "id": "sample-two",
+  "name": "第二範例活動",
+  "venue": "測試展覽館",
+  "dateRangeLabel": "10.1–4",
+  "dataUpdatedAt": "2026-01-02T00:00:00.000+08:00",
+  "eventEndsAt": "2026-10-04T23:59:59.999+08:00",
+  "mapTemplate": "SAMPLE_TWO",
+  "areaMode": "single",
+  "days": [
+    { "id": "thu", "label": "THU", "dateLabel": "10月1日" },
+    { "id": "fri", "label": "FRI", "dateLabel": "10月2日" },
+    { "id": "sat", "label": "SAT", "dateLabel": "10月3日" },
+    { "id": "sun", "label": "SUN", "dateLabel": "10月4日" }
+  ],
+  "areas": [{ "id": "all", "label": "全館", "shortLabel": "全部" }],
+  "genres": ["全部類別"],
+  "organizer": {
+    "adapter": "fixture/1",
+    "eventUrl": "https://example.invalid/sample-two",
+    "boothListUrls": {
+      "thu": "https://example.invalid/sample-two/thu",
+      "fri": "https://example.invalid/sample-two/fri",
+      "sat": "https://example.invalid/sample-two/sat",
+      "sun": "https://example.invalid/sample-two/sun"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema": "event-definition/1",
+  "id": "sample",
+  "name": "範例創作市集",
+  "venue": "範例會館",
+  "dateRangeLabel": "9.1–2",
+  "dataUpdatedAt": "2026-01-01T00:00:00.000+08:00",
+  "eventEndsAt": "2026-09-02T23:59:59.999+08:00",
+  "mapTemplate": "SAMPLE",
+  "areaMode": "switchable",
+  "days": [
+    { "id": 1, "label": "DAY 1", "dateLabel": "9月1日" },
+    { "id": 2, "label": "DAY 2", "dateLabel": "9月2日" }
+  ],
+  "areas": [
+    { "id": "north", "label": "北區", "shortLabel": "北" },
+    { "id": "south", "label": "南區", "shortLabel": "南" }
+  ],
+  "genres": ["全部類別"],
+  "organizer": {
+    "adapter": "fixture/1",
+    "eventUrl": "https://example.invalid/sample",
+    "boothListUrls": {
+      "1": "https://example.invalid/sample/day-1",
+      "2": "https://example.invalid/sample/day-2"
+    }
+  }
+}

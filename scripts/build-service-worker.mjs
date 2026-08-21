@@ -12,6 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = resolve(root, "dist");
 const sourcePath = resolve(root, "app", "service-worker-source.js");
 const outputPath = resolve(dist, "sw.js");
+const stage = JSON.parse(await readFile(resolve(root, ".event-data-stage.json"), "utf8"));
 
 /** Entries worth holding for a full offline session at the venue. */
 /**
@@ -55,7 +56,7 @@ const precache = [...new Set([
   ...reader,
 ])].sort();
 
-const required = ["/index.html", "/manifest.webmanifest", "/data/events/ff47/circles.json", "/data/events/ff47/map.json"];
+const required = ["/index.html", "/manifest.webmanifest", `/data/events/${stage.eventId}/circles.json`, `/data/events/${stage.eventId}/map.json`];
 const missing = required.filter((path) => !precache.includes(path));
 if (missing.length > 0) throw new Error(`The build is missing offline-critical files: ${missing.join(", ")}`);
 if (!reader.some((path) => path.endsWith(".js"))) throw new Error("index.html references no application script to precache.");

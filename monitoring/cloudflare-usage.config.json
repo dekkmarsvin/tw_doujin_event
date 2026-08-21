@@ -1,0 +1,12 @@
+{
+  "schema": "cloudflare-usage-config/1",
+  "resources": [
+    { "id": "r2:production", "kind": "r2", "environment": "production", "bucketName": "tw-doujin-event-thumbnails" },
+    { "id": "r2:preview", "kind": "r2", "environment": "preview", "bucketName": "tw-doujin-event-thumbnails-preview" }
+  ],
+  "operationClasses": {
+    "classA": ["ListBuckets", "PutBucket", "ListObjects", "PutObject", "CopyObject", "CompleteMultipartUpload", "CreateMultipartUpload", "LifecycleStorageTierTransition", "ListMultipartUploads", "UploadPart", "UploadPartCopy", "ListParts", "PutBucketEncryption", "PutBucketCors", "PutBucketLifecycleConfiguration"],
+    "classB": ["HeadBucket", "HeadObject", "GetObject", "UsageSummary", "GetBucketEncryption", "GetBucketLocation", "GetBucketCors", "GetBucketLifecycleConfiguration"],
+    "free": ["DeleteObject", "DeleteBucket", "AbortMultipartUpload"]
+  }
+}

@@ -80,7 +80,7 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
           <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
             {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
-            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <><small>{record.circle.creatorTypes.join("、") || record.genre} · {record.circle.work}</small><small className={styles.sourceHint}>來源：FF47 公開整理表{thumbnail ? " · 社團自填縮圖" : ""}</small></>}</span>
+            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{(record.circle.creatorTypes.length > 0 || record.circle.work) && <small>{[record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean).join(" · ")}</small>}<small className={styles.sourceHint}>來源：活動主辦單位{thumbnail ? " · 社團自填縮圖" : ""}</small></>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>
@@ -189,11 +189,11 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
     <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
     <div className={styles.detailBody}>
       <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button></div>
-      <div className={styles.title}><div><h2>{record.name}</h2><p>{record.circle.creatorTypes.join("、") || record.genre}{record.circle.pen ? ` · ${record.circle.pen}` : ""}</p>{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
+      <div className={styles.title}><div><h2>{record.name}</h2>{(record.circle.creatorTypes.length > 0 || record.circle.pen) && <p>{[record.circle.creatorTypes.join("、"), record.circle.pen].filter(Boolean).join(" · ")}</p>}{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
       {favorite?.groupId && <p className={styles.sourceHint}>收藏群組：{groups.find((group) => group.id === favorite.groupId)?.name ?? "未分組"}</p>}
       {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登記 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
       {!compact && <div className={styles.tags}>{[...new Set([...record.circle.workTypes, ...record.circle.referencedWorks, ...record.circle.specialTags, ...record.tags.map((tag) => tag.trim())])].filter(Boolean).map((tag) => <span key={tag}>#{tag}</span>)}</div>}
-      <div className={styles.work}><small>作品與販售資訊</small><b>{record.circle.work}</b><p>{record.circle.saleInfo || record.note}</p></div>
+      {(record.circle.work || record.circle.saleInfo || record.note) && <div className={styles.work}><small>作品與販售資訊</small>{record.circle.work && <b>{record.circle.work}</b>}{(record.circle.saleInfo || record.note) && <p>{record.circle.saleInfo || record.note}</p>}</div>}
       {visibleLinks.length > 0 && <div className={styles.externalLinks} aria-label="社團外部連結"><b>更多資訊</b><div>{visibleLinks.map((link) => <a key={`${link.kind}-${link.provider}-${link.url}`} href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>)}</div>{compact && record.circle.externalLinks.length > visibleLinks.length && <small>完整詳細資訊另有 {record.circle.externalLinks.length - visibleLinks.length} 個連結</small>}</div>}
       <div className={styles.detailActions}><button className={styles.primary} onClick={onTogglePlan}>{plan ? "從行程移除" : "加入今日行程"}</button><button disabled={plan?.status === "next"} onClick={onSetNext}>{plan?.status === "next" ? "目前下一站" : "設為下一站"}</button></div>
       {compact && <><div className={styles.sourceSummary}><b>資料來源</b><span>{record.sources.map((source) => source.provider).join("、")}</span></div><button className={styles.fullDetailButton} onClick={onOpenFull}>開啟完整詳細資訊</button></>}
@@ -205,7 +205,7 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
       {!compact && <div className={styles.sources} aria-label="資料來源">
         <b>資料來源</b>
         {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong><small>{source.label} · {SOURCE_ORIGIN_LABEL[source.contentType]} · {SOURCE_STATUS_LABEL[source.status]}</small><small>匯入 {sourceDate(source.fetchedAt)}</small></span>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">查看原始來源 <UiIcon name="external" /></a> : <small className={styles.sourceNoLink}>於本站填寫</small>}</div>)}
-        <p>社團與作品欄位由公開整理資料彙整；品項、庫存與臨時異動以社團及主辦現場公告為準。</p>
+        <p>攤位與社團名稱以主辦資料為準；其他內容由社團自行提供。</p>
       </div>}
     </div>
   </section>;

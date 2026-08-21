@@ -102,7 +102,8 @@ export function projectEventWorkspace(input: ProjectionInput) {
     return [marker.code, {
       tone: representative.tone,
       label: marker.records.map((record) => record.name).join("、"),
-      ariaLabel: [marker.code, marker.records.map((record) => record.name).join("、"), ...statusLabels, marker.records.map((record) => record.genre).join("、")].join("，"),
+      ariaLabel: [marker.code, marker.records.map((record) => record.name).join("、"), ...statusLabels,
+        ...new Set(marker.records.map((record) => record.genre).filter((value) => value !== event.genres[0]))].join("，"),
       selected: selected?.day === day && selected.code === marker.code,
       favorite,
       planned: planEntries.length > 0,

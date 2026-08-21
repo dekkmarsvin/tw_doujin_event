@@ -33,6 +33,7 @@
   // Top level is production only — `vars` is non-inheritable, which is why the
   // preview environment declares its own dummy pair below.
   "vars": {
+    "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
     "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top"
   },
@@ -73,6 +74,7 @@
       // must never reach production: there it is a real secret, set with
       // `wrangler pages secret put`.
       "vars": {
+        "EVENT_ID": "ff47",
         "PREVIEW_MAIL_SINK": "d1",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
         "TURNSTILE_SITEKEY": "1x00000000000000000000AA",

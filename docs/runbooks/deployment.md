@@ -414,7 +414,7 @@ npm run purge:dev
 與[本機共同 gate](./local-development.md#驗證-gate) 相同，CI 會重跑一次。另需確認：
 
 - `dist/index.html`、`dist/_headers` 存在，且沒有 Functions 或自訂 rewrite 規則攔截靜態請求。
-- `dist/data/events/ff47/map.json` 通過 FF47 layout 驗證（988 格、28 根柱子、5 個出入口）。
+- `npm run build:production` 已依 pin 重建單一活動產物；`dist/data/events/ff47/map.json` 通過 FF47 layout 驗證（988 格、28 根柱子、5 個出入口）。
 - `dist/_worker.js` 與 `dist/server/index.js` 不存在。
 - 公開 bundle 不包含 `/api/events/`、`MapAdminImporter` 或管理發布文案。
 

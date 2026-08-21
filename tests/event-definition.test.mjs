@@ -10,12 +10,13 @@ after(async () => vite.close());
 
 test("the active event comes from a versioned validated definition", () => {
   assert.equal(ACTIVE_EVENT.schema, EVENT_DEFINITION_SCHEMA);
-  assert.equal(ACTIVE_EVENT.id, "ff47");
-  assert.equal(ACTIVE_EVENT.dataLastUpdatedLabel, "2026 年 8 月 11 日");
-  assert.equal(ACTIVE_EVENT.organizer.boothListUrls[1].startsWith("https://www.f-2.com.tw/"), true);
-  assert.equal(ACTIVE_EVENT_ID, "ff47");
-  assert.equal(EVENT_REGISTRY.size, 1);
-  assert.equal(getEventDefinition("ff47"), ACTIVE_EVENT);
+  assert.equal(ACTIVE_EVENT.id, "sample");
+  assert.equal(ACTIVE_EVENT.dataLastUpdatedLabel, "2026 年 1 月 1 日");
+  assert.equal(ACTIVE_EVENT.organizer.boothListUrls[1].startsWith("https://example.invalid/"), true);
+  assert.equal(ACTIVE_EVENT_ID, "sample");
+  assert.equal(EVENT_REGISTRY.size, 2);
+  assert.equal(getEventDefinition("sample"), ACTIVE_EVENT);
+  assert.deepEqual(getEventDefinition("sample-two")?.days.map(({ id }) => id), ["thu", "fri", "sat", "sun"]);
   assert.equal(getEventDefinition("missing"), null);
 });
 

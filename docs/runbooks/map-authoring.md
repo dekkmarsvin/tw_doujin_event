@@ -12,14 +12,16 @@
 ### 1. 啟動 authoring 環境
 
 ```bash
+npm run data:fetch -- ff47
+npm run data:stage -- ff47
 npm run dev
 ```
 
-開啟 `/editor`，選擇 `data_source_test/FF47社團攤位配置圖.jpg`。
+authoring build 會讀取目前 staged event definition，據此選擇 recognizer 與畫面標籤。開啟 `/editor`，從該活動 data repo 或受信任的本機來源選擇原始配置圖。原圖不複製到程式 repo。
 
 ### 2. 辨識
 
-`recognizeFF47Map(imageData)` 是深模組，唯一公開 interface 是輸入圖片像素、回傳 `MapRecognitionReport`。它負責：
+`recognizeMapTemplate(event.mapTemplate, imageData)` 依活動定義分派辨識 adapter，回傳 `MapRecognitionReport`。FF47 adapter 負責：
 
 - 從格線辨識 A–V 縱向排與 W 橫向排。
 - 依 FF47 編號規則產生 slot：A 為 01–22；B–V 為 01–44；W 為 01–42。
@@ -48,19 +50,19 @@ npm run dev
 
 ### 5. 發布到本機 D1
 
-只有 A 至 W、988 格、28 根柱子、5 個出入口與**信心門檻全部通過**才可發布。按「發布活動地圖」後 route 驗證並 UPSERT，回傳 revision。
+只有該活動 template 的完整性條件與**信心門檻全部通過**才可發布。FF47 為 A 至 W、988 格、28 根柱子與 5 個出入口。按「發布活動地圖」後 route 驗證並 UPSERT，回傳 revision。
 
 ### 6. 匯出公開快照
 
 ```bash
-npm run map:snapshot
+npm run map:snapshot -- ff47 ../tw_doujin_event-data-ff47/map.json
 ```
 
 ```bash
 npm test
 ```
 
-`map:snapshot` 會建立 authoring build，再將本機 D1 的 `ff47` 已發布 revision 匯出到 `public/data/events/ff47/map.json`。
+`map:snapshot` 會建立 authoring build，再將指定活動的已發布 revision 寫到明確指定的 data repo 路徑。程式會拒絕寫回已退役的 `public/data/events/`。在 data repo review、提交並推送後，再依[社團與活動資料更新](./catalog-data-update.md)更新 pin。
 
 ### 7. Review 後發布
 

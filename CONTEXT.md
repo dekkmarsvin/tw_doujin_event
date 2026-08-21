@@ -50,7 +50,7 @@
 本站呈現的社團與攤位資料整體。對應公開快照 `circles.json`。
 
 **社團模板**（circle template）
-Excel 主資料工作表中的一列，是社團身分的證據來源。生成器把它與主辦當日攤位清單接起來，產生 `CircleRecord` 與 `PlacementRecord`。
+社團身分由永久配號 registry 與可審閱證據決定。活動中的正式證據是主辦攤位鍵（`eventId + day:booth`）；生成器把它與主辦當日攤位清單接起來，產生 `CircleRecord` 與 `PlacementRecord`。
 
 **快照**（snapshot）
 版本控制中的靜態 JSON 產物，是公開資料的唯一真相。`circles.json`（場刊）與 `map.json`（地圖）。避免說「靜態檔」。
@@ -59,7 +59,7 @@ Excel 主資料工作表中的一列，是社團身分的證據來源。生成�
 社團自己在 `/circle` 填寫、疊加在快照之上的內容。可即時撤下，一律標示為「社團自述／尚未驗證」。避免說「社團資料」——那會和 `CircleRecord` 混淆。
 
 **來源**（`SourceLink`）
-一筆內容的出處：提供者、內容類型、原始連結、擷取時間與狀態。內容類型有 `official`（主辦）、`circle`（社團本人）、`catalog`（公開整理）、`social`、`media`。**只有主辦來源可標示「主辦來源」；其他一律不得使用「官方」措辭。**
+一筆內容的出處：提供者、內容類型、原始連結、擷取時間與狀態。現行生產者是 `official`（主辦）與 `circle`（社團本人）；`catalog`、`social`、`media` 只保留為歷史／連結分類，不抓取第三方內容。**只有主辦來源可標示「主辦來源」；其他一律不得使用「官方」措辭。**
 
 **facet**
 資料生成階段已正規化的搜尋欄位（`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`）。UI 只消費，不再切割字串。

@@ -4,10 +4,10 @@ import { useRef, useState } from "react";
 import { publishEventMap } from "./event-map-client";
 import EventMapRenderer from "./event-map-renderer";
 import MapLayoutEditor from "./map-layout-editor";
-import { LANDMARK_RECOGNITION_WARNING, recognizeFF47Map } from "./map-recognition";
+import { LANDMARK_RECOGNITION_WARNING } from "./map-recognition";
 import { scaleMapLandmarks, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
 import { getEventDefinition } from "./event-catalog";
-import { validateMapTemplateLayout } from "./map-template-registry";
+import { getMapTemplateMetadata, recognizeMapTemplate, validateMapTemplateLayout } from "./map-template-registry";
 import { UiIcon } from "./ui-icons";
 import { useModalFocus } from "./use-modal-focus";
 import styles from "./map-admin-importer.module.css";
@@ -54,6 +54,9 @@ function loadImage(source: string) {
 }
 
 export default function MapAdminImporter({ eventId, initialMap, onPublished, onClose }: Props) {
+  const eventDefinition = getEventDefinition(eventId);
+  const eventName = eventDefinition?.name ?? eventId;
+  const templateMetadata = getMapTemplateMetadata(eventDefinition?.mapTemplate ?? initialMap?.layout.template ?? "");
   const initialReport = reportFromPublished(initialMap);
   const [sourceName, setSourceName] = useState(initialMap?.sourceName ?? "");
   const [imageDataUrl, setImageDataUrl] = useState("");
@@ -86,7 +89,8 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
       if (!context) throw new Error("瀏覽器無法建立圖片分析畫布。" );
       context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-      const recognized = recognizeFF47Map({ data: pixels.data, width: pixels.width, height: pixels.height });
+      if (!eventDefinition) throw new Error(`找不到活動 ${eventId} 的定義。`);
+      const recognized = recognizeMapTemplate(eventDefinition.mapTemplate, { data: pixels.data, width: pixels.width, height: pixels.height });
       const previousLayout = report?.layout;
       if (previousLayout?.landmarks.length) {
         recognized.layout.landmarks = scaleMapLandmarks(previousLayout.landmarks, previousLayout, recognized.layout);
@@ -104,7 +108,6 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
   };
 
   const currentDiagnostics = report ? diagnostics(report.layout) : null;
-  const eventDefinition = getEventDefinition(eventId);
   const layoutValidation = report ? validateMapTemplateLayout(eventDefinition?.mapTemplate ?? report.layout.template, report.layout) : null;
   const canPublish = !!report && report.confidence >= .85 && !!layoutValidation?.ok;
   const visibleWarnings = [...new Set([...(report?.warnings ?? []), ...(layoutValidation && !layoutValidation.ok ? layoutValidation.errors : [])])];
@@ -126,7 +129,7 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
   return <div className={styles.backdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="admin-map-title" tabIndex={-1}>
       <header className={styles.header}>
-        <div><small>ADMIN · MAP EDITOR</small><h2 id="admin-map-title">管理 FF47 活動地圖</h2></div>
+        <div><small>ADMIN · MAP EDITOR</small><h2 id="admin-map-title">管理 {eventName} 活動地圖</h2></div>
         <button onClick={onClose} aria-label="關閉管理地圖視窗"><UiIcon name="close" /></button>
       </header>
 
@@ -134,7 +137,7 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
 
       <label className={`${styles.dropzone} ${busy ? styles.busy : ""}`}>
         <input data-testid="map-image-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void handleFile(event.target.files?.[0])} disabled={!!busy} />
-        <span aria-hidden="true"><UiIcon name="upload" /></span><b>{busy === "recognizing" ? "正在辨識向量地圖…" : sourceName || "選擇 FF47 社團攤位配置圖"}</b><small>JPG、PNG 或 WebP，最大 4MB</small>
+        <span aria-hidden="true"><UiIcon name="upload" /></span><b>{busy === "recognizing" ? "正在辨識向量地圖…" : sourceName || `選擇 ${eventName} 社團攤位配置圖`}</b><small>JPG、PNG 或 WebP，最大 4MB</small>
       </label>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -142,8 +145,8 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
       {report && <>
         <div className={styles.summary}>
           <div><small>一般結構辨識信心</small><b className={report.confidence >= .85 ? styles.good : styles.warn}>{Math.round(report.confidence * 100)}%</b></div>
-          <div><small>A–W 排</small><b>{currentDiagnostics?.rowCount}<i>/ 23</i></b></div>
-          <div><small>攤位格</small><b>{currentDiagnostics?.slotCount}<i>/ 988</i></b></div>
+          <div><small>{templateMetadata.rowLabel}</small><b>{currentDiagnostics?.rowCount}{templateMetadata.expectedRows !== null && <i>/ {templateMetadata.expectedRows}</i>}</b></div>
+          <div><small>{templateMetadata.slotLabel}</small><b>{currentDiagnostics?.slotCount}{templateMetadata.expectedSlots !== null && <i>/ {templateMetadata.expectedSlots}</i>}</b></div>
           <div><small>柱子</small><b>{currentDiagnostics?.pillarCount}</b></div>
           <div><small>出入口</small><b>{currentDiagnostics?.accessPointCount}</b></div>
         </div>
@@ -152,13 +155,13 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
           {imageDataUrl && <figure>
             <figcaption>原始配置圖（僅供管理比對）</figcaption>
             {/* eslint-disable-next-line @next/next/no-img-element -- admin-only local recognition preview */}
-            <img src={imageDataUrl} alt="管理員上傳的 FF47 原始配置圖" />
+            <img src={imageDataUrl} alt={`管理員上傳的 ${eventName} 原始配置圖`} />
           </figure>}
           <figure><figcaption>可發布的 SVG 地圖</figcaption><div className={styles.vectorPreview}><EventMapRenderer layout={report.layout} slots={{}} onSelect={() => undefined} /></div></figure>
         </div>
 
         <MapLayoutEditor layout={report.layout} backgroundImageUrl={imageDataUrl} onChange={(layout) => setReport((current) => current ? { ...current, layout, diagnostics: diagnostics(layout) } : current)} />
-        <div className={styles.rows} aria-label="已辨識 A 到 W 排">{report.layout.rows.map((row) => <span key={row.label}>{row.label}<small>{row.orientation === "horizontal" ? "橫" : "直"} · {row.slots.length}</small></span>)}</div>
+        <div className={styles.rows} aria-label="已辨識攤位排">{report.layout.rows.map((row) => <span key={row.label}>{row.label}<small>{row.orientation === "horizontal" ? "橫" : "直"} · {row.slots.length}</small></span>)}</div>
         {!!visibleWarnings.length && <div className={styles.warnings}><b>發布前檢查</b>{visibleWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
         <footer className={styles.actions}><button onClick={onClose}>取消</button><button disabled={!baselineReport || !!busy} onClick={() => baselineReport && setReport(baselineReport)}>還原本次編輯</button><button className={styles.publish} disabled={!canPublish || !!busy} onClick={() => void publish()}>{busy === "publishing" ? "正在發布…" : "發布活動地圖"}<UiIcon name="external" /></button></footer>
       </>}

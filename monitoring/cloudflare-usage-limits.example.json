@@ -1,0 +1,22 @@
+{
+  "schema": "cloudflare-usage-limits/1",
+  "resources": {
+    "r2:production": {
+      "storageBytes": null,
+      "classARequests": null,
+      "classBRequests": null,
+      "monthlyBudgetUsd": null
+    },
+    "r2:preview": {
+      "storageBytes": null,
+      "classARequests": null,
+      "classBRequests": null,
+      "monthlyBudgetUsd": null
+    }
+  },
+  "pricing": {
+    "storageUsdPerGbMonth": null,
+    "classAUsdPerMillion": null,
+    "classBUsdPerMillion": null
+  }
+}

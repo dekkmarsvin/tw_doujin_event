@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { assertExactOrganizerEvidenceCoverage, consumeOrganizerEvidenceKey } from "../scripts/official-catalog-core.mjs";
 import { CircleIdentityAdjudicationError, createCircleIdentityRegistry } from "../scripts/circle-identity-registry.mjs";
 
 function fixture(extraSources = []) {
@@ -15,7 +16,7 @@ function fixture(extraSources = []) {
         circleId: "c-000001",
         currentName: "原社團",
         aliases: [],
-        sources: [{ eventId: "ff47", kind: "workbook-row", value: "10" }, ...extraSources],
+        sources: [{ eventId: "ff47", kind: "organizer-booth", value: "1:A10" }, ...extraSources],
       }],
     },
   };
@@ -23,15 +24,15 @@ function fixture(extraSources = []) {
 
 test("a rename keeps the allocated ID and records the previous name as evidence", () => {
   const registry = createCircleIdentityRegistry(fixture());
-  assert.equal(registry.resolve({ eventId: "ff47", kind: "workbook-row", value: "10" }, "新社團"), "c-000001");
+  assert.equal(registry.resolve({ eventId: "ff47", kind: "organizer-booth", value: "1:A10" }, "新社團"), "c-000001");
   assert.equal(registry.evidence.entries[0].currentName, "新社團");
   assert.deepEqual(registry.evidence.entries[0].aliases, ["原社團"]);
 });
 
-test("an inserted or moved row with only a name match fails with an adjudication report", () => {
+test("an unreviewed booth with only a name match fails with an adjudication report", () => {
   const registry = createCircleIdentityRegistry(fixture());
   assert.throws(
-    () => registry.resolve({ eventId: "ff47", kind: "workbook-row", value: "11" }, "原社團"),
+    () => registry.resolve({ eventId: "ff47", kind: "organizer-booth", value: "1:A11" }, "原社團"),
     (error) => error instanceof CircleIdentityAdjudicationError
       && error.report.reason === "name-only-match"
       && error.report.candidates[0] === "c-000001",
@@ -63,4 +64,10 @@ test("the allocation cursor must follow the immutable ledger tail", () => {
   const invalid = fixture();
   invalid.allocations.nextSequence = 1;
   assert.throws(() => createCircleIdentityRegistry(invalid), /nextSequence must be 2/);
+});
+test("official organizer evidence rejects duplicate consumption even when counts match", () => {
+  const consumed = new Set();
+  consumeOrganizerEvidenceKey(consumed, "1:A01");
+  assert.throws(() => consumeOrganizerEvidenceKey(consumed, "1:A01"), /more than once/);
+  assert.throws(() => assertExactOrganizerEvidenceCoverage(new Set(["1:A01", "1:A02"]), consumed), /missing: 1:A02/);
 });

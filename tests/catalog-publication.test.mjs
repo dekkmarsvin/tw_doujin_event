@@ -11,13 +11,13 @@ const records = await environment.runner.import("/app/circle-records.ts");
 after(() => vite.close());
 beforeEach(() => records.resetCircleCatalog());
 
-const baseA = JSON.parse(await readFile(new URL("../public/data/events/ff47/circles.json", import.meta.url), "utf8"));
+const baseA = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
 baseA.eventId = "event-a";
 const baseB = structuredClone(baseA);
 baseB.eventId = "event-b";
 const overlay = (eventId, saleInfo = "overlay") => ({
   schema: "circle-overrides/1", eventId, generatedAt: "2026-08-14", revision: 1,
-  overrides: [{ circleId: baseA.templates[0].id, updatedAt: "2026-08-14T00:00:00.000Z", fields: { saleInfo } }],
+  overrides: [{ circleId: baseA.circles[0].id, updatedAt: "2026-08-14T00:00:00.000Z", fields: { saleInfo } }],
 });
 const resource = (payload, cacheControl = null, etag = null) => ({ payload, cacheControl, etag });
 
@@ -44,7 +44,7 @@ test("base publishes before the optional overlay and cache metadata stays event-
   overlayDeferred.resolve(resource(overlay("event-a"), "public, max-age=60, must-revalidate", '"overlay-a"'));
   await loading;
   assert.equal(publication.getSnapshot("event-a").overlayStatus, "applied");
-  assert.equal(publication.getSnapshot("event-a").catalog.circlesById.get(baseA.templates[0].id).saleInfo, "overlay");
+  assert.equal(publication.getSnapshot("event-a").catalog.circlesById.get(baseA.circles[0].id).saleInfo, "overlay");
   assert.deepEqual(publication.getCacheMetadata("event-a"), {
     base: { cacheControl: "public, max-age=300, must-revalidate", etag: '"base-a"' },
     overlay: { cacheControl: "public, max-age=60, must-revalidate", etag: '"overlay-a"' },
@@ -67,8 +67,8 @@ test("two events have independent state, listeners and one in-flight load each",
   assert.deepEqual(calls.sort(), ["base:event-a", "base:event-b", "overlay:event-a", "overlay:event-b"]);
   assert.equal(publication.getSnapshot("event-a").eventId, "event-a");
   assert.equal(publication.getSnapshot("event-b").eventId, "event-b");
-  assert.equal(publication.getSnapshot("event-a").catalog.circlesById.get(baseA.templates[0].id).saleInfo, "event-a");
-  assert.equal(publication.getSnapshot("event-b").catalog.circlesById.get(baseB.templates[0].id).saleInfo, "event-b");
+  assert.equal(publication.getSnapshot("event-a").catalog.circlesById.get(baseA.circles[0].id).saleInfo, "event-a");
+  assert.equal(publication.getSnapshot("event-b").catalog.circlesById.get(baseB.circles[0].id).saleInfo, "event-b");
   assert.ok(notificationsA > 0 && notificationsB > 0);
 });
 
@@ -83,7 +83,7 @@ test("overlay failure or identity mismatch keeps the complete reviewed base", as
     const state = publication.getSnapshot("event-a");
     assert.equal(state.status, "ready");
     assert.equal(state.overlayStatus, "unavailable");
-    assert.equal(state.catalog.circles.length, baseA.templates.length);
+    assert.equal(state.catalog.circles.length, baseA.circles.length);
   }
 });
 

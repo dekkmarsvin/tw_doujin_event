@@ -35,9 +35,10 @@
 | 文件 | 何時用 |
 |---|---|
 | [本機開發與驗證](./runbooks/local-development.md) | 啟動、跑 gate、交付前檢查 |
-| [社團資料更新](./runbooks/catalog-data-update.md) | 上游試算表有變動時 |
+| [社團資料更新](./runbooks/catalog-data-update.md) | 主辦活動資料或 data pin 有變動時 |
 | [地圖 authoring](./runbooks/map-authoring.md) | 要更新地圖靜態快照時 |
 | [部署](./runbooks/deployment.md) | 首次啟用、改密鑰、看 CI 行為、回滾 |
+| [Cloudflare 容量與耗用監控](./runbooks/cloudflare-usage-monitoring.md) | R2 每日容量、操作量與月底趨勢 |
 
 ## 決策紀錄
 

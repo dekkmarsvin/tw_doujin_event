@@ -46,6 +46,9 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit --incremental false
 
+      - name: Build pinned production event
+        run: npm run build:production
+
       - name: Normalize Cloudflare API token
         id: cloudflare-auth
         shell: bash

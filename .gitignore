@@ -45,6 +45,9 @@ yarn-error.log*
 /dist/
 /.wrangler/
 /.event-data/
+/.event-data-stage.json
+/public/data/events/
+/.cloudflare-usage/
 /outputs/
 /work/
 

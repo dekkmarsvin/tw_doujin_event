@@ -8,7 +8,7 @@ const pin = parseEventDataPin(JSON.parse(await readFile("data/event-data-pins/ff
 test("event data is pinned to a full commit with per-file hashes", () => {
   assert.equal(pin.eventId, "ff47");
   assert.match(pin.commit, /^[0-9a-f]{40}$/);
-  assert.deepEqual(pin.files.map((file) => file.path), ["event.json", "official-booths.json"]);
+  assert.deepEqual(pin.files.map((file) => file.path), ["event.json", "official-booths.json", "map.json"]);
   for (const file of pin.files) {
     assert.match(file.sha256, /^[0-9a-f]{64}$/);
     assert.equal(rawFileUrl(pin, file).includes(`/main/`), false, "a floating branch must never appear in the fetch URL");

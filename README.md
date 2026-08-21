@@ -48,7 +48,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 
 | 要做的事 | 文件 |
 |---|---|
-| 上游試算表有變動，要更新場刊 | [社團資料更新](docs/runbooks/catalog-data-update.md) |
+| 主辦活動資料有變動，要更新場刊 | [社團資料更新](docs/runbooks/catalog-data-update.md) |
 | 要重新產生地圖快照 | [地圖 authoring](docs/runbooks/map-authoring.md) |
 | 首次部署、改密鑰、回滾 | [部署](docs/runbooks/deployment.md) |
 
@@ -76,11 +76,13 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 
 **資料與產物**
 
-- `public/data/events/ff47/circles.json`：社團與攤位快照
-- `public/data/events/ff47/map.json`：地圖快照
+- `fixtures/events/`：不含真實活動資料的共同 build／test fixtures
+- `data/event-data-pins/`：公開 data repo 的不可變 commit 與逐檔 hash
+- `data/circle-identities/`：永久社團 ID 配號、官方 booth evidence 與裁決紀錄
 - `public/fonts/`：自託管 Geist / Geist Mono 字型與授權
-- `data_source_test/`：FF47 公開整理資料與配置圖測試輸入
-- `scripts/`：資料生成、快照匯出、來源同步、identity registry 與 preview portal E2E 工具
+- `scripts/fetch-event-data.mjs`、`stage-event-data.mjs`：驗證 pin 並建立忽略版控的單一活動 staging tree
+- `scripts/build-official-circle-catalog.mjs`：由主辦攤位資料與 identity evidence 生成 official-only catalog
+- `.event-data/`、`public/data/events/`：本機／CI 產物，不進版控
 
 **本機 authoring（不部署到 Pages）**
 

@@ -4,7 +4,7 @@
 
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
 **測試**：`tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`
-**產物**：`public/data/events/ff47/map.json`
+**活動資料**：data repo 的 `map.json`，由 pin 驗證後 staging 到 `dist/data/events/<event>/map.json`
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 
 一般使用者不上傳圖片、看不到管理入口。公開頁面只讀取隨 build 發布的已驗證靜態快照——決策見 [ADR-0008](../adr/0008-static-public-reading-path.md)。原始配置圖只供 authoring 階段辨識與對照，**不作為前台底圖**。
@@ -12,18 +12,17 @@
 ## 地圖資料不變量
 
 - 座標使用原始辨識圖片的像素座標；`width`、`height` 定義 SVG `viewBox`。所有元素都在同一座標空間。
-- `rows[].label` 在同一 layout 中唯一；完整 FF47 layout 必須包含 A–W。
-- A–V 的 `orientation` 為 `vertical`，W 為 `horizontal`。
+- `rows[].label` 在同一 layout 中唯一。排號與方向由該活動的 template adapter 決定，不是共用 schema 常數。
 - slot 掛在排底下（`rows[].slots[]`，`EventMapLayout` 沒有頂層 `slots`）；`code` 在同一 layout 中唯一。slot 保存矩形 `x/y/width/height`，互動使用 slot 而非圖片座標點。
 - pillar 必須保存 `x/y/width/height`；access point 必須保存 `kind`、位置與方向。
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
-- **FF47 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。
+- **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
 
 **場館與展區是兩件事**，見 [`CONTEXT.md`](../../CONTEXT.md)。場館是活動實際舉辦的建築，由活動定義的 `venue` 提供，地圖標題從那裡讀；展區是場館內部的分區代碼。**契約不寫死當期場館名稱**——那是每場活動各自的資料。
 
 FF47 的活動定義登錄三個展區：`ALL`（全館）與 `A`（A–K 區）、`B`（L–W 區）。三者全在**同一個場館**內，`A`／`B` 是那個場館的兩半而不是兩個場館，所以 `areaMode` 是 `single`，介面**不出現展區切換，也不呈現 A–K／L–W 分區**。`areaMode: "switchable"` 保留給未來真正的多場館或多層活動；只有 `switchable` 且展區多於一個時才顯示切換控制（`eventUsesAreaSwitcher()`）。
 
-`Booth["hall"]` 存的也是展區代碼，不是場館。欄位名是歷史遺留且已寫進公開快照 schema，文件一律用「展區」。
+`Booth["hall"]` 存的也是展區代碼，不是場館。欄位名是讀取模型的歷史遺留；公開 catalog v3 使用 `placement.area`，文件一律用「展區」。
 
 資料模型不得把 FF47 的 A–W、988 格或特定場館幾何當成所有活動的固定規則。
 

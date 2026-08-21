@@ -1,5 +1,5 @@
 /**
- * Public offline shell for the FF47 Pages site.
+ * Public offline shell for the staged event Pages site.
  *
  * The venue is a dense hall on congested mobile networks, so a reload there
  * must not cost the user their map. `scripts/build-service-worker.mjs` injects
@@ -15,7 +15,9 @@
 const CACHE_VERSION = "__CACHE_VERSION__";
 const PRECACHE_MANIFEST = ["__PRECACHE_MANIFEST__"];
 
-const CACHE_NAME = `ff47-catalog-${CACHE_VERSION}`;
+const CACHE_PREFIX = "event-catalog-";
+const LEGACY_CACHE_PREFIX = "ff47-catalog-";
+const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
 const SHELL_URL = "/index.html";
 const NAVIGATION_TIMEOUT_MS = 3500;
 
@@ -56,7 +58,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.map((name) => (name.startsWith("ff47-catalog-") && name !== CACHE_NAME ? caches.delete(name) : undefined)));
+    await Promise.all(names.map((name) => ((name.startsWith(CACHE_PREFIX) || name.startsWith(LEGACY_CACHE_PREFIX)) && name !== CACHE_NAME ? caches.delete(name) : undefined)));
     await self.clients.claim();
   })());
 });

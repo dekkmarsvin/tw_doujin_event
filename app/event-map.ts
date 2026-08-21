@@ -156,5 +156,10 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
 export function isPublishedEventMap(value: unknown): value is PublishedEventMap {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<PublishedEventMap>;
-  return typeof candidate.eventId === "string" && typeof candidate.revision === "number" && typeof candidate.sourceName === "string" && typeof candidate.updatedAt === "string" && validateEventMapLayout(candidate.layout).ok;
+  return typeof candidate.eventId === "string" && candidate.eventId.length > 0
+    && Number.isSafeInteger(candidate.revision) && Number(candidate.revision) > 0
+    && typeof candidate.sourceName === "string"
+    && typeof candidate.confidence === "number" && candidate.confidence >= 0 && candidate.confidence <= 1
+    && typeof candidate.updatedAt === "string" && !Number.isNaN(Date.parse(candidate.updatedAt))
+    && validateEventMapLayout(candidate.layout).ok;
 }

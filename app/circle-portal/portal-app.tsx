@@ -744,7 +744,7 @@ function AdminPanel() {
 
     <h2>撤下社團補充資料</h2>
     <label htmlFor="takedown-circle">社團 ID</label>
-    <input id="takedown-circle" value={takedownId} onChange={(event) => setTakedownId(event.target.value)} placeholder="ff47-…" />
+    <input id="takedown-circle" value={takedownId} onChange={(event) => setTakedownId(event.target.value)} placeholder="c-000001" />
     <label htmlFor="takedown-reason">原因（會寫入稽核記錄）</label>
     <input id="takedown-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
     <button type="button" onClick={() => {
