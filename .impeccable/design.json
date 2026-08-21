@@ -125,7 +125,7 @@
       "name": "Category Filter Item",
       "kind": "nav",
       "description": "高密度分類篩選與數量提示。",
-      "html": "<button class=\"ds-category is-active\"><i></i><span>繪圖・創作</span><small>637</small></button>",
+      "html": "<button class=\"ds-category is-active\"><i></i><span>原創作品</span><small>637</small></button>",
       "css": ".ds-category{display:grid;grid-template-columns:8px 1fr auto;gap:9px;align-items:center;width:220px;padding:8px 7px;border:0;border-radius:7px;background:transparent;color:var(--ink);text-align:left;font:400 12px var(--font-geist),system-ui,sans-serif;cursor:pointer}.ds-category i{width:7px;height:7px;border-radius:2px;background:var(--mint)}.ds-category small{color:#a0a6a2;font-size:10px}.ds-category:hover,.ds-category.is-active{background:#f2f3f0}.ds-category.is-active{font-weight:800}.ds-category:focus-visible{outline:2px solid var(--ink);outline-offset:1px}"
     },
     {

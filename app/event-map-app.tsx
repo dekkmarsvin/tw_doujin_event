@@ -48,6 +48,15 @@ type TextScale = "standard" | "large" | "extra";
 const TEXT_SCALE_STORAGE_KEY = "event-map-text-scale";
 const LEGACY_TEXT_SCALE_STORAGE_KEY = "ff47-event-map-text-scale";
 const GENRES: readonly string[] = ACTIVE_EVENT.genres;
+const CATEGORY_DOT_COLORS = ["var(--mint)", "var(--lilac)", "var(--blue)", "var(--amber)", "#4ba9a0", "var(--coral)"] as const;
+
+/** Presentation cycles through a fixed semantic palette; category labels stay
+ * in event data and are never turned into CSS selectors. Text remains the
+ * authority because colors repeat when an organizer publishes many options. */
+function categoryDotStyle(category: string) {
+  const index = GENRES.indexOf(category) - 1;
+  return index < 0 ? undefined : { background: CATEGORY_DOT_COLORS[index % CATEGORY_DOT_COLORS.length] };
+}
 type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
   | ({ kind: "pinch" } & MapPinchOrigin);
@@ -537,7 +546,7 @@ export default function EventMapApp() {
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== ACTIVE_EVENT.genres[0] ? styles.clearFiltersActive : ""}`;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
     <header><div><small>FILTERS</small><b>篩選攤位</b></div><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></header>
-    <fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset>
+    <fieldset><legend>社團主題類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className="dot" style={categoryDotStyle(value)} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset>
     <label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label>
     <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
   </section>;
@@ -556,7 +565,7 @@ export default function EventMapApp() {
     <section className="toolbar" aria-label={showAreaSwitcher ? "日期與展區篩選" : "日期篩選"}><div className="days">{ACTIVE_EVENT.days.map((eventDay) => <button key={eventDay.id} className={day === eventDay.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setDay(eventDay.id); setSelectedRecordId(null); }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>{showAreaSwitcher && <div className="mobile-halls">{ACTIVE_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.label}</button>)}</div>}<div className="open-hours" role="status"><span />{planningStorageError ? "儲存異常，請開啟資料管理" : planningReady ? "資料僅儲存於瀏覽器" : "正在讀取瀏覽器資料"}</div><button className={`${styles.navigationToggle} ${navigationMode ? styles.navigationToggleActive : ""}`} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? "退出導航模式" : "導航模式"}</button></section>
     <div className={`workspace ${styles.workspace} ${navigationMode ? styles.navigationWorkspace : ""}`}>
       <aside className={`filters ${styles.leftRail}`}>
-        {navigationMode ? planningPanel : <><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></div>{showAreaSwitcher && <fieldset><legend>展區</legend><div className="segments">{ACTIVE_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.shortLabel}</button>)}</div></fieldset>}<fieldset><legend>創作類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className={`dot dot-${value}`} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label></div><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />{resultsPanel}</>}
+        {navigationMode ? planningPanel : <><div className={styles.filterStack}><div className="filter-title"><b>篩選攤位</b><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></div>{showAreaSwitcher && <fieldset><legend>展區</legend><div className="segments">{ACTIVE_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.shortLabel}</button>)}</div></fieldset>}<fieldset><legend>社團主題類別</legend><div className="genres">{GENRES.map((value) => <button key={value} className={genre === value ? "active" : ""} onClick={() => { historyIntent.current = "push"; setGenre(value); }}><i className="dot" style={categoryDotStyle(value)} />{value}<small>{genreCounts.get(value) ?? 0}</small></button>)}</div></fieldset><label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label></div><AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />{resultsPanel}</>}
       </aside>
       <section className="map-region" aria-label="攤位地圖">
         <div className="map-title"><div><small>社團攤位配置圖</small><h1>{ACTIVE_EVENT.venue} <em>{ACTIVE_EVENT.areas.find((area) => area.id === hall)?.label}</em></h1></div></div>

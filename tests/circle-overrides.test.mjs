@@ -146,6 +146,7 @@ test("circle-authored content is labelled as self-reported, never as organizer d
 test("edited text flows into the derived read model and becomes searchable", () => {
   const edited = records.buildCircleCatalog(payload, withFields(placed.id, {
     saleInfo: "限定壓克力吊飾",
+    circleCategory: "原創作品",
     referencedWorks: ["蔚藍檔案"],
     specialTags: ["新刊"],
   }));
@@ -153,6 +154,8 @@ test("edited text flows into the derived read model and becomes searchable", () 
 
   assert.equal(circle.saleInfo, "限定壓克力吊飾");
   assert.equal(circle.description, "限定壓克力吊飾");
+  assert.equal(circle.circleCategory, "原創作品");
+  assert.ok(circle.categories.includes("原創作品"));
   assert.equal(circle.work, "蔚藍檔案");
   assert.ok(circle.categories.includes("蔚藍檔案"));
   assert.ok(circle.categories.includes("新刊"));
@@ -168,7 +171,7 @@ test("an override replaces a list wholesale instead of merging it", () => {
 
 test("one field authority defines inherit, replace and clear encodings", () => {
   assert.deepEqual(overrides.CIRCLE_OVERRIDE_FIELD_KEYS, [
-    "pen", "saleInfo", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail",
+    "pen", "saleInfo", "circleCategory", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail",
   ]);
 
   let fields = {};
@@ -190,6 +193,7 @@ test("every editable field projects empty base, replace and clear from the same 
   const valueOf = {
     pen: (circle) => circle.pen,
     saleInfo: (circle) => circle.saleInfo,
+    circleCategory: (circle) => circle.circleCategory,
     referencedWorks: (circle) => circle.referencedWorks,
     creatorTypes: (circle) => circle.creatorTypes,
     workTypes: (circle) => circle.workTypes,
@@ -201,6 +205,7 @@ test("every editable field projects empty base, replace and clear from the same 
   const replacement = {
     pen: "replacement pen",
     saleInfo: "replacement sale",
+    circleCategory: "原創作品",
     referencedWorks: ["replacement work"],
     creatorTypes: ["replacement creator"],
     workTypes: ["replacement type"],
@@ -209,7 +214,7 @@ test("every editable field projects empty base, replace and clear from the same 
     links: [{ provider: "replacement", kind: "website", url: "https://example.com/replacement" }],
     thumbnail: replacementThumbnail,
   };
-  const emptyBase = { pen: "", saleInfo: "", referencedWorks: [], creatorTypes: [], workTypes: [], ageRatings: [], specialTags: [], links: [], thumbnail: [] };
+  const emptyBase = { pen: "", saleInfo: "", circleCategory: "", referencedWorks: [], creatorTypes: [], workTypes: [], ageRatings: [], specialTags: [], links: [], thumbnail: [] };
 
   for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS) {
     const inherited = records.buildCircleCatalog(payload, withFields(placed.id, {})).circlesById.get(placed.id);
@@ -277,6 +282,13 @@ test("refuses fields the circle may not author", () => {
   assert.equal(overrides.isCircleOverrideFields({ id: "ff47-other" }), false);
   assert.equal(overrides.isCircleOverrideFields({ sourceRow: 12 }), false);
   assert.equal(overrides.isCircleOverrideFields({ name: "改名" }), false);
+});
+
+test("a circle category must come from the active event catalog", () => {
+  assert.equal(overrides.isCircleOverrideFields({ circleCategory: "原創作品" }), true);
+  assert.equal(overrides.isCircleOverrideFields({ circleCategory: "不在目錄中的分類" }), false);
+  assert.equal(overrides.isCircleOverrideFields({ circleCategory: "" }), true);
+  assert.equal(overrides.parseCircleOverridesPayload(withFields(placed.id, { circleCategory: "不在目錄中的分類" })).overrides.length, 0);
 });
 
 test("enforces length caps so one circle cannot bloat every reader's download", () => {

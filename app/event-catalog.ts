@@ -1,9 +1,10 @@
 import sampleDefinition from "../fixtures/events/sample/event.json";
 import sampleTwoDefinition from "../fixtures/events/sample-two/event.json";
+import { circleCategoryLabels, parseCircleCategoryCatalog, type CircleCategoryCatalog } from "./circle-categories";
 
 declare const __ACTIVE_EVENT_DEFINITION__: unknown;
 
-export const EVENT_DEFINITION_SCHEMA = "event-definition/1" as const;
+export const EVENT_DEFINITION_SCHEMA = "event-definition/2" as const;
 
 export type EventDayDefinition<TDay extends string | number = string | number> = { id: TDay; label: string; dateLabel: string };
 export type EventAreaDefinition<TArea extends string = string> = { id: TArea; label: string; shortLabel: string };
@@ -26,7 +27,9 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   areaMode: "single" | "switchable";
   days: readonly EventDayDefinition<TDay>[];
   areas: readonly EventAreaDefinition<TArea>[];
-  /** Creator-category filter vocabulary. The first entry is the unfiltered option. */
+  /** Organizer-published category vocabulary and its provenance. */
+  circleCategories: CircleCategoryCatalog;
+  /** Derived compatibility projection consumed by the existing filter/URL codec. */
   genres: readonly string[];
   organizer: OrganizerDefinition;
 };
@@ -64,9 +67,7 @@ export function parseEventDefinition(value: unknown): EventDefinition {
     isRecord(area) && nonempty(area.id) && nonempty(area.label) && nonempty(area.shortLabel))) {
     throw new Error("Event definition areas are invalid.");
   }
-  if (!Array.isArray(value.genres) || value.genres.length === 0 || !value.genres.every(nonempty)) {
-    throw new Error("Event definition genres are invalid.");
-  }
+  const circleCategories = parseCircleCategoryCatalog(value.circleCategories);
   if (!isRecord(value.organizer) || !nonempty(value.organizer.adapter) || !nonempty(value.organizer.eventUrl)
     || !isRecord(value.organizer.boothListUrls)
     || !Object.values(value.organizer.boothListUrls).every(nonempty)) {
@@ -83,6 +84,8 @@ export function parseEventDefinition(value: unknown): EventDefinition {
 
   return {
     ...(value as Omit<EventDefinition, "dataLastUpdatedLabel">),
+    circleCategories,
+    genres: circleCategoryLabels(circleCategories),
     dataLastUpdatedLabel: dataDateLabel(value.dataUpdatedAt as string),
   };
 }

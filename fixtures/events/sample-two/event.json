@@ -1,5 +1,5 @@
 {
-  "schema": "event-definition/1",
+  "schema": "event-definition/2",
   "id": "sample-two",
   "name": "第二範例活動",
   "venue": "測試展覽館",
@@ -15,7 +15,17 @@
     { "id": "sun", "label": "SUN", "dateLabel": "10月4日" }
   ],
   "areas": [{ "id": "all", "label": "全館", "shortLabel": "全部" }],
-  "genres": ["全部類別"],
+  "circleCategories": {
+    "schema": "circle-category-catalog/1",
+    "source": {
+      "provider": "第二範例主辦單位",
+      "url": "https://example.invalid/sample-two/categories",
+      "retrievedAt": "2026-01-02T00:00:00.000+08:00"
+    },
+    "categories": [
+      { "id": "photography", "label": "攝影", "description": "以攝影作品為主。" }
+    ]
+  },
   "organizer": {
     "adapter": "fixture/1",
     "eventUrl": "https://example.invalid/sample-two",

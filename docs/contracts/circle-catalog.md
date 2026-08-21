@@ -11,8 +11,9 @@
 
 1. `CircleRecord.id` 是專案內社團身分的唯一鍵；名稱不是身分。
 2. 活動主辦資料決定社團名稱、日期、展區與攤位配置。
-3. 社團本人只透過 `circle-overrides/1` 提供筆名、販售資訊、作品 facet、連結與代表圖。
-4. 收藏、群組、備註與行程屬於使用者，不由 catalog 或 overlay 覆寫。
+3. 活動定義中的 `circleCategories` 固定主辦公布的分類字彙與來源；它不表示主辦已替個別社團分類。
+4. 社團本人只透過 `circle-overrides/1` 提供自己在該分類字彙中的一項主要類別、筆名、販售資訊、作品 facet、連結與代表圖。
+5. 收藏、群組、備註與行程屬於使用者，不由 catalog 或 overlay 覆寫。
 
 第三方工作簿不再是輸入、fallback 或補充來源。官方資料與 identity evidence 對不上時，build 必須失敗並要求審閱，不得用名稱猜測或虛構社團內容。
 
@@ -42,6 +43,7 @@ type CircleCatalogPayload = {
 - `circles[]` 只含主辦可確認的 ID 與顯示名稱。
 - `placements[]` 只含活動配置；座標由 event map 的 `boothCode` 解析，不重複存進 catalog。
 - base 不含筆名、作品、分類、販售資訊、外部連結或代表圖。缺少內容時 UI 直接省略欄位。
+- 分類的**選項集合**來自主辦分類目錄；分類的**逐社團值**不在 base，只有社團本人選擇後才出現在 overlay，並維持「社團自述／尚未驗證」標示。
 - `booths`、`templates`、`officialSupplementKeys` 與工作簿 `sourceRow` 都是退役欄位，任何一項出現在 staged payload 都使 build 失敗。
 
 ## 身分規則
@@ -78,6 +80,7 @@ type CircleCatalogPayload = {
 - 缺少作品、筆名、販售資訊或圖片時省略對應區塊，不補寫推測內容。
 - 使用者選取、收藏或規劃的是 canonical circle ID；placement 只決定這次活動的日期與攤位。
 - 活動主辦資料標示為「活動主辦單位」；社團補充資料標示為「社團自述／尚未驗證」。
+- 主要創作類別的篩選選項一律由 active event 的 `circleCategories` 投影，不保留工作簿分類或 UI 常數。
 
 ## 驗收條件
 

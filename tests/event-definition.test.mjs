@@ -14,6 +14,8 @@ test("the active event comes from a versioned validated definition", () => {
   assert.equal(ACTIVE_EVENT.dataLastUpdatedLabel, "2026 年 1 月 1 日");
   assert.equal(ACTIVE_EVENT.organizer.boothListUrls[1].startsWith("https://example.invalid/"), true);
   assert.equal(ACTIVE_EVENT_ID, "sample");
+  assert.deepEqual(ACTIVE_EVENT.genres, ["全部類別", "原創作品", "遊戲作品"]);
+  assert.equal(ACTIVE_EVENT.circleCategories.source.url, "https://example.invalid/sample/categories");
   assert.equal(EVENT_REGISTRY.size, 2);
   assert.equal(getEventDefinition("sample"), ACTIVE_EVENT);
   assert.deepEqual(getEventDefinition("sample-two")?.days.map(({ id }) => id), ["thu", "fri", "sat", "sun"]);
@@ -42,4 +44,12 @@ test("a future event may use different day and area identifiers", () => {
 test("event definitions fail closed on unknown versions and incomplete organizer data", () => {
   assert.throws(() => parseEventDefinition({ schema: "event-definition/999" }), /Unsupported/);
   assert.throws(() => parseEventDefinition({ ...ACTIVE_EVENT, organizer: { ...ACTIVE_EVENT.organizer, boothListUrls: { 9: "https://example.com" } } }), /cover organizer booth lists/);
+  assert.throws(() => parseEventDefinition({ ...ACTIVE_EVENT, circleCategories: { ...ACTIVE_EVENT.circleCategories, categories: [] } }), /categories are invalid/);
+  assert.throws(() => parseEventDefinition({
+    ...ACTIVE_EVENT,
+    circleCategories: { ...ACTIVE_EVENT.circleCategories, categories: [
+      { id: "same", label: "重複", description: "一" },
+      { id: "same", label: "另一個", description: "二" },
+    ] },
+  }), /must be unique/);
 });

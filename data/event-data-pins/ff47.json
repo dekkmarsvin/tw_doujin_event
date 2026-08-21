@@ -2,9 +2,9 @@
   "schema": "event-data-pin/1",
   "eventId": "ff47",
   "repository": "dekkmarsvin/tw_doujin_event-data-ff47",
-  "commit": "c0a46a7422753020b5ab91134c65453738c406b6",
+  "commit": "948ae45c645e321742d8dc90188996c645415ae7",
   "files": [
-    { "path": "event.json", "sha256": "d784df5a1398f251e60fae3ef80ac2ba1946172e8df99be213e580ebf7ace84e" },
+    { "path": "event.json", "sha256": "da6fdfa89cb22bd88f43befd562b9d5941fb4f338c12d41c92d1a209c753f419" },
     { "path": "official-booths.json", "sha256": "444c6c9c51c5dd6925f756886b2a0508139962b3039bb59a0f98eb8d710d1428" },
     { "path": "map.json", "sha256": "d5f047a673baf166aba8e78794391523d305f340991eb608f74bc37de53f2a96" }
   ]

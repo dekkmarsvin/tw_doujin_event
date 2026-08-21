@@ -56,7 +56,9 @@
 
 ## 可編輯範圍
 
-**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
+**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題類別（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
+
+`circleCategory` 不是自由文字：控制面與寫入驗證共用 active event 的 `circleCategories`。選項集合來自主辦公開分類頁，但某社團選了哪一項仍是社團自述，不得標示為主辦認定。主辦 base 沒有逐社團分類，因此此欄的「繼承」在介面顯示為「尚未提供」。
 
 **永不開放**：攤位、日期、`SourceLink`。
 
@@ -88,6 +90,7 @@
 |---|---|
 | `pen` | 80 字 |
 | `saleInfo` | 2000 字 |
+| `circleCategory` | 活動分類目錄中的一項；可留空 |
 | 清單類欄位項目數 | 20 |
 | 清單類單項長度 | 60 字 |
 | 連結數 | 12 |

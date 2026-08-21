@@ -12,6 +12,7 @@ import {
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail, type CircleRetentionChoice,
 } from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages";
+import { findCircleCategory } from "../circle-categories";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { ACTIVE_EVENT } from "../event-catalog";
@@ -28,15 +29,17 @@ const EMPTY_LINK: CircleExternalLink = { provider: "", kind: "social", url: "" }
 
 const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
 
-function FieldModeControls({ mode, label, onInherit, onClear }: {
+function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "沿用場刊", inheritAction = "沿用場刊" }: {
   mode: keyof typeof FIELD_MODE_LABEL;
   label: string;
   onInherit: () => void;
   onClear: () => void;
+  inheritStatus?: string;
+  inheritAction?: string;
 }) {
   return <div className={styles.fieldMode} role="group" aria-label={`${label}的資料來源`}>
-    <span>目前：<b>{FIELD_MODE_LABEL[mode]}</b></span>
-    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit"} onClick={onInherit}>沿用場刊</button>
+    <span>目前：<b>{mode === "inherit" ? inheritStatus : FIELD_MODE_LABEL[mode]}</b></span>
+    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit"} onClick={onInherit}>{inheritAction}</button>
     <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear"} onClick={onClear}>清除此欄</button>
   </div>;
 }
@@ -340,6 +343,7 @@ function deletionSummary(fields: CircleOverrideFields) {
   const lines: string[] = [];
   if (fields.pen) lines.push(`筆名：${fields.pen}`);
   if (fields.saleInfo) lines.push(`販售資訊 ${[...fields.saleInfo].length} 字`);
+  if (fields.circleCategory) lines.push(`社團主題類別：${fields.circleCategory}`);
   for (const { key, label } of CIRCLE_OVERRIDE_LIST_FIELDS) {
     const items = fields[key];
     if (items?.length) lines.push(`${label} ${items.length} 項`);
@@ -412,6 +416,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   };
 
   const thumbnail = fields.thumbnail ?? undefined;
+  const selectedCircleCategory = fields.circleCategory ? findCircleCategory(ACTIVE_EVENT.circleCategories, fields.circleCategory) : null;
   const editThumbnail = (patch: Partial<CircleOverrideThumbnail>) =>
     setFields((current) => ({
       ...current,
@@ -450,6 +455,25 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       onChange={(event) => setFields((current) => ({ ...current, saleInfo: event.target.value }))}
     />
     <FieldModeControls mode={modeFor("saleInfo")} label="販售資訊" onInherit={() => inheritField("saleInfo")} onClear={() => clearField("saleInfo")} />
+
+    <label htmlFor={`circle-category-${claim.circleId}`}>社團主題類別</label>
+    <select
+      id={`circle-category-${claim.circleId}`}
+      value={fields.circleCategory ?? ""}
+      onChange={(event) => setFields((current) => ({ ...current, circleCategory: event.target.value }))}
+    >
+      <option value="">尚未選擇</option>
+      {ACTIVE_EVENT.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
+    </select>
+    <p className={styles.editorHint}>
+      請依本次主要販售內容選擇一項。選項來自<a href={ACTIVE_EVENT.circleCategories.source.url} target="_blank" rel="noreferrer">開拓動漫祭社團主題類別</a>。
+      {selectedCircleCategory && <>目前類別：{selectedCircleCategory.description}</>}
+    </p>
+    <FieldModeControls
+      mode={modeFor("circleCategory")} label="社團主題類別"
+      inheritStatus="尚未提供" inheritAction="恢復未選擇"
+      onInherit={() => inheritField("circleCategory")} onClear={() => clearField("circleCategory")}
+    />
 
     {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <div key={key}>
       <label htmlFor={`${key}-${claim.circleId}`}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>

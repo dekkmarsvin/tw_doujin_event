@@ -10,8 +10,6 @@ export const CREATOR_TYPE_OPTIONS = [
   "手工藝品",
   "模型",
   "攝影",
-  "學生社團",
-  "代理社團",
 ] as const;
 
 export type AdvancedCircleSearch = {

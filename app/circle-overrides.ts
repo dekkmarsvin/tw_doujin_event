@@ -1,4 +1,6 @@
 import type { CircleExternalLink, CircleTemplateLinkKind } from "./circle-records";
+import { isCircleCategoryLabel, type CircleCategoryCatalog } from "./circle-categories";
+import { ACTIVE_EVENT, getEventDefinition } from "./event-catalog";
 
 export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
 
@@ -24,6 +26,7 @@ export type CircleOverrideThumbnail = { sourceUrl: string; url: string; provider
 export type CircleOverrideFields = {
   pen?: string;
   saleInfo?: string;
+  circleCategory?: string;
   creatorTypes?: string[];
   ageRatings?: string[];
   workTypes?: string[];
@@ -105,7 +108,7 @@ const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
 const TEXT_FIELDS = ["pen", "saleInfo"] as const;
 
 /** One editable-scope authority shared by validation, editor controls and tests. */
-export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, ...LIST_FIELDS, "links", "thumbnail"] as const satisfies readonly (keyof CircleOverrideFields)[];
+export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, "circleCategory", ...LIST_FIELDS, "links", "thumbnail"] as const satisfies readonly (keyof CircleOverrideFields)[];
 
 export type CircleOverrideFieldKey = (typeof CIRCLE_OVERRIDE_FIELD_KEYS)[number];
 export type CircleOverrideFieldMode = "inherit" | "replace" | "clear";
@@ -201,7 +204,10 @@ function isThumbnail(value: unknown): value is CircleOverrideThumbnail {
 }
 
 /** Shared by the write route and the read guard so both enforce one ruleset. */
-export function isCircleOverrideFields(value: unknown): value is CircleOverrideFields {
+export function isCircleOverrideFields(
+  value: unknown,
+  categories: CircleCategoryCatalog | null = ACTIVE_EVENT.circleCategories,
+): value is CircleOverrideFields {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const fields = value as Record<string, unknown>;
 
@@ -212,6 +218,9 @@ export function isCircleOverrideFields(value: unknown): value is CircleOverrideF
 
   if ("pen" in fields && !isBoundedString(fields.pen, OVERRIDE_LIMITS.pen)) return false;
   if ("saleInfo" in fields && !isBoundedString(fields.saleInfo, OVERRIDE_LIMITS.saleInfo)) return false;
+  if ("circleCategory" in fields && !(categories
+    ? isCircleCategoryLabel(categories, fields.circleCategory)
+    : isBoundedString(fields.circleCategory, OVERRIDE_LIMITS.listItemLength))) return false;
   if (LIST_FIELDS.some((field) => field in fields && !isBoundedList(fields[field]))) return false;
   if ("links" in fields && !(Array.isArray(fields.links) && fields.links.length <= OVERRIDE_LIMITS.links && fields.links.every(isLink))) return false;
   if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) return false;
@@ -219,12 +228,12 @@ export function isCircleOverrideFields(value: unknown): value is CircleOverrideF
   return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields;
 }
 
-function isCircleOverride(value: unknown): value is CircleOverride {
+function isCircleOverride(value: unknown, categories: CircleCategoryCatalog | null): value is CircleOverride {
   if (!value || typeof value !== "object") return false;
   const override = value as Record<string, unknown>;
   return typeof override.circleId === "string" && override.circleId.length > 0
     && typeof override.updatedAt === "string"
-    && isCircleOverrideFields(override.fields);
+    && isCircleOverrideFields(override.fields, categories);
 }
 
 /**
@@ -241,12 +250,17 @@ export function parseCircleOverridesPayload(value: unknown): CircleOverridesPayl
   if (!Number.isInteger(payload.revision)) return null;
   if (!Array.isArray(payload.overrides)) return null;
 
+  const event = getEventDefinition(payload.eventId);
   return {
     schema: CIRCLE_OVERRIDES_SCHEMA,
     eventId: payload.eventId,
     generatedAt: payload.generatedAt,
     revision: payload.revision as number,
-    overrides: payload.overrides.filter(isCircleOverride),
+    // A transport may need to parse a structurally valid foreign-event
+    // envelope before it can report the event-id mismatch. Known events also
+    // enforce their catalog vocabulary; an unknown event gets only the bounded
+    // string guard and can never be projected as the active event.
+    overrides: payload.overrides.filter((override) => isCircleOverride(override, event?.circleCategories ?? null)),
   };
 }
 

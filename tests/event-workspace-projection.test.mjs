@@ -17,7 +17,7 @@ const event = (id) => ({
 
 function record(eventId, id, code, options = {}) {
   const circle = {
-    id, name: options.name ?? id, description: "", categories: [], pen: "", work: "", creatorTypes: [], ageRatings: [], workTypes: [], referencedWorks: [], saleInfo: "", specialTags: [], media: [], externalLinks: [], updatedAt: "2026-08-14", sources: [],
+    id, name: options.name ?? id, description: "", categories: [], circleCategory: options.genre ?? "原創", pen: "", work: "", creatorTypes: [], ageRatings: [], workTypes: [], referencedWorks: [], saleInfo: "", specialTags: [], media: [], externalLinks: [], updatedAt: "2026-08-14", sources: [],
   };
   return {
     id: `${eventId}-${code}`, recordId: `${eventId}-${code}-0`, code, name: circle.name, pen: "", genre: options.genre ?? "原創", tags: [], day: 1, hall: "A", x: 0, y: 0, tone: "coral", work: "", note: "", sources: [], circle,

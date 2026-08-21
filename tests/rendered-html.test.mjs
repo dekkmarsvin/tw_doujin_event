@@ -87,9 +87,25 @@ test("builds the staged application as a Cloudflare Pages SPA", async () => {
   // Quoting is the minifier's choice, so match either form.
   assert.match(portalJs, /["'`]\/privacy["'`]/, "the sign-in card must link to the notice");
   assert.match(portalJs, /代表圖網址限使用以下圖片主機/, "the portal must explain the supported image hosts");
+  assert.match(portalJs, /社團主題類別/, "the portal must ship the organizer-category selector");
+  assert.match(portalJs, /尚未選擇/, "the category selector must represent the unselected state");
   assert.doesNotMatch(portalJs, /IP 暴露/, "the portal must not turn ordinary image loading into an IP-exposure warning");
   assert.doesNotMatch(await readFile(new URL("../dist/sw.js", import.meta.url), "utf8"), /privacy/);
   assert.match(await readFile(new URL("../dist/fonts/geist.css", import.meta.url), "utf8"), /font-family: "Geist"/);
+});
+
+test("circle category controls consume event data rather than organizer constants", async () => {
+  const [portal, reader] = await Promise.all([
+    readFile(new URL("../app/circle-portal/portal-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/event-map-app.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(portal, /ACTIVE_EVENT\.circleCategories\.categories\.map/);
+  assert.match(portal, /ACTIVE_EVENT\.circleCategories\.source\.url/);
+  assert.match(reader, /const GENRES: readonly string\[\] = ACTIVE_EVENT\.genres/);
+  for (const organizerSpecificLabel of ["總合動漫畫", "東方Project", "學校漫研"]) {
+    assert.doesNotMatch(portal, new RegExp(organizerSpecificLabel));
+    assert.doesNotMatch(reader, new RegExp(organizerSpecificLabel));
+  }
 });
 
 test("separates the public static app from the retained editor implementation", async () => {
@@ -169,7 +185,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /onFocusCapture=\{handleMobilePanelFocus\}/);
   assert.match(app, /setMobileSheetLevel\("full"\)/);
   assert.match(eventCatalog, /parseEventDefinition\(injectedDefinition\)/);
-  assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/1"/);
+  assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/2"/);
+  assert.match(eventCatalog, /parseCircleCategoryCatalog\(value\.circleCategories\)/);
   assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
   assert.match(editorPage, /loadPublishedEventMap\(ACTIVE_EVENT_ID\)/);
   assert.match(editorPage, /<MapAdminImporter/);

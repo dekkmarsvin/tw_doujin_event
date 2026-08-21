@@ -5,7 +5,9 @@
 
 ## 決策
 
-每個活動以一份帶 `schema` 版本的 JSON 定義 id、名稱、場館、日期、天數、展區、地圖模板、來源 URL 與發布時間。共用 TypeScript 只保留 parser、validator、通用 `EventDefinition` 型別與 registry，不保留 `FF47_*` 常數。
+每個活動以一份帶 `schema` 版本的 JSON 定義 id、名稱、場館、日期、天數、展區、地圖模板、來源 URL、主辦分類目錄與發布時間。共用 TypeScript 只保留 parser、validator、通用 `EventDefinition` 型別與 registry，不保留 `FF47_*` 常數。
+
+`event-definition/2` 以帶來源的 `circleCategories` 取代沒有來源、只存顯示字串的 `genres`。`genres` 僅是 parser 為既有 filter／URL codec 產生的衍生投影，不再允許資料檔自行提供第二份字彙。
 
 主辦網站解析屬 organizer adapter；活動定義選擇 adapter 與其設定，但解析規則不放進 JSON。天與展區在共用程式中使用一般 `string | number`／`string`，活動專屬字面量只存在資料與驗證結果中。
 
@@ -14,4 +16,3 @@
 - 新活動以新增資料檔和必要 adapter 完成，不修改既有活動檔。
 - JSON schema 版本變更必須有 migration 或明確拒絕舊版，不能靜默猜測。
 - 既有 `FF47_EVENT` 可在遷移期作相容別名，但不得再成為共用模組的資料權威。
-

@@ -62,7 +62,7 @@
 一筆內容的出處：提供者、內容類型、原始連結、擷取時間與狀態。現行生產者是 `official`（主辦）與 `circle`（社團本人）；`catalog`、`social`、`media` 只保留為歷史／連結分類，不抓取第三方內容。**只有主辦來源可標示「主辦來源」；其他一律不得使用「官方」措辭。**
 
 **facet**
-資料生成階段已正規化的搜尋欄位（`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`）。UI 只消費，不再切割字串。
+資料生成階段已正規化的搜尋欄位（`circleCategory`、`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`）。`circleCategory` 只能選自活動定義所固定的主辦分類目錄；其他 facet 仍是社團自由填寫。UI 只消費，不再切割字串。
 
 **revision**
 地圖 layout 的版本號，每次發布遞增。

@@ -67,6 +67,7 @@ export type CircleRecord = {
   nameReading?: string;
   description: string;
   categories: string[];
+  circleCategory: string;
   pen: string;
   work: string;
   creatorTypes: string[];
@@ -145,13 +146,15 @@ function circleFromBase(base: CatalogCircle, event: EventDefinition, generatedAt
   const workTypes = fields?.workTypes ?? [];
   const referencedWorks = fields?.referencedWorks ?? [];
   const specialTags = fields?.specialTags ?? [];
+  const circleCategory = fields?.circleCategory ?? "";
   const saleInfo = fields?.saleInfo ?? "";
   const thumbnail = fields?.thumbnail;
   return {
     id: base.id,
     name: base.name,
     description: saleInfo,
-    categories: [...new Set([...creatorTypes, ...workTypes, ...referencedWorks, ...specialTags])],
+    categories: [...new Set([circleCategory, ...creatorTypes, ...workTypes, ...referencedWorks, ...specialTags].filter(Boolean))],
+    circleCategory,
     pen: fields?.pen ?? "",
     work: referencedWorks.join("、") || creatorTypes.join("、"),
     creatorTypes,
@@ -201,7 +204,7 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
       code: placement.boothCode,
       name: circle.name,
       pen: "",
-      genre: event.genres[0],
+      genre: circle.circleCategory || event.genres[0],
       tags: [],
       day: placement.day,
       hall: placement.area,

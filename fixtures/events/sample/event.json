@@ -1,5 +1,5 @@
 {
-  "schema": "event-definition/1",
+  "schema": "event-definition/2",
   "id": "sample",
   "name": "範例創作市集",
   "venue": "範例會館",
@@ -16,7 +16,18 @@
     { "id": "north", "label": "北區", "shortLabel": "北" },
     { "id": "south", "label": "南區", "shortLabel": "南" }
   ],
-  "genres": ["全部類別"],
+  "circleCategories": {
+    "schema": "circle-category-catalog/1",
+    "source": {
+      "provider": "範例主辦單位",
+      "url": "https://example.invalid/sample/categories",
+      "retrievedAt": "2026-01-01T00:00:00.000+08:00"
+    },
+    "categories": [
+      { "id": "original", "label": "原創作品", "description": "由社團自行創作的作品。" },
+      { "id": "games", "label": "遊戲作品", "description": "以遊戲為主題的作品。" }
+    ]
+  },
   "organizer": {
     "adapter": "fixture/1",
     "eventUrl": "https://example.invalid/sample",

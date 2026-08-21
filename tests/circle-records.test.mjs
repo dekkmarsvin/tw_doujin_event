@@ -52,6 +52,7 @@ test("the thin base contains no fabricated profile, media, links or facets", () 
   for (const circle of catalog.circles) {
     assert.equal(circle.pen, "");
     assert.equal(circle.saleInfo, "");
+    assert.equal(circle.circleCategory, "");
     assert.deepEqual(circle.creatorTypes, []);
     assert.deepEqual(circle.workTypes, []);
     assert.deepEqual(circle.referencedWorks, []);
@@ -66,13 +67,15 @@ test("circle-authored fields arrive only through the overlay", () => {
     schema: "circle-overrides/1", eventId: "sample", generatedAt: "2026-01-02T00:00:00.000Z", revision: 1,
     overrides: [{
       circleId: "c-900001", updatedAt: "2026-01-02T00:00:00.000Z",
-      fields: { pen: "範例筆名", saleInfo: "新刊", referencedWorks: ["原創"], links: [{ provider: "網站", kind: "website", url: "https://example.com/circle" }] },
+      fields: { pen: "範例筆名", saleInfo: "新刊", circleCategory: "原創作品", referencedWorks: ["原創"], links: [{ provider: "網站", kind: "website", url: "https://example.com/circle" }] },
     }],
   };
   const edited = records.buildCircleCatalog(payload, overlay);
   const circle = edited.circlesById.get("c-900001");
   assert.equal(circle.pen, "範例筆名");
   assert.equal(circle.saleInfo, "新刊");
+  assert.equal(circle.circleCategory, "原創作品");
+  assert.deepEqual(edited.recordsByCircleId.get(circle.id).map(({ genre }) => genre), ["原創作品", "原創作品"]);
   assert.deepEqual(circle.referencedWorks, ["原創"]);
   assert.equal(circle.externalLinks.length, 1);
   assert.deepEqual(circle.sources.map(({ contentType }) => contentType), ["official", "circle"]);
