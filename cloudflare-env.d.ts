@@ -28,10 +28,21 @@ interface D1Database {
   batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
+interface R2PutOptions {
+  httpMetadata?: { contentType?: string; cacheControl?: string };
+  customMetadata?: Record<string, string>;
+}
+
+interface R2Bucket {
+  put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
+  delete(keys: string | string[]): Promise<void>;
+}
+
 /** Bindings the scheduled retention purge reads. It is deployed on its own,
  * outside the Pages project, because Pages has no Cron Trigger (ADR-0022). */
 interface RetentionEnv {
   DB: D1Database;
+  THUMBNAILS: R2Bucket;
 }
 
 /** The argument a Cron Trigger hands to `scheduled()`. */
@@ -51,6 +62,8 @@ declare module "cloudflare:workers" {
  * `wrangler pages secret put` and never live in the repository. */
 interface PortalEnv {
   DB: D1Database;
+  THUMBNAILS: R2Bucket;
+  THUMBNAIL_PUBLIC_ORIGIN?: string;
   ASSETS: Fetcher;
   MAILGUN_API_KEY?: string;
   MAILGUN_DOMAIN?: string;

@@ -54,7 +54,7 @@ test("additive column migrations upgrade an existing database idempotently", asy
   // One CREATE per table, listing every column added after it existed: a table
   // can be behind by more than one migration, and `circle_overrides` now is.
   for (const [tableName, missingColumns] of [
-    ["circle_overrides", ["post_event_hidden", "retention_choice", "retention_expires_at"]],
+    ["circle_overrides", ["post_event_hidden", "retention_choice", "retention_expires_at", "hosted_thumbnail_key"]],
     ["overrides_doc", ["phase"]],
     ["audit_log", ["shredded_at"]],
   ]) {

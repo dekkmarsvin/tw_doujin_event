@@ -118,6 +118,9 @@ export const IDENTITY_TABLES = [
     // an operator can query which rows disappear when without reading code.
     "retention_choice TEXT",
     "retention_expires_at INTEGER",
+    // Content-addressed R2 object currently owned by this row. The public URL
+    // remains in fields_json; the key is operational metadata used for cleanup.
+    "hosted_thumbnail_key TEXT",
     "takedown_reason TEXT",
     "takendown_by TEXT",
     "takendown_at INTEGER",
@@ -185,6 +188,7 @@ export const IDENTITY_COLUMN_MIGRATIONS = [
   { table: "circle_overrides", column: "post_event_hidden", sql: "ALTER TABLE circle_overrides ADD COLUMN post_event_hidden INTEGER NOT NULL DEFAULT 0" },
   { table: "circle_overrides", column: "retention_choice", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_choice TEXT" },
   { table: "circle_overrides", column: "retention_expires_at", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_expires_at INTEGER" },
+  { table: "circle_overrides", column: "hosted_thumbnail_key", sql: "ALTER TABLE circle_overrides ADD COLUMN hosted_thumbnail_key TEXT" },
   { table: "overrides_doc", column: "phase", sql: "ALTER TABLE overrides_doc ADD COLUMN phase TEXT NOT NULL DEFAULT 'during'" },
   { table: "audit_log", column: "shredded_at", sql: "ALTER TABLE audit_log ADD COLUMN shredded_at INTEGER" },
 ] as const;

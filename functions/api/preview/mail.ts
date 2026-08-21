@@ -16,6 +16,9 @@ export const onRequestGet: PagesFunction<PortalEnv> = async ({ request, env }) =
 /** Clear disposable accounts, claims, overrides, audit and captured mail. */
 export const onRequestDelete: PagesFunction<PortalEnv> = async ({ request, env }) => {
   if (!previewE2eAuthorized(env, request)) return json({ error: "not found" }, 404);
-  await repositoryFor(env).clearPreviewData();
+  const repository = repositoryFor(env);
+  const keys = await repository.listHostedThumbnailKeys();
+  if (keys.length > 0) await env.THUMBNAILS.delete(keys);
+  await repository.clearPreviewData();
   return json({ ok: true });
 };

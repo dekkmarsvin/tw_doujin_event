@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createClaim, decideClaim, deleteMyAccount, deleteMyOverride, disableAccount, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
-  previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
+  previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, uploadThumbnail, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import {
@@ -514,17 +514,46 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
 
     <h3 className={styles.editorSection}>代表圖</h3>
     <p className={styles.editorHint}>
-      代表圖網址限使用以下圖片主機：{THUMBNAIL_HOST_ALLOWLIST.join("、")}。
+      建議直接上傳 JPEG、PNG 或 WebP（最多 2 MiB）；也可在下方改用允許清單內的外部圖片網址。
     </p>
     <FieldModeControls mode={modeFor("thumbnail")} label="代表圖" onInherit={() => inheritField("thumbnail")} onClear={() => clearField("thumbnail")} />
 
-    <label htmlFor={`thumb-url-${claim.circleId}`}>圖片網址</label>
+    <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片（主要方式）</label>
+    <input
+      id={`thumb-file-${claim.circleId}`} type="file" accept="image/jpeg,image/png,image/webp"
+      disabled={status.kind === "busy"}
+      onChange={(event) => {
+        const input = event.currentTarget;
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const sourceUrl = thumbnail?.sourceUrl?.trim() ?? "";
+        const provider = thumbnail?.provider?.trim() || "社團本人";
+        if (!sourceUrl || linkUrlProblem(sourceUrl)) {
+          setStatus({ kind: "error", message: "請先填寫有效的圖片出處頁面，再選擇檔案。" });
+          input.value = "";
+          return;
+        }
+        setStatus({ kind: "busy", message: "上傳代表圖中…" });
+        void uploadThumbnail(claim.circleId, file, sourceUrl, provider)
+          .then(({ thumbnail: uploaded }) => {
+            setFields((current) => ({ ...current, thumbnail: uploaded }));
+            setSavedFields((current) => ({ ...current, thumbnail: uploaded }));
+            setSaved(true);
+            setStatus({ kind: "ok", message: "代表圖已上傳並儲存。" });
+          })
+          .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
+          .finally(() => { input.value = ""; });
+      }}
+    />
+
+    <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址（次要方式）</label>
     <input
       id={`thumb-url-${claim.circleId}`} value={thumbnail?.url ?? ""} inputMode="url" placeholder="https://"
       aria-invalid={thumbnail?.url && thumbnailUrlProblem(thumbnail.url) ? true : undefined}
       onChange={(event) => editThumbnail({ url: event.target.value })}
     />
     {thumbnail?.url && thumbnailUrlProblem(thumbnail.url) && <p className={styles.error}>{thumbnailUrlProblem(thumbnail.url)}</p>}
+    <p className={styles.editorHint}>代表圖網址限使用以下圖片主機：{THUMBNAIL_HOST_ALLOWLIST.join("、")}。</p>
 
     <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面</label>
     <input

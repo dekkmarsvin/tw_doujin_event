@@ -142,6 +142,8 @@ export const LINK_KINDS: readonly CircleTemplateLinkKind[] = ["social", "support
  * two disagree.
  */
 export const THUMBNAIL_HOST_ALLOWLIST: readonly string[] = [
+  "media.kotoban.top",
+  "media-preview.kotoban.top",
   "drive.google.com",
   "lh3.googleusercontent.com",
   "i.pximg.net",

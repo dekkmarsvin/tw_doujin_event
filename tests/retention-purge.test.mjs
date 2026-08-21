@@ -152,6 +152,25 @@ test("deletes the rows whose own deadline has passed, and only those", async () 
   assert.equal(columns.total, 0);
 });
 
+test("deletes hosted thumbnail bytes before removing an expired override", async () => {
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-hosted", fieldsJson: JSON.stringify({ saleInfo: "內容" }),
+    updatedBy: "account-1", now: NOW - DAY,
+    retention: { choice: "purge", expiresAt: NOW - 1 },
+    hostedThumbnailKey: "events/ff47/circles/ff47-hosted/hash.webp",
+  });
+  const calls = [];
+  await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, {
+    delete: async (keys) => {
+      calls.push(keys);
+      const row = await database.prepare("SELECT circle_id FROM circle_overrides WHERE circle_id = 'ff47-hosted'").first();
+      assert.ok(row, "R2 bytes are deleted while the row still makes the operation retryable");
+    },
+  });
+  assert.deepEqual(calls, [["events/ff47/circles/ff47-hosted/hash.webp"]]);
+  assert.equal(await database.prepare("SELECT circle_id FROM circle_overrides WHERE circle_id = 'ff47-hosted'").first(), null);
+});
+
 test("the published document loses the purged circle and gets a new revision", async () => {
   await writeOverride("ff47-due", { choice: "purge", expiresAt: NOW - DAY });
   await writeOverride("ff47-keeps", { choice: "keep", expiresAt: null });

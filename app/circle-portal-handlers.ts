@@ -2,6 +2,7 @@ import { circleRetentionExpiresAt, isCircleOverrideFields, isRetentionChoice, ty
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
+import { hostedThumbnailFields, prepareHostedThumbnail, type HostedThumbnailStore } from "./hosted-thumbnails";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -67,6 +68,7 @@ export type PortalDependencies = {
   turnstileSitekey: () => string;
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
+  thumbnailStore?: HostedThumbnailStore;
   config: PortalConfig;
 };
 
@@ -111,7 +113,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey, projectCircle, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey, projectCircle, thumbnailStore, config }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
   // string against a normalized one silently denies an admin whose address
@@ -255,6 +257,11 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。" }, 400);
     }
     const now = config.now();
+    const hostedKeys = await repository.listHostedThumbnailKeysForAccount(current.accountId);
+    if (hostedKeys.length > 0) {
+      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+      await thumbnailStore.delete(hostedKeys);
+    }
     const deleted = await repository.deleteAccount({
       accountId: current.accountId,
       email: current.email,
@@ -446,7 +453,17 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const now = config.now();
     const ipHash = await clientIpHash(request);
     const previous = await repository.getOverride(config.eventId, circleId);
-    await repository.putOverride({ eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention });
+    const previousKey = previous?.hosted_thumbnail_key ?? null;
+    const keepsHostedThumbnail = !!(previousKey && thumbnailStore
+      && (fields as CircleOverrideFields).thumbnail?.url === thumbnailStore.url(previousKey));
+    if (previousKey && !keepsHostedThumbnail) {
+      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+      await thumbnailStore.delete(previousKey);
+    }
+    await repository.putOverride({
+      eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
+      ...(previousKey && !keepsHostedThumbnail ? { hostedThumbnailKey: null } : {}),
+    });
     await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now);
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.updated",
@@ -466,6 +483,63 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       });
     }
     return json({ ok: true });
+  }
+
+  async function uploadThumbnail(request: Request, circleId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
+      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+    }
+    if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return json({ error: "上傳格式無效。" }, 400);
+    }
+    const file = form.get("file");
+    const sourceUrl = form.get("sourceUrl");
+    const provider = form.get("provider");
+    if (!(file instanceof File) || typeof sourceUrl !== "string" || typeof provider !== "string") {
+      return json({ error: "請選擇圖片，並填寫出處頁面與來源標示。" }, 400);
+    }
+
+    let prepared: Awaited<ReturnType<typeof prepareHostedThumbnail>>;
+    try {
+      prepared = await prepareHostedThumbnail({ eventId: config.eventId, circleId, file, sourceUrl, provider });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "代表圖格式無效。" }, 400);
+    }
+
+    const previous = await repository.getOverride(config.eventId, circleId);
+    const previousKey = previous?.hosted_thumbnail_key ?? null;
+    const previousFields = previous ? JSON.parse(previous.fields_json) as CircleOverrideFields : {};
+    const thumbnail = hostedThumbnailFields(thumbnailStore, prepared);
+    const fields: CircleOverrideFields = { ...previousFields, thumbnail };
+    if (!isCircleOverrideFields(fields)) return json({ error: "代表圖資料格式無效。" }, 400);
+
+    await thumbnailStore.put(prepared.key, prepared.value, prepared.contentType);
+    try {
+      const now = config.now();
+      await repository.putOverride({
+        eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now,
+        hostedThumbnailKey: prepared.key,
+      });
+      await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now, currentPhase());
+      await repository.writeAudit({
+        at: now, actorAccountId: current.accountId, actorRole: "circle", action: "thumbnail.uploaded",
+        subjectType: "override", subjectId: circleId,
+        detail: { contentType: prepared.contentType, size: prepared.value.byteLength },
+        ipHash: await clientIpHash(request),
+      });
+    } catch (error) {
+      await thumbnailStore.delete(prepared.key).catch(() => undefined);
+      throw error;
+    }
+    if (previousKey && previousKey !== prepared.key) await thumbnailStore.delete(previousKey);
+    return json({ ok: true, thumbnail });
   }
 
   /**
@@ -497,6 +571,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
+    if (previous?.hosted_thumbnail_key) {
+      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+      await thumbnailStore.delete(previous.hosted_thumbnail_key);
+    }
     if (!await repository.deleteOverride({ eventId: config.eventId, circleId })) {
       return json({ error: "沒有可刪除的內容。" }, 404);
     }
@@ -708,7 +786,15 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     if (!circleId || !reason) return json({ error: "circleId 與 reason 是必填欄位。" }, 400);
 
     const now = config.now();
-    const ok = await repository.takedownOverride({ eventId: config.eventId, circleId, reason, by: gate.session.email, now });
+    const previous = await repository.getOverride(config.eventId, circleId);
+    if (previous?.hosted_thumbnail_key) {
+      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+      await thumbnailStore.delete(previous.hosted_thumbnail_key);
+    }
+    const fieldsJson = previous?.hosted_thumbnail_key
+      ? JSON.stringify({ ...(JSON.parse(previous.fields_json) as CircleOverrideFields), thumbnail: null })
+      : undefined;
+    const ok = await repository.takedownOverride({ eventId: config.eventId, circleId, reason, by: gate.session.email, now, fieldsJson });
     if (ok) await repository.rebuildOverridesDoc(config.eventId, config.dataUpdatedAt, now);
     await repository.writeAudit({
       at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "override.takendown",
@@ -754,7 +840,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   return {
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listClaims, createClaim, runChallenge, searchCatalog,
-    getMyOverride, putOverride, deleteMyOverride, previewOverride, setPostEventVisibility,
+    getMyOverride, putOverride, uploadThumbnail, deleteMyOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins, adminDisableAccount,
     publicOverrides,

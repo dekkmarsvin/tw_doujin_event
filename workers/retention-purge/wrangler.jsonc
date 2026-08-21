@@ -19,6 +19,12 @@
       "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "THUMBNAILS",
+      "bucket_name": "tw-doujin-event-thumbnails"
+    }
+  ],
   // Deployed as `tw-catalog-retention-purge-preview`. Bindings are not
   // inherited by named environments — the same rule that makes the Pages
   // config repeat its D1 block — so preview declares its own, pointing at the
@@ -36,6 +42,12 @@
           "binding": "DB",
           "database_name": "tw-catalog-identity-preview",
           "database_id": "88716ee2-4d17-4c93-87aa-bfe9c961a599"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "THUMBNAILS",
+          "bucket_name": "tw-doujin-event-thumbnails-preview"
         }
       ]
     }

@@ -42,11 +42,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   // omitted it was rejected with a 415 before reaching any handler.
   const method = (init?.method ?? "GET").toUpperCase();
   const mutating = method !== "GET" && method !== "HEAD";
+  const multipart = typeof FormData !== "undefined" && init?.body instanceof FormData;
 
   const response = await fetch(path, {
     ...init,
     credentials: "same-origin",
-    headers: { accept: "application/json", ...(mutating ? { "content-type": "application/json" } : {}), ...init?.headers },
+    headers: { accept: "application/json", ...(mutating && !multipart ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
   const text = await response.text();
 
@@ -185,6 +186,17 @@ export function listAdmins() {
 
 export function manageAdmin(email: string, action: "add" | "remove") {
   return call<{ ok: true }>("/api/admin/admins", { method: "POST", body: JSON.stringify({ email, action }) });
+}
+
+export function uploadThumbnail(circleId: string, file: File, sourceUrl: string, provider: string) {
+  const body = new FormData();
+  body.set("file", file);
+  body.set("sourceUrl", sourceUrl);
+  body.set("provider", provider);
+  return call<{ ok: true; thumbnail: NonNullable<CircleOverrideFields["thumbnail"]> }>(
+    `/api/circle/${encodeURIComponent(circleId)}/thumbnail`,
+    { method: "POST", body },
+  );
 }
 
 export function disableAccount(email: string) {

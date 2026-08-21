@@ -3,6 +3,7 @@ import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleTemplateName
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
 import { FF47_ENDS_AT, FF47_EVENT } from "../app/event-catalog";
+import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -236,6 +237,17 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
   const { request, env } = context;
   const eventId = FF47_EVENT.id;
   const repository = repositoryFor(env);
+  const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
+  const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
+    url: (key) => `${thumbnailOrigin.replace(/\/$/, "")}/${key}`,
+    put: async (key, value, contentType) => {
+      await env.THUMBNAILS.put(key, value, {
+        httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
+        customMetadata: { event: FF47_EVENT.id },
+      });
+    },
+    delete: (keys) => env.THUMBNAILS.delete(keys),
+  } : undefined;
   return createCirclePortalHandlers({
     repository,
     sendMail: async (message) => {
@@ -267,6 +279,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     fetchEvidence,
     verifyHuman: (token, remoteIp) => verifyTurnstile(env, token, remoteIp),
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
+    thumbnailStore,
     projectCircle: async (circleId, fields) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.

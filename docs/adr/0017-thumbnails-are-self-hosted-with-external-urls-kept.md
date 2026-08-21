@@ -1,6 +1,7 @@
 # ADR-0017：縮圖由本站代管，外部網址保留為第二條線
 
 - 狀態：已定案（2026-08-19）
+- 實作：[#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)（2026-08-21）
 - 延續：[ADR-0012：資料來源只留主辦官網與社團本人](./0012-first-party-sources-only.md)
 - 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)
 - 相關 issue：[#40](https://github.com/dekkmarsvin/tw_doujin_event/issues/40)、[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)、[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)
@@ -36,7 +37,7 @@
 | 項目 | 值 |
 |---|---|
 | 格式 | JPEG、PNG、WebP |
-| 單檔容量 | 2 MB |
+| 單檔容量 | 2 MiB |
 | 每個社團每個活動 | 1 張（縮圖欄位本來就是單值） |
 | 檔名 | 內容 SHA-256，副檔名由驗證後的 MIME 決定 |
 
@@ -51,13 +52,13 @@
 ## 後果
 
 - **代管圖片落入 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的資料 inventory。** 它是本站儲存的二進位內容，需要和文字欄位一樣有目的、保存期限、刪除規則與負責人。活動後退出（post-event opt-out）目前只處理文字補充資料，代管圖片要一併定義。**具體的保存期限數值由 #30 決定，本 ADR 只確定它必須被涵蓋。** 一個方向已經確定：管理者撤下與社團退出時採**刪除**，不是保留但不公開——留著位元組正是責任的來源。
-- **`wrangler.jsonc` 目前只綁了一個 D1。** R2 binding 要加，而且 `d1_databases` 的先例已經證明：`env.preview` 不繼承頂層 binding，preview 要各自宣告一份，否則 preview 會直接沒有 bucket。preview 必須是不同的 bucket，理由和 preview 用不同 D1 一樣。
-- **`img-src` 從五個外部主機變成五個外部主機加代管網域。** `THUMBNAIL_HOST_ALLOWLIST` 仍然是唯一權威，`public/_headers` 與它的一致性仍由 `tests/circle-overrides.test.mjs` 斷言。代管網域是新增項，不是替換。
-- **社團端多了一條寫入路徑。** 目前 `/circle` 只有文字欄位，沒有 file input、沒有 multipart 處理。這是社團端第一次接受使用者上傳的位元組，容量與型別的把關失效會直接變成儲存空間與內容問題。
+- **production 與 preview 各有 R2 binding。** 兩邊 binding 都叫 `THUMBNAILS`，bucket 與 custom domain 分開；`env.preview` 明確重複宣告，不依賴繼承。
+- **`img-src` 加入兩個代管網域。** `THUMBNAIL_HOST_ALLOWLIST` 仍然是唯一權威，`public/_headers` 與它的一致性仍由 `tests/circle-overrides.test.mjs` 斷言。代管網域是新增項，不是替換。
+- **社團端多了一條 multipart 寫入路徑。** middleware 只對同源、固定 thumbnail route 放行 multipart；handler 再驗證 session、verified claim、容量、宣告 MIME 與檔案特徵。
 
 ## 不在本 ADR 範圍
 
-- R2 bucket 名稱、自訂網域與 DNS 設定。
+- R2 bucket 名稱、自訂網域與 DNS 設定的維運方式（實際值見[部署 runbook](../runbooks/deployment.md)）。
 - 保存期限與刪除的實際數值（[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)）。
 - 既有外部網址是否、以及何時搬進代管。
 - 付費的 Cloudflare Images 或任何伺服器端影像處理。

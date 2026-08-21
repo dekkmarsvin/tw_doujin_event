@@ -85,7 +85,18 @@ async function deleteWhere(database: D1Database, sql: string, cutoff: number) {
  * operation — a deleted row whose image is still served is the failure this is
  * meant to prevent.
  */
-async function purgeExpiredOverrides(database: D1Database, now: number) {
+async function purgeExpiredOverrides(database: D1Database, now: number, objects?: { delete(keys: string | string[]): Promise<void> }) {
+  if (objects) {
+    const due = await database.prepare(
+      `SELECT hosted_thumbnail_key FROM circle_overrides
+       WHERE retention_choice = 'purge' AND retention_expires_at IS NOT NULL AND retention_expires_at <= ?1
+         AND hosted_thumbnail_key IS NOT NULL`,
+    ).bind(now).all<{ hosted_thumbnail_key: string }>();
+    const keys = [...new Set(due.results.map((row) => row.hosted_thumbnail_key))];
+    // Bytes go first. R2 deletion is idempotent, so a D1 failure leaves a
+    // retryable row pointing at an already-absent object, never orphan bytes.
+    if (keys.length > 0) await objects.delete(keys);
+  }
   const purged = await database.prepare(
     `DELETE FROM circle_overrides
      WHERE retention_choice = 'purge' AND retention_expires_at IS NOT NULL AND retention_expires_at <= ?1
@@ -130,6 +141,7 @@ export async function purgeExpiredRecords(
   database: D1Database,
   now: number,
   windows: RetentionWindows = RETENTION_WINDOWS,
+  objects?: { delete(keys: string | string[]): Promise<void> },
 ): Promise<PurgeSummary> {
   if (windows.loginTokens <= LOGIN_RATE_LIMIT_WINDOW_MS) {
     throw new Error("login token retention must outlast the rate-limit window, or purging resets the quota.");
@@ -165,7 +177,7 @@ export async function purgeExpiredRecords(
   } else skipped.push("preview_mail_sink");
 
   if (present.has("circle_overrides")) {
-    const purged = await purgeExpiredOverrides(database, now);
+    const purged = await purgeExpiredOverrides(database, now, objects);
     deleted.circle_overrides = purged.length;
 
     if (purged.length > 0) {

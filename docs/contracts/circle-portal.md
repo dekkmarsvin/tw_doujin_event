@@ -153,11 +153,11 @@
 
 **清除接進上面那個排程 Worker**（`db/retention-purge.ts` 的 `purgeExpiredOverrides`），與憑證清除同一個部署單位、同一次執行，不另建，每天一次，**不掛在 `/data/events/:eventId/overrides.json` 上**——那條路徑的每一次 revalidation 都是一次 Function 呼叫（[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)），把清除掛上去等於把它變成流量的函數。清除的三條硬約束：
 
-- **刪的是資料列，不是加一個旗標。** `fields_json` 與 `previous_fields_json` 一併消失，沒有可以還原的殘骸。刪除以 `DELETE ... RETURNING` 一次完成，回傳的 id 同時用來更新公開文件——分成兩句 SQL 會留下「已刪除但仍公開」的時間差。
+- **刪的是資料列，不是加一個旗標。** `fields_json` 與 `previous_fields_json` 一併消失，沒有可以還原的殘骸。若列帶有代管縮圖，先以可重試的 R2 delete 移除物件，再刪除 D1 列；公開文件依 `DELETE ... RETURNING` 的 id 同步移除。
 - **公開文件同步失去該筆，且 revision 遞增。** `overrides_doc` 是衍生資料；revision 進 ETag，不遞增的話快取會繼續提供剛被刪掉的內容。
 - **`audit_log` 留下刪除發生過，但不留下被刪除的內容**：每筆刪除寫一列 `override.purged`（`subject_id` 為社團 id，`detail_json` 只有 `eventId`），每次執行另有一列 `retention.purged` 摘要。與 #54 寫入的 `override.retention` 併讀，就能回答「當事人哪天要求、系統哪天執行」。
 
-[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 的代管縮圖實作之後，**位元組必須在同一次作業裡刪除**——刪了列卻仍在服務圖片，正是這段機制要防的事。
+代管縮圖的 R2 位元組會在同一次排程作業中先行刪除；R2 delete 可重複執行，若後續 D1 失敗，下一次仍能安全重試。社團自助刪除、帳號刪除與管理者撤下使用同一個順序。
 
 ## 管理者
 
@@ -169,13 +169,13 @@
 
 ## 媒體安全
 
-社團提供的縮圖來源限於**允許清單內的主機**（`THUMBNAIL_HOST_ALLOWLIST`）。任意主機會讓每位讀者的瀏覽器對外發出請求並暴露 IP——這是內容安全問題，不是樣式問題。
+社團提供的縮圖來源限於**允許清單內的主機**（`THUMBNAIL_HOST_ALLOWLIST`），CSP 與寫入驗證共用這份清單。
 
 依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**，這份清單因此同時是 CSP `img-src` 的主機集合，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)。
 
-**目前社團只能貼網址，沒有上傳能力**：代表圖是三個文字欄位（圖片網址、出處頁面、來源標示），沒有 file input 也沒有 multipart 處理。允許清單裡只有 `i.imgur.com` 與 `drive.google.com` 是社團能主動上傳的圖床，另外三個是別的服務的 CDN，貼進來的通常是熱連結——失效時本站無法補救，降級行為是維持文字卡。
+代表圖採**本站代管為主、外部網址為輔**的雙線。已驗證的社團可上傳 JPEG／PNG／WebP，單檔上限 2 MiB，每個社團每個活動一張；伺服器驗證宣告 MIME 與檔案特徵，物件末段以內容 SHA-256 命名，不在 Worker 內重編碼。公開 URL 由 production `media.kotoban.top` 或 preview `media-preview.kotoban.top` 的 R2 custom domain 提供，帶一年 immutable 快取，**不經 Pages Function**。
 
-[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 已決定改為**本站代管為主、外部網址為輔**的雙線，**尚未實作**。實作時的硬約束記在這裡，避免日後被無意違反：代管圖片以 R2 public bucket 加自訂網域服務、**絕不經 Pages Function**（見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)）；上傳只做 MIME 與容量把關，不在 Worker 內做影像處理；檔名為內容 SHA-256；格式限 JPEG／PNG／WebP，單檔 2 MB，每個社團每個活動一張。代管圖片隨所屬補充資料由排程清除、自助刪除或管理者撤下一併刪除；實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
+上傳時會直接寫入該社團的 overlay；更換圖片時先發布新物件與欄位，再移除舊物件。改用外部網址或清除欄位時會解除並刪除舊的代管物件。若代管線與外部網址都不可用，閱讀端維持文字卡。實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
 
 ## 聯絡窗口
 

@@ -243,6 +243,26 @@ npx wrangler d1 execute tw-catalog-identity --remote --command "SELECT COUNT(*) 
 npx wrangler d1 execute tw-catalog-identity-preview --remote --command "SELECT COUNT(*) FROM login_tokens"
 ```
 
+### 3.1 建立 R2 縮圖 bucket 與 custom domain
+
+production 與 preview 必須分開；`r2_buckets` 和 D1 一樣不跨環境繼承：
+
+```bash
+npx wrangler r2 bucket create tw-doujin-event-thumbnails
+npx wrangler r2 bucket create tw-doujin-event-thumbnails-preview
+npx wrangler r2 bucket domain add tw-doujin-event-thumbnails --domain media.kotoban.top --zone-id <ZONE_ID> --min-tls 1.2 --force
+npx wrangler r2 bucket domain add tw-doujin-event-thumbnails-preview --domain media-preview.kotoban.top --zone-id <ZONE_ID> --min-tls 1.2 --force
+```
+
+Pages 與排程 Worker 都以 `THUMBNAILS` 綁定同一環境的 bucket；Pages 另由 `THUMBNAIL_PUBLIC_ORIGIN` 產生公開 URL。不得啟用 `r2.dev` 或新增 Function 代理讀取。驗證：
+
+```bash
+npx wrangler r2 bucket domain list tw-doujin-event-thumbnails
+npx wrangler r2 bucket domain list tw-doujin-event-thumbnails-preview
+```
+
+容量與操作量的營運監控追蹤於 [#66](https://github.com/dekkmarsvin/tw_doujin_event/issues/66)，不屬於縮圖請求路徑。
+
 ### 4. 設定 production 與 preview runtime secrets
 
 見上節。設定後重部署一次 preview，再確認 `/api/auth/session` 是 401；完整 E2E 由 PR workflow 執行。兩份收件人名單以外的地址，在寫入 D1 或呼叫 Mailgun **之前**就被拒絕，絕不退回 production Mailgun。
@@ -340,7 +360,7 @@ token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI
 
 ## 排程清除 Worker
 
-保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
+保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1 與該環境的縮圖 R2 bucket（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
 
 它每天 UTC 03:17 執行一次，刪除四類資料、匿名化一類欄位，並寫一筆 `audit_log` 摘要：
 
@@ -352,7 +372,7 @@ token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI
 | `circle_overrides` | **由社團自選**：只刪 `retention_choice = 'purge'` 且 `retention_expires_at` 已過的列（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
 | `audit_log.ip_hash` | 寫入滿 90 天後清為 `NULL`，audit 列不刪除 |
 
-前三者與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除社團資料列時，`overrides_doc` 會同步失去該筆並遞增 revision（revision 進 ETag，不遞增快取會繼續提供已刪除的內容），並且每筆寫一列 `override.purged` 稽核，內容不留。
+前三者與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除社團資料列前先刪除 `hosted_thumbnail_key` 指向的 R2 物件；之後 `overrides_doc` 同步失去該筆並遞增 revision，且每筆寫一列 `override.purged` 稽核，內容不留。
 
 **它只刪，不建表**——schema 仍由 Pages 端的 repository 首次使用時建立；找不到的表會列進摘要的 `skipped` 並跳過。
 

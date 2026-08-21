@@ -50,6 +50,7 @@
 | `/assets/*` | `public, max-age=31536000, immutable`（檔名含 content hash） |
 | static `/data/events/*` | `public, max-age=300, must-revalidate` |
 | Function `/data/events/:eventId/overrides.json` | `public, max-age=60, must-revalidate` + strong ETag（Function response 明確覆寫 static `_headers` 規則） |
+| R2 代管縮圖 | `public, max-age=31536000, immutable`（URL 含內容 SHA-256） |
 | `/sw.js` | `no-cache`（另帶 `Service-Worker-Allowed: /`） |
 | `/manifest.webmanifest` | `public, max-age=3600` |
 
@@ -57,7 +58,7 @@ reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓�
 
 **overlay 的每一次 revalidation 都是一次 Function 呼叫，包含回 304 的那些。** strong ETag 省的是頻寬，不是配額：304 的分支在 Function 內部，且在算出 ETag 之前已經讀過一次 D1。Cloudflare 的邊緣不會在 Function 之前擋下這些請求——Workers Cache 是 `wrangler.jsonc` 的 `cache.enabled` 選項，目前沒有開；zone 層的預設快取副檔名清單也不含 `.json`。因此免費方案每日 100,000 次的上限，換算是每天 100,000 個「活躍讀者分鐘」，而不是十萬名讀者。實測見 [#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)。
 
-由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份配額，而 Error 1027 的後果是 overlay 消失。社團縮圖代管因此走 R2 public bucket 加自訂網域，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
+由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份配額，而 Error 1027 的後果是 overlay 消失。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
 
 同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 只允許 `'self'`、`data:` 與 `THUMBNAIL_HOST_ALLOWLIST` 的主機，**不含裸 `https:`**。這份清單的唯一權威在 `app/circle-overrides.ts`，`_headers` 與它不一致時 `tests/circle-overrides.test.mjs` 失敗，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
@@ -74,4 +75,4 @@ Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.
 - `dist/sw.js` 的 precache 清單涵蓋所有離線必要檔案。
 - `dist/_headers` 存在，且沒有 Functions 或自訂 rewrite 規則攔截靜態請求。
 - 全新瀏覽器工作階段不需圖片、Worker 或 D1 即可取得同一份場刊與地圖。
-- 離線重新載入後，已下載的場刊、地圖、字型與介面仍可運作；外部縮圖維持可理解的降級狀態。
+- 離線重新載入後，已下載的場刊、地圖、字型與介面仍可運作；縮圖不可用時維持文字卡。

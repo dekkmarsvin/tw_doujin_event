@@ -59,6 +59,22 @@ test("a mutating request must declare json, which no html form can send", async 
   assert.equal(withCharset.status, 200);
 });
 
+test("multipart is admitted only for the same-origin thumbnail upload route", async () => {
+  const accepted = await onRequest(context(request("POST", "/api/circle/ff47-demo/thumbnail", {
+    "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
+  })));
+  assert.equal(accepted.status, 200);
+
+  const wrongRoute = await onRequest(context(request("POST", "/api/claims", {
+    "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
+  })));
+  assert.equal(wrongRoute.status, 415);
+  const foreign = await onRequest(context(request("POST", "/api/circle/ff47-demo/thumbnail", {
+    "content-type": "multipart/form-data; boundary=test", origin: "https://evil.example",
+  })));
+  assert.equal(foreign.status, 403);
+});
+
 test("a bodyless DELETE is allowed when it declares json", async () => {
   // This is the logout path. It carries no body, so a rule keyed on "has a
   // body" would have let it through untyped and a rule keyed on the header

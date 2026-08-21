@@ -11,13 +11,13 @@
  * Not to be confused with `worker/index.ts`, which serves the map-authoring
  * editor. This one has no fetch handler and answers no requests.
  */
-import { purgeExpiredRecords } from "../../db/retention-purge";
+import { purgeExpiredRecords, RETENTION_WINDOWS } from "../../db/retention-purge";
 
 export default {
   async scheduled(controller: ScheduledController, env: RetentionEnv) {
     // The scheduled time, not the wall clock: a firing delayed by a minute
     // should still delete against the window it was scheduled for.
-    const summary = await purgeExpiredRecords(env.DB, controller.scheduledTime);
+    const summary = await purgeExpiredRecords(env.DB, controller.scheduledTime, RETENTION_WINDOWS, env.THUMBNAILS);
     // Also in `audit_log`; this copy is for `wrangler tail` during a deploy.
     console.log(JSON.stringify({ event: "retention.purged", cron: controller.cron, ...summary }));
   },

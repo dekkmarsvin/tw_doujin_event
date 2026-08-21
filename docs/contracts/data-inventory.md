@@ -103,6 +103,7 @@
 | `status`、`takedown_reason`、`takendown_by`、`takendown_at` | 管理者撤下紀錄 |
 | `post_event_hidden` | 活動後退出旗標 |
 | `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
+| `hosted_thumbnail_key` | 目前代管縮圖的 R2 object key；公開 URL 仍在 `fields_json`，這欄只供更換與刪除生命週期使用 |
 
 **目的**：讓社團供應比公開整理更即時的內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：由社團自選，選了 `purge` 的列在活動結束滿 90 天時由排程 Worker **刪除資料列**；未表態與選 `keep` 的列不設期限。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 **owner**：社團本人。
 
@@ -120,7 +121,7 @@
 
 - 登入：`auth.link_requested`、`auth.session_created`、`auth.signed_out`
 - 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`
-- 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
+- 社團自填內容：`override.updated`、`thumbnail.uploaded`（只記 MIME 與 bytes）、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
 - 管理者名冊：`admin.added`、`admin.removed`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
@@ -137,7 +138,7 @@
 
 **保存期**：7 天，全站最短。 **到期處置**：由排程 Worker **刪除資料列**。期限最短的理由是它存的是登入信全文（含連結），而 preview 的沙盒收件人是真實的個人信箱；測試不需要昨天的信。preview 環境的 Worker 另行部署為 `tw-catalog-retention-purge-preview`。
 
-`clearPreviewData()` 會清空 `login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`、`accounts` 八張表，**保留 admins**。它只在 preview 可達，且與排程清除無關——後者依期限刪列，這個把表清空。
+preview 清除端點會先刪除 preview R2 中由 overlay 引用的物件，再由 `clearPreviewData()` 清空 `login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`、`accounts` 八張表，**保留 admins**。它只在 preview 可達，且與排程清除無關。
 
 ## IP 的處理
 
@@ -153,7 +154,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 |---|---|---|
 | **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（含一次性登入連結） | 每次索取登入連結 |
 | **Cloudflare Turnstile**（`challenges.cloudflare.com`） | 瀏覽器載入 widget；伺服器 siteverify 送 token 與**原始 IP** | 每次索取登入連結（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)） |
-| **Cloudflare**（Pages／Workers／D1） | 平台本身，承載全部上述資料 | 全時 |
+| **Cloudflare**（Pages／Workers／D1／R2） | 平台本身，承載全部上述資料與代管縮圖 | 全時 |
 | **Cloudflare Access** | 維護者身分 | 閘控期間；解除後消失（[ADR-0015](../adr/0015-access-lifts-when-no-third-party-bytes-remain.md)） |
 
 認領證據抓取（`fetchEvidence()`）由 Worker 主動連向社團自己登錄的 URL，**對該主機揭露的是本站，不是使用者**。
@@ -162,7 +163,7 @@ Turnstile 是**閱讀端以外唯一的第三方腳本**，且只載入在 `/cir
 
 ## 閱讀端不在本表範圍
 
-一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./planning.md#儲存與版本)）與介面字級偏好。**沒有 cookie、沒有分析工具、沒有第三方請求**（縮圖依 [ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 改為自行代管後，允許清單主機的請求也會消失）。
+一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./planning.md#儲存與版本)）與介面字級偏好。沒有 cookie 或分析工具。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
 
 規劃資料只留在使用者裝置，是刻意的隱私姿態，不是本站持有的資料——見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 

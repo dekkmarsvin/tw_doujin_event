@@ -46,6 +46,7 @@ export type OverrideRow = {
   /** `null` where the circle has not answered yet; never defaulted here. */
   retention_choice?: CircleRetentionChoice | null;
   retention_expires_at?: number | null;
+  hosted_thumbnail_key?: string | null;
 };
 
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
@@ -309,6 +310,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return true;
   }
 
+  /** R2 must be cleared before the D1 account deletion commits. */
+  async function listHostedThumbnailKeysForAccount(accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT DISTINCT o.hosted_thumbnail_key AS object_key
+       FROM circle_overrides o
+       JOIN circle_claims c ON c.event_id = o.event_id AND c.circle_id = o.circle_id
+       WHERE c.account_id = ?1 AND c.status = 'verified' AND o.hosted_thumbnail_key IS NOT NULL`,
+    ).bind(accountId).all<{ object_key: string }>();
+    return result.results.map((row) => row.object_key);
+  }
+
+  async function listHostedThumbnailKeys() {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT DISTINCT hosted_thumbnail_key AS object_key FROM circle_overrides WHERE hosted_thumbnail_key IS NOT NULL`,
+    ).all<{ object_key: string }>();
+    return result.results.map((row) => row.object_key);
+  }
+
   async function createClaim(input: {
     id: string; accountId: string; eventId: string; circleId: string;
     circleNameKey: string; circleNameAtClaim: string; sourceRowAtClaim: number | null;
@@ -415,11 +436,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     updatedBy: string;
     now: number;
     retention?: { choice: CircleRetentionChoice; expiresAt: number | null };
+    /** Absent preserves the current object; null explicitly detaches it. */
+    hostedThumbnailKey?: string | null;
   }) {
     await ensureTables();
+    const changesHostedThumbnail = Object.prototype.hasOwnProperty.call(input, "hostedThumbnailKey");
     await database.prepare(
-      `INSERT INTO circle_overrides (id, event_id, circle_id, fields_json, updated_by, created_at, updated_at, retention_choice, retention_expires_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8)
+      `INSERT INTO circle_overrides (id, event_id, circle_id, fields_json, updated_by, created_at, updated_at, retention_choice, retention_expires_at, hosted_thumbnail_key)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9)
        ON CONFLICT(event_id, circle_id) DO UPDATE SET
          previous_fields_json = circle_overrides.fields_json,
          fields_json = excluded.fields_json,
@@ -430,10 +454,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          retention_choice = COALESCE(excluded.retention_choice, circle_overrides.retention_choice),
          retention_expires_at = CASE WHEN excluded.retention_choice IS NULL
            THEN circle_overrides.retention_expires_at ELSE excluded.retention_expires_at END,
+         hosted_thumbnail_key = CASE WHEN ?10 = 1 THEN excluded.hosted_thumbnail_key ELSE circle_overrides.hosted_thumbnail_key END,
          takedown_reason = NULL, takendown_by = NULL, takendown_at = NULL`,
     ).bind(
       crypto.randomUUID(), input.eventId, input.circleId, input.fieldsJson, input.updatedBy, input.now,
       input.retention?.choice ?? null, input.retention?.expiresAt ?? null,
+      input.hostedThumbnailKey ?? null, changesHostedThumbnail ? 1 : 0,
     ).run();
   }
 
@@ -451,12 +477,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return (result.meta.changes ?? 0) === 1;
   }
 
-  async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number }) {
+  async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number; fieldsJson?: string }) {
     await ensureTables();
     const result = await database.prepare(
-      `UPDATE circle_overrides SET status = 'takendown', takedown_reason = ?1, takendown_by = ?2, takendown_at = ?3
+      `UPDATE circle_overrides SET status = 'takendown', takedown_reason = ?1, takendown_by = ?2, takendown_at = ?3,
+         fields_json = CASE WHEN ?6 = 1 THEN ?7 ELSE fields_json END,
+         hosted_thumbnail_key = CASE WHEN ?6 = 1 THEN NULL ELSE hosted_thumbnail_key END
        WHERE event_id = ?4 AND circle_id = ?5 AND status = 'live'`,
-    ).bind(input.reason, input.by, input.now, input.eventId, input.circleId).run();
+    ).bind(
+      input.reason, input.by, input.now, input.eventId, input.circleId,
+      input.fieldsJson === undefined ? 0 : 1, input.fieldsJson ?? null,
+    ).run();
     return result.meta.changes === 1;
   }
 
@@ -543,6 +574,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, consumeLoginToken,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, deleteAccount,
+    listHostedThumbnailKeysForAccount, listHostedThumbnailKeys,
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,

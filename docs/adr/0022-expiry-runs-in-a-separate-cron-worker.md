@@ -57,7 +57,7 @@ C 是長期方向而不是現在的動作。[ADR-0008](./0008-static-public-read
 ## 這個決策沒有解決什麼
 
 - **它不決定 Worker 的名稱、cron 表達式與部署流程**，那些屬於實作與[部署 runbook](../runbooks/deployment.md)。
-- **它不處理 R2 上的代管縮圖怎麼一起刪。** [ADR-0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 的代管尚未實作；實作時這個 Worker 要一併綁 R2，刪列與刪位元組必須是同一次作業。
+- **R2 刪除已由 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65) 接入。** Worker 綁定與 D1 同環境的 `THUMBNAILS`；到期列有 `hosted_thumbnail_key` 時，先做可重試的 R2 delete，再刪 D1 列與更新公開文件。
 
 ## 後果
 

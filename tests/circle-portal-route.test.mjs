@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { File } from "node:buffer";
 import test, { after, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
@@ -37,6 +38,7 @@ let verifiedTokens = [];
 let sitekey = () => "test-sitekey";
 let handlers;
 let repository;
+let thumbnailObjects;
 
 const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "admins"];
 
@@ -46,6 +48,7 @@ beforeEach(async () => {
   humanVerified = true;
   verifiedTokens = [];
   sitekey = () => "test-sitekey";
+  thumbnailObjects = { put: [], deleted: [] };
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.com"] });
   // Isolation matters here: claim ownership and the login rate-limit window are
   // both persistent, so a shared database would make tests order-dependent.
@@ -70,6 +73,11 @@ beforeEach(async () => {
       return humanVerified;
     },
     turnstileSitekey: () => sitekey(),
+    thumbnailStore: {
+      url: (key) => `https://media-preview.kotoban.top/${key}`,
+      put: async (key, value, contentType) => { thumbnailObjects.put.push({ key, size: value.byteLength, contentType }); },
+      delete: async (keys) => { thumbnailObjects.deleted.push(...(Array.isArray(keys) ? keys : [keys])); },
+    },
     config: {
       eventId: "ff47",
       origin: ORIGIN,
@@ -114,6 +122,16 @@ async function approve(cookieOwner, circleId, adminCookie) {
   const { id } = await created.json();
   await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, adminCookie));
   return id;
+}
+
+function thumbnailRequest(circleId, cookie, bytes, type = "image/png") {
+  const body = new FormData();
+  body.set("file", new File([Uint8Array.from(bytes)], "thumbnail", { type }));
+  body.set("sourceUrl", "https://circle.example/work");
+  body.set("provider", "社團本人");
+  return new Request(`${ORIGIN}/api/circle/${circleId}/thumbnail`, {
+    method: "POST", headers: { origin: ORIGIN, cookie }, body,
+  });
 }
 
 test("a login request answers identically whether or not the inbox is known", async () => {
@@ -249,7 +267,9 @@ test("a circle can delete its account and release its owned circle", async () =>
   const email = "delete@owner.example";
   const cookie = await signIn(email);
   assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, cookie))).status, 201);
-  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "delete me" } }, cookie), "ff47-domain")).status, 200);
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00];
+  assert.equal((await handlers.uploadThumbnail(thumbnailRequest("ff47-domain", cookie, png), "ff47-domain")).status, 200);
+  const hostedKey = (await repository.getOverride("ff47", "ff47-domain")).hosted_thumbnail_key;
 
   assert.equal((await handlers.deleteMyAccount(post("/api/account", { confirm: "wrong@example.com" }, cookie))).status, 400);
   const deleted = await handlers.deleteMyAccount(post("/api/account", { confirm: email }, cookie));
@@ -258,6 +278,7 @@ test("a circle can delete its account and release its owned circle", async () =>
   assert.equal((await handlers.session(get("/api/auth/session", cookie))).status, 401);
   assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM accounts WHERE email = ?1`).bind(email).first()).total, 0);
   assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = 'ff47-domain'`).first()).total, 0);
+  assert.deepEqual(thumbnailObjects.deleted, [hostedKey]);
 
   const successor = await signIn("successor@owner.example");
   assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, successor))).status, 201);
@@ -360,6 +381,44 @@ test("the public document is anonymous, revalidatable, and answers 304", async (
   );
   assert.equal(revalidated.status, 304);
   assert.equal(revalidated.headers.get("etag"), etag);
+});
+
+test("hosted thumbnails are content-addressed and removed by self-delete and admin takedown", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("hosted-owner@example.com");
+  await approve(owner, "ff47-site", admin);
+  await approve(owner, "ff47-social", admin);
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00];
+
+  const first = await handlers.uploadThumbnail(thumbnailRequest("ff47-site", owner, png), "ff47-site");
+  assert.equal(first.status, 200);
+  const firstBody = await first.json();
+  assert.match(firstBody.thumbnail.url, /^https:\/\/media-preview\.kotoban\.top\/events\/ff47\/circles\/ff47-site\/[a-f0-9]{64}\.png$/);
+  assert.deepEqual(thumbnailObjects.put.map(({ contentType, size }) => ({ contentType, size })), [{ contentType: "image/png", size: png.length }]);
+  const firstRow = await repository.getOverride("ff47", "ff47-site");
+  assert.ok(firstRow.hosted_thumbnail_key);
+  const published = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal((await published.json()).overrides[0].fields.thumbnail.url, firstBody.thumbnail.url);
+
+  const replacement = await handlers.uploadThumbnail(thumbnailRequest("ff47-site", owner, [...png, 0x01]), "ff47-site");
+  assert.equal(replacement.status, 200);
+  const replacementKey = (await repository.getOverride("ff47", "ff47-site")).hosted_thumbnail_key;
+  assert.notEqual(replacementKey, firstRow.hosted_thumbnail_key);
+  assert.deepEqual(thumbnailObjects.deleted, [firstRow.hosted_thumbnail_key], "replacement removes the former single object");
+
+  const removed = await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", { confirm: "ff47-site" }, owner), "ff47-site");
+  assert.equal(removed.status, 200);
+  assert.deepEqual(thumbnailObjects.deleted, [firstRow.hosted_thumbnail_key, replacementKey]);
+
+  const second = await handlers.uploadThumbnail(thumbnailRequest("ff47-social", owner, png), "ff47-social");
+  assert.equal(second.status, 200);
+  const secondKey = (await repository.getOverride("ff47", "ff47-social")).hosted_thumbnail_key;
+  const takedown = await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-social", reason: "權利人要求" }, admin));
+  assert.equal(takedown.status, 200);
+  assert.deepEqual(thumbnailObjects.deleted, [firstRow.hosted_thumbnail_key, replacementKey, secondKey]);
+  const takenDownRow = await repository.getOverride("ff47", "ff47-social");
+  assert.equal(takenDownRow.hosted_thumbnail_key, null);
+  assert.equal(JSON.parse(takenDownRow.fields_json).thumbnail, null, "a later edit cannot republish a deleted hosted URL");
 });
 
 test("an unknown event cannot masquerade as an empty reviewed overlay", async () => {

@@ -17,6 +17,12 @@
       "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "THUMBNAILS",
+      "bucket_name": "tw-doujin-event-thumbnails"
+    }
+  ],
   // The Turnstile sitekey the sign-in form renders, handed to the browser by
   // `GET /api/auth/config`. Public by definition, so it belongs in version
   // control rather than in dashboard state: a deployment made with this config
@@ -27,7 +33,8 @@
   // Top level is production only — `vars` is non-inheritable, which is why the
   // preview environment declares its own dummy pair below.
   "vars": {
-    "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc"
+    "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
+    "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top"
   },
   // Preview (every branch that is not the production branch) gets its own
   // database. Without this the top-level binding applies to preview too, so a
@@ -69,8 +76,15 @@
         "PREVIEW_MAIL_SINK": "d1",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
         "TURNSTILE_SITEKEY": "1x00000000000000000000AA",
-        "TURNSTILE_SECRET": "1x0000000000000000000000000000000AA"
+        "TURNSTILE_SECRET": "1x0000000000000000000000000000000AA",
+        "THUMBNAIL_PUBLIC_ORIGIN": "https://media-preview.kotoban.top"
       },
+      "r2_buckets": [
+        {
+          "binding": "THUMBNAILS",
+          "bucket_name": "tw-doujin-event-thumbnails-preview"
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",
