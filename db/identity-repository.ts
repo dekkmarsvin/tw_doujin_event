@@ -223,6 +223,92 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(now, sessionId).run();
   }
 
+  async function disableAccount(email: string, now: number) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE accounts SET disabled_at = ?1 WHERE email = ?2 AND disabled_at IS NULL`,
+    ).bind(now, email).run();
+    if (result.meta.changes === 1) {
+      await database.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE account_id = (SELECT id FROM accounts WHERE email = ?2) AND revoked_at IS NULL`)
+        .bind(now, email).run();
+      return "disabled" as const;
+    }
+    const row = await database.prepare(`SELECT disabled_at FROM accounts WHERE email = ?1`)
+      .bind(email).first<{ disabled_at: number | null }>();
+    return row ? "already-disabled" as const : "missing" as const;
+  }
+
+  /**
+   * Delete an account and the data that still identifies its owner.
+   *
+   * Only overlays covered by this account's currently verified claims are
+   * removed. A revoked former owner cannot delete a successor's contribution.
+   * The published documents are updated in the same D1 batch as the rows so a
+   * successful deletion never leaves personal content in the read model.
+   */
+  async function deleteAccount(input: { accountId: string; email: string; emailAuditDigest: string; legacyEmailAuditDigest: string; now: number }) {
+    await ensureTables();
+    const account = await database.prepare(`SELECT id FROM accounts WHERE id = ?1 AND email = ?2`)
+      .bind(input.accountId, input.email).first<{ id: string }>();
+    if (!account) return false;
+
+    const owned = await database.prepare(
+      `SELECT event_id, circle_id FROM circle_claims WHERE account_id = ?1 AND status = 'verified'`,
+    ).bind(input.accountId).all<{ event_id: string; circle_id: string }>();
+    const circlesByEvent = new Map<string, Set<string>>();
+    for (const row of owned.results) {
+      const circles = circlesByEvent.get(row.event_id) ?? new Set<string>();
+      circles.add(row.circle_id);
+      circlesByEvent.set(row.event_id, circles);
+    }
+
+    const statements: D1PreparedStatement[] = [];
+    for (const [eventId, circleIds] of circlesByEvent) {
+      for (const circleId of circleIds) {
+        statements.push(database.prepare(`DELETE FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2`).bind(eventId, circleId));
+      }
+      const current = await database.prepare(`SELECT revision, json FROM overrides_doc WHERE event_id = ?1`)
+        .bind(eventId).first<{ revision: number; json: string }>();
+      if (current) {
+        const document = JSON.parse(current.json) as { overrides: { circleId: string }[] };
+        const overrides = document.overrides.filter((override) => !circleIds.has(override.circleId));
+        if (overrides.length !== document.overrides.length) {
+          const revision = current.revision + 1;
+          statements.push(database.prepare(
+            `UPDATE overrides_doc SET revision = ?1, json = ?2, updated_at = ?3 WHERE event_id = ?4`,
+          ).bind(revision, JSON.stringify({ ...document, revision, overrides }), input.now, eventId));
+        }
+      }
+    }
+
+    statements.push(
+      database.prepare(`DELETE FROM login_tokens WHERE email = ?1`).bind(input.email),
+      database.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(input.accountId),
+      database.prepare(`DELETE FROM circle_claims WHERE account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE circle_claims SET reviewed_by = '[shredded]' WHERE reviewed_by = ?1`).bind(input.email),
+      database.prepare(`UPDATE circle_overrides SET takendown_by = '[shredded]' WHERE takendown_by = ?1`).bind(input.email),
+      database.prepare(`UPDATE admins SET added_by = '[shredded]' WHERE added_by = ?1`).bind(input.email),
+      database.prepare(
+        `UPDATE audit_log SET actor_account_id = NULL, detail_json = NULL, ip_hash = NULL,
+           shredded_at = COALESCE(shredded_at, ?1) WHERE actor_account_id = ?2`,
+      ).bind(input.now, input.accountId),
+      database.prepare(
+        `UPDATE audit_log SET subject_id = '[shredded]', detail_json = NULL, ip_hash = NULL,
+           shredded_at = COALESCE(shredded_at, ?1)
+         WHERE (subject_type = 'account' AND subject_id = ?2)
+            OR (subject_type = 'email' AND subject_id IN (?3, ?4))
+            OR (subject_type = 'admin' AND subject_id = ?5)`,
+      ).bind(input.now, input.accountId, input.emailAuditDigest, input.legacyEmailAuditDigest, input.email),
+      database.prepare(`DELETE FROM accounts WHERE id = ?1`).bind(input.accountId),
+      database.prepare(
+        `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash, shredded_at)
+         VALUES (?1, ?2, NULL, 'system', 'account.deleted', 'account', '[shredded]', NULL, NULL, ?2)`,
+      ).bind(crypto.randomUUID(), input.now),
+    );
+    await database.batch(statements);
+    return true;
+  }
+
   async function createClaim(input: {
     id: string; accountId: string; eventId: string; circleId: string;
     circleNameKey: string; circleNameAtClaim: string; sourceRowAtClaim: number | null;
@@ -456,7 +542,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, consumeLoginToken,
-    upsertAccount, createSession, getSession, revokeSession,
+    upsertAccount, createSession, getSession, revokeSession, disableAccount, deleteAccount,
     createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,

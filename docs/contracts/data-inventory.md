@@ -1,8 +1,8 @@
 # 資料 inventory
 
-本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**，保存期限與到期處置的決策依據是 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)（社團自述內容）與 [ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)（其餘七類），機制是 [ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md) 的排程 Worker。仍屬 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 未定案的一律標為**待決**，不猜、不預填。
+本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md) 與 [ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 決定。
 
-**schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（9 張表由 `ensureTables()` 於首次請求建立，本專案沒有 migration 路徑）
+**schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（9 張表由 `ensureTables()` 於首次請求建立；既有資料庫用同檔案的 additive column migrations 升級）
 **寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
 **行為契約**：[社團自助控制面](./circle-portal.md)。認領、可編輯範圍、退出與管理者規則只寫在那裡，本文不重複。
 **外部對照**：[性質相近的服務如何公開自己的資料收集](../research/data-collection-policies-in-comparable-projects.md)
@@ -49,10 +49,10 @@
 | `id` | 配發識別碼 | |
 | `email` | **明文電子郵件** | 唯一索引；經 `normalizeEmail()` 正規化 |
 | `created_at`、`last_login_at` | 時間戳 | |
-| `disabled_at` | 停用時間 | **從未被寫入。** 讀取端（`upsertAccount`、`getSession`）會擋停用帳號，但沒有任何路徑設定它——等於目前無法停用帳號 |
+| `disabled_at` | 停用時間 | 管理者可停用非管理者帳號；寫入後立即撤銷 sessions，並阻止再次登入 |
 
 **目的**：讓社團以 email 一次性連結登入並維護自己的公開資料。
-**保存期**：不設期限。 **到期處置**：依當事人請求刪除——**受理範圍待決**（誰能提出、涵蓋哪幾張表、既有的認領與補充資料怎麼處置），[ADR-0020](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md) 只確定它走信箱、不走自助。目前沒有刪除帳號的程式路徑。
+**保存期**：不設期限。 **到期處置**：登入中的非管理者可輸入完整 email 自助刪除（[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。帳號、tokens、sessions 與 claims 一併刪除；仍由該帳號擁有的補充資料從資料列與公開文件移除，擁有者名額釋放。管理者須先由另一位管理者移出名單。
 
 ### `admins` — 管理者名單
 
@@ -91,7 +91,7 @@
 | `challenge_token_hash`、`challenge_expires_at`、`challenge_attempts` | 驗證碼狀態，24 小時 |
 | `status`、`verified_at`、`reviewed_by`、`reviewed_at` | 審核結果，`reviewed_by` 是**管理者身分** |
 
-**目的**：證明某帳號是某社團本人。 **保存期**：不設期限——誰在什麼時候取得了哪個社團的擁有權，是日後爭議時唯一能回答問題的東西。 **到期處置**：依當事人請求刪除，**受理範圍同 `accounts`，待決**。**目前沒有刪除路徑**——`setClaimStatus()` 只改狀態。
+**目的**：證明某帳號是某社團本人。 **保存期**：不設期限。 **到期處置**：隨帳號刪除；partial unique index 的擁有者名額同步釋放。已轉移給別人的社團不會因前任刪帳號而移除現任內容。
 
 ### `circle_overrides` — 社團自填的補充資料
 
@@ -114,7 +114,7 @@
 
 ### `audit_log` — 稽核記錄
 
-`at`、`actor_account_id`、`actor_role`、`action`、`subject_type`、`subject_id`、`detail_json`、`ip_hash`。
+`at`、`actor_account_id`、`actor_role`、`action`、`subject_type`、`subject_id`、`detail_json`、`ip_hash`、`shredded_at`。
 
 目前寫入的 action，依主體分組：
 
@@ -126,10 +126,10 @@
 
 兩點值得單獨記下：
 
-- `auth.link_requested` 的 `subject_id` 是 **email 的純 SHA-256**（`sha256Hex(email)`），**沒有加 pepper**——與 `ip_hash` 的處理不同，強度也不同。
-- **沒有任何刪除或塗銷的程式路徑。** 見下面「還沒有的機制」。
+- `auth.link_requested` 的 `subject_id` 是以 `HASH_PEPPER` 為金鑰、帶 `audit-email-v1` domain separation 的 HMAC；不存明文，也不是可直接字典比對的無金鑰 SHA-256。
+- `shredded_at` 非 NULL 代表該列已塗銷，不應再當成原始稽核內容解讀。
 
-**保存期**：不設期限，**永不刪除**。 **到期處置**：依請求塗銷其中的個資，保留該列（[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)，形狀取自 pretix 的 `LogEntry`：紀錄不刪，只塗掉個資並標記已塗改）。**這條已寫進[隱私告知](../policy/privacy-notice.md)第八節，但塗銷的機制尚未實作**——見下。
+**保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時把可連結的 account／email 主體改為固定值、清空 actor、IP 與自由內容，並寫入 `shredded_at`。仍保留「何時發生哪個動作」。
 
 ### `preview_mail_sink` — 僅 preview
 
@@ -143,7 +143,7 @@
 
 原始 IP 取自 `cf-connecting-ip`，缺少時退回 `x-forwarded-for`。**不以原始值儲存**：存的是 `SHA-256(HASH_PEPPER ‖ IP)`，寫入 `login_tokens.request_ip_hash` 與 `audit_log.ip_hash`。
 
-pepper 是**固定值**，不輪替。研究文件指出這個姿態沒有現成對照可抄：Codeberg／Wikimedia／Mastodon 的期限是給原始 IP 的，Plausible 用當日輪替鹽讓這個類別根本不存在，本站介於兩者之間。
+pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內刪除；`audit_log.ip_hash` 由排程 Worker 在 90 天後清為 `NULL`，稽核 action 本身不刪除。
 
 **例外**：Turnstile siteverify 會把**原始 IP** 送給 Cloudflare（見下）。
 
@@ -170,28 +170,14 @@ Turnstile 是**閱讀端以外唯一的第三方腳本**，且只載入在 `/cir
 
 驗收條件要求「cleanup／expiry 行為有可執行機制與 tests，不只存在於文件」。這一節記的是它現在由什麼東西兌現。
 
-- **排程清除**：[`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `purgeExpiredRecords()`，由 [`workers/retention-purge/`](../../workers/retention-purge) 每天 03:17 UTC 觸發，刪除過期的 `login_tokens`、`sessions`、`preview_mail_sink`，以及 `retention_expires_at` 已過的社團自述內容。每次執行寫一列 `retention.purged`，**包含沒刪到東西的那些**——沒有紀錄的排程等於沒有排程。測試在 [`tests/retention-purge.test.mjs`](../../tests/retention-purge.test.mjs)。
+- **排程清除**：[`db/retention-purge.ts`](../../db/retention-purge.ts) 的 `purgeExpiredRecords()`，由 [`workers/retention-purge/`](../../workers/retention-purge) 每天 03:17 UTC 觸發，刪除過期的 `login_tokens`、`sessions`、`preview_mail_sink` 與到期社團自述，並清除超過 90 天的 `audit_log.ip_hash`。每次執行寫一列 `retention.purged`，包含沒處理到東西的那些。
 - **它不會建立 schema。** 這個模組先讀 `sqlite_master`，表不在就跳過，不呼叫 `ensureTables()`。理由寫在模組頂端：**能建立資料庫的清除程式，就是能讓資料庫復活的清除程式。**
 - **社團自助刪除**：`deleteOverride()`，走[既有的擁有權鏈](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md)（登入 → 已驗證的認領），不發放任何持有即授權的編輯連結。刪除後 `overrides_doc` 同步重建並遞增 revision，`audit_log` 留下 `override.deleted`——是哪個帳號做的，不留內容。
+- **帳號自助刪除與 audit 塗銷**：`deleteAccount()` 以同一個 D1 batch 刪除帳號關聯資料、釋放認領、移除仍由它擁有的補充資料、更新公開文件並塗銷 audit 個資。`account.deleted` 本身以已塗銷列記錄。
+- **管理者停用帳號**：`disableAccount()` 寫入 `disabled_at` 並撤銷 live sessions；讀取端既有檢查阻止再次登入。
 
-## 還沒有的機制
+## 尚未納入政策正文
 
-- **`audit_log` 的塗銷。** [隱私告知](../policy/privacy-notice.md)第八節已對使用者承諾「收到刪除請求時塗銷其中的個人資料」，而目前沒有任何程式路徑做這件事，runbook 也沒有人工程序。依 [ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md) 的第一個約束，**對外文件描述的必須是實際行為**；在閘控解除前，這裡要嘛補上機制，要嘛把人工程序寫進[部署 runbook](../runbooks/deployment.md)。追蹤於 [#63](https://github.com/dekkmarsvin/tw_doujin_event/issues/63)。
-- **帳號與認領的刪除。** `accounts` 與 `circle_claims` 都沒有刪除路徑，`setClaimStatus()` 只改狀態。受理範圍本身也還沒定案（見上）。
-- **`accounts.disabled_at` 沒有寫入路徑**——讀取端會擋停用帳號，但沒有東西設得了它，等於目前無法停用帳號。該欄位要補上寫入路徑還是移除，待決。
-- **沒有匿名化程序。** IP 雜湊維持固定 pepper，是化名不是匿名——見上面「IP 的處理」。
-
-## 待決事項
-
-每一項都要有結論才能關閉 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)。**本文不預設答案。**
-
-1. **帳號刪除的受理範圍**：誰能提出、刪除範圍涵蓋哪幾張表、既有的認領與補充資料怎麼處置。[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md) 明說它沒有解決這件事：刪掉 `accounts` 那一列，`circle_claims` 與 `audit_log` 裡的 `account_id` 就成了指不到人的識別碼；連帶刪除、塗銷或保留孤兒鍵都可以，但 `circle_claims_one_owner_idx` 的不變量不能被繞過。
-2. **`audit_log` 塗銷的實作形狀**：處置已定（依請求塗銷、保留該列），缺的是機制或人工程序。這一項不能晚於閘控解除——告知已經先承諾了。
-3. **`accounts.disabled_at` 是否要有寫入路徑**，或該欄位移除。
-4. **IP 雜湊的姿態**：維持固定 pepper、改輪替鹽，或為 `audit_log.ip_hash` 單獨設保存期。[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md) 決定的是**保留**並照實揭露，不是這三條路的取捨。
-5. **`auth.link_requested` 的 email 雜湊是否比照 IP 加 pepper**（目前是純 SHA-256）。
-6. **preview 資料是否納入政策文本。** 研究指出所有參考對象都只談正式服務。
-
-決定之後，處置要回填本表，並依驗收條件補上可執行機制與測試。
+preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則交給 Mailgun sandbox；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
 
 已定案而**不再**列於此的：八類資料的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第十節）。

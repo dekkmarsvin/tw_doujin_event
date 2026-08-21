@@ -52,7 +52,7 @@
 - **擁有權掛在社團身分上，不掛在帳號上。** 移轉後新擁有者可以刪除前任寫的內容；`audit_log` 的 `override.deleted` 記下是**哪個帳號**做的，那是移轉之後唯一分得出誰做了什麼的依據。稽核不留下被刪除的內容。
 - **自助刪除與到期自動清除刪掉同一組東西**，否則兩條路徑會留下不同的殘骸。這條由測試把關。
 
-帳號本身的刪除（`accounts`、`sessions`、`login_tokens`、`circle_claims`）不在自助範圍，走維運信箱（[ADR-0019](../adr/0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md)）。
+帳號本身也可自助刪除（`DELETE /api/account`）：登入中的非管理者必須輸入完整 email 確認。帳號、tokens、sessions、claims 與仍由該帳號擁有的補充資料一併刪除，公開文件同步更新，稽核個資塗銷但 action 與時間保留。管理者需先由另一位管理者移出名單。來信協助仍走維運信箱（[ADR-0019](../adr/0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md)）。
 
 ## 可編輯範圍
 
@@ -129,14 +129,16 @@
 | `login_tokens` | 建立後 24 小時 | 是 |
 | `sessions` | 到期或撤銷後 7 天 | 是 |
 | `preview_mail_sink` | 7 天 | 是 |
-| `accounts`、`circle_claims`、`audit_log`、`admins` | 不設期限 | 不適用 |
+| `audit_log.ip_hash` | 90 天後清空；action 與時間不刪 | 是 |
+| `accounts`、`circle_claims` | 不設期限；帳號自助刪除時連帶刪除 | 是 |
+| `audit_log`（IP 以外）、`admins` | 不設期限 | 不適用 |
 | `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | 是 |
 
 - **清除跑在獨立的排程 Worker 上**，每天一次，不掛在任何使用者請求的路徑上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。Cron Trigger 是 Workers 的功能，Pages 沒有；而機會性清除會讓保存期限變成流量的函數。部署方式見[部署 runbook](../runbooks/deployment.md#排程清除-worker)。
 - **`login_tokens` 依 `created_at` 清除，門檻必須大於一小時。** 那張表同時是每小時速率限制的計數來源（每信箱 5 次、每 IP 20 次），依「已使用」清除會把限制打穿。`purgeExpiredRecords` 對過短的視窗直接拋錯，不是靜靜照做。
 - **排程 Worker 不建立 schema。** 建表仍由 repository 首次使用時完成；找不到的表列進 `skipped` 並跳過。這條由測試把關：對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。
 - **每次執行寫一筆 `audit_log` 摘要**（`action = "retention.purged"`），包含什麼都沒刪的那些。這是「清除還在跑嗎」唯一的答案。
-- 刪掉憑證不會失去證據：`auth.link_requested` 已把 IP 雜湊與 email 的 SHA-256 寫進 `audit_log`。
+- 刪掉憑證不會立即失去證據：`auth.link_requested` 會把 IP 雜湊與 email 的 keyed HMAC 寫進 `audit_log`；IP 在 90 天後清空，帳號刪除時可連結個資會塗銷。
 
 ### 社團補充資料的保存期限
 
@@ -173,7 +175,7 @@
 
 **目前社團只能貼網址，沒有上傳能力**：代表圖是三個文字欄位（圖片網址、出處頁面、來源標示），沒有 file input 也沒有 multipart 處理。允許清單裡只有 `i.imgur.com` 與 `drive.google.com` 是社團能主動上傳的圖床，另外三個是別的服務的 CDN，貼進來的通常是熱連結——失效時本站無法補救，降級行為是維持文字卡。
 
-[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 已決定改為**本站代管為主、外部網址為輔**的雙線，**尚未實作**。實作時的硬約束記在這裡，避免日後被無意違反：代管圖片以 R2 public bucket 加自訂網域服務、**絕不經 Pages Function**（見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)）；上傳只做 MIME 與容量把關，不在 Worker 內做影像處理；檔名為內容 SHA-256；格式限 JPEG／PNG／WebP，單檔 2 MB，每個社團每個活動一張。代管圖片的保存期限與刪除規則屬於 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的資料 inventory。
+[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 已決定改為**本站代管為主、外部網址為輔**的雙線，**尚未實作**。實作時的硬約束記在這裡，避免日後被無意違反：代管圖片以 R2 public bucket 加自訂網域服務、**絕不經 Pages Function**（見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)）；上傳只做 MIME 與容量把關，不在 Worker 內做影像處理；檔名為內容 SHA-256；格式限 JPEG／PNG／WebP，單檔 2 MB，每個社團每個活動一張。代管圖片隨所屬補充資料由排程清除、自助刪除或管理者撤下一併刪除；實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
 
 ## 聯絡窗口
 

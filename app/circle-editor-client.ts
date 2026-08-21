@@ -93,6 +93,10 @@ export function signOut() {
   return call<{ ok: true }>("/api/auth/session", { method: "DELETE" });
 }
 
+export function deleteMyAccount(email: string) {
+  return call<{ ok: true }>("/api/account", { method: "DELETE", body: JSON.stringify({ confirm: email }) });
+}
+
 export type CircleMatch = {
   id: string;
   name: string;
@@ -181,4 +185,8 @@ export function listAdmins() {
 
 export function manageAdmin(email: string, action: "add" | "remove") {
   return call<{ ok: true }>("/api/admin/admins", { method: "POST", body: JSON.stringify({ email, action }) });
+}
+
+export function disableAccount(email: string) {
+  return call<{ ok: true }>("/api/admin/accounts", { method: "POST", body: JSON.stringify({ email }) });
 }

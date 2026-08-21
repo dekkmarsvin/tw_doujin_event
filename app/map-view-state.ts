@@ -10,7 +10,7 @@ import type { CircleViewRecord } from "./circle-records";
 export function resolveCircleSelection(
   records: CircleViewRecord[],
   recordsById: ReadonlyMap<string, CircleViewRecord>,
-  day: 1 | 2 | 3,
+  day: string | number,
   selectedCircleId: string | null,
   selectedBoothCode: string | null,
   resolveAliases: (circleId: string) => readonly string[] = (circleId) => [circleId],

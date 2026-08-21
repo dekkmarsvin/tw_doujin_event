@@ -168,9 +168,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /role="tabpanel" aria-labelledby=\{activeMobileTabId\}/);
   assert.match(app, /onFocusCapture=\{handleMobilePanelFocus\}/);
   assert.match(app, /setMobileSheetLevel\("full"\)/);
-  assert.match(eventCatalog, /FF47_DATA_UPDATED_AT = "2026-08-11T00:00:00\.000\+08:00"/);
-  assert.match(eventCatalog, /dataUpdatedAt: FF47_DATA_UPDATED_AT/);
-  assert.match(eventCatalog, /dataLastUpdatedLabel: dataDateLabel\(FF47_DATA_UPDATED_AT\)/);
+  assert.match(eventCatalog, /parseEventDefinition\(ff47Definition\)/);
+  assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/1"/);
   assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
   assert.match(editorPage, /loadPublishedEventMap\(FF47_EVENT_ID\)/);
   assert.match(editorPage, /<MapAdminImporter/);

@@ -139,6 +139,9 @@ export const IDENTITY_TABLES = [
     "subject_id TEXT NOT NULL",
     "detail_json TEXT",
     "ip_hash TEXT",
+    // Personal fields can be irreversibly removed while the action and time
+    // remain as an operational record. NULL means the row is still original.
+    "shredded_at INTEGER",
   ]),
   // Used only when the preview environment explicitly selects the D1 mail
   // sink. The production database has the empty table but no route can write
@@ -183,4 +186,5 @@ export const IDENTITY_COLUMN_MIGRATIONS = [
   { table: "circle_overrides", column: "retention_choice", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_choice TEXT" },
   { table: "circle_overrides", column: "retention_expires_at", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_expires_at INTEGER" },
   { table: "overrides_doc", column: "phase", sql: "ALTER TABLE overrides_doc ADD COLUMN phase TEXT NOT NULL DEFAULT 'during'" },
+  { table: "audit_log", column: "shredded_at", sql: "ALTER TABLE audit_log ADD COLUMN shredded_at INTEGER" },
 ] as const;

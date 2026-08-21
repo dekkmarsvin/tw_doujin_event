@@ -7,7 +7,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
-const { createCirclePortalHandlers, SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
+const { createCirclePortalHandlers, emailAuditSubjectId, SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
 const { OVERRIDE_RETENTION_PURGE_AFTER_MS } = await environment.runner.import("/app/circle-overrides.ts");
 const { purgeExpiredRecords } = await environment.runner.import("/db/retention-purge.ts");
 
@@ -235,6 +235,40 @@ test("signing out revokes the session immediately", async () => {
   const cookie = await signIn("bye@example.com");
   await handlers.signOut(post("/api/auth/session", {}, cookie));
   assert.equal((await handlers.session(get("/api/auth/session", cookie))).status, 401);
+});
+
+test("login-request audit uses a keyed domain-separated digest", async () => {
+  await handlers.requestLink(post("/api/auth/request-link", { email: "audit-email@example.com", turnstileToken: "solved" }));
+  const row = await database.prepare(`SELECT subject_id FROM audit_log WHERE action = 'auth.link_requested' ORDER BY at DESC LIMIT 1`).first();
+  assert.equal(row.subject_id, await emailAuditSubjectId("test-pepper", "audit-email@example.com"));
+  const rawSha = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("audit-email@example.com"));
+  assert.notEqual(row.subject_id, Buffer.from(rawSha).toString("hex"));
+});
+
+test("a circle can delete its account and release its owned circle", async () => {
+  const email = "delete@owner.example";
+  const cookie = await signIn(email);
+  assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, cookie))).status, 201);
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "delete me" } }, cookie), "ff47-domain")).status, 200);
+
+  assert.equal((await handlers.deleteMyAccount(post("/api/account", { confirm: "wrong@example.com" }, cookie))).status, 400);
+  const deleted = await handlers.deleteMyAccount(post("/api/account", { confirm: email }, cookie));
+  assert.equal(deleted.status, 200);
+  assert.match(deleted.headers.get("set-cookie"), /Max-Age=0/);
+  assert.equal((await handlers.session(get("/api/auth/session", cookie))).status, 401);
+  assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM accounts WHERE email = ?1`).bind(email).first()).total, 0);
+  assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = 'ff47-domain'`).first()).total, 0);
+
+  const successor = await signIn("successor@owner.example");
+  assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, successor))).status, 201);
+});
+
+test("an admin can disable a non-admin account and revoke its live session", async () => {
+  const target = await signIn("disabled-route@example.com");
+  const admin = await signIn("admin@example.com");
+  assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email: "disabled-route@example.com" }, admin))).status, 200);
+  assert.equal((await handlers.session(get("/api/auth/session", target))).status, 401);
+  assert.equal((await handlers.adminDisableAccount(post("/api/admin/accounts", { email: "admin@example.com" }, admin))).status, 409);
 });
 
 test("every write refuses an anonymous caller", async () => {

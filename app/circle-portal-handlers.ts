@@ -70,6 +70,14 @@ export type PortalDependencies = {
   config: PortalConfig;
 };
 
+const EMAIL_AUDIT_DOMAIN = "audit-email-v1";
+
+/** Keyed and domain-separated so a leaked audit table cannot be tested against
+ * an email dictionary, and the digest cannot be confused with another HMAC. */
+export function emailAuditSubjectId(secret: string, email: string) {
+  return hmacSign(secret, `${EMAIL_AUDIT_DOMAIN}\0${normalizeEmail(email)}`);
+}
+
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_LIMIT = 8;
 
@@ -187,7 +195,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       subject: "場刊 Map 登入連結",
       text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/circle?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
     });
-    await repository.writeAudit({ at: now, actorRole: "system", action: "auth.link_requested", subjectType: "email", subjectId: await sha256Hex(email), ipHash });
+    await repository.writeAudit({
+      at: now, actorRole: "system", action: "auth.link_requested", subjectType: "email",
+      subjectId: await emailAuditSubjectId(config.hashPepper, email), ipHash,
+    });
     return accepted;
   }
 
@@ -230,6 +241,28 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       await repository.revokeSession(current.sessionId, config.now());
       await repository.writeAudit({ at: config.now(), actorAccountId: current.accountId, actorRole: "circle", action: "auth.signed_out", subjectType: "account", subjectId: current.accountId });
     }
+    return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
+  }
+
+  async function deleteMyAccount(request: Request) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (await isAdmin(current.email)) {
+      return json({ error: "管理者帳號需先由另一位管理者移出名單，才能刪除。" }, 409);
+    }
+    const body = await readJson(request);
+    if (body?.confirm !== current.email) {
+      return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。" }, 400);
+    }
+    const now = config.now();
+    const deleted = await repository.deleteAccount({
+      accountId: current.accountId,
+      email: current.email,
+      emailAuditDigest: await emailAuditSubjectId(config.hashPepper, current.email),
+      legacyEmailAuditDigest: await sha256Hex(current.email),
+      now,
+    });
+    if (!deleted) return json({ error: "找不到可刪除的帳號。" }, 404);
     return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
   }
 
@@ -646,6 +679,25 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     return json({ error: result === "last" ? "這是最後一位管理者，無法移除。" : "找不到這位管理者。" }, 409);
   }
 
+  async function adminDisableAccount(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+    if (!isEmailShaped(email)) return json({ error: "email 格式無效。" }, 400);
+    if (await isAdmin(email)) return json({ error: "請先將此帳號移出管理者名單。" }, 409);
+
+    const now = config.now();
+    const result = await repository.disableAccount(email, now);
+    await repository.writeAudit({
+      at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "account.disabled",
+      subjectType: "email", subjectId: await emailAuditSubjectId(config.hashPepper, email),
+      detail: { result }, ipHash: await clientIpHash(request),
+    });
+    if (result === "disabled") return json({ ok: true });
+    return json({ error: result === "missing" ? "找不到這個帳號。" : "這個帳號已停用。" }, 409);
+  }
+
   async function adminTakedown(request: Request) {
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
@@ -700,11 +752,11 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   return {
-    authConfig, requestLink, verify, session, signOut,
+    authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listClaims, createClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride, deleteMyOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,
-    adminListAdmins, adminManageAdmins,
+    adminListAdmins, adminManageAdmins, adminDisableAccount,
     publicOverrides,
   };
 }

@@ -94,6 +94,20 @@ test("deletes preview mail older than a week", async () => {
   assert.equal(await countIn("preview_mail_sink"), 1);
 });
 
+test("clears audit IP hashes after 90 days without deleting the audit rows", async () => {
+  await repository.writeAudit({ at: NOW - 91 * DAY, actorRole: "system", action: "old", subjectType: "test", subjectId: "old", ipHash: "old-ip" });
+  await repository.writeAudit({ at: NOW - 89 * DAY, actorRole: "system", action: "fresh", subjectType: "test", subjectId: "fresh", ipHash: "fresh-ip" });
+
+  const summary = await purgeExpiredRecords(database, NOW);
+
+  assert.equal(summary.anonymized.audit_ip_hashes, 1);
+  const rows = await database.prepare(`SELECT action, ip_hash FROM audit_log WHERE action IN ('old', 'fresh') ORDER BY action`).all();
+  assert.deepEqual(rows.results, [
+    { action: "fresh", ip_hash: "fresh-ip" },
+    { action: "old", ip_hash: null },
+  ]);
+});
+
 test("records every run in the audit log, including the empty ones", async () => {
   await purgeExpiredRecords(database, NOW);
 

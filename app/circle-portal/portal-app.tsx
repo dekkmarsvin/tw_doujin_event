@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  createClaim, decideClaim, deleteMyOverride, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
+  createClaim, decideClaim, deleteMyAccount, deleteMyOverride, disableAccount, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
   previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, verifyLoginToken,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
@@ -121,6 +121,7 @@ export default function CirclePortalApp() {
           <ClaimList claims={claims} onChanged={refreshClaims} />
           <ClaimForm onCreated={refreshClaims} />
           {claims.filter((claim) => claim.status === "verified").map((claim) => <CircleEditor key={claim.circleId} claim={claim} />)}
+          <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
           {session.isAdmin && <AdminPanel />}
         </>}
 
@@ -128,6 +129,28 @@ export default function CirclePortalApp() {
       <p>你在這裡填寫的內容會標示為「社團自述」，與主辦提供的攤位資料分開呈現。攤位與日期由主辦公布，無法在此修改。</p>
     </footer>
   </div>;
+}
+
+function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDeleted: () => void }) {
+  const [confirm, setConfirm] = useState("");
+  const [status, setStatus] = useState<Status>(IDLE);
+  return <section className={styles.card}>
+    <h2>刪除帳號</h2>
+    <p>刪除會撤銷登入狀態與認領、移除目前由此帳號擁有的社團自述，並塗銷操作紀錄中的個人識別資料。主辦公布的社團名與攤位不受影響。</p>
+    {session.isAdmin
+      ? <p className={styles.notice}>管理者需先由另一位管理者移出名單，才能刪除帳號。</p>
+      : <>
+        <label htmlFor="delete-account-confirm">輸入完整 email 確認：{session.email}</label>
+        <input id="delete-account-confirm" type="email" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
+        <button type="button" disabled={confirm !== session.email || status.kind === "busy"} onClick={() => {
+          setStatus({ kind: "busy", message: "刪除中…" });
+          void deleteMyAccount(session.email)
+            .then(() => { onDeleted(); })
+            .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+        }}>永久刪除帳號</button>
+      </>}
+    {status.kind === "error" && <p className={styles.error}>{status.message}</p>}
+  </section>;
 }
 
 function SignIn() {
@@ -712,6 +735,7 @@ function AdminRoster() {
   const [self, setSelf] = useState("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
+  const [disableEmail, setDisableEmail] = useState("");
 
   const refresh = useCallback(() => {
     void listAdmins()
@@ -747,5 +771,16 @@ function AdminRoster() {
     <button type="button" disabled={status.kind === "busy"} onClick={() => run(email, "add")}>新增</button>
 
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+
+    <h3>停用帳號</h3>
+    <p>停用會立即撤銷該帳號的登入狀態，但保留資料供身分確認或後續刪除請求。</p>
+    <label htmlFor="disable-account-email">帳號 email</label>
+    <input id="disable-account-email" type="email" value={disableEmail} onChange={(event) => setDisableEmail(event.target.value)} />
+    <button type="button" disabled={!disableEmail || status.kind === "busy"} onClick={() => {
+      setStatus({ kind: "busy", message: "處理中…" });
+      void disableAccount(disableEmail)
+        .then(() => { setStatus({ kind: "ok", message: "帳號已停用。" }); setDisableEmail(""); })
+        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+    }}>停用</button>
   </>;
 }

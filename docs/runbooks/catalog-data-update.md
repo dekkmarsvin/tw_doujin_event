@@ -10,7 +10,7 @@
 
 | 角色 | 位置 | 長期地位 |
 |---|---|---|
-| 配置權威（主辦官網） | [FF47 三日攤位編號公佈](https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/)，版本化快照為 `data_source_test/ff47-official-booths.json` | 保留 |
+| 配置權威（主辦官網） | [FF47 三日攤位編號公佈](https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/)，已發布到公開的 [FF47 data repo](https://github.com/dekkmarsvin/tw_doujin_event-data-ff47) | 保留 |
 | 內容來源 | [FF47 Google 試算表](https://docs.google.com/spreadsheets/d/1LvbfijXkjcoK6nKw06U2YBZ655vcIXWvyEVX-pP0ovU/edit?usp=sharing)，版本化快照為 `data_source_test/FF47 完整攤位整理.xlsx` | 過渡 |
 | 社團模板來源工作表 | `攤位整理表 請在此填寫資訊`（一列一個具名稱的社團） | 過渡 |
 | 縮圖 | 社團在 `/circle` 自填，主機限於 `THUMBNAIL_HOST_ALLOWLIST` | 保留 |
@@ -48,7 +48,7 @@ npm run official:agreement
 
 已記錄的衝突不會擋 build，只會計入「尚未裁決」數。這是刻意的：擋在已知的積欠上，只會讓人把檢查刪掉。裁決一筆就把該筆的 `decision` 從 `unadjudicated` 改為 `official` 或 `catalog` 並寫下 `note`；衝突消失後，該筆要從檔案移除，否則檢查會報 stale。
 
-FF47 目前的狀態：2,953 個攤位網格完全一致，26 筆名稱衝突全部待裁決。
+FF47 目前的狀態：2,953 個攤位網格完全一致，26 筆名稱衝突已全部裁決（16 筆採主辦、10 筆保留 catalog 裁決）。依 [ADR-0025](../adr/0025-open-with-an-official-only-thin-catalog.md)，official-only 切換後不再維護工作簿側的逐筆修正。
 
 ## 管線
 
@@ -63,7 +63,7 @@ Google 試算表
                            └─ public/data/events/ff47/circles.json   執行期讀取的快照
 ```
 
-`npm run build` 會以 `catalog:check` 與 `catalog:snapshot:check` 逐位元組驗證快照與來源一致，再以 `official:agreement` 確認快照沒有偏離官網，任一項不一致就中止。**所有快照必須納入版本控制。**
+`npm run build` 目前仍以 `catalog:check` 與 `catalog:snapshot:check` 逐位元組驗證過渡快照。資料 repo 搬移後，活動資料變更先在 data repo 合併，再於本 repo 更新 `data/event-data-pins/<event>.json` 的完整 commit 與逐檔 SHA-256；build 只能消費已驗證的 pin，不追浮動 branch。
 
 ## 更新流程
 

@@ -23,6 +23,7 @@
     "official:update": "node scripts/sync-ff47-official-booths.mjs --update && npm run official:agreement",
     "official:agreement": "node scripts/check-official-booth-agreement.mjs",
     "source:update": "node scripts/sync-ff47-google-sheet.mjs --update && npm run catalog:generate && npm run catalog:snapshot",
+    "data:fetch": "node scripts/fetch-event-data.mjs",
     "catalog:generate": "node scripts/generate-ff47-circle-templates.mjs",
     "catalog:check": "node scripts/generate-ff47-circle-templates.mjs --check",
     "catalog:snapshot": "node scripts/export-static-circle-catalog.mjs",

@@ -1,78 +1,101 @@
-export type EventDayDefinition<TDay extends string | number = string | number> = {
-  id: TDay;
-  label: string;
-  dateLabel: string;
-};
+import ff47Definition from "../data/events/ff47/event.json";
 
-export type EventAreaDefinition<TArea extends string = string> = {
-  id: TArea;
-  label: string;
-  shortLabel: string;
+export const EVENT_DEFINITION_SCHEMA = "event-definition/1" as const;
+
+export type EventDayDefinition<TDay extends string | number = string | number> = { id: TDay; label: string; dateLabel: string };
+export type EventAreaDefinition<TArea extends string = string> = { id: TArea; label: string; shortLabel: string };
+export type OrganizerDefinition = {
+  adapter: string;
+  eventUrl: string;
+  boothListUrls: Readonly<Record<string, string>>;
 };
 
 export type EventDefinition<TDay extends string | number = string | number, TArea extends string = string> = {
+  schema: typeof EVENT_DEFINITION_SCHEMA;
   id: string;
   name: string;
   venue: string;
   dateRangeLabel: string;
   dataUpdatedAt: string;
   dataLastUpdatedLabel: string;
+  eventEndsAt: string;
   mapTemplate: string;
   areaMode: "single" | "switchable";
   days: readonly EventDayDefinition<TDay>[];
   areas: readonly EventAreaDefinition<TArea>[];
   /** Creator-category filter vocabulary. The first entry is the unfiltered option. */
   genres: readonly string[];
+  organizer: OrganizerDefinition;
 };
 
-export const FF47_DATA_UPDATED_AT = "2026-08-11T00:00:00.000+08:00";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
 
-/**
- * When the event is over for publication purposes. A circle that opted out has
- * its self-written content withdrawn from the public overlay after this instant;
- * the reviewed organizer data is unaffected.
- */
-export const FF47_ENDS_AT = "2026-08-23T23:59:59.999+08:00";
-
-/** Organizer daily booth lists. Placement authority for the catalog snapshot. */
-export const FF47_OFFICIAL_BOOTH_LIST_URLS = {
-  1: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%80%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
-  2: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%BA%8C%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
-  3: "https://www.f-2.com.tw/%E3%80%90ff47%E3%80%91%E7%AC%AC%E4%B8%89%E5%A4%A9%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F/",
-} as const;
-
-export const FF47_OFFICIAL_EVENT_URL = "https://www.f-2.com.tw/ff47%E4%B8%89%E6%97%A5%E6%94%A4%E4%BD%8D%E7%B7%A8%E8%99%9F%E5%85%AC%E4%BD%88/";
+function nonempty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
 function dataDateLabel(value: string) {
   const [year, month, day] = value.slice(0, 10).split("-").map(Number);
   return `${year} 年 ${month} 月 ${day} 日`;
 }
 
-export const FF47_EVENT = {
-  id: "ff47",
-  name: "Fancy Frontier 47",
-  venue: "花博公園爭豔館",
-  dateRangeLabel: "8.21–23",
-  dataUpdatedAt: FF47_DATA_UPDATED_AT,
-  dataLastUpdatedLabel: dataDateLabel(FF47_DATA_UPDATED_AT),
-  mapTemplate: "FF47",
-  areaMode: "single",
-  days: [
-    { id: 1, label: "DAY 1", dateLabel: "8月21日・五" },
-    { id: 2, label: "DAY 2", dateLabel: "8月22日・六" },
-    { id: 3, label: "DAY 3", dateLabel: "8月23日・日" },
-  ],
-  areas: [
-    { id: "ALL", label: "全館", shortLabel: "全部" },
-    { id: "A", label: "A–K 區", shortLabel: "A–K" },
-    { id: "B", label: "L–W 區", shortLabel: "L–W" },
-  ],
-  genres: ["全部類別", "繪圖・創作", "Cosplay", "VTuber", "手作・模型", "學生社團", "代理社團"],
-} as const satisfies EventDefinition;
+/** Strict at the boundary: a malformed pinned event must stop the build, not
+ * become a partly working event whose defaults are guessed in the UI. */
+export function parseEventDefinition(value: unknown): EventDefinition {
+  if (!isRecord(value) || value.schema !== EVENT_DEFINITION_SCHEMA) throw new Error("Unsupported event definition schema.");
+  for (const key of ["id", "name", "venue", "dateRangeLabel", "dataUpdatedAt", "eventEndsAt", "mapTemplate"] as const) {
+    if (!nonempty(value[key])) throw new Error(`Event definition ${key} must be a non-empty string.`);
+  }
+  if (Number.isNaN(Date.parse(value.dataUpdatedAt as string)) || Number.isNaN(Date.parse(value.eventEndsAt as string))) {
+    throw new Error("Event definition timestamps must be valid ISO instants.");
+  }
+  if (value.areaMode !== "single" && value.areaMode !== "switchable") throw new Error("Event definition areaMode is invalid.");
+  if (!Array.isArray(value.days) || value.days.length === 0 || !value.days.every((day) =>
+    isRecord(day) && ((typeof day.id === "string" && nonempty(day.id)) || typeof day.id === "number")
+      && nonempty(day.label) && nonempty(day.dateLabel))) {
+    throw new Error("Event definition days are invalid.");
+  }
+  if (!Array.isArray(value.areas) || value.areas.length === 0 || !value.areas.every((area) =>
+    isRecord(area) && nonempty(area.id) && nonempty(area.label) && nonempty(area.shortLabel))) {
+    throw new Error("Event definition areas are invalid.");
+  }
+  if (!Array.isArray(value.genres) || value.genres.length === 0 || !value.genres.every(nonempty)) {
+    throw new Error("Event definition genres are invalid.");
+  }
+  if (!isRecord(value.organizer) || !nonempty(value.organizer.adapter) || !nonempty(value.organizer.eventUrl)
+    || !isRecord(value.organizer.boothListUrls)
+    || !Object.values(value.organizer.boothListUrls).every(nonempty)) {
+    throw new Error("Event definition organizer is invalid.");
+  }
+  const days = value.days as EventDayDefinition[];
+  const areas = value.areas as EventAreaDefinition[];
+  const dayIds = new Set(days.map((day) => String(day.id)));
+  const boothListDays = Object.keys(value.organizer.boothListUrls);
+  if (dayIds.size !== days.length || boothListDays.length !== days.length || !boothListDays.every((day) => dayIds.has(day))) {
+    throw new Error("Event definition day ids must be unique and cover organizer booth lists.");
+  }
+  if (new Set(areas.map((area) => area.id)).size !== areas.length) throw new Error("Event definition area ids must be unique.");
+
+  return {
+    ...(value as Omit<EventDefinition, "dataLastUpdatedLabel">),
+    dataLastUpdatedLabel: dataDateLabel(value.dataUpdatedAt as string),
+  };
+}
+
+export const ACTIVE_EVENT = parseEventDefinition(ff47Definition);
+
+/** Migration aliases. New shared code uses EventDefinition/ACTIVE_EVENT; these
+ * stay until the remaining FF47-named callers are migrated under issue #35. */
+export const FF47_EVENT = ACTIVE_EVENT;
+export const FF47_DATA_UPDATED_AT = ACTIVE_EVENT.dataUpdatedAt;
+export const FF47_ENDS_AT = ACTIVE_EVENT.eventEndsAt;
+export const FF47_OFFICIAL_BOOTH_LIST_URLS = ACTIVE_EVENT.organizer.boothListUrls;
+export const FF47_OFFICIAL_EVENT_URL = ACTIVE_EVENT.organizer.eventUrl;
+export type FF47Day = EventDayDefinition["id"];
+export type FF47Area = EventAreaDefinition["id"];
 
 export function eventUsesAreaSwitcher(event: EventDefinition) {
   return event.areaMode === "switchable" && event.areas.length > 1;
 }
-
-export type FF47Day = (typeof FF47_EVENT.days)[number]["id"];
-export type FF47Area = (typeof FF47_EVENT.areas)[number]["id"];

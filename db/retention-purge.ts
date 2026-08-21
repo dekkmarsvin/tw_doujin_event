@@ -34,6 +34,8 @@ export const RETENTION_WINDOWS = {
   sessions: 7 * DAY_MS,
   /** Preview only, and the one place that holds the text of a sent mail. */
   previewMailSink: 7 * DAY_MS,
+  /** Audit actions remain, but a per-request network identifier does not. */
+  auditIpHashes: 90 * DAY_MS,
 } as const;
 
 export type RetentionWindows = typeof RETENTION_WINDOWS;
@@ -41,6 +43,7 @@ export type RetentionWindows = typeof RETENTION_WINDOWS;
 export type PurgeSummary = {
   at: number;
   deleted: { login_tokens: number; sessions: number; preview_mail_sink: number; circle_overrides: number };
+  anonymized: { audit_ip_hashes: number };
   /** Tables that do not exist here. Preview and production hold the same
    * schema, but a database no Function has touched yet holds none of it. */
   skipped: string[];
@@ -134,6 +137,7 @@ export async function purgeExpiredRecords(
 
   const present = await existingTables(database);
   const deleted = { login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0 };
+  const anonymized = { audit_ip_hashes: 0 };
   const skipped: string[] = [];
 
   // By `created_at`, the same column the limiter counts — not by `consumed_at`
@@ -196,8 +200,13 @@ export async function purgeExpiredRecords(
   } else skipped.push("circle_overrides");
 
   if (!present.has("overrides_doc")) skipped.push("overrides_doc");
-  if (!present.has("audit_log")) skipped.push("audit_log");
-  const summary: PurgeSummary = { at: now, deleted, skipped };
+  if (present.has("audit_log")) {
+    const result = await database.prepare(
+      `UPDATE audit_log SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND at < ?1`,
+    ).bind(now - windows.auditIpHashes).run();
+    anonymized.audit_ip_hashes = result.meta.changes ?? 0;
+  } else skipped.push("audit_log");
+  const summary: PurgeSummary = { at: now, deleted, anonymized, skipped };
 
   // Written on every run, including the ones that delete nothing: without it
   // there is no way to answer "is the purge still running?" short of reading
@@ -206,7 +215,7 @@ export async function purgeExpiredRecords(
     await database.prepare(
       `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
        VALUES (?1, ?2, NULL, 'system', 'retention.purged', 'retention', 'scheduled', ?3, NULL)`,
-    ).bind(crypto.randomUUID(), now, JSON.stringify({ deleted, skipped })).run();
+    ).bind(crypto.randomUUID(), now, JSON.stringify({ deleted, anonymized, skipped })).run();
   }
 
   return summary;

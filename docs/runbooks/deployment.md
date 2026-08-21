@@ -342,7 +342,7 @@ token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI
 
 保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
 
-它每天 UTC 03:17 執行一次，刪除四類資料，並寫一筆 `audit_log` 摘要：
+它每天 UTC 03:17 執行一次，刪除四類資料、匿名化一類欄位，並寫一筆 `audit_log` 摘要：
 
 | 目標 | 期限 |
 |---|---|
@@ -350,8 +350,9 @@ token 過期或被撤銷、或 policy 被改成 Allow 時的症狀都一樣：CI
 | `sessions` | 到期或撤銷後 7 天 |
 | `preview_mail_sink` | 7 天 |
 | `circle_overrides` | **由社團自選**：只刪 `retention_choice = 'purge'` 且 `retention_expires_at` 已過的列（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
+| `audit_log.ip_hash` | 寫入滿 90 天後清為 `NULL`，audit 列不刪除 |
 
-前三者的期限是這個 Worker 的常數，第四項不是——期限寫在每一列自己身上，這裡只負責執行。刪除社團資料列時，`overrides_doc` 會同步失去該筆並遞增 revision（revision 進 ETag，不遞增快取會繼續提供已刪除的內容），並且每筆寫一列 `override.purged` 稽核，內容不留。
+前三者與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除社團資料列時，`overrides_doc` 會同步失去該筆並遞增 revision（revision 進 ETag，不遞增快取會繼續提供已刪除的內容），並且每筆寫一列 `override.purged` 稽核，內容不留。
 
 **它只刪，不建表**——schema 仍由 Pages 端的 repository 首次使用時建立；找不到的表會列進摘要的 `skipped` 並跳過。
 

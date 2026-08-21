@@ -13,7 +13,7 @@ export type Booth = {
   pen: string;
   genre: string;
   tags: string[];
-  day: 1 | 2 | 3;
+  day: string | number;
   hall: "A" | "B";
   x: number;
   y: number;

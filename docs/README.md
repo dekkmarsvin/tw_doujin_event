@@ -27,7 +27,7 @@
 | [URL 檢視狀態](./contracts/url-state.md) | 17 個查詢參數、恢復規則、不寫入 URL 的狀態 |
 | [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
-| [資料匯入](./contracts/data-import.md) | **P2，尚未實作**。身分比對、預覽、CSV v1、外部服務串接 |
+| [資料匯入](./contracts/data-import.md) | **P2，尚未對外開放**。規劃檔案交換已有底層能力；一般介面與外部服務串接尚未實作 |
 | [資料 inventory](./contracts/data-inventory.md) | 實際持有的資料、欄位、有效期與第三方；保存期限、到期處置與清除機制 |
 
 ## 流程
@@ -69,6 +69,11 @@
 | [0022](./adr/0022-expiry-runs-in-a-separate-cron-worker.md) | 清除跑在獨立的排程 Worker，不掛在使用者請求上 |
 | [0023](./adr/0023-the-privacy-notice-ships-without-professional-review.md) | 隱私告知自行撰寫、隨 repo 版控，不送專業審閱（**揭露方式已被 0024 部分取代**） |
 | [0024](./adr/0024-user-facing-copy-uses-minimum-necessary-disclosure.md) | 對外文案採最少必要揭露 |
+| [0025](./adr/0025-open-with-an-official-only-thin-catalog.md) | 重新公開前先切成主辦資料的薄場刊 |
+| [0026](./adr/0026-public-sanitized-event-data-and-history-rewrite.md) | 活動資料 repo 公開且只收可再發布資料，程式碼 repo 重寫歷史 |
+| [0027](./adr/0027-personal-data-lifecycle-and-account-deletion.md) | 帳號刪除、audit 塗銷與 IP 雜湊 90 天期限 |
+| [0028](./adr/0028-versioned-json-event-definitions.md) | 活動定義使用版本化 JSON |
+| [0029](./adr/0029-public-production-gated-preview.md) | production 公開、preview 持續受 Access 保護 |
 
 ## 對外文件
 

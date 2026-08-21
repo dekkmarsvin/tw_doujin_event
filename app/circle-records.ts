@@ -150,7 +150,7 @@ export function normalizeCircleTemplateName(value: string) {
 }
 
 /** Unambiguous composite key: no separator can appear inside a JSON member. */
-function placementKey(day: number, boothCode: string, nameKey: string) {
+function placementKey(day: string | number, boothCode: string, nameKey: string) {
   return JSON.stringify([day, boothCode, nameKey]);
 }
 
@@ -245,7 +245,7 @@ export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: Ci
   }
 
   /** Match only exact workbook evidence: same normalized name and, when present, the same day/booth. */
-  const findTemplate = (name: string, day: 1 | 2 | 3, boothCode: string) => {
+  const findTemplate = (name: string, day: string | number, boothCode: string) => {
     const nameKey = normalizeCircleTemplateName(name);
     const placementMatches = templatesByPlacement.get(placementKey(day, boothCode.toUpperCase(), nameKey)) ?? [];
     if (placementMatches.length === 1) return placementMatches[0];

@@ -56,6 +56,7 @@ test("additive column migrations upgrade an existing database idempotently", asy
   for (const [tableName, missingColumns] of [
     ["circle_overrides", ["post_event_hidden", "retention_choice", "retention_expires_at"]],
     ["overrides_doc", ["phase"]],
+    ["audit_log", ["shredded_at"]],
   ]) {
     const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
     assert.ok(definition);
@@ -120,6 +121,17 @@ test("a session resolves only while live, and revocation takes effect at once", 
   await repository.revokeSession("session-1", NOW + 2_000);
   assert.equal(await repository.getSession("session-1", NOW + 3_000), null, "a revoked session must not resolve");
   assert.equal(await repository.getSession("no-such-session", NOW), null);
+});
+
+test("disabling an account revokes its sessions and blocks future login", async () => {
+  const accountId = await repository.upsertAccount("disabled@example.com", NOW);
+  await repository.createSession(accountId, NOW, NOW + 100_000, "session-disabled");
+
+  assert.equal(await repository.disableAccount("disabled@example.com", NOW + 1_000), "disabled");
+  assert.equal(await repository.getSession("session-disabled", NOW + 2_000), null);
+  await assert.rejects(() => repository.upsertAccount("disabled@example.com", NOW + 3_000), /已停用/);
+  assert.equal(await repository.disableAccount("disabled@example.com", NOW + 4_000), "already-disabled");
+  assert.equal(await repository.disableAccount("missing@example.com", NOW + 4_000), "missing");
 });
 
 test("the database refuses a second owner for the same circle", async () => {
@@ -233,6 +245,53 @@ test("audit rows are written and retrievable by subject", async () => {
   assert.equal(rows.results.length, 1);
   assert.equal(rows.results[0].action, "claim.admin_approved");
   assert.equal(JSON.parse(rows.results[0].detail_json).method, "admin");
+});
+
+test("account deletion releases claims, removes owned overlays and shreds personal audit fields", async () => {
+  const email = "delete-account@example.com";
+  const accountId = await repository.upsertAccount(email, NOW);
+  await repository.createSession(accountId, NOW, NOW + 100_000, "delete-account-session");
+  await repository.createLoginToken({ tokenHash: "delete-account-token", email, now: NOW, expiresAt: NOW + 100_000, ipHash: "ip-delete" });
+  await repository.createClaim({
+    id: "delete-account-claim", accountId, eventId: "ff47", circleId: "ff47-delete-account",
+    circleNameKey: "delete", circleNameAtClaim: "Delete", sourceRowAtClaim: 1,
+    status: "verified", method: "admin", targetUrl: "https://personal.example/", challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: "https://personal.example/evidence", evidenceNote: "personal note", now: NOW,
+  });
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-delete-account", fieldsJson: JSON.stringify({ saleInfo: "personal content" }),
+    updatedBy: accountId, now: NOW,
+  });
+  await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW);
+  const emailAuditDigest = "keyed-email-digest";
+  await repository.writeAudit({
+    at: NOW, actorAccountId: accountId, actorRole: "circle", action: "claim.created",
+    subjectType: "email", subjectId: emailAuditDigest, detail: { evidenceUrl: "https://personal.example/evidence" }, ipHash: "ip-delete",
+  });
+
+  assert.equal(await repository.deleteAccount({ accountId, email, emailAuditDigest, legacyEmailAuditDigest: "legacy-email-digest", now: NOW + 5_000 }), true);
+  for (const table of ["accounts", "sessions", "login_tokens", "circle_claims", "circle_overrides"]) {
+    assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${table === "accounts" ? "id" : table === "sessions" || table === "circle_claims" ? "account_id" : table === "login_tokens" ? "email" : "circle_id"} = ?1`).bind(
+      table === "login_tokens" ? email : table === "circle_overrides" ? "ff47-delete-account" : accountId,
+    ).first()).total, 0, `${table} must not retain the account`);
+  }
+  assert.equal(JSON.parse((await repository.getOverridesDoc("ff47")).json).overrides.some((item) => item.circleId === "ff47-delete-account"), false);
+
+  const shredded = await database.prepare(`SELECT * FROM audit_log WHERE action = 'claim.created' AND shredded_at IS NOT NULL`).first();
+  assert.equal(shredded.actor_account_id, null);
+  assert.equal(shredded.subject_id, "[shredded]");
+  assert.equal(shredded.detail_json, null);
+  assert.equal(shredded.ip_hash, null);
+  assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM audit_log WHERE action = 'account.deleted' AND shredded_at IS NOT NULL`).first()).total, 1);
+
+  const successor = await repository.upsertAccount("successor@example.com", NOW + 6_000);
+  await repository.createClaim({
+    id: "successor-claim", accountId: successor, eventId: "ff47", circleId: "ff47-delete-account",
+    circleNameKey: "delete", circleNameAtClaim: "Delete", sourceRowAtClaim: 1,
+    status: "verified", method: "admin", targetUrl: null, challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 6_000,
+  });
+  assert.equal(await repository.ownsCircle(successor, "ff47", "ff47-delete-account"), true, "deletion must release the one-owner slot");
 });
 
 test("no raw login token is recoverable from the database", async () => {
