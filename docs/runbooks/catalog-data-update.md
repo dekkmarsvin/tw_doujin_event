@@ -7,6 +7,7 @@
 | 資料 | 權威 |
 |---|---|
 | 活動名稱、日期、場館、主辦 URL | data repo `event.json` |
+| 跨活動主辦、分類目錄、場館與場館空間 | 公開 reference-data repo 的 pinned revision |
 | 官方社團名與攤位配置 | data repo `official-booths.json`，來源為活動主辦單位 |
 | 向量地圖 | data repo `map.json`，由人工審閱的 authoring revision 匯出 |
 | 永久社團 ID | 本 repo `data/circle-identities/allocations.json` |
@@ -49,15 +50,17 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
   "eventId": "ff47",
   "repository": "dekkmarsvin/tw_doujin_event-data-ff47",
   "commit": "<40-char commit>",
-  "files": {
-    "event.json": "<sha256>",
-    "official-booths.json": "<sha256>",
-    "map.json": "<sha256>"
-  }
+  "files": [
+    { "path": "event.json", "sha256": "<sha256>" },
+    { "path": "official-booths.json", "sha256": "<sha256>" },
+    { "path": "map.json", "sha256": "<sha256>" }
+  ]
 }
 ```
 
 不得 pin branch、tag 或未逐檔核對的內容。
+
+活動採用跨活動 reference-data 時，由 event-data repo 另外保存 `reference-data-pin/1`。先完成 reference review／發布，再更新 event-data 的完整 reference commit、逐檔 hash 與 assignment，最後才更新本 repo 的 event-data pin。格式與 fail-closed 行為見[共享 reference-data pin 契約](../contracts/reference-data-pin.md)。
 
 ### 4. 本機驗證 production staging
 
