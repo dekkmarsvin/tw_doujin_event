@@ -338,7 +338,7 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://pr-<N>.tw-catal
 curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://<hash>.tw-catalog.pages.dev/
 ```
 
-兩者都必須 `302` 到 `*.cloudflareaccess.com`。PR alias 與該次 deployment hash 都要測；只測 alias 無法證明不可變 URL 沒有繞過 Access。
+兩者都必須 `302` 到 `*.cloudflareaccess.com`。CI 直接使用 Wrangler Action 回報的 `pages-deployment-alias-url` 與 `deployment-url`；不要從 branch 名自行拼 alias，因為 Pages 會正規化 `/` 等非英數字元。branch alias 與該次 deployment hash 都要測；只測 alias 無法證明不可變 URL 沒有繞過 Access。
 
 ### CI 用 service token 通過 preview Access
 
