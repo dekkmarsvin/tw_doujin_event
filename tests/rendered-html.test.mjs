@@ -108,6 +108,32 @@ test("circle category controls consume event data rather than organizer constant
   }
 });
 
+test("circle editor has one preview-first save path across the three responsive ranges", async () => {
+  const [portal, styles, details] = await Promise.all([
+    readFile(new URL("../app/circle-portal/portal-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/circle-portal/portal.module.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/event-workspace-panels.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(portal, /"預覽並送出"/);
+  assert.match(portal, /"確認儲存"/);
+  assert.match(portal, /previewOverride\(claim\.circleId, snapshot\)/);
+  assert.match(portal, /saveOverride\(claim\.circleId, savingFields, reviewedRetention, reviewedThumbnailKey/);
+  assert.match(portal, /Object\.hasOwn\(patch, "url"\).*setStagedThumbnailKey\(null\)/s);
+  assert.equal([...portal.matchAll(/const requestGeneration = \+\+previewRequestGeneration\.current/g)].length, 2);
+  assert.match(portal, /requestGeneration !== previewRequestGeneration\.current/);
+  assert.doesNotMatch(portal, /initialFields\)[\s\S]{0,300}setServerPreview/, "an initial response must never replace the reviewed server projection");
+  assert.doesNotMatch(portal, /saveOverride\(claim\.circleId, draft\(\)/, "a draft must never be written directly");
+  assert.match(portal, /<PublicationPreview records=\{serverPreview\}/, "confirmation reuses the reader projection component");
+  assert.match(portal, /groups=\{\[\]\} readOnly/, "the shared reader renderer must be explicitly non-interactive in preview");
+  assert.match(details, /readOnly\?: boolean/);
+  assert.doesNotMatch(styles, /previewFrame :global\(section\)[^}]*max-height/, "long review content must not be clipped");
+  assert.match(styles, /@media \(max-width: 760px\)/);
+  assert.match(styles, /@media \(min-width: 761px\) and \(max-width: 959px\)/);
+  assert.match(styles, /@media \(min-width: 960px\)/);
+  assert.match(styles, /position: sticky/);
+  assert.match(styles, /position: fixed/);
+});
+
 test("separates the public static app from the retained editor implementation", async () => {
   const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "circle-editor-client.ts"];
   const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, editorClient] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
@@ -254,10 +280,11 @@ test("separates the public static app from the retained editor implementation", 
   // Parsing that must yield an actionable message, not a bare syntax error.
   assert.match(editorClient, /response\.redirected/);
 
-  // The override is applied downstream of the booth-matching indexes. Moving it
-  // upstream would silently detach renamed circles from every map placement;
-  // tests/circle-overrides.test.mjs proves the behaviour, this pins the seam.
-  assert.match(catalogStore, /circleFromBase\(base, event, payload\.generatedAt, overridesById\.get\(base\.id\)\)/);
+  // Official identity is built first and the shared pure draft projection is
+  // applied before placement view records are derived. This keeps identity and
+  // placement separate while giving reader and portal one projection seam.
+  assert.match(catalogStore, /const official = circleFromBase\(base, event, payload\.generatedAt\)/);
+  assert.match(catalogStore, /projectCircleDraft\(official, override\.fields, override\.updatedAt\)/);
   assert.match(catalogStore, /provider: "社團本人"/);
   assert.match(catalogStore, /status: "unverified"/);
   assert.match(workspacePanels, /SOURCE_ORIGIN_LABEL/);

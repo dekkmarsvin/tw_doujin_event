@@ -2,7 +2,7 @@ import { circleRetentionExpiresAt, isCircleOverrideFields, isRetentionChoice, ty
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
-import { hostedThumbnailFields, prepareHostedThumbnail, type HostedThumbnailStore } from "./hosted-thumbnails";
+import { deleteObjectKeys, hostedThumbnailFields, prepareHostedThumbnail, type HostedThumbnailStore } from "./hosted-thumbnails";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -67,7 +67,7 @@ export type PortalDependencies = {
    */
   turnstileSitekey: () => string;
   /** Runs the reader's own projection so a preview cannot drift from reality. */
-  projectCircle: (circleId: string, fields: CircleOverrideFields) => Promise<unknown[] | null>;
+  projectCircle: (circleId: string, fields: CircleOverrideFields | null, updatedAt?: string) => Promise<unknown[] | null>;
   thumbnailStore?: HostedThumbnailStore;
   config: PortalConfig;
 };
@@ -260,10 +260,13 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。" }, 400);
     }
     const now = config.now();
-    const hostedKeys = await repository.listHostedThumbnailKeysForAccount(current.accountId);
-    if (hostedKeys.length > 0) {
-      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
-      await thumbnailStore.delete(hostedKeys);
+    const claimScopes = await repository.listClaimScopesForAccount(current.accountId);
+    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (thumbnailStore) {
+      const allKeys = (await Promise.all(claimScopes.map((claim) => thumbnailStore.list(
+        `events/${encodeURIComponent(claim.event_id)}/circles/${encodeURIComponent(claim.circle_id)}/`,
+      )))).flat();
+      await deleteObjectKeys(thumbnailStore, [...new Set(allKeys)]);
     }
     const deleted = await repository.deleteAccount({
       accountId: current.accountId,
@@ -458,17 +461,35 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const ipHash = await clientIpHash(request);
     const previous = await repository.getOverride(config.eventId, circleId);
     const previousKey = previous?.hosted_thumbnail_key ?? null;
-    const keepsHostedThumbnail = !!(previousKey && thumbnailStore
-      && (fields as CircleOverrideFields).thumbnail?.url === thumbnailStore.url(previousKey));
-    if (previousKey && !keepsHostedThumbnail) {
-      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
-      await thumbnailStore.delete(previousKey);
+    const uploadedKey = typeof body?.hostedThumbnailKey === "string" ? body.hostedThumbnailKey : null;
+    const uploadPrefix = `events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`;
+    const thumbnailUrl = (fields as CircleOverrideFields).thumbnail?.url ?? null;
+    const previousHostedUrl = previousKey && thumbnailStore ? thumbnailStore.url(previousKey) : null;
+    const pointsAtHostedStore = !!(thumbnailStore && thumbnailUrl?.startsWith(thumbnailStore.url("")));
+    if (pointsAtHostedStore && thumbnailUrl !== previousHostedUrl && !uploadedKey) {
+      return json({ error: "本站代管代表圖需要有效的上傳憑證，請重新選擇檔案。" }, 400);
     }
+    if (uploadedKey && (!thumbnailStore
+      || !new RegExp(`^${uploadPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-f0-9]{64}\\.(?:jpg|png|webp)$`).test(uploadedKey)
+      || (fields as CircleOverrideFields).thumbnail?.url !== thumbnailStore.url(uploadedKey))) {
+      return json({ error: "代表圖上傳憑證無效，請重新選擇檔案。" }, 400);
+    }
+    if (uploadedKey && !await thumbnailStore!.list(uploadPrefix).then((keys) => keys.includes(uploadedKey))) {
+      return json({ error: "代表圖草稿已不存在，請重新選擇檔案。" }, 400);
+    }
+    const keepsHostedThumbnail = !!(previousKey && thumbnailStore
+      && thumbnailUrl === thumbnailStore.url(previousKey));
+    const nextHostedKey = uploadedKey ?? (keepsHostedThumbnail ? previousKey : null);
+    if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
     await repository.putOverride({
       eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
-      ...(previousKey && !keepsHostedThumbnail ? { hostedThumbnailKey: null } : {}),
+      hostedThumbnailKey: nextHostedKey,
     });
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
+    if (thumbnailStore) {
+      const unusedKeys = (await thumbnailStore.list(uploadPrefix)).filter((key) => key !== nextHostedKey);
+      await deleteObjectKeys(thumbnailStore, unusedKeys);
+    }
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle", action: "override.updated",
       subjectType: "override", subjectId: circleId,
@@ -517,33 +538,14 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       return json({ error: error instanceof Error ? error.message : "代表圖格式無效。" }, 400);
     }
 
-    const previous = await repository.getOverride(config.eventId, circleId);
-    const previousKey = previous?.hosted_thumbnail_key ?? null;
-    const previousFields = previous ? JSON.parse(previous.fields_json) as CircleOverrideFields : {};
     const thumbnail = hostedThumbnailFields(thumbnailStore, prepared);
-    const fields: CircleOverrideFields = { ...previousFields, thumbnail };
-    if (!isCircleOverrideFields(fields)) return json({ error: "代表圖資料格式無效。" }, 400);
 
+    const previousKey = (await repository.getOverride(config.eventId, circleId))?.hosted_thumbnail_key ?? null;
+    const staleDraftKeys = (await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`))
+      .filter((key) => key !== previousKey && key !== prepared.key);
+    await deleteObjectKeys(thumbnailStore, staleDraftKeys);
     await thumbnailStore.put(prepared.key, prepared.value, prepared.contentType);
-    try {
-      const now = config.now();
-      await repository.putOverride({
-        eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now,
-        hostedThumbnailKey: prepared.key,
-      });
-      await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
-      await repository.writeAudit({
-        at: now, actorAccountId: current.accountId, actorRole: "circle", action: "thumbnail.uploaded",
-        subjectType: "override", subjectId: circleId,
-        detail: { contentType: prepared.contentType, size: prepared.value.byteLength },
-        ipHash: await clientIpHash(request),
-      });
-    } catch (error) {
-      await thumbnailStore.delete(prepared.key).catch(() => undefined);
-      throw error;
-    }
-    if (previousKey && previousKey !== prepared.key) await thumbnailStore.delete(previousKey);
-    return json({ ok: true, thumbnail });
+    return json({ ok: true, thumbnail, uploadKey: prepared.key });
   }
 
   /**
@@ -575,9 +577,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if (previous?.hosted_thumbnail_key) {
-      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
-      await thumbnailStore.delete(previous.hosted_thumbnail_key);
+    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (thumbnailStore) {
+      const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
+      await deleteObjectKeys(thumbnailStore, keys);
     }
     if (!await repository.deleteOverride({ eventId: config.eventId, circleId })) {
       return json({ error: "沒有可刪除的內容。" }, 404);
@@ -610,9 +613,13 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const fields = body?.fields ?? {};
     if (!isCircleOverrideFields(fields)) return json({ error: "資料格式不符或超出長度限制。" }, 400);
 
-    const records = await projectCircle(circleId, fields as CircleOverrideFields);
+    const projectedAt = new Date(config.now()).toISOString();
+    const [records, baseRecords] = await Promise.all([
+      projectCircle(circleId, fields as CircleOverrideFields, projectedAt),
+      projectCircle(circleId, null, projectedAt),
+    ]);
     if (!records) return json({ error: "找不到這個社團。" }, 404);
-    return json({ records });
+    return json({ records, baseRecords: baseRecords ?? [], projectedAt });
   }
 
   async function getMyOverride(request: Request, circleId: string) {
@@ -791,9 +798,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if (previous?.hosted_thumbnail_key) {
-      if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
-      await thumbnailStore.delete(previous.hosted_thumbnail_key);
+    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (thumbnailStore) {
+      const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
+      await deleteObjectKeys(thumbnailStore, keys);
     }
     const fieldsJson = previous?.hosted_thumbnail_key
       ? JSON.stringify({ ...(JSON.parse(previous.fields_json) as CircleOverrideFields), thumbnail: null })

@@ -82,6 +82,33 @@ test("circle-authored fields arrive only through the overlay", () => {
   assert.deepEqual(edited.recordsByCircleId.get(circle.id).map(({ placement }) => placement), catalog.recordsByCircleId.get(circle.id).map(({ placement }) => placement));
 });
 
+test("client draft projection is byte-for-byte the published read model projection", () => {
+  const circleId = "c-900001";
+  const updatedAt = "2026-01-03T04:05:06.000Z";
+  const fields = {
+    pen: "確認用筆名",
+    saleInfo: "確認用新刊",
+    circleCategory: "原創作品",
+    creatorTypes: ["漫畫"],
+    ageRatings: ["全年齡"],
+    workTypes: [],
+    referencedWorks: ["原創"],
+    specialTags: ["新刊"],
+    links: [{ provider: "官方網站", kind: "website", url: "https://example.com/new" }],
+    thumbnail: null,
+  };
+  const publicCatalog = records.buildCircleCatalog(payload, {
+    schema: "circle-overrides/1", eventId: "sample", generatedAt: updatedAt, revision: 2,
+    overrides: [{ circleId, updatedAt, fields }],
+  });
+  const clientRecords = records.projectCircleDraftRecords(catalog.recordsByCircleId.get(circleId), fields, updatedAt);
+  assert.deepEqual(clientRecords, publicCatalog.recordsByCircleId.get(circleId));
+  assert.deepEqual(clientRecords[0].sources.map(({ provider, contentType, label, status }) => ({ provider, contentType, label, status })), [
+    { provider: "活動主辦單位", contentType: "official", label: clientRecords[0].sources[0].label, status: "linked" },
+    { provider: "社團本人", contentType: "circle", label: "社團自行提供的補充資料", status: "unverified" },
+  ]);
+});
+
 test("build is pure and booth-scoped aliases resolve to canonical identities", () => {
   const rebuilt = records.buildCircleCatalog(payload);
   assert.deepEqual(rebuilt.records[0], catalog.records[0]);

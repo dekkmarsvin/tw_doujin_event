@@ -100,6 +100,16 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 `POST /api/circle/:circleId/preview` 以**閱讀端自己的投影元件**渲染草稿，唯讀、不寫入任何資料。預覽必須重用閱讀端元件，否則預覽會與實際呈現漂移。
 
+社團補充內容欄位與保存期限的發布只有一條寫入路徑：「預覽並送出」先讓 server preview 重新驗證擁有權、活動目錄與序列化上限，只有成功回傳的版本才能出現「確認儲存」。server preview 拒絕時不呼叫寫入端點，並保留原草稿、保存期限選擇與焦點脈絡。活動後退出與自助刪除是獨立的可逆／刪除動作，不屬於這條內容發布路徑。
+
+草稿的即時預覽、server preview 與公開文件共用 `projectCircleDraft` 投影及閱讀端 `CircleDetails` renderer；草稿變更只重算 client projection，不會自動儲存。確認頁可額外以「未提供」標示空白選填欄位，但不得把這些字寫入公開 projection。
+
+三段版面是同一條工作流，不是三種儲存語意：
+
+- `<= 760px`：「預覽並送出」進入全畫面檢查頁，只能返回修改或確認儲存，沒有直接儲存動作。
+- `761–959px`：表單保持單欄，以明確動作在同頁開啟可返回的檢查區。
+- `>= 960px`：左側表單、右側 sticky 即時公開卡預覽；準備儲存時，右側切換成 server preview 確認。
+
 ## 標示
 
 社團自填內容一律附 `provider: "社團本人"`、`contentType: "circle"`、`status: "unverified"` 的來源條目，顯示為「**社團自述／尚未驗證**」，且不提供偽造的原始來源連結。
@@ -176,7 +186,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 代表圖採**本站代管為主、外部網址為輔**的雙線。已驗證的社團可上傳 JPEG／PNG／WebP，單檔上限 2 MiB，每個社團每個活動一張；伺服器驗證宣告 MIME 與檔案特徵，物件末段以內容 SHA-256 命名，不在 Worker 內重編碼。公開 URL 由 production `media.kotoban.top` 或 preview `media-preview.kotoban.top` 的 R2 custom domain 提供，帶一年 immutable 快取，**不經 Pages Function**。
 
-上傳時會直接寫入該社團的 overlay；更換圖片時先發布新物件與欄位，再移除舊物件。改用外部網址或清除欄位時會解除並刪除舊的代管物件。若代管線與外部網址都不可用，閱讀端維持文字卡。實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
+檔案上傳只建立草稿物件並回填預覽，不直接改寫 overlay；經 server preview 與使用者確認儲存後，才把該物件連同其他欄位發布。更換圖片時先發布新物件與欄位，再移除舊物件；改用外部網址或清除欄位時會解除並刪除舊的代管物件。若代管線與外部網址都不可用，閱讀端維持文字卡。實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
 
 ## 聯絡窗口
 

@@ -40,6 +40,10 @@ let handlers;
 let repository;
 let thumbnailObjects;
 
+const projectTestCircle = async (circleId, fields) => (CIRCLES[circleId]
+  ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...(fields ?? {}) } }]
+  : null);
+
 const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "admins"];
 
 beforeEach(async () => {
@@ -48,7 +52,7 @@ beforeEach(async () => {
   humanVerified = true;
   verifiedTokens = [];
   sitekey = () => "test-sitekey";
-  thumbnailObjects = { put: [], deleted: [] };
+  thumbnailObjects = { put: [], deleted: [], keys: new Set() };
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.com"] });
   // Isolation matters here: claim ownership and the login rate-limit window are
   // both persistent, so a shared database would make tests order-dependent.
@@ -64,9 +68,7 @@ beforeEach(async () => {
     searchCircles: async (query, limit) => Object.values(CIRCLES)
       .filter((circle) => circle.nameKey.includes(query.toLocaleLowerCase("zh-Hant")))
       .slice(0, limit),
-    projectCircle: async (circleId, fields) => (CIRCLES[circleId]
-      ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...fields } }]
-      : null),
+    projectCircle: projectTestCircle,
     fetchEvidence: async () => evidenceBody,
     verifyHuman: async (token, remoteIp) => {
       verifiedTokens.push({ token, remoteIp });
@@ -75,8 +77,13 @@ beforeEach(async () => {
     turnstileSitekey: () => sitekey(),
     thumbnailStore: {
       url: (key) => `https://media-preview.kotoban.top/${key}`,
-      put: async (key, value, contentType) => { thumbnailObjects.put.push({ key, size: value.byteLength, contentType }); },
-      delete: async (keys) => { thumbnailObjects.deleted.push(...(Array.isArray(keys) ? keys : [keys])); },
+      list: async (prefix) => [...thumbnailObjects.keys].filter((key) => key.startsWith(prefix)),
+      put: async (key, value, contentType) => { thumbnailObjects.keys.add(key); thumbnailObjects.put.push({ key, size: value.byteLength, contentType }); },
+      delete: async (keys) => {
+        const removed = Array.isArray(keys) ? keys : [keys];
+        removed.forEach((key) => thumbnailObjects.keys.delete(key));
+        thumbnailObjects.deleted.push(...removed);
+      },
     },
     config: {
       eventId: "ff47",
@@ -268,8 +275,26 @@ test("a circle can delete its account and release its owned circle", async () =>
   const cookie = await signIn(email);
   assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, cookie))).status, 201);
   const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00];
-  assert.equal((await handlers.uploadThumbnail(thumbnailRequest("ff47-domain", cookie, png), "ff47-domain")).status, 200);
+  const upload = await handlers.uploadThumbnail(thumbnailRequest("ff47-domain", cookie, png), "ff47-domain");
+  assert.equal(upload.status, 200);
+  const uploaded = await upload.json();
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-domain/overrides", {
+    fields: { thumbnail: uploaded.thumbnail }, hostedThumbnailKey: uploaded.uploadKey,
+  }, cookie), "ff47-domain")).status, 200);
   const hostedKey = (await repository.getOverride("ff47", "ff47-domain")).hosted_thumbnail_key;
+  const abandoned = await handlers.uploadThumbnail(thumbnailRequest("ff47-domain", cookie, [...png, 0x03]), "ff47-domain");
+  assert.equal(abandoned.status, 200);
+  const abandonedKey = (await abandoned.json()).uploadKey;
+  const accountId = await repository.upsertAccount(email, clock);
+  await repository.createClaim({
+    id: "claim-past-event", accountId, eventId: "past-event", circleId: "past-circle",
+    circleNameKey: "past", circleNameAtClaim: "Past", sourceRowAtClaim: null,
+    status: "verified", method: "admin", targetUrl: null,
+    challengeTokenHash: null, challengeExpiresAt: null,
+    evidenceUrl: null, evidenceNote: null, now: clock,
+  });
+  const pastDraftKey = `events/past-event/circles/past-circle/${"b".repeat(64)}.png`;
+  thumbnailObjects.keys.add(pastDraftKey);
 
   assert.equal((await handlers.deleteMyAccount(post("/api/account", { confirm: "wrong@example.com" }, cookie))).status, 400);
   const deleted = await handlers.deleteMyAccount(post("/api/account", { confirm: email }, cookie));
@@ -278,7 +303,7 @@ test("a circle can delete its account and release its owned circle", async () =>
   assert.equal((await handlers.session(get("/api/auth/session", cookie))).status, 401);
   assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM accounts WHERE email = ?1`).bind(email).first()).total, 0);
   assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM circle_overrides WHERE circle_id = 'ff47-domain'`).first()).total, 0);
-  assert.deepEqual(thumbnailObjects.deleted, [hostedKey]);
+  assert.deepEqual(thumbnailObjects.deleted, [hostedKey, abandonedKey, pastDraftKey]);
 
   const successor = await signIn("successor@owner.example");
   assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, successor))).status, 201);
@@ -383,7 +408,7 @@ test("the public document is anonymous, revalidatable, and answers 304", async (
   assert.equal(revalidated.headers.get("etag"), etag);
 });
 
-test("hosted thumbnails are content-addressed and removed by self-delete and admin takedown", async () => {
+test("hosted thumbnails stay draft-only until the confirmed save, then follow normal deletion", async () => {
   const admin = await signIn("admin@example.com");
   const owner = await signIn("hosted-owner@example.com");
   await approve(owner, "ff47-site", admin);
@@ -395,27 +420,65 @@ test("hosted thumbnails are content-addressed and removed by self-delete and adm
   const firstBody = await first.json();
   assert.match(firstBody.thumbnail.url, /^https:\/\/media-preview\.kotoban\.top\/events\/ff47\/circles\/ff47-site\/[a-f0-9]{64}\.png$/);
   assert.deepEqual(thumbnailObjects.put.map(({ contentType, size }) => ({ contentType, size })), [{ contentType: "image/png", size: png.length }]);
+  assert.equal(await repository.getOverride("ff47", "ff47-site"), null, "upload alone must not publish or save the draft");
+  assert.deepEqual((await (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json()).overrides, []);
+
+  const savedFirst = await handlers.putOverride(post("/api/circle/ff47-site/overrides", {
+    fields: { thumbnail: firstBody.thumbnail }, hostedThumbnailKey: firstBody.uploadKey,
+  }, owner), "ff47-site");
+  assert.equal(savedFirst.status, 200);
   const firstRow = await repository.getOverride("ff47", "ff47-site");
   assert.ok(firstRow.hosted_thumbnail_key);
   const published = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
   assert.equal((await published.json()).overrides[0].fields.thumbnail.url, firstBody.thumbnail.url);
+  const metadataOnly = await handlers.putOverride(post("/api/circle/ff47-site/overrides", {
+    fields: { thumbnail: { ...firstBody.thumbnail, provider: "社團更新標示" } },
+  }, owner), "ff47-site");
+  assert.equal(metadataOnly.status, 200);
+  assert.equal((await repository.getOverride("ff47", "ff47-site")).hosted_thumbnail_key, firstRow.hosted_thumbnail_key);
+  assert.equal(thumbnailObjects.keys.has(firstRow.hosted_thumbnail_key), true, "metadata edits keep the published object");
 
   const replacement = await handlers.uploadThumbnail(thumbnailRequest("ff47-site", owner, [...png, 0x01]), "ff47-site");
   assert.equal(replacement.status, 200);
+  const replacementBody = await replacement.json();
+  assert.equal((await repository.getOverride("ff47", "ff47-site")).hosted_thumbnail_key, firstRow.hosted_thumbnail_key);
+  assert.deepEqual(thumbnailObjects.deleted, [], "staging a replacement must not remove the published object");
+  const latestDraft = await handlers.uploadThumbnail(thumbnailRequest("ff47-site", owner, [...png, 0x02]), "ff47-site");
+  assert.equal(latestDraft.status, 200);
+  const latestDraftBody = await latestDraft.json();
+  assert.deepEqual(thumbnailObjects.deleted, [replacementBody.uploadKey], "only the latest unpublished draft is retained");
+  const missingKey = await handlers.putOverride(post("/api/circle/ff47-site/overrides", {
+    fields: { thumbnail: latestDraftBody.thumbnail },
+  }, owner), "ff47-site");
+  assert.equal(missingKey.status, 400, "an unconfirmed hosted URL cannot be persisted without its upload key");
+  assert.equal(thumbnailObjects.keys.has(latestDraftBody.uploadKey), true);
+  const savedReplacement = await handlers.putOverride(post("/api/circle/ff47-site/overrides", {
+    fields: { thumbnail: latestDraftBody.thumbnail }, hostedThumbnailKey: latestDraftBody.uploadKey,
+  }, owner), "ff47-site");
+  assert.equal(savedReplacement.status, 200);
   const replacementKey = (await repository.getOverride("ff47", "ff47-site")).hosted_thumbnail_key;
   assert.notEqual(replacementKey, firstRow.hosted_thumbnail_key);
-  assert.deepEqual(thumbnailObjects.deleted, [firstRow.hosted_thumbnail_key], "replacement removes the former single object");
+  assert.deepEqual(thumbnailObjects.deleted, [replacementBody.uploadKey, firstRow.hosted_thumbnail_key], "replacement removes the former published object after save");
+
+  const forged = await handlers.putOverride(post("/api/circle/ff47-site/overrides", {
+    fields: { thumbnail: latestDraftBody.thumbnail }, hostedThumbnailKey: "events/ff47/circles/ff47-social/" + "a".repeat(64) + ".png",
+  }, owner), "ff47-site");
+  assert.equal(forged.status, 400);
 
   const removed = await handlers.deleteMyOverride(post("/api/circle/ff47-site/overrides", { confirm: "ff47-site" }, owner), "ff47-site");
   assert.equal(removed.status, 200);
-  assert.deepEqual(thumbnailObjects.deleted, [firstRow.hosted_thumbnail_key, replacementKey]);
+  assert.deepEqual(thumbnailObjects.deleted, [replacementBody.uploadKey, firstRow.hosted_thumbnail_key, replacementKey]);
 
   const second = await handlers.uploadThumbnail(thumbnailRequest("ff47-social", owner, png), "ff47-social");
   assert.equal(second.status, 200);
+  const secondBody = await second.json();
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-social/overrides", {
+    fields: { thumbnail: secondBody.thumbnail }, hostedThumbnailKey: secondBody.uploadKey,
+  }, owner), "ff47-social")).status, 200);
   const secondKey = (await repository.getOverride("ff47", "ff47-social")).hosted_thumbnail_key;
   const takedown = await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-social", reason: "權利人要求" }, admin));
   assert.equal(takedown.status, 200);
-  assert.deepEqual(thumbnailObjects.deleted, [firstRow.hosted_thumbnail_key, replacementKey, secondKey]);
+  assert.deepEqual(thumbnailObjects.deleted, [replacementBody.uploadKey, firstRow.hosted_thumbnail_key, replacementKey, secondKey]);
   const takenDownRow = await repository.getOverride("ff47", "ff47-social");
   assert.equal(takenDownRow.hosted_thumbnail_key, null);
   assert.equal(JSON.parse(takenDownRow.fields_json).thumbnail, null, "a later edit cannot republish a deleted hosted URL");
@@ -537,12 +600,33 @@ test("preview renders a draft without storing it", async () => {
   const response = await handlers.previewOverride(
     post("/api/circle/ff47-site/preview", { fields: { saleInfo: "草稿內容" } }, owner), "ff47-site");
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).records[0].circle.saleInfo, "草稿內容");
+  const preview = await response.json();
+  assert.equal(preview.records[0].circle.saleInfo, "草稿內容");
+  assert.equal(preview.baseRecords[0].circle.saleInfo, undefined);
+  assert.equal(preview.projectedAt, new Date(clock).toISOString());
 
   // Nothing may reach the published document from a preview.
   assert.equal(await repository.getOverride("ff47", "ff47-site"), null);
   const doc = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
   assert.deepEqual((await doc.json()).overrides, []);
+});
+
+test("the confirmed preview payload projects identically after it becomes public", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("preview-public@example.com");
+  await approve(owner, "ff47-site", admin);
+  const fields = { saleInfo: "同一份內容", specialTags: ["新刊", "套組"] };
+
+  const previewResponse = await handlers.previewOverride(
+    post("/api/circle/ff47-site/preview", { fields }, owner), "ff47-site");
+  const preview = await previewResponse.json();
+  assert.equal((await handlers.putOverride(
+    post("/api/circle/ff47-site/overrides", { fields }, owner), "ff47-site")).status, 200);
+  const publicDocument = await (await handlers.publicOverrides(
+    get("/data/events/ff47/overrides.json"), "ff47")).json();
+  const publishedFields = publicDocument.overrides.find(({ circleId }) => circleId === "ff47-site").fields;
+
+  assert.deepEqual(preview.records, await projectTestCircle("ff47-site", publishedFields));
 });
 
 test("preview refuses a non-owner and an unauthored field", async () => {

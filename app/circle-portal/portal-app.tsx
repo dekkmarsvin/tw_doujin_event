@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createClaim, decideClaim, deleteMyAccount, deleteMyOverride, disableAccount, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
   previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, uploadThumbnail, verifyLoginToken,
@@ -15,6 +15,7 @@ import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages
 import { findCircleCategory } from "../circle-categories";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
+import { projectCircleDraftRecords } from "../circle-records";
 import { ACTIVE_EVENT } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
 import styles from "./portal.module.css";
@@ -358,10 +359,52 @@ function deletionSummary(fields: CircleOverrideFields) {
 const EVENT_END_MS = Date.parse(ACTIVE_EVENT.eventEndsAt);
 const RETENTION_DATE = new Intl.DateTimeFormat("zh-Hant", { dateStyle: "long", timeZone: "Asia/Taipei" });
 
+function PublicationPreview({ records }: { records: CircleViewRecord[] }) {
+  if (records.length === 0) return <p>這個社團目前沒有配置攤位，公開頁面不會顯示。</p>;
+  const record = records[0];
+  return <>
+    {records.length > 1 && <p>此社團有 {records.length} 天配置；以下預覽 DAY {record.day} {record.code}，其他天的內容相同。</p>}
+    <div className={styles.previewFrame} aria-label="刊登預覽">
+      <CircleDetails
+        record={record}
+        sharedRecords={records.filter((candidate) => candidate.day === record.day && candidate.code === record.code)}
+        favorite={null} plan={null} groups={[]} readOnly
+        onClose={() => undefined} onOpenFull={() => undefined} onSelectShared={() => undefined}
+        onToggleFavorite={() => undefined} onTogglePlan={() => undefined} onSetNext={() => undefined}
+        onUpdateFavorite={() => undefined} onCreateGroup={() => undefined}
+      />
+    </div>
+  </>;
+}
+
+function ReviewSummary({ fields, retention }: { fields: CircleOverrideFields; retention: CircleRetentionChoice | null }) {
+  const value = (candidate: string | string[] | undefined) => Array.isArray(candidate)
+    ? candidate.join("、") || "未提供" : candidate?.trim() || "未提供";
+  const rows = [
+    ["筆名", value(fields.pen)],
+    ["販售資訊", value(fields.saleInfo)],
+    ["社團主題類別", value(fields.circleCategory)],
+    ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(fields[key])]),
+    ["外部連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
+    ["代表圖", fields.thumbnail ? fields.thumbnail.provider || "已提供" : "未提供"],
+    ["保存期限", retention === "keep" ? "保留" : retention === "purge" ? "活動後清除" : "未選擇"],
+  ];
+  return <dl className={styles.reviewSummary}>
+    {rows.map(([label, content]) => <div key={label}><dt>{label}</dt><dd>{content}</dd></div>)}
+  </dl>;
+}
+
 function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [fields, setFields] = useState<CircleOverrideFields>({});
   const [status, setStatus] = useState<Status>(IDLE);
-  const [preview, setPreview] = useState<CircleViewRecord[] | null>(null);
+  const [baseRecords, setBaseRecords] = useState<CircleViewRecord[] | null>(null);
+  const [serverPreview, setServerPreview] = useState<CircleViewRecord[] | null>(null);
+  const [projectedAt, setProjectedAt] = useState("");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewedFields, setReviewedFields] = useState<CircleOverrideFields | null>(null);
+  const [reviewedRetention, setReviewedRetention] = useState<CircleRetentionChoice | null>(null);
+  const [stagedThumbnailKey, setStagedThumbnailKey] = useState<string | null>(null);
+  const [reviewedThumbnailKey, setReviewedThumbnailKey] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
   // `null` is a third state, not a default: a circle that has not answered must
   // be asked rather than assumed to have chosen either side (ADR-0018).
@@ -373,23 +416,35 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
   const [confirmText, setConfirmText] = useState("");
   const loaded = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const reviewPanel = useRef<HTMLDivElement | null>(null);
+  const previewRequestGeneration = useRef(0);
 
   // State contains only fields the author has deliberately touched. Empty
   // strings/arrays and a null thumbnail are tombstones, not values to discard.
   const draft = (): CircleOverrideFields => ({ ...fields });
-
+  const livePreview = useMemo(() => baseRecords && projectedAt
+    ? projectCircleDraftRecords(baseRecords, fields, projectedAt)
+    : serverPreview, [baseRecords, fields, projectedAt, serverPreview]);
 
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
     void readMyOverride(claim.circleId)
       .then((result) => {
-        setFields(result.fields ?? {});
-        setSavedFields(result.fields ?? {});
+        const initialFields = result.fields ?? {};
+        setFields(initialFields);
+        setSavedFields(initialFields);
         setHidden(!!result.postEventHidden);
         setRetention(result.retention ?? null);
         setRetentionExpiresAt(result.retentionExpiresAt ?? null);
         setSaved(result.status !== "none");
+        const requestGeneration = ++previewRequestGeneration.current;
+        void previewOverride(claim.circleId, initialFields).then((previewResult) => {
+          if (requestGeneration !== previewRequestGeneration.current) return;
+          setBaseRecords(previewResult.baseRecords as CircleViewRecord[]);
+          setProjectedAt(previewResult.projectedAt);
+        }).catch(() => undefined);
       })
       .catch(() => setFields({}));
   }, [claim.circleId]);
@@ -399,8 +454,14 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     setFields((current) => ({ ...current, [key]: items }));
   };
 
-  const inheritField = (key: CircleOverrideFieldKey) => setFields((current) => inheritCircleOverrideField(current, key));
-  const clearField = (key: CircleOverrideFieldKey) => setFields((current) => clearCircleOverrideField(current, key));
+  const inheritField = (key: CircleOverrideFieldKey) => {
+    if (key === "thumbnail") setStagedThumbnailKey(null);
+    setFields((current) => inheritCircleOverrideField(current, key));
+  };
+  const clearField = (key: CircleOverrideFieldKey) => {
+    if (key === "thumbnail") setStagedThumbnailKey(null);
+    setFields((current) => clearCircleOverrideField(current, key));
+  };
   const modeFor = (key: CircleOverrideFieldKey) => circleOverrideFieldMode(fields, key);
 
   const links = fields.links ?? [];
@@ -417,28 +478,82 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
 
   const thumbnail = fields.thumbnail ?? undefined;
   const selectedCircleCategory = fields.circleCategory ? findCircleCategory(ACTIVE_EVENT.circleCategories, fields.circleCategory) : null;
-  const editThumbnail = (patch: Partial<CircleOverrideThumbnail>) =>
+  const editThumbnail = (patch: Partial<CircleOverrideThumbnail>) => {
+    // Metadata edits still describe the same staged object. Only replacing the
+    // URL turns it into a different (external) thumbnail and drops the key.
+    if (Object.hasOwn(patch, "url")) setStagedThumbnailKey(null);
     setFields((current) => ({
       ...current,
       thumbnail: { url: "", sourceUrl: "", provider: "", ...(current.thumbnail ?? {}), ...patch },
     }));
+  };
 
   // Block the round trip rather than let the shared validator answer with one
   // message for nine fields: it cannot say which row is wrong, but the editor can.
   const problems = [
+    ...CIRCLE_OVERRIDE_LIST_FIELDS.flatMap(({ key, label }) => {
+      const items = fields[key] ?? [];
+      const item = items.findIndex((candidate) => candidate.length > OVERRIDE_LIMITS.listItemLength);
+      return [
+        items.length > OVERRIDE_LIMITS.listItems
+          ? { id: `${key}-${claim.circleId}`, message: `${label}最多 ${OVERRIDE_LIMITS.listItems} 項，目前有 ${items.length} 項。` } : null,
+        item >= 0
+          ? { id: `${key}-${claim.circleId}`, message: `${label}第 ${item + 1} 項超過 ${OVERRIDE_LIMITS.listItemLength} 字。` } : null,
+      ];
+    }),
     ...links.map((link, index) => {
       const problem = linkUrlProblem(link.url) || (link.provider.trim() ? "" : "請填寫平台名稱。");
-      return problem ? `第 ${index + 1} 個連結：${problem}` : "";
+      return problem ? { id: linkUrlProblem(link.url) ? `link-url-${claim.circleId}-${index}` : `link-provider-${claim.circleId}-${index}`, message: `第 ${index + 1} 個連結：${problem}` } : null;
     }),
-    thumbnail ? thumbnailUrlProblem(thumbnail.url) : "",
-    thumbnail && !thumbnail.sourceUrl.trim() ? "代表圖需要填寫出處頁面。" : "",
-    thumbnail?.sourceUrl?.trim() ? linkUrlProblem(thumbnail.sourceUrl) : "",
-    thumbnail && !thumbnail.provider.trim() ? "代表圖需要填寫來源標示。" : "",
-  ].filter(Boolean);
+    thumbnail && thumbnailUrlProblem(thumbnail.url) ? { id: `thumb-url-${claim.circleId}`, message: thumbnailUrlProblem(thumbnail.url) } : null,
+    thumbnail && !thumbnail.sourceUrl.trim() ? { id: `thumb-source-${claim.circleId}`, message: "代表圖需要填寫出處頁面。" } : null,
+    thumbnail?.sourceUrl?.trim() && linkUrlProblem(thumbnail.sourceUrl) ? { id: `thumb-source-${claim.circleId}`, message: linkUrlProblem(thumbnail.sourceUrl) } : null,
+    thumbnail && !thumbnail.provider.trim() ? { id: `thumb-provider-${claim.circleId}`, message: "代表圖需要填寫來源標示。" } : null,
+    JSON.stringify(fields).length > OVERRIDE_LIMITS.serializedFields
+      ? { id: `editor-fields-${claim.circleId}`, message: `全部欄位合計超過 ${OVERRIDE_LIMITS.serializedFields} 字元，請縮短內容或連結。` } : null,
+  ].filter((problem): problem is { id: string; message: string } => problem !== null);
 
-  return <section className={styles.card}>
+  const closeReview = () => {
+    setReviewOpen(false);
+    requestAnimationFrame(() => returnFocus.current?.focus());
+  };
+
+  useEffect(() => {
+    if (reviewOpen) requestAnimationFrame(() => reviewPanel.current?.focus());
+  }, [reviewOpen]);
+
+  const openReview = () => {
+    if (problems.length > 0) {
+      document.getElementById(problems[0].id)?.focus();
+      return;
+    }
+    const snapshot = draft();
+    const requestGeneration = ++previewRequestGeneration.current;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setStatus({ kind: "busy", message: "正在用公開端規則檢查預覽…" });
+    void previewOverride(claim.circleId, snapshot)
+      .then((result) => {
+        if (requestGeneration !== previewRequestGeneration.current) return;
+        setBaseRecords(result.baseRecords as CircleViewRecord[]);
+        setServerPreview(result.records as CircleViewRecord[]);
+        setProjectedAt(result.projectedAt);
+        setReviewedFields(snapshot);
+        setReviewedRetention(retention);
+        setReviewedThumbnailKey(stagedThumbnailKey);
+        setReviewOpen(true);
+        setStatus(IDLE);
+      })
+      .catch((error: unknown) => {
+        if (requestGeneration === previewRequestGeneration.current) setStatus({ kind: "error", message: errorMessage(error) });
+      });
+  };
+
+  return <section className={`${styles.card} ${styles.editorCard}`}>
     <h2>編輯：{claim.circleName}</h2>
-    <p>以下欄位儲存後即時生效。社團名稱、攤位與日期由主辦公布，無法在此修改；名稱有誤請聯絡管理者更正來源資料。</p>
+    <p>以下欄位需先預覽確認才會儲存，儲存後約一分鐘內公開。社團名稱、攤位與日期由主辦公布，無法在此修改；名稱有誤請聯絡管理者更正來源資料。</p>
+
+    <div className={styles.editorLayout}>
+      <div id={`editor-fields-${claim.circleId}`} className={styles.editorForm} tabIndex={-1} inert={reviewOpen ? true : undefined}>
 
     <label htmlFor={`pen-${claim.circleId}`}>筆名（最多 {OVERRIDE_LIMITS.pen} 字）</label>
     <input
@@ -559,11 +674,10 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
         }
         setStatus({ kind: "busy", message: "上傳代表圖中…" });
         void uploadThumbnail(claim.circleId, file, sourceUrl, provider)
-          .then(({ thumbnail: uploaded }) => {
+          .then(({ thumbnail: uploaded, uploadKey }) => {
             setFields((current) => ({ ...current, thumbnail: uploaded }));
-            setSavedFields((current) => ({ ...current, thumbnail: uploaded }));
-            setSaved(true);
-            setStatus({ kind: "ok", message: "代表圖已上傳並儲存。" });
+            setStagedThumbnailKey(uploadKey);
+            setStatus({ kind: "ok", message: "代表圖已上傳到草稿，尚未公開；請預覽並確認儲存。" });
           })
           .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
           .finally(() => { input.value = ""; });
@@ -625,50 +739,14 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     </fieldset>
 
     <div className={styles.editorActions}>
-      <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
-        setStatus({ kind: "busy", message: "產生預覽中…" });
-        void previewOverride(claim.circleId, draft())
-          .then((result) => { setPreview(result.records as CircleViewRecord[]); setStatus(IDLE); })
-          .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-      }}>預覽</button>
-
-      <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
-        setStatus({ kind: "busy", message: "儲存中…" });
-        void saveOverride(claim.circleId, draft(), retention)
-          .then(() => { setSaved(true); setSavedFields(draft()); setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" }); })
-          .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-      }}>儲存</button>
+      <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={openReview}>
+        {status.kind === "busy" ? "檢查中…" : "預覽並送出"}
+      </button>
     </div>
 
     {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
-      {problems.map((problem) => <li key={problem}>{problem}</li>)}
+      {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}><a href={`#${problem.id}`}>{problem.message}</a></li>)}
     </ul>}
-
-    {preview && <div className={styles.preview}>
-      <h3>參觀者會看到的樣子</h3>
-      {preview.length === 0
-        ? <p>這個社團目前沒有配置攤位，公開頁面不會顯示。</p>
-        : <>
-          {preview.length > 1 && <p>此社團有 {preview.length} 天配置；以下預覽 DAY {preview[0].day} {preview[0].code}，其他天的內容相同。</p>}
-          <div className={styles.previewFrame} aria-label="刊登預覽">
-            {/* The reader's own component, so the preview cannot drift from the
-                published result. Inert: the planning controls are shown because
-                visitors see them, but must not act from inside a preview.
-                `sharedRecords` means other circles at the same booth on the same
-                day — passing this circle's other days would render it as sharing
-                a booth with itself. */}
-            <CircleDetails
-              record={preview[0]}
-              sharedRecords={preview.filter((record) => record.day === preview[0].day && record.code === preview[0].code)}
-              favorite={null} plan={null} groups={[]}
-              onClose={() => undefined} onOpenFull={() => undefined} onSelectShared={() => undefined}
-              onToggleFavorite={() => undefined} onTogglePlan={() => undefined} onSetNext={() => undefined}
-              onUpdateFavorite={() => undefined} onCreateGroup={() => undefined}
-            />
-          </div>
-        </>}
-      <button type="button" onClick={() => setPreview(null)}>關閉預覽</button>
-    </div>}
 
     <div className={styles.visibility}>
       <label>
@@ -734,6 +812,45 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     </div>}
 
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+      </div>
+
+      <aside className={`${styles.previewColumn} ${reviewOpen ? styles.reviewOpen : ""}`} aria-label={reviewOpen ? "儲存前確認" : "即時公開預覽"}>
+        {reviewOpen && reviewedFields && serverPreview
+          ? <div ref={reviewPanel} className={styles.reviewPanel} role="region" tabIndex={-1} aria-labelledby={`review-title-${claim.circleId}`}>
+            <div className={styles.reviewHeading}>
+              <div><small>SERVER PREVIEW</small><h3 id={`review-title-${claim.circleId}`}>儲存前確認</h3></div>
+              <button type="button" className={styles.backButton} onClick={closeReview}>返回修改</button>
+            </div>
+            <p>以下是伺服器以公開端規則重新檢查後的版本。確認後才會儲存。</p>
+            <PublicationPreview records={serverPreview} />
+            <h4>這次填寫的欄位</h4>
+            <ReviewSummary fields={reviewedFields} retention={reviewedRetention} />
+            <div className={styles.reviewActions}>
+              <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
+              <button type="button" disabled={status.kind === "busy"} onClick={() => {
+                const savingFields = { ...reviewedFields };
+                setStatus({ kind: "busy", message: "儲存中…" });
+                void saveOverride(claim.circleId, savingFields, reviewedRetention, reviewedThumbnailKey ?? undefined)
+                  .then(() => {
+                    setSaved(true);
+                    setSavedFields(savingFields);
+                    setStagedThumbnailKey(null);
+                    setReviewedThumbnailKey(null);
+                    setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" });
+                    closeReview();
+                  })
+                  .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+              }}>{status.kind === "busy" ? "儲存中…" : "確認儲存"}</button>
+            </div>
+            {status.kind === "error" && <p className={styles.error} role="status">{status.message}</p>}
+          </div>
+          : <div className={styles.livePreview}>
+            <small>LIVE PREVIEW · 尚未儲存</small>
+            <h3>參觀者會看到的樣子</h3>
+            {livePreview ? <PublicationPreview records={livePreview} /> : <p>正在準備預覽…</p>}
+          </div>}
+      </aside>
+    </div>
   </section>;
 }
 
