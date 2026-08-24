@@ -77,6 +77,8 @@
 | [0029](./adr/0029-public-production-gated-preview.md) | production 公開、preview 持續受 Access 保護 |
 | [0030](./adr/0030-organizer-category-catalog-circle-selected-value.md) | 主辦分類目錄是活動資料，逐社團類別是社團自述 |
 | [0031](./adr/0031-quota-exhaustion-is-not-a-release-gate.md) | 不以不可安全重現的配額耗盡作發布 gate，Pages Functions 設為 fail-open |
+| [0032](./adr/0032-shared-reference-data-is-public-and-pinned.md) | 共享 reference-data 公開、經 review 發布，活動只使用 pinned revision |
+| [0033](./adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) | 地圖貢獻採管理者授權、私人平行草稿與明確保存期限 |
 
 ## 對外文件
 

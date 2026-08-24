@@ -29,3 +29,18 @@ test("every issue form enters the canonical triage flow", async () => {
   }
   assert.match(await read(".github/ISSUE_TEMPLATE/config.yml"), /blank_issues_enabled: false/);
 });
+
+test("accepted reference-data and map-contribution policies stay indexed and explicit", async () => {
+  const [index, referenceAdr, contributionAdr] = await Promise.all([
+    read("docs/README.md"),
+    read("docs/adr/0032-shared-reference-data-is-public-and-pinned.md"),
+    read("docs/adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md"),
+  ]);
+  assert.match(index, /0032-shared-reference-data-is-public-and-pinned/);
+  assert.match(index, /0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts/);
+  assert.match(referenceAdr, /tw_doujin_event-reference-data[\s\S]*完整 commit SHA[\s\S]*SHA-256/);
+  assert.match(referenceAdr, /工作簿、社群試算表或其他第三方內容/);
+  assert.match(contributionAdr, /管理者授予或撤銷[\s\S]*optimistic concurrency/);
+  assert.match(contributionAdr, /20 MiB[\s\S]*PDF 最多 20 頁/);
+  assert.match(contributionAdr, /180 天[\s\S]*30 天[\s\S]*90 天/);
+});
