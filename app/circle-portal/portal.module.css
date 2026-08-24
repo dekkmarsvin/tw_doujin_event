@@ -13,7 +13,7 @@
   --danger: #a43e30;
 
   box-sizing: border-box;
-  max-width: 720px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 24px 18px 64px;
   color: var(--ink);
@@ -41,12 +41,16 @@
 .identity a { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
 
 .card {
+  max-width: 720px;
+  margin-right: auto;
+  margin-left: auto;
   margin-top: 18px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
 }
+.editorCard { max-width: none; }
 .card h2 { font-size: 14px; }
 .card > p { margin-top: 6px; color: var(--muted); font-size: 11px; }
 
@@ -205,8 +209,10 @@
   .retentionChoices { grid-template-columns: 1fr 1fr; }
 }
 
+.editorLayout { margin-top: 14px; }
+.editorForm { min-width: 0; }
 .editorActions { display: flex; gap: 8px; }
-.editorActions button:first-child { border-color: var(--line); background: #fff; color: var(--ink); }
+.editorActions button { width: 100%; }
 
 /* The only irreversible action in the portal, and the only place that says so
    in red. Kept visually apart from the per-field "clear" controls: ADR-0020
@@ -236,7 +242,47 @@
   pointer-events: none;
   user-select: none;
 }
-.previewFrame :global(section) { max-height: 60vh; overflow: hidden; }
+.previewColumn { display: none; min-width: 0; }
+.previewColumn.reviewOpen { display: block; }
+.livePreview > small, .reviewHeading small {
+  color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .1em;
+}
+.livePreview h3, .reviewPanel h3 { margin: 4px 0 0; font-size: 13px; }
+.livePreview > p, .reviewPanel > p { margin-top: 8px; color: var(--muted); font-size: 11px; }
+.reviewPanel { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.reviewHeading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.card .backButton { margin-top: 0; border-color: var(--line); background: #fff; color: var(--ink); }
+.reviewPanel h4 { margin: 16px 0 0; font-size: 11px; }
+.reviewSummary { margin: 8px 0 0; border-top: 1px solid var(--line); }
+.reviewSummary > div { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(0, 1.3fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.reviewSummary dt { color: var(--muted); font-size: 10px; }
+.reviewSummary dd { margin: 0; overflow-wrap: anywhere; font-size: 11px; }
+.reviewActions { display: flex; gap: 8px; margin-top: 14px; }
+.reviewActions button { flex: 1; margin-top: 0; }
+.problemList a { color: inherit; text-underline-offset: 2px; }
+
+@media (max-width: 760px) {
+  .previewColumn.reviewOpen {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    overflow: auto;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(24px, env(safe-area-inset-bottom));
+    background: var(--paper);
+  }
+  .reviewPanel { width: min(100%, 680px); min-height: 100%; margin: 0 auto; }
+  .reviewHeading { position: sticky; top: -14px; z-index: 2; padding: 8px 0; background: #fff; }
+}
+
+@media (min-width: 761px) and (max-width: 959px) {
+  .previewColumn.reviewOpen { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+}
+
+@media (min-width: 960px) {
+  .editorLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 430px); gap: 24px; align-items: start; }
+  .previewColumn { display: block; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+  .previewColumn.reviewOpen { display: block; }
+}
 
 .footer { margin-top: 24px; color: var(--muted); font-size: 10px; line-height: 1.7; }
 

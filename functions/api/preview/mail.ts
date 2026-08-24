@@ -1,4 +1,5 @@
 import { previewE2eAuthorized, previewSinkRecipientAllowed, repositoryFor } from "../../_portal";
+import { deleteObjectKeys } from "../../../app/hosted-thumbnails";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -17,8 +18,14 @@ export const onRequestGet: PagesFunction<PortalEnv> = async ({ request, env }) =
 export const onRequestDelete: PagesFunction<PortalEnv> = async ({ request, env }) => {
   if (!previewE2eAuthorized(env, request)) return json({ error: "not found" }, 404);
   const repository = repositoryFor(env);
-  const keys = await repository.listHostedThumbnailKeys();
-  if (keys.length > 0) await env.THUMBNAILS.delete(keys);
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await env.THUMBNAILS.list({ ...(cursor ? { cursor } : {}) });
+    keys.push(...page.objects.map(({ key }) => key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  await deleteObjectKeys(env.THUMBNAILS, keys);
   await repository.clearPreviewData();
   return json({ ok: true });
 };

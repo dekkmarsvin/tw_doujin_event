@@ -129,52 +129,100 @@ function buildOfficialSource(event: EventDefinition, fetchedAt: string, day?: Bo
 }
 
 /** Circle-authored content is labelled as self-reported, never as organizer-confirmed. */
-function circleSelfSource(override: CircleOverride): SourceLink {
+function circleSelfSource(updatedAt: string): SourceLink {
   return {
     provider: "社團本人",
     contentType: "circle",
     label: "社團自行提供的補充資料",
     url: "",
-    fetchedAt: override.updatedAt,
+    fetchedAt: updatedAt,
     status: "unverified",
   };
 }
 
-function circleFromBase(base: CatalogCircle, event: EventDefinition, generatedAt: string, override?: CircleOverride): CircleRecord {
-  const fields = override?.fields;
-  const creatorTypes = fields?.creatorTypes ?? [];
-  const workTypes = fields?.workTypes ?? [];
-  const referencedWorks = fields?.referencedWorks ?? [];
-  const specialTags = fields?.specialTags ?? [];
-  const circleCategory = fields?.circleCategory ?? "";
-  const saleInfo = fields?.saleInfo ?? "";
-  const thumbnail = fields?.thumbnail;
+function circleFromBase(base: CatalogCircle, event: EventDefinition, generatedAt: string): CircleRecord {
   return {
     id: base.id,
     name: base.name,
-    description: saleInfo,
-    categories: [...new Set([circleCategory, ...creatorTypes, ...workTypes, ...referencedWorks, ...specialTags].filter(Boolean))],
-    circleCategory,
-    pen: fields?.pen ?? "",
-    work: referencedWorks.join("、") || creatorTypes.join("、"),
-    creatorTypes,
-    ageRatings: fields?.ageRatings ?? [],
-    workTypes,
-    referencedWorks,
-    saleInfo,
-    specialTags,
-    media: thumbnail ? [{
+    description: "",
+    categories: [],
+    circleCategory: "",
+    pen: "",
+    work: "",
+    creatorTypes: [],
+    ageRatings: [],
+    workTypes: [],
+    referencedWorks: [],
+    saleInfo: "",
+    specialTags: [],
+    media: [],
+    externalLinks: [],
+    updatedAt: generatedAt,
+    sources: [buildOfficialSource(event, generatedAt)],
+  };
+}
+
+/**
+ * Apply a circle-authored draft to the official read model. Pure and shared by
+ * the published catalog builder and the portal's client-side live preview.
+ * Missing keys inherit; empty values and arrays remain deliberate tombstones.
+ */
+export function projectCircleDraft(base: CircleRecord, fields: CircleOverride["fields"], updatedAt: string): CircleRecord {
+  const creatorTypes = fields.creatorTypes ?? base.creatorTypes;
+  const workTypes = fields.workTypes ?? base.workTypes;
+  const referencedWorks = fields.referencedWorks ?? base.referencedWorks;
+  const specialTags = fields.specialTags ?? base.specialTags;
+  const circleCategory = fields.circleCategory ?? base.circleCategory;
+  const saleInfo = fields.saleInfo ?? base.saleInfo;
+  const facetsChanged = ["circleCategory", "creatorTypes", "workTypes", "referencedWorks", "specialTags"]
+    .some((key) => Object.hasOwn(fields, key));
+  const workChanged = Object.hasOwn(fields, "referencedWorks") || Object.hasOwn(fields, "creatorTypes");
+  const thumbnail = fields.thumbnail;
+  const media = thumbnail === undefined
+    ? base.media.map((item) => ({ ...item }))
+    : thumbnail === null ? [] : [{
       id: `${base.id}-thumbnail`,
-      kind: "thumbnail",
+      kind: "thumbnail" as const,
       url: thumbnail.url,
       sourceUrl: thumbnail.sourceUrl,
       provider: thumbnail.provider,
       alt: `${base.name} 社團縮圖`,
-    }] : [],
-    externalLinks: fields?.links?.map((link) => ({ ...link })) ?? [],
-    updatedAt: override?.updatedAt ?? generatedAt,
-    sources: [buildOfficialSource(event, generatedAt), ...(override ? [circleSelfSource(override)] : [])],
+    }];
+  return {
+    ...base,
+    description: saleInfo,
+    categories: facetsChanged
+      ? [...new Set([circleCategory, ...creatorTypes, ...workTypes, ...referencedWorks, ...specialTags].filter(Boolean))]
+      : [...base.categories],
+    circleCategory,
+    pen: fields.pen ?? base.pen,
+    work: workChanged ? referencedWorks.join("、") || creatorTypes.join("、") : base.work,
+    creatorTypes: [...creatorTypes],
+    ageRatings: [...(fields.ageRatings ?? base.ageRatings)],
+    workTypes: [...workTypes],
+    referencedWorks: [...referencedWorks],
+    saleInfo,
+    specialTags: [...specialTags],
+    media,
+    externalLinks: (fields.links ?? base.externalLinks).map((link) => ({ ...link })),
+    updatedAt,
+    sources: [...base.sources.filter((source) => source.contentType !== "circle"), circleSelfSource(updatedAt)],
   };
+}
+
+/** Project the records returned as an official preview baseline without a request or write. */
+export function projectCircleDraftRecords(baseRecords: CircleViewRecord[], fields: CircleOverride["fields"], updatedAt: string) {
+  if (baseRecords.length === 0) return [];
+  const projectedCircle = projectCircleDraft(baseRecords[0].circle, fields, updatedAt);
+  return baseRecords.map((record) => ({
+    ...record,
+    genre: projectedCircle.circleCategory || record.genre,
+    circle: projectedCircle,
+    sources: [
+      ...record.sources.filter((source) => source.contentType !== "circle"),
+      ...projectedCircle.sources.filter((source) => source.contentType === "circle"),
+    ],
+  }));
 }
 
 /**
@@ -182,18 +230,18 @@ function circleFromBase(base: CatalogCircle, event: EventDefinition, generatedAt
  * payload and overrides always produce the same circles, placements and view
  * records.
  *
- * Circle-authored overrides are applied per field inside `circleFromTemplate`,
- * deliberately downstream of the name indexes below. Rewriting a template name
- * before those indexes are built would stop `findTemplate` from matching that
- * circle's booth rows, silently detaching it from every map placement.
+ * Official identity is constructed first, then the shared draft projection is
+ * applied before placement view records are derived. The authored fields never
+ * change the canonical circle id or the placement-to-circle relationship.
  */
 export function buildCircleCatalog(payload: CircleCatalogPayload, overrides?: CircleOverridesPayload, eventDefinition?: EventDefinition): CircleCatalog {
   const overridesById = indexCircleOverrides(overrides);
   const event = eventDefinition ?? getEventDefinition(payload.eventId) ?? ACTIVE_EVENT;
-  const circlesById = new Map(payload.circles.map((base) => [
-    base.id,
-    circleFromBase(base, event, payload.generatedAt, overridesById.get(base.id)),
-  ]));
+  const circlesById = new Map(payload.circles.map((base) => {
+    const official = circleFromBase(base, event, payload.generatedAt);
+    const override = overridesById.get(base.id);
+    return [base.id, override ? projectCircleDraft(official, override.fields, override.updatedAt) : official];
+  }));
 
   const rows = payload.placements.map((sourcePlacement) => {
     const circle = circlesById.get(sourcePlacement.circleId);

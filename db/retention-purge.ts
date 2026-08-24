@@ -15,6 +15,8 @@
  * so the row carries its own date and this only enforces it.
  */
 
+import { deleteObjectKeys } from "../app/hosted-thumbnails";
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -85,17 +87,40 @@ async function deleteWhere(database: D1Database, sql: string, cutoff: number) {
  * operation — a deleted row whose image is still served is the failure this is
  * meant to prevent.
  */
-async function purgeExpiredOverrides(database: D1Database, now: number, objects?: { delete(keys: string | string[]): Promise<void> }) {
+async function listObjectKeys(objects: Pick<R2Bucket, "list">, prefix?: string) {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await objects.list({ ...(prefix ? { prefix } : {}), ...(cursor ? { cursor } : {}) });
+    keys.push(...page.objects.map(({ key }) => key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys;
+}
+
+async function purgeExpiredOverrides(database: D1Database, now: number, objects?: Pick<R2Bucket, "list" | "delete">) {
   if (objects) {
     const due = await database.prepare(
-      `SELECT hosted_thumbnail_key FROM circle_overrides
+      `SELECT event_id, circle_id FROM circle_overrides
        WHERE retention_choice = 'purge' AND retention_expires_at IS NOT NULL AND retention_expires_at <= ?1
-         AND hosted_thumbnail_key IS NOT NULL`,
-    ).bind(now).all<{ hosted_thumbnail_key: string }>();
-    const keys = [...new Set(due.results.map((row) => row.hosted_thumbnail_key))];
+      `,
+    ).bind(now).all<{ event_id: string; circle_id: string }>();
+    const eventPrefixes = new Map<string, string>();
+    const dueCirclePrefixes = new Set(due.results.map(({ event_id, circle_id }) => {
+      const eventPrefix = `events/${encodeURIComponent(event_id)}/circles/`;
+      eventPrefixes.set(event_id, eventPrefix);
+      return `${eventPrefix}${encodeURIComponent(circle_id)}/`;
+    }));
+    const keys = [...new Set((await Promise.all([...eventPrefixes.values()].map(async (eventPrefix) => {
+      const eventKeys = await listObjectKeys(objects, eventPrefix);
+      return eventKeys.filter((key) => {
+        const circleSeparator = key.indexOf("/", eventPrefix.length);
+        return circleSeparator >= 0 && dueCirclePrefixes.has(key.slice(0, circleSeparator + 1));
+      });
+    }))).flat())];
     // Bytes go first. R2 deletion is idempotent, so a D1 failure leaves a
     // retryable row pointing at an already-absent object, never orphan bytes.
-    if (keys.length > 0) await objects.delete(keys);
+    await deleteObjectKeys(objects, keys);
   }
   const purged = await database.prepare(
     `DELETE FROM circle_overrides
@@ -141,7 +166,7 @@ export async function purgeExpiredRecords(
   database: D1Database,
   now: number,
   windows: RetentionWindows = RETENTION_WINDOWS,
-  objects?: { delete(keys: string | string[]): Promise<void> },
+  objects?: Pick<R2Bucket, "list" | "delete">,
 ): Promise<PurgeSummary> {
   if (windows.loginTokens <= LOGIN_RATE_LIMIT_WINDOW_MS) {
     throw new Error("login token retention must outlast the rate-limit window, or purging resets the quota.");

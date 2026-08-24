@@ -245,6 +245,16 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
     url: (key) => `${thumbnailOrigin.replace(/\/$/, "")}/${key}`,
+    list: async (prefix) => {
+      const keys: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await env.THUMBNAILS.list({ prefix, cursor });
+        keys.push(...page.objects.map(({ key }) => key));
+        cursor = page.truncated ? page.cursor : undefined;
+      } while (cursor);
+      return keys;
+    },
     put: async (key, value, contentType) => {
       await env.THUMBNAILS.put(key, value, {
         httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
@@ -285,17 +295,17 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     verifyHuman: (token, remoteIp) => verifyTurnstile(env, token, remoteIp),
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     thumbnailStore,
-    projectCircle: async (circleId, fields) => {
+    projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.
       const { payload, event } = await catalog(env, request, eventId);
-      const projected = buildCircleCatalog(payload, {
+      const projected = buildCircleCatalog(payload, fields ? {
         schema: CIRCLE_OVERRIDES_SCHEMA,
         eventId,
         generatedAt: event.dataUpdatedAt,
         revision: 0,
-        overrides: [{ circleId, updatedAt: new Date().toISOString(), fields }],
-      }, event);
+        overrides: [{ circleId, updatedAt, fields }],
+      } : undefined, event);
       const records = projected.recordsByCircleId.get(circleId);
       if (records?.length) return records;
       // A circle with no numbered booth still has an identity to preview.

@@ -1,6 +1,7 @@
 import { isHttpsUrl, type CircleOverrideThumbnail } from "./circle-overrides";
 
 export const HOSTED_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
+export const R2_DELETE_BATCH_SIZE = 1000;
 
 const FORMATS = [
   { mime: "image/jpeg", extension: "jpg", matches: (bytes: Uint8Array) => bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff },
@@ -10,9 +11,22 @@ const FORMATS = [
 
 export type HostedThumbnailStore = {
   url(key: string): string;
+  list(prefix: string): Promise<string[]>;
   put(key: string, value: ArrayBuffer, contentType: string): Promise<void>;
   delete(keys: string | string[]): Promise<void>;
 };
+
+/** Workers R2 accepts at most 1000 object keys in one delete call. Keep the
+ * boundary here so every cleanup path behaves the same way when a busy event
+ * creates more than one page of objects. */
+export async function deleteObjectKeys(
+  store: Pick<HostedThumbnailStore, "delete">,
+  keys: readonly string[],
+) {
+  for (let index = 0; index < keys.length; index += R2_DELETE_BATCH_SIZE) {
+    await store.delete(keys.slice(index, index + R2_DELETE_BATCH_SIZE));
+  }
+}
 
 export function detectHostedThumbnailFormat(bytes: Uint8Array) {
   return FORMATS.find((format) => format.matches(bytes)) ?? null;

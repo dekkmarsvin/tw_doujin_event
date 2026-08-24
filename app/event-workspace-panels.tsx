@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- FF47 media URLs are source-controlled remote assets, not build-time application images. */
 
 import { useState } from "react";
+import type { MouseEvent } from "react";
 import type { CircleCatalogStatus, CircleMedia, CircleViewRecord } from "./circle-records";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
@@ -138,10 +139,11 @@ export function DayItinerary({ day, entries, recordsById, variant = "compact", o
   </section>;
 }
 
-function CircleMediaGallery({ media, activeIndex, compact, onActiveIndex, onOpenFull }: {
+function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onActiveIndex, onOpenFull }: {
   media: CircleMedia[];
   activeIndex: number;
   compact: boolean;
+  readOnly?: boolean;
   onActiveIndex: (index: number) => void;
   onOpenFull?: () => void;
 }) {
@@ -151,26 +153,31 @@ function CircleMediaGallery({ media, activeIndex, compact, onActiveIndex, onOpen
   const move = (delta: number) => onActiveIndex((activeIndex + delta + media.length) % media.length);
   return <div className={`${styles.mediaGallery} ${compact ? styles.compactGallery : styles.fullGallery}`} role="group" aria-label="社團圖片">
     {compact && onOpenFull
-      ? <button className={styles.galleryOpen} onClick={onOpenFull} aria-label={`開啟 ${activeMedia.alt} 的完整詳細資訊`}>{image}</button>
+      ? <button className={styles.galleryOpen} disabled={readOnly} onClick={onOpenFull} aria-label={`開啟 ${activeMedia.alt} 的完整詳細資訊`}>{image}</button>
       : <div className={styles.galleryFrame}>{image}</div>}
     {!compact && <div className={styles.galleryFooter}>
       {media.length > 1 && <div className={styles.galleryControls} role="group" aria-label="圖片幻燈片控制">
-        <button type="button" onClick={() => move(-1)} aria-label="上一張圖片"><UiIcon name="chevron-left" /></button>
-        <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
-        <button type="button" onClick={() => move(1)} aria-label="下一張圖片"><UiIcon name="chevron-right" /></button>
+        <button type="button" disabled={readOnly} onClick={() => move(-1)} aria-label="上一張圖片"><UiIcon name="chevron-left" /></button>
+        <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" disabled={readOnly} key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
+        <button type="button" disabled={readOnly} onClick={() => move(1)} aria-label="下一張圖片"><UiIcon name="chevron-right" /></button>
       </div>}
-      <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer"><span>{activeMedia.provider}</span><span>查看原始圖片</span><UiIcon name="external" /></a>
+      <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>查看原始圖片</span><UiIcon name="external" /></a>
     </div>}
   </div>;
 }
 
-export function CircleDetails({ record, sharedRecords, favorite, plan, groups, compact = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
+function preventLinkActivation(event: MouseEvent<HTMLAnchorElement>) {
+  event.preventDefault();
+}
+
+export function CircleDetails({ record, sharedRecords, favorite, plan, groups, compact = false, readOnly = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
   record: CircleViewRecord | null;
   sharedRecords: CircleViewRecord[];
   favorite: FavoriteRecord | null;
   plan: VisitPlanEntry | null;
   groups: FavoriteGroup[];
   compact?: boolean;
+  readOnly?: boolean;
   onClose: () => void;
   onOpenFull?: () => void;
   onSelectShared: (record: CircleViewRecord) => void;
@@ -186,25 +193,25 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
   const activeMediaIndex = mediaSelection.circleId === record.circle.id ? mediaSelection.index : 0;
   const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
   return <section className={`${styles.details} ${compact ? styles.compactDetails : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} aria-label="攤位詳細資訊">
-    <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
+    <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} readOnly={readOnly} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
     <div className={styles.detailBody}>
-      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button></div>
-      <div className={styles.title}><div><h2>{record.name}</h2>{(record.circle.circleCategory || record.circle.creatorTypes.length > 0 || record.circle.pen) && <p>{[record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.pen].filter(Boolean).join(" · ")}</p>}{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
+      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} disabled={readOnly} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button></div>
+      <div className={styles.title}><div><h2>{record.name}</h2>{(record.circle.circleCategory || record.circle.creatorTypes.length > 0 || record.circle.pen) && <p>{[record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.pen].filter(Boolean).join(" · ")}</p>}{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} disabled={readOnly} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
       {favorite?.groupId && <p className={styles.sourceHint}>收藏群組：{groups.find((group) => group.id === favorite.groupId)?.name ?? "未分組"}</p>}
-      {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登記 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
+      {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登記 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} disabled={readOnly} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}
       {!compact && <div className={styles.tags}>{[...new Set([...record.circle.workTypes, ...record.circle.referencedWorks, ...record.circle.specialTags, ...record.tags.map((tag) => tag.trim())])].filter(Boolean).map((tag) => <span key={tag}>#{tag}</span>)}</div>}
       {(record.circle.work || record.circle.saleInfo || record.note) && <div className={styles.work}><small>作品與販售資訊</small>{record.circle.work && <b>{record.circle.work}</b>}{(record.circle.saleInfo || record.note) && <p>{record.circle.saleInfo || record.note}</p>}</div>}
-      {visibleLinks.length > 0 && <div className={styles.externalLinks} aria-label="社團外部連結"><b>更多資訊</b><div>{visibleLinks.map((link) => <a key={`${link.kind}-${link.provider}-${link.url}`} href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>)}</div>{compact && record.circle.externalLinks.length > visibleLinks.length && <small>完整詳細資訊另有 {record.circle.externalLinks.length - visibleLinks.length} 個連結</small>}</div>}
-      <div className={styles.detailActions}><button className={styles.primary} onClick={onTogglePlan}>{plan ? "從行程移除" : "加入今日行程"}</button><button disabled={plan?.status === "next"} onClick={onSetNext}>{plan?.status === "next" ? "目前下一站" : "設為下一站"}</button></div>
-      {compact && <><div className={styles.sourceSummary}><b>資料來源</b><span>{record.sources.map((source) => source.provider).join("、")}</span></div><button className={styles.fullDetailButton} onClick={onOpenFull}>開啟完整詳細資訊</button></>}
+      {visibleLinks.length > 0 && <div className={styles.externalLinks} aria-label="社團外部連結"><b>更多資訊</b><div>{visibleLinks.map((link) => <a key={`${link.kind}-${link.provider}-${link.url}`} href={link.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>)}</div>{compact && record.circle.externalLinks.length > visibleLinks.length && <small>完整詳細資訊另有 {record.circle.externalLinks.length - visibleLinks.length} 個連結</small>}</div>}
+      <div className={styles.detailActions}><button className={styles.primary} disabled={readOnly} onClick={onTogglePlan}>{plan ? "從行程移除" : "加入今日行程"}</button><button disabled={readOnly || plan?.status === "next"} onClick={onSetNext}>{plan?.status === "next" ? "目前下一站" : "設為下一站"}</button></div>
+      {compact && <><div className={styles.sourceSummary}><b>資料來源</b><span>{record.sources.map((source) => source.provider).join("、")}</span></div><button className={styles.fullDetailButton} disabled={readOnly} onClick={onOpenFull}>開啟完整詳細資訊</button></>}
       {!compact && favorite && <div className={styles.favoriteEditor}>
-        <label>收藏分組<select value={favorite.groupId ?? ""} onChange={(event) => onUpdateFavorite(event.target.value || null, favorite.memo)}><option value="">未分組</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
-        <label>備註<textarea value={favorite.memo} onChange={(event) => onUpdateFavorite(favorite.groupId, event.target.value)} placeholder="記下想買的刊物、預算或提醒" /></label>
-        <div className={styles.groupCreator}><input value={newGroup} onChange={(event) => setNewGroup(event.target.value)} placeholder="新增收藏分組" /><button disabled={!newGroup.trim()} onClick={() => { onCreateGroup(newGroup); setNewGroup(""); }}>新增</button></div>
+        <label>收藏分組<select disabled={readOnly} value={favorite.groupId ?? ""} onChange={(event) => onUpdateFavorite(event.target.value || null, favorite.memo)}><option value="">未分組</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
+        <label>備註<textarea disabled={readOnly} value={favorite.memo} onChange={(event) => onUpdateFavorite(favorite.groupId, event.target.value)} placeholder="記下想買的刊物、預算或提醒" /></label>
+        <div className={styles.groupCreator}><input disabled={readOnly} value={newGroup} onChange={(event) => setNewGroup(event.target.value)} placeholder="新增收藏分組" /><button disabled={readOnly || !newGroup.trim()} onClick={() => { onCreateGroup(newGroup); setNewGroup(""); }}>新增</button></div>
       </div>}
       {!compact && <div className={styles.sources} aria-label="資料來源">
         <b>資料來源</b>
-        {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong><small>{source.label} · {SOURCE_ORIGIN_LABEL[source.contentType]} · {SOURCE_STATUS_LABEL[source.status]}</small><small>匯入 {sourceDate(source.fetchedAt)}</small></span>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">查看原始來源 <UiIcon name="external" /></a> : <small className={styles.sourceNoLink}>於本站填寫</small>}</div>)}
+        {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong><small>{source.label} · {SOURCE_ORIGIN_LABEL[source.contentType]} · {SOURCE_STATUS_LABEL[source.status]}</small><small>匯入 {sourceDate(source.fetchedAt)}</small></span>{source.url ? <a href={source.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}>查看原始來源 <UiIcon name="external" /></a> : <small className={styles.sourceNoLink}>於本站填寫</small>}</div>)}
         <p>攤位與社團名稱以主辦資料為準；其他內容由社團自行提供。</p>
       </div>}
     </div>

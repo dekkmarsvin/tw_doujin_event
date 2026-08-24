@@ -107,6 +107,12 @@
 
 **目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：由社團自選，選了 `purge` 的列在活動結束滿 90 天時由排程 Worker **刪除資料列**；未表態與選 `keep` 的列不設期限。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 **owner**：社團本人。
 
+### R2 代管代表圖
+
+選擇檔案只上傳草稿物件，不改寫 `circle_overrides` 或 `overrides_doc`；一般的單一編輯流程會保留目前已發布的代表圖與最新一張未確認草稿，再次上傳會取代前一張草稿。確認儲存時會驗證 object key 確實屬於該活動與社團，發布新圖後刪除舊圖與當時可見的其他未引用草稿。社團不確認的草稿會在後續上傳、儲存、自助刪除、刪除帳號、管理者撤下、保存期限清除或 preview reset 時掃描對應 prefix／bucket 並移除；它不進入公開 overlay。
+
+同一社團若在多個分頁並行上傳或清理，R2 與 D1 之間沒有跨服務交易鎖，短時間內可能多留草稿，或讓其中一個分頁需要重新上傳。這不會發布未確認的物件；下一次上述生命週期動作會再次掃描。若產品要提供多分頁無衝突保證，需另以可序列化的 staged pointer 協調，不能把目前的 prefix 掃描描述成強一致上限。
+
 ### `overrides_doc` — 公開的 overlay 文件
 
 `event_id`、`revision`、`json`（實際對外送出的文件）、`updated_at`、`phase`。由 `rebuildOverridesDoc()` 從 live overrides 重建；`phase` 進 ETag，讓活動階段改變時快取不會提供已撤回的內容。
@@ -121,7 +127,7 @@
 
 - 登入：`auth.link_requested`、`auth.session_created`、`auth.signed_out`
 - 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`
-- 社團自填內容：`override.updated`、`thumbnail.uploaded`（只記 MIME 與 bytes）、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
+- 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
 - 管理者名冊：`admin.added`、`admin.removed`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
@@ -138,7 +144,7 @@
 
 **保存期**：7 天，全站最短。 **到期處置**：由排程 Worker **刪除資料列**。期限最短的理由是它存的是登入信全文（含連結），而 preview 的沙盒收件人是真實的個人信箱；測試不需要昨天的信。preview 環境的 Worker 另行部署為 `tw-catalog-retention-purge-preview`。
 
-preview 清除端點會先刪除 preview R2 中由 overlay 引用的物件，再由 `clearPreviewData()` 清空 `login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`、`accounts` 八張表，**保留 admins**。它只在 preview 可達，且與排程清除無關。
+preview 清除端點會先刪除隔離 preview R2 bucket 內的全部物件（包含已發布與未確認草稿），再由 `clearPreviewData()` 清空 `login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`、`accounts` 八張表，**保留 admins**。它只在 preview 可達，且與排程清除無關。
 
 ## IP 的處理
 
