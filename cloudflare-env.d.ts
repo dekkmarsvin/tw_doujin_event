@@ -34,6 +34,11 @@ interface R2PutOptions {
 }
 
 interface R2Bucket {
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
+    objects: Array<{ key: string }>;
+    truncated: boolean;
+    cursor?: string;
+  }>;
   put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
   delete(keys: string | string[]): Promise<void>;
 }

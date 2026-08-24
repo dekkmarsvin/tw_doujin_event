@@ -151,7 +151,7 @@ export function deleteMyOverride(circleId: string) {
 }
 
 export function previewOverride(circleId: string, fields: CircleOverrideFields) {
-  return call<{ records: unknown[] }>(`/api/circle/${encodeURIComponent(circleId)}/preview`, {
+  return call<{ records: unknown[]; baseRecords: unknown[]; projectedAt: string }>(`/api/circle/${encodeURIComponent(circleId)}/preview`, {
     method: "POST",
     body: JSON.stringify({ fields }),
   });
@@ -159,10 +159,10 @@ export function previewOverride(circleId: string, fields: CircleOverrideFields) 
 
 /** `retention` is omitted rather than guessed when the circle has not chosen:
  * the server leaves the stored answer alone, and no answer is never a purge. */
-export function saveOverride(circleId: string, fields: CircleOverrideFields, retention: CircleRetentionChoice | null) {
+export function saveOverride(circleId: string, fields: CircleOverrideFields, retention: CircleRetentionChoice | null, hostedThumbnailKey?: string) {
   return call<{ ok: true }>(`/api/circle/${encodeURIComponent(circleId)}/overrides`, {
     method: "PUT",
-    body: JSON.stringify(retention ? { fields, retention } : { fields }),
+    body: JSON.stringify({ fields, ...(retention ? { retention } : {}), ...(hostedThumbnailKey ? { hostedThumbnailKey } : {}) }),
   });
 }
 
@@ -193,7 +193,7 @@ export function uploadThumbnail(circleId: string, file: File, sourceUrl: string,
   body.set("file", file);
   body.set("sourceUrl", sourceUrl);
   body.set("provider", provider);
-  return call<{ ok: true; thumbnail: NonNullable<CircleOverrideFields["thumbnail"]> }>(
+  return call<{ ok: true; thumbnail: NonNullable<CircleOverrideFields["thumbnail"]>; uploadKey: string }>(
     `/api/circle/${encodeURIComponent(circleId)}/thumbnail`,
     { method: "POST", body },
   );

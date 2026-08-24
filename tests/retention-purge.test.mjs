@@ -152,7 +152,7 @@ test("deletes the rows whose own deadline has passed, and only those", async () 
   assert.equal(columns.total, 0);
 });
 
-test("deletes hosted thumbnail bytes before removing an expired override", async () => {
+test("deletes published and abandoned draft thumbnail bytes before removing an expired override", async () => {
   await repository.putOverride({
     eventId: "ff47", circleId: "ff47-hosted", fieldsJson: JSON.stringify({ saleInfo: "內容" }),
     updatedBy: "account-1", now: NOW - DAY,
@@ -160,14 +160,31 @@ test("deletes hosted thumbnail bytes before removing an expired override", async
     hostedThumbnailKey: "events/ff47/circles/ff47-hosted/hash.webp",
   });
   const calls = [];
+  const listPrefixes = [];
+  const objectKeys = [
+    "events/ff47/circles/ff47-hosted/hash.webp",
+    "events/ff47/circles/ff47-hosted/draft.png",
+    "events/ff47/circles/another/keep.png",
+  ];
   await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, {
+    list: async ({ prefix } = {}) => {
+      listPrefixes.push(prefix);
+      return {
+        objects: objectKeys.filter((key) => !prefix || key.startsWith(prefix)).map((key) => ({ key })),
+        truncated: false,
+      };
+    },
     delete: async (keys) => {
       calls.push(keys);
       const row = await database.prepare("SELECT circle_id FROM circle_overrides WHERE circle_id = 'ff47-hosted'").first();
       assert.ok(row, "R2 bytes are deleted while the row still makes the operation retryable");
     },
   });
-  assert.deepEqual(calls, [["events/ff47/circles/ff47-hosted/hash.webp"]]);
+  assert.deepEqual(calls, [[
+    "events/ff47/circles/ff47-hosted/hash.webp",
+    "events/ff47/circles/ff47-hosted/draft.png",
+  ]]);
+  assert.deepEqual(listPrefixes, ["events/ff47/circles/"], "R2 is listed once per due event, not once per circle");
   assert.equal(await database.prepare("SELECT circle_id FROM circle_overrides WHERE circle_id = 'ff47-hosted'").first(), null);
 });
 

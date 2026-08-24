@@ -16,6 +16,8 @@ const miniflare = new Miniflare(convertV4MiniflareOptions({
 const database = await miniflare.getD1Database("DB");
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
+const previewObjects = new Set(["events/ff47/circles/c-000001/published.webp", "events/ff47/circles/c-000001/draft.png"]);
+
 const env = {
   PREVIEW_MAIL_SINK: "d1",
   PREVIEW_TEST_RECIPIENTS: "preview-admin@example.test, preview-circle@example.test",
@@ -23,6 +25,10 @@ const env = {
   PREVIEW_E2E_TOKEN: "a-private-preview-token",
   ADMIN_EMAILS: "preview-admin@example.test",
   DB: database,
+  THUMBNAILS: {
+    list: async () => ({ objects: [...previewObjects].map((key) => ({ key })), truncated: false }),
+    delete: async (keys) => { (Array.isArray(keys) ? keys : [keys]).forEach((key) => previewObjects.delete(key)); },
+  },
 };
 
 test("preview mail sink accepts only explicit test recipients", () => {
@@ -73,6 +79,7 @@ test("preview route reads and clears captured mail only with its dedicated token
     headers: { "x-preview-e2e-token": env.PREVIEW_E2E_TOKEN },
   }), env });
   assert.equal(cleared.status, 200);
+  assert.deepEqual([...previewObjects], [], "preview reset removes published and staged-only objects");
   assert.equal(await repository.latestPreviewMail("preview-circle@example.test"), null);
   assert.equal(await repository.isAdminEmail("preview-admin@example.test"), true);
 });

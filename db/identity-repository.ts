@@ -365,6 +365,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
+  /** All historical scopes matter when deleting an account: staged R2 objects
+   * are keyed by event/circle even when they were never published to D1. */
+  async function listClaimScopesForAccount(accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT DISTINCT event_id, circle_id FROM circle_claims WHERE account_id = ?1 ORDER BY event_id, circle_id`,
+    ).bind(accountId).all<{ event_id: string; circle_id: string }>();
+    return result.results;
+  }
+
   async function listClaimsByStatus(eventId: string, status: ClaimStatus, limit = 100) {
     await ensureTables();
     const result = await database.prepare(
@@ -575,7 +585,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     countLoginTokensSince, createLoginToken, consumeLoginToken,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, deleteAccount,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys,
-    createClaim, getClaim, listClaimsForAccount, listClaimsByStatus,
+    createClaim, getClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,

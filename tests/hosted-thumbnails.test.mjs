@@ -41,3 +41,11 @@ test("enforces the 2 MiB limit before storing bytes", async () => {
     /2 MiB/,
   );
 });
+
+test("R2 object deletion is split at the 1000-key Workers API boundary", async () => {
+  const calls = [];
+  const keys = Array.from({ length: 1001 }, (_, index) => `object-${index}`);
+  await thumbnails.deleteObjectKeys({ delete: async (batch) => calls.push(batch) }, keys);
+  assert.deepEqual(calls.map((batch) => batch.length), [1000, 1]);
+  assert.deepEqual(calls.flat(), keys);
+});

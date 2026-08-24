@@ -87,28 +87,28 @@ jobs:
             --project-name=tw-catalog
             --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
 
-      # Production is public at the custom domain. These requests intentionally
-      # carry no Access headers: a 302 would mean the public hostname was gated
-      # again, while 401 from the session route proves the Functions ran.
-      - name: Smoke test public production
+      # Gate the deployment on the Pages production origin. The custom domain
+      # has a separate advisory check below because zone security rules can
+      # reject a GitHub-hosted runner even while the public application is live.
+      - name: Smoke test production deployment
         if: github.event_name != 'pull_request' && github.ref_name == 'main'
         env:
-          BASE_URL: https://map.kotoban.top
+          BASE_URL: https://tw-catalog.pages.dev
         run: |
           for attempt in $(seq 1 8); do
             static_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/" || echo 000)
             session_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/auth/session" || echo 000)
             if [ "$static_code" = "200" ] && [ "$session_code" = "401" ]; then
-              echo "Public production is live; static assets returned 200 and Functions returned the expected anonymous 401."
+              echo "Production deployment is live; static assets returned 200 and Functions returned the expected anonymous 401."
               exit 0
             fi
             echo "attempt $attempt: / returned $static_code; /api/auth/session returned $session_code"
             sleep 3
           done
           if [ "$static_code" = "301" ] || [ "$static_code" = "302" ]; then
-            echo "::error::Public production redirected instead of returning 200; verify map.kotoban.top is not covered by Access."
+            echo "::error::Pages production origin redirected instead of returning 200; verify tw-catalog.pages.dev is not covered by Access."
           else
-            echo "::error::Public production returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401."
+            echo "::error::Production deployment returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401."
           fi
           exit 1
 
@@ -119,7 +119,7 @@ jobs:
       - name: Smoke test preview Access and application
         if: github.event_name == 'pull_request' || github.ref_name != 'main'
         env:
-          BASE_URL: https://${{ github.event_name == 'pull_request' && format('pr-{0}.', github.event.number) || format('{0}.', github.ref_name) }}tw-catalog.pages.dev
+          BASE_URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
           IMMUTABLE_URL: ${{ steps.deploy.outputs.deployment-url }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
@@ -131,7 +131,7 @@ jobs:
 
           for preview_url in "$BASE_URL" "$IMMUTABLE_URL"; do
             if [ -z "$preview_url" ]; then
-              echo "::error::Wrangler did not report an immutable preview deployment URL."
+              echo "::error::Wrangler did not report both preview alias and immutable deployment URLs."
               exit 1
             fi
             anonymous=$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{redirect_url}' "$preview_url/" || echo '000 ')
@@ -177,6 +177,79 @@ jobs:
             echo "::error::Preview returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401 after Access."
           fi
           exit 1
+
+
+  # map.kotoban.top is the reader-facing production hostname. Keep observing it
+  # anonymously, but do not turn a zone-level block of GitHub runner traffic into
+  # a failed deployment after the Pages origin has already passed its smoke test.
+  production-availability:
+    name: Observe public production custom domain
+    if: github.event_name != 'pull_request' && github.ref_name == 'main'
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Check anonymous production reachability
+        shell: bash
+        env:
+          BASE_URL: https://map.kotoban.top
+        run: |
+          request() {
+            local label="$1"
+            local url="$2"
+            local headers="$RUNNER_TEMP/$label.headers"
+            local body="$RUNNER_TEMP/$label.body"
+            local code
+
+            if code=$(curl --silent --show-error --connect-timeout 3 --max-time 5 \
+              --dump-header "$headers" \
+              --output "$body" \
+              --write-out '%{http_code}' \
+              "$url"); then
+              printf '%s' "$code"
+            else
+              printf '000'
+            fi
+          }
+
+          diagnose() {
+            local label="$1"
+            local headers="$RUNNER_TEMP/$label.headers"
+            local body="$RUNNER_TEMP/$label.body"
+            local body_preview
+
+            echo "$label response diagnostics:"
+            if [ -s "$headers" ]; then
+              grep --ignore-case --extended-regexp \
+                '^(date|server|cf-ray|cf-mitigated|cf-cache-status|location|content-type):' \
+                "$headers" || true
+            else
+              echo "no response headers captured"
+            fi
+            if [ -s "$body" ]; then
+              body_preview=$(head --bytes 512 "$body" | tr '\r\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')
+              printf 'body preview: %s\n' "$body_preview"
+            else
+              echo "no response body captured"
+            fi
+          }
+
+          for attempt in $(seq 1 8); do
+            static_code=$(request static "$BASE_URL/")
+            session_code=$(request session "$BASE_URL/api/auth/session")
+            if [ "$static_code" = "200" ] && [ "$session_code" = "401" ]; then
+              echo "Public production custom domain is live; static assets returned 200 and Functions returned the expected anonymous 401."
+              exit 0
+            fi
+            echo "attempt $attempt: / returned $static_code; /api/auth/session returned $session_code"
+            sleep 3
+          done
+
+          echo "UTC diagnostic time: $(date --utc --iso-8601=seconds)"
+          diagnose static
+          diagnose session
+          echo "::warning::Public production custom domain returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401. The Pages deployment passed separately, so inspect Cloudflare Security Events using the captured cf-ray values."
 
 
   # Every PR uses the same disposable preview D1. A separate globally serialized
