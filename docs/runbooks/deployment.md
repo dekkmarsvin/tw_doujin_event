@@ -5,7 +5,7 @@
 | 用途 | 網址 | Access |
 |---|---|---|
 | 正式公開入口 | <https://map.kotoban.top/> | 無；一般閱讀公開，社團端由應用層驗證 |
-| Pages production origin | <https://tw-catalog.pages.dev/> | 無；可直接存取，但不是文件與 CI 的正式網址 |
+| Pages production origin | <https://tw-catalog.pages.dev/> | 無；只作 deployment smoke 與故障排查，不是對外正式入口 |
 | PR alias／不可變 deployment | `https://pr-<N>.tw-catalog.pages.dev`／`https://<hash>.tw-catalog.pages.dev` | 有；維護者登入或 CI Service Auth |
 
 `map.kotoban.top` 必須在 Pages project 的 **Custom domains** 顯示 Active，並使用 Cloudflare proxy。該 hostname 不啟用 Browser Insights／Web Analytics：專案不使用分析追蹤，既有 CSP 也會阻擋 Cloudflare 注入的 beacon；看到 `static.cloudflareinsights.com` 的 CSP console error 時應關閉 zone 設定，不得為它放寬 `script-src`。
@@ -183,7 +183,7 @@ curl -sI https://map.kotoban.top/circle | grep -ci '^content-security-policy'
 
 | 觸發 | 行為 |
 |---|---|
-| push 到 `main` | 完整 gate 通過後以 branch `main` 發布到 `tw-catalog`，再匿名 smoke test 正式入口 `map.kotoban.top` |
+| push 到 `main` | 完整 gate 通過後以 branch `main` 發布到 `tw-catalog`；production origin smoke 必須通過，再以獨立 job 匿名觀測正式入口 `map.kotoban.top` |
 | 同 repository 的 pull request | 以 branch `pr-<number>` 發布到**同一個 project**，網址 `pr-<number>.tw-catalog.pages.dev`；不覆蓋 production |
 | fork pull request | **不執行 deploy job**，避免把 Cloudflare token 暴露給外部程式碼 |
 | `workflow_dispatch` | 從 GitHub Actions 頁面手動重跑目前 branch |
@@ -193,7 +193,8 @@ curl -sI https://map.kotoban.top/circle | grep -ci '^content-security-policy'
 - Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；preview 的 Mailgun 用 sandbox 那一組，永遠不是 production 的。
-- **401 wiring smoke 與完整 portal E2E 是兩件事。** 「Smoke test deployment」只證明靜態資產上線；「Smoke test Functions」的 401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
+- **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
+- `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
 - E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、公開文件、audit 與 captured mail；admins roster 保留供下一次重跑。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
@@ -300,7 +301,7 @@ gh secret set CLOUDFLARE_API_TOKEN
 
 部署以外，CI 還需要 `PREVIEW_E2E_TOKEN` 與一組 Access service token（`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`），後者見 [CI 用 service token 通過 preview Access](#ci-用-service-token-通過-preview-access)。
 
-完成後 push `main`，第一次 workflow 會建立 production deployment。在 Pages project 的 **Custom domains** 將 `map.kotoban.top` 設為 Active，然後以正式網域完成匿名 smoke；`tw-catalog.pages.dev` 只作為 Pages origin 與故障排查入口。
+完成後 push `main`，第一次 workflow 會建立 production deployment。在 Pages project 的 **Custom domains** 將 `map.kotoban.top` 設為 Active。CI 以 `tw-catalog.pages.dev` 完成阻擋式 deployment smoke，再以正式網域執行非阻塞匿名觀測；前者只作部署驗證與故障排查，正式入口仍是 `map.kotoban.top`。
 
 ## Cloudflare Access：production 公開，preview 閘控
 
@@ -323,6 +324,13 @@ curl -s -o /dev/null -w "/api/auth/session %{http_code}\n" https://map.kotoban.t
 
 前三個路徑必須是 `200`，未登入 session 必須是應用程式自己的 `401`，不得導向 `*.cloudflareaccess.com`。
 
+### production CI 的兩個訊號
+
+- `Smoke test production deployment` 對 `tw-catalog.pages.dev` 匿名要求 `/` 200、`/api/auth/session` 401；這是 deployment job 的必要 gate。
+- `Observe public production custom domain` 在 deployment job 通過後，對 `map.kotoban.top` 匿名要求同一組狀態碼。這個 job 不帶 Access header，也不阻擋部署。
+
+正式網域若回傳非預期狀態，job 會留下 warning、UTC 時間、`cf-ray` 等回應標頭與短 body preview。先以 Ray ID 到 Cloudflare **Security → Events** 對照規則，再從另一個網路位置重測；不要替 production 加入 service token 或 Access Bypass。若 production origin 同時失敗，則視為 deployment 本身異常。
+
 preview 不帶 header：
 
 ```bash
@@ -334,7 +342,7 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://<hash>.tw-catal
 
 ### CI 用 service token 通過 preview Access
 
-GitHub Actions 不是瀏覽器，走不完 identity 登入流程，所以 preview smoke 與 portal E2E 以 **Access service token** 認證；production smoke 不得帶這組 header。
+GitHub Actions 不是瀏覽器，走不完 identity 登入流程，所以 preview smoke 與 portal E2E 以 **Access service token** 認證；production origin smoke 與正式網域觀測都不得帶這組 header。
 
 ```
 CF-Access-Client-Id: <CLIENT_ID>
@@ -356,7 +364,7 @@ CF-Access-Client-Secret: <CLIENT_SECRET>
 
 PR deploy job 的 preview smoke 與 `scripts/preview-portal-e2e.mjs` 都會帶這組 header；缺任一個 secret 時 preview job 直接失敗。production job 不讀這兩個 secret。
 
-preview 若只看 `curl --fail` 會量錯東西：Access 對未認證請求回 302 而不是 4xx。CI 因此先斷言匿名請求確實導向 Access，再帶 service token 斷言 `/` 是 200、`/api/auth/session` 是應用程式自己的 401。production 則全程匿名斷言同一組狀態碼。
+preview 若只看 `curl --fail` 會量錯東西：Access 對未認證請求回 302 而不是 4xx。CI 因此先斷言匿名請求確實導向 Access，再帶 service token 斷言 `/` 是 200、`/api/auth/session` 是應用程式自己的 401。production 的 origin gate 與正式網域觀測則全程匿名檢查同一組狀態碼。
 
 token 過期或被撤銷、或 policy 被改成 Allow 時，CI 會報 `Service token was redirected by Access`。錯誤訊息會附上 Access 在登入導向裡宣告的 `service_token_status`，用來分辨兩者：
 
