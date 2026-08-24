@@ -27,6 +27,8 @@
 
 不使用 advanced mode 是硬邊界：它會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker。Pages 自動產生的路由表只涵蓋 `functions/` 下實際存在的路徑，其餘靜態資源仍由邊緣直送。
 
+Pages project 的 production 與 preview 都必須使用 **Fail open**（Dashboard → Workers & Pages → `tw-catalog` → Settings → Runtime → Fail open / closed）。Cloudflare 沒有提供降低每日額度或模擬 Error 1027 的安全測試介面，因此不刻意耗盡正式帳號額度；CI 每次部署後會透過 Pages project API 校正並驗證兩個環境的 `fail_open: true`。這項決策見 [ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)。
+
 `app/editor/`、`app/api/`、`worker/` 與 `drizzle/` 保留在 source tree 供本機地圖 authoring 使用；`vite.pages.config.ts` 不會把它們納入公開 bundle。
 
 公開 build 有兩個 entry：`index.html`（閱讀端，可離線）與 `circle.html`（社團控制面，`noindex`）。社團入口的程式碼不得出現在閱讀端 bundle，`tests/rendered-html.test.mjs` 會以內容比對把關。

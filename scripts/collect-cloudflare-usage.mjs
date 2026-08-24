@@ -11,12 +11,16 @@ const date = valueAfter("--date") ?? yesterday;
 const statePath = path.resolve(root, valueAfter("--state") ?? ".cloudflare-usage/history.json");
 const summaryPath = valueAfter("--summary") ? path.resolve(root, valueAfter("--summary")) : null;
 const reportOnly = args.includes("--report-only");
+const allowEmptyHistory = args.includes("--allow-empty-history");
 if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("--date must be YYYY-MM-DD.");
 
 const config = JSON.parse(await readFile(path.join(root, "monitoring", "cloudflare-usage.config.json"), "utf8"));
 const limits = process.env.CLOUDFLARE_USAGE_LIMITS_JSON ? JSON.parse(process.env.CLOUDFLARE_USAGE_LIMITS_JSON) : null;
 let history = await readFile(statePath, "utf8").then(JSON.parse).then(parseHistory).catch((error) => {
-  if (error?.code === "ENOENT") return emptyHistory();
+  if (error?.code === "ENOENT" && allowEmptyHistory) return emptyHistory();
+  if (error?.code === "ENOENT") {
+    throw new Error(`Cloudflare usage history is missing at ${statePath}. Restore it or pass --allow-empty-history for an explicit baseline reset.`);
+  }
   throw error;
 });
 

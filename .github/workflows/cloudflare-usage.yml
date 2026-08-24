@@ -9,6 +9,15 @@ on:
         description: UTC day to collect (YYYY-MM-DD); blank means yesterday
         required: false
         type: string
+      allow_history_reset:
+        description: Explicitly start a new baseline if saved history cannot be restored
+        required: false
+        default: false
+        type: boolean
+      history_reset_reason:
+        description: Required explanation when allow_history_reset is enabled
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -43,14 +52,24 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_USAGE_LIMITS_JSON: ${{ secrets.CLOUDFLARE_USAGE_LIMITS_JSON }}
           REQUESTED_DATE: ${{ inputs.date }}
+          ALLOW_HISTORY_RESET: ${{ inputs.allow_history_reset }}
+          HISTORY_RESET_REASON: ${{ inputs.history_reset_reason }}
         shell: bash
         run: |
           args=(--summary "$GITHUB_STEP_SUMMARY")
           if [ -n "$REQUESTED_DATE" ]; then args+=(--date "$REQUESTED_DATE"); fi
+          if [ "$ALLOW_HISTORY_RESET" = "true" ]; then
+            if [ -z "${HISTORY_RESET_REASON// }" ]; then
+              echo "::error::history_reset_reason is required when allow_history_reset is enabled."
+              exit 1
+            fi
+            args+=(--allow-empty-history)
+            echo "::warning::Cloudflare usage baseline reset was explicitly allowed: $HISTORY_RESET_REASON"
+          fi
           npm run usage:collect -- "${args[@]}"
 
       - name: Save usage history and failed-query diagnostics
-        if: always()
+        if: always() && hashFiles('.cloudflare-usage/history.json') != ''
         uses: actions/cache/save@v5
         with:
           path: .cloudflare-usage/history.json

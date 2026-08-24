@@ -5,8 +5,8 @@ import test from "node:test";
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("human contributors can find the gate, documentation authority and data-source boundary", async () => {
-  const [readme, contributing, conduct] = await Promise.all([
-    read("README.md"), read("CONTRIBUTING.md"), read("CODE_OF_CONDUCT.md"),
+  const [readme, contributing, conduct, context, catalogContract] = await Promise.all([
+    read("README.md"), read("CONTRIBUTING.md"), read("CODE_OF_CONDUCT.md"), read("CONTEXT.md"), read("docs/contracts/circle-catalog.md"),
   ]);
   assert.match(readme, /CONTRIBUTING\.md/);
   for (const command of ["npm test", "npm run lint", "npx tsc --noEmit --incremental false"]) assert.match(contributing, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -14,6 +14,8 @@ test("human contributors can find the gate, documentation authority and data-sou
   assert.match(contributing, /docs\/README\.md#維護規則/);
   assert.match(contributing, /完整 commit SHA[\s\S]*SHA-256/);
   assert.match(conduct, /maintain@kotoban\.top/);
+  assert.match(context, /主辦官方說明頁面[\s\S]*社團本人自填[\s\S]*不再有工作簿/);
+  assert.match(catalogContract, /reviewed base[\s\S]*社團本人[\s\S]*overlay[\s\S]*不具輸入、fallback 或補充地位/);
 });
 
 test("every issue form enters the canonical triage flow", async () => {

@@ -17,6 +17,8 @@
 
 `.github/workflows/cloudflare-usage.yml` 每日 06:17 UTC 收集前一個 UTC 日，並把 `.cloudflare-usage/history.json` 保存在跨 run cache。失敗時仍保存查詢錯誤狀態，並在 workflow summary 顯示報表。
 
+cache 沒有保存承諾，因此排程找不到 history 時必須失敗，不能靜默建立空基線。先確認是否能從先前 run 或備份恢復；確定無法恢復時，才以手動 workflow 勾選 `allow_history_reset` 並填寫 `history_reset_reason`。這會在 summary 留下 warning，之後的 7／30 日趨勢從新基線重新累積。
+
 Repository secrets：
 
 | Secret | 內容 |
@@ -37,6 +39,12 @@ PowerShell：
 $env:CLOUDFLARE_API_TOKEN = "<account-analytics-read token>"
 $env:CLOUDFLARE_ACCOUNT_ID = "<account id>"
 npm run usage:collect -- --date 2026-08-20
+```
+
+第一次建立本機基線，或明確放棄無法恢復的本機 history 時，額外加入 `--allow-empty-history`。平常漏掉 `.cloudflare-usage/history.json` 會直接失敗：
+
+```powershell
+npm run usage:collect -- --date 2026-08-20 --allow-empty-history
 ```
 
 報表重算不呼叫 API：

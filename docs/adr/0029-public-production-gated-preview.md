@@ -1,6 +1,6 @@
 # ADR-0029：production 公開、preview 持續受 Access 保護
 
-- 狀態：已定案（2026-08-21）
+- 狀態：已定案（2026-08-21）；Error 1027 實測 gate 已由 [ADR-0031](./0031-quota-exhaustion-is-not-a-release-gate.md) 取代
 - 具體化：[ADR-0015](./0015-access-lifts-when-no-third-party-bytes-remain.md)
 - 相關 issue：[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)
 

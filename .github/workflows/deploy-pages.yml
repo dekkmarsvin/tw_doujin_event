@@ -67,6 +67,13 @@ jobs:
           echo "::add-mask::$token"
           printf 'token=%s\n' "$token" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure Pages Functions fail open at quota exhaustion
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-auth.outputs.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: tw-catalog
+        run: node scripts/ensure-pages-fail-open.mjs
+
       - name: Deploy to Cloudflare Pages
         id: deploy
         uses: cloudflare/wrangler-action@v4

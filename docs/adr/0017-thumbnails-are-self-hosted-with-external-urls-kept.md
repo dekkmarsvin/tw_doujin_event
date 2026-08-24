@@ -1,6 +1,6 @@
 # ADR-0017：縮圖由本站代管，外部網址保留為第二條線
 
-- 狀態：已定案（2026-08-19）
+- 狀態：已定案（2026-08-19）；Error 1027 的未實測後果敘述已由 [ADR-0031](./0031-quota-exhaustion-is-not-a-release-gate.md) 取代
 - 實作：[#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)（2026-08-21）
 - 延續：[ADR-0012：資料來源只留主辦官網與社團本人](./0012-first-party-sources-only.md)
 - 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)

@@ -75,6 +75,8 @@
 | [0027](./adr/0027-personal-data-lifecycle-and-account-deletion.md) | 帳號刪除、audit 塗銷與 IP 雜湊 90 天期限 |
 | [0028](./adr/0028-versioned-json-event-definitions.md) | 活動定義使用版本化 JSON |
 | [0029](./adr/0029-public-production-gated-preview.md) | production 公開、preview 持續受 Access 保護 |
+| [0030](./adr/0030-organizer-category-catalog-circle-selected-value.md) | 主辦分類目錄是活動資料，逐社團類別是社團自述 |
+| [0031](./adr/0031-quota-exhaustion-is-not-a-release-gate.md) | 不以不可安全重現的配額耗盡作發布 gate，Pages Functions 設為 fail-open |
 
 ## 對外文件
 

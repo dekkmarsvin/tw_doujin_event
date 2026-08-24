@@ -54,11 +54,13 @@
 | `/sw.js` | `no-cache`（另帶 `Service-Worker-Allowed: /`） |
 | `/manifest.webmanifest` | `public, max-age=3600` |
 
-reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓社團儲存與管理者 takedown 約一分鐘內可見。Service Worker 不保存 overlay：離線或 freshness 無法確認時使用完整 base，不把可能任意過期的 overlay 描述成即時資料。
+reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓社團儲存與管理者 takedown 約一分鐘內可見。Service Worker 不保存 overlay：離線或 freshness 無法確認時使用完整 base，不把可能任意過期的 overlay 描述成即時資料。base 的資料只來自各活動主辦官方說明頁面；overlay 只來自社團本人自填，沒有工作簿或其他資料來源。
 
 **overlay 的每一次 revalidation 都是一次 Function 呼叫，包含回 304 的那些。** strong ETag 省的是頻寬，不是配額：304 的分支在 Function 內部，且在算出 ETag 之前已經讀過一次 D1。Cloudflare 的邊緣不會在 Function 之前擋下這些請求——Workers Cache 是 `wrangler.jsonc` 的 `cache.enabled` 選項，目前沒有開；zone 層的預設快取副檔名清單也不含 `.json`。因此免費方案每日 100,000 次的上限，換算是每天 100,000 個「活躍讀者分鐘」，而不是十萬名讀者。實測見 [#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)。
 
-由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份配額，而 Error 1027 的後果是 overlay 消失。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
+Cloudflare 沒有提供降低帳號每日上限或模擬 Error 1027 的測試介面；真正耗盡免費額度會影響同帳號服務，因此不以受控實驗消耗正式額度。部署流程改以 Pages project API 驗證並設定 production／preview 的 `fail_open: true`；這是可重複驗收的配置契約。配額耗盡的實際端到端行為不再是發布 gate，見 [ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)。
+
+由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份配額。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
 
 同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 只允許 `'self'`、`data:` 與 `THUMBNAIL_HOST_ALLOWLIST` 的主機，**不含裸 `https:`**。這份清單的唯一權威在 `app/circle-overrides.ts`，`_headers` 與它不一致時 `tests/circle-overrides.test.mjs` 失敗，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
