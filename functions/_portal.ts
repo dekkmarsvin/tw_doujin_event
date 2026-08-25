@@ -5,6 +5,7 @@ import { createIdentityRepository, type IdentityRepository } from "../db/identit
 import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
+import { isPublishedEventMap } from "../app/event-map";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -284,6 +285,16 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     },
     delete: (keys) => env.MAP_CONTRIBUTIONS!.delete(keys),
   } : undefined;
+  const readPublishedEventMap = async (targetPath: string) => {
+    const response = await env.ASSETS.fetch(new Request(new URL(
+      `/data/events/${encodeURIComponent(eventId)}/${targetPath}`,
+      request.url,
+    ).toString()));
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Published map read failed (${response.status}).`);
+    const value: unknown = await response.json();
+    return isPublishedEventMap(value) && value.eventId === eventId ? value : null;
+  };
   return createCirclePortalHandlers({
     repository,
     sendMail: async (message) => {
@@ -317,6 +328,41 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     thumbnailStore,
     mapContributionStore,
+    resolveMapContributionScope: async ({ periodKey, venueSpaceId }) => {
+      const { payload, event } = await catalog(env, request, eventId);
+      const period = event.days.find(({ id }) => String(id) === periodKey || `day-${String(id)}` === periodKey);
+      const venue = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
+      if (!period || !venue) return null;
+      const targetPath = event.venueAssignments.length === 1
+        ? "map.json"
+        : `maps/${encodeURIComponent(periodKey)}/${encodeURIComponent(venueSpaceId)}.json`;
+      const areaIds = new Set(venue.areaIds);
+      const activePlacements = payload.placements.filter((placement) => placement.status !== "cancelled" && areaIds.has(placement.area));
+      const published = await readPublishedEventMap(targetPath);
+      // Empty official booth slots have no placement row but are still valid
+      // geometry. The reviewed public snapshot is authoritative for those
+      // codes; placements add newly announced occupied/moved booths.
+      const allowedBoothCodes = [...new Set([
+        ...activePlacements.map(({ boothCode }) => boothCode),
+        ...(published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? []),
+      ])].sort();
+      const requiredBoothCodes = [...new Set(activePlacements
+        .filter((placement) => String(placement.day) === String(period.id))
+        .map(({ boothCode }) => boothCode))].sort();
+      return {
+        eventId,
+        periodKey,
+        venueSpaceId,
+        mapTemplate: event.mapTemplate,
+        allowedBoothCodes,
+        requiredBoothCodes,
+        // Today's public contract has one event-level map only when one venue
+        // assignment makes it unambiguous. Multi-space candidates stay scoped
+        // and require a later event-data/public contract change before publish.
+        targetPath,
+      };
+    },
+    readPublishedEventMap,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.

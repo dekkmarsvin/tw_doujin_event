@@ -26,10 +26,11 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     if (origin !== url.origin) return json({ error: "來源不符，請重新整理後再試。" }, 403);
 
     const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    const thumbnailUpload = request.method === "POST"
-      && /^\/api\/circle\/[^/]+\/thumbnail$/.test(url.pathname)
+    const privateFileUpload = request.method === "POST"
+      && (/^\/api\/circle\/[^/]+\/thumbnail$/.test(url.pathname)
+        || url.pathname === "/api/map-contributions/files")
       && contentType === "multipart/form-data";
-    if (contentType !== "application/json" && !thumbnailUpload) return json({ error: "請求格式無效。" }, 415);
+    if (contentType !== "application/json" && !privateFileUpload) return json({ error: "請求格式無效。" }, 415);
   }
 
   const response = await context.next();

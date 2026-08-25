@@ -115,28 +115,53 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
   if (!Array.isArray(layout.accessPoints)) errors.push("accessPoints 必須是陣列。" );
   if (!Array.isArray(layout.landmarks)) errors.push("landmarks 必須是陣列。" );
   if (Array.isArray(layout.rows)) {
-    const labels = layout.rows.map((row) => row.label);
-    const uniqueLabels = new Set(labels);
-    if (uniqueLabels.size !== labels.length) errors.push("row label 不可重複。" );
-
+    const labels = new Set<string>();
     const codes = new Set<string>();
-    layout.rows.forEach((row) => {
+    layout.rows.forEach((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("每一排都必須是物件。" ); return; }
+      const row = candidate as Partial<BoothRow>;
       if (typeof row.label !== "string" || !row.label.trim()) errors.push("每一排都必須有標籤。" );
+      else if (labels.has(row.label)) errors.push("row label 不可重複。" );
+      else labels.add(row.label);
       if (row.orientation !== "vertical" && row.orientation !== "horizontal") errors.push(`${row.label || "未命名"} 排方向無效。`);
+      if (!Number.isFinite(row.confidence) || Number(row.confidence) < 0 || Number(row.confidence) > 1) errors.push(`${row.label || "未命名"} 排 confidence 必須介於 0 與 1。`);
       if (!Array.isArray(row.slots)) errors.push(`${row.label || "未命名"} 排的 slots 必須是陣列。`);
-      row.slots?.forEach((slot) => {
+      if (Array.isArray(row.slots)) row.slots.forEach((candidateSlot) => {
+        if (!candidateSlot || typeof candidateSlot !== "object" || Array.isArray(candidateSlot)) { errors.push(`${row.label || "未命名"} 排的攤位必須是物件。`); return; }
+        const slot = candidateSlot as Partial<BoothSlot>;
         if (typeof slot.code !== "string" || !slot.code.trim()) errors.push(`${row.label || "未命名"} 排有攤位缺少代碼。`);
-        if (codes.has(slot.code)) errors.push(`攤位代碼 ${slot.code} 重複。`);
-        codes.add(slot.code);
-        if (!finiteRect(slot.rect, width, height)) errors.push(`${slot.code} 的矩形座標無效。`);
+        else if (codes.has(slot.code)) errors.push(`攤位代碼 ${slot.code} 重複。`);
+        else codes.add(slot.code);
+        if (!slot.rect || !finiteRect(slot.rect, width, height)) errors.push(`${slot.code || "未命名攤位"} 的矩形座標無效。`);
       });
     });
   }
 
-  layout.pillars?.forEach((pillar) => { if (!finiteRect(pillar, width, height)) errors.push(`柱子 ${pillar.id} 的矩形座標無效。`); });
-  layout.accessPoints?.forEach((point) => {
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.y < 0 || point.x > width || point.y > height) errors.push(`出入口 ${point.id} 的座標無效。`);
-  });
+  if (Array.isArray(layout.pillars)) {
+    const pillarIds = new Set<string>();
+    layout.pillars.forEach((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("每一根柱子都必須是物件。" ); return; }
+      const pillar = candidate as Partial<MapPillar>;
+      if (typeof pillar.id !== "string" || !pillar.id.trim()) errors.push("每一根柱子都必須有 id。" );
+      else if (pillarIds.has(pillar.id)) errors.push(`柱子 id ${pillar.id} 重複。`);
+      else pillarIds.add(pillar.id);
+      if (!finiteRect(pillar as MapRect, width, height)) errors.push(`柱子 ${pillar.id || "未命名"} 的矩形座標無效。`);
+    });
+  }
+  if (Array.isArray(layout.accessPoints)) {
+    const accessIds = new Set<string>();
+    layout.accessPoints.forEach((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("每一個出入口都必須是物件。" ); return; }
+      const point = candidate as Partial<MapAccessPoint>;
+      if (typeof point.id !== "string" || !point.id.trim()) errors.push("每一個出入口都必須有 id。" );
+      else if (accessIds.has(point.id)) errors.push(`出入口 id ${point.id} 重複。`);
+      else accessIds.add(point.id);
+      if (point.kind !== "entrance" && point.kind !== "exit") errors.push(`出入口 ${point.id || "未命名"} 的類型無效。`);
+      if (point.direction !== "north" && point.direction !== "south") errors.push(`出入口 ${point.id || "未命名"} 的方向無效。`);
+      if (typeof point.label !== "string" || !point.label.trim()) errors.push(`出入口 ${point.id || "未命名"} 必須有顯示名稱。`);
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`出入口 ${point.id || "未命名"} 的座標無效。`);
+    });
+  }
   if (Array.isArray(layout.landmarks)) {
     const landmarkIds = new Set<string>();
     layout.landmarks.forEach((landmark) => {

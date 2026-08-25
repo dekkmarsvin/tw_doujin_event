@@ -59,11 +59,13 @@ test("a mutating request must declare json, which no html form can send", async 
   assert.equal(withCharset.status, 200);
 });
 
-test("multipart is admitted only for the same-origin thumbnail upload route", async () => {
-  const accepted = await onRequest(context(request("POST", "/api/circle/ff47-demo/thumbnail", {
-    "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
-  })));
-  assert.equal(accepted.status, 200);
+test("multipart is admitted only for the two same-origin private upload routes", async () => {
+  for (const path of ["/api/circle/ff47-demo/thumbnail", "/api/map-contributions/files"]) {
+    const accepted = await onRequest(context(request("POST", path, {
+      "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
+    })));
+    assert.equal(accepted.status, 200, `${path} must pass the shared gate`);
+  }
 
   const wrongRoute = await onRequest(context(request("POST", "/api/claims", {
     "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
@@ -132,6 +134,13 @@ test("the client declares json on every mutation, including bodyless ones", asyn
   captured = [];
   await client.manageAdmin("a@b.co", "add");
   assert.equal(captured[0].init.headers["content-type"], "application/json");
+
+  captured = [];
+  await client.uploadMapContributionEvidence({
+    draftId: "draft-a", revision: 1, file: new File(["x"], "map.png", { type: "image/png" }),
+    sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25",
+  });
+  assert.equal(captured[0].init.headers["content-type"], undefined, "the browser must add the multipart boundary");
 });
 
 test("the client never declares a content type on a read", async () => {

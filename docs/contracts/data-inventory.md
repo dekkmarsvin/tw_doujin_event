@@ -36,7 +36,7 @@
 | `sessions` | 7 天 | 到期或撤銷，取先發生者 |
 | `previewMailSink` | 7 天 | 建立時。preview 限定，且是全站唯一存有信件內文的地方 |
 | `mapDraftInactivity` | 180 天 | `draft`／`changes_requested` 最後一次活動；`submitted` 不套用此時鐘 |
-| `mapDecisionRaw` | 30 天 | `approved`／`rejected`／`exported` 的決定時間；只刪原始檔，metadata 保留 |
+| `mapDecisionRaw` | 30 天 | `approved`／`rejected`／`exported`／`withdrawn` 的決定時間；只刪原始檔，metadata 保留 |
 
 社團自述內容的期限不在這張表裡——它由社團自選並寫在資料列上，Worker 只負責執行（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。
 
@@ -124,7 +124,7 @@
 
 ### `map_drafts` 與 `map_draft_revisions` — 私人地圖草稿
 
-`map_drafts` 保存活動、period、場館空間、owner、狀態、目前 revision、活動／決定時間、內部 transition token 與清除 claim。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；#73 必須以明確替換／撤回動作釋放名額。
+`map_drafts` 保存活動、period、場館空間、owner、狀態、目前 revision、活動／決定時間、內部 transition token 與清除 claim。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
 
 **目的**：允許平行整理與可重現審閱，不直接改寫公開快照。**保存期**：`draft` 180 天無活動後整份刪除；`changes_requested` 180 天無活動後刪除 revisions 並將 owner 去識別化；`submitted` 審閱前不自動刪除。已審內容的後續處置見下兩類。
 
@@ -138,7 +138,13 @@
 
 D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期、頁碼、SHA-256、MIME、容量、尺寸／頁數、上傳者／時間、審閱結果與原始檔刪除時間。JPEG、PNG、WebP 與 PDF bytes 位於獨立的 `MAP_CONTRIBUTIONS` R2 bucket；該 bucket 沒有公開網域，只能經 owner／管理者權限檢查讀取。
 
-**目的**：保留 layout 可追溯的主辦官方證據。**保存期**：未提交或被要求修改的檔案隨草稿 180 天期限處理；`approved`／`rejected`／`exported` 決定 30 天後刪除原始 bytes 並清空 object key，永久保留來源 metadata 與審閱結果。帳號刪除時，從未提交的檔案立即刪除；已審檔案的上傳者去識別化。
+**目的**：保留 layout 可追溯的主辦官方證據。**保存期**：未提交或被要求修改的檔案隨草稿 180 天期限處理；`approved`／`rejected`／`exported`／`withdrawn` 決定 30 天後刪除原始 bytes 並清空 object key，永久保留來源 metadata 與審閱結果。帳號刪除時，從未提交的檔案立即刪除；已審檔案的上傳者去識別化。
+
+### `map_draft_exports` — event-data 候選匯出
+
+保存已核准 draft revision 的 `target_path`、候選 JSON、語意差異 JSON、SHA-256、建立者與時間；同一 draft revision 最多一份，重試回傳原列。候選只供管理者下載並建立 event-data repository 的可審查變更，不是公開資料 endpoint。
+
+**目的**：固定審閱者核准的精確幾何與匯出內容，避免下載時重新計算而漂移。**保存期**：不設期限；帳號刪除時將建立者去識別化。公開地圖仍只來自 event-data repository 的 reviewed snapshot 與 pin。
 
 ### `overrides_doc` — 公開的 overlay 文件
 

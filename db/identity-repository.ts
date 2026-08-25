@@ -16,7 +16,7 @@ import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_SCHEMA_STATEMENTS } from "./identi
 export type OverridesPhase = "during" | "after";
 export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked";
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
-export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported";
+export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 
 export type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
 
@@ -310,6 +310,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
 
     statements.push(
+      database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
       database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft'`).bind(input.accountId),
@@ -317,6 +318,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE map_draft_revisions SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_reviews SET actor_account_id = NULL WHERE actor_account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_files SET uploaded_by = NULL WHERE uploaded_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE map_draft_exports SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_contributor_grants SET granted_by = '[shredded]' WHERE granted_by = ?1`).bind(input.email),
       database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
       database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
@@ -751,6 +753,73 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }>();
   }
 
+  async function listMapDraftsForOwner(ownerAccountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT id, event_id, period_key, venue_space_id, status, current_revision,
+              created_at, updated_at, decision_at
+       FROM map_drafts WHERE owner_account_id = ?1 ORDER BY updated_at DESC`,
+    ).bind(ownerAccountId).all<{
+      id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
+      current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
+    }>();
+    return result.results;
+  }
+
+  async function listMapDraftsForAdmin() {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT d.id, d.event_id, d.period_key, d.venue_space_id, d.status, d.current_revision,
+              d.created_at, d.updated_at, d.decision_at, a.email AS owner_email
+       FROM map_drafts d LEFT JOIN accounts a ON a.id = d.owner_account_id
+       WHERE d.status <> 'draft' ORDER BY d.updated_at DESC`,
+    ).all<{
+      id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
+      current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
+      owner_email: string | null;
+    }>();
+    return result.results;
+  }
+
+  async function listMapDraftFiles(draftId: string, revision?: number) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT id, draft_id, revision, object_key, source_url, document_date, page_number, sha256, mime,
+              size_bytes, width, height, page_count, uploaded_at, review_result, raw_deleted_at
+       FROM map_draft_files WHERE draft_id = ?1 AND (?2 IS NULL OR revision = ?2)
+       ORDER BY uploaded_at ASC`,
+    ).bind(draftId, revision ?? null).all<{
+      id: string; draft_id: string; revision: number; object_key: string | null; source_url: string;
+      document_date: string; page_number: number | null; sha256: string; mime: string; size_bytes: number;
+      width: number | null; height: number | null; page_count: number | null; uploaded_at: number;
+      review_result: string | null; raw_deleted_at: number | null;
+    }>();
+    return result.results;
+  }
+
+  async function listMapDraftReviews(draftId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT revision, from_status, to_status, actor_role, note, at
+       FROM map_draft_reviews WHERE draft_id = ?1 ORDER BY at ASC, rowid ASC`,
+    ).bind(draftId).all<{
+      revision: number; from_status: MapDraftStatus; to_status: MapDraftStatus;
+      actor_role: string; note: string | null; at: number;
+    }>();
+    return result.results;
+  }
+
+  async function getActiveApprovedMapDraft(eventId: string, periodKey: string, venueSpaceId: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT id, current_revision, status FROM map_drafts
+       WHERE event_id = ?1 AND period_key = ?2 AND venue_space_id = ?3
+         AND status IN ('approved', 'exported') LIMIT 1`,
+    ).bind(eventId, periodKey, venueSpaceId).first<{
+      id: string; current_revision: number; status: "approved" | "exported";
+    }>();
+  }
+
   async function listStaleSubmittedMapDrafts(before: number) {
     await ensureTables();
     const result = await database.prepare(
@@ -822,14 +891,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function transitionMapDraft(input: {
     draftId: string;
     expectedRevision: number;
-    toStatus: "changes_requested" | "approved" | "rejected" | "exported";
+    toStatus: "changes_requested" | "rejected";
     actorAccountId: string | null;
     actorRole: "admin" | "system";
     note?: string | null;
     now: number;
   }) {
     await ensureTables();
-    const fromStatus = input.toStatus === "exported" ? "approved" : "submitted";
+    const fromStatus = "submitted";
     const decisionAt = input.toStatus === "changes_requested" ? null : input.now;
     const transitionToken = crypto.randomUUID();
     const results = await database.batch([
@@ -846,8 +915,167 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         crypto.randomUUID(), fromStatus, input.toStatus, input.actorAccountId, input.actorRole,
         input.note ?? null, input.now, input.draftId, input.expectedRevision, transitionToken,
       ),
+      database.prepare(
+        `UPDATE map_draft_files SET review_result = ?1
+         WHERE draft_id = ?2 AND revision = ?3
+           AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?2 AND d.current_revision = ?3
+             AND d.status = ?4 AND d.transition_token = ?5)`,
+      ).bind(input.toStatus, input.draftId, input.expectedRevision, input.toStatus, transitionToken),
     ]);
     return results[0].meta.changes === 1 && results[1].meta.changes === 1;
+  }
+
+  /** Explicitly withdraws the current approved/exported draft before approving
+   * its replacement. Every row change and both immutable review records share
+   * one D1 batch, so the unique scope invariant never has an open window. */
+  async function approveMapDraft(input: {
+    draftId: string;
+    expectedRevision: number;
+    replacementDraftId?: string | null;
+    actorAccountId: string;
+    note?: string | null;
+    now: number;
+  }) {
+    await ensureTables();
+    const evidence = await database.prepare(
+      `SELECT id FROM map_draft_files WHERE draft_id = ?1 AND revision = ?2 LIMIT 1`,
+    ).bind(input.draftId, input.expectedRevision).first<{ id: string }>();
+    if (!evidence) return { ok: false as const, reason: "missing_evidence" as const };
+    const active = await database.prepare(
+      `SELECT current.id, current.status FROM map_drafts target
+       JOIN map_drafts current
+         ON current.event_id = target.event_id
+        AND current.period_key = target.period_key
+        AND current.venue_space_id = target.venue_space_id
+       WHERE target.id = ?1 AND target.current_revision = ?2 AND target.status = 'submitted'
+         AND current.status IN ('approved', 'exported') LIMIT 1`,
+    ).bind(input.draftId, input.expectedRevision).first<{ id: string; status: "approved" | "exported" }>();
+    if (active && active.id !== input.replacementDraftId) return { ok: false as const, reason: "replacement_required" as const, activeDraftId: active.id };
+    if (!active && input.replacementDraftId) return { ok: false as const, reason: "replacement_mismatch" as const };
+    if (!active) {
+      const approvedToken = crypto.randomUUID();
+      const results = await database.batch([
+        database.prepare(
+          `UPDATE map_drafts SET status = 'approved', updated_at = ?1, last_activity_at = ?1,
+               decision_at = ?1, transition_token = ?2
+           WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted' AND retention_action IS NULL
+             AND EXISTS (SELECT 1 FROM map_draft_files WHERE draft_id = ?3 AND revision = ?4)`,
+        ).bind(input.now, approvedToken, input.draftId, input.expectedRevision),
+        database.prepare(
+          `INSERT INTO map_draft_reviews (
+             id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
+           ) SELECT ?1, id, current_revision, 'submitted', 'approved', ?2, 'admin', ?3, ?4
+             FROM map_drafts WHERE id = ?5 AND current_revision = ?6 AND status = 'approved' AND transition_token = ?7`,
+        ).bind(crypto.randomUUID(), input.actorAccountId, input.note ?? null, input.now, input.draftId, input.expectedRevision, approvedToken),
+        database.prepare(
+          `UPDATE map_draft_files SET review_result = 'approved_official_source'
+           WHERE draft_id = ?1 AND revision = ?2
+             AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?1 AND d.current_revision = ?2
+               AND d.status = 'approved' AND d.transition_token = ?3)`,
+        ).bind(input.draftId, input.expectedRevision, approvedToken),
+      ]);
+      const ok = results.every((result) => result.meta.changes >= 1);
+      return ok ? { ok: true as const, replacedDraftId: null } : { ok: false as const, reason: "conflict" as const };
+    }
+
+    const withdrawnToken = crypto.randomUUID();
+    const approvedToken = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE map_drafts SET status = 'withdrawn', updated_at = ?1, last_activity_at = ?1,
+             decision_at = ?1, transition_token = ?2
+         WHERE id = ?3 AND status IN ('approved', 'exported')
+           AND EXISTS (SELECT 1 FROM map_drafts target
+             WHERE target.id = ?4 AND target.current_revision = ?5 AND target.status = 'submitted'
+               AND EXISTS (SELECT 1 FROM map_draft_files evidence
+                 WHERE evidence.draft_id = target.id AND evidence.revision = target.current_revision)
+               AND target.event_id = map_drafts.event_id AND target.period_key = map_drafts.period_key
+               AND target.venue_space_id = map_drafts.venue_space_id)`,
+      ).bind(input.now, withdrawnToken, active.id, input.draftId, input.expectedRevision),
+      database.prepare(
+        `INSERT INTO map_draft_reviews (
+           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
+         ) SELECT ?1, id, current_revision, ?2, 'withdrawn', ?3, 'admin', ?4, ?5
+           FROM map_drafts WHERE id = ?6 AND status = 'withdrawn' AND transition_token = ?7`,
+      ).bind(crypto.randomUUID(), active.status, input.actorAccountId, input.note ?? null, input.now, active.id, withdrawnToken),
+      database.prepare(
+        `UPDATE map_drafts SET status = 'approved', updated_at = ?1, last_activity_at = ?1,
+             decision_at = ?1, transition_token = ?2
+         WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted'
+           AND EXISTS (SELECT 1 FROM map_draft_files WHERE draft_id = ?3 AND revision = ?4)
+           AND NOT EXISTS (SELECT 1 FROM map_drafts current
+             WHERE current.event_id = map_drafts.event_id AND current.period_key = map_drafts.period_key
+               AND current.venue_space_id = map_drafts.venue_space_id
+               AND current.status IN ('approved', 'exported'))`,
+      ).bind(input.now, approvedToken, input.draftId, input.expectedRevision),
+      database.prepare(
+        `INSERT INTO map_draft_reviews (
+           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
+         ) SELECT ?1, id, current_revision, 'submitted', 'approved', ?2, 'admin', ?3, ?4
+           FROM map_drafts WHERE id = ?5 AND current_revision = ?6 AND status = 'approved' AND transition_token = ?7`,
+      ).bind(crypto.randomUUID(), input.actorAccountId, input.note ?? null, input.now, input.draftId, input.expectedRevision, approvedToken),
+      database.prepare(
+        `UPDATE map_draft_files SET review_result = 'approved_official_source'
+         WHERE draft_id = ?1 AND revision = ?2
+           AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?1 AND d.current_revision = ?2
+             AND d.status = 'approved' AND d.transition_token = ?3)`,
+      ).bind(input.draftId, input.expectedRevision, approvedToken),
+    ]);
+    const ok = results.slice(0, 4).every((result) => result.meta.changes === 1)
+      && results[4].meta.changes >= 1;
+    return ok ? { ok: true as const, replacedDraftId: active.id } : { ok: false as const, reason: "conflict" as const };
+  }
+
+  async function getMapDraftExport(draftId: string, revision: number) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT id, draft_id, revision, target_path, candidate_json, diff_json, candidate_sha256, created_at
+       FROM map_draft_exports WHERE draft_id = ?1 AND revision = ?2`,
+    ).bind(draftId, revision).first<{
+      id: string; draft_id: string; revision: number; target_path: string; candidate_json: string;
+      diff_json: string; candidate_sha256: string; created_at: number;
+    }>();
+  }
+
+  async function exportMapDraft(input: {
+    draftId: string;
+    expectedRevision: number;
+    targetPath: string;
+    candidateJson: string;
+    diffJson: string;
+    candidateSha256: string;
+    actorAccountId: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const existing = await getMapDraftExport(input.draftId, input.expectedRevision);
+    if (existing) return existing;
+    const exportId = crypto.randomUUID();
+    const transitionToken = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `INSERT INTO map_draft_exports (
+           id, draft_id, revision, target_path, candidate_json, diff_json, candidate_sha256, created_by, created_at
+         ) SELECT ?1, id, current_revision, ?2, ?3, ?4, ?5, ?6, ?7
+           FROM map_drafts WHERE id = ?8 AND current_revision = ?9 AND status = 'approved'`,
+      ).bind(exportId, input.targetPath, input.candidateJson, input.diffJson, input.candidateSha256,
+        input.actorAccountId, input.now, input.draftId, input.expectedRevision),
+      database.prepare(
+        `UPDATE map_drafts SET status = 'exported', updated_at = ?1, last_activity_at = ?1,
+             decision_at = ?1, transition_token = ?2
+         WHERE id = ?3 AND current_revision = ?4 AND status = 'approved'
+           AND EXISTS (SELECT 1 FROM map_draft_exports e WHERE e.id = ?5 AND e.draft_id = map_drafts.id)`,
+      ).bind(input.now, transitionToken, input.draftId, input.expectedRevision, exportId),
+      database.prepare(
+        `INSERT INTO map_draft_reviews (
+           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
+         ) SELECT ?1, id, current_revision, 'approved', 'exported', ?2, 'admin', ?3, ?4
+           FROM map_drafts WHERE id = ?5 AND current_revision = ?6 AND status = 'exported' AND transition_token = ?7`,
+      ).bind(crypto.randomUUID(), input.actorAccountId, `候選匯出：${input.targetPath}`, input.now,
+        input.draftId, input.expectedRevision, transitionToken),
+    ]);
+    if (!results.every((result) => result.meta.changes === 1)) return null;
+    return getMapDraftExport(input.draftId, input.expectedRevision);
   }
 
   async function addMapDraftFile(input: {
@@ -918,7 +1146,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
-      "map_draft_files", "map_draft_reviews", "map_draft_revisions", "map_drafts", "map_contributor_grants",
+      "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
   }
@@ -934,7 +1162,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
     manageMapContributor, hasActiveMapContributor,
-    createMapDraft, getMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
+    createMapDraft, getMapDraft, listMapDraftsForOwner, listMapDraftsForAdmin, listMapDraftFiles, listMapDraftReviews,
+    getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
+    approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };

@@ -108,6 +108,15 @@ test("circle category controls consume event data rather than organizer constant
   }
 });
 
+test("map reviewers can inspect the authenticated evidence bytes before approval", async () => {
+  const panel = await readFile(new URL("../app/circle-portal/map-contribution-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /\/api\/map-contributions\/files\/\$\{encodeURIComponent\(item\.id\)\}/);
+  assert.match(panel, /預覽上傳檔/);
+  assert.match(panel, /下載上傳檔/);
+  assert.match(panel, /item\.mime\.startsWith\("image\/"\)/);
+  assert.match(panel, /原始檔已依保存期限刪除/);
+});
+
 test("circle editor has one preview-first save path across the three responsive ranges", async () => {
   const [portal, styles, details] = await Promise.all([
     readFile(new URL("../app/circle-portal/portal-app.tsx", import.meta.url), "utf8"),

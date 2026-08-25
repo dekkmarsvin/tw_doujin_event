@@ -25,10 +25,26 @@ let repository;
 let handlers;
 let sent;
 let objects;
+let scopeConfig;
+
+function validContent() {
+  return {
+    schema: "map-contribution-draft/1",
+    layout: {
+      version: 2, template: "SAMPLE", width: 100, height: 100,
+      floor: { x: 0, y: 0, width: 100, height: 100 },
+      rows: [], pillars: [], accessPoints: [], landmarks: [],
+    },
+  };
+}
 
 beforeEach(async () => {
   sent = [];
   objects = new Map();
+  scopeConfig = {
+    eventId: "ff47", periodKey: "day-1", venueSpaceId: "zhengyan-exhibition-area", mapTemplate: "SAMPLE",
+    allowedBoothCodes: [], requiredBoothCodes: [], targetPath: "map.json",
+  };
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
   await repository.ensureTables();
   await repository.clearPreviewData();
@@ -42,6 +58,9 @@ beforeEach(async () => {
     verifyHuman: async () => true,
     turnstileSitekey: () => "test-key",
     projectCircle: async () => null,
+    resolveMapContributionScope: async ({ periodKey, venueSpaceId }) =>
+      periodKey === scopeConfig.periodKey && venueSpaceId === scopeConfig.venueSpaceId ? scopeConfig : null,
+    readPublishedEventMap: async () => null,
     mapContributionStore: {
       put: async (key, value, contentType) => objects.set(key, { bytes: new Uint8Array(value), contentType }),
       get: async (key) => {
@@ -79,7 +98,7 @@ async function grant(email, adminCookie, action = "grant") {
 
 async function newDraft(cookie) {
   const response = await handlers.createMapDraft(request("/api/map-contributions/drafts", "POST", {
-    periodKey: "day-1", venueSpaceId: "zhengyan-exhibition-area", content: { markers: [] },
+    periodKey: "day-1", venueSpaceId: "zhengyan-exhibition-area", content: validContent(),
   }, cookie));
   return { response, body: await response.json() };
 }
@@ -131,7 +150,7 @@ test("admin-only grants are audited and revocation immediately blocks writes", a
   assert.equal(body.revision, 1);
   assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
   const update = await handlers.updateMapDraft(request(`/api/map-contributions/drafts/${body.draftId}`, "PUT", {
-    expectedRevision: 1, content: { markers: ["A01"] },
+    expectedRevision: 1, content: validContent(),
   }, mapperCookie), body.draftId);
   assert.equal(update.status, 409);
   const audit = await database.prepare("SELECT action, actor_role FROM audit_log WHERE action LIKE 'map_contributor.%' ORDER BY at").all();
@@ -210,4 +229,124 @@ test("starting account deletion rejects a new upload request before storing byte
   assert.equal(response.status, 401);
   assert.equal(objects.size, 0);
   assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM map_draft_files WHERE draft_id = ?1").bind(draft.draftId).first()).total, 0);
+});
+
+test("submission validates official coverage and requires evidence from the current revision", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+
+  scopeConfig = { ...scopeConfig, allowedBoothCodes: ["A01"], requiredBoothCodes: ["A01"] };
+  let response = await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId);
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).problems[0].code, "missing_booth");
+
+  scopeConfig = { ...scopeConfig, requiredBoothCodes: [] };
+  response = await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId);
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).problems[0].code, "missing_evidence");
+
+  assert.equal((await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie))).status, 201);
+  response = await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId);
+  assert.equal(response.status, 200);
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "submitted");
+});
+
+test("only an admin can approve and export an immutable review candidate", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve",
+  }, mapperCookie), draft.draftId)).status, 403);
+  assert.equal((await handlers.adminExportMapDraft(request(`/admin/drafts/${draft.draftId}/export`, "POST", {
+    expectedRevision: 1,
+  }, adminCookie), draft.draftId)).status, 409);
+
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", note: "geometry checked",
+  }, adminCookie), draft.draftId)).status, 400, "official source confirmation is an explicit review decision");
+
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", note: "geometry checked", confirmOfficialSource: true,
+  }, adminCookie), draft.draftId)).status, 200);
+  const exported = await handlers.adminExportMapDraft(request(`/admin/drafts/${draft.draftId}/export`, "POST", {
+    expectedRevision: 1,
+  }, adminCookie), draft.draftId);
+  assert.equal(exported.status, 201);
+  const body = await exported.json();
+  assert.equal(body.targetPath, "map.json");
+  assert.equal(body.candidate.sourceName, `map-contribution:${draft.draftId}:r1`);
+  assert.deepEqual(body.candidate.layout, validContent().layout);
+  assert.match(body.candidateSha256, /^[a-f0-9]{64}$/);
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "exported");
+  assert.equal((await repository.listMapDraftFiles(draft.draftId, 1))[0].review_result, "approved_official_source");
+
+  const retry = await handlers.adminExportMapDraft(request(`/admin/drafts/${draft.draftId}/export`, "POST", {
+    expectedRevision: 1,
+  }, adminCookie), draft.draftId);
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).candidateSha256, body.candidateSha256);
+  const reviews = await repository.listMapDraftReviews(draft.draftId);
+  assert.deepEqual(reviews.map(({ from_status, to_status }) => [from_status, to_status]), [
+    ["draft", "submitted"], ["submitted", "approved"], ["approved", "exported"],
+  ]);
+});
+
+test("admin approval fails closed for a legacy submitted revision with no evidence", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
+  assert.equal(await repository.submitMapDraft({
+    draftId: draft.draftId, ownerAccountId: mapperId, expectedRevision: 1, now: NOW + 1,
+  }), true, "simulate a submitted row created before evidence became mandatory");
+
+  const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", confirmOfficialSource: true,
+  }, adminCookie), draft.draftId);
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).problems[0].code, "missing_evidence");
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "submitted");
+});
+
+test("approving a parallel draft requires an explicit replacement id", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: first } = await newDraft(mapperCookie);
+  const { body: second } = await newDraft(mapperCookie);
+  for (const draft of [first, second]) {
+    await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+    assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+      expectedRevision: 1,
+    }, mapperCookie), draft.draftId)).status, 200);
+  }
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${first.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", confirmOfficialSource: true,
+  }, adminCookie), first.draftId)).status, 200);
+  const missingReplacement = await handlers.adminReviewMapDraft(request(`/admin/drafts/${second.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", confirmOfficialSource: true,
+  }, adminCookie), second.draftId);
+  assert.equal(missingReplacement.status, 409);
+  assert.equal((await missingReplacement.json()).activeDraftId, first.draftId);
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${second.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", replacementDraftId: first.draftId, confirmOfficialSource: true,
+  }, adminCookie), second.draftId)).status, 200);
+  assert.equal((await repository.getMapDraft(first.draftId)).status, "withdrawn");
+  assert.equal((await repository.getMapDraft(second.draftId)).status, "approved");
 });

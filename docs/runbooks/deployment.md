@@ -222,7 +222,7 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定。**不需要執行任何 migration。**
 
-identity、社團控制面與地圖貢獻共 14 張 runtime table，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。地圖貢獻新增 `map_contributor_grants`、`map_drafts`、`map_draft_revisions`、`map_draft_reviews`、`map_draft_files`；preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
+identity、社團控制面與地圖貢獻共 15 張 runtime table，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。地圖貢獻新增 `map_contributor_grants`、`map_drafts`、`map_draft_revisions`、`map_draft_reviews`、`map_draft_files`、`map_draft_exports`；preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
 
 identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 只服務本機地圖 authoring，不是 identity schema 的第二份 representation，也不參與部署。
 
@@ -397,7 +397,7 @@ token 過期或被撤銷、或 policy 被改成 Allow 時，CI 會報 `Service t
 | `preview_mail_sink` | 7 天 |
 | `circle_overrides` | **由社團自選**：只刪 `retention_choice = 'purge'` 且 `retention_expires_at` 已過的列（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
 | `map_drafts`／`map_draft_revisions` | `draft`／`changes_requested` 180 天無活動後刪除內容；後者保留去識別化 review |
-| 私人地圖來源 R2 bytes | `approved`／`rejected`／`exported` 決定 30 天後刪除；`submitted` 不自動清除 |
+| 私人地圖來源 R2 bytes | `approved`／`rejected`／`exported`／`withdrawn` 決定 30 天後刪除；`submitted` 不自動清除 |
 | `audit_log.ip_hash` | 寫入滿 90 天後清為 `NULL`，audit 列不刪除 |
 
 憑證、地圖草稿／原始檔與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除 D1 metadata 前先刪除對應 R2 bytes；私人 bucket 未綁定且有到期原始檔時會中止，不把 metadata 當成已清除。社團自述清除後 `overrides_doc` 同步失去該筆並遞增 revision，且每筆寫一列 `override.purged` 稽核，內容不留。

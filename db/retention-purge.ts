@@ -171,7 +171,7 @@ async function purgeMapDraftData(
          WHERE d.retention_action IS NULL AND f.object_key IS NOT NULL AND (
            (d.status = 'draft' AND d.last_activity_at <= ?1)
            OR (d.status = 'changes_requested' AND d.last_activity_at <= ?1)
-           OR (d.status IN ('approved', 'rejected', 'exported') AND d.decision_at IS NOT NULL AND d.decision_at <= ?2)
+           OR (d.status IN ('approved', 'rejected', 'exported', 'withdrawn') AND d.decision_at IS NOT NULL AND d.decision_at <= ?2)
          ) LIMIT 1`,
       ).bind(editableCutoff, decisionCutoff).first<{ id: string }>();
       if (needsStorage) throw new Error("Private map evidence bucket is required before map draft retention can delete metadata.");
@@ -189,7 +189,7 @@ async function purgeMapDraftData(
              AND (owner_account_id != '[shredded]'
                OR EXISTS (SELECT 1 FROM map_draft_revisions r WHERE r.draft_id = map_drafts.id)
                OR EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = map_drafts.id AND f.object_key IS NOT NULL)))
-           OR (status IN ('approved', 'rejected', 'exported') AND decision_at IS NOT NULL AND decision_at <= ?2
+           OR (status IN ('approved', 'rejected', 'exported', 'withdrawn') AND decision_at IS NOT NULL AND decision_at <= ?2
              AND EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = map_drafts.id AND f.object_key IS NOT NULL))
          ) ORDER BY last_activity_at ASC, id ASC LIMIT ?3
        )`,
