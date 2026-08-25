@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { TextDecoder } from "node:util";
 
 export const REFERENCE_DATA_PIN_SCHEMA = "reference-data-pin/1";
 export const REFERENCE_DATA_REPOSITORY = "dekkmarsvin/tw_doujin_event-reference-data";
@@ -204,7 +205,7 @@ export function verifyReferenceDataFiles(value, filesByPath) {
     if (actual !== file.sha256) fail(`SHA-256 mismatch for ${file.path}: expected ${file.sha256}, got ${actual}.`);
     let parsed;
     try {
-      parsed = JSON.parse(Buffer.from(bytes).toString("utf8"));
+      parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
       fail(`Pinned reference file is not valid JSON: ${file.path}.`);
     }

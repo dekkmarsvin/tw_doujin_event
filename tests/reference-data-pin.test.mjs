@@ -83,6 +83,20 @@ test("reference verification fails closed for pin, hash, schema and stable-id mi
   assert.throws(() => verifyReferenceDataFiles(wrongSchema, wrongSchemaRecords), /unsupported reference schema/);
 
   const organizerPath = pin.selection.organizer.path;
+  const malformedUtf8Records = new Map(records);
+  const organizerBytes = records.get(organizerPath);
+  const organizerName = Buffer.from("虛構主辦");
+  const organizerNameOffset = organizerBytes.indexOf(organizerName);
+  const malformedUtf8 = Buffer.concat([
+    organizerBytes.subarray(0, organizerNameOffset),
+    Buffer.from([0xc3, 0x28]),
+    organizerBytes.subarray(organizerNameOffset + organizerName.length),
+  ]);
+  malformedUtf8Records.set(organizerPath, malformedUtf8);
+  const malformedUtf8Pin = structuredClone(pin);
+  malformedUtf8Pin.files.find((file) => file.path === organizerPath).sha256 = sha256(malformedUtf8);
+  assert.throws(() => verifyReferenceDataFiles(malformedUtf8Pin, malformedUtf8Records), /not valid JSON/);
+
   const wrongAuthorityRecords = new Map(records);
   const wrongAuthority = Buffer.from(records.get(organizerPath).toString("utf8").replace("organizer-official", "venue-official"));
   wrongAuthorityRecords.set(organizerPath, wrongAuthority);
