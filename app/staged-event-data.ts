@@ -3,9 +3,12 @@ import { parseEventDefinition } from "./event-catalog";
 import { isPublishedEventMap } from "./event-map";
 import { validateMapTemplateLayout } from "./map-template-registry";
 
-export function validateStagedEventArtifacts(eventValue: unknown, catalogValue: unknown, mapValue: unknown, eventId: string) {
-  const event = parseEventDefinition(eventValue);
+export function validateStagedEventArtifacts(eventValue: unknown, referenceValue: unknown, catalogValue: unknown, mapValue: unknown, eventId: string) {
+  const event = parseEventDefinition(eventValue, referenceValue);
   if (event.id !== eventId) throw new Error(`Staged event identity mismatch: expected ${eventId}, got ${event.id}.`);
+  if (event.venueAssignments.length > 1) {
+    throw new Error("Per-space published map artifacts are required before staging a multi-space event.");
+  }
   if (catalogValue && typeof catalogValue === "object" && Array.isArray((catalogValue as { placements?: unknown }).placements)) {
     const placementIds = (catalogValue as { placements: Array<{ id?: unknown }> }).placements.map((placement) => placement?.id);
     if (new Set(placementIds).size !== placementIds.length) throw new Error("Staged catalog contains duplicate placement ids.");

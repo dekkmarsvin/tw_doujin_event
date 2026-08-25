@@ -13,7 +13,7 @@
 
 1. `CircleRecord.id` 是專案內社團身分的唯一鍵；名稱不是身分。
 2. 活動主辦資料決定社團名稱、日期、展區與攤位配置。
-3. 活動定義中的 `circleCategories` 固定主辦公布的分類字彙與來源；它不表示主辦已替個別社團分類。
+3. 活動定義選取 pinned category catalog；parser 投影出的 `circleCategories` 固定主辦公布的分類字彙與來源，但不表示主辦已替個別社團分類。
 4. 社團本人只透過 `circle-overrides/1` 提供自己在該分類字彙中的一項主要類別、筆名、販售資訊、作品 facet、連結與代表圖。
 5. 收藏、群組、備註與行程屬於使用者，不由 catalog 或 overlay 覆寫。
 

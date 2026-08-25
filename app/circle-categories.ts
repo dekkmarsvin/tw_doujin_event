@@ -9,11 +9,12 @@ export type CircleCategoryDefinition = {
 
 export type CircleCategoryCatalog = {
   schema: typeof CIRCLE_CATEGORY_CATALOG_SCHEMA;
-  source: {
+  sources: readonly {
+    id: string;
     provider: string;
     url: string;
     retrievedAt: string;
-  };
+  }[];
   categories: readonly CircleCategoryDefinition[];
 };
 
@@ -41,13 +42,14 @@ export function parseCircleCategoryCatalog(value: unknown): CircleCategoryCatalo
   if (!isRecord(value) || value.schema !== CIRCLE_CATEGORY_CATALOG_SCHEMA) {
     throw new Error("Unsupported circle category catalog schema.");
   }
-  if (!isRecord(value.source) || !nonempty(value.source.provider) || !isHttpsUrl(value.source.url)
-    || !nonempty(value.source.retrievedAt) || Number.isNaN(Date.parse(value.source.retrievedAt))) {
-    throw new Error("Circle category catalog source is invalid.");
+  if (!Array.isArray(value.sources) || value.sources.length === 0 || !value.sources.every((source) =>
+    isRecord(source) && nonempty(source.id) && nonempty(source.provider) && isHttpsUrl(source.url)
+      && nonempty(source.retrievedAt) && !Number.isNaN(Date.parse(source.retrievedAt)))) {
+    throw new Error("Circle category catalog sources are invalid.");
   }
   if (!Array.isArray(value.categories) || value.categories.length === 0 || !value.categories.every((category) =>
     isRecord(category) && nonempty(category.id) && /^[a-z0-9][a-z0-9-]*$/.test(category.id)
-      && nonempty(category.label) && nonempty(category.description))) {
+      && nonempty(category.label) && (category.description === undefined || typeof category.description === "string"))) {
     throw new Error("Circle category catalog categories are invalid.");
   }
   const categories = value.categories as CircleCategoryDefinition[];
@@ -58,8 +60,8 @@ export function parseCircleCategoryCatalog(value: unknown): CircleCategoryCatalo
   }
   return {
     schema: CIRCLE_CATEGORY_CATALOG_SCHEMA,
-    source: value.source as CircleCategoryCatalog["source"],
-    categories: categories.map((category) => ({ ...category })),
+    sources: (value.sources as CircleCategoryCatalog["sources"]).map((source) => ({ ...source })),
+    categories: categories.map((category) => ({ ...category, description: category.description ?? "" })),
   };
 }
 

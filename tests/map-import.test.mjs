@@ -16,15 +16,29 @@ after(() => vite.close());
 
 test("validates the staged fixture map without FF47-specific counts", async () => {
   const event = JSON.parse(await readFile(new URL("../fixtures/events/sample/event.json", import.meta.url), "utf8"));
+  const references = JSON.parse(await readFile(new URL("../fixtures/events/sample/reference-records.json", import.meta.url), "utf8"));
   const catalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
   const snapshot = JSON.parse(await readFile(new URL("../fixtures/events/sample/map.json", import.meta.url), "utf8"));
   assert.equal(snapshot.eventId, "sample");
   assert.ok(Number.isSafeInteger(snapshot.revision) && snapshot.revision > 0);
   assert.equal(validateEventMapLayout(snapshot.layout).ok, true);
   assert.equal(validateFf47Layout(snapshot.layout).ok, false);
-  assert.equal(validateStagedEventArtifacts(event, catalog, snapshot, "sample").map, snapshot);
-  assert.throws(() => validateStagedEventArtifacts(event, catalog, { ...snapshot, layout: { ...snapshot.layout, template: "FF47" } }, "sample"), /does not match/);
-  assert.throws(() => validateStagedEventArtifacts(event, { ...catalog, placements: [...catalog.placements, catalog.placements[0]] }, snapshot, "sample"), /duplicate placement/);
+  assert.equal(validateStagedEventArtifacts(event, references, catalog, snapshot, "sample").map, snapshot);
+  assert.throws(() => validateStagedEventArtifacts(event, references, catalog, { ...snapshot, layout: { ...snapshot.layout, template: "FF47" } }, "sample"), /does not match/);
+  assert.throws(() => validateStagedEventArtifacts(event, references, { ...catalog, placements: [...catalog.placements, catalog.placements[0]] }, snapshot, "sample"), /duplicate placement/);
+  const multiSpaceReferences = [...references, {
+    ...structuredClone(references.find(({ schema }) => schema === "venue-space/1")),
+    id: "sample-south-floor",
+    name: "範例南館樓層",
+  }];
+  const multiSpaceEvent = {
+    ...event,
+    venueAssignments: [
+      { venueId: "sample-venue", venueSpaceId: "sample-hall", areaIds: ["north"] },
+      { venueId: "sample-venue", venueSpaceId: "sample-south-floor", areaIds: ["south"] },
+    ],
+  };
+  assert.throws(() => validateStagedEventArtifacts(multiSpaceEvent, multiSpaceReferences, catalog, snapshot, "sample"), /Per-space published map artifacts/);
 });
 
 function syntheticFF47Image() {

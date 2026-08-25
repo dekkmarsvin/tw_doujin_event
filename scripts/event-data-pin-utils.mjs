@@ -29,3 +29,8 @@ export function parseEventDataPin(value) {
 export function rawFileUrl(pin, file) {
   return `https://raw.githubusercontent.com/${pin.repository}/${pin.commit}/${file.path}`;
 }
+
+export function assertEventDataPinIdentity(pin, eventId) {
+  if (pin.eventId !== eventId) throw new Error(`Event data pin identity mismatch: expected ${eventId}, got ${pin.eventId}.`);
+  return pin;
+}

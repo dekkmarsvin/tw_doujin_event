@@ -1,8 +1,7 @@
 {
-  "schema": "event-definition/2",
+  "schema": "event-definition/3",
   "id": "sample-two",
   "name": "第二範例活動",
-  "venue": "測試展覽館",
   "dateRangeLabel": "10.1–4",
   "dataUpdatedAt": "2026-01-02T00:00:00.000+08:00",
   "eventEndsAt": "2026-10-04T23:59:59.999+08:00",
@@ -15,18 +14,12 @@
     { "id": "sun", "label": "SUN", "dateLabel": "10月4日" }
   ],
   "areas": [{ "id": "all", "label": "全館", "shortLabel": "全部" }],
-  "circleCategories": {
-    "schema": "circle-category-catalog/1",
-    "source": {
-      "provider": "第二範例主辦單位",
-      "url": "https://example.invalid/sample-two/categories",
-      "retrievedAt": "2026-01-02T00:00:00.000+08:00"
-    },
-    "categories": [
-      { "id": "photography", "label": "攝影", "description": "以攝影作品為主。" }
-    ]
-  },
-  "organizer": {
+  "organizerAssignments": [{ "organizerId": "sample-two-organizer", "role": "lead" }],
+  "categoryCatalog": { "organizerId": "sample-two-organizer", "id": "circle-topics", "revision": "2026-01-02" },
+  "venueAssignments": [
+    { "venueId": "sample-venue", "venueSpaceId": "sample-two-floor", "areaIds": ["all"] }
+  ],
+  "officialData": {
     "adapter": "fixture/1",
     "eventUrl": "https://example.invalid/sample-two",
     "boothListUrls": {

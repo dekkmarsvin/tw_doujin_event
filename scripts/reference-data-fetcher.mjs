@@ -33,23 +33,47 @@ export async function recoverInterruptedReferenceReplacement(destination, overri
 }
 
 export async function replaceReferenceTree(temporary, destination, overrides = {}) {
+  return replaceVerifiedTrees([{ temporary, destination }], overrides);
+}
+
+export async function replaceVerifiedTrees(replacements, overrides = {}) {
   const fs = fileSystem(overrides);
-  const backup = `${destination}.previous`;
-  await recoverInterruptedReferenceReplacement(destination, fs);
-  const hadPrevious = await pathExists(destination, fs.lstat);
-  if (hadPrevious) await fs.rename(destination, backup);
+  const states = replacements.map(({ temporary, destination }) => ({
+    temporary,
+    destination,
+    backup: `${destination}.previous`,
+    hadPrevious: false,
+    installed: false,
+  }));
+  for (const state of states) {
+    await recoverInterruptedReferenceReplacement(state.destination, fs);
+    state.hadPrevious = await pathExists(state.destination, fs.lstat);
+  }
   try {
-    await fs.rename(temporary, destination);
+    for (const state of states) {
+      if (state.hadPrevious) await fs.rename(state.destination, state.backup);
+    }
+    for (const state of states) {
+      await fs.rename(state.temporary, state.destination);
+      state.installed = true;
+    }
   } catch (error) {
-    if (hadPrevious && !await pathExists(destination, fs.lstat) && await pathExists(backup, fs.lstat)) {
-      await fs.rename(backup, destination);
+    for (const state of [...states].reverse()) {
+      if (state.installed && await pathExists(state.destination, fs.lstat)) {
+        await fs.rm(state.destination, { recursive: true, force: true });
+      }
+      if (state.hadPrevious && !await pathExists(state.destination, fs.lstat) && await pathExists(state.backup, fs.lstat)) {
+        await fs.rename(state.backup, state.destination);
+      }
     }
     throw error;
   }
-  if (hadPrevious) await fs.rm(backup, { recursive: true, force: true });
+  for (const state of states) {
+    if (state.hadPrevious) await fs.rm(state.backup, { recursive: true, force: true });
+  }
 }
 
-export async function fetchReferenceData(value, destination, fetchImpl = globalThis.fetch, fileSystemOverrides = {}) {
+export async function stageReferenceData(value, destination, fetchImpl = globalThis.fetch, fileSystemOverrides = {}) {
   const pin = parseReferenceDataPin(value);
   if (typeof fetchImpl !== "function") throw new Error("A fetch implementation is required.");
   const parent = path.dirname(destination);
@@ -68,10 +92,20 @@ export async function fetchReferenceData(value, destination, fetchImpl = globalT
       await writeFile(output, bytes);
     }
     verifyReferenceDataFiles(pin, filesByPath);
-    await replaceReferenceTree(temporary, destination, fileSystemOverrides);
-    return pin;
+    return { pin, temporary };
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function fetchReferenceData(value, destination, fetchImpl = globalThis.fetch, fileSystemOverrides = {}) {
+  const staged = await stageReferenceData(value, destination, fetchImpl, fileSystemOverrides);
+  try {
+    await replaceReferenceTree(staged.temporary, destination, fileSystemOverrides);
+    return staged.pin;
+  } catch (error) {
+    await rm(staged.temporary, { recursive: true, force: true });
     throw error;
   }
 }

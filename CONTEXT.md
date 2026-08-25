@@ -21,16 +21,17 @@
 - 一個 **攤位**（booth）在不同日可能有不同社團。
 - 收藏、備註與行程掛在 `CircleRecord.id` 上，**不掛在攤位上**。
 
-### 「場館」與「展區」不是同一件事
+### 「場館」、「場館空間」與「展區」不是同一件事
 
 | 說法 | 意思 | FF47 的值 |
 |---|---|---|
-| **場館**（venue） | 活動實際舉辦的建築。由 `EventDefinition.venue` 提供 | 花博公園爭豔館 |
-| **展區**（area） | 場館內部的分區代碼，供篩選與定位使用 | `ALL`（全館）、`A`（A–K 區）、`B`（L–W 區） |
+| **場館**（venue） | 活動實際舉辦的建築；由活動定義選取 pinned venue record | 花博公園爭艷館 |
+| **場館空間**（venue space） | 場館內可穩定識別的館別、樓層或展場；地圖 layout 掛在這一層 | 爭艷館展區 |
+| **展區**（area） | 活動在場館空間內定義的攤位／展示分區，供篩選與定位使用 | `ALL`（全區）、`A`（A–K 區）、`B`（L–W 區） |
 
-**場館名稱屬於活動資料，不寫死在程式或文件裡。** 換一場活動就換一個場館；文件要提到場館時說「活動定義的場館」，不複製當期的名稱。
+**場館與場館空間屬於 pinned reference data，不寫死在程式或文件裡。** 活動定義只保存 stable ID assignment；production pipeline 先驗證 reference commit／hash／selection，parser 再驗證 staged records 與 assignments 後投影名稱。
 
-展區是同一個場館的切分。FF47 的 `A` 與 `B` 是爭豔館的兩半，**不是兩個場館**——所以 `areaMode` 是 `single`，介面不顯示切換。
+`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場館空間**。URL codec 已保留多場館空間的 `venueSpaceId` 語意；公開切換能力要等每個場館空間各自的地圖 artifact 完成後才啟用。
 
 **`Booth["hall"]` 的名字說謊**：它存的是展區代碼（`"A" | "B"`），不是場館。名稱是歷史遺留，且已寫進公開快照 schema，改名不是改一個識別字。**文件與新程式碼一律用「展區」／`area`。**
 
