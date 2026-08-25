@@ -36,6 +36,14 @@ const createDraft = (id, ownerAccountId = contributorId) => repository.createMap
   now: NOW,
 });
 
+const addEvidence = (draftId, revision = 1) => repository.addMapDraftFile({
+  id: `file-${draftId}-r${revision}`, draftId, revision,
+  objectKey: `map-contributions/ff47/${draftId}/source.png`,
+  sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25", pageNumber: null,
+  sha256: "a".repeat(64), mime: "image/png", sizeBytes: 10,
+  width: 1, height: 1, pageCount: null, uploadedBy: contributorId, now: NOW,
+});
+
 test("only an active grant can create, revise or submit a private draft", async () => {
   assert.equal(await createDraft("draft-before-grant"), false);
   assert.equal(await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW }), "granted");
@@ -67,22 +75,73 @@ test("only an active grant can create, revise or submit a private draft", async 
   assert.deepEqual(JSON.parse(draft.content_json), { markers: ["A01"] });
 });
 
-test("parallel drafts coexist but one scope cannot have two approved revisions", async () => {
+test("parallel drafts coexist but a second approval requires explicit replacement", async () => {
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   assert.equal(await createDraft("draft-a"), true);
   assert.equal(await createDraft("draft-b"), true);
+  await addEvidence("draft-a");
+  await addEvidence("draft-b");
   assert.equal(await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 }), true);
   assert.equal(await repository.submitMapDraft({ draftId: "draft-b", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 }), true);
-  assert.equal(await repository.transitionMapDraft({
-    draftId: "draft-a", expectedRevision: 1, toStatus: "approved", actorAccountId: "admin-1", actorRole: "admin", now: NOW + 3,
-  }), true);
-  assert.equal(await repository.transitionMapDraft({
-    draftId: "draft-a", expectedRevision: 1, toStatus: "exported", actorAccountId: null, actorRole: "system", now: NOW + 4,
-  }), true);
-  await assert.rejects(() => repository.transitionMapDraft({
-    draftId: "draft-b", expectedRevision: 1, toStatus: "approved", actorAccountId: "admin-1", actorRole: "admin", now: NOW + 5,
-  }), /UNIQUE|unique/i);
-  assert.equal((await repository.getMapDraft("draft-b")).status, "submitted", "the failed approval batch must roll back");
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 3,
+  }), { ok: true, replacedDraftId: null });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-b", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 5,
+  }), { ok: false, reason: "replacement_required", activeDraftId: "draft-a" });
+  assert.equal((await repository.getMapDraft("draft-b")).status, "submitted");
+});
+
+test("replacement approval is explicit and records withdrawal before the new approval", async () => {
+  await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
+  await createDraft("draft-a");
+  await createDraft("draft-b");
+  await addEvidence("draft-a");
+  await addEvidence("draft-b");
+  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await repository.submitMapDraft({ draftId: "draft-b", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 3,
+  }), { ok: true, replacedDraftId: null });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-b", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 4,
+  }), { ok: false, reason: "replacement_required", activeDraftId: "draft-a" });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-b", expectedRevision: 1, replacementDraftId: "draft-a",
+    actorAccountId: "admin-1", note: "new official revision", now: NOW + 5,
+  }), { ok: true, replacedDraftId: "draft-a" });
+  assert.equal((await repository.getMapDraft("draft-a")).status, "withdrawn");
+  assert.equal((await repository.getMapDraft("draft-b")).status, "approved");
+  const reviews = await database.prepare(
+    "SELECT draft_id, from_status, to_status FROM map_draft_reviews WHERE at = ?1 ORDER BY to_status",
+  ).bind(NOW + 5).all();
+  assert.deepEqual(reviews.results, [
+    { draft_id: "draft-b", from_status: "submitted", to_status: "approved" },
+    { draft_id: "draft-a", from_status: "approved", to_status: "withdrawn" },
+  ]);
+});
+
+test("candidate export atomically records the immutable payload and is idempotent", async () => {
+  await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
+  await createDraft("draft-a");
+  await addEvidence("draft-a");
+  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await repository.approveMapDraft({ draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2 });
+  const input = {
+    draftId: "draft-a", expectedRevision: 1, targetPath: "map.json",
+    candidateJson: '{"eventId":"ff47"}\n', diffJson: '{"addedBoothCodes":[]}',
+    candidateSha256: "c".repeat(64), actorAccountId: "admin-1", now: NOW + 3,
+  };
+  const first = await repository.exportMapDraft(input);
+  assert.equal(first.target_path, "map.json");
+  assert.equal(first.candidate_sha256, "c".repeat(64));
+  assert.equal((await repository.getMapDraft("draft-a")).status, "exported");
+  const retry = await repository.exportMapDraft({ ...input, now: NOW + 4 });
+  assert.equal(retry.id, first.id);
+  const counts = await database.prepare(
+    "SELECT (SELECT COUNT(*) FROM map_draft_exports) AS exports, (SELECT COUNT(*) FROM map_draft_reviews WHERE to_status = 'exported') AS reviews",
+  ).first();
+  assert.deepEqual(counts, { exports: 1, reviews: 1 });
 });
 
 test("the state machine allows requested changes and forbids rejected export", async () => {
@@ -99,31 +158,44 @@ test("the state machine allows requested changes and forbids rejected export", a
   assert.equal(await repository.transitionMapDraft({
     draftId: "draft-a", expectedRevision: 2, toStatus: "rejected", actorAccountId: "admin-1", actorRole: "admin", now: NOW + 5,
   }), true);
-  assert.equal(await repository.transitionMapDraft({
-    draftId: "draft-a", expectedRevision: 2, toStatus: "exported", actorAccountId: null, actorRole: "system", now: NOW + 6,
-  }), false);
+  assert.equal(await repository.exportMapDraft({
+    draftId: "draft-a", expectedRevision: 2, targetPath: "map.json",
+    candidateJson: "{}", diffJson: "{}", candidateSha256: "d".repeat(64),
+    actorAccountId: "admin-1", now: NOW + 6,
+  }), null);
 });
 
 test("same-millisecond retries do not append duplicate state transitions", async () => {
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
+  await addEvidence("draft-a");
   assert.equal(await repository.submitMapDraft({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1,
   }), true);
   assert.equal(await repository.submitMapDraft({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1,
   }), false);
-  assert.equal(await repository.transitionMapDraft({
-    draftId: "draft-a", expectedRevision: 1, toStatus: "approved", actorAccountId: "admin-1", actorRole: "admin", now: NOW + 2,
-  }), true);
-  assert.equal(await repository.transitionMapDraft({
-    draftId: "draft-a", expectedRevision: 1, toStatus: "approved", actorAccountId: "admin-1", actorRole: "admin", now: NOW + 2,
-  }), false);
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2,
+  }), { ok: true, replacedDraftId: null });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2,
+  }), { ok: false, reason: "conflict" });
   const reviews = await database.prepare("SELECT from_status, to_status FROM map_draft_reviews WHERE draft_id = 'draft-a' ORDER BY at").all();
   assert.deepEqual(reviews.results, [
     { from_status: "draft", to_status: "submitted" },
     { from_status: "submitted", to_status: "approved" },
   ]);
+});
+
+test("approval fails closed when a legacy submitted revision has no evidence", async () => {
+  await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
+  await createDraft("draft-a");
+  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2,
+  }), { ok: false, reason: "missing_evidence" });
+  assert.equal((await repository.getMapDraft("draft-a")).status, "submitted");
 });
 
 test("raw metadata is bound to the current private revision", async () => {

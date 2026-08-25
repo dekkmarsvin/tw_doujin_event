@@ -2,7 +2,7 @@
 
 地圖貢獻讓經管理者授權的維護者，把**活動主辦官方說明頁面中的配置證據**整理成私人草稿。它不新增資料來源：公開快照的基礎仍只來自主辦官方頁面，社團補充則仍只由社團本人自填；工作簿、社群試算表與其他第三方資料不在來源鏈中。
 
-本契約涵蓋 [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 的角色、私人草稿、檔案與保存機制。投稿／審閱介面、核准替換與 event-data 匯出工作流屬 [#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73)，不能把本次的底層 route 描述成已完成的公開產品流程。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
+本契約涵蓋 [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 的角色、私人草稿、檔案與保存機制，以及 [#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73) 的投稿、審閱、核准替換與 event-data 候選匯出。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
 
 **實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)
 **測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`
@@ -22,19 +22,33 @@
 
 `draft -> submitted -> changes_requested -> submitted -> approved -> exported`
 
-`rejected` 是終止狀態。資料庫 partial unique index 將 `approved` 與 `exported` 都視為仍有效的核准版本，保證同一範圍最多一份；#73 在核准另一份之前須提供明確替換／撤回動作。每個提交與管理決策寫入不可變的 `map_draft_reviews`；D1 batch 以每次操作的 transition token 把狀態更新與紀錄寫入綁在一起，同毫秒重試也不會多留一筆轉換。
+`rejected` 是終止狀態；`withdrawn` 表示管理者在同一個 D1 batch 中明確以另一份草稿取代既有的 `approved`／`exported` 草稿。資料庫 partial unique index 將 `approved` 與 `exported` 都視為仍有效的核准版本，保證同一範圍最多一份。每個提交與管理決策寫入不可變的 `map_draft_reviews`；D1 batch 以每次操作的 transition token 把狀態更新與紀錄寫入綁在一起，同毫秒重試也不會多留一筆轉換。
 
-## 現有 route
+提交會重新解析 versioned draft envelope，並以活動定義、官方 placement 與 map template 做伺服器驗證：代碼唯一且已知、目前 period 的 placement 全數有座標、矩形不越界也不重疊，且目前 revision 至少綁定一份聲明為活動官方說明頁面的來源檔。HTTPS 本身不能證明發布者身分，因此核准 API 另要求管理者明確確認目前 revision 的每份來源確為活動官方頁面；核准後，該 revision 的永久 file metadata 會記為 `approved_official_source`。工作中草稿可以尚未覆蓋所有攤位，但不能保存未知欄位或會讓共用 renderer 讀取失敗的 malformed shape。
+
+## Route
 
 | Route | 權限 | 行為 |
 |---|---|---|
+| `GET /api/map-contributions/drafts` | 有效 contributor | 列出自己的私人草稿 |
 | `POST /api/map-contributions/drafts` | 有效 contributor | 建立 revision 1 |
+| `GET /api/map-contributions/drafts/:draftId` | owner | 讀取草稿、來源 metadata 與審閱軌跡 |
 | `PUT /api/map-contributions/drafts/:draftId` | owner + 有效 contributor | 以 optimistic concurrency 新增 revision |
-| `POST /api/map-contributions/drafts/:draftId/submit` | owner + 有效 contributor | 提交目前 revision |
+| `POST /api/map-contributions/drafts/:draftId/submit` | owner + 有效 contributor | 驗證幾何、官方 placement 覆蓋與來源後提交目前 revision |
 | `POST /api/map-contributions/files` | owner + 有效 contributor | 上傳官方來源檔並綁定目前 revision |
 | `GET /api/map-contributions/files/:fileId` | owner 或管理者 | 下載原始檔 |
 | `GET /api/map-contributions/files/:fileId/preview` | owner 或管理者 | 預覽圖片；PDF 回 `415` |
 | `GET /api/admin/map-contributions?days=N` | 近期管理者 session | 列出超過 N 天仍為 submitted 的草稿 |
+| `GET /api/admin/map-contributions/drafts` | 近期管理者 session | 列出已進入審閱流程的草稿 |
+| `GET /api/admin/map-contributions/drafts/:draftId` | 管理者 | 讀取審閱資料與共用 renderer 所需 layout |
+| `POST /api/admin/map-contributions/drafts/:draftId/review` | 近期管理者 session | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId |
+| `POST /api/admin/map-contributions/drafts/:draftId/export` | 近期管理者 session | 將核准 revision 固化為候選 JSON、SHA-256 與語意差異，並轉為 exported |
+
+## 候選匯出與公開邊界
+
+匯出只在私人 D1 寫入不可變的候選、`targetPath`、SHA-256 與相對於目前 reviewed public snapshot 的語意差異，並提供管理者下載；它不呼叫 GitHub、不寫 event-data repository，也不改變任何匿名公開 endpoint。候選仍須經 event-data repository 的 schema、review 與 pin 流程才能發布。
+
+目前單一 venue-space 活動的 `targetPath` 是 `map.json`。多 venue-space 草稿使用 `maps/<periodKey>/<venueSpaceId>.json` 保留明確 scope；在公開 reader 與 event-data per-space artifact 契約完成前，這類候選不可直接發布成現有 event-level `map.json`。
 
 ## 官方來源檔
 
@@ -49,7 +63,7 @@
 | `draft` 180 天無活動 | 刪除內容、檔案與草稿 |
 | `changes_requested` 180 天無活動 | 刪除可編輯內容與檔案，保留去識別化審閱紀錄 |
 | `submitted` | 不自動刪除；由管理報表列出逾期未審案件 |
-| `approved`／`rejected`／`exported` | 決定後 30 天刪除原始檔，保留來源 metadata 與審閱結果 |
+| `approved`／`rejected`／`exported`／`withdrawn` | 決定後 30 天刪除原始檔，保留來源 metadata 與審閱結果 |
 
 刪除帳號時，從未提交的草稿立即刪除；已進入審閱流程的 owner、revision author 與 review actor 去識別化，內容依其狀態期限處理。preview reset 會清空隔離 D1 的地圖貢獻資料與私人 preview bucket。
 

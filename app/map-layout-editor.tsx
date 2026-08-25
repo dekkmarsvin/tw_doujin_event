@@ -272,15 +272,63 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     setSelection({ kind: "landmark", itemIndex: index });
   };
 
-  const removeLandmark = () => {
-    if (!selection || selection.kind !== "landmark") return;
-    commit((draft) => draft.landmarks.splice(selection.itemIndex, 1));
+  const uniqueId = (prefix: string, values: readonly string[]) => {
+    let suffix = values.length + 1;
+    while (values.includes(`${prefix}-${suffix}`)) suffix += 1;
+    return `${prefix}-${suffix}`;
+  };
+
+  const addSlot = () => {
+    const rowIndex = 0;
+    const existingCodes = layout.rows.flatMap((row) => row.slots.map(({ code }) => code));
+    const code = uniqueId("NEW", existingCodes);
+    commit((draft) => {
+      if (draft.rows.length === 0) draft.rows.push({ label: "NEW", orientation: "horizontal", confidence: 1, slots: [] });
+      draft.rows[0].slots.push({
+        code,
+        rect: { x: draft.width * .45, y: draft.height * .45, width: draft.width * .06, height: draft.height * .04 },
+      });
+    });
+    setSelection({ kind: "slot", rowIndex, itemIndex: layout.rows[0]?.slots.length ?? 0 });
+  };
+
+  const addPillar = () => {
+    const itemIndex = layout.pillars.length;
+    const id = uniqueId("pillar", layout.pillars.map(({ id: value }) => value));
+    commit((draft) => draft.pillars.push({
+      id, x: draft.width * .48, y: draft.height * .48, width: draft.width * .03, height: draft.height * .03,
+    }));
+    setSelection({ kind: "pillar", itemIndex });
+  };
+
+  const addAccess = (kind: "entrance" | "exit") => {
+    const itemIndex = layout.accessPoints.length;
+    const id = uniqueId(kind, layout.accessPoints.map(({ id: value }) => value));
+    commit((draft) => draft.accessPoints.push({
+      id, kind, direction: "north", x: draft.width * .5, y: draft.height * .9,
+      label: kind === "entrance" ? "入口" : "出口",
+    }));
+    setSelection({ kind: "access", itemIndex });
+  };
+
+  const removeSelection = () => {
+    if (!selection) return;
+    commit((draft) => {
+      if (selection.kind === "slot") {
+        draft.rows[selection.rowIndex].slots.splice(selection.itemIndex, 1);
+        if (draft.rows[selection.rowIndex].slots.length === 0) draft.rows.splice(selection.rowIndex, 1);
+      } else if (selection.kind === "pillar") draft.pillars.splice(selection.itemIndex, 1);
+      else if (selection.kind === "access") draft.accessPoints.splice(selection.itemIndex, 1);
+      else draft.landmarks.splice(selection.itemIndex, 1);
+    });
     setSelection(null);
   };
 
   const selectedRect = selection && selection.kind !== "access" ? selectedPosition(layout, selection) as MapRect | undefined : undefined;
   const selectedAccess = selection?.kind === "access" ? layout.accessPoints[selection.itemIndex] : undefined;
+  const selectedSlotSelection = selection?.kind === "slot" ? selection : undefined;
   const selectedSlot = selection?.kind === "slot" ? layout.rows[selection.rowIndex]?.slots[selection.itemIndex] : undefined;
+  const selectedPillarSelection = selection?.kind === "pillar" ? selection : undefined;
   const selectedPillar = selection?.kind === "pillar" ? layout.pillars[selection.itemIndex] : undefined;
   const selectedLandmark = selection?.kind === "landmark" ? layout.landmarks[selection.itemIndex] : undefined;
   const selectedLandmarkKind = selectedLandmark ? resolveMapLandmarkKind(selectedLandmark) : undefined;
@@ -336,13 +384,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>非一般攤位區可拖曳四角調整大小；企業攤靠近相鄰邊緣時會自動貼齊，按住 Alt 可暫停。方向鍵微調 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>可新增並拖曳攤位、柱子、出入口與區域；非一般攤位區可拖曳四角調整大小。方向鍵微調 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器地圖縮放控制"><span>檢視倍率</span><div><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selection} onClick={() => selection && focusSelection(selection)}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${zoom * 100}%`, aspectRatio: `${layout.width} / ${layout.height}` }}>
-        <svg ref={svgRef} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 FF47 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelection(null); }}>
+        <svg ref={svgRef} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelection(null); }}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
           <rect className={styles.floor} {...layout.floor} />
@@ -368,6 +416,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
         {!selection && <div className={styles.empty}><b>選取地圖元素</b><p>可調整一般攤位、柱子、出入口及企業攤／舞台區域的位置。</p></div>}
         {selection && <>
           <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : "非一般攤位區"}</small><b>{selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
+          {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input value={selectedSlot.code} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }); }} /></label><label className={styles.wide}><span>排標籤</span><input value={layout.rows[selectedSlotSelection.rowIndex].label} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].label = next; }); }} /></label></>}
+          {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子 ID</span><input value={selectedPillar.id} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }); }} /></label>}
           {selectedLandmark && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selection.itemIndex].kind = stableKind; draft.landmarks[selection.itemIndex].label = event.target.value; }); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
           {selectedAccess && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedAccess.label} onChange={(event) => updateAccess({ label: event.target.value })} /></label><label><span>類型</span><select value={selectedAccess.kind} onChange={(event) => updateAccess({ kind: event.target.value as "entrance" | "exit" })}><option value="entrance">入口</option><option value="exit">出口</option></select></label><label><span>方向</span><select value={selectedAccess.direction} onChange={(event) => updateAccess({ direction: event.target.value as "north" | "south" })}><option value="north">向北</option><option value="south">向南</option></select></label></>}
           <div className={styles.fields}>
@@ -376,8 +426,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
             {selectedRect && numberField("寬", selectedRect.width, (value) => updateRect({ width: value }))}
             {selectedRect && numberField("高", selectedRect.height, (value) => updateRect({ height: value }))}
           </div>
-          {selectedLandmark && <button className={styles.remove} onClick={removeLandmark}>移除此區域</button>}
-          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selectedLandmark ? "拖曳物件可移動，拖曳四角可調整大小。" : "拖曳會直接更新預覽；"}發布前仍會由 FF47 完整性規則檢查所有座標與必要元素。</p>
+          <button className={styles.remove} onClick={removeSelection}>移除此元素</button>
+          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selectedLandmark ? "拖曳物件可移動，拖曳四角可調整大小。" : "拖曳會直接更新預覽；"}提交前仍會由伺服器檢查座標、代碼與必要元素。</p>
         </>}
       </aside>
     </div>

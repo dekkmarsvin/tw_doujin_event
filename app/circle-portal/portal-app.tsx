@@ -18,6 +18,7 @@ import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
 import { ACTIVE_EVENT } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
+import { AdminMapReviewPanel, MapContributorPanel } from "./map-contribution-panel";
 import styles from "./portal.module.css";
 
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
@@ -111,7 +112,8 @@ export default function CirclePortalApp() {
       {session && <div className={styles.identity}>
         {/* Shows which identity the server resolved, so a mismatch against
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
-        <span>{session.email}{session.isAdmin ? "・管理者" : ""}</span>
+        <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
+        {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
         {session.isAdmin && <a href="#admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(() => { setSession(null); setClaims([]); })}>登出</button>
       </div>}
@@ -125,6 +127,8 @@ export default function CirclePortalApp() {
           <ClaimList claims={claims} onChanged={refreshClaims} />
           <ClaimForm onCreated={refreshClaims} />
           {claims.filter((claim) => claim.status === "verified").map((claim) => <CircleEditor key={claim.circleId} claim={claim} />)}
+          {session.isMapContributor && <MapContributorPanel />}
+          {session.isAdmin && <AdminMapReviewPanel />}
           <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
           {session.isAdmin && <AdminPanel />}
         </>}

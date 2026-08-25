@@ -65,17 +65,26 @@ test("retention removes abandoned content, preserves submitted work, and is idem
   await draft("approved", oldDecision - 2);
   await raw("raw-approved", "approved", oldDecision - 2);
   await repository.submitMapDraft({ draftId: "approved", ownerAccountId: accountId, expectedRevision: 1, now: oldDecision - 1 });
-  await repository.transitionMapDraft({
-    draftId: "approved", expectedRevision: 1, toStatus: "approved",
-    actorAccountId: "admin-1", actorRole: "admin", now: oldDecision,
+  await repository.approveMapDraft({
+    draftId: "approved", expectedRevision: 1, actorAccountId: "admin-1", now: oldDecision - 2,
   });
+  await repository.createMapDraft({
+    id: "replacement", eventId: "ff47", periodKey: "approved", venueSpaceId: "hall", ownerAccountId: accountId,
+    contentJson: JSON.stringify({ id: "replacement" }), now: oldDecision - 1,
+  });
+  await raw("raw-replacement", "replacement", oldDecision - 1);
+  await repository.submitMapDraft({ draftId: "replacement", ownerAccountId: accountId, expectedRevision: 1, now: oldDecision - 1 });
+  await repository.approveMapDraft({
+    draftId: "replacement", expectedRevision: 1, replacementDraftId: "approved", actorAccountId: "admin-1", now: oldDecision,
+  });
+  assert.equal((await repository.getMapDraft("approved")).status, "withdrawn");
 
   const deletedKeys = [];
   const store = { delete: async (keys) => deletedKeys.push(...(Array.isArray(keys) ? keys : [keys])) };
   const first = await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, undefined, store);
   assert.equal(first.deleted.map_drafts, 1);
   assert.equal(first.deleted.map_draft_revisions, 2);
-  assert.equal(first.deleted.map_raw_objects, 3);
+  assert.equal(first.deleted.map_raw_objects, 4);
   assert.equal(first.anonymized.map_drafts, 1);
   assert.equal(await repository.getMapDraft("never-submitted"), null);
   assert.equal((await repository.getMapDraft("submitted")).status, "submitted");
@@ -83,19 +92,22 @@ test("retention removes abandoned content, preserves submitted work, and is idem
   const changes = await database.prepare("SELECT owner_account_id, status FROM map_drafts WHERE id = 'changes'").first();
   assert.deepEqual(changes, { owner_account_id: "[shredded]", status: "changes_requested" });
   assert.equal((await database.prepare("SELECT actor_account_id FROM map_draft_reviews WHERE draft_id = 'changes'").first()).actor_account_id, null);
-  const approved = await repository.getMapDraftFile("raw-approved");
-  assert.equal(approved.object_key, null);
-  assert.equal(approved.review_result, null);
+  const withdrawn = await repository.getMapDraftFile("raw-approved");
+  assert.equal(withdrawn.object_key, null);
+  assert.equal(withdrawn.review_result, "approved_official_source");
   assert.equal((await repository.listStaleSubmittedMapDrafts(NOW - 30 * DAY)).some(({ id }) => id === "submitted"), true);
-  assert.equal(new Set(deletedKeys).size, 3);
+  assert.equal(new Set(deletedKeys).size, 4);
 
   const second = await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, undefined, store);
   assert.equal(second.deleted.map_drafts, 0);
   assert.equal(second.deleted.map_draft_revisions, 0);
   assert.equal(second.deleted.map_raw_objects, 0);
-  const actions = await database.prepare("SELECT action FROM audit_log WHERE action LIKE 'map_draft.%' ORDER BY action").all();
-  assert.deepEqual(actions.results.map(({ action }) => action), [
-    "map_draft.content_purged", "map_draft.purged", "map_draft.raw_purged",
+  const actions = await database.prepare("SELECT action, subject_id FROM audit_log WHERE action LIKE 'map_draft.%' ORDER BY action, subject_id").all();
+  assert.deepEqual(actions.results, [
+    { action: "map_draft.content_purged", subject_id: "changes" },
+    { action: "map_draft.purged", subject_id: "never-submitted" },
+    { action: "map_draft.raw_purged", subject_id: "approved" },
+    { action: "map_draft.raw_purged", subject_id: "replacement" },
   ]);
 });
 

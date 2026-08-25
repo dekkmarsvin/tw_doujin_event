@@ -1,6 +1,7 @@
 # ADR-0033：地圖貢獻採管理者授權與私人版本化草稿
 
 - 狀態：已定案（2026-08-24）
+- 補充：2026-08-25 明文化 approved/exported 稿被新核准稿取代時的 `withdrawn` 狀態與保存期限
 - 相關 issue：[#67](https://github.com/dekkmarsvin/tw_doujin_event/issues/67)、[#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72)、[#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73)
 
 ## 問題
@@ -19,7 +20,7 @@
 
 1. 同一個 `eventId + day/period + venueSpaceId` 可有多份平行草稿。每份有不可變 draft ID 與遞增 revision，寫入使用 optimistic concurrency；revision 落後時拒絕覆寫並要求重新載入。
 2. 同一活動空間同時只能有一個 approved revision。核准新 revision 前必須明確取代或撤回既有 approved revision。
-3. 狀態機是 `draft -> submitted -> changes_requested -> submitted -> approved -> exported`；`rejected` 是終止狀態，不能直接 exported。需要重做時建立新 draft 或新 revision。
+3. 狀態機是 `draft -> submitted -> changes_requested -> submitted -> approved -> exported`；`rejected` 是終止狀態，不能直接 exported。需要重做時建立新 draft 或新 revision。核准同範圍的新稿時，既有 `approved` 或 `exported` 稿原子地轉為 `withdrawn`，新稿才轉為 `approved`；`withdrawn` 也是終止狀態。
 4. `exported` 只表示已產生 event-data 候選檔；仍須經該 repo 的 diff、schema gate 與 repository review，不能直接發布到公開站。
 
 ### 原始檔
@@ -36,7 +37,7 @@
 | `draft` 連續 180 天無活動 | 刪除草稿內容與原始檔 |
 | `changes_requested` 連續 180 天無活動 | 刪除可編輯內容與原始檔；保留去識別化審閱紀錄 |
 | `submitted` | 審閱完成前不自動刪除；以營運報表顯示長期未審案件 |
-| `approved`、`rejected`、`exported` 的原始檔 | 決定發生 30 天後刪除；永久 metadata 與審閱結果保留 |
+| `approved`、`rejected`、`exported`、`withdrawn` 的原始檔 | 決定發生 30 天後刪除；永久 metadata 與審閱結果保留 |
 | 從未提交的 draft 所屬帳號刪除 | 立即刪除草稿與原始檔 |
 | 已進入審閱流程的帳號刪除 | actor 去識別化；審閱紀錄保留，原始檔依狀態期限清除 |
 
@@ -48,4 +49,4 @@ Audit 列不設自動刪除期限，帳號刪除時清除可識別 actor；IP ha
 - `submitted` 不會因時間經過而在審閱中消失，但必須能被營運看見，避免無期限遺忘。
 - PDF 仍可作為官方配置證據，但不能成為公開資產或執行 active content 的入口。
 - 角色、草稿、原始檔、audit 與 retention 必須納入 data inventory；若對外行為影響投稿者決策，再以最少必要揭露同步 privacy notice。
-- [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 可從政策 triage 轉為可實作契約工作；[#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73) 仍受 #69 與 #72 的實作完成狀態阻擋。
+- [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 提供角色與私人資料基礎；[#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73) 在 #69 與 #72 完成後實作投稿、審閱、替代與候選匯出。

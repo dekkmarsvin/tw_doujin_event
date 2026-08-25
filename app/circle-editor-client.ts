@@ -1,4 +1,6 @@
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
+import type { EventMapLayout, PublishedEventMap } from "./event-map";
+import type { MapCandidateDiff, MapDraftProblem } from "./map-contribution-draft";
 
 /**
  * Every authenticated write in one place, so the boundary is auditable: the
@@ -6,7 +8,7 @@ import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overr
  * anonymous, edge-cacheable read namespace.
  */
 
-export type PortalSession = { email: string; isAdmin: boolean };
+export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean };
 
 export type ClaimSummary = {
   id: string;
@@ -30,7 +32,7 @@ export type PendingClaim = {
 };
 
 export class PortalError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly body?: Record<string, unknown>) {
     super(message);
   }
 }
@@ -68,7 +70,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
 
-  if (!response.ok) throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗。", response.status);
+  if (!response.ok) throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗。", response.status, body);
   return body as T;
 }
 
@@ -201,4 +203,119 @@ export function uploadThumbnail(circleId: string, file: File, sourceUrl: string,
 
 export function disableAccount(email: string) {
   return call<{ ok: true }>("/api/admin/accounts", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
+export type MapDraftSummary = {
+  id: string;
+  event_id: string;
+  period_key: string;
+  venue_space_id: string;
+  status: MapDraftStatus;
+  current_revision: number;
+  created_at: number;
+  updated_at: number;
+  decision_at: number | null;
+  owner_email?: string | null;
+};
+export type MapDraftFile = {
+  id: string;
+  revision: number;
+  source_url: string;
+  document_date: string;
+  page_number: number | null;
+  sha256: string;
+  mime: string;
+  width: number | null;
+  height: number | null;
+  review_result: string | null;
+  raw_deleted_at: number | null;
+};
+export type MapDraftDetail = MapDraftSummary & {
+  owner_account_id: string;
+  content: { schema: "map-contribution-draft/1"; layout: EventMapLayout };
+};
+export type MapDraftReview = {
+  revision: number;
+  from_status: MapDraftStatus;
+  to_status: MapDraftStatus;
+  actor_role: string;
+  note: string | null;
+  at: number;
+};
+
+export function listMyMapDrafts() {
+  return call<{ drafts: MapDraftSummary[] }>("/api/map-contributions/drafts");
+}
+
+export function readMapDraft(draftId: string, admin = false) {
+  const base = admin ? "/api/admin/map-contributions/drafts" : "/api/map-contributions/drafts";
+  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[] }>(`${base}/${encodeURIComponent(draftId)}`);
+}
+
+export function createMapContributionDraft(periodKey: string, venueSpaceId: string, layout: EventMapLayout) {
+  return call<{ ok: true; draftId: string; revision: number }>("/api/map-contributions/drafts", {
+    method: "POST",
+    body: JSON.stringify({ periodKey, venueSpaceId, content: { schema: "map-contribution-draft/1", layout } }),
+  });
+}
+
+export function saveMapContributionDraft(draftId: string, expectedRevision: number, layout: EventMapLayout) {
+  return call<{ ok: true; draftId: string; revision: number }>(`/api/map-contributions/drafts/${encodeURIComponent(draftId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ expectedRevision, content: { schema: "map-contribution-draft/1", layout } }),
+  });
+}
+
+export function submitMapContributionDraft(draftId: string, expectedRevision: number) {
+  return call<{ ok: true; draftId: string; revision: number }>(`/api/map-contributions/drafts/${encodeURIComponent(draftId)}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ expectedRevision }),
+  });
+}
+
+export function uploadMapContributionEvidence(input: {
+  draftId: string; revision: number; file: File; sourceUrl: string; documentDate: string; pageNumber?: number | null;
+}) {
+  const body = new FormData();
+  body.set("draftId", input.draftId);
+  body.set("revision", String(input.revision));
+  body.set("sourceUrl", input.sourceUrl);
+  body.set("documentDate", input.documentDate);
+  if (input.pageNumber != null) body.set("pageNumber", String(input.pageNumber));
+  body.set("file", input.file);
+  return call<{ ok: true; fileId: string; revision: number; sha256: string; mime: string; sizeBytes: number }>(
+    "/api/map-contributions/files", { method: "POST", body },
+  );
+}
+
+export function listAdminMapDrafts() {
+  return call<{ drafts: MapDraftSummary[] }>("/api/admin/map-contributions/drafts");
+}
+
+export function reviewMapContributionDraft(input: {
+  draftId: string;
+  expectedRevision: number;
+  decision: "changes_requested" | "approve" | "reject";
+  note?: string;
+  replacementDraftId?: string;
+  confirmOfficialSource?: boolean;
+}) {
+  return call<{ ok: true }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(input.draftId)}/review`, {
+    method: "POST", body: JSON.stringify(input),
+  });
+}
+
+export function exportMapContributionCandidate(draftId: string, expectedRevision: number) {
+  return call<{
+    ok: true; draftId: string; revision: number; targetPath: string; candidate: PublishedEventMap;
+    diff: MapCandidateDiff; candidateSha256: string; createdAt: number;
+  }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(draftId)}/export`, {
+    method: "POST", body: JSON.stringify({ expectedRevision }),
+  });
+}
+
+export function mapDraftProblems(error: unknown) {
+  if (!(error instanceof PortalError) || !Array.isArray(error.body?.problems)) return [];
+  return error.body.problems as MapDraftProblem[];
 }

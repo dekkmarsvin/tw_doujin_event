@@ -223,6 +223,17 @@ export const IDENTITY_TABLES = [
     "review_result TEXT",
     "raw_deleted_at INTEGER",
   ]),
+  table("map_draft_exports", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "draft_id TEXT NOT NULL",
+    "revision INTEGER NOT NULL",
+    "target_path TEXT NOT NULL",
+    "candidate_json TEXT NOT NULL",
+    "diff_json TEXT NOT NULL",
+    "candidate_sha256 TEXT NOT NULL",
+    "created_by TEXT",
+    "created_at INTEGER NOT NULL",
+  ]),
 ] as const;
 
 export const IDENTITY_INDEXES = [
@@ -251,6 +262,7 @@ export const IDENTITY_INDEXES = [
   index("map_draft_reviews_draft_idx", "map_draft_reviews", "draft_id, at"),
   index("map_draft_files_draft_idx", "map_draft_files", "draft_id, revision"),
   index("map_draft_files_object_idx", "map_draft_files", "object_key", { unique: true, where: "object_key IS NOT NULL" }),
+  index("map_draft_exports_key_idx", "map_draft_exports", "draft_id, revision", { unique: true }),
 ] as const;
 
 export const IDENTITY_SCHEMA_STATEMENTS = [...IDENTITY_TABLES, ...IDENTITY_INDEXES].map(({ sql }) => sql);
