@@ -100,7 +100,7 @@ test("circle category controls consume event data rather than organizer constant
     readFile(new URL("../app/event-map-app.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(portal, /ACTIVE_EVENT\.circleCategories\.categories\.map/);
-  assert.match(portal, /ACTIVE_EVENT\.circleCategories\.source\.url/);
+  assert.match(portal, /ACTIVE_EVENT\.circleCategories\.sources\.map/);
   assert.match(reader, /const GENRES: readonly string\[\] = ACTIVE_EVENT\.genres/);
   for (const organizerSpecificLabel of ["總合動漫畫", "東方Project", "學校漫研"]) {
     assert.doesNotMatch(portal, new RegExp(organizerSpecificLabel));

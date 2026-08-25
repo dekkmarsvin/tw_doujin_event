@@ -20,7 +20,7 @@ test("the active event comes from a versioned validated definition", () => {
   assert.equal(ACTIVE_EVENT.venueAssignments[0].venueSpaceId, "sample-hall");
   assert.equal(ACTIVE_EVENT_ID, "sample");
   assert.deepEqual(ACTIVE_EVENT.genres, ["全部類別", "原創作品", "遊戲作品"]);
-  assert.equal(ACTIVE_EVENT.circleCategories.source.url, "https://example.invalid/sample/categories");
+  assert.deepEqual(ACTIVE_EVENT.circleCategories.sources.map(({ url }) => url), ["https://example.invalid/sample/categories"]);
   assert.equal(EVENT_REGISTRY.size, 2);
   assert.equal(getEventDefinition("sample"), ACTIVE_EVENT);
   assert.deepEqual(getEventDefinition("sample-two")?.days.map(({ id }) => id), ["thu", "fri", "sat", "sun"]);
@@ -57,6 +57,24 @@ test("a future event may use different day and area identifiers", () => {
   assert.deepEqual(future.days.map(({ id }) => id), [1, 2, 3, 4]);
   assert.deepEqual(future.areas.map(({ id }) => id), ["north", "south"]);
   assert.deepEqual(future.venueAssignments.map(({ venueSpaceId }) => venueSpaceId), ["sample-hall", "sample-south-floor"]);
+});
+
+test("category projection preserves every official source and normalizes an omitted description", () => {
+  const references = structuredClone(sampleReferences);
+  const catalog = references.find(({ schema }) => schema === "category-catalog/1");
+  delete catalog.categories[0].description;
+  catalog.sources.push({
+    id: "category-page-two",
+    kind: "organizer-official",
+    url: "https://example.invalid/sample/categories-2",
+    retrievedAt: "2026-01-01T01:00:00.000+08:00",
+  });
+  const event = parseEventDefinition(sampleDefinition, references);
+  assert.equal(event.circleCategories.categories[0].description, "");
+  assert.deepEqual(event.circleCategories.sources.map(({ id, url }) => ({ id, url })), [
+    { id: "category-page", url: "https://example.invalid/sample/categories" },
+    { id: "category-page-two", url: "https://example.invalid/sample/categories-2" },
+  ]);
 });
 
 test("event definitions fail closed on v2, incomplete assignments and mismatched references", () => {

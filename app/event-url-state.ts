@@ -23,8 +23,8 @@ export type EventUrlState<TDay extends string | number, TArea extends string> = 
 
 export function defaultEventUrlState<TDay extends string | number, TArea extends string>(event: EventDefinition<TDay, TArea>): EventUrlState<TDay, TArea> {
   const day = event.days[0]?.id;
-  const venueAssignment = event.venueAssignments[0];
-  const area = event.areas.find(({ id }) => id === venueAssignment?.areaIds[0])?.id;
+  const area = event.areas[0]?.id;
+  const venueAssignment = area === undefined ? undefined : event.venueAssignments.find((assignment) => assignment.areaIds.includes(area));
   if (day === undefined || area === undefined || !venueAssignment || event.genres.length === 0) throw new Error(`Event ${event.id} has incomplete URL defaults.`);
   return {
     eventId: event.id,
@@ -54,15 +54,17 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
   const requestedAssignment = event.venueAssignments.find(({ venueSpaceId }) => venueSpaceId === requestedVenueSpaceId);
   const inferredAssignment = requestedArea === undefined ? undefined : venueAssignmentForArea(event, requestedArea);
   const invalidRequestedVenueSpace = requestedVenueSpaceId !== null && requestedAssignment === undefined;
+  const missingOrInvalidAreaForSpace = requestedVenueSpaceId !== null && requestedArea === undefined;
   const incompatibleRequestedPair = requestedAssignment !== undefined && requestedArea !== undefined
     && !requestedAssignment.areaIds.includes(requestedArea);
-  const useDefaultAssignment = invalidRequestedVenueSpace || incompatibleRequestedPair;
+  const useDefaultAssignment = invalidRequestedVenueSpace || missingOrInvalidAreaForSpace || incompatibleRequestedPair;
+  const defaultAssignment = venueAssignmentForArea(event, defaults.area);
   const venueAssignment = useDefaultAssignment
-    ? event.venueAssignments[0]
-    : requestedAssignment ?? inferredAssignment ?? event.venueAssignments[0];
+    ? defaultAssignment
+    : requestedAssignment ?? inferredAssignment ?? defaultAssignment;
   const area = !useDefaultAssignment && requestedArea !== undefined && venueAssignment.areaIds.includes(requestedArea)
     ? requestedArea
-    : event.areas.find(({ id }) => id === venueAssignment.areaIds[0])?.id ?? defaults.area;
+    : event.areas.find(({ id }) => venueAssignment.areaIds.includes(id))?.id ?? defaults.area;
   const genreValue = url.searchParams.get("genre");
   const genre = genreValue && event.genres.includes(genreValue) ? genreValue : defaults.genre;
   const workType = url.searchParams.get("workType");

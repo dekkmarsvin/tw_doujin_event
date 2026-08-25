@@ -581,8 +581,11 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       {ACTIVE_EVENT.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
     </select>
     <p className={styles.editorHint}>
-      請依本次主要販售內容選擇一項。選項來自<a href={ACTIVE_EVENT.circleCategories.source.url} target="_blank" rel="noreferrer">開拓動漫祭社團主題類別</a>。
-      {selectedCircleCategory && <>目前類別：{selectedCircleCategory.description}</>}
+      請依本次主要販售內容選擇一項。選項來自
+      {ACTIVE_EVENT.circleCategories.sources.map((source, index) => <span key={source.id}>
+        {index > 0 && "、"}<a href={source.url} target="_blank" rel="noreferrer">活動官方說明頁{ACTIVE_EVENT.circleCategories.sources.length > 1 ? ` ${index + 1}` : ""}</a>
+      </span>)}。
+      {selectedCircleCategory?.description && <>目前類別：{selectedCircleCategory.description}</>}
     </p>
     <FieldModeControls
       mode={modeFor("circleCategory")} label="社團主題類別"

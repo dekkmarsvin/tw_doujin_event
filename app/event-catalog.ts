@@ -177,14 +177,20 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     (record) => record.organizerId === categoryCatalog.organizerId && record.revision === categoryCatalog.revision,
   );
   if (categoryRecord.organizerId !== categoryCatalog.organizerId || categoryRecord.revision !== categoryCatalog.revision
-    || !Array.isArray(categoryRecord.sources) || !isRecord(categoryRecord.sources[0])
-    || !https(categoryRecord.sources[0].url) || !nonempty(categoryRecord.sources[0].retrievedAt)) {
+    || !Array.isArray(categoryRecord.sources) || categoryRecord.sources.length === 0
+    || !categoryRecord.sources.every((source) => isRecord(source) && nonempty(source.id)
+      && https(source.url) && nonempty(source.retrievedAt))) {
     throw new Error("Event category catalog reference does not match pinned data.");
   }
   const categoryOrganizer = organizerAssignments.find(({ organizerId }) => organizerId === categoryCatalog.organizerId)!;
   const circleCategories = parseCircleCategoryCatalog({
     schema: "circle-category-catalog/1",
-    source: { provider: categoryOrganizer.name, url: categoryRecord.sources[0].url, retrievedAt: categoryRecord.sources[0].retrievedAt },
+    sources: categoryRecord.sources.map((source) => ({
+      id: source.id,
+      provider: categoryOrganizer.name,
+      url: source.url,
+      retrievedAt: source.retrievedAt,
+    })),
     categories: categoryRecord.categories,
   });
 

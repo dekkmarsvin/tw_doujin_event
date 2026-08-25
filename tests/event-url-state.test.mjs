@@ -57,6 +57,26 @@ test("legacy hall alias parses but serialization emits only area", () => {
   assert.equal(url.searchParams.has("hall"), false);
 });
 
+test("URL defaults follow event area order rather than assignment order", () => {
+  const reversedAreas = {
+    ...eventA,
+    venueAssignments: [{ venueId: "venue-a", venueSpaceId: "hall-a", areaIds: ["EAST", "ALL"] }],
+  };
+  assert.equal(codec.defaultEventUrlState(reversedAreas).area, "ALL");
+
+  const reversedAssignments = {
+    ...eventA,
+    areas: [{ id: "NORTH", label: "北館", shortLabel: "北" }, { id: "SOUTH", label: "南館", shortLabel: "南" }],
+    venueAssignments: [
+      { venueId: "venue-a", venueSpaceId: "south-floor", areaIds: ["SOUTH"] },
+      { venueId: "venue-a", venueSpaceId: "north-floor", areaIds: ["NORTH"] },
+    ],
+  };
+  const defaults = codec.defaultEventUrlState(reversedAssignments);
+  assert.equal(defaults.area, "NORTH");
+  assert.equal(defaults.venueSpaceId, "north-floor");
+});
+
 test("venue space is shareable only for multi-space events and invalid pairs fail closed", () => {
   const multiSpace = {
     ...eventA,
@@ -83,6 +103,12 @@ test("venue space is shareable only for multi-space events and invalid pairs fai
   const invalidSpace = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=missing&area=SOUTH");
   assert.equal(invalidSpace.state.venueSpaceId, "north-floor");
   assert.equal(invalidSpace.state.area, "NORTH");
+  const unknownArea = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor&area=BOGUS");
+  assert.equal(unknownArea.state.venueSpaceId, "north-floor");
+  assert.equal(unknownArea.state.area, "NORTH");
+  const missingArea = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor");
+  assert.equal(missingArea.state.venueSpaceId, "north-floor");
+  assert.equal(missingArea.state.area, "NORTH");
   assert.equal(codec.serializeEventUrlState(multiSpace, invalidSpace.state, "https://map.example/?venueSpaceId=missing").searchParams.get("venueSpaceId"), "north-floor");
   const singleSpace = codec.serializeEventUrlState(eventA, codec.defaultEventUrlState(eventA), "https://map.example/?venueSpaceId=stale");
   assert.equal(singleSpace.searchParams.has("venueSpaceId"), false);
