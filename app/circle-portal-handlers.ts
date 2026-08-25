@@ -3,6 +3,9 @@ import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomCh
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
 import { deleteObjectKeys, hostedThumbnailFields, prepareHostedThumbnail, type HostedThumbnailStore } from "./hosted-thumbnails";
+import {
+  mapContributionObjectKey, prepareMapContributionFile, type MapContributionFileStore,
+} from "./map-contribution-files";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -69,6 +72,8 @@ export type PortalDependencies = {
   /** Runs the reader's own projection so a preview cannot drift from reality. */
   projectCircle: (circleId: string, fields: CircleOverrideFields | null, updatedAt?: string) => Promise<unknown[] | null>;
   thumbnailStore?: HostedThumbnailStore;
+  /** Separate private R2 bucket. It must never share the public thumbnail origin. */
+  mapContributionStore?: MapContributionFileStore;
   config: PortalConfig;
 };
 
@@ -113,7 +118,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey, projectCircle, thumbnailStore, config }: PortalDependencies) {
+export function createCirclePortalHandlers({ repository, sendMail, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey, projectCircle, thumbnailStore, mapContributionStore, config }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
   // string against a normalized one silently denies an admin whose address
@@ -132,7 +137,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   /** Resolve the caller. Signature is a cheap gate; the session row is the authority. */
-  async function currentSession(request: Request) {
+  async function currentSession(request: Request, allowDeleting = false) {
     const raw = readCookie(request, SESSION_COOKIE);
     if (!raw) return null;
     const separator = raw.lastIndexOf(".");
@@ -140,7 +145,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const sessionId = raw.slice(0, separator);
     const signature = raw.slice(separator + 1);
     if (!await hmacVerify(config.sessionSecret, sessionId, signature)) return null;
-    const session = await repository.getSession(sessionId, config.now());
+    const session = await repository.getSession(sessionId, config.now(), allowDeleting);
     return session ? { ...session, sessionId } : null;
   }
 
@@ -250,7 +255,9 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
   }
 
   async function deleteMyAccount(request: Request) {
-    const current = await requireSession(request);
+    // The session that initiated deletion remains usable only on this route so
+    // an R2 outage can be retried; every normal route rejects the tombstone.
+    const current = await currentSession(request, true);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (await isAdmin(current.email)) {
       return json({ error: "管理者帳號需先由另一位管理者移出名單，才能刪除。" }, 409);
@@ -260,14 +267,26 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。" }, 400);
     }
     const now = config.now();
-    const claimScopes = await repository.listClaimScopesForAccount(current.accountId);
+    let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
+    let mapDraftKeys = await repository.listUnsubmittedMapDraftObjectKeysForAccount(current.accountId);
     if (!thumbnailStore && claimScopes.length > 0) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (!mapContributionStore && mapDraftKeys.length > 0) return json({ error: "私人地圖檔案儲存服務尚未設定完成。" }, 503);
+    if (!await repository.beginAccountDeletion({
+      accountId: current.accountId, email: current.email, now, retrySessionId: current.sessionId,
+    })) {
+      return json({ error: "找不到可刪除的帳號。" }, 404);
+    }
+    // Re-read after the atomic contributor tombstone. An upload that already
+    // put R2 bytes can no longer bind metadata and will roll its object back.
+    claimScopes = await repository.listClaimScopesForAccount(current.accountId);
+    mapDraftKeys = await repository.listUnsubmittedMapDraftObjectKeysForAccount(current.accountId);
     if (thumbnailStore) {
       const allKeys = (await Promise.all(claimScopes.map((claim) => thumbnailStore.list(
         `events/${encodeURIComponent(claim.event_id)}/circles/${encodeURIComponent(claim.circle_id)}/`,
       )))).flat();
       await deleteObjectKeys(thumbnailStore, [...new Set(allKeys)]);
     }
+    if (mapContributionStore) await deleteObjectKeys(mapContributionStore, [...new Set(mapDraftKeys)]);
     const deleted = await repository.deleteAccount({
       accountId: current.accountId,
       email: current.email,
@@ -367,7 +386,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     const challenge = challengeable ? randomChallengeCode(config.eventId) : null;
 
     const id = crypto.randomUUID();
-    await repository.createClaim({
+    const created = await repository.createClaim({
       id,
       accountId: current.accountId,
       eventId: config.eventId,
@@ -384,6 +403,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       evidenceNote,
       now,
     });
+    if (!created) return json({ error: "此帳號正在刪除，無法建立認領。" }, 409);
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle",
       action: domainMatch ? "claim.auto_verified" : "claim.created",
@@ -411,7 +431,9 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     if (claim.challenge_attempts >= LIMITS.challengeAttemptsPerClaim) {
       return json({ error: "驗證次數已達上限，請改用人工審核。" }, 429);
     }
-    await repository.recordChallengeAttempt(claim.id);
+    if (!await repository.recordChallengeAttempt(claim.id)) {
+      return json({ error: "此帳號正在刪除，無法繼續驗證。" }, 409);
+    }
 
     const body = await fetchEvidence(claim.target_url);
     const matched = !!body && await sha256Hex(extractChallenge(body) ?? "") === claim.challenge_token_hash;
@@ -481,10 +503,15 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       && thumbnailUrl === thumbnailStore.url(previousKey));
     const nextHostedKey = uploadedKey ?? (keepsHostedThumbnail ? previousKey : null);
     if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
-    await repository.putOverride({
-      eventId: config.eventId, circleId, fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
+    const saved = await repository.putOverride({
+      accountId: current.accountId, eventId: config.eventId, circleId,
+      fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
       hostedThumbnailKey: nextHostedKey,
     });
+    if (!saved) {
+      if (uploadedKey && thumbnailStore) await thumbnailStore.delete(uploadedKey);
+      return json({ error: "此帳號正在刪除，無法儲存內容。" }, 409);
+    }
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
     if (thumbnailStore) {
       const unusedKeys = (await thumbnailStore.list(uploadPrefix)).filter((key) => key !== nextHostedKey);
@@ -545,6 +572,10 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       .filter((key) => key !== previousKey && key !== prepared.key);
     await deleteObjectKeys(thumbnailStore, staleDraftKeys);
     await thumbnailStore.put(prepared.key, prepared.value, prepared.contentType);
+    if (!await repository.isAccountWritable(current.accountId)) {
+      await thumbnailStore.delete(prepared.key);
+      return json({ error: "此帳號正在刪除，無法上傳圖片。" }, 409);
+    }
     return json({ ok: true, thumbnail, uploadKey: prepared.key });
   }
 
@@ -582,7 +613,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
       await deleteObjectKeys(thumbnailStore, keys);
     }
-    if (!await repository.deleteOverride({ eventId: config.eventId, circleId })) {
+    if (!await repository.deleteOverride({ accountId: current.accountId, eventId: config.eventId, circleId })) {
       return json({ error: "沒有可刪除的內容。" }, 404);
     }
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
@@ -660,7 +691,7 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     if (typeof body?.hidden !== "boolean") return json({ error: "hidden 必須是 true 或 false。" }, 400);
 
     const now = config.now();
-    const applied = await repository.setPostEventHidden(config.eventId, circleId, body.hidden);
+    const applied = await repository.setPostEventHidden(current.accountId, config.eventId, circleId, body.hidden);
     if (!applied) return json({ error: "請先儲存一次內容再設定。" }, 409);
 
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
@@ -679,6 +710,170 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       return { ok: false, response: json({ error: "管理操作需要重新登入。" }, 401) };
     }
     return { ok: true, session: current };
+  }
+
+  async function adminManageMapContributor(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+    const action = body?.action;
+    if (!isEmailShaped(email) || (action !== "grant" && action !== "revoke" && action !== "suspend")) {
+      return json({ error: "email 與 action（grant／revoke／suspend）是必填欄位。" }, 400);
+    }
+    const now = config.now();
+    const result = await repository.manageMapContributor({ email, action, by: gate.session.email, now });
+    await repository.writeAudit({
+      at: now, actorAccountId: gate.session.accountId, actorRole: "admin",
+      action: `map_contributor.${action}`, subjectType: "map_contributor",
+      subjectId: await emailAuditSubjectId(config.hashPepper, email), detail: { result }, ipHash: await clientIpHash(request),
+    });
+    if (result === "missing") return json({ error: "找不到可授權的有效帳號。" }, 404);
+    if (result === "unchanged") return json({ error: "角色狀態沒有變更。" }, 409);
+    return json({ ok: true, result });
+  }
+
+  async function adminListStaleMapDrafts(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const daysValue = Number(new URL(request.url).searchParams.get("days") ?? "30");
+    if (!Number.isSafeInteger(daysValue) || daysValue < 1 || daysValue > 365) return json({ error: "days 必須介於 1 與 365。" }, 400);
+    const before = config.now() - daysValue * 24 * 60 * 60 * 1000;
+    const drafts = await repository.listStaleSubmittedMapDrafts(before);
+    return json({ before, drafts });
+  }
+
+  function validMapScope(value: unknown): value is string {
+    return typeof value === "string" && /^[a-z0-9][a-z0-9-]*$/.test(value);
+  }
+
+  function privateDraftContent(value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const serialized = JSON.stringify(value);
+    return new TextEncoder().encode(serialized).byteLength <= 1024 * 1024 ? serialized : null;
+  }
+
+  async function createMapDraft(request: Request) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const body = await readJson(request);
+    const periodKey = body?.periodKey;
+    const venueSpaceId = body?.venueSpaceId;
+    const contentJson = privateDraftContent(body?.content);
+    if (!validMapScope(periodKey) || !validMapScope(venueSpaceId) || !contentJson) {
+      return json({ error: "periodKey、venueSpaceId 或草稿內容無效。" }, 400);
+    }
+    const draftId = crypto.randomUUID();
+    const created = await repository.createMapDraft({
+      id: draftId, eventId: config.eventId, periodKey, venueSpaceId,
+      ownerAccountId: current.accountId, contentJson, now: config.now(),
+    });
+    if (!created) return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: current.accountId, actorRole: "map_contributor",
+      action: "map_draft.created", subjectType: "map_draft", subjectId: draftId,
+      detail: { eventId: config.eventId, periodKey, venueSpaceId }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, draftId, revision: 1 }, 201);
+  }
+
+  async function updateMapDraft(request: Request, draftId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const body = await readJson(request);
+    const expectedRevision = body?.expectedRevision;
+    const contentJson = privateDraftContent(body?.content);
+    if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1 || !contentJson) {
+      return json({ error: "expectedRevision 或草稿內容無效。" }, 400);
+    }
+    const revision = await repository.writeMapDraftRevision({
+      draftId, ownerAccountId: current.accountId, expectedRevision: expectedRevision as number,
+      contentJson, now: config.now(),
+    });
+    if (revision === null) return json({ error: "草稿版本已變更、狀態不可編輯，或權限已撤銷。" }, 409);
+    return json({ ok: true, draftId, revision });
+  }
+
+  async function submitMapDraft(request: Request, draftId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const body = await readJson(request);
+    const expectedRevision = body?.expectedRevision;
+    if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1) return json({ error: "expectedRevision 無效。" }, 400);
+    const submitted = await repository.submitMapDraft({
+      draftId, ownerAccountId: current.accountId, expectedRevision: expectedRevision as number, now: config.now(),
+    });
+    if (!submitted) return json({ error: "草稿版本已變更、狀態不可提交，或權限已撤銷。" }, 409);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: current.accountId, actorRole: "map_contributor",
+      action: "map_draft.submitted", subjectType: "map_draft", subjectId: draftId,
+      detail: { revision: expectedRevision }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, draftId, revision: expectedRevision });
+  }
+
+  async function uploadMapDraftFile(request: Request) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!mapContributionStore) return json({ error: "私人地圖檔案儲存服務尚未設定完成。" }, 503);
+    let form: FormData;
+    try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
+    const file = form.get("file");
+    const draftId = form.get("draftId");
+    const revision = Number(form.get("revision"));
+    const sourceUrl = form.get("sourceUrl");
+    const documentDate = form.get("documentDate");
+    const pageValue = form.get("pageNumber");
+    const pageNumber = typeof pageValue === "string" && pageValue !== "" ? Number(pageValue) : null;
+    if (!(file instanceof File) || typeof draftId !== "string" || !validMapScope(draftId)
+      || !Number.isSafeInteger(revision) || revision < 1 || typeof sourceUrl !== "string" || typeof documentDate !== "string") {
+      return json({ error: "檔案、draftId、revision 與官方來源 metadata 是必填欄位。" }, 400);
+    }
+    let prepared: Awaited<ReturnType<typeof prepareMapContributionFile>>;
+    try { prepared = await prepareMapContributionFile({ file, sourceUrl, documentDate, pageNumber }); }
+    catch (error) { return json({ error: error instanceof Error ? error.message : "檔案格式無效。" }, 400); }
+    const fileId = crypto.randomUUID();
+    const objectKey = mapContributionObjectKey({ eventId: config.eventId, draftId, fileId, extension: prepared.extension });
+    await mapContributionStore.put(objectKey, prepared.bytes, prepared.contentType);
+    let recorded: boolean;
+    try {
+      recorded = await repository.addMapDraftFile({
+        id: fileId, draftId, revision, objectKey, sourceUrl: prepared.sourceUrl, documentDate: prepared.documentDate,
+        pageNumber: prepared.pageNumber, sha256: prepared.sha256, mime: prepared.contentType,
+        sizeBytes: prepared.sizeBytes, width: prepared.width, height: prepared.height, pageCount: prepared.pageCount,
+        uploadedBy: current.accountId, now: config.now(),
+      });
+    } catch (error) {
+      await mapContributionStore.delete(objectKey);
+      throw error;
+    }
+    if (!recorded) {
+      await mapContributionStore.delete(objectKey);
+      return json({ error: "草稿版本已變更、狀態不可上傳，或權限已撤銷。" }, 409);
+    }
+    return json({ ok: true, fileId, revision, sha256: prepared.sha256, mime: prepared.contentType, sizeBytes: prepared.sizeBytes }, 201);
+  }
+
+  async function readMapDraftFile(request: Request, fileId: string, preview = false) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!mapContributionStore) return json({ error: "私人地圖檔案儲存服務尚未設定完成。" }, 503);
+    const metadata = await repository.getMapDraftFile(fileId);
+    if (!metadata?.object_key) return json({ error: "找不到檔案。" }, 404);
+    if (metadata.owner_account_id !== current.accountId && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
+    if (preview && metadata.mime === "application/pdf") return json({ error: "PDF 不提供 inline 預覽，請使用授權下載。" }, 415);
+    const object = await mapContributionStore.get(metadata.object_key);
+    if (!object) return json({ error: "找不到檔案。" }, 404);
+    const extension = metadata.mime === "image/jpeg" ? "jpg" : metadata.mime === "image/png" ? "png" : metadata.mime === "image/webp" ? "webp" : "pdf";
+    return new Response(object.body, {
+      headers: {
+        "content-type": metadata.mime,
+        "content-disposition": `${preview ? "inline" : "attachment"}; filename="map-source.${extension}"`,
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+        ...(preview ? { "content-security-policy": "default-src 'none'; sandbox" } : {}),
+      },
+    });
   }
 
   async function adminListClaims(request: Request) {
@@ -784,7 +979,8 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
       detail: { result }, ipHash: await clientIpHash(request),
     });
     if (result === "disabled") return json({ ok: true });
-    return json({ error: result === "missing" ? "找不到這個帳號。" : "這個帳號已停用。" }, 409);
+    return json({ error: result === "missing" ? "找不到這個帳號。"
+      : result === "deleting" ? "這個帳號正在刪除，不能再停用。" : "這個帳號已停用。" }, 409);
   }
 
   async function adminTakedown(request: Request) {
@@ -855,6 +1051,9 @@ export function createCirclePortalHandlers({ repository, sendMail, lookupCircle,
     getMyOverride, putOverride, uploadThumbnail, deleteMyOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins, adminDisableAccount,
+    adminManageMapContributor, adminListStaleMapDrafts,
+    createMapDraft, updateMapDraft, submitMapDraft,
+    uploadMapDraftFile, readMapDraftFile,
     publicOverrides,
   };
 }

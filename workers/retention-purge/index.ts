@@ -17,7 +17,9 @@ export default {
   async scheduled(controller: ScheduledController, env: RetentionEnv) {
     // The scheduled time, not the wall clock: a firing delayed by a minute
     // should still delete against the window it was scheduled for.
-    const summary = await purgeExpiredRecords(env.DB, controller.scheduledTime, RETENTION_WINDOWS, env.THUMBNAILS);
+    const summary = await purgeExpiredRecords(
+      env.DB, controller.scheduledTime, RETENTION_WINDOWS, env.THUMBNAILS, env.MAP_CONTRIBUTIONS,
+    );
     // Also in `audit_log`; this copy is for `wrangler tail` during a deploy.
     console.log(JSON.stringify({ event: "retention.purged", cron: controller.cron, ...summary }));
   },

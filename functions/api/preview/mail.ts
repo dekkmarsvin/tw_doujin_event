@@ -5,6 +5,17 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 }
 
+async function clearBucket(bucket: R2Bucket) {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ ...(cursor ? { cursor } : {}) });
+    keys.push(...page.objects.map(({ key }) => key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  await deleteObjectKeys(bucket, keys);
+}
+
 /** Preview-only mail sink reader. Production has neither the flag nor token. */
 export const onRequestGet: PagesFunction<PortalEnv> = async ({ request, env }) => {
   if (!previewE2eAuthorized(env, request)) return json({ error: "not found" }, 404);
@@ -17,15 +28,10 @@ export const onRequestGet: PagesFunction<PortalEnv> = async ({ request, env }) =
 /** Clear disposable accounts, claims, overrides, audit and captured mail. */
 export const onRequestDelete: PagesFunction<PortalEnv> = async ({ request, env }) => {
   if (!previewE2eAuthorized(env, request)) return json({ error: "not found" }, 404);
+  if (!env.MAP_CONTRIBUTIONS) return json({ error: "private map storage is not configured" }, 503);
   const repository = repositoryFor(env);
-  const keys: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await env.THUMBNAILS.list({ ...(cursor ? { cursor } : {}) });
-    keys.push(...page.objects.map(({ key }) => key));
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  await deleteObjectKeys(env.THUMBNAILS, keys);
+  await clearBucket(env.THUMBNAILS);
+  await clearBucket(env.MAP_CONTRIBUTIONS);
   await repository.clearPreviewData();
   return json({ ok: true });
 };

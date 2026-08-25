@@ -40,6 +40,7 @@ interface R2Bucket {
     cursor?: string;
   }>;
   put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: R2PutOptions): Promise<unknown>;
+  get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
   delete(keys: string | string[]): Promise<void>;
 }
 
@@ -48,6 +49,8 @@ interface R2Bucket {
 interface RetentionEnv {
   DB: D1Database;
   THUMBNAILS: R2Bucket;
+  /** Private evidence bucket. It has no public domain and is only read through authenticated Functions. */
+  MAP_CONTRIBUTIONS?: R2Bucket;
 }
 
 /** The argument a Cron Trigger hands to `scheduled()`. */
@@ -69,6 +72,8 @@ interface PortalEnv {
   EVENT_ID: string;
   DB: D1Database;
   THUMBNAILS: R2Bucket;
+  /** Private evidence bucket. It has no public domain and is read only through authenticated Functions. */
+  MAP_CONTRIBUTIONS?: R2Bucket;
   THUMBNAIL_PUBLIC_ORIGIN?: string;
   ASSETS: Fetcher;
   MAILGUN_API_KEY?: string;

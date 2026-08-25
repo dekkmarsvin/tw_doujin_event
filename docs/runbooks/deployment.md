@@ -21,7 +21,7 @@
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
 | Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
 | 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker) |
-| R2 | **需要**——production `tw-doujin-event-thumbnails`、preview `tw-doujin-event-thumbnails-preview`，由 `THUMBNAILS` binding 提供社團代管縮圖 |
+| R2 | **需要**——每個環境各有公開縮圖 bucket（`THUMBNAILS`）與無公開網域的地圖來源 bucket（`MAP_CONTRIBUTIONS`） |
 | KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
@@ -195,7 +195,7 @@ curl -sI https://map.kotoban.top/circle | grep -ci '^content-security-policy'
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；preview 的 Mailgun 用 sandbox 那一組，永遠不是 production 的。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
 - `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
-- E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、公開文件、audit 與 captured mail；admins roster 保留供下一次重跑。
+- E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、地圖貢獻資料、公開文件、audit、captured mail，以及兩個 preview R2 bucket；admins roster 保留供下一次重跑。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用
@@ -222,7 +222,7 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定。**不需要執行任何 migration。**
 
-社團控制面的八張核心表——`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`——以及 preview-only mail sink 使用的 `preview_mail_sink`，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
+identity、社團控制面與地圖貢獻共 14 張 runtime table，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。地圖貢獻新增 `map_contributor_grants`、`map_drafts`、`map_draft_revisions`、`map_draft_reviews`、`map_draft_files`；preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
 
 identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 只服務本機地圖 authoring，不是 identity schema 的第二份 representation，也不參與部署。
 
@@ -274,6 +274,19 @@ npx wrangler r2 bucket domain list tw-doujin-event-thumbnails-preview
 ```
 
 容量與操作量的營運監控追蹤於 [#66](https://github.com/dekkmarsvin/tw_doujin_event/issues/66)，不屬於縮圖請求路徑。
+
+### 3.2 建立私人地圖來源 bucket
+
+production 與 preview 分開，且不得設定 custom domain 或開啟 `r2.dev`：
+
+```bash
+npx wrangler r2 bucket create tw-doujin-event-map-contributions
+npx wrangler r2 bucket create tw-doujin-event-map-contributions-preview
+npx wrangler r2 bucket domain list tw-doujin-event-map-contributions
+npx wrangler r2 bucket domain list tw-doujin-event-map-contributions-preview
+```
+
+最後兩個指令應顯示沒有 custom domain。Pages 與排程 Worker 都以 `MAP_CONTRIBUTIONS` 綁定同一環境的私人 bucket；不得與有公開圖片網域的 `THUMBNAILS` 共用。Pages 只透過需要 session 與 owner／管理者檢查的 Function 讀取，排程 Worker 只刪除到期原始檔。
 
 ### 4. 設定 production 與 preview runtime secrets
 
@@ -373,9 +386,9 @@ token 過期或被撤銷、或 policy 被改成 Allow 時，CI 會報 `Service t
 
 ## 排程清除 Worker
 
-保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1 與該環境的縮圖 R2 bucket（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
+保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1、該環境的縮圖 R2 bucket 與私人地圖來源 bucket（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
 
-它每天 UTC 03:17 執行一次，刪除四類資料、匿名化一類欄位，並寫一筆 `audit_log` 摘要：
+它每天 UTC 03:17 執行一次，依下表刪除或匿名化到期資料，並寫一筆 `audit_log` 摘要：
 
 | 目標 | 期限 |
 |---|---|
@@ -383,9 +396,11 @@ token 過期或被撤銷、或 policy 被改成 Allow 時，CI 會報 `Service t
 | `sessions` | 到期或撤銷後 7 天 |
 | `preview_mail_sink` | 7 天 |
 | `circle_overrides` | **由社團自選**：只刪 `retention_choice = 'purge'` 且 `retention_expires_at` 已過的列（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
+| `map_drafts`／`map_draft_revisions` | `draft`／`changes_requested` 180 天無活動後刪除內容；後者保留去識別化 review |
+| 私人地圖來源 R2 bytes | `approved`／`rejected`／`exported` 決定 30 天後刪除；`submitted` 不自動清除 |
 | `audit_log.ip_hash` | 寫入滿 90 天後清為 `NULL`，audit 列不刪除 |
 
-前三者與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除社團資料列前先刪除 `hosted_thumbnail_key` 指向的 R2 物件；之後 `overrides_doc` 同步失去該筆並遞增 revision，且每筆寫一列 `override.purged` 稽核，內容不留。
+憑證、地圖草稿／原始檔與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除 D1 metadata 前先刪除對應 R2 bytes；私人 bucket 未綁定且有到期原始檔時會中止，不把 metadata 當成已清除。社團自述清除後 `overrides_doc` 同步失去該筆並遞增 revision，且每筆寫一列 `override.purged` 稽核，內容不留。
 
 **它只刪，不建表**——schema 仍由 Pages 端的 repository 首次使用時建立；找不到的表會列進摘要的 `skipped` 並跳過。
 
@@ -420,7 +435,7 @@ npm run purge:dev
 ### 兩件容易踩到的事
 
 - **它不在 GitHub Actions 的部署流程裡。** Pages 的 CI 不會連帶更新這個 Worker；改了 `db/retention-purge.ts` 之後要自己重跑 `npm run purge:deploy`。
-- **bindings 不會被 named environment 繼承。** `env.preview` 必須自己宣告一份 `d1_databases`，理由與 Pages 的 `wrangler.jsonc` 完全相同；漏掉的話 preview 那份會直接沒有資料庫。
+- **bindings 不會被 named environment 繼承。** `env.preview` 必須自己宣告 `d1_databases`、`THUMBNAILS` 與 `MAP_CONTRIBUTIONS`，理由與 Pages 的 `wrangler.jsonc` 完全相同；漏掉的話 preview 那份會直接少資源。
 
 ## 發布前 gate
 

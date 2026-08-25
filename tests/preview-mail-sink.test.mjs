@@ -17,6 +17,7 @@ const database = await miniflare.getD1Database("DB");
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const previewObjects = new Set(["events/ff47/circles/c-000001/published.webp", "events/ff47/circles/c-000001/draft.png"]);
+const mapContributionObjects = new Set(["events/ff47/map-drafts/draft-1/file-1/source.png"]);
 
 const env = {
   PREVIEW_MAIL_SINK: "d1",
@@ -28,6 +29,10 @@ const env = {
   THUMBNAILS: {
     list: async () => ({ objects: [...previewObjects].map((key) => ({ key })), truncated: false }),
     delete: async (keys) => { (Array.isArray(keys) ? keys : [keys]).forEach((key) => previewObjects.delete(key)); },
+  },
+  MAP_CONTRIBUTIONS: {
+    list: async () => ({ objects: [...mapContributionObjects].map((key) => ({ key })), truncated: false }),
+    delete: async (keys) => { (Array.isArray(keys) ? keys : [keys]).forEach((key) => mapContributionObjects.delete(key)); },
   },
 };
 
@@ -80,6 +85,22 @@ test("preview route reads and clears captured mail only with its dedicated token
   }), env });
   assert.equal(cleared.status, 200);
   assert.deepEqual([...previewObjects], [], "preview reset removes published and staged-only objects");
+  assert.deepEqual([...mapContributionObjects], [], "preview reset removes private map-contribution evidence");
   assert.equal(await repository.latestPreviewMail("preview-circle@example.test"), null);
   assert.equal(await repository.isAdminEmail("preview-admin@example.test"), true);
+});
+
+test("preview reset fails before deleting anything when private map storage is missing", async () => {
+  previewObjects.add("events/ff47/circles/c-000001/keep.png");
+  await repositoryFor(env).storePreviewMail({ email: "preview-circle@example.test", subject: "login", text: "keep", now: 1_786_500_000_001 });
+  const response = await onRequestDelete({
+    request: new Request("https://preview.example/api/preview/mail", {
+      method: "DELETE", headers: { "x-preview-e2e-token": env.PREVIEW_E2E_TOKEN },
+    }),
+    env: { ...env, MAP_CONTRIBUTIONS: undefined },
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual([...previewObjects], ["events/ff47/circles/c-000001/keep.png"]);
+  assert.equal((await repositoryFor(env).latestPreviewMail("preview-circle@example.test")).text, "keep");
+  previewObjects.clear();
 });

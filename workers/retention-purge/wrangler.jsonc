@@ -23,6 +23,10 @@
     {
       "binding": "THUMBNAILS",
       "bucket_name": "tw-doujin-event-thumbnails"
+    },
+    {
+      "binding": "MAP_CONTRIBUTIONS",
+      "bucket_name": "tw-doujin-event-map-contributions"
     }
   ],
   // Deployed as `tw-catalog-retention-purge-preview`. Bindings are not
@@ -48,6 +52,10 @@
         {
           "binding": "THUMBNAILS",
           "bucket_name": "tw-doujin-event-thumbnails-preview"
+        },
+        {
+          "binding": "MAP_CONTRIBUTIONS",
+          "bucket_name": "tw-doujin-event-map-contributions-preview"
         }
       ]
     }

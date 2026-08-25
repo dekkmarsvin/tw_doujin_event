@@ -16,6 +16,7 @@ import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_SCHEMA_STATEMENTS } from "./identi
 export type OverridesPhase = "during" | "after";
 export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked";
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
+export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported";
 
 export type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
 
@@ -126,7 +127,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function writeAudit(entry: {
     at: number;
     actorAccountId?: string | null;
-    actorRole: "circle" | "admin" | "system";
+    actorRole: "circle" | "map_contributor" | "admin" | "system";
     action: string;
     subjectType: string;
     subjectId: string;
@@ -135,8 +136,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }) {
     await ensureTables();
     await database.prepare(
-      `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      `INSERT INTO audit_log (
+         id, at, actor_account_id, actor_role, action, subject_type, subject_id,
+         detail_json, ip_hash, shredded_at
+       ) SELECT ?1, ?2,
+         CASE WHEN actor_allowed = 1 THEN ?3 ELSE NULL END,
+         ?4, ?5, ?6, ?7,
+         CASE WHEN actor_allowed = 1 THEN ?8 ELSE NULL END,
+         CASE WHEN actor_allowed = 1 THEN ?9 ELSE NULL END,
+         CASE WHEN actor_allowed = 1 THEN NULL ELSE ?2 END
+       FROM (
+         SELECT CASE WHEN ?3 IS NULL OR EXISTS (
+           SELECT 1 FROM accounts WHERE id = ?3 AND deletion_started_at IS NULL
+         ) THEN 1 ELSE 0 END AS actor_allowed
+       )`,
     ).bind(
       crypto.randomUUID(), entry.at, entry.actorAccountId ?? null, entry.actorRole,
       entry.action, entry.subjectType, entry.subjectId,
@@ -185,10 +198,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function upsertAccount(email: string, now: number): Promise<string> {
     await ensureTables();
-    const existing = await database.prepare(`SELECT id, disabled_at FROM accounts WHERE email = ?1`)
-      .bind(email).first<{ id: string; disabled_at: number | null }>();
+    const existing = await database.prepare(`SELECT id, disabled_at, deletion_started_at FROM accounts WHERE email = ?1`)
+      .bind(email).first<{ id: string; disabled_at: number | null; deletion_started_at: number | null }>();
     if (existing) {
       if (existing.disabled_at !== null) throw new Error("此帳號已停用。");
+      if (existing.deletion_started_at !== null) throw new Error("此帳號正在刪除，請稍後再試。");
       await database.prepare(`UPDATE accounts SET last_login_at = ?1 WHERE id = ?2`).bind(now, existing.id).run();
       return existing.id;
     }
@@ -201,18 +215,22 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function createSession(accountId: string, now: number, expiresAt: number, id: string) {
     await ensureTables();
-    await database.prepare(
-      `INSERT INTO sessions (id, account_id, created_at, expires_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?3)`,
+    const result = await database.prepare(
+      `INSERT INTO sessions (id, account_id, created_at, expires_at, last_seen_at)
+       SELECT ?1, ?2, ?3, ?4, ?3 FROM accounts
+       WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL`,
     ).bind(id, accountId, now, expiresAt).run();
+    if (result.meta.changes !== 1) throw new Error("此帳號目前無法建立登入狀態。");
   }
 
-  async function getSession(sessionId: string, now: number): Promise<SessionAccount | null> {
+  async function getSession(sessionId: string, now: number, allowDeleting = false): Promise<SessionAccount | null> {
     await ensureTables();
     const row = await database.prepare(
       `SELECT s.account_id, s.created_at, a.email FROM sessions s
        JOIN accounts a ON a.id = s.account_id
-       WHERE s.id = ?1 AND s.revoked_at IS NULL AND s.expires_at > ?2 AND a.disabled_at IS NULL`,
-    ).bind(sessionId, now).first<{ account_id: string; created_at: number; email: string }>();
+       WHERE s.id = ?1 AND s.revoked_at IS NULL AND s.expires_at > ?2
+         AND a.disabled_at IS NULL AND (?3 = 1 OR a.deletion_started_at IS NULL)`,
+    ).bind(sessionId, now, allowDeleting ? 1 : 0).first<{ account_id: string; created_at: number; email: string }>();
     if (!row) return null;
     await database.prepare(`UPDATE sessions SET last_seen_at = ?1 WHERE id = ?2`).bind(now, sessionId).run();
     return { accountId: row.account_id, email: row.email, sessionCreatedAt: row.created_at };
@@ -226,17 +244,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function disableAccount(email: string, now: number) {
     await ensureTables();
-    const result = await database.prepare(
-      `UPDATE accounts SET disabled_at = ?1 WHERE email = ?2 AND disabled_at IS NULL`,
-    ).bind(now, email).run();
-    if (result.meta.changes === 1) {
-      await database.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE account_id = (SELECT id FROM accounts WHERE email = ?2) AND revoked_at IS NULL`)
-        .bind(now, email).run();
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE accounts SET disabled_at = ?1
+         WHERE email = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL`,
+      ).bind(now, email),
+      database.prepare(
+        `UPDATE sessions SET revoked_at = ?1
+         WHERE account_id = (
+           SELECT id FROM accounts WHERE email = ?2 AND disabled_at = ?1 AND deletion_started_at IS NULL
+         ) AND revoked_at IS NULL`,
+      ).bind(now, email),
+    ]);
+    if (results[0].meta.changes === 1) {
       return "disabled" as const;
     }
-    const row = await database.prepare(`SELECT disabled_at FROM accounts WHERE email = ?1`)
-      .bind(email).first<{ disabled_at: number | null }>();
-    return row ? "already-disabled" as const : "missing" as const;
+    const row = await database.prepare(`SELECT disabled_at, deletion_started_at FROM accounts WHERE email = ?1`)
+      .bind(email).first<{ disabled_at: number | null; deletion_started_at: number | null }>();
+    return row?.deletion_started_at !== null && row?.deletion_started_at !== undefined
+      ? "deleting" as const
+      : row ? "already-disabled" as const : "missing" as const;
   }
 
   /**
@@ -249,7 +276,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    */
   async function deleteAccount(input: { accountId: string; email: string; emailAuditDigest: string; legacyEmailAuditDigest: string; now: number }) {
     await ensureTables();
-    const account = await database.prepare(`SELECT id FROM accounts WHERE id = ?1 AND email = ?2`)
+    const account = await database.prepare(`SELECT id FROM accounts WHERE id = ?1 AND email = ?2 AND deletion_started_at IS NOT NULL`)
       .bind(input.accountId, input.email).first<{ id: string }>();
     if (!account) return false;
 
@@ -283,6 +310,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
 
     statements.push(
+      database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft'`).bind(input.accountId),
+      database.prepare(`UPDATE map_drafts SET owner_account_id = '[shredded]' WHERE owner_account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE map_draft_revisions SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE map_draft_reviews SET actor_account_id = NULL WHERE actor_account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE map_draft_files SET uploaded_by = NULL WHERE uploaded_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE map_contributor_grants SET granted_by = '[shredded]' WHERE granted_by = ?1`).bind(input.email),
+      database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
+      database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
+      database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`DELETE FROM login_tokens WHERE email = ?1`).bind(input.email),
       database.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`DELETE FROM circle_claims WHERE account_id = ?1`).bind(input.accountId),
@@ -310,6 +348,39 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return true;
   }
 
+  async function beginAccountDeletion(input: { accountId: string; email: string; now: number; retrySessionId?: string }) {
+    await ensureTables();
+    const results = await database.batch([
+      database.prepare(
+       `UPDATE accounts SET deletion_started_at = COALESCE(deletion_started_at, ?1)
+         WHERE id = ?2 AND email = ?3 AND disabled_at IS NULL`,
+      ).bind(input.now, input.accountId, input.email),
+      database.prepare(
+        `UPDATE sessions SET revoked_at = COALESCE(revoked_at, ?1)
+         WHERE account_id = ?2 AND (?3 IS NULL OR id != ?3)
+           AND EXISTS (
+             SELECT 1 FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
+           )`,
+      ).bind(input.now, input.accountId, input.retrySessionId ?? null),
+      // Removing this in the same transaction makes every in-flight map file
+      // bind fail after its R2 put; the handler then removes that object.
+      database.prepare(
+        `DELETE FROM map_contributor_grants WHERE account_id = ?1 AND EXISTS (
+           SELECT 1 FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
+         )`,
+      ).bind(input.accountId),
+    ]);
+    return results[0].meta.changes === 1;
+  }
+
+  async function isAccountWritable(accountId: string) {
+    await ensureTables();
+    const row = await database.prepare(
+      "SELECT id FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NULL",
+    ).bind(accountId).first<{ id: string }>();
+    return !!row;
+  }
+
   /** R2 must be cleared before the D1 account deletion commits. */
   async function listHostedThumbnailKeysForAccount(accountId: string) {
     await ensureTables();
@@ -320,6 +391,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        WHERE c.account_id = ?1 AND c.status = 'verified' AND o.hosted_thumbnail_key IS NOT NULL`,
     ).bind(accountId).all<{ object_key: string }>();
     return result.results.map((row) => row.object_key);
+  }
+
+  /** Private map evidence must be deleted before an unsubmitted draft row is removed. */
+  async function listUnsubmittedMapDraftObjectKeysForAccount(accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT f.object_key FROM map_draft_files f
+       JOIN map_drafts d ON d.id = f.draft_id
+       WHERE d.owner_account_id = ?1 AND d.status = 'draft' AND f.object_key IS NOT NULL`,
+    ).bind(accountId).all<{ object_key: string }>();
+    return result.results.map(({ object_key }) => object_key);
   }
 
   async function listHostedThumbnailKeys() {
@@ -338,18 +420,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     evidenceUrl: string | null; evidenceNote: string | null; now: number;
   }) {
     await ensureTables();
-    await database.prepare(
+    const result = await database.prepare(
       `INSERT INTO circle_claims (
          id, account_id, event_id, circle_id, circle_name_key, circle_name_at_claim, source_row_at_claim,
          status, method, target_url, challenge_token_hash, challenge_expires_at,
          evidence_url, evidence_note, created_at, verified_at
-       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`,
+       ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+         FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL`,
     ).bind(
       input.id, input.accountId, input.eventId, input.circleId, input.circleNameKey,
       input.circleNameAtClaim, input.sourceRowAtClaim, input.status, input.method, input.targetUrl,
       input.challengeTokenHash, input.challengeExpiresAt, input.evidenceUrl, input.evidenceNote,
       input.now, input.status === "verified" ? input.now : null,
     ).run();
+    return result.meta.changes === 1;
   }
 
   async function getClaim(id: string) {
@@ -394,8 +478,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function ownsCircle(accountId: string, eventId: string, circleId: string) {
     await ensureTables();
     const row = await database.prepare(
-      `SELECT id FROM circle_claims
-       WHERE account_id = ?1 AND event_id = ?2 AND circle_id = ?3 AND status = 'verified'`,
+      `SELECT c.id FROM circle_claims c JOIN accounts a ON a.id = c.account_id
+       WHERE c.account_id = ?1 AND c.event_id = ?2 AND c.circle_id = ?3 AND c.status = 'verified'
+         AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL`,
     ).bind(accountId, eventId, circleId).first<{ id: string }>();
     return !!row;
   }
@@ -406,7 +491,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     try {
       const result = await database.prepare(
         `UPDATE circle_claims SET status = 'verified', method = ?1, verified_at = ?2, reviewed_by = ?3, reviewed_at = ?2
-         WHERE id = ?4 AND status = 'pending'`,
+         WHERE id = ?4 AND status = 'pending' AND EXISTS (
+           SELECT 1 FROM accounts a WHERE a.id = circle_claims.account_id
+             AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
+         )`,
       ).bind(method, now, reviewedBy, id).run();
       return result.meta.changes === 1;
     } catch {
@@ -424,8 +512,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function recordChallengeAttempt(id: string) {
     await ensureTables();
-    await database.prepare(`UPDATE circle_claims SET challenge_attempts = challenge_attempts + 1 WHERE id = ?1`)
-      .bind(id).run();
+    const result = await database.prepare(
+      `UPDATE circle_claims SET challenge_attempts = challenge_attempts + 1
+       WHERE id = ?1 AND EXISTS (
+         SELECT 1 FROM accounts a WHERE a.id = circle_claims.account_id
+           AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
+       )`,
+    ).bind(id).run();
+    return result.meta.changes === 1;
   }
 
   async function getOverride(eventId: string, circleId: string) {
@@ -440,6 +534,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * made earlier, so the update coalesces onto the stored value.
    */
   async function putOverride(input: {
+    accountId?: string;
     eventId: string;
     circleId: string;
     fieldsJson: string;
@@ -451,9 +546,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }) {
     await ensureTables();
     const changesHostedThumbnail = Object.prototype.hasOwnProperty.call(input, "hostedThumbnailKey");
-    await database.prepare(
+    const result = await database.prepare(
       `INSERT INTO circle_overrides (id, event_id, circle_id, fields_json, updated_by, created_at, updated_at, retention_choice, retention_expires_at, hosted_thumbnail_key)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9
+       WHERE ?11 IS NULL OR EXISTS (
+         SELECT 1 FROM accounts a WHERE a.id = ?11
+           AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
+       )
        ON CONFLICT(event_id, circle_id) DO UPDATE SET
          previous_fields_json = circle_overrides.fields_json,
          fields_json = excluded.fields_json,
@@ -469,8 +568,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(
       crypto.randomUUID(), input.eventId, input.circleId, input.fieldsJson, input.updatedBy, input.now,
       input.retention?.choice ?? null, input.retention?.expiresAt ?? null,
-      input.hostedThumbnailKey ?? null, changesHostedThumbnail ? 1 : 0,
+      input.hostedThumbnailKey ?? null, changesHostedThumbnail ? 1 : 0, input.accountId ?? null,
     ).run();
+    return result.meta.changes === 1;
   }
 
   /**
@@ -480,10 +580,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * it" and "its deadline passed" cannot leave different remains — including
    * `previous_fields_json`, which a status change would have kept.
    */
-  async function deleteOverride(input: { eventId: string; circleId: string }) {
+  async function deleteOverride(input: { accountId: string; eventId: string; circleId: string }) {
     await ensureTables();
-    const result = await database.prepare(`DELETE FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2`)
-      .bind(input.eventId, input.circleId).run();
+    const result = await database.prepare(
+      `DELETE FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2 AND EXISTS (
+         SELECT 1 FROM circle_claims c JOIN accounts a ON a.id = c.account_id
+         WHERE c.account_id = ?3 AND c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified'
+           AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
+       )`,
+    ).bind(input.eventId, input.circleId, input.accountId).run();
     return (result.meta.changes ?? 0) === 1;
   }
 
@@ -513,11 +618,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
-  async function setPostEventHidden(eventId: string, circleId: string, hidden: boolean) {
+  async function setPostEventHidden(accountId: string, eventId: string, circleId: string, hidden: boolean) {
     await ensureTables();
     const result = await database.prepare(
-      `UPDATE circle_overrides SET post_event_hidden = ?1 WHERE event_id = ?2 AND circle_id = ?3`,
-    ).bind(hidden ? 1 : 0, eventId, circleId).run();
+      `UPDATE circle_overrides SET post_event_hidden = ?1
+       WHERE event_id = ?2 AND circle_id = ?3 AND EXISTS (
+         SELECT 1 FROM circle_claims c JOIN accounts a ON a.id = c.account_id
+         WHERE c.account_id = ?4 AND c.event_id = ?2 AND c.circle_id = ?3 AND c.status = 'verified'
+           AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
+       )`,
+    ).bind(hidden ? 1 : 0, eventId, circleId, accountId).run();
     return result.meta.changes === 1;
   }
 
@@ -557,6 +667,239 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
   }
 
+  async function manageMapContributor(input: {
+    email: string;
+    action: "grant" | "revoke" | "suspend";
+    by: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const account = await database.prepare("SELECT id FROM accounts WHERE email = ?1 AND disabled_at IS NULL AND deletion_started_at IS NULL")
+      .bind(input.email).first<{ id: string }>();
+    if (!account) return "missing" as const;
+    if (input.action === "grant") {
+      const result = await database.prepare(
+        `INSERT INTO map_contributor_grants (account_id, granted_by, granted_at, revoked_by, revoked_at, suspended_by, suspended_at)
+         VALUES (?1, ?2, ?3, NULL, NULL, NULL, NULL)
+         ON CONFLICT(account_id) DO UPDATE SET
+           granted_by = excluded.granted_by, granted_at = excluded.granted_at,
+           revoked_by = NULL, revoked_at = NULL, suspended_by = NULL, suspended_at = NULL
+         WHERE map_contributor_grants.revoked_at IS NOT NULL OR map_contributor_grants.suspended_at IS NOT NULL`,
+      ).bind(account.id, input.by, input.now).run();
+      return result.meta.changes === 1 ? "granted" as const : "unchanged" as const;
+    }
+    const column = input.action === "revoke" ? "revoked" : "suspended";
+    const result = await database.prepare(
+      `UPDATE map_contributor_grants SET ${column}_by = ?1, ${column}_at = ?2
+       WHERE account_id = ?3 AND revoked_at IS NULL AND suspended_at IS NULL`,
+    ).bind(input.by, input.now, account.id).run();
+    return result.meta.changes === 1
+      ? (input.action === "revoke" ? "revoked" as const : "suspended" as const)
+      : "unchanged" as const;
+  }
+
+  async function hasActiveMapContributor(accountId: string) {
+    await ensureTables();
+    const row = await database.prepare(
+      `SELECT account_id FROM map_contributor_grants
+       WHERE account_id = ?1 AND revoked_at IS NULL AND suspended_at IS NULL`,
+    ).bind(accountId).first<{ account_id: string }>();
+    return !!row;
+  }
+
+  async function createMapDraft(input: {
+    id: string;
+    eventId: string;
+    periodKey: string;
+    venueSpaceId: string;
+    ownerAccountId: string;
+    contentJson: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const revisionId = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `INSERT INTO map_drafts (
+           id, event_id, period_key, venue_space_id, owner_account_id, status,
+           current_revision, created_at, updated_at, last_activity_at
+         )
+         SELECT ?1, ?2, ?3, ?4, ?5, 'draft', 1, ?6, ?6, ?6
+         WHERE EXISTS (
+           SELECT 1 FROM map_contributor_grants
+           WHERE account_id = ?5 AND revoked_at IS NULL AND suspended_at IS NULL
+         )`,
+      ).bind(input.id, input.eventId, input.periodKey, input.venueSpaceId, input.ownerAccountId, input.now),
+      database.prepare(
+        `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
+         SELECT ?1, id, 1, ?2, ?3, ?4 FROM map_drafts WHERE id = ?5 AND owner_account_id = ?3`,
+      ).bind(revisionId, input.contentJson, input.ownerAccountId, input.now, input.id),
+    ]);
+    return results[0].meta.changes === 1 && results[1].meta.changes === 1;
+  }
+
+  async function getMapDraft(draftId: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT d.*, r.content_json FROM map_drafts d
+       JOIN map_draft_revisions r ON r.draft_id = d.id AND r.revision = d.current_revision
+       WHERE d.id = ?1`,
+    ).bind(draftId).first<{
+      id: string; event_id: string; period_key: string; venue_space_id: string; owner_account_id: string;
+      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number;
+      last_activity_at: number; decision_at: number | null; content_json: string | null;
+    }>();
+  }
+
+  async function listStaleSubmittedMapDrafts(before: number) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT id, event_id, period_key, venue_space_id, current_revision, updated_at
+       FROM map_drafts WHERE status = 'submitted' AND updated_at < ?1 ORDER BY updated_at ASC`,
+    ).bind(before).all<{
+      id: string; event_id: string; period_key: string; venue_space_id: string;
+      current_revision: number; updated_at: number;
+    }>();
+    return result.results;
+  }
+
+  async function writeMapDraftRevision(input: {
+    draftId: string;
+    ownerAccountId: string;
+    expectedRevision: number;
+    contentJson: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const nextRevision = input.expectedRevision + 1;
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE map_drafts SET current_revision = ?1, updated_at = ?2, last_activity_at = ?2
+         WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
+           AND status IN ('draft', 'changes_requested')
+           AND retention_action IS NULL
+           AND EXISTS (
+             SELECT 1 FROM map_contributor_grants
+             WHERE account_id = ?4 AND revoked_at IS NULL AND suspended_at IS NULL
+           )`,
+      ).bind(nextRevision, input.now, input.draftId, input.ownerAccountId, input.expectedRevision),
+      database.prepare(
+        `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
+         SELECT ?1, id, ?2, ?3, ?4, ?5 FROM map_drafts
+         WHERE id = ?6 AND owner_account_id = ?4 AND current_revision = ?2 AND updated_at = ?5`,
+      ).bind(crypto.randomUUID(), nextRevision, input.contentJson, input.ownerAccountId, input.now, input.draftId),
+    ]);
+    return results[0].meta.changes === 1 && results[1].meta.changes === 1 ? nextRevision : null;
+  }
+
+  async function submitMapDraft(input: { draftId: string; ownerAccountId: string; expectedRevision: number; now: number }) {
+    await ensureTables();
+    const reviewId = crypto.randomUUID();
+    const transitionToken = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE map_drafts SET status = 'submitted', updated_at = ?1, last_activity_at = ?1, transition_token = ?2
+         WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
+           AND status IN ('draft', 'changes_requested')
+           AND retention_action IS NULL
+           AND EXISTS (
+             SELECT 1 FROM map_contributor_grants
+             WHERE account_id = ?4 AND revoked_at IS NULL AND suspended_at IS NULL
+           )`,
+      ).bind(input.now, transitionToken, input.draftId, input.ownerAccountId, input.expectedRevision),
+      database.prepare(
+        `INSERT INTO map_draft_reviews (id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, at)
+         SELECT ?1, d.id, d.current_revision,
+           CASE WHEN EXISTS (SELECT 1 FROM map_draft_reviews WHERE draft_id = d.id AND to_status = 'changes_requested')
+             THEN 'changes_requested' ELSE 'draft' END,
+           'submitted', ?2, 'map_contributor', ?3
+         FROM map_drafts d WHERE d.id = ?4 AND d.owner_account_id = ?2 AND d.status = 'submitted' AND d.transition_token = ?5`,
+      ).bind(reviewId, input.ownerAccountId, input.now, input.draftId, transitionToken),
+    ]);
+    return results[0].meta.changes === 1 && results[1].meta.changes === 1;
+  }
+
+  async function transitionMapDraft(input: {
+    draftId: string;
+    expectedRevision: number;
+    toStatus: "changes_requested" | "approved" | "rejected" | "exported";
+    actorAccountId: string | null;
+    actorRole: "admin" | "system";
+    note?: string | null;
+    now: number;
+  }) {
+    await ensureTables();
+    const fromStatus = input.toStatus === "exported" ? "approved" : "submitted";
+    const decisionAt = input.toStatus === "changes_requested" ? null : input.now;
+    const transitionToken = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE map_drafts SET status = ?1, updated_at = ?2, last_activity_at = ?2, decision_at = ?3, transition_token = ?4
+         WHERE id = ?5 AND current_revision = ?6 AND status = ?7 AND retention_action IS NULL`,
+      ).bind(input.toStatus, input.now, decisionAt, transitionToken, input.draftId, input.expectedRevision, fromStatus),
+      database.prepare(
+        `INSERT INTO map_draft_reviews (
+           id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, note, at
+         ) SELECT ?1, id, current_revision, ?2, ?3, ?4, ?5, ?6, ?7
+           FROM map_drafts WHERE id = ?8 AND current_revision = ?9 AND status = ?3 AND transition_token = ?10`,
+      ).bind(
+        crypto.randomUUID(), fromStatus, input.toStatus, input.actorAccountId, input.actorRole,
+        input.note ?? null, input.now, input.draftId, input.expectedRevision, transitionToken,
+      ),
+    ]);
+    return results[0].meta.changes === 1 && results[1].meta.changes === 1;
+  }
+
+  async function addMapDraftFile(input: {
+    id: string; draftId: string; revision: number; objectKey: string; sourceUrl: string; documentDate: string;
+    pageNumber: number | null; sha256: string; mime: string; sizeBytes: number; width: number | null;
+    height: number | null; pageCount: number | null; uploadedBy: string; now: number;
+  }) {
+    await ensureTables();
+    const result = await database.prepare(
+      `INSERT INTO map_draft_files (
+         id, draft_id, revision, object_key, source_url, document_date, page_number, sha256, mime,
+         size_bytes, width, height, page_count, uploaded_by, uploaded_at
+       ) SELECT ?1, d.id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
+         FROM map_drafts d
+         WHERE d.id = ?15 AND d.owner_account_id = ?13 AND d.current_revision = ?2
+           AND d.status IN ('draft', 'changes_requested')
+           AND d.retention_action IS NULL
+           AND EXISTS (
+             SELECT 1 FROM map_contributor_grants
+             WHERE account_id = ?13 AND revoked_at IS NULL AND suspended_at IS NULL
+           )`,
+    ).bind(
+      input.id, input.revision, input.objectKey, input.sourceUrl, input.documentDate, input.pageNumber,
+      input.sha256, input.mime, input.sizeBytes, input.width, input.height, input.pageCount,
+      input.uploadedBy, input.now, input.draftId,
+    ).run();
+    return result.meta.changes === 1;
+  }
+
+  async function getMapDraftFile(fileId: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT f.*, d.owner_account_id, d.status FROM map_draft_files f
+       JOIN map_drafts d ON d.id = f.draft_id WHERE f.id = ?1`,
+    ).bind(fileId).first<{
+      id: string; draft_id: string; revision: number; object_key: string | null; source_url: string;
+      document_date: string; page_number: number | null; sha256: string; mime: string; size_bytes: number;
+      width: number | null; height: number | null; page_count: number | null; uploaded_by: string | null;
+      uploaded_at: number; review_result: string | null; raw_deleted_at: number | null;
+      owner_account_id: string; status: MapDraftStatus;
+    }>();
+  }
+
+  async function markMapDraftRawDeleted(fileId: string, now: number) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE map_draft_files SET object_key = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1)
+       WHERE id = ?2 AND object_key IS NOT NULL`,
+    ).bind(now, fileId).run();
+    return result.meta.changes === 1;
+  }
+
   async function storePreviewMail(message: { email: string; subject: string; text: string; now: number }) {
     await ensureTables();
     await database.prepare(
@@ -575,6 +918,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
+      "map_draft_files", "map_draft_reviews", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
   }
@@ -583,12 +927,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, consumeLoginToken,
-    upsertAccount, createSession, getSession, revokeSession, disableAccount, deleteAccount,
-    listHostedThumbnailKeysForAccount, listHostedThumbnailKeys,
+    upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
+    listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
     createClaim, getClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
+    manageMapContributor, hasActiveMapContributor,
+    createMapDraft, getMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
+    addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }

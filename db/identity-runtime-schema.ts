@@ -54,6 +54,7 @@ export const IDENTITY_TABLES = [
     "created_at INTEGER NOT NULL",
     "last_login_at INTEGER",
     "disabled_at INTEGER",
+    "deletion_started_at INTEGER",
   ]),
   table("admins", [
     "email TEXT PRIMARY KEY NOT NULL",
@@ -156,6 +157,72 @@ export const IDENTITY_TABLES = [
     "text TEXT NOT NULL",
     "created_at INTEGER NOT NULL",
   ]),
+  table("map_contributor_grants", [
+    "account_id TEXT PRIMARY KEY NOT NULL",
+    "granted_by TEXT NOT NULL",
+    "granted_at INTEGER NOT NULL",
+    "revoked_by TEXT",
+    "revoked_at INTEGER",
+    "suspended_by TEXT",
+    "suspended_at INTEGER",
+  ]),
+  table("map_drafts", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "event_id TEXT NOT NULL",
+    "period_key TEXT NOT NULL",
+    "venue_space_id TEXT NOT NULL",
+    "owner_account_id TEXT NOT NULL",
+    "status TEXT NOT NULL DEFAULT 'draft'",
+    "current_revision INTEGER NOT NULL DEFAULT 1",
+    "created_at INTEGER NOT NULL",
+    "updated_at INTEGER NOT NULL",
+    "last_activity_at INTEGER NOT NULL",
+    "decision_at INTEGER",
+    // Correlates the state update and immutable review insert in one D1 batch.
+    // A timestamp is not sufficient because two requests can share a millisecond.
+    "transition_token TEXT",
+    // Non-NULL means retention has atomically claimed the draft. Contributor
+    // writes stop until the idempotent R2/D1 cleanup completes or retries.
+    "retention_action TEXT",
+  ]),
+  table("map_draft_revisions", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "draft_id TEXT NOT NULL",
+    "revision INTEGER NOT NULL",
+    "content_json TEXT",
+    "created_by TEXT",
+    "created_at INTEGER NOT NULL",
+  ]),
+  table("map_draft_reviews", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "draft_id TEXT NOT NULL",
+    "revision INTEGER NOT NULL",
+    "from_status TEXT NOT NULL",
+    "to_status TEXT NOT NULL",
+    "actor_account_id TEXT",
+    "actor_role TEXT NOT NULL",
+    "note TEXT",
+    "at INTEGER NOT NULL",
+  ]),
+  table("map_draft_files", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "draft_id TEXT NOT NULL",
+    "revision INTEGER NOT NULL",
+    "object_key TEXT",
+    "source_url TEXT NOT NULL",
+    "document_date TEXT NOT NULL",
+    "page_number INTEGER",
+    "sha256 TEXT NOT NULL",
+    "mime TEXT NOT NULL",
+    "size_bytes INTEGER NOT NULL",
+    "width INTEGER",
+    "height INTEGER",
+    "page_count INTEGER",
+    "uploaded_by TEXT",
+    "uploaded_at INTEGER NOT NULL",
+    "review_result TEXT",
+    "raw_deleted_at INTEGER",
+  ]),
 ] as const;
 
 export const IDENTITY_INDEXES = [
@@ -176,6 +243,14 @@ export const IDENTITY_INDEXES = [
   index("audit_at_idx", "audit_log", "at"),
   index("audit_subject_idx", "audit_log", "subject_type, subject_id, at"),
   index("preview_mail_sink_email_idx", "preview_mail_sink", "email, created_at"),
+  index("map_contributor_grants_state_idx", "map_contributor_grants", "revoked_at, suspended_at"),
+  index("map_drafts_owner_idx", "map_drafts", "owner_account_id, updated_at"),
+  index("map_drafts_scope_idx", "map_drafts", "event_id, period_key, venue_space_id, updated_at"),
+  index("map_drafts_one_active_approved_idx", "map_drafts", "event_id, period_key, venue_space_id", { unique: true, where: "status IN ('approved', 'exported')" }),
+  index("map_draft_revisions_key_idx", "map_draft_revisions", "draft_id, revision", { unique: true }),
+  index("map_draft_reviews_draft_idx", "map_draft_reviews", "draft_id, at"),
+  index("map_draft_files_draft_idx", "map_draft_files", "draft_id, revision"),
+  index("map_draft_files_object_idx", "map_draft_files", "object_key", { unique: true, where: "object_key IS NOT NULL" }),
 ] as const;
 
 export const IDENTITY_SCHEMA_STATEMENTS = [...IDENTITY_TABLES, ...IDENTITY_INDEXES].map(({ sql }) => sql);
@@ -185,10 +260,13 @@ export const IDENTITY_SCHEMA_STATEMENTS = [...IDENTITY_TABLES, ...IDENTITY_INDEX
  * NOT EXISTS`, so duplicate-column errors are the idempotent success case.
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
+  { table: "accounts", column: "deletion_started_at", sql: "ALTER TABLE accounts ADD COLUMN deletion_started_at INTEGER" },
   { table: "circle_overrides", column: "post_event_hidden", sql: "ALTER TABLE circle_overrides ADD COLUMN post_event_hidden INTEGER NOT NULL DEFAULT 0" },
   { table: "circle_overrides", column: "retention_choice", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_choice TEXT" },
   { table: "circle_overrides", column: "retention_expires_at", sql: "ALTER TABLE circle_overrides ADD COLUMN retention_expires_at INTEGER" },
   { table: "circle_overrides", column: "hosted_thumbnail_key", sql: "ALTER TABLE circle_overrides ADD COLUMN hosted_thumbnail_key TEXT" },
   { table: "overrides_doc", column: "phase", sql: "ALTER TABLE overrides_doc ADD COLUMN phase TEXT NOT NULL DEFAULT 'during'" },
   { table: "audit_log", column: "shredded_at", sql: "ALTER TABLE audit_log ADD COLUMN shredded_at INTEGER" },
+  { table: "map_drafts", column: "transition_token", sql: "ALTER TABLE map_drafts ADD COLUMN transition_token TEXT" },
+  { table: "map_drafts", column: "retention_action", sql: "ALTER TABLE map_drafts ADD COLUMN retention_action TEXT" },
 ] as const;

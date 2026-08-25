@@ -38,14 +38,21 @@ export const RETENTION_WINDOWS = {
   previewMailSink: 7 * DAY_MS,
   /** Audit actions remain, but a per-request network identifier does not. */
   auditIpHashes: 90 * DAY_MS,
+  /** Inactivity while still editable. Submitted drafts deliberately have no clock. */
+  mapDraftInactivity: 180 * DAY_MS,
+  /** Raw evidence after an approve/reject/export decision. Metadata remains. */
+  mapDecisionRaw: 30 * DAY_MS,
 } as const;
 
 export type RetentionWindows = typeof RETENTION_WINDOWS;
 
 export type PurgeSummary = {
   at: number;
-  deleted: { login_tokens: number; sessions: number; preview_mail_sink: number; circle_overrides: number };
-  anonymized: { audit_ip_hashes: number };
+  deleted: {
+    login_tokens: number; sessions: number; preview_mail_sink: number; circle_overrides: number;
+    map_drafts: number; map_draft_revisions: number; map_raw_objects: number;
+  };
+  anonymized: { audit_ip_hashes: number; map_drafts: number };
   /** Tables that do not exist here. Preview and production hold the same
    * schema, but a database no Function has touched yet holds none of it. */
   skipped: string[];
@@ -53,8 +60,14 @@ export type PurgeSummary = {
 
 /** Statements per `batch()` when recording a purge. */
 const AUDIT_BATCH_SIZE = 100;
+export const MAP_RETENTION_BATCH_SIZE = 5;
+export const MAP_RETENTION_RAW_OBJECT_BATCH_SIZE = 450;
+const MAP_RETENTION_D1_BIND_BATCH_SIZE = 90;
 
-const PURGE_TABLES = ["login_tokens", "sessions", "preview_mail_sink", "circle_overrides", "overrides_doc", "audit_log"] as const;
+const PURGE_TABLES = [
+  "login_tokens", "sessions", "preview_mail_sink", "circle_overrides", "overrides_doc", "audit_log",
+  "map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_files",
+] as const;
 
 async function existingTables(database: D1Database) {
   const placeholders = PURGE_TABLES.map((_, index) => `?${index + 1}`).join(", ");
@@ -130,6 +143,139 @@ async function purgeExpiredOverrides(database: D1Database, now: number, objects?
   return purged.results;
 }
 
+async function purgeMapDraftData(
+  database: D1Database,
+  now: number,
+  windows: RetentionWindows,
+  objects?: Pick<R2Bucket, "delete">,
+) {
+  const editableCutoff = now - windows.mapDraftInactivity;
+  const decisionCutoff = now - windows.mapDecisionRaw;
+  const claimed = () => database.prepare(
+    `SELECT id, status, retention_action FROM map_drafts
+     WHERE retention_action IS NOT NULL
+     ORDER BY last_activity_at ASC, id ASC LIMIT ?1`,
+  ).bind(MAP_RETENTION_BATCH_SIZE).all<{
+    id: string; status: string; retention_action: "delete" | "anonymize" | "raw";
+  }>();
+  // Claim before touching R2. Contributor writes and review transitions all
+  // require retention_action IS NULL, so bytes and revisions cannot change
+  // underneath the cross-service delete. A failed R2 call leaves the claim in
+  // D1 and the next run resumes it; multiple purgers may safely retry the same
+  // idempotent claim.
+  let due = await claimed();
+  if (due.results.length === 0) {
+    if (!objects) {
+      const needsStorage = await database.prepare(
+        `SELECT d.id FROM map_drafts d JOIN map_draft_files f ON f.draft_id = d.id
+         WHERE d.retention_action IS NULL AND f.object_key IS NOT NULL AND (
+           (d.status = 'draft' AND d.last_activity_at <= ?1)
+           OR (d.status = 'changes_requested' AND d.last_activity_at <= ?1)
+           OR (d.status IN ('approved', 'rejected', 'exported') AND d.decision_at IS NOT NULL AND d.decision_at <= ?2)
+         ) LIMIT 1`,
+      ).bind(editableCutoff, decisionCutoff).first<{ id: string }>();
+      if (needsStorage) throw new Error("Private map evidence bucket is required before map draft retention can delete metadata.");
+    }
+    await database.prepare(
+      `UPDATE map_drafts SET retention_action = CASE
+         WHEN status = 'draft' THEN 'delete'
+         WHEN status = 'changes_requested' THEN 'anonymize'
+         ELSE 'raw' END
+       WHERE id IN (
+         SELECT id FROM map_drafts
+         WHERE retention_action IS NULL AND (
+           (status = 'draft' AND last_activity_at <= ?1)
+           OR (status = 'changes_requested' AND last_activity_at <= ?1
+             AND (owner_account_id != '[shredded]'
+               OR EXISTS (SELECT 1 FROM map_draft_revisions r WHERE r.draft_id = map_drafts.id)
+               OR EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = map_drafts.id AND f.object_key IS NOT NULL)))
+           OR (status IN ('approved', 'rejected', 'exported') AND decision_at IS NOT NULL AND decision_at <= ?2
+             AND EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = map_drafts.id AND f.object_key IS NOT NULL))
+         ) ORDER BY last_activity_at ASC, id ASC LIMIT ?3
+       )`,
+    ).bind(editableCutoff, decisionCutoff, MAP_RETENTION_BATCH_SIZE).run();
+    due = await claimed();
+  }
+  if (due.results.length === 0) return { drafts: 0, revisions: 0, rawObjects: 0, anonymized: 0 };
+
+  const raw = await database.prepare(
+    `SELECT f.id, f.object_key FROM map_draft_files f
+     JOIN map_drafts d ON d.id = f.draft_id
+     WHERE f.object_key IS NOT NULL AND d.retention_action IS NOT NULL
+     ORDER BY d.last_activity_at ASC, d.id ASC, f.id ASC LIMIT ?1`,
+  ).bind(MAP_RETENTION_RAW_OBJECT_BATCH_SIZE).all<{ id: string; object_key: string }>();
+  if (raw.results.length > 0 && !objects) throw new Error("Private map evidence bucket is required before map draft retention can delete metadata.");
+  if (objects) await deleteObjectKeys(objects, raw.results.map(({ object_key }) => object_key));
+  for (let index = 0; index < raw.results.length; index += MAP_RETENTION_D1_BIND_BATCH_SIZE) {
+    const ids = raw.results.slice(index, index + MAP_RETENTION_D1_BIND_BATCH_SIZE).map(({ id }) => id);
+    const placeholders = ids.map((_, offset) => `?${offset + 2}`).join(", ");
+    await database.prepare(
+      `UPDATE map_draft_files SET object_key = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1)
+       WHERE object_key IS NOT NULL AND id IN (${placeholders})`,
+    ).bind(now, ...ids).run();
+  }
+
+  // A claim remains for the next run when it owns more raw objects than this
+  // invocation's bounded R2/D1 budget. Only fully drained drafts may advance.
+  const ready = await database.prepare(
+    `SELECT id, status, retention_action FROM map_drafts d
+     WHERE retention_action IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = d.id AND f.object_key IS NOT NULL)
+     ORDER BY last_activity_at ASC, id ASC LIMIT ?1`,
+  ).bind(MAP_RETENTION_BATCH_SIZE).all<{
+    id: string; status: string; retention_action: "delete" | "anonymize" | "raw";
+  }>();
+
+  let drafts = 0;
+  let revisions = 0;
+  let anonymized = 0;
+  for (const draft of ready.results) {
+    if (draft.retention_action === "delete") {
+      const results = await database.batch([
+        database.prepare(
+          `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
+           SELECT ?1, ?2, NULL, 'system', 'map_draft.purged', 'map_draft', id, NULL, NULL
+           FROM map_drafts WHERE id = ?3 AND retention_action = 'delete'`,
+        ).bind(crypto.randomUUID(), now, draft.id),
+        database.prepare("DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
+        database.prepare("DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
+        database.prepare("DELETE FROM map_drafts WHERE id = ?1 AND retention_action = 'delete'").bind(draft.id),
+      ]);
+      revisions += results[2].meta.changes ?? 0;
+      drafts += results[3].meta.changes ?? 0;
+      continue;
+    }
+    if (draft.retention_action === "anonymize") {
+      const results = await database.batch([
+        database.prepare(
+          `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
+           SELECT ?1, ?2, NULL, 'system', 'map_draft.content_purged', 'map_draft', id, NULL, NULL
+           FROM map_drafts WHERE id = ?3 AND retention_action = 'anonymize'`,
+        ).bind(crypto.randomUUID(), now, draft.id),
+        database.prepare("UPDATE map_draft_files SET object_key = NULL, uploaded_by = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1) WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?2 AND retention_action = 'anonymize')").bind(now, draft.id),
+        database.prepare("DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
+        database.prepare("UPDATE map_draft_reviews SET actor_account_id = NULL WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
+        database.prepare("UPDATE map_drafts SET owner_account_id = '[shredded]', retention_action = NULL WHERE id = ?1 AND retention_action = 'anonymize'").bind(draft.id),
+      ]);
+      revisions += results[2].meta.changes ?? 0;
+      anonymized += results[4].meta.changes ?? 0;
+      continue;
+    }
+    await database.batch([
+      database.prepare(
+        `INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
+         SELECT ?1, ?2, NULL, 'system', 'map_draft.raw_purged', 'map_draft', id, ?4, NULL
+         FROM map_drafts WHERE id = ?3 AND retention_action = 'raw'`,
+      ).bind(crypto.randomUUID(), now, draft.id, JSON.stringify({ status: draft.status })),
+      database.prepare(
+        "UPDATE map_draft_files SET object_key = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1) WHERE object_key IS NOT NULL AND draft_id IN (SELECT id FROM map_drafts WHERE id = ?2 AND retention_action = 'raw')",
+      ).bind(now, draft.id),
+      database.prepare("UPDATE map_drafts SET retention_action = NULL WHERE id = ?1 AND retention_action = 'raw'").bind(draft.id),
+    ]);
+  }
+  return { drafts, revisions, rawObjects: raw.results.length, anonymized };
+}
+
 /**
  * Takes the purged circles out of the document readers actually fetch.
  *
@@ -167,14 +313,18 @@ export async function purgeExpiredRecords(
   now: number,
   windows: RetentionWindows = RETENTION_WINDOWS,
   objects?: Pick<R2Bucket, "list" | "delete">,
+  mapObjects?: Pick<R2Bucket, "delete">,
 ): Promise<PurgeSummary> {
   if (windows.loginTokens <= LOGIN_RATE_LIMIT_WINDOW_MS) {
     throw new Error("login token retention must outlast the rate-limit window, or purging resets the quota.");
   }
 
   const present = await existingTables(database);
-  const deleted = { login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0 };
-  const anonymized = { audit_ip_hashes: 0 };
+  const deleted = {
+    login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0,
+    map_drafts: 0, map_draft_revisions: 0, map_raw_objects: 0,
+  };
+  const anonymized = { audit_ip_hashes: 0, map_drafts: 0 };
   const skipped: string[] = [];
 
   // By `created_at`, the same column the limiter counts — not by `consumed_at`
@@ -237,6 +387,17 @@ export async function purgeExpiredRecords(
   } else skipped.push("circle_overrides");
 
   if (!present.has("overrides_doc")) skipped.push("overrides_doc");
+  if (present.has("audit_log") && present.has("map_drafts") && present.has("map_draft_revisions") && present.has("map_draft_reviews") && present.has("map_draft_files")) {
+    const result = await purgeMapDraftData(database, now, windows, mapObjects);
+    deleted.map_drafts = result.drafts;
+    deleted.map_draft_revisions = result.revisions;
+    deleted.map_raw_objects = result.rawObjects;
+    anonymized.map_drafts = result.anonymized;
+  } else {
+    for (const table of ["map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_files"] as const) {
+      if (!present.has(table)) skipped.push(table);
+    }
+  }
   if (present.has("audit_log")) {
     const result = await database.prepare(
       `UPDATE audit_log SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND at < ?1`,

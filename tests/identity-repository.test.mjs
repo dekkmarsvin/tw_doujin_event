@@ -269,6 +269,12 @@ test("account deletion releases claims, removes owned overlays and shreds person
     subjectType: "email", subjectId: emailAuditDigest, detail: { evidenceUrl: "https://personal.example/evidence" }, ipHash: "ip-delete",
   });
 
+  assert.equal(await repository.beginAccountDeletion({
+    accountId, email, now: NOW + 4_000, retrySessionId: "delete-account-session",
+  }), true);
+  assert.equal(await repository.getSession("delete-account-session", NOW + 4_001), null, "normal routes reject a deleting account");
+  assert.equal((await repository.getSession("delete-account-session", NOW + 4_001, true))?.accountId, accountId,
+    "only the deletion route may retain its retry session");
   assert.equal(await repository.deleteAccount({ accountId, email, emailAuditDigest, legacyEmailAuditDigest: "legacy-email-digest", now: NOW + 5_000 }), true);
   for (const table of ["accounts", "sessions", "login_tokens", "circle_claims", "circle_overrides"]) {
     assert.equal((await database.prepare(`SELECT COUNT(*) AS total FROM ${table} WHERE ${table === "accounts" ? "id" : table === "sessions" || table === "circle_claims" ? "account_id" : table === "login_tokens" ? "email" : "circle_id"} = ?1`).bind(
@@ -292,6 +298,62 @@ test("account deletion releases claims, removes owned overlays and shreds person
     challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 6_000,
   });
   assert.equal(await repository.ownsCircle(successor, "ff47", "ff47-delete-account"), true, "deletion must release the one-owner slot");
+});
+
+test("a deletion tombstone blocks in-flight circle writes and strips late audit identity", async () => {
+  const email = "delete-race@example.com";
+  const accountId = await repository.upsertAccount(email, NOW);
+  await repository.createSession(accountId, NOW, NOW + 100_000, "delete-race-session");
+  await repository.createClaim({
+    id: "delete-race-owner", accountId, eventId: "ff47", circleId: "ff47-delete-race",
+    circleNameKey: "race", circleNameAtClaim: "Race", sourceRowAtClaim: 1,
+    status: "verified", method: "admin", targetUrl: null, challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW,
+  });
+
+  assert.equal(await repository.beginAccountDeletion({
+    accountId, email, now: NOW + 1, retrySessionId: "delete-race-session",
+  }), true);
+  assert.equal(await repository.disableAccount(email, NOW + 2), "deleting",
+    "an admin disable must not revoke the only session that can retry failed R2 cleanup");
+  assert.equal((await repository.getSession("delete-race-session", NOW + 3, true))?.accountId, accountId);
+  assert.equal(await repository.ownsCircle(accountId, "ff47", "ff47-delete-race"), false);
+  assert.equal(await repository.createClaim({
+    id: "delete-race-late-claim", accountId, eventId: "ff47", circleId: "ff47-delete-race-late",
+    circleNameKey: "late", circleNameAtClaim: "Late", sourceRowAtClaim: 2,
+    status: "pending", method: null, targetUrl: null, challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 2,
+  }), false);
+  assert.equal(await repository.putOverride({
+    accountId, eventId: "ff47", circleId: "ff47-delete-race",
+    fieldsJson: JSON.stringify({ saleInfo: "must not survive" }), updatedBy: accountId, now: NOW + 2,
+  }), false);
+  assert.equal(await repository.getOverride("ff47", "ff47-delete-race"), null);
+
+  await repository.writeAudit({
+    at: NOW + 2, actorAccountId: accountId, actorRole: "circle", action: "override.late",
+    subjectType: "override", subjectId: "ff47-delete-race", detail: { text: "must be shredded" }, ipHash: "late-ip",
+  });
+  assert.deepEqual(
+    await database.prepare("SELECT actor_account_id, detail_json, ip_hash, shredded_at FROM audit_log WHERE action = 'override.late'").first(),
+    { actor_account_id: null, detail_json: null, ip_hash: null, shredded_at: NOW + 2 },
+  );
+});
+
+test("an admin disable wins atomically over a later deletion start", async () => {
+  const email = "disable-before-delete@example.com";
+  const accountId = await repository.upsertAccount(email, NOW);
+  await repository.createSession(accountId, NOW, NOW + 100_000, "disable-before-delete-session");
+
+  assert.equal(await repository.disableAccount(email, NOW + 1), "disabled");
+  assert.equal(await repository.beginAccountDeletion({
+    accountId, email, now: NOW + 2, retrySessionId: "disable-before-delete-session",
+  }), false);
+  assert.deepEqual(
+    await database.prepare("SELECT disabled_at, deletion_started_at FROM accounts WHERE id = ?1").bind(accountId).first(),
+    { disabled_at: NOW + 1, deletion_started_at: null },
+  );
+  assert.equal(await repository.getSession("disable-before-delete-session", NOW + 3, true), null);
 });
 
 test("no raw login token is recoverable from the database", async () => {
