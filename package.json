@@ -22,6 +22,7 @@
     "pages:prepare": "node scripts/prepare-pages-build.mjs",
     "map:snapshot": "npm run build:editor && node scripts/export-static-event-map.mjs",
     "data:fetch": "node scripts/fetch-event-data.mjs",
+    "reference-data:fetch": "node scripts/fetch-reference-data.mjs",
     "data:stage": "node scripts/stage-event-data.mjs",
     "event-data:check": "node scripts/check-staged-event-data.mjs",
     "usage:collect": "node scripts/collect-cloudflare-usage.mjs",
