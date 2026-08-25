@@ -297,10 +297,22 @@ test("separates the public static app from the retained editor implementation", 
   const wranglerConfig = JSON.parse(wrangler.replace(/^\s*\/\/.*$/gm, ""));
   assert.equal(wranglerConfig.pages_build_output_dir, "./dist");
   assert.equal("main" in wranglerConfig, false, "Pages must never run in advanced mode");
-  assert.equal(wranglerConfig.r2_buckets.length, 1);
-  assert.equal(wranglerConfig.r2_buckets[0].binding, "THUMBNAILS");
-  assert.equal(wranglerConfig.env.preview.r2_buckets[0].binding, "THUMBNAILS", "R2 bindings are not inherited");
-  assert.notEqual(wranglerConfig.r2_buckets[0].bucket_name, wranglerConfig.env.preview.r2_buckets[0].bucket_name);
+  assert.deepEqual(
+    wranglerConfig.r2_buckets.map(({ binding }) => binding),
+    ["THUMBNAILS", "MAP_CONTRIBUTIONS"],
+  );
+  assert.deepEqual(
+    wranglerConfig.env.preview.r2_buckets.map(({ binding }) => binding),
+    ["THUMBNAILS", "MAP_CONTRIBUTIONS"],
+    "R2 bindings are not inherited",
+  );
+  for (const productionBinding of wranglerConfig.r2_buckets) {
+    const previewBinding = wranglerConfig.env.preview.r2_buckets.find(
+      ({ binding }) => binding === productionBinding.binding,
+    );
+    assert.ok(previewBinding, `preview must repeat ${productionBinding.binding}`);
+    assert.notEqual(productionBinding.bucket_name, previewBinding.bucket_name);
+  }
   assert.equal(wranglerConfig.d1_databases.length, 1);
   assert.equal(wranglerConfig.d1_databases[0].binding, "DB");
 });

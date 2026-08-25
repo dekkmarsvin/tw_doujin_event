@@ -4,6 +4,7 @@ import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
 import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
+import type { MapContributionFileStore } from "../app/map-contribution-files";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -270,6 +271,19 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     },
     delete: (keys) => env.THUMBNAILS.delete(keys),
   } : undefined;
+  const mapContributionStore: MapContributionFileStore | undefined = env.MAP_CONTRIBUTIONS ? {
+    put: async (key, value, contentType) => {
+      await env.MAP_CONTRIBUTIONS!.put(key, value, {
+        httpMetadata: { contentType, cacheControl: "private, no-store" },
+        customMetadata: { event: eventId, classification: "private-map-evidence" },
+      });
+    },
+    get: async (key) => {
+      const object = await env.MAP_CONTRIBUTIONS!.get(key);
+      return object ? { body: object.body, contentType: object.httpMetadata?.contentType } : null;
+    },
+    delete: (keys) => env.MAP_CONTRIBUTIONS!.delete(keys),
+  } : undefined;
   return createCirclePortalHandlers({
     repository,
     sendMail: async (message) => {
@@ -302,6 +316,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     verifyHuman: (token, remoteIp) => verifyTurnstile(env, token, remoteIp),
     turnstileSitekey: () => requireSecret(env, "TURNSTILE_SITEKEY"),
     thumbnailStore,
+    mapContributionStore,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.

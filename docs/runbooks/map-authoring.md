@@ -88,6 +88,5 @@ authoring 持久化由純 repository、純 route handlers 與環境 wrapper 構�
 
 ## 尚未做
 
-- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages。未來要開放外部編輯入口時，必須先拆成受驗證的控制面——加入身分驗證、角色、草稿、審核、稽核與版本化發布，**不得重新公開現有這條未驗證的 PUT route**。
-  （社團自助控制面已有完整的身分與角色機制，但那是另一套系統，見[社團自助控制面契約](../contracts/circle-portal.md)。地圖 authoring 尚未接上它。）
+- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。外部投稿使用另一套管理者授權、私人草稿、審閱與版本化發布機制，見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)；投稿／審閱介面與匯出仍由 #73 完成。
 - 對非一般攤位文字做 OCR。第一階段只保存可可靠辨識的相對矩形。

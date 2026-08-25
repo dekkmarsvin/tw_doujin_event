@@ -21,6 +21,10 @@
     {
       "binding": "THUMBNAILS",
       "bucket_name": "tw-doujin-event-thumbnails"
+    },
+    {
+      "binding": "MAP_CONTRIBUTIONS",
+      "bucket_name": "tw-doujin-event-map-contributions"
     }
   ],
   // The Turnstile sitekey the sign-in form renders, handed to the browser by
@@ -85,6 +89,10 @@
         {
           "binding": "THUMBNAILS",
           "bucket_name": "tw-doujin-event-thumbnails-preview"
+        },
+        {
+          "binding": "MAP_CONTRIBUTIONS",
+          "bucket_name": "tw-doujin-event-map-contributions-preview"
         }
       ],
       "d1_databases": [

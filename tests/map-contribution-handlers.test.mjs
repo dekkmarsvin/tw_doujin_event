@@ -1,0 +1,213 @@
+import assert from "node:assert/strict";
+import { File } from "node:buffer";
+import { deflateSync } from "node:zlib";
+import test, { after, beforeEach } from "node:test";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { createServer, isRunnableDevEnvironment } from "vite";
+
+const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
+const environment = vite.environments.ssr;
+if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
+const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
+const { createCirclePortalHandlers } = await environment.runner.import("/app/circle-portal-handlers.ts");
+
+const miniflare = new Miniflare(convertV4MiniflareOptions({
+  modules: true,
+  script: "export default { fetch() { return new Response('ok'); } }",
+  d1Databases: { DB: "map-contribution-handler-test" },
+}));
+const database = await miniflare.getD1Database("DB");
+after(async () => { await miniflare.dispose(); await vite.close(); });
+
+const ORIGIN = "https://preview.example";
+const NOW = 1_786_500_000_000;
+let repository;
+let handlers;
+let sent;
+let objects;
+
+beforeEach(async () => {
+  sent = [];
+  objects = new Map();
+  repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
+  await repository.ensureTables();
+  await repository.clearPreviewData();
+  await repository.addAdmin("admin@example.test", "bootstrap", NOW);
+  handlers = createCirclePortalHandlers({
+    repository,
+    sendMail: async (message) => sent.push(message),
+    lookupCircle: async () => null,
+    searchCircles: async () => [],
+    fetchEvidence: async () => null,
+    verifyHuman: async () => true,
+    turnstileSitekey: () => "test-key",
+    projectCircle: async () => null,
+    mapContributionStore: {
+      put: async (key, value, contentType) => objects.set(key, { bytes: new Uint8Array(value), contentType }),
+      get: async (key) => {
+        const value = objects.get(key);
+        return value ? { body: new Response(value.bytes).body, contentType: value.contentType } : null;
+      },
+      delete: async (keys) => (Array.isArray(keys) ? keys : [keys]).forEach((key) => objects.delete(key)),
+    },
+    config: {
+      eventId: "ff47", origin: ORIGIN, sessionSecret: "session-secret", hashPepper: "pepper",
+      adminEmails: ["admin@example.test"], dataUpdatedAt: "2026-08-25T00:00:00Z",
+      eventEndsAt: "2026-09-01T00:00:00Z", now: () => NOW,
+    },
+  });
+});
+
+function request(path, method, body, cookie) {
+  return new Request(`${ORIGIN}${path}`, {
+    method,
+    headers: { origin: ORIGIN, ...(body === undefined ? {} : { "content-type": "application/json" }), ...(cookie ? { cookie } : {}) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
+async function signIn(email) {
+  await handlers.requestLink(request("/api/auth/request-link", "POST", { email, turnstileToken: "solved" }));
+  const token = decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]);
+  const response = await handlers.verify(request("/api/auth/verify", "POST", { token }));
+  return response.headers.get("set-cookie").split(";")[0];
+}
+
+async function grant(email, adminCookie, action = "grant") {
+  return handlers.adminManageMapContributor(request("/api/admin/map-contributors", "POST", { email, action }, adminCookie));
+}
+
+async function newDraft(cookie) {
+  const response = await handlers.createMapDraft(request("/api/map-contributions/drafts", "POST", {
+    periodKey: "day-1", venueSpaceId: "zhengyan-exhibition-area", content: { markers: [] },
+  }, cookie));
+  return { response, body: await response.json() };
+}
+
+function png() {
+  const crc32 = (value) => {
+    let crc = 0xffffffff;
+    for (const byte of value) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const typeBytes = Buffer.from(type);
+    const result = Buffer.alloc(12 + data.length);
+    result.writeUInt32BE(data.length, 0);
+    typeBytes.copy(result, 4);
+    Buffer.from(data).copy(result, 8);
+    result.writeUInt32BE(crc32(Buffer.concat([typeBytes, Buffer.from(data)])), 8 + data.length);
+    return result;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4); ihdr.set([8, 6, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr), chunk("IDAT", deflateSync(Buffer.alloc(5))), chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function uploadRequest(draftId, cookie) {
+  const form = new FormData();
+  form.set("draftId", draftId);
+  form.set("revision", "1");
+  form.set("sourceUrl", "https://organizer.example/map");
+  form.set("documentDate", "2026-08-25");
+  form.set("file", new File([png()], "map.png", { type: "image/png" }));
+  return new Request(`${ORIGIN}/api/map-contributions/files`, { method: "POST", headers: { origin: ORIGIN, cookie }, body: form });
+}
+
+test("admin-only grants are audited and revocation immediately blocks writes", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  assert.equal((await grant("mapper@example.test", mapperCookie)).status, 403);
+  assert.equal((await grant("mapper@example.test", adminCookie)).status, 200);
+
+  const { response, body } = await newDraft(mapperCookie);
+  assert.equal(response.status, 201);
+  assert.equal(body.revision, 1);
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  const update = await handlers.updateMapDraft(request(`/api/map-contributions/drafts/${body.draftId}`, "PUT", {
+    expectedRevision: 1, content: { markers: ["A01"] },
+  }, mapperCookie), body.draftId);
+  assert.equal(update.status, 409);
+  const audit = await database.prepare("SELECT action, actor_role FROM audit_log WHERE action LIKE 'map_contributor.%' ORDER BY at").all();
+  assert.deepEqual(audit.results, [
+    { action: "map_contributor.grant", actor_role: "admin" },
+    { action: "map_contributor.revoke", actor_role: "admin" },
+  ]);
+});
+
+test("private evidence is owner/admin-only, images preview safely and raw downloads attach", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const strangerCookie = await signIn("stranger@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const uploaded = await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal(uploaded.status, 201);
+  const { fileId } = await uploaded.json();
+  assert.equal(objects.size, 1);
+
+  assert.equal((await handlers.readMapDraftFile(request(`/files/${fileId}`, "GET", undefined, strangerCookie), fileId)).status, 403);
+  const preview = await handlers.readMapDraftFile(request(`/files/${fileId}/preview`, "GET", undefined, mapperCookie), fileId, true);
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("content-disposition"), "inline; filename=\"map-source.png\"");
+  assert.equal(preview.headers.get("x-content-type-options"), "nosniff");
+  assert.match(preview.headers.get("content-security-policy"), /sandbox/);
+
+  const raw = await handlers.readMapDraftFile(request(`/files/${fileId}`, "GET", undefined, adminCookie), fileId, false);
+  assert.equal(raw.status, 200);
+  assert.equal(raw.headers.get("content-disposition"), "attachment; filename=\"map-source.png\"");
+  assert.equal(raw.headers.get("cache-control"), "private, no-store");
+});
+
+test("failed metadata binding rolls back the private object", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await grant("mapper@example.test", adminCookie, "suspend");
+  const response = await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal(response.status, 409);
+  assert.equal(objects.size, 0);
+});
+
+test("a D1 exception after upload also rolls back the private object", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  repository.addMapDraftFile = async () => { throw new Error("D1 unavailable"); };
+  await assert.rejects(() => handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie)), /D1 unavailable/);
+  assert.equal(objects.size, 0);
+});
+
+test("account deletion removes unsubmitted private bytes before deleting D1 metadata", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  assert.equal((await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie))).status, 201);
+  assert.equal(objects.size, 1);
+  const deleted = await handlers.deleteMyAccount(request("/api/account", "DELETE", { confirm: "mapper@example.test" }, mapperCookie));
+  assert.equal(deleted.status, 200);
+  assert.equal(objects.size, 0);
+  assert.equal(await repository.getMapDraft(draft.draftId), null);
+});
+
+test("starting account deletion rejects a new upload request before storing bytes", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const session = await repository.getSession(mapperCookie.split("=")[1].split(".")[0], NOW);
+  assert.equal(await repository.beginAccountDeletion({ accountId: session.accountId, email: "mapper@example.test", now: NOW }), true);
+  const response = await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal(response.status, 401);
+  assert.equal(objects.size, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM map_draft_files WHERE draft_id = ?1").bind(draft.draftId).first()).total, 0);
+});

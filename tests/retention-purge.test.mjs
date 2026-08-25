@@ -116,7 +116,15 @@ test("records every run in the audit log, including the empty ones", async () =>
   assert.equal(entry.actor_role, "system");
   assert.equal(entry.subject_type, "retention");
   assert.equal(entry.at, NOW);
-  assert.deepEqual(JSON.parse(entry.detail_json).deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0 });
+  assert.deepEqual(JSON.parse(entry.detail_json).deleted, {
+    login_tokens: 0,
+    sessions: 0,
+    preview_mail_sink: 0,
+    circle_overrides: 0,
+    map_drafts: 0,
+    map_draft_revisions: 0,
+    map_raw_objects: 0,
+  });
 });
 
 /** The event ended long enough ago that a `purge` row written then is now due. */
@@ -226,8 +234,27 @@ test("a purge records that it happened without recording what it deleted", async
 test("never creates a table it does not find", async () => {
   const summary = await purgeExpiredRecords(untouched, NOW);
 
-  assert.deepEqual(summary.deleted, { login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0 });
-  assert.deepEqual(summary.skipped.sort(), ["audit_log", "circle_overrides", "login_tokens", "overrides_doc", "preview_mail_sink", "sessions"]);
+  assert.deepEqual(summary.deleted, {
+    login_tokens: 0,
+    sessions: 0,
+    preview_mail_sink: 0,
+    circle_overrides: 0,
+    map_drafts: 0,
+    map_draft_revisions: 0,
+    map_raw_objects: 0,
+  });
+  assert.deepEqual(summary.skipped.sort(), [
+    "audit_log",
+    "circle_overrides",
+    "login_tokens",
+    "map_draft_files",
+    "map_draft_reviews",
+    "map_draft_revisions",
+    "map_drafts",
+    "overrides_doc",
+    "preview_mail_sink",
+    "sessions",
+  ]);
   const tables = await untouched.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all();
   assert.deepEqual(tables.results, [], "the purge must not be able to create the database it purges");
 });
