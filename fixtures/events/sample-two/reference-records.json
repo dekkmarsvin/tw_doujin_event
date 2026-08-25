@@ -1,0 +1,35 @@
+[
+  {
+    "schema": "organizer/1",
+    "id": "sample-two-organizer",
+    "name": "第二範例主辦單位",
+    "officialUrl": "https://example.invalid/sample-two",
+    "sources": [{ "id": "official-page", "kind": "organizer-official", "url": "https://example.invalid/sample-two", "retrievedAt": "2026-01-02T00:00:00.000+08:00" }],
+    "provenance": { "/name": ["official-page"], "/officialUrl": ["official-page"] }
+  },
+  {
+    "schema": "category-catalog/1",
+    "id": "circle-topics",
+    "organizerId": "sample-two-organizer",
+    "revision": "2026-01-02",
+    "categories": [{ "id": "photography", "label": "攝影", "description": "以攝影作品為主。" }],
+    "sources": [{ "id": "category-page", "kind": "organizer-official", "url": "https://example.invalid/sample-two/categories", "retrievedAt": "2026-01-02T00:00:00.000+08:00" }],
+    "provenance": { "/categories/0/label": ["category-page"], "/categories/0/description": ["category-page"] }
+  },
+  {
+    "schema": "venue/1",
+    "id": "sample-venue",
+    "name": "範例會館（更新版）",
+    "officialUrl": "https://venue.example.invalid/sample",
+    "sources": [{ "id": "venue-page", "kind": "venue-official", "url": "https://venue.example.invalid/sample", "retrievedAt": "2026-01-02T00:00:00.000+08:00" }],
+    "provenance": { "/name": ["venue-page"], "/officialUrl": ["venue-page"] }
+  },
+  {
+    "schema": "venue-space/1",
+    "id": "sample-two-floor",
+    "venueId": "sample-venue",
+    "name": "單層展場",
+    "sources": [{ "id": "venue-page", "kind": "venue-official", "url": "https://venue.example.invalid/sample", "retrievedAt": "2026-01-02T00:00:00.000+08:00" }],
+    "provenance": { "/name": ["venue-page"] }
+  }
+]

@@ -1,6 +1,6 @@
 import type { AdvancedCircleSearch } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
-import type { EventDefinition } from "./event-catalog";
+import { eventUsesVenueSpaceSwitcher, venueAssignmentForArea, type EventDefinition } from "./event-catalog";
 
 export type PendingCircleSelection<TDay extends string | number> = {
   day: TDay;
@@ -12,6 +12,7 @@ export type EventUrlState<TDay extends string | number, TArea extends string> = 
   eventId: string;
   day: TDay;
   area: TArea;
+  venueSpaceId: string;
   query: string;
   genre: string;
   favoriteOnly: boolean;
@@ -22,12 +23,14 @@ export type EventUrlState<TDay extends string | number, TArea extends string> = 
 
 export function defaultEventUrlState<TDay extends string | number, TArea extends string>(event: EventDefinition<TDay, TArea>): EventUrlState<TDay, TArea> {
   const day = event.days[0]?.id;
-  const area = event.areas[0]?.id;
-  if (day === undefined || area === undefined || event.genres.length === 0) throw new Error(`Event ${event.id} has incomplete URL defaults.`);
+  const venueAssignment = event.venueAssignments[0];
+  const area = event.areas.find(({ id }) => id === venueAssignment?.areaIds[0])?.id;
+  if (day === undefined || area === undefined || !venueAssignment || event.genres.length === 0) throw new Error(`Event ${event.id} has incomplete URL defaults.`);
   return {
     eventId: event.id,
     day,
     area,
+    venueSpaceId: venueAssignment.venueSpaceId,
     query: "",
     genre: event.genres[0],
     favoriteOnly: false,
@@ -46,7 +49,20 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
   const dayValue = url.searchParams.get("day");
   const day = event.days.find(({ id }) => String(id) === dayValue)?.id ?? defaults.day;
   const areaValue = url.searchParams.get("area") ?? url.searchParams.get("hall");
-  const area = event.areas.find(({ id }) => id === areaValue)?.id ?? defaults.area;
+  const requestedArea = event.areas.find(({ id }) => id === areaValue)?.id;
+  const requestedVenueSpaceId = url.searchParams.get("venueSpaceId");
+  const requestedAssignment = event.venueAssignments.find(({ venueSpaceId }) => venueSpaceId === requestedVenueSpaceId);
+  const inferredAssignment = requestedArea === undefined ? undefined : venueAssignmentForArea(event, requestedArea);
+  const invalidRequestedVenueSpace = requestedVenueSpaceId !== null && requestedAssignment === undefined;
+  const incompatibleRequestedPair = requestedAssignment !== undefined && requestedArea !== undefined
+    && !requestedAssignment.areaIds.includes(requestedArea);
+  const useDefaultAssignment = invalidRequestedVenueSpace || incompatibleRequestedPair;
+  const venueAssignment = useDefaultAssignment
+    ? event.venueAssignments[0]
+    : requestedAssignment ?? inferredAssignment ?? event.venueAssignments[0];
+  const area = !useDefaultAssignment && requestedArea !== undefined && venueAssignment.areaIds.includes(requestedArea)
+    ? requestedArea
+    : event.areas.find(({ id }) => id === venueAssignment.areaIds[0])?.id ?? defaults.area;
   const genreValue = url.searchParams.get("genre");
   const genre = genreValue && event.genres.includes(genreValue) ? genreValue : defaults.genre;
   const workType = url.searchParams.get("workType");
@@ -59,6 +75,7 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
       eventId: event.id,
       day,
       area,
+      venueSpaceId: venueAssignment.venueSpaceId,
       query: url.searchParams.get("query") ?? "",
       genre,
       favoriteOnly: url.searchParams.get("favorite") === "1",
@@ -84,7 +101,7 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
   return { eventMatched: true, state };
 }
 
-const OPTIONAL_PARAMETERS = ["query", "genre", "favorite", "creator", "work", "workType", "r18", "favoriteGroup", "visit", "sort", "density", "media", "selectedCircle", "selectedBooth"];
+const OPTIONAL_PARAMETERS = ["venueSpaceId", "query", "genre", "favorite", "creator", "work", "workType", "r18", "favoriteGroup", "visit", "sort", "density", "media", "selectedCircle", "selectedBooth"];
 
 export function serializeEventUrlState<TDay extends string | number, TArea extends string>(
   event: EventDefinition<TDay, TArea>,
@@ -99,6 +116,8 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   url.searchParams.set("event", event.id);
   url.searchParams.set("day", String(state.day));
   url.searchParams.set("area", state.area);
+  const venueAssignment = venueAssignmentForArea(event, state.area);
+  if (eventUsesVenueSpaceSwitcher(event)) url.searchParams.set("venueSpaceId", venueAssignment.venueSpaceId);
   if (state.query.trim()) url.searchParams.set("query", state.query.trim());
   if (state.genre !== defaults.genre) url.searchParams.set("genre", state.genre);
   if (state.favoriteOnly) url.searchParams.set("favorite", "1");

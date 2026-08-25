@@ -12,10 +12,12 @@ const eventA = {
   id: "event-a", name: "A", venue: "A", dateRangeLabel: "A", dataUpdatedAt: "2026-01-01", dataLastUpdatedLabel: "A", mapTemplate: "A",
   areaMode: "switchable", days: [{ id: 7, label: "D7", dateLabel: "D7" }, { id: 8, label: "D8", dateLabel: "D8" }],
   areas: [{ id: "ALL", label: "全部", shortLabel: "全" }, { id: "EAST", label: "東區", shortLabel: "東" }], genres: ["全部", "原創"],
+  venueAssignments: [{ venueId: "venue-a", venueSpaceId: "hall-a", areaIds: ["ALL", "EAST"] }],
 };
 const eventB = {
   ...eventA, id: "event-b", name: "B", days: [{ id: "sat-am", label: "六上午", dateLabel: "六" }],
   areas: [{ id: "NORTH", label: "北館", shortLabel: "北" }], genres: ["所有類型", "攝影"],
+  venueAssignments: [{ venueId: "venue-b", venueSpaceId: "hall-b", areaIds: ["NORTH"] }],
 };
 
 test("full URL state round-trips through one schema while defaults are omitted", () => {
@@ -53,6 +55,37 @@ test("legacy hall alias parses but serialization emits only area", () => {
   const url = codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/?hall=EAST");
   assert.equal(url.searchParams.get("area"), "EAST");
   assert.equal(url.searchParams.has("hall"), false);
+});
+
+test("venue space is shareable only for multi-space events and invalid pairs fail closed", () => {
+  const multiSpace = {
+    ...eventA,
+    areas: [{ id: "NORTH", label: "北館", shortLabel: "北" }, { id: "SOUTH", label: "南館", shortLabel: "南" }],
+    venueAssignments: [
+      { venueId: "venue-a", venueSpaceId: "north-floor", areaIds: ["NORTH"] },
+      { venueId: "venue-a", venueSpaceId: "south-floor", areaIds: ["SOUTH"] },
+    ],
+  };
+  const south = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor&area=SOUTH");
+  assert.equal(south.state.venueSpaceId, "south-floor");
+  assert.equal(south.state.area, "SOUTH");
+  const serialized = codec.serializeEventUrlState(multiSpace, south.state, "https://map.example/");
+  assert.equal(serialized.searchParams.get("venueSpaceId"), "south-floor");
+
+  const mismatched = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=north-floor&area=SOUTH");
+  assert.equal(mismatched.state.venueSpaceId, "north-floor");
+  assert.equal(mismatched.state.area, "NORTH");
+
+  const reversedMismatch = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor&area=NORTH");
+  assert.equal(reversedMismatch.state.venueSpaceId, "north-floor");
+  assert.equal(reversedMismatch.state.area, "NORTH");
+
+  const invalidSpace = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=missing&area=SOUTH");
+  assert.equal(invalidSpace.state.venueSpaceId, "north-floor");
+  assert.equal(invalidSpace.state.area, "NORTH");
+  assert.equal(codec.serializeEventUrlState(multiSpace, invalidSpace.state, "https://map.example/?venueSpaceId=missing").searchParams.get("venueSpaceId"), "north-floor");
+  const singleSpace = codec.serializeEventUrlState(eventA, codec.defaultEventUrlState(eventA), "https://map.example/?venueSpaceId=stale");
+  assert.equal(singleSpace.searchParams.has("venueSpaceId"), false);
 });
 
 test("loading and popstate restoration protect deep links from rewrite", () => {

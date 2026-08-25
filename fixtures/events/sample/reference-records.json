@@ -1,0 +1,38 @@
+[
+  {
+    "schema": "organizer/1",
+    "id": "sample-organizer",
+    "name": "範例主辦單位",
+    "officialUrl": "https://example.invalid/sample",
+    "sources": [{ "id": "official-page", "kind": "organizer-official", "url": "https://example.invalid/sample", "retrievedAt": "2026-01-01T00:00:00.000+08:00" }],
+    "provenance": { "/name": ["official-page"], "/officialUrl": ["official-page"] }
+  },
+  {
+    "schema": "category-catalog/1",
+    "id": "circle-topics",
+    "organizerId": "sample-organizer",
+    "revision": "2026-01-01",
+    "categories": [
+      { "id": "original", "label": "原創作品", "description": "由社團自行創作的作品。" },
+      { "id": "games", "label": "遊戲作品", "description": "以遊戲為主題的作品。" }
+    ],
+    "sources": [{ "id": "category-page", "kind": "organizer-official", "url": "https://example.invalid/sample/categories", "retrievedAt": "2026-01-01T00:00:00.000+08:00" }],
+    "provenance": { "/categories/0/label": ["category-page"], "/categories/0/description": ["category-page"], "/categories/1/label": ["category-page"], "/categories/1/description": ["category-page"] }
+  },
+  {
+    "schema": "venue/1",
+    "id": "sample-venue",
+    "name": "範例會館",
+    "officialUrl": "https://venue.example.invalid/sample",
+    "sources": [{ "id": "venue-page", "kind": "venue-official", "url": "https://venue.example.invalid/sample", "retrievedAt": "2026-01-01T00:00:00.000+08:00" }],
+    "provenance": { "/name": ["venue-page"], "/officialUrl": ["venue-page"] }
+  },
+  {
+    "schema": "venue-space/1",
+    "id": "sample-hall",
+    "venueId": "sample-venue",
+    "name": "範例展廳",
+    "sources": [{ "id": "venue-page", "kind": "venue-official", "url": "https://venue.example.invalid/sample", "retrievedAt": "2026-01-01T00:00:00.000+08:00" }],
+    "provenance": { "/name": ["venue-page"] }
+  }
+]

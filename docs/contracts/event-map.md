@@ -18,9 +18,11 @@
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
 - **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
 
-**場館與展區是兩件事**，見 [`CONTEXT.md`](../../CONTEXT.md)。場館是活動實際舉辦的建築，由活動定義的 `venue` 提供，地圖標題從那裡讀；展區是場館內部的分區代碼。**契約不寫死當期場館名稱**——那是每場活動各自的資料。
+**場館、場館空間與展區是三件事**，見 [`CONTEXT.md`](../../CONTEXT.md)。場館與場館空間名稱由 event definition 選取的 pinned reference records 投影；展區是活動在某個場館空間內定義的攤位／展示分區。**契約不寫死當期名稱**——那是每場活動各自的 verified reference data。
 
-FF47 的活動定義登錄三個展區：`ALL`（全館）與 `A`（A–K 區）、`B`（L–W 區）。三者全在**同一個場館**內，`A`／`B` 是那個場館的兩半而不是兩個場館，所以 `areaMode` 是 `single`，介面**不出現展區切換，也不呈現 A–K／L–W 分區**。`areaMode: "switchable"` 保留給未來真正的多場館或多層活動；只有 `switchable` 且展區多於一個時才顯示切換控制（`eventUsesAreaSwitcher()`）。
+FF47 的活動定義登錄三個展區：`ALL`（全區）與 `A`（A–K 區）、`B`（L–W 區）。三者全在**同一個場館空間**內，`A`／`B` 是活動分區而不是場館空間，所以 `areaMode` 是 `single`，介面**不出現展區切換，也不呈現 A–K／L–W 分區**。`areaMode: "switchable"` 只控制活動展區是否可切換，不等同多場館或多樓層；場館空間歸屬由 `venueAssignments` 獨立決定。
+
+目前公開 `map.json` 是單一 event-level layout，FF47 只有一個 venue space，因此沒有歧義。多場館空間的 EventDefinition 與 URL codec 已定義 space／area pair 的 fail-closed 語意，但公開 reader 在 per-space map artifact 契約完成前不得發布多 space event；不可把同一份 layout 假裝成多個場館空間。這項 artifact 擴充與以 `eventId + day/period + venueSpaceId` 為鍵的地圖工作接續處理。
 
 `Booth["hall"]` 存的也是展區代碼，不是場館。欄位名是讀取模型的歷史遺留；公開 catalog v3 使用 `placement.area`，文件一律用「展區」。
 
@@ -72,7 +74,7 @@ type AccessibleEventMapRendererProps = {
 
 ## 使用者流程
 
-1. 選擇活動與日期。只有 `areaMode: "switchable"` 的多場館或多層活動才顯示展區切換與場館總覽。
+1. 選擇活動與日期。`areaMode: "switchable"` 且有多個活動展區時顯示展區切換；它不表示已有多場館／多樓層地圖總覽。
 2. 以拖曳、滾輪、觸控手勢或固定控制器平移和縮放；「重設」回到完整可用範圍。
 3. 搜尋攤位代碼或社團名稱，選取結果後地圖直接移動到對應攤位。
 4. 點選攤位後同步高亮 SVG slot、更新 URL，並開啟同一份社團資料的地圖側欄。共用攤位以緊密清單切換社團；側欄代表圖可直接開啟完整詳情。

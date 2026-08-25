@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertExactOrganizerEvidenceCoverage, consumeOrganizerEvidenceKey } from "./official-catalog-core.mjs";
+import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const eventId = process.argv[2];
@@ -11,9 +12,9 @@ if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) throw new Error("Usage: n
 const dataDir = path.join(root, ".event-data", eventId);
 const outputPath = path.join(root, "public", "data", "events", eventId, "circles.json");
 const [event, official, evidence] = await Promise.all([
-  readFile(path.join(dataDir, "event.json"), "utf8").then(JSON.parse),
-  readFile(path.join(dataDir, "official-booths.json"), "utf8").then(JSON.parse),
-  readFile(path.join(root, "data", "circle-identities", "evidence.json"), "utf8").then(JSON.parse),
+  readJsonFileStrict(path.join(dataDir, "event.json"), "event.json"),
+  readJsonFileStrict(path.join(dataDir, "official-booths.json"), "official-booths.json"),
+  readJsonFileStrict(path.join(root, "data", "circle-identities", "evidence.json"), "identity evidence"),
 ]);
 if (event.id !== eventId) throw new Error(`Event definition identity mismatch: expected ${eventId}, got ${event.id}.`);
 const defaultArea = event.areas?.[0]?.id;

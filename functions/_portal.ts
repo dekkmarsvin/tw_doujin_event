@@ -24,14 +24,21 @@ async function catalog(env: PortalEnv, request: Request, eventId: string) {
 
   const pending = (async () => {
     const base = `/data/events/${encodeURIComponent(eventId)}`;
-    const [response, eventResponse] = await Promise.all([
+    const [response, eventResponse, referencesResponse] = await Promise.all([
       env.ASSETS.fetch(new Request(new URL(`${base}/circles.json`, request.url).toString())),
       env.ASSETS.fetch(new Request(new URL(`${base}/event.json`, request.url).toString())),
+      env.ASSETS.fetch(new Request(new URL(`${base}/reference-records.json`, request.url).toString())),
     ]);
-    if (!response.ok || !eventResponse.ok) throw new Error(`無法讀取活動資料（catalog=${response.status}, event=${eventResponse.status}）。`);
-    const [value, eventValue]: [unknown, unknown] = await Promise.all([response.json(), eventResponse.json()]);
+    if (!response.ok || !eventResponse.ok || !referencesResponse.ok) {
+      throw new Error(`無法讀取活動資料（catalog=${response.status}, event=${eventResponse.status}, references=${referencesResponse.status}）。`);
+    }
+    const [value, eventValue, referencesValue]: [unknown, unknown, unknown] = await Promise.all([
+      response.json(),
+      eventResponse.json(),
+      referencesResponse.json(),
+    ]);
     if (!isCircleCatalogPayload(value) || value.eventId !== eventId) throw new Error(`活動 ${eventId} 的靜態社團資料格式或 identity 無效。`);
-    const event = parseEventDefinition(eventValue);
+    const event = parseEventDefinition(eventValue, referencesValue);
     if (event.id !== eventId) throw new Error(`活動 ${eventId} 的定義 identity 無效。`);
     const payload: CircleCatalogPayload = value;
     const index = new Map(payload.circles.map((circle) => [circle.id, {

@@ -6,8 +6,8 @@
 
 | 資料 | 權威 |
 |---|---|
-| 活動名稱、日期、場館、主辦 URL | data repo `event.json` |
-| 跨活動主辦、分類目錄、場館與場館空間 | 公開 reference-data repo 的 pinned revision |
+| 活動名稱、日期與活動官方頁 | data repo `event.json` |
+| 主辦 official URL、分類目錄、場館與場館空間 | 公開 reference-data repo 的 pinned revision |
 | 官方社團名與攤位配置 | data repo `official-booths.json`，來源為活動主辦單位 |
 | 向量地圖 | data repo `map.json`，由人工審閱的 authoring revision 匯出 |
 | 永久社團 ID | 本 repo `data/circle-identities/allocations.json` |
@@ -42,7 +42,7 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
 
 ### 3. 更新 pin
 
-把 data repo 的完整 40 字元 commit SHA 與三個 raw blob 的 SHA-256 寫入 `data/event-data-pins/<event>.json`：
+把 data repo 的完整 40 字元 commit SHA 與四個 raw blob 的 SHA-256 寫入 `data/event-data-pins/<event>.json`：
 
 ```json
 {
@@ -53,14 +53,15 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
   "files": [
     { "path": "event.json", "sha256": "<sha256>" },
     { "path": "official-booths.json", "sha256": "<sha256>" },
-    { "path": "map.json", "sha256": "<sha256>" }
+    { "path": "map.json", "sha256": "<sha256>" },
+    { "path": "reference-data-pin.json", "sha256": "<sha256>" }
   ]
 }
 ```
 
 不得 pin branch、tag 或未逐檔核對的內容。
 
-活動採用跨活動 reference-data 時，由 event-data repo 另外保存 `reference-data-pin/1`。先完成 reference review／發布，再更新 event-data 的完整 reference commit、逐檔 hash 與 assignment，最後才更新本 repo 的 event-data pin。格式與 fail-closed 行為見[共享 reference-data pin 契約](../contracts/reference-data-pin.md)。
+活動採用跨活動 reference-data 時，由 event-data repo 另外保存 `reference-data-pin/2`。先完成 reference review／發布，再更新 event-data 的完整 reference commit、逐檔 hash 與 assignment，最後才更新本 repo 的 event-data pin。格式與 fail-closed 行為見[共享 reference-data pin 契約](../contracts/reference-data-pin.md)。
 
 ### 4. 本機驗證 production staging
 
@@ -71,11 +72,12 @@ npm run event-data:check
 npm run build:production
 ```
 
-`data:fetch` 先下載到暫存位置、核對 SHA-256，再原子替換 `.event-data/<event>/`。`data:stage` 由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`circles.json`、`map.json` staging 到忽略版控的 `public/data/events/<event>/`。
+`data:fetch` 先把 event-data 與其 reference records 全部下載到暫存位置並核對 SHA-256，再以同一組 replacement 將 `.event-data/<event>/` 與 `.reference-data/<event>/` 配對換入；任一 rename 失敗會把兩棵舊 tree 一起復原。`data:stage` 再驗證 reference selection／relationships，由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`reference-records.json`、`circles.json`、`map.json` staging 到忽略版控的 `public/data/events/<event>/`。
 
 以下任一情形會 fail closed：
 
 - pin 的 commit 或 hash 不符；
+- reference pin、selection、schema 或 organizer／venue 關聯不符；
 - 官方 booth 缺 identity evidence；
 - 同一 booth 證據屬於多個 ID；
 - 官網群組內的 booth 被拆到不同 ID；

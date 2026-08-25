@@ -33,8 +33,8 @@ import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
 import { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin, type MapView } from "./map-viewport";
-import { ACTIVE_EVENT, ACTIVE_EVENT_ID, eventUsesAreaSwitcher, type EventAreaDefinition, type EventDayDefinition } from "./event-catalog";
-import { historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
+import { ACTIVE_EVENT, ACTIVE_EVENT_ID, eventUsesAreaSwitcher, venueAssignmentForArea, type EventAreaDefinition, type EventDayDefinition } from "./event-catalog";
+import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
 import styles from "./event-map-app.module.css";
@@ -42,6 +42,7 @@ import styles from "./event-map-app.module.css";
 type Hall = EventAreaDefinition["id"];
 type EventDay = EventDayDefinition["id"];
 type MobilePanel = "filters" | "results" | "details" | "plan";
+const ACTIVE_URL_DEFAULTS = defaultEventUrlState(ACTIVE_EVENT);
 type MobileSheetLevel = "peek" | "half" | "full";
 type TextScale = "standard" | "large" | "extra";
 
@@ -66,8 +67,8 @@ export default function EventMapApp() {
   const { catalog, status: catalogStatus, error: catalogError } = useCircleCatalog(ACTIVE_EVENT_ID);
   const { records: circleRecords, recordsById: circleRecordsById, recordsByCircleId: circleRecordsByCircleId } = catalog;
   const catalogReady = catalogStatus === "ready";
-  const [day, setDay] = useState<EventDay>(ACTIVE_EVENT.days[0].id);
-  const [hall, setHall] = useState<Hall>(ACTIVE_EVENT.areas[0].id);
+  const [day, setDay] = useState<EventDay>(ACTIVE_URL_DEFAULTS.day);
+  const [hall, setHall] = useState<Hall>(ACTIVE_URL_DEFAULTS.area);
   const [genre, setGenre] = useState<string>(ACTIVE_EVENT.genres[0]);
   const [query, setQuery] = useState("");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
@@ -288,7 +289,8 @@ export default function EventMapApp() {
     }
     const selected = circleRecordsById.get(selectedRecordId ?? "");
     const url = serializeEventUrlState(ACTIVE_EVENT, {
-      eventId: ACTIVE_EVENT.id, day, area: hall, query, genre, favoriteOnly, advancedSearch, planningDisplay,
+      eventId: ACTIVE_EVENT.id, day, area: hall, venueSpaceId: venueAssignmentForArea(ACTIVE_EVENT, hall).venueSpaceId,
+      query, genre, favoriteOnly, advancedSearch, planningDisplay,
       selection: { day, circleId: selected?.circle.id ?? null, boothCode: selected?.code ?? null },
     }, window.location.href);
     const method = historyMethod(historyIntent.current, false);
@@ -359,7 +361,7 @@ export default function EventMapApp() {
     selectRecord(filtered[0], "details", false);
   }, [day, favoriteOnly, filtered, genre, hall, query, selectRecord]);
 
-  const clearResultFilters = () => { historyIntent.current = "push"; setGenre(ACTIVE_EVENT.genres[0]); setFavoriteOnly(false); setHall(ACTIVE_EVENT.areas[0].id); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
+  const clearResultFilters = () => { historyIntent.current = "push"; setGenre(ACTIVE_URL_DEFAULTS.genre); setFavoriteOnly(false); setHall(ACTIVE_URL_DEFAULTS.area); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
   const clearFilters = () => { clearResultFilters(); setQuery(""); };
   const resetAdvancedSearch = () => { historyIntent.current = "push"; setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); };
   const resetMap = () => {
@@ -386,7 +388,7 @@ export default function EventMapApp() {
     const enabled = !navigationMode;
     setNavigationMode(enabled);
     if (!enabled) return;
-    setHall(ACTIVE_EVENT.areas[0].id);
+    setHall(ACTIVE_URL_DEFAULTS.area);
     setMobilePanel(navigationTargetRecord ? "details" : "plan");
     setMobileSheetLevel("half");
     if (navigationTargetRecord) selectRecord(navigationTargetRecord, "details", false);
@@ -521,7 +523,7 @@ export default function EventMapApp() {
     ...filter,
     onClear: () => {
       historyIntent.current = "push";
-      if (filter.id === "area") setHall(ACTIVE_EVENT.areas[0].id);
+      if (filter.id === "area") setHall(ACTIVE_URL_DEFAULTS.area);
       if (filter.id === "genre") setGenre(ACTIVE_EVENT.genres[0]);
       if (filter.id === "favorite") setFavoriteOnly(false);
       if (filter.id === "creator") setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" }));

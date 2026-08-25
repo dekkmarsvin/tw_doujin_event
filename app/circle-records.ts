@@ -122,7 +122,7 @@ function buildOfficialSource(event: EventDefinition, fetchedAt: string, day?: Bo
     provider: "活動主辦單位",
     contentType: "official",
     label: day ? `${event.name} ${day} 日攤位清單` : `${event.name} 活動與攤位配置`,
-    url: day ? event.organizer.boothListUrls[day] : event.organizer.eventUrl,
+    url: day ? event.officialData.boothListUrls[day] : event.officialData.eventUrl,
     fetchedAt,
     status: "linked",
   };

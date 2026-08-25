@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { TextDecoder } from "node:util";
 
-export const REFERENCE_DATA_PIN_SCHEMA = "reference-data-pin/1";
+export const REFERENCE_DATA_PIN_SCHEMA = "reference-data-pin/2";
 export const REFERENCE_DATA_REPOSITORY = "dekkmarsvin/tw_doujin_event-reference-data";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -37,6 +37,7 @@ function requireString(value, label, pattern) {
 
 function requireHttpsUrl(value, label) {
   requireString(value, label);
+  if (!value.startsWith("https://")) fail(`${label} must use HTTPS.`);
   let parsed;
   try {
     parsed = new URL(value);
@@ -44,6 +45,21 @@ function requireHttpsUrl(value, label) {
     fail(`${label} is invalid.`);
   }
   if (parsed.protocol !== "https:") fail(`${label} must use HTTPS.`);
+}
+
+function requireTimestamp(value, label) {
+  requireString(value, label);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (!match) fail(`${label} must be an ISO timestamp.`);
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offsetHourText, offsetMinuteText] = match;
+  const [year, month, day, hour, minute, second, offsetHour, offsetMinute] = [
+    yearText, monthText, dayText, hourText, minuteText, secondText, offsetHourText ?? "0", offsetMinuteText ?? "0",
+  ].map(Number);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]
+    || hour > 23 || minute > 59 || second > 59 || offsetHour > 23 || offsetMinute > 59
+    || Number.isNaN(Date.parse(value))) fail(`${label} must be an ISO timestamp.`);
 }
 
 function normalizeDataPath(value, label) {
@@ -63,9 +79,7 @@ function validateSources(value, label, allowedKinds = SOURCE_KINDS) {
     ids.add(source.id);
     if (!allowedKinds.has(source.kind)) fail(`${label}[${index}].kind is invalid.`);
     requireHttpsUrl(source.url, `${label}[${index}].url`);
-    if (typeof source.retrievedAt !== "string"
-      || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(source.retrievedAt)
-      || Number.isNaN(Date.parse(source.retrievedAt))) fail(`${label}[${index}].retrievedAt is invalid.`);
+    requireTimestamp(source.retrievedAt, `${label}[${index}].retrievedAt`);
     if (source.note !== undefined) requireString(source.note, `${label}[${index}].note`);
   }
   return ids;
@@ -174,20 +188,44 @@ export function parseReferenceDataPin(value) {
     filePaths.add(file.path);
   }
   const selection = requireRecord(pin.selection, "reference data pin selection");
-  requireKeys(selection, ["organizer", "categoryCatalog", "venue", "venueSpaces"], ["organizer", "categoryCatalog", "venue", "venueSpaces"], "reference data pin selection");
-  parseIdPath(selection.organizer, "reference data pin organizer");
+  requireKeys(selection, ["organizers", "categoryCatalog", "venues"], ["organizers", "categoryCatalog", "venues"], "reference data pin selection");
+  if (!Array.isArray(selection.organizers) || selection.organizers.length === 0) fail("Reference data pin must select organizers.");
+  const organizerIds = new Set();
+  for (const [index, organizer] of selection.organizers.entries()) {
+    const parsed = parseIdPath(organizer, `reference data pin organizers[${index}]`);
+    if (organizerIds.has(parsed.id)) fail(`Duplicate organizer stable ID ${parsed.id}.`);
+    organizerIds.add(parsed.id);
+  }
   parseIdPath(selection.categoryCatalog, "reference data pin categoryCatalog", true);
-  parseIdPath(selection.venue, "reference data pin venue");
-  if (!Array.isArray(selection.venueSpaces) || selection.venueSpaces.length === 0) fail("Reference data pin must select venue spaces.");
+  if (!organizerIds.has(selection.categoryCatalog.organizerId)) fail("Category catalog organizer must be selected.");
+  if (!Array.isArray(selection.venues) || selection.venues.length === 0) fail("Reference data pin must select venues.");
+  const venueIds = new Set();
   const spaceIds = new Set();
-  for (const [index, space] of selection.venueSpaces.entries()) {
-    const parsed = parseIdPath(space, `reference data pin venueSpaces[${index}]`);
-    if (spaceIds.has(parsed.id)) fail(`Duplicate venue-space stable ID ${parsed.id}.`);
-    spaceIds.add(parsed.id);
+  for (const [venueIndex, venueValue] of selection.venues.entries()) {
+    const venue = requireRecord(venueValue, `reference data pin venues[${venueIndex}]`);
+    requireKeys(venue, ["id", "path", "spaces"], ["id", "path", "spaces"], `reference data pin venues[${venueIndex}]`);
+    parseIdPath({ id: venue.id, path: venue.path }, `reference data pin venues[${venueIndex}]`);
+    if (venueIds.has(venue.id)) fail(`Duplicate venue stable ID ${venue.id}.`);
+    venueIds.add(venue.id);
+    if (!Array.isArray(venue.spaces) || venue.spaces.length === 0) fail(`Reference data pin venues[${venueIndex}] must select spaces.`);
+    for (const [spaceIndex, space] of venue.spaces.entries()) {
+      const parsed = parseIdPath(space, `reference data pin venues[${venueIndex}].spaces[${spaceIndex}]`);
+      if (spaceIds.has(parsed.id)) fail(`Duplicate venue-space stable ID ${parsed.id}.`);
+      spaceIds.add(parsed.id);
+    }
   }
-  for (const selected of [selection.organizer, selection.categoryCatalog, selection.venue, ...selection.venueSpaces]) {
+  const selectedRecords = [
+    ...selection.organizers,
+    selection.categoryCatalog,
+    ...selection.venues.flatMap((venue) => [{ id: venue.id, path: venue.path }, ...venue.spaces]),
+  ];
+  const selectedPaths = new Set();
+  for (const selected of selectedRecords) {
     if (!filePaths.has(selected.path)) fail(`Selected reference path is not pinned: ${selected.path}.`);
+    if (selectedPaths.has(selected.path)) fail(`Reference path is selected more than once: ${selected.path}.`);
+    selectedPaths.add(selected.path);
   }
+  if (selectedPaths.size !== filePaths.size) fail("Every pinned reference file must be selected exactly once.");
   return pin;
 }
 
@@ -211,21 +249,57 @@ export function verifyReferenceDataFiles(value, filesByPath) {
     }
     records.set(file.path, parseReferenceRecord(parsed, file.path));
   }
-  const { organizer, categoryCatalog, venue, venueSpaces } = pin.selection;
-  const organizerRecord = records.get(organizer.path);
+  const { organizers, categoryCatalog, venues } = pin.selection;
   const catalogRecord = records.get(categoryCatalog.path);
-  const venueRecord = records.get(venue.path);
-  if (organizerRecord?.schema !== "organizer/1" || organizerRecord.id !== organizer.id) fail(`Unknown organizer stable ID ${organizer.id}.`);
+  for (const organizer of organizers) {
+    const organizerRecord = records.get(organizer.path);
+    if (organizerRecord?.schema !== "organizer/1" || organizerRecord.id !== organizer.id) fail(`Unknown organizer stable ID ${organizer.id}.`);
+  }
   if (catalogRecord?.schema !== "category-catalog/1" || catalogRecord.id !== categoryCatalog.id
     || catalogRecord.organizerId !== categoryCatalog.organizerId || catalogRecord.revision !== categoryCatalog.revision) {
     fail(`Unknown category catalog ${categoryCatalog.organizerId}/${categoryCatalog.id}@${categoryCatalog.revision}.`);
   }
-  if (catalogRecord.organizerId !== organizerRecord.id) fail("Category catalog does not belong to the selected organizer.");
-  if (venueRecord?.schema !== "venue/1" || venueRecord.id !== venue.id) fail(`Unknown venue stable ID ${venue.id}.`);
-  for (const selected of venueSpaces) {
-    const record = records.get(selected.path);
-    if (record?.schema !== "venue-space/1" || record.id !== selected.id) fail(`Unknown venue-space stable ID ${selected.id}.`);
-    if (record.venueId !== venueRecord.id) fail(`Venue-space ${selected.id} does not belong to venue ${venueRecord.id}.`);
+  if (!organizers.some(({ id }) => id === catalogRecord.organizerId)) fail("Category catalog does not belong to a selected organizer.");
+  for (const venue of venues) {
+    const venueRecord = records.get(venue.path);
+    if (venueRecord?.schema !== "venue/1" || venueRecord.id !== venue.id) fail(`Unknown venue stable ID ${venue.id}.`);
+    for (const selected of venue.spaces) {
+      const record = records.get(selected.path);
+      if (record?.schema !== "venue-space/1" || record.id !== selected.id) fail(`Unknown venue-space stable ID ${selected.id}.`);
+      if (record.venueId !== venueRecord.id) fail(`Venue-space ${selected.id} does not belong to venue ${venueRecord.id}.`);
+    }
   }
   return { pin, records };
+}
+
+function equalSets(left, right) {
+  return left.size === right.size && [...left].every((value) => right.has(value));
+}
+
+export function selectEventReferenceRecords(value, records, event) {
+  const pin = parseReferenceDataPin(value);
+  const definition = requireRecord(event, "event definition");
+  if (definition.id !== pin.eventId) fail(`Reference data pin identity mismatch: expected ${definition.id}, got ${pin.eventId}.`);
+  if (!Array.isArray(definition.organizerAssignments) || !Array.isArray(definition.venueAssignments)) {
+    fail("Event definition reference assignments are invalid.");
+  }
+  const eventOrganizerIds = new Set(definition.organizerAssignments.map((assignment) => requireRecord(assignment, "event organizer assignment").organizerId));
+  const selectedOrganizerIds = new Set(pin.selection.organizers.map(({ id }) => id));
+  if (!equalSets(eventOrganizerIds, selectedOrganizerIds)) fail("Event organizer assignments do not match the pinned selection.");
+  const categoryCatalog = requireRecord(definition.categoryCatalog, "event category catalog");
+  const selectedCatalog = pin.selection.categoryCatalog;
+  if (categoryCatalog.id !== selectedCatalog.id || categoryCatalog.organizerId !== selectedCatalog.organizerId
+    || categoryCatalog.revision !== selectedCatalog.revision) fail("Event category catalog does not match the pinned selection.");
+  const eventVenueSpaces = new Map();
+  for (const assignmentValue of definition.venueAssignments) {
+    const assignment = requireRecord(assignmentValue, "event venue assignment");
+    if (!eventVenueSpaces.has(assignment.venueId)) eventVenueSpaces.set(assignment.venueId, new Set());
+    eventVenueSpaces.get(assignment.venueId).add(assignment.venueSpaceId);
+  }
+  const selectedVenueSpaces = new Map(pin.selection.venues.map((venue) => [venue.id, new Set(venue.spaces.map(({ id }) => id))]));
+  if (!equalSets(new Set(eventVenueSpaces.keys()), new Set(selectedVenueSpaces.keys()))
+    || [...eventVenueSpaces].some(([venueId, spaces]) => !equalSets(spaces, selectedVenueSpaces.get(venueId)))) {
+    fail("Event venue assignments do not match the pinned selection.");
+  }
+  return pin.files.map(({ path: filePath }) => records.get(filePath));
 }

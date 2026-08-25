@@ -14,6 +14,7 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 | `event` | 活動 | 目前活動 ID，永遠寫出 |
 | `day` | 活動 | 活動日，永遠寫出 |
 | `area` | 活動 | 展區，永遠寫出。讀取時接受 legacy 別名 `hall` |
+| `venueSpaceId` | 活動 | 場館空間 stable ID；只有活動分配多個場館空間時寫出 |
 | `query` | 探索搜尋 | 一般關鍵字 |
 | `genre` | 探索搜尋 | 社團主題類別；值為 active event 分類目錄中的顯示名稱 |
 | `creator` | 詳細搜尋 | 創作者類型 |
@@ -29,7 +30,7 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 | `selectedCircle` | 地圖／詳情 | canonical `CircleRecord.id` |
 | `selectedBooth` | 地圖／詳情 | 實際 `PlacementRecord` 的攤位代碼 |
 
-除 `event`、`day`、`area` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件。
+除 `event`、`day`、`area` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件；多場館空間活動的 `venueSpaceId` 是例外，必須寫出以消除 `area` 歸屬歧義。
 
 ## 規則
 
@@ -37,6 +38,7 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 - **攤位範圍 deep link 在 selection seam 解析。** `selectedCircle` 若帶的是攤位範圍 ID（`1-e19`、`1-e19-0`），先從 records 解析為 allocated ID，再與日期／攤位取交集；成功恢復後只會重新序列化 canonical `c-*`。舊的 `ff47-<hash>` ID 已無相容路徑，解析不到就 fail closed（[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)）。
 - **採多活動資料模型、單一 active-event UI。** codec 與 workspace projection 都接受 event definition；`event` 缺少時使用 active event，等於其他活動時整份 query fail closed 回 active event defaults，不讓篩選或選取跨活動洩漏。加入第二個活動前不先顯示活動選擇器。
 - **defaults 從 event definition 推導。** `day`、`area` 與 genre 預設分別取活動定義的第一筆，不在 codec 內硬編碼 FF47 的 `1`、`ALL` 或「全部類別」。
+- **場館空間與展區成對驗證。** `area` 是活動分區，`venueSpaceId` 是 pinned 場館空間，兩者不得互換。無效的 space 或不屬於該 space 的 area 一律回到該活動的預設 assignment；單一場館空間活動會移除殘留的 `venueSpaceId`。
 - `genre` 只接受 active event 的衍生分類字彙；舊工作簿類別或其他活動的值一律回到「全部類別」，不跨活動猜測對應。
 - **恢復時機**：初始化、重新整理與 `popstate` 必須恢復篩選及選取。地圖資料延後完成時，以保存的攤位代碼重新聚焦。
 - **延後套用選取**：可分享連結的社團與攤位選取要等社團快照可解析後才套用。**在此之前不得改寫 URL**，否則會把使用者分享的深層連結洗掉。

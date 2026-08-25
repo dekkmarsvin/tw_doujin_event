@@ -210,9 +210,10 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /role="tabpanel" aria-labelledby=\{activeMobileTabId\}/);
   assert.match(app, /onFocusCapture=\{handleMobilePanelFocus\}/);
   assert.match(app, /setMobileSheetLevel\("full"\)/);
-  assert.match(eventCatalog, /parseEventDefinition\(injectedDefinition\)/);
-  assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/2"/);
-  assert.match(eventCatalog, /parseCircleCategoryCatalog\(value\.circleCategories\)/);
+  assert.match(eventCatalog, /parseEventDefinition\(injectedDefinition, injectedReferences\)/);
+  assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/3"/);
+  assert.match(eventCatalog, /parseCircleCategoryCatalog\(\{/);
+  assert.match(eventCatalog, /findReference\([\s\S]*"category-catalog\/1"/);
   assert.doesNotMatch(app, /MapAdminImporter|publicationNotice|showAdmin|管理活動地圖|開啟管理地圖/);
   assert.match(editorPage, /loadPublishedEventMap\(ACTIVE_EVENT_ID\)/);
   assert.match(editorPage, /<MapAdminImporter/);
