@@ -1,8 +1,11 @@
 {
   "schema": "cloudflare-usage-config/1",
   "resources": [
+    { "id": "r2:account", "kind": "r2", "environment": "account", "scope": "account" },
     { "id": "r2:production", "kind": "r2", "environment": "production", "bucketName": "tw-doujin-event-thumbnails" },
-    { "id": "r2:preview", "kind": "r2", "environment": "preview", "bucketName": "tw-doujin-event-thumbnails-preview" }
+    { "id": "r2:preview", "kind": "r2", "environment": "preview", "bucketName": "tw-doujin-event-thumbnails-preview" },
+    { "id": "r2:map-contributions:production", "kind": "r2", "environment": "production", "bucketName": "tw-doujin-event-map-contributions" },
+    { "id": "r2:map-contributions:preview", "kind": "r2", "environment": "preview", "bucketName": "tw-doujin-event-map-contributions-preview" }
   ],
   "operationClasses": {
     "classA": ["ListBuckets", "PutBucket", "ListObjects", "PutObject", "CopyObject", "CompleteMultipartUpload", "CreateMultipartUpload", "LifecycleStorageTierTransition", "ListMultipartUploads", "UploadPart", "UploadPartCopy", "ListParts", "PutBucketEncryption", "PutBucketCors", "PutBucketLifecycleConfiguration"],

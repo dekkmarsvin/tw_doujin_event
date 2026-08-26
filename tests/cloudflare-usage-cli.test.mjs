@@ -38,3 +38,14 @@ test("missing usage history fails unless a reset is explicit", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("CLI rejects nonexistent and current UTC dates before touching history", async () => {
+  const nonexistent = await run(["--report-only", "--date", "2026-02-30"]);
+  assert.notEqual(nonexistent.code, 0);
+  assert.match(nonexistent.stderr, /real YYYY-MM-DD UTC day/);
+
+  const current = new Date().toISOString().slice(0, 10);
+  const currentDay = await run(["--report-only", "--date", current]);
+  assert.notEqual(currentDay.code, 0);
+  assert.match(currentDay.stderr, /earlier than the current UTC day/);
+});
