@@ -144,8 +144,8 @@ test("circle editor has one preview-first save path across the three responsive 
 });
 
 test("separates the public static app from the retained editor implementation", async () => {
-  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "circle-editor-client.ts"];
-  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, page, catalogClient, catalogStore, overridesClient, editorClient] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
+  const paths = ["event-map-app.tsx", "editor-page.tsx", "map-admin-importer.tsx", "map-layout-editor.tsx", "map-recognition.ts", "accessible-event-map-renderer.tsx", "static-event-map-client.ts", "event-catalog.ts", "event-workspace-panels.tsx", "planning-tools.tsx", "reader-help.tsx", "page.tsx", "static-circle-catalog-client.ts", "circle-records.ts", "static-circle-overrides-client.ts", "circle-editor-client.ts"];
+  const [app, editorPage, admin, editor, recognizer, renderer, staticClient, eventCatalog, workspacePanels, planningTools, readerHelp, page, catalogClient, catalogStore, overridesClient, editorClient] = await Promise.all(paths.map((path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8")));
   const appStyles = await readFile(new URL("../app/event-map-app.module.css", import.meta.url), "utf8");
   const workspaceStyles = await readFile(new URL("../app/event-workspace-panels.module.css", import.meta.url), "utf8");
   const planningToolsStyles = await readFile(new URL("../app/planning-tools.module.css", import.meta.url), "utf8");
@@ -190,9 +190,13 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /showAreaSwitcher && <fieldset/);
   assert.match(app, /data-text-scale=\{textScale\}/);
   assert.match(app, /網頁字體大小/);
-  assert.match(app, /關於本頁/);
-  assert.match(app, /非官方同人展逛攤工具/);
-  assert.match(app, /Discord ID <strong>dekkorakki<\/strong>/);
+  assert.match(app, /<ReaderHelp dataLastUpdatedLabel=/);
+  assert.match(readerHelp, /使用說明/);
+  assert.match(readerHelp, /收藏、加入行程與設為下一站是三個獨立動作/);
+  assert.match(readerHelp, /目前網頁尚未提供匯入/);
+  assert.match(readerHelp, /關於本頁/);
+  assert.match(readerHelp, /非官方同人展逛攤工具/);
+  assert.match(readerHelp, /Discord ID <strong>dekkorakki<\/strong>/);
   assert.match(app, /資料僅儲存於瀏覽器/);
   assert.match(app, /<PlanningTools \/>/);
   assert.match(page, /return <EventMapApp \/>/);

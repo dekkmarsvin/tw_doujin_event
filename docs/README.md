@@ -26,6 +26,7 @@
 | [搜尋、篩選與顯示設定](./contracts/search.md) | 三組條件的責任切分、詳細搜尋互動、已實作與未實作 |
 | [URL 檢視狀態](./contracts/url-state.md) | 17 個查詢參數、恢復規則、不寫入 URL 的狀態 |
 | [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
+| [地圖貢獻控制面](./contracts/map-contributions.md) | contributor 授權、私人 revision、官方來源檔、審閱狀態機、候選匯出與保存期限 |
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
 | [資料匯入](./contracts/data-import.md) | **P2，尚未對外開放**。規劃檔案交換已有底層能力；一般介面與外部服務串接尚未實作 |
 | [資料 inventory](./contracts/data-inventory.md) | 實際持有的資料、欄位、有效期與第三方；保存期限、到期處置與清除機制 |
@@ -80,6 +81,8 @@
 | [0031](./adr/0031-quota-exhaustion-is-not-a-release-gate.md) | 不以不可安全重現的配額耗盡作發布 gate，Pages Functions 設為 fail-open |
 | [0032](./adr/0032-shared-reference-data-is-public-and-pinned.md) | 共享 reference-data 公開、經 review 發布，活動只使用 pinned revision |
 | [0033](./adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) | 地圖貢獻採管理者授權、私人平行草稿與明確保存期限 |
+| [0034](./adr/0034-production-origin-gates-deployment.md) | Pages production origin 阻擋壞部署，自訂網域 smoke 提供非阻塞訊號 |
+| [0035](./adr/0035-new-event-onboarding-is-data-driven.md) | **草稿**：新活動 onboarding 資料驅動；只有空白畫布、來源說明與排原語的第一階段已實作 |
 
 ## 對外文件
 
@@ -98,6 +101,7 @@
 - [Comike WebCatalog：社團自助編輯](./research/comike-webcatalog-circle-editing.md)
 - [日本同人／コミケ周邊服務功能盤點](./research/doujin-service-landscape.md)（**二手檢索，未實地操作**——可信度低於上面三份）
 - [性質相近的服務與開源專案如何公開自己的資料收集](./research/data-collection-policies-in-comparable-projects.md)（17 個對象，全部原文已讀；為 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的基礎研究）
+- [台灣同人展主辦官方攤位頁面盤點](./research/taiwan-organizer-booth-pages.md)（新活動 onboarding 與地圖 authoring 的輸入研究）
 
 ## 維護規則
 

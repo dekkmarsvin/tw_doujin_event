@@ -7,22 +7,6 @@
 .textScale button[aria-pressed="true"] { background:#fff; color:var(--ink); box-shadow:0 1px 4px #26362b1a; }
 .textScale button:active { background:#dfe4de; }
 .textScale button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
-.aboutMenu { position:relative; }
-.aboutTrigger { min-height:36px; padding:0 12px; border:1px solid var(--line); border-radius:7px; background:#f9faf8; color:var(--muted); font-size:calc(10px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
-.aboutTrigger:hover,.aboutTrigger[aria-expanded="true"] { background:var(--paper); color:var(--ink); }
-.aboutTrigger:active { background:var(--cream); }
-.aboutTrigger:focus-visible,.aboutPanel button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
-.aboutPanel { position:absolute; z-index:30; top:calc(100% + 8px); right:0; width:min(340px,calc(100vw - 32px)); padding:18px; border:1px solid var(--line); border-radius:12px; background:#f9faf8; color:var(--ink); box-shadow:0 14px 40px #2631293a; }
-.aboutPanel header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
-.aboutPanel h2 { margin:0; font-size:calc(14px * var(--ui-font-scale,1)); line-height:1.4; }
-.aboutPanel header button { width:28px; height:28px; display:grid; flex:0 0 auto; place-items:center; padding:0; border:1px solid var(--line); border-radius:7px; background:#f9faf8; color:var(--muted); cursor:pointer; }
-.aboutPanel header button:hover { background:var(--paper); color:var(--ink); }
-.aboutPanel header button:active { background:var(--cream); }
-.aboutPanel p { margin:0; color:var(--muted); font-size:calc(11px * var(--ui-font-scale,1)); line-height:1.65; }
-.aboutPanel dl { display:grid; gap:8px; margin:12px 0 0; padding-top:12px; border-top:1px solid var(--line); }
-.aboutPanel dl div { display:grid; grid-template-columns:100px 1fr; gap:12px; align-items:baseline; }
-.aboutPanel dt { color:var(--muted); font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; }
-.aboutPanel dd { margin:0; font-size:calc(10px * var(--ui-font-scale,1)); }
 .workspace { height:calc(100vh - 130px); min-height:0; grid-template-columns:296px minmax(430px,1fr) 330px; grid-template-rows:minmax(0,1fr); overflow:hidden; }
 .workspace.navigationWorkspace { grid-template-columns:360px minmax(430px,1fr) 330px; }
 .leftRail { display:flex; flex-direction:column; overflow:hidden; }
@@ -93,9 +77,6 @@
   :global(.topbar) :global(.event) { position:static; grid-row:2; }
   .topbarActions { position:absolute; right:16px; top:14px; }
   .topbarActions :global(.help) { display:block; }
-  .aboutTrigger { min-height:44px; padding-inline:12px; }
-  .aboutPanel { top:calc(100% + 8px); }
-  .aboutPanel header button { width:44px; height:44px; }
   .workspace { display:block; }
   .leftRail { display:none; }
   .rightRail { display:none; }

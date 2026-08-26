@@ -37,6 +37,7 @@ import { ACTIVE_EVENT, ACTIVE_EVENT_ID, eventUsesAreaSwitcher, venueAssignmentFo
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
+import ReaderHelp from "./reader-help";
 import styles from "./event-map-app.module.css";
 
 type Hall = EventAreaDefinition["id"];
@@ -87,7 +88,6 @@ export default function EventMapApp() {
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState("");
   const [showFullDetail, setShowFullDetail] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
   const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
@@ -96,8 +96,6 @@ export default function EventMapApp() {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const floorRef = useRef<HTMLDivElement | null>(null);
   const fullDetailRef = useRef<HTMLDivElement | null>(null);
-  const aboutRef = useRef<HTMLDivElement | null>(null);
-  const aboutButtonRef = useRef<HTMLButtonElement | null>(null);
   const gesture = useRef<MapGesture | null>(null);
   const mapGestureFrame = useRef<number | null>(null);
   const mobileSheetGesture = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
@@ -138,25 +136,6 @@ export default function EventMapApp() {
   useEffect(() => () => {
     if (mapGestureFrame.current !== null) cancelAnimationFrame(mapGestureFrame.current);
   }, []);
-
-  useEffect(() => {
-    if (!showAbout) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !aboutRef.current?.contains(event.target)) setShowAbout(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setShowAbout(false);
-      requestAnimationFrame(() => aboutButtonRef.current?.focus());
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [showAbout]);
 
   useEffect(() => {
     const restore = (fromHistory = false) => {
@@ -563,7 +542,7 @@ export default function EventMapApp() {
   };
 
   return <main className="app-shell" data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
-    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{ACTIVE_EVENT.name}</b><small>{ACTIVE_EVENT.dateRangeLabel} · {ACTIVE_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><div className={styles.topbarActions}><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools /><div ref={aboutRef} className={styles.aboutMenu}><button ref={aboutButtonRef} type="button" className={styles.aboutTrigger} aria-haspopup="dialog" aria-expanded={showAbout} aria-controls="about-this-site" onClick={() => setShowAbout((current) => !current)}>關於</button>{showAbout && <section id="about-this-site" className={styles.aboutPanel} role="dialog" aria-labelledby="about-title"><header><h2 id="about-title">關於本頁</h2><button type="button" onClick={() => { setShowAbout(false); aboutButtonRef.current?.focus(); }} aria-label="關閉關於說明"><UiIcon name="close" /></button></header><p>本頁是非官方同人展逛攤工具，不代表 Fancy Frontier 主辦單位。資料整理自公開資料，實際活動資訊請以主辦單位與社團最新公告為準。</p><dl><div><dt>資料最後更新</dt><dd>{ACTIVE_EVENT.dataLastUpdatedLabel}</dd></div><div><dt>聯絡</dt><dd>Discord ID <strong>dekkorakki</strong></dd></div></dl></section>}</div></div></header>
+    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b><small>同人展逛攤地圖</small></div></div><div className="event"><i>活動</i><div><b>{ACTIVE_EVENT.name}</b><small>{ACTIVE_EVENT.dateRangeLabel} · {ACTIVE_EVENT.venue}</small></div></div><label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" /><kbd>⌘ K</kbd></label><div className={styles.topbarActions}><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools /><ReaderHelp dataLastUpdatedLabel={ACTIVE_EVENT.dataLastUpdatedLabel} /></div></header>
     <section className="toolbar" aria-label={showAreaSwitcher ? "日期與展區篩選" : "日期篩選"}><div className="days">{ACTIVE_EVENT.days.map((eventDay) => <button key={eventDay.id} className={day === eventDay.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setDay(eventDay.id); setSelectedRecordId(null); }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>{showAreaSwitcher && <div className="mobile-halls">{ACTIVE_EVENT.areas.map((area) => <button key={area.id} className={hall === area.id ? "active" : ""} onClick={() => { historyIntent.current = "push"; setHall(area.id); }}>{area.label}</button>)}</div>}<div className="open-hours" role="status"><span />{planningStorageError ? "儲存異常，請開啟資料管理" : planningReady ? "資料僅儲存於瀏覽器" : "正在讀取瀏覽器資料"}</div><button className={`${styles.navigationToggle} ${navigationMode ? styles.navigationToggleActive : ""}`} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? "退出導航模式" : "導航模式"}</button></section>
     <div className={`workspace ${styles.workspace} ${navigationMode ? styles.navigationWorkspace : ""}`}>
       <aside className={`filters ${styles.leftRail}`}>
