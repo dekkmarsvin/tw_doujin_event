@@ -16,7 +16,7 @@
 
 ## 草稿與版本
 
-`eventId + periodKey + venueSpaceId` 是審閱範圍，同一範圍允許多份平行草稿。`periodKey` 一律保存活動定義中的日程 ID；不會與另一個正式 ID 衝突時，相容輸入 `day-<id>` 會先正規化成 `<id>`，多空間 `targetPath` 也只使用正規值。既有 alias 列會在下一次處理該範圍時原子正規化；若資料庫已存在兩份 alias 不同但邏輯範圍相同的有效核准稿，操作回 `409` 並要求人工處理，不再核准第三份。已固化的 legacy export 不改寫其 `targetPath`；若該路徑不是目前正規值，重試匯出會回 `409`，由管理者人工處理。每份草稿有固定 ID 與單調遞增 revision；修改與提交都必須帶 `expectedRevision`，落後的版本回 `409`，不覆寫較新的內容。
+`eventId + periodKey + venueSpaceId` 是審閱範圍，同一範圍允許多份平行草稿。`periodKey` 一律保存活動定義中的日程 ID；不會與另一個正式 ID 衝突時，相容輸入 `day-<id>` 會先正規化成 `<id>`，多空間 `targetPath` 也只使用正規值。既有 alias 列會在下一次處理該範圍時原子正規化；若資料庫已存在兩份 alias 不同但邏輯範圍相同的有效核准稿，操作回 `409` 並要求人工處理，不再核准第三份。已固化的 legacy export 不改寫其 `targetPath`；live scope 仍存在時，非正規路徑的重試匯出會回 `409`，由管理者人工處理；live scope 日後移除或改名時，既有 immutable export 仍可下載。每份草稿有固定 ID 與單調遞增 revision；修改與提交都必須帶 `expectedRevision`，落後的版本回 `409`，不覆寫較新的內容。
 
 狀態機為：
 

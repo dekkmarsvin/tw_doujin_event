@@ -1059,13 +1059,22 @@ export function createCirclePortalHandlers({
     if (!draft) return json({ error: "找不到草稿。" }, 404);
     if (draft.current_revision !== expectedRevision) return json({ error: "草稿版本已變更。" }, 409);
 
+    const existing = await repository.getMapDraftExport(draftId, Number(expectedRevision));
     const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
-    if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
-      ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-      : "活動 period 或場地空間已不存在。" }, 409);
+    if (!resolvedScope.ok) {
+      if (existing && resolvedScope.reason === "not_found") {
+        return json({
+          ok: true, draftId, revision: existing.revision, targetPath: existing.target_path,
+          candidate: JSON.parse(existing.candidate_json), diff: JSON.parse(existing.diff_json),
+          candidateSha256: existing.candidate_sha256, createdAt: existing.created_at,
+        });
+      }
+      return json({ error: resolvedScope.reason === "scope_conflict"
+        ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
+        : "活動 period 或場地空間已不存在。" }, 409);
+    }
     const scope = resolvedScope.scope;
 
-    const existing = await repository.getMapDraftExport(draftId, Number(expectedRevision));
     if (existing) {
       if (existing.target_path !== scope.targetPath) {
         return json({ error: "既有候選使用非正規 targetPath，為保留 immutable export，必須先人工處理。" }, 409);

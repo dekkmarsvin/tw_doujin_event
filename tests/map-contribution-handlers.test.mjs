@@ -303,6 +303,13 @@ test("a legacy immutable export with an alias target path fails closed", async (
   assert.equal((await repository.getMapDraft("legacy-export")).period_key, "1");
   assert.equal((await repository.getMapDraftExport("legacy-export", 1)).target_path, legacyTargetPath,
     "the immutable legacy export is not rewritten");
+
+  scopeConfig = { ...scopeConfig, periodAliases: [] };
+  const archived = await handlers.adminExportMapDraft(request("/admin/drafts/legacy-export/export", "POST", {
+    expectedRevision: 1,
+  }, adminCookie), "legacy-export");
+  assert.equal(archived.status, 200, "an immutable export remains retrievable after its live scope is removed");
+  assert.equal((await archived.json()).targetPath, legacyTargetPath);
 });
 
 test("private evidence is owner/admin-only, images preview safely and raw downloads attach", async () => {
