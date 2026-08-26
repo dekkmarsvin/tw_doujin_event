@@ -86,7 +86,7 @@ authoring 持久化由純 repository、純 route handlers 與環境 wrapper 構�
 - **公開前台不呼叫這兩個 route。**
 - 隔離 Miniflare D1 測試必須證明：一次 PUT 可由稍後 GET 讀回、第二次 PUT 會增加 revision、無效 event ID 與低信心內容不寫入。
 
-## 尚未做
+## 現行限制與後續範圍
 
-- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。外部投稿使用另一套管理者授權、私人草稿、審閱與版本化發布機制，見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)；投稿／審閱介面與匯出仍由 #73 完成。
+- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。外部投稿已使用另一套管理者授權、私人草稿、審閱與版本化候選匯出機制，見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)。
 - 對非一般攤位文字做 OCR。第一階段只保存可可靠辨識的相對矩形。
