@@ -40,7 +40,7 @@ export const RETENTION_WINDOWS = {
   auditIpHashes: 90 * DAY_MS,
   /** Inactivity while still editable. Submitted drafts deliberately have no clock. */
   mapDraftInactivity: 180 * DAY_MS,
-  /** Raw evidence after an approve/reject/export decision. Metadata remains. */
+  /** Raw evidence after an approve/reject/export/withdraw decision. Metadata remains. */
   mapDecisionRaw: 30 * DAY_MS,
 } as const;
 
