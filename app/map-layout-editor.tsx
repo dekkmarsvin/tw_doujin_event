@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { resolveMapLandmarkKind, type EventMapLayout, type MapLandmarkKind, type MapRect } from "./event-map";
-import { resizeRectFromCorner, snapRectToAdjacentRects, type ResizeCorner, type SnapGuide } from "./map-layout-editor-geometry";
+import { resolveMapLandmarkKind, type EventMapLayout, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowDefinition, type SnapGuide } from "./map-layout-editor-geometry";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
 
@@ -40,6 +40,54 @@ type Props = {
   onChange: (layout: EventMapLayout) => void;
 };
 
+/** The row form keeps its numeric fields as strings so a half-typed value does
+ * not snap back to a default while the maintainer is still typing. */
+type RowFormState = {
+  label: string;
+  startX: string;
+  startY: string;
+  endX: string;
+  endY: string;
+  slotCount: string;
+  slotWidth: string;
+  slotHeight: string;
+  codePrefix: string;
+  startNumber: string;
+  numberPadding: string;
+};
+
+function blankRowForm(layout: EventMapLayout): RowFormState {
+  return {
+    label: "",
+    startX: String(Math.round(layout.width * .2)),
+    startY: String(Math.round(layout.height * .5)),
+    endX: String(Math.round(layout.width * .8)),
+    endY: String(Math.round(layout.height * .5)),
+    slotCount: "10",
+    slotWidth: String(Math.max(1, Math.round(layout.width * .04))),
+    slotHeight: String(Math.max(1, Math.round(layout.height * .03))),
+    codePrefix: "",
+    startNumber: "1",
+    numberPadding: "2",
+  };
+}
+
+function rowDefinitionFrom(form: RowFormState): RowDefinition {
+  return {
+    label: form.label,
+    start: { x: Number(form.startX), y: Number(form.startY) },
+    end: { x: Number(form.endX), y: Number(form.endY) },
+    slotCount: Number(form.slotCount),
+    slotWidth: Number(form.slotWidth),
+    slotHeight: Number(form.slotHeight),
+    // An empty prefix means the row label doubles as the code prefix, which is
+    // how every organizer surveyed so far numbers its booths.
+    codePrefix: form.codePrefix.trim() || form.label.trim(),
+    startNumber: Number(form.startNumber),
+    numberPadding: Number(form.numberPadding),
+  };
+}
+
 const MIN_EDITOR_ZOOM = 1;
 const MAX_EDITOR_ZOOM = 4;
 const EDITOR_ZOOM_STEP = .5;
@@ -76,6 +124,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const [zoom, setZoom] = useState(MIN_EDITOR_ZOOM);
   const [layoutUnitsPerPixel, setLayoutUnitsPerPixel] = useState(layout.width / 800);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
+  const [rowForm, setRowForm] = useState<RowFormState | null>(null);
+  const [rowErrors, setRowErrors] = useState<string[]>([]);
   const drag = useRef<DragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -278,18 +328,47 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     return `${prefix}-${suffix}`;
   };
 
+  /** Adds a single booth to the row that is currently selected, falling back to
+   * the last row. Rows themselves are created by `createRow`; without that, a
+   * layout could never grow past one row because row labels must be unique. */
   const addSlot = () => {
-    const rowIndex = 0;
+    const rowIndex = selection?.kind === "slot" ? selection.rowIndex : Math.max(0, layout.rows.length - 1);
     const existingCodes = layout.rows.flatMap((row) => row.slots.map(({ code }) => code));
     const code = uniqueId("NEW", existingCodes);
     commit((draft) => {
       if (draft.rows.length === 0) draft.rows.push({ label: "NEW", orientation: "horizontal", confidence: 1, slots: [] });
-      draft.rows[0].slots.push({
+      draft.rows[rowIndex].slots.push({
         code,
         rect: { x: draft.width * .45, y: draft.height * .45, width: draft.width * .06, height: draft.height * .04 },
       });
     });
-    setSelection({ kind: "slot", rowIndex, itemIndex: layout.rows[0]?.slots.length ?? 0 });
+    setSelection({ kind: "slot", rowIndex, itemIndex: layout.rows[rowIndex]?.slots.length ?? 0 });
+  };
+
+  const createRow = () => {
+    if (!rowForm) return;
+    const definition = rowDefinitionFrom(rowForm);
+    const result = generateRowSlots(definition, layout);
+    if (!result.ok) { setRowErrors(result.errors); return; }
+    const label = result.row.label;
+    if (layout.rows.some((row) => row.label === label)) { setRowErrors([`排標籤 ${label} 已經存在。`]); return; }
+    const existingCodes = new Set(layout.rows.flatMap((row) => row.slots.map(({ code }) => code)));
+    const collision = result.row.slots.find(({ code }) => existingCodes.has(code));
+    if (collision) { setRowErrors([`攤位代碼 ${collision.code} 與其他排重複。`]); return; }
+    const rowIndex = layout.rows.length;
+    commit((draft) => draft.rows.push(result.row));
+    setRowErrors([]);
+    setRowForm(null);
+    setSelection({ kind: "slot", rowIndex, itemIndex: 0 });
+  };
+
+  const removeRow = (rowIndex: number) => {
+    commit((draft) => draft.rows.splice(rowIndex, 1));
+    setSelection(null);
+  };
+
+  const updateRow = (rowIndex: number, next: Partial<{ label: string; orientation: MapOrientation }>) => {
+    commit((draft) => Object.assign(draft.rows[rowIndex], next));
   };
 
   const addPillar = () => {
@@ -381,10 +460,26 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     if (option) requestAnimationFrame(() => focusSelection(option.selection));
   };
 
+  const rowField = (label: string, value: string, onValue: (value: string) => void, placeholder?: string) =>
+    <label className={styles.wide}><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onValue(event.target.value)} /></label>;
+
+  const rowFormOrientation = rowForm
+    ? rowOrientationFromEndpoints({ x: Number(rowForm.startX), y: Number(rowForm.startY) }, { x: Number(rowForm.endX), y: Number(rowForm.endY) })
+    : "vertical";
+
+  const rowCodePreview = (() => {
+    if (!rowForm) return "";
+    const definition = rowDefinitionFrom(rowForm);
+    const result = generateRowSlots(definition, layout);
+    if (!result.ok) return "尚無法預覽";
+    const codes = result.row.slots.map(({ code }) => code);
+    return codes.length > 3 ? `${codes.slice(0, 2).join("、")}…${codes.at(-1)}` : codes.join("、");
+  })();
+
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>可新增並拖曳攤位、柱子、出入口與區域；非一般攤位區可拖曳四角調整大小。方向鍵微調 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>以「新增一排」一次產生整排攤位，或逐一新增並拖曳攤位、柱子、出入口與區域；非一般攤位區可拖曳四角調整大小。方向鍵微調 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => { setRowErrors([]); setRowForm((current) => current ? null : blankRowForm(layout)); }} aria-expanded={!!rowForm}>新增一排</button><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器地圖縮放控制"><span>檢視倍率</span><div><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selection} onClick={() => selection && focusSelection(selection)}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
@@ -413,10 +508,37 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
       </div>
       <aside className={styles.inspector} aria-label="選取元素屬性">
         <label className={styles.elementPicker}><span>精確選取地圖元素</span><select aria-label="選取地圖元素" value={activeKey} onChange={(event) => selectElement(event.target.value)}><option value="">請選擇攤位或設施</option>{elementOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
+        {rowForm && <div className={styles.rowPanel}>
+          <b>新增一排</b>
+          <p>起點與終點是這一排第一格與最後一格的中心；格數決定中間如何等分。排標籤可以是任意文字。方向由端點自動判定，建立後仍可在排清單更改。</p>
+          {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
+          {rowField("新排標籤", rowForm.label, (value) => setRowForm({ ...rowForm, label: value }), "例：A、子、商")}
+          <div className={styles.fields}>
+            {rowField("起點 X", rowForm.startX, (value) => setRowForm({ ...rowForm, startX: value }))}
+            {rowField("起點 Y", rowForm.startY, (value) => setRowForm({ ...rowForm, startY: value }))}
+            {rowField("終點 X", rowForm.endX, (value) => setRowForm({ ...rowForm, endX: value }))}
+            {rowField("終點 Y", rowForm.endY, (value) => setRowForm({ ...rowForm, endY: value }))}
+            {rowField("格數", rowForm.slotCount, (value) => setRowForm({ ...rowForm, slotCount: value }))}
+            {rowField("每格寬", rowForm.slotWidth, (value) => setRowForm({ ...rowForm, slotWidth: value }))}
+            {rowField("每格高", rowForm.slotHeight, (value) => setRowForm({ ...rowForm, slotHeight: value }))}
+            {rowField("起始編號", rowForm.startNumber, (value) => setRowForm({ ...rowForm, startNumber: value }))}
+            {rowField("補零位數", rowForm.numberPadding, (value) => setRowForm({ ...rowForm, numberPadding: value }))}
+          </div>
+          {rowField("代碼前綴", rowForm.codePrefix, (value) => setRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
+          <p>方向：{rowFormOrientation === "horizontal" ? "橫排" : "直排"}（依端點判定）<br />預覽：{rowCodePreview}</p>
+          <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>建立這一排</button></div>
+        </div>}
+        {!rowForm && !!layout.rows.length && <div className={styles.rowList}>
+          <b>已建立的排（{layout.rows.length}）</b>
+          <ul>{layout.rows.map((row, rowIndex) => <li key={row.label}>
+            <span>{row.label}<small>{row.orientation === "horizontal" ? "橫" : "直"} · {row.slots.length} 格</small></span>
+            <button type="button" onClick={() => removeRow(rowIndex)} aria-label={`移除 ${row.label} 排`}>移除整排</button>
+          </li>)}</ul>
+        </div>}
         {!selection && <div className={styles.empty}><b>選取地圖元素</b><p>可調整一般攤位、柱子、出入口及企業攤／舞台區域的位置。</p></div>}
         {selection && <>
           <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : "非一般攤位區"}</small><b>{selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
-          {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input value={selectedSlot.code} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }); }} /></label><label className={styles.wide}><span>排標籤</span><input value={layout.rows[selectedSlotSelection.rowIndex].label} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].label = next; }); }} /></label></>}
+          {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input value={selectedSlot.code} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }); }} /></label><label className={styles.wide}><span>所屬排標籤</span><input value={layout.rows[selectedSlotSelection.rowIndex].label} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { label: event.target.value.trim() })} /></label><label className={styles.wide}><span>所屬排方向</span><select value={layout.rows[selectedSlotSelection.rowIndex].orientation} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label></>}
           {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子 ID</span><input value={selectedPillar.id} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }); }} /></label>}
           {selectedLandmark && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selection.itemIndex].kind = stableKind; draft.landmarks[selection.itemIndex].label = event.target.value; }); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
           {selectedAccess && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedAccess.label} onChange={(event) => updateAccess({ label: event.target.value })} /></label><label><span>類型</span><select value={selectedAccess.kind} onChange={(event) => updateAccess({ kind: event.target.value as "entrance" | "exit" })}><option value="entrance">入口</option><option value="exit">出口</option></select></label><label><span>方向</span><select value={selectedAccess.direction} onChange={(event) => updateAccess({ direction: event.target.value as "north" | "south" })}><option value="north">向北</option><option value="south">向南</option></select></label></>}

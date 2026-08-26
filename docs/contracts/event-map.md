@@ -11,12 +11,21 @@
 
 ## 地圖資料不變量
 
-- 座標使用原始辨識圖片的像素座標；`width`、`height` 定義 SVG `viewBox`。所有元素都在同一座標空間。
+- 座標使用原始配置圖的像素座標；沒有配置圖時使用建立空白地圖時指定的畫布尺寸。`width`、`height` 定義 SVG `viewBox`，所有元素都在同一座標空間。
 - `rows[].label` 在同一 layout 中唯一。排號與方向由該活動的 template adapter 決定，不是共用 schema 常數。
 - slot 掛在排底下（`rows[].slots[]`，`EventMapLayout` 沒有頂層 `slots`）；`code` 在同一 layout 中唯一。slot 保存矩形 `x/y/width/height`，互動使用 slot 而非圖片座標點。
 - pillar 必須保存 `x/y/width/height`；access point 必須保存 `kind`、位置與方向。
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
 - **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
+
+## 快照的來源語意
+
+已發布快照的 `sourceName` 與 `confidence` 一起說明這份 layout 是怎麼來的：
+
+- **`sourceName` 是必填的可追溯欄位，不是檔名欄位。** 由 authoring 介面的「來源說明」提供，上傳配置圖時預填檔名，人工繪製時由維護者自行填寫（例：`描摹自 2025_FFK_map.jpg`）。空白不得發布。
+- **`confidence` 只有在來源是圖片辨識時才是辨識信心。** 人工繪製與描摹一律送 `1`，並在 authoring 介面標示為「人工繪製」。
+- 因此**已發布快照本身無法區分人工繪製與滿分辨識**，追溯只靠 `sourceName` 的文字。要在資料層真正區分，需要另加 provenance 欄位；該取捨與延後理由見 [ADR-0035](../adr/0035-new-event-onboarding-is-data-driven.md)。
+- **辨識是選配。** 沒有註冊辨識 adapter 的 template 仍可 authoring：上傳的配置圖成為描摹底圖，攤位由「新增一排」建立。缺少 adapter 不是錯誤狀態。
 
 **場館、場館空間與展區是三件事**，見 [`CONTEXT.md`](../../CONTEXT.md)。場館與場館空間名稱由 event definition 選取的 pinned reference records 投影；展區是活動在某個場館空間內定義的攤位／展示分區。**契約不寫死當期名稱**——那是每場活動各自的 verified reference data。
 

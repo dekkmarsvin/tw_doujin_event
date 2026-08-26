@@ -7,10 +7,10 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
-const { recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
-const { resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
+const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
+const { createBlankEventMapLayout, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { resizeRectFromCorner, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
 
@@ -166,4 +166,90 @@ test("rejects images that are too small", () => {
   const report = recognizeFF47Map({ data: new Uint8ClampedArray(400 * 300 * 4), width: 400, height: 300 });
   assert.equal(report.confidence, 0);
   assert.match(report.warnings[0], /解析度太低/);
+});
+
+test("a template without a recognition adapter still yields a publishable blank canvas", () => {
+  // Authoring must not depend on recognition: a brand-new venue has no adapter,
+  // and the maintainer traces the official plan by hand instead.
+  assert.equal(hasMapTemplateRecognizer("FF47"), true);
+  assert.equal(hasMapTemplateRecognizer("PIER2-2025"), false);
+  const blank = createBlankEventMapLayout("PIER2-2025", 1600, 1000);
+  assert.equal(validateEventMapLayout(blank).ok, true);
+  assert.deepEqual(blank.floor, { x: 0, y: 0, width: 1600, height: 1000 });
+  assert.deepEqual([blank.rows, blank.pillars, blank.accessPoints, blank.landmarks], [[], [], [], []]);
+  assert.equal(createBlankEventMapLayout("PIER2-2025", 0, -5).width, 1);
+});
+
+test("a row is generated from two endpoints, a count and a numbering rule", () => {
+  const definition = {
+    label: "B", start: { x: 100, y: 50 }, end: { x: 100, y: 950 },
+    slotCount: 10, slotWidth: 40, slotHeight: 30, codePrefix: "B", startNumber: 1, numberPadding: 2,
+  };
+  const result = generateRowSlots(definition, { width: 1600, height: 1000 });
+  assert.equal(result.ok, true);
+  assert.equal(result.row.label, "B");
+  assert.equal(result.row.orientation, "vertical");
+  assert.equal(result.row.confidence, 1);
+  assert.equal(result.row.slots.length, 10);
+  assert.deepEqual(result.row.slots.map(({ code }) => code).slice(0, 3), ["B01", "B02", "B03"]);
+  assert.equal(result.row.slots.at(-1).code, "B10");
+  // Endpoints are slot centres, so the first rectangle straddles y = 50.
+  assert.deepEqual(result.row.slots[0].rect, { x: 80, y: 35, width: 40, height: 30 });
+  assert.equal(result.row.slots.at(-1).rect.y, 935);
+  const gaps = result.row.slots.slice(1).map((slot, index) => slot.rect.y - result.row.slots[index].rect.y);
+  assert.equal(new Set(gaps.map((gap) => Math.round(gap * 1e6))).size, 1);
+});
+
+test("row labels and booth codes accept any script, including branch characters", () => {
+  // 駁二動漫祭 numbers eight of its rows with 地支 characters, and CWT gives its
+  // commercial section the 商 prefix. Neither may need special handling.
+  const rows = [
+    generateRowSlots({ label: "子", start: { x: 20, y: 20 }, end: { x: 20, y: 80 }, slotCount: 32, slotWidth: 6, slotHeight: 2, codePrefix: "子", startNumber: 1, numberPadding: 2 }, { width: 100, height: 100 }),
+    generateRowSlots({ label: "商", start: { x: 20, y: 90 }, end: { x: 80, y: 90 }, slotCount: 4, slotWidth: 8, slotHeight: 4, codePrefix: "商", startNumber: 1, numberPadding: 2 }, { width: 100, height: 100 }),
+  ];
+  assert.deepEqual(rows.map(({ ok }) => ok), [true, true]);
+  assert.equal(rows[0].row.slots[0].code, "子01");
+  assert.equal(rows[0].row.slots.at(-1).code, "子32");
+  assert.deepEqual(rows[1].row.slots.map(({ code }) => code), ["商01", "商02", "商03", "商04"]);
+  const layout = { ...createBlankEventMapLayout("PIER2-2025", 100, 100), rows: rows.map(({ row }) => row) };
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  assert.equal(formatSlotCode("辰", 7, 2), "辰07");
+  assert.equal(formatSlotCode("K", 6, 0), "K6");
+});
+
+test("row generation refuses definitions that cannot produce a valid row", () => {
+  const bounds = { width: 100, height: 100 };
+  const base = { label: "A", start: { x: 10, y: 10 }, end: { x: 10, y: 90 }, slotCount: 4, slotWidth: 8, slotHeight: 8, codePrefix: "A", startNumber: 1, numberPadding: 2 };
+  assert.equal(generateRowSlots({ ...base, label: "  " }, bounds).ok, false);
+  assert.equal(generateRowSlots({ ...base, slotCount: 0 }, bounds).ok, false);
+  assert.equal(generateRowSlots({ ...base, slotCount: 2.5 }, bounds).ok, false);
+  assert.equal(generateRowSlots({ ...base, slotWidth: 0 }, bounds).ok, false);
+  assert.equal(generateRowSlots({ ...base, startNumber: -1 }, bounds).ok, false);
+  assert.equal(generateRowSlots({ ...base, end: { x: Number.NaN, y: 90 } }, bounds).ok, false);
+  // A zero-length step would stack every booth on one code.
+  const collapsed = generateRowSlots({ ...base, startNumber: 1, numberPadding: 2, slotCount: 3, end: { x: 10, y: 10 } }, bounds);
+  assert.equal(collapsed.ok, true);
+  assert.deepEqual(collapsed.row.slots.map(({ code }) => code), ["A01", "A02", "A03"]);
+  // Rectangles never leave the sheet, even when an endpoint sits on the edge.
+  const clamped = generateRowSlots({ ...base, start: { x: 0, y: 0 }, end: { x: 100, y: 100 } }, bounds);
+  assert.equal(clamped.ok, true);
+  assert.ok(clamped.row.slots.every(({ rect }) => rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 100 && rect.y + rect.height <= 100));
+});
+
+test("row orientation comes from the endpoints, so it can never contradict them", () => {
+  // Both renderers place the row label from `orientation`
+  // (`row.orientation === "horizontal" ? maxY + 30 : minY - 13`), so a value
+  // that disagrees with the geometry puts the label on the wrong axis.
+  assert.equal(rowOrientationFromEndpoints({ x: 0, y: 0 }, { x: 100, y: 0 }), "horizontal");
+  assert.equal(rowOrientationFromEndpoints({ x: 0, y: 0 }, { x: 0, y: 100 }), "vertical");
+  assert.equal(rowOrientationFromEndpoints({ x: 100, y: 0 }, { x: 0, y: 0 }), "horizontal");
+  // A square span and coincident endpoints are called vertical, matching how
+  // every recognized row is stored.
+  assert.equal(rowOrientationFromEndpoints({ x: 0, y: 0 }, { x: 50, y: 50 }), "vertical");
+  assert.equal(rowOrientationFromEndpoints({ x: 20, y: 20 }, { x: 20, y: 20 }), "vertical");
+
+  const bounds = { width: 200, height: 200 };
+  const base = { label: "R", slotCount: 4, slotWidth: 10, slotHeight: 10, codePrefix: "R", startNumber: 1, numberPadding: 2 };
+  assert.equal(generateRowSlots({ ...base, start: { x: 20, y: 100 }, end: { x: 180, y: 100 } }, bounds).row.orientation, "horizontal");
+  assert.equal(generateRowSlots({ ...base, start: { x: 100, y: 20 }, end: { x: 100, y: 180 } }, bounds).row.orientation, "vertical");
 });
