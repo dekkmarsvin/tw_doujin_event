@@ -38,12 +38,14 @@ async function draft(id, at) {
 
 async function raw(id, draftId, at) {
   await repository.addMapDraftFile({
-    id, draftId, revision: 1, objectKey: `map-contributions/ff47/${draftId}/${id}.png`,
+    id, draftId, eventId: "ff47", revision: 1, objectKey: `map-contributions/ff47/${draftId}/${id}.png`,
     sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25", pageNumber: null,
     sha256: id.padEnd(64, "a").slice(0, 64), mime: "image/png", sizeBytes: 10,
     width: 1, height: 1, pageCount: null, uploadedBy: accountId, now: at,
   });
 }
+
+const submitDraft = (input) => repository.submitMapDraft({ eventId: "ff47", ...input });
 
 test("retention removes abandoned content, preserves submitted work, and is idempotent", async () => {
   const inactive = NOW - RETENTION_WINDOWS.mapDraftInactivity - DAY;
@@ -53,18 +55,18 @@ test("retention removes abandoned content, preserves submitted work, and is idem
 
   await draft("changes", inactive - 2);
   await raw("raw-changes", "changes", inactive - 2);
-  await repository.submitMapDraft({ draftId: "changes", ownerAccountId: accountId, expectedRevision: 1, now: inactive - 1 });
+  await submitDraft({ draftId: "changes", ownerAccountId: accountId, expectedRevision: 1, now: inactive - 1 });
   await repository.transitionMapDraft({
     draftId: "changes", expectedRevision: 1, toStatus: "changes_requested",
     actorAccountId: "admin-1", actorRole: "admin", note: "fix", now: inactive,
   });
 
   await draft("submitted", inactive - 2);
-  await repository.submitMapDraft({ draftId: "submitted", ownerAccountId: accountId, expectedRevision: 1, now: inactive });
+  await submitDraft({ draftId: "submitted", ownerAccountId: accountId, expectedRevision: 1, now: inactive });
 
   await draft("approved", oldDecision - 2);
   await raw("raw-approved", "approved", oldDecision - 2);
-  await repository.submitMapDraft({ draftId: "approved", ownerAccountId: accountId, expectedRevision: 1, now: oldDecision - 1 });
+  await submitDraft({ draftId: "approved", ownerAccountId: accountId, expectedRevision: 1, now: oldDecision - 1 });
   await repository.approveMapDraft({
     draftId: "approved", expectedRevision: 1, actorAccountId: "admin-1", now: oldDecision - 2,
   });
@@ -73,7 +75,7 @@ test("retention removes abandoned content, preserves submitted work, and is idem
     contentJson: JSON.stringify({ id: "replacement" }), now: oldDecision - 1,
   });
   await raw("raw-replacement", "replacement", oldDecision - 1);
-  await repository.submitMapDraft({ draftId: "replacement", ownerAccountId: accountId, expectedRevision: 1, now: oldDecision - 1 });
+  await submitDraft({ draftId: "replacement", ownerAccountId: accountId, expectedRevision: 1, now: oldDecision - 1 });
   await repository.approveMapDraft({
     draftId: "replacement", expectedRevision: 1, replacementDraftId: "approved", actorAccountId: "admin-1", now: oldDecision,
   });
@@ -150,7 +152,7 @@ test("account deletion does not exempt requested changes from the 180-day cleanu
   const inactive = NOW - RETENTION_WINDOWS.mapDraftInactivity - DAY;
   await draft("deleted-owner-changes", inactive - 2);
   await raw("raw-deleted-owner", "deleted-owner-changes", inactive - 2);
-  await repository.submitMapDraft({ draftId: "deleted-owner-changes", ownerAccountId: accountId, expectedRevision: 1, now: inactive - 1 });
+  await submitDraft({ draftId: "deleted-owner-changes", ownerAccountId: accountId, expectedRevision: 1, now: inactive - 1 });
   await repository.transitionMapDraft({
     draftId: "deleted-owner-changes", expectedRevision: 1, toStatus: "changes_requested",
     actorAccountId: "admin-1", actorRole: "admin", now: inactive,

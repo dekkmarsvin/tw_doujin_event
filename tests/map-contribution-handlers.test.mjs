@@ -42,7 +42,8 @@ beforeEach(async () => {
   sent = [];
   objects = new Map();
   scopeConfig = {
-    eventId: "ff47", periodKey: "day-1", venueSpaceId: "zhengyan-exhibition-area", mapTemplate: "SAMPLE",
+    eventId: "ff47", periodKey: "1", periodAliases: ["1", "day-1"],
+    venueSpaceId: "zhengyan-exhibition-area", mapTemplate: "SAMPLE",
     allowedBoothCodes: [], requiredBoothCodes: [], targetPath: "map.json",
   };
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
@@ -59,7 +60,7 @@ beforeEach(async () => {
     turnstileSitekey: () => "test-key",
     projectCircle: async () => null,
     resolveMapContributionScope: async ({ periodKey, venueSpaceId }) =>
-      periodKey === scopeConfig.periodKey && venueSpaceId === scopeConfig.venueSpaceId ? scopeConfig : null,
+      scopeConfig.periodAliases.includes(periodKey) && venueSpaceId === scopeConfig.venueSpaceId ? scopeConfig : null,
     readPublishedEventMap: async () => null,
     mapContributionStore: {
       put: async (key, value, contentType) => objects.set(key, { bytes: new Uint8Array(value), contentType }),
@@ -139,6 +140,17 @@ function uploadRequest(draftId, cookie) {
   return new Request(`${ORIGIN}/api/map-contributions/files`, { method: "POST", headers: { origin: ORIGIN, cookie }, body: form });
 }
 
+async function addEvidenceRecord(draftId, eventId = "ff47") {
+  const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
+  return repository.addMapDraftFile({
+    id: `file-${draftId}`, draftId, eventId, revision: 1,
+    objectKey: `map-contributions/${eventId}/${draftId}/source.png`,
+    sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25", pageNumber: null,
+    sha256: "a".repeat(64), mime: "image/png", sizeBytes: 10,
+    width: 1, height: 1, pageCount: null, uploadedBy: mapperId, now: NOW,
+  });
+}
+
 test("admin-only grants are audited and revocation immediately blocks writes", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");
@@ -148,6 +160,7 @@ test("admin-only grants are audited and revocation immediately blocks writes", a
   const { response, body } = await newDraft(mapperCookie);
   assert.equal(response.status, 201);
   assert.equal(body.revision, 1);
+  assert.equal((await repository.getMapDraft(body.draftId)).period_key, "1", "day-1 is stored as the canonical event day id");
   assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
   const update = await handlers.updateMapDraft(request(`/api/map-contributions/drafts/${body.draftId}`, "PUT", {
     expectedRevision: 1, content: validContent(),
@@ -158,6 +171,138 @@ test("admin-only grants are audited and revocation immediately blocks writes", a
     { action: "map_contributor.grant", actor_role: "admin" },
     { action: "map_contributor.revoke", actor_role: "admin" },
   ]);
+});
+
+test("period aliases normalize before persistence and cannot create parallel active scopes", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
+  assert.equal(await repository.createMapDraft({
+    id: "legacy-alias", eventId: "ff47", periodKey: "day-1", venueSpaceId: scopeConfig.venueSpaceId,
+    ownerAccountId: mapperId, contentJson: JSON.stringify(validContent()), now: NOW,
+  }), true);
+  await addEvidenceRecord("legacy-alias");
+  await repository.submitMapDraft({
+    draftId: "legacy-alias", eventId: "ff47", ownerAccountId: mapperId, expectedRevision: 1, now: NOW + 1,
+  });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "legacy-alias", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2,
+  }), { ok: true, replacedDraftId: null });
+
+  const { body: next } = await newDraft(mapperCookie);
+  assert.equal((await repository.getMapDraft("legacy-alias")).period_key, "1");
+  assert.equal((await repository.getMapDraft(next.draftId)).period_key, "1");
+  await handlers.uploadMapDraftFile(uploadRequest(next.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${next.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), next.draftId)).status, 200);
+  const approval = await handlers.adminReviewMapDraft(request(`/admin/drafts/${next.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "approve", confirmOfficialSource: true,
+  }, adminCookie), next.draftId);
+  assert.equal(approval.status, 409);
+  assert.equal((await approval.json()).activeDraftId, "legacy-alias");
+});
+
+test("denied create and submit requests do not normalize legacy scope rows", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const strangerCookie = await signIn("stranger@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
+  assert.equal(await repository.createMapDraft({
+    id: "legacy-denied", eventId: "ff47", periodKey: "day-1", venueSpaceId: scopeConfig.venueSpaceId,
+    ownerAccountId: mapperId, contentJson: JSON.stringify(validContent()), now: NOW,
+  }), true);
+  await addEvidenceRecord("legacy-denied");
+
+  assert.equal((await newDraft(strangerCookie)).response.status, 403);
+  assert.equal((await repository.getMapDraft("legacy-denied")).period_key, "day-1");
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  assert.equal((await handlers.submitMapDraft(request("/drafts/legacy-denied/submit", "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), "legacy-denied")).status, 409);
+  assert.equal((await repository.getMapDraft("legacy-denied")).period_key, "day-1");
+});
+
+test("owner and admin map routes are bounded to the configured event", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
+  const oldNow = NOW - 40 * 24 * 60 * 60 * 1000;
+  assert.equal(await repository.createMapDraft({
+    id: "old-event-draft", eventId: "old-event", periodKey: "1", venueSpaceId: scopeConfig.venueSpaceId,
+    ownerAccountId: mapperId, contentJson: JSON.stringify(validContent()), now: oldNow,
+  }), true);
+  await addEvidenceRecord("old-event-draft", "old-event");
+  assert.equal(await repository.submitMapDraft({
+    draftId: "old-event-draft", eventId: "old-event", ownerAccountId: mapperId,
+    expectedRevision: 1, now: oldNow + 1,
+  }), true);
+
+  const mine = await handlers.listMyMapDrafts(request("/drafts", "GET", undefined, mapperCookie));
+  assert.deepEqual((await mine.json()).drafts, []);
+  const admin = await handlers.adminListMapDrafts(request("/admin/drafts", "GET", undefined, adminCookie));
+  assert.deepEqual((await admin.json()).drafts, []);
+  assert.equal((await handlers.getMapDraft(request("/drafts/old-event-draft", "GET", undefined, mapperCookie), "old-event-draft")).status, 404);
+  assert.equal((await handlers.getMapDraft(request("/admin/drafts/old-event-draft", "GET", undefined, adminCookie), "old-event-draft", true)).status, 404);
+  assert.equal((await handlers.updateMapDraft(request("/drafts/old-event-draft", "PUT", {
+    expectedRevision: 1, content: validContent(),
+  }, mapperCookie), "old-event-draft")).status, 404);
+  assert.equal((await handlers.submitMapDraft(request("/drafts/old-event-draft/submit", "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), "old-event-draft")).status, 404);
+  assert.equal((await handlers.uploadMapDraftFile(uploadRequest("old-event-draft", mapperCookie))).status, 404);
+  assert.equal(objects.size, 0, "an old-event upload is rejected before R2 write");
+  assert.equal((await handlers.readMapDraftFile(request("/files/file-old-event-draft", "GET", undefined, mapperCookie), "file-old-event-draft")).status, 404);
+  assert.equal((await handlers.adminReviewMapDraft(request("/admin/drafts/old-event-draft/review", "POST", {
+    expectedRevision: 1, decision: "approve", confirmOfficialSource: true,
+  }, adminCookie), "old-event-draft")).status, 404);
+  assert.equal((await handlers.adminExportMapDraft(request("/admin/drafts/old-event-draft/export", "POST", {
+    expectedRevision: 1,
+  }, adminCookie), "old-event-draft")).status, 404);
+  const stale = await handlers.adminListStaleMapDrafts(request("/admin/drafts/stale?days=30", "GET", undefined, adminCookie));
+  assert.deepEqual((await stale.json()).drafts, []);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM map_draft_reviews WHERE draft_id = ?1").bind("old-event-draft").first()).total, 1,
+    "only the owner submission transition exists");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM map_draft_exports WHERE draft_id = ?1").bind("old-event-draft").first()).total, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE subject_id = ?1").bind("old-event-draft").first()).total, 0);
+});
+
+test("a legacy immutable export with an alias target path fails closed", async () => {
+  await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
+  const adminId = await repository.upsertAccount("admin@example.test", NOW);
+  scopeConfig = { ...scopeConfig, targetPath: "maps/1/zhengyan-exhibition-area.json" };
+  assert.equal(await repository.createMapDraft({
+    id: "legacy-export", eventId: "ff47", periodKey: "day-1", venueSpaceId: scopeConfig.venueSpaceId,
+    ownerAccountId: mapperId, contentJson: JSON.stringify(validContent()), now: NOW,
+  }), true);
+  await addEvidenceRecord("legacy-export");
+  assert.equal(await repository.submitMapDraft({
+    draftId: "legacy-export", eventId: "ff47", ownerAccountId: mapperId, expectedRevision: 1, now: NOW + 1,
+  }), true);
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "legacy-export", expectedRevision: 1, actorAccountId: adminId, now: NOW + 2,
+  }), { ok: true, replacedDraftId: null });
+  const legacyTargetPath = "maps/day-1/zhengyan-exhibition-area.json";
+  assert.ok(await repository.exportMapDraft({
+    draftId: "legacy-export", expectedRevision: 1, targetPath: legacyTargetPath,
+    candidateJson: "{}", diffJson: "{}", candidateSha256: "b".repeat(64),
+    actorAccountId: adminId, now: NOW + 3,
+  }));
+
+  const response = await handlers.adminExportMapDraft(request("/admin/drafts/legacy-export/export", "POST", {
+    expectedRevision: 1,
+  }, adminCookie), "legacy-export");
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /immutable export/);
+  assert.equal((await repository.getMapDraft("legacy-export")).period_key, "1");
+  assert.equal((await repository.getMapDraftExport("legacy-export", 1)).target_path, legacyTargetPath,
+    "the immutable legacy export is not rewritten");
 });
 
 test("private evidence is owner/admin-only, images preview safely and raw downloads attach", async () => {
@@ -313,7 +458,7 @@ test("admin approval fails closed for a legacy submitted revision with no eviden
   const { body: draft } = await newDraft(mapperCookie);
   const mapperId = await repository.upsertAccount("mapper@example.test", NOW);
   assert.equal(await repository.submitMapDraft({
-    draftId: draft.draftId, ownerAccountId: mapperId, expectedRevision: 1, now: NOW + 1,
+    draftId: draft.draftId, eventId: "ff47", ownerAccountId: mapperId, expectedRevision: 1, now: NOW + 1,
   }), true, "simulate a submitted row created before evidence became mandatory");
 
   const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {

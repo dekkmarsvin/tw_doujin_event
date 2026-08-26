@@ -740,40 +740,65 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return results[0].meta.changes === 1 && results[1].meta.changes === 1;
   }
 
-  async function getMapDraft(draftId: string) {
+  async function getMapDraft(draftId: string, eventId?: string) {
     await ensureTables();
     return database.prepare(
       `SELECT d.*, r.content_json FROM map_drafts d
        JOIN map_draft_revisions r ON r.draft_id = d.id AND r.revision = d.current_revision
-       WHERE d.id = ?1`,
-    ).bind(draftId).first<{
+       WHERE d.id = ?1 AND (?2 IS NULL OR d.event_id = ?2)`,
+    ).bind(draftId, eventId ?? null).first<{
       id: string; event_id: string; period_key: string; venue_space_id: string; owner_account_id: string;
       status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number;
       last_activity_at: number; decision_at: number | null; content_json: string | null;
     }>();
   }
 
-  async function listMapDraftsForOwner(ownerAccountId: string) {
+  /** One-time lazy normalization for aliases accepted by the active event.
+   * The active-approval unique index makes conflicting legacy state fail
+   * closed instead of preserving two spellings for one logical scope. */
+  async function normalizeMapDraftPeriodAliases(input: {
+    eventId: string; venueSpaceId: string; periodKey: string; periodAliases: readonly string[];
+  }) {
+    await ensureTables();
+    const aliases = [...new Set(input.periodAliases)]
+      .filter((alias) => alias !== input.periodKey);
+    if (aliases.length > 16 || aliases.some((alias) => !/^[a-z0-9][a-z0-9-]*$/.test(alias))) {
+      throw new Error("Invalid map period aliases.");
+    }
+    if (!aliases.length) return true;
+    try {
+      await database.batch(aliases.map((alias) => database.prepare(
+        `UPDATE map_drafts SET period_key = ?1
+         WHERE event_id = ?2 AND venue_space_id = ?3 AND period_key = ?4`,
+      ).bind(input.periodKey, input.eventId, input.venueSpaceId, alias)));
+      return true;
+    } catch (error) {
+      if (error instanceof Error && /unique/i.test(error.message)) return false;
+      throw error;
+    }
+  }
+
+  async function listMapDraftsForOwner(ownerAccountId: string, eventId: string) {
     await ensureTables();
     const result = await database.prepare(
       `SELECT id, event_id, period_key, venue_space_id, status, current_revision,
               created_at, updated_at, decision_at
-       FROM map_drafts WHERE owner_account_id = ?1 ORDER BY updated_at DESC`,
-    ).bind(ownerAccountId).all<{
+       FROM map_drafts WHERE owner_account_id = ?1 AND event_id = ?2 ORDER BY updated_at DESC`,
+    ).bind(ownerAccountId, eventId).all<{
       id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
       current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
     }>();
     return result.results;
   }
 
-  async function listMapDraftsForAdmin() {
+  async function listMapDraftsForAdmin(eventId: string) {
     await ensureTables();
     const result = await database.prepare(
       `SELECT d.id, d.event_id, d.period_key, d.venue_space_id, d.status, d.current_revision,
               d.created_at, d.updated_at, d.decision_at, a.email AS owner_email
        FROM map_drafts d LEFT JOIN accounts a ON a.id = d.owner_account_id
-       WHERE d.status <> 'draft' ORDER BY d.updated_at DESC`,
-    ).all<{
+       WHERE d.event_id = ?1 AND d.status <> 'draft' ORDER BY d.updated_at DESC`,
+    ).bind(eventId).all<{
       id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
       current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
       owner_email: string | null;
@@ -820,12 +845,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }>();
   }
 
-  async function listStaleSubmittedMapDrafts(before: number) {
+  async function listStaleSubmittedMapDrafts(before: number, eventId?: string) {
     await ensureTables();
     const result = await database.prepare(
       `SELECT id, event_id, period_key, venue_space_id, current_revision, updated_at
-       FROM map_drafts WHERE status = 'submitted' AND updated_at < ?1 ORDER BY updated_at ASC`,
-    ).bind(before).all<{
+       FROM map_drafts WHERE status = 'submitted' AND updated_at < ?1
+         AND (?2 IS NULL OR event_id = ?2) ORDER BY updated_at ASC`,
+    ).bind(before, eventId ?? null).all<{
       id: string; event_id: string; period_key: string; venue_space_id: string;
       current_revision: number; updated_at: number;
     }>();
@@ -834,6 +860,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function writeMapDraftRevision(input: {
     draftId: string;
+    eventId: string;
     ownerAccountId: string;
     expectedRevision: number;
     contentJson: string;
@@ -845,13 +872,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE map_drafts SET current_revision = ?1, updated_at = ?2, last_activity_at = ?2
          WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
+           AND event_id = ?6
            AND status IN ('draft', 'changes_requested')
            AND retention_action IS NULL
            AND EXISTS (
              SELECT 1 FROM map_contributor_grants
              WHERE account_id = ?4 AND revoked_at IS NULL AND suspended_at IS NULL
            )`,
-      ).bind(nextRevision, input.now, input.draftId, input.ownerAccountId, input.expectedRevision),
+      ).bind(nextRevision, input.now, input.draftId, input.ownerAccountId, input.expectedRevision, input.eventId),
       database.prepare(
         `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
          SELECT ?1, id, ?2, ?3, ?4, ?5 FROM map_drafts
@@ -861,7 +889,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return results[0].meta.changes === 1 && results[1].meta.changes === 1 ? nextRevision : null;
   }
 
-  async function submitMapDraft(input: { draftId: string; ownerAccountId: string; expectedRevision: number; now: number }) {
+  async function submitMapDraft(input: { draftId: string; eventId: string; ownerAccountId: string; expectedRevision: number; now: number }) {
     await ensureTables();
     const reviewId = crypto.randomUUID();
     const transitionToken = crypto.randomUUID();
@@ -869,13 +897,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE map_drafts SET status = 'submitted', updated_at = ?1, last_activity_at = ?1, transition_token = ?2
          WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
+           AND event_id = ?6
            AND status IN ('draft', 'changes_requested')
            AND retention_action IS NULL
            AND EXISTS (
              SELECT 1 FROM map_contributor_grants
              WHERE account_id = ?4 AND revoked_at IS NULL AND suspended_at IS NULL
            )`,
-      ).bind(input.now, transitionToken, input.draftId, input.ownerAccountId, input.expectedRevision),
+      ).bind(input.now, transitionToken, input.draftId, input.ownerAccountId, input.expectedRevision, input.eventId),
       database.prepare(
         `INSERT INTO map_draft_reviews (id, draft_id, revision, from_status, to_status, actor_account_id, actor_role, at)
          SELECT ?1, d.id, d.current_revision,
@@ -1079,7 +1108,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function addMapDraftFile(input: {
-    id: string; draftId: string; revision: number; objectKey: string; sourceUrl: string; documentDate: string;
+    id: string; draftId: string; eventId: string; revision: number; objectKey: string; sourceUrl: string; documentDate: string;
     pageNumber: number | null; sha256: string; mime: string; sizeBytes: number; width: number | null;
     height: number | null; pageCount: number | null; uploadedBy: string; now: number;
   }) {
@@ -1091,6 +1120,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        ) SELECT ?1, d.id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
          FROM map_drafts d
          WHERE d.id = ?15 AND d.owner_account_id = ?13 AND d.current_revision = ?2
+           AND d.event_id = ?16
            AND d.status IN ('draft', 'changes_requested')
            AND d.retention_action IS NULL
            AND EXISTS (
@@ -1100,22 +1130,23 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(
       input.id, input.revision, input.objectKey, input.sourceUrl, input.documentDate, input.pageNumber,
       input.sha256, input.mime, input.sizeBytes, input.width, input.height, input.pageCount,
-      input.uploadedBy, input.now, input.draftId,
+      input.uploadedBy, input.now, input.draftId, input.eventId,
     ).run();
     return result.meta.changes === 1;
   }
 
-  async function getMapDraftFile(fileId: string) {
+  async function getMapDraftFile(fileId: string, eventId?: string) {
     await ensureTables();
     return database.prepare(
-      `SELECT f.*, d.owner_account_id, d.status FROM map_draft_files f
-       JOIN map_drafts d ON d.id = f.draft_id WHERE f.id = ?1`,
-    ).bind(fileId).first<{
+      `SELECT f.*, d.owner_account_id, d.event_id, d.status FROM map_draft_files f
+       JOIN map_drafts d ON d.id = f.draft_id
+       WHERE f.id = ?1 AND (?2 IS NULL OR d.event_id = ?2)`,
+    ).bind(fileId, eventId ?? null).first<{
       id: string; draft_id: string; revision: number; object_key: string | null; source_url: string;
       document_date: string; page_number: number | null; sha256: string; mime: string; size_bytes: number;
       width: number | null; height: number | null; page_count: number | null; uploaded_by: string | null;
       uploaded_at: number; review_result: string | null; raw_deleted_at: number | null;
-      owner_account_id: string; status: MapDraftStatus;
+      owner_account_id: string; event_id: string; status: MapDraftStatus;
     }>();
   }
 
@@ -1162,7 +1193,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
     manageMapContributor, hasActiveMapContributor,
-    createMapDraft, getMapDraft, listMapDraftsForOwner, listMapDraftsForAdmin, listMapDraftFiles, listMapDraftReviews,
+    createMapDraft, getMapDraft, normalizeMapDraftPeriodAliases,
+    listMapDraftsForOwner, listMapDraftsForAdmin, listMapDraftFiles, listMapDraftReviews,
     getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
