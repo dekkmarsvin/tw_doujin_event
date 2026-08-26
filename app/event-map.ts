@@ -72,6 +72,26 @@ export type EventMapLayout = {
   landmarks: MapLandmark[];
 };
 
+/** Authoring starts here whenever recognition cannot: a new template with no
+ * adapter, or a venue whose plan is only ever traced by hand. The floor fills
+ * the sheet so the maintainer can place the first row before deciding where the
+ * hall outline actually sits. */
+export function createBlankEventMapLayout(template: string, width: number, height: number): EventMapLayout {
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+  return {
+    version: EVENT_MAP_VERSION,
+    template,
+    width: safeWidth,
+    height: safeHeight,
+    floor: { x: 0, y: 0, width: safeWidth, height: safeHeight },
+    rows: [],
+    pillars: [],
+    accessPoints: [],
+    landmarks: [],
+  };
+}
+
 export type MapRecognitionReport = {
   layout: EventMapLayout;
   confidence: number;

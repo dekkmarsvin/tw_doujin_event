@@ -41,3 +41,11 @@
 .actions .publish span { margin-left:18px; }
 .actions button:disabled { border-color:#dfe3df; background:#e8ebe8; color:#9ba39e; cursor:not-allowed; }
 @media (max-width:720px) { .backdrop { align-items:end; padding:0; }.dialog { max-height:94vh; border-radius:18px 18px 0 0; }.comparison { grid-template-columns:1fr; }.summary { grid-template-columns:repeat(2,1fr); }.rows { grid-template-columns:repeat(8,1fr); } }
+.manualStart { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin:11px 24px 0; }
+.manualStart button { min-height:36px; padding:0 12px; border:1px solid #d4dad5; border-radius:8px; background:#fff; color:#344039; font-size:calc(10px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
+.manualStart button:hover:not(:disabled) { border-color:#79857d; background:#f2f4f1; }
+.manualStart button:disabled { color:#a1aaa4; cursor:not-allowed; }
+.manualStart small { color:#6f7973; font-size:calc(9px * var(--ui-font-scale,1)); }
+.sourceField { display:grid; gap:5px; margin:13px 24px 0; color:#657069; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; }
+.sourceField input { height:36px; padding:0 10px; border:1px solid #d4dad5; border-radius:8px; background:#fff; color:#202a35; font-size:calc(10px * var(--ui-font-scale,1)); font-weight:400; }
+.sourceField input:focus { border-color:#7d8981; outline:3px solid #dfe8e3; outline-offset:1px; }

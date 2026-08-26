@@ -5,9 +5,9 @@ import { publishEventMap } from "./event-map-client";
 import EventMapRenderer from "./event-map-renderer";
 import MapLayoutEditor from "./map-layout-editor";
 import { LANDMARK_RECOGNITION_WARNING } from "./map-recognition";
-import { scaleMapLandmarks, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
+import { createBlankEventMapLayout, scaleMapLandmarks, type EventMapLayout, type MapRecognitionReport, type PublishedEventMap } from "./event-map";
 import { getEventDefinition } from "./event-catalog";
-import { getMapTemplateMetadata, recognizeMapTemplate, validateMapTemplateLayout } from "./map-template-registry";
+import { getMapTemplateMetadata, hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } from "./map-template-registry";
 import { UiIcon } from "./ui-icons";
 import { useModalFocus } from "./use-modal-focus";
 import styles from "./map-admin-importer.module.css";
@@ -20,6 +20,15 @@ type Props = {
 };
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
+const BLANK_CANVAS_WIDTH = 1600;
+const BLANK_CANVAS_HEIGHT = 1000;
+
+/** How the layout on screen came to exist. Recognition is only one of three
+ * ways, and the other two produce no meaningful confidence figure — so the
+ * summary must not present them as if a recognizer had scored them. */
+type ReportOrigin = "recognized" | "manual" | "existing";
+
+const MANUAL_AUTHORING_NOTE = "此地圖由人工繪製，未經圖片辨識；發布前請自行核對每一格與官方攤位清單。";
 
 function diagnostics(layout: EventMapLayout) {
   return {
@@ -33,6 +42,13 @@ function diagnostics(layout: EventMapLayout) {
 function reportFromPublished(map?: PublishedEventMap | null): MapRecognitionReport | null {
   if (!map) return null;
   return { layout: map.layout, confidence: map.confidence, warnings: map.layout.landmarks.length ? [] : [LANDMARK_RECOGNITION_WARNING], diagnostics: diagnostics(map.layout) };
+}
+
+/** Hand-authored layouts carry no recognition score, so they are pinned at full
+ * confidence and marked by `origin` instead. See ADR-0035 on why a dedicated
+ * provenance field was deferred rather than invented here. */
+function manualReport(layout: EventMapLayout, warnings: string[] = []): MapRecognitionReport {
+  return { layout, confidence: 1, warnings: [MANUAL_AUTHORING_NOTE, ...warnings], diagnostics: diagnostics(layout) };
 }
 
 function readFile(file: File) {
@@ -61,6 +77,7 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
   const [sourceName, setSourceName] = useState(initialMap?.sourceName ?? "");
   const [imageDataUrl, setImageDataUrl] = useState("");
   const [report, setReport] = useState<MapRecognitionReport | null>(initialReport);
+  const [origin, setOrigin] = useState<ReportOrigin>(initialReport ? "existing" : "manual");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<"recognizing" | "publishing" | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -90,14 +107,22 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
       context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
       if (!eventDefinition) throw new Error(`找不到活動 ${eventId} 的定義。`);
-      const recognized = recognizeMapTemplate(eventDefinition.mapTemplate, { data: pixels.data, width: pixels.width, height: pixels.height });
+      // A template without a recognition adapter is not a failure: the plan
+      // still becomes the tracing backdrop and the maintainer draws the rows.
+      const template = eventDefinition.mapTemplate;
+      const next = hasMapTemplateRecognizer(template)
+        ? recognizeMapTemplate(template, { data: pixels.data, width: pixels.width, height: pixels.height })
+        : manualReport(createBlankEventMapLayout(template, pixels.width, pixels.height), [
+          `地圖模板 ${template} 沒有圖片辨識 adapter，已改為描摹模式：配置圖僅作底圖，請用「新增一排」建立攤位。`,
+        ]);
       const previousLayout = report?.layout;
       if (previousLayout?.landmarks.length) {
-        recognized.layout.landmarks = scaleMapLandmarks(previousLayout.landmarks, previousLayout, recognized.layout);
-        recognized.warnings.push(`已依新圖片尺寸保留 ${previousLayout.landmarks.length} 個手動區域；請在發布前確認位置。`);
+        next.layout.landmarks = scaleMapLandmarks(previousLayout.landmarks, previousLayout, next.layout);
+        next.warnings.push(`已依新圖片尺寸保留 ${previousLayout.landmarks.length} 個手動區域；請在發布前確認位置。`);
       }
-      setReport(recognized);
-      setBaselineReport(recognized);
+      setReport(next);
+      setBaselineReport(next);
+      setOrigin(hasMapTemplateRecognizer(template) ? "recognized" : "manual");
       setSourceName(file.name);
       setImageDataUrl(source);
     } catch (caught) {
@@ -107,9 +132,21 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
     }
   };
 
+  const startBlankLayout = () => {
+    if (!eventDefinition) { setError(`找不到活動 ${eventId} 的定義。`); return; }
+    setError("");
+    const next = manualReport(createBlankEventMapLayout(eventDefinition.mapTemplate, BLANK_CANVAS_WIDTH, BLANK_CANVAS_HEIGHT));
+    setReport(next);
+    setBaselineReport(next);
+    setOrigin("manual");
+    setImageDataUrl("");
+  };
+
   const currentDiagnostics = report ? diagnostics(report.layout) : null;
   const layoutValidation = report ? validateMapTemplateLayout(eventDefinition?.mapTemplate ?? report.layout.template, report.layout) : null;
-  const canPublish = !!report && report.confidence >= .85 && !!layoutValidation?.ok;
+  // sourceName is what the published snapshot carries as provenance, so it is a
+  // publish gate rather than a nicety — an untraceable map must not ship.
+  const canPublish = !!report && !!sourceName.trim() && report.confidence >= .85 && !!layoutValidation?.ok;
   const visibleWarnings = [...new Set([...(report?.warnings ?? []), ...(layoutValidation && !layoutValidation.ok ? layoutValidation.errors : [])])];
 
   const publish = async () => {
@@ -140,11 +177,22 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
         <span aria-hidden="true"><UiIcon name="upload" /></span><b>{busy === "recognizing" ? "正在辨識向量地圖…" : sourceName || `選擇 ${eventName} 社團攤位配置圖`}</b><small>JPG、PNG 或 WebP，最大 4MB</small>
       </label>
 
+      <div className={styles.manualStart}>
+        <button type="button" onClick={startBlankLayout} disabled={!!busy}>{report ? "改用空白地圖重新開始" : "不使用配置圖，建立空白地圖"}</button>
+        <small>沒有圖片辨識 adapter 的場館也能在此描摹或直接繪製。</small>
+      </div>
+
+      <label className={styles.sourceField}><span>來源說明（會隨快照發布）</span>
+        <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} placeholder="例：描摹自 2025_FFK_map.jpg" />
+      </label>
+
       {error && <p className={styles.error} role="alert">{error}</p>}
 
       {report && <>
         <div className={styles.summary}>
-          <div><small>一般結構辨識信心</small><b className={report.confidence >= .85 ? styles.good : styles.warn}>{Math.round(report.confidence * 100)}%</b></div>
+          <div><small>來源</small>{origin === "recognized"
+            ? <b className={report.confidence >= .85 ? styles.good : styles.warn}>辨識 {Math.round(report.confidence * 100)}%</b>
+            : <b className={styles.good}>{origin === "manual" ? "人工繪製" : "既有 revision"}</b>}</div>
           <div><small>{templateMetadata.rowLabel}</small><b>{currentDiagnostics?.rowCount}{templateMetadata.expectedRows !== null && <i>/ {templateMetadata.expectedRows}</i>}</b></div>
           <div><small>{templateMetadata.slotLabel}</small><b>{currentDiagnostics?.slotCount}{templateMetadata.expectedSlots !== null && <i>/ {templateMetadata.expectedSlots}</i>}</b></div>
           <div><small>柱子</small><b>{currentDiagnostics?.pillarCount}</b></div>

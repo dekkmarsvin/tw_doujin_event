@@ -1,5 +1,6 @@
 import {
   EVENT_MAP_VERSION,
+  createBlankEventMapLayout,
   type BoothRow,
   type BoothSlot,
   type EventMapLayout,
@@ -295,7 +296,7 @@ function detectAccessPoints(source: PixelSource): MapAccessPoint[] {
 export function recognizeFF47Map(source: PixelSource): MapRecognitionReport {
   const { width, height } = source;
   const warnings: string[] = [];
-  const emptyLayout: EventMapLayout = { version: EVENT_MAP_VERSION, template: "FF47", width, height, floor: { x: 0, y: 0, width: Math.max(1, width), height: Math.max(1, height) }, rows: [], pillars: [], accessPoints: [], landmarks: [] };
+  const emptyLayout = createBlankEventMapLayout("FF47", width, height);
   if (width < 800 || height < 500) return { layout: emptyLayout, confidence: 0, warnings: ["圖片解析度太低；請使用寬度至少 800px 的原始配置圖。"], diagnostics: { rowCount: 0, slotCount: 0, pillarCount: 0, accessPointCount: 0 } };
 
   const upperLines = verticalLines(source, .235, .485);

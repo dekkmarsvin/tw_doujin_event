@@ -25,6 +25,13 @@ export function validateMapTemplateLayout(template: string, value: unknown) {
   return (TEMPLATE_VALIDATORS.get(template) ?? validateEventMapLayout)(value);
 }
 
+/** Recognition is an optional accelerator, not a precondition for authoring.
+ * Callers ask first so a template without an adapter falls back to tracing the
+ * uploaded plan by hand instead of failing the import outright. */
+export function hasMapTemplateRecognizer(template: string) {
+  return TEMPLATE_RECOGNIZERS.has(template);
+}
+
 export function recognizeMapTemplate(template: string, source: PixelSource) {
   const recognize = TEMPLATE_RECOGNIZERS.get(template);
   if (!recognize) throw new Error(`地圖模板 ${template} 尚未提供圖片辨識 adapter。`);

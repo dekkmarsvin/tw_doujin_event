@@ -1,6 +1,70 @@
-import type { MapRect } from "./event-map";
+import type { BoothRow, BoothSlot, MapOrientation, MapRect } from "./event-map";
 
 export type ResizeCorner = "nw" | "ne" | "se" | "sw";
+
+/** A row is described by where it starts, where it ends, how many booths sit on
+ * it, and how those booths are numbered. Row labels are plain strings, so the
+ * Chinese branch labels some organizers use need no special handling. */
+export type RowDefinition = {
+  label: string;
+  orientation: MapOrientation;
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  slotCount: number;
+  slotWidth: number;
+  slotHeight: number;
+  codePrefix: string;
+  startNumber: number;
+  numberPadding: number;
+};
+
+export type RowGenerationResult =
+  | { ok: true; row: BoothRow; errors: [] }
+  | { ok: false; row: null; errors: string[] };
+
+export function formatSlotCode(prefix: string, value: number, padding: number) {
+  return `${prefix}${String(value).padStart(Math.max(0, padding), "0")}`;
+}
+
+/** Evenly distributes `slotCount` booth rectangles between the two endpoints.
+ * Each rectangle is centred on its step, so a row reads the same whether it was
+ * traced left-to-right or right-to-left. */
+export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect, "width" | "height">): RowGenerationResult {
+  const errors: string[] = [];
+  const label = definition.label.trim();
+  if (!label) errors.push("排標籤不可留空。");
+  if (!Number.isInteger(definition.slotCount) || definition.slotCount < 1) errors.push("格數必須是大於 0 的整數。");
+  if (!(definition.slotWidth > 0) || !(definition.slotHeight > 0)) errors.push("每格寬高必須大於 0。");
+  if (!Number.isInteger(definition.startNumber) || definition.startNumber < 0) errors.push("起始編號必須是 0 或正整數。");
+  if (!Number.isInteger(definition.numberPadding) || definition.numberPadding < 0) errors.push("補零位數必須是 0 或正整數。");
+  for (const value of [definition.start.x, definition.start.y, definition.end.x, definition.end.y]) {
+    if (!Number.isFinite(value)) { errors.push("起點與終點座標必須是有效數字。"); break; }
+  }
+  if (errors.length) return { ok: false, row: null, errors };
+
+  const steps = Math.max(1, definition.slotCount - 1);
+  const stepX = (definition.end.x - definition.start.x) / steps;
+  const stepY = (definition.end.y - definition.start.y) / steps;
+  const slots: BoothSlot[] = [];
+  for (let index = 0; index < definition.slotCount; index += 1) {
+    const centerX = definition.start.x + stepX * index;
+    const centerY = definition.start.y + stepY * index;
+    const x = clampToBound(centerX - definition.slotWidth / 2, definition.slotWidth, bounds.width);
+    const y = clampToBound(centerY - definition.slotHeight / 2, definition.slotHeight, bounds.height);
+    slots.push({
+      code: formatSlotCode(definition.codePrefix, definition.startNumber + index, definition.numberPadding),
+      rect: { x, y, width: definition.slotWidth, height: definition.slotHeight },
+    });
+  }
+  const duplicate = slots.find((slot, index) => slots.findIndex(({ code }) => code === slot.code) !== index);
+  if (duplicate) return { ok: false, row: null, errors: [`這一排會產生重複的攤位代碼 ${duplicate.code}。`] };
+
+  return { ok: true, row: { label, orientation: definition.orientation, confidence: 1, slots }, errors: [] };
+}
+
+function clampToBound(value: number, size: number, bound: number) {
+  return Math.max(0, Math.min(value, Math.max(0, bound - size)));
+}
 
 export type SnapGuide = {
   axis: "x" | "y";
