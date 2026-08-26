@@ -16,7 +16,7 @@
 
 ## 草稿與版本
 
-`eventId + periodKey + venueSpaceId` 是審閱範圍，同一範圍允許多份平行草稿。每份草稿有固定 ID 與單調遞增 revision；修改與提交都必須帶 `expectedRevision`，落後的版本回 `409`，不覆寫較新的內容。
+`eventId + periodKey + venueSpaceId` 是審閱範圍，同一範圍允許多份平行草稿。`periodKey` 一律保存活動定義中的日程 ID；不會與另一個正式 ID 衝突時，相容輸入 `day-<id>` 會先正規化成 `<id>`，多空間 `targetPath` 也只使用正規值。既有 alias 列會在下一次處理該範圍時原子正規化；若資料庫已存在兩份 alias 不同但邏輯範圍相同的有效核准稿，操作回 `409` 並要求人工處理，不再核准第三份。已固化的 legacy export 不改寫其 `targetPath`；若該路徑不是目前正規值，重試匯出會回 `409`，由管理者人工處理。每份草稿有固定 ID 與單調遞增 revision；修改與提交都必須帶 `expectedRevision`，落後的版本回 `409`，不覆寫較新的內容。
 
 狀態機為：
 
@@ -43,6 +43,8 @@
 | `GET /api/admin/map-contributions/drafts/:draftId` | 管理者 | 讀取審閱資料與共用 renderer 所需 layout |
 | `POST /api/admin/map-contributions/drafts/:draftId/review` | 近期管理者 session | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId |
 | `POST /api/admin/map-contributions/drafts/:draftId/export` | 近期管理者 session | 將核准 revision 固化為候選 JSON、SHA-256 與語意差異，並轉為 exported |
+
+所有 contributor 與管理 route 都只列出、讀取或修改目前 Pages 設定的 `eventId`；共用 D1 中其他活動留下的草稿與來源檔不會進入目前活動的控制面。
 
 ## 候選匯出與公開邊界
 

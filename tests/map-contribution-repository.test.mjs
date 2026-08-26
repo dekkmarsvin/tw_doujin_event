@@ -26,10 +26,10 @@ beforeEach(async () => {
   contributorId = await repository.upsertAccount("mapper@example.test", NOW);
 });
 
-const createDraft = (id, ownerAccountId = contributorId) => repository.createMapDraft({
+const createDraft = (id, ownerAccountId = contributorId, periodKey = "day-1") => repository.createMapDraft({
   id,
   eventId: "ff47",
-  periodKey: "day-1",
+  periodKey,
   venueSpaceId: "zhengyan-exhibition-area",
   ownerAccountId,
   contentJson: JSON.stringify({ markers: [] }),
@@ -37,12 +37,15 @@ const createDraft = (id, ownerAccountId = contributorId) => repository.createMap
 });
 
 const addEvidence = (draftId, revision = 1) => repository.addMapDraftFile({
-  id: `file-${draftId}-r${revision}`, draftId, revision,
+  id: `file-${draftId}-r${revision}`, draftId, eventId: "ff47", revision,
   objectKey: `map-contributions/ff47/${draftId}/source.png`,
   sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25", pageNumber: null,
   sha256: "a".repeat(64), mime: "image/png", sizeBytes: 10,
   width: 1, height: 1, pageCount: null, uploadedBy: contributorId, now: NOW,
 });
+
+const writeRevision = (input) => repository.writeMapDraftRevision({ eventId: "ff47", ...input });
+const submitDraft = (input) => repository.submitMapDraft({ eventId: "ff47", ...input });
 
 test("only an active grant can create, revise or submit a private draft", async () => {
   assert.equal(await createDraft("draft-before-grant"), false);
@@ -50,25 +53,25 @@ test("only an active grant can create, revise or submit a private draft", async 
   assert.equal(await repository.hasActiveMapContributor(contributorId), true);
   assert.equal(await createDraft("draft-a"), true);
 
-  assert.equal(await repository.writeMapDraftRevision({
+  assert.equal(await writeRevision({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1,
     contentJson: JSON.stringify({ markers: ["A01"] }), now: NOW + 1,
   }), 2);
-  assert.equal(await repository.writeMapDraftRevision({
+  assert.equal(await writeRevision({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1,
     contentJson: JSON.stringify({ markers: ["stale"] }), now: NOW + 2,
   }), null);
 
   assert.equal(await repository.manageMapContributor({ email: "mapper@example.test", action: "revoke", by: "admin@example.test", now: NOW + 3 }), "revoked");
   assert.equal(await repository.hasActiveMapContributor(contributorId), false);
-  assert.equal(await repository.writeMapDraftRevision({
+  assert.equal(await writeRevision({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2,
     contentJson: JSON.stringify({ markers: ["blocked"] }), now: NOW + 4,
   }), null);
-  assert.equal(await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2, now: NOW + 5 }), false);
+  assert.equal(await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2, now: NOW + 5 }), false);
 
   assert.equal(await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW + 6 }), "granted");
-  assert.equal(await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2, now: NOW + 7 }), true);
+  assert.equal(await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2, now: NOW + 7 }), true);
   const draft = await repository.getMapDraft("draft-a");
   assert.equal(draft.status, "submitted");
   assert.equal(draft.current_revision, 2);
@@ -81,8 +84,8 @@ test("parallel drafts coexist but a second approval requires explicit replacemen
   assert.equal(await createDraft("draft-b"), true);
   await addEvidence("draft-a");
   await addEvidence("draft-b");
-  assert.equal(await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 }), true);
-  assert.equal(await repository.submitMapDraft({ draftId: "draft-b", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 }), true);
+  assert.equal(await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 }), true);
+  assert.equal(await submitDraft({ draftId: "draft-b", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 }), true);
   assert.deepEqual(await repository.approveMapDraft({
     draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 3,
   }), { ok: true, replacedDraftId: null });
@@ -92,14 +95,37 @@ test("parallel drafts coexist but a second approval requires explicit replacemen
   assert.equal((await repository.getMapDraft("draft-b")).status, "submitted");
 });
 
+test("legacy alias normalization fails closed when two active rows already conflict", async () => {
+  await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
+  await createDraft("legacy-active", contributorId, "day-1");
+  await createDraft("canonical-active", contributorId, "1");
+  await addEvidence("legacy-active");
+  await addEvidence("canonical-active");
+  await submitDraft({ draftId: "legacy-active", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await submitDraft({ draftId: "canonical-active", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "legacy-active", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 3,
+  }), { ok: true, replacedDraftId: null });
+  assert.deepEqual(await repository.approveMapDraft({
+    draftId: "canonical-active", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 4,
+  }), { ok: true, replacedDraftId: null });
+
+  assert.equal(await repository.normalizeMapDraftPeriodAliases({
+    eventId: "ff47", venueSpaceId: "zhengyan-exhibition-area",
+    periodKey: "1", periodAliases: ["1", "day-1"],
+  }), false);
+  assert.equal((await repository.getMapDraft("legacy-active")).period_key, "day-1", "failed normalization rolls back");
+  assert.equal((await repository.getMapDraft("canonical-active")).period_key, "1");
+});
+
 test("replacement approval is explicit and records withdrawal before the new approval", async () => {
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
   await createDraft("draft-b");
   await addEvidence("draft-a");
   await addEvidence("draft-b");
-  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
-  await repository.submitMapDraft({ draftId: "draft-b", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 });
+  await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await submitDraft({ draftId: "draft-b", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 2 });
   assert.deepEqual(await repository.approveMapDraft({
     draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 3,
   }), { ok: true, replacedDraftId: null });
@@ -125,7 +151,7 @@ test("candidate export atomically records the immutable payload and is idempoten
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
   await addEvidence("draft-a");
-  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
   await repository.approveMapDraft({ draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2 });
   const input = {
     draftId: "draft-a", expectedRevision: 1, targetPath: "map.json",
@@ -147,14 +173,14 @@ test("candidate export atomically records the immutable payload and is idempoten
 test("the state machine allows requested changes and forbids rejected export", async () => {
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
-  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
   assert.equal(await repository.transitionMapDraft({
     draftId: "draft-a", expectedRevision: 1, toStatus: "changes_requested", actorAccountId: "admin-1", actorRole: "admin", note: "move A01", now: NOW + 2,
   }), true);
-  assert.equal(await repository.writeMapDraftRevision({
+  assert.equal(await writeRevision({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, contentJson: JSON.stringify({ markers: ["A01"] }), now: NOW + 3,
   }), 2);
-  assert.equal(await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2, now: NOW + 4 }), true);
+  assert.equal(await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 2, now: NOW + 4 }), true);
   assert.equal(await repository.transitionMapDraft({
     draftId: "draft-a", expectedRevision: 2, toStatus: "rejected", actorAccountId: "admin-1", actorRole: "admin", now: NOW + 5,
   }), true);
@@ -169,10 +195,10 @@ test("same-millisecond retries do not append duplicate state transitions", async
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
   await addEvidence("draft-a");
-  assert.equal(await repository.submitMapDraft({
+  assert.equal(await submitDraft({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1,
   }), true);
-  assert.equal(await repository.submitMapDraft({
+  assert.equal(await submitDraft({
     draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1,
   }), false);
   assert.deepEqual(await repository.approveMapDraft({
@@ -191,7 +217,7 @@ test("same-millisecond retries do not append duplicate state transitions", async
 test("approval fails closed when a legacy submitted revision has no evidence", async () => {
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
-  await repository.submitMapDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await submitDraft({ draftId: "draft-a", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
   assert.deepEqual(await repository.approveMapDraft({
     draftId: "draft-a", expectedRevision: 1, actorAccountId: "admin-1", now: NOW + 2,
   }), { ok: false, reason: "missing_evidence" });
@@ -202,7 +228,7 @@ test("raw metadata is bound to the current private revision", async () => {
   await repository.manageMapContributor({ email: "mapper@example.test", action: "grant", by: "admin@example.test", now: NOW });
   await createDraft("draft-a");
   assert.equal(await repository.addMapDraftFile({
-    id: "file-a", draftId: "draft-a", revision: 1, objectKey: "private/ff47/draft-a/file-a.png",
+    id: "file-a", draftId: "draft-a", eventId: "ff47", revision: 1, objectKey: "private/ff47/draft-a/file-a.png",
     sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25", pageNumber: null,
     sha256: "a".repeat(64), mime: "image/png", sizeBytes: 123, width: 100, height: 200,
     pageCount: null, uploadedBy: contributorId, now: NOW,
@@ -219,12 +245,12 @@ test("account deletion removes never-submitted drafts and anonymizes reviewed ac
   await createDraft("draft-private");
   await createDraft("draft-reviewed");
   await repository.addMapDraftFile({
-    id: "private-file", draftId: "draft-private", revision: 1, objectKey: "private/ff47/draft-private/raw.png",
+    id: "private-file", draftId: "draft-private", eventId: "ff47", revision: 1, objectKey: "private/ff47/draft-private/raw.png",
     sourceUrl: "https://organizer.example/map", documentDate: "2026-08-25", pageNumber: null,
     sha256: "b".repeat(64), mime: "image/png", sizeBytes: 12, width: 1, height: 1,
     pageCount: null, uploadedBy: contributorId, now: NOW,
   });
-  await repository.submitMapDraft({ draftId: "draft-reviewed", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
+  await submitDraft({ draftId: "draft-reviewed", ownerAccountId: contributorId, expectedRevision: 1, now: NOW + 1 });
   assert.deepEqual(await repository.listUnsubmittedMapDraftObjectKeysForAccount(contributorId), ["private/ff47/draft-private/raw.png"]);
 
   assert.equal(await repository.beginAccountDeletion({

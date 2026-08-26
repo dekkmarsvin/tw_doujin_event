@@ -11,12 +11,34 @@ export type MapContributionDraftContent = {
 export type MapContributionScope = {
   eventId: string;
   periodKey: string;
+  /** Accepted request/storage aliases which all normalize to periodKey. */
+  periodAliases: readonly string[];
   venueSpaceId: string;
   mapTemplate: string;
   allowedBoothCodes: readonly string[];
   requiredBoothCodes: readonly string[];
   targetPath: string;
 };
+
+export function resolveCanonicalMapPeriod<T extends { id: string | number }>(
+  days: readonly T[],
+  requestedPeriodKey: string,
+) {
+  // Exact event IDs always win. The compatibility alias is accepted only
+  // when it cannot name another declared day in the same event.
+  const exact = days.find(({ id }) => requestedPeriodKey === String(id));
+  const aliasKey = requestedPeriodKey.startsWith("day-") ? requestedPeriodKey.slice(4) : null;
+  const period = exact ?? (aliasKey ? days.find(({ id }) => aliasKey === String(id)) : undefined);
+  if (!period) return null;
+  const periodKey = String(period.id);
+  const compatibilityAlias = `day-${periodKey}`;
+  const aliasIsAnotherExactDay = days.some(({ id }) => String(id) === compatibilityAlias && id !== period.id);
+  return {
+    period,
+    periodKey,
+    periodAliases: aliasIsAnotherExactDay ? [periodKey] : [...new Set([periodKey, compatibilityAlias])],
+  };
+}
 
 export type MapDraftProblem = {
   code: "invalid_content" | "invalid_layout" | "template_mismatch" | "unknown_booth" | "missing_booth" | "missing_evidence" | "overlap";

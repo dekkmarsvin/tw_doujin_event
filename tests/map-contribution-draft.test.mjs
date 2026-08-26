@@ -6,7 +6,8 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const {
-  MAP_CONTRIBUTION_DRAFT_SCHEMA, buildMapCandidate, parseMapContributionDraftContent, validateMapContributionDraft,
+  MAP_CONTRIBUTION_DRAFT_SCHEMA, buildMapCandidate, parseMapContributionDraftContent,
+  resolveCanonicalMapPeriod, validateMapContributionDraft,
 } = await environment.runner.import("/app/map-contribution-draft.ts");
 after(async () => { await vite.close(); });
 
@@ -31,12 +32,31 @@ const layout = {
 const scope = {
   eventId: "sample",
   periodKey: "1",
+  periodAliases: ["1", "day-1"],
   venueSpaceId: "sample-hall",
   mapTemplate: "SAMPLE",
   allowedBoothCodes: ["S01", "S02", "S03"],
   requiredBoothCodes: ["S01", "S02"],
   targetPath: "map.json",
 };
+
+test("period aliases resolve to one canonical storage and target key", () => {
+  const days = [{ id: 1, label: "Day 1" }, { id: "special", label: "Special" }];
+  assert.deepEqual(resolveCanonicalMapPeriod(days, "1"), {
+    period: days[0], periodKey: "1", periodAliases: ["1", "day-1"],
+  });
+  assert.deepEqual(resolveCanonicalMapPeriod(days, "day-1"), {
+    period: days[0], periodKey: "1", periodAliases: ["1", "day-1"],
+  });
+  assert.equal(resolveCanonicalMapPeriod(days, "missing"), null);
+  const ambiguous = [{ id: "1" }, { id: "day-1" }];
+  assert.deepEqual(resolveCanonicalMapPeriod(ambiguous, "1"), {
+    period: ambiguous[0], periodKey: "1", periodAliases: ["1"],
+  });
+  assert.deepEqual(resolveCanonicalMapPeriod(ambiguous, "day-1"), {
+    period: ambiguous[1], periodKey: "day-1", periodAliases: ["day-1", "day-day-1"],
+  });
+});
 
 const content = (nextLayout = layout) => ({ schema: MAP_CONTRIBUTION_DRAFT_SCHEMA, layout: nextLayout });
 

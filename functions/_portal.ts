@@ -6,6 +6,7 @@ import { parseEventDefinition, type EventDefinition } from "../app/event-catalog
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
 import { isPublishedEventMap } from "../app/event-map";
+import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -330,12 +331,13 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     mapContributionStore,
     resolveMapContributionScope: async ({ periodKey, venueSpaceId }) => {
       const { payload, event } = await catalog(env, request, eventId);
-      const period = event.days.find(({ id }) => String(id) === periodKey || `day-${String(id)}` === periodKey);
+      const resolvedPeriod = resolveCanonicalMapPeriod(event.days, periodKey);
       const venue = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
-      if (!period || !venue) return null;
+      if (!resolvedPeriod || !venue) return null;
+      const { period, periodKey: canonicalPeriodKey, periodAliases } = resolvedPeriod;
       const targetPath = event.venueAssignments.length === 1
         ? "map.json"
-        : `maps/${encodeURIComponent(periodKey)}/${encodeURIComponent(venueSpaceId)}.json`;
+        : `maps/${encodeURIComponent(canonicalPeriodKey)}/${encodeURIComponent(venueSpaceId)}.json`;
       const areaIds = new Set(venue.areaIds);
       const activePlacements = payload.placements.filter((placement) => placement.status !== "cancelled" && areaIds.has(placement.area));
       const published = await readPublishedEventMap(targetPath);
@@ -351,7 +353,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
         .map(({ boothCode }) => boothCode))].sort();
       return {
         eventId,
-        periodKey,
+        periodKey: canonicalPeriodKey,
+        periodAliases,
         venueSpaceId,
         mapTemplate: event.mapTemplate,
         allowedBoothCodes,
