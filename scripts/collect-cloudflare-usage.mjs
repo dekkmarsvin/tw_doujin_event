@@ -1,22 +1,26 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildUsageReport, emptyHistory, parseHistory, parseR2Analytics, renderUsageMarkdown, upsertUsageDay } from "./cloudflare-usage-core.mjs";
+import { buildUsageReport, emptyHistory, isIsoDay, parseHistory, parseR2Analytics, parseUsageLimits, renderUsageMarkdown, upsertUsageDay } from "./cloudflare-usage-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const valueAfter = (flag) => { const index = args.indexOf(flag); return index >= 0 ? args[index + 1] : undefined; };
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+const latestCollectibleDate = yesterday;
 const date = valueAfter("--date") ?? yesterday;
 const statePath = path.resolve(root, valueAfter("--state") ?? ".cloudflare-usage/history.json");
 const summaryPath = valueAfter("--summary") ? path.resolve(root, valueAfter("--summary")) : null;
 const reportOnly = args.includes("--report-only");
 const allowEmptyHistory = args.includes("--allow-empty-history");
-if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("--date must be YYYY-MM-DD.");
+if (!isIsoDay(date)) throw new Error("--date must be a real YYYY-MM-DD UTC day.");
+if (date > latestCollectibleDate) throw new Error("--date must be earlier than the current UTC day.");
 
 const config = JSON.parse(await readFile(path.join(root, "monitoring", "cloudflare-usage.config.json"), "utf8"));
-const limits = process.env.CLOUDFLARE_USAGE_LIMITS_JSON ? JSON.parse(process.env.CLOUDFLARE_USAGE_LIMITS_JSON) : null;
-let history = await readFile(statePath, "utf8").then(JSON.parse).then(parseHistory).catch((error) => {
+const limits = process.env.CLOUDFLARE_USAGE_LIMITS_JSON
+  ? parseUsageLimits(JSON.parse(process.env.CLOUDFLARE_USAGE_LIMITS_JSON), config)
+  : null;
+let history = await readFile(statePath, "utf8").then(JSON.parse).then((value) => parseHistory(value, { latestAllowedDate: latestCollectibleDate })).catch((error) => {
   if (error?.code === "ENOENT" && allowEmptyHistory) return emptyHistory();
   if (error?.code === "ENOENT") {
     throw new Error(`Cloudflare usage history is missing at ${statePath}. Restore it or pass --allow-empty-history for an explicit baseline reset.`);
@@ -24,7 +28,7 @@ let history = await readFile(statePath, "utf8").then(JSON.parse).then(parseHisto
   throw error;
 });
 
-const QUERY = `query R2Daily($accountTag: string!, $startDate: Time, $endDate: Time, $bucketName: string) {
+const BUCKET_QUERY = `query R2Daily($accountTag: string!, $startDate: Time, $endDate: Time, $bucketName: string!) {
   viewer { accounts(filter: { accountTag: $accountTag }) {
     r2StorageAdaptiveGroups(limit: 10000, filter: { datetime_geq: $startDate, datetime_leq: $endDate, bucketName: $bucketName }, orderBy: [datetime_DESC]) {
       max { objectCount uploadCount payloadSize metadataSize }
@@ -37,15 +41,28 @@ const QUERY = `query R2Daily($accountTag: string!, $startDate: Time, $endDate: T
   } }
 }`;
 
+const ACCOUNT_QUERY = `query R2AccountDaily($accountTag: string!, $startDate: Time, $endDate: Time) {
+  viewer { accounts(filter: { accountTag: $accountTag }) {
+    r2StorageAdaptiveGroups(limit: 10000, filter: { datetime_geq: $startDate, datetime_leq: $endDate }, orderBy: [datetime_DESC]) {
+      max { objectCount uploadCount payloadSize metadataSize }
+      dimensions { datetime bucketName }
+    }
+    r2OperationsAdaptiveGroups(limit: 10000, filter: { datetime_geq: $startDate, datetime_leq: $endDate }) {
+      sum { requests }
+      dimensions { actionType actionStatus responseStatusCode bucketName }
+    }
+  } }
+}`;
+
 async function fetchResource(resource) {
   const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, accept: "application/json", "content-type": "application/json" },
-    body: JSON.stringify({ query: QUERY, variables: {
+    body: JSON.stringify({ query: resource.scope === "account" ? ACCOUNT_QUERY : BUCKET_QUERY, variables: {
       accountTag: process.env.CLOUDFLARE_ACCOUNT_ID,
       startDate: `${date}T00:00:00Z`,
       endDate: `${date}T23:59:59Z`,
-      bucketName: resource.bucketName,
+      ...(resource.scope === "account" ? {} : { bucketName: resource.bucketName }),
     } }),
   });
   const body = await response.json().catch(() => null);

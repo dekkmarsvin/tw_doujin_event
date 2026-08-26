@@ -1,6 +1,12 @@
 {
   "schema": "cloudflare-usage-limits/1",
   "resources": {
+    "r2:account": {
+      "storageBytes": null,
+      "classARequests": null,
+      "classBRequests": null,
+      "monthlyBudgetUsd": null
+    },
     "r2:production": {
       "storageBytes": null,
       "classARequests": null,
@@ -8,6 +14,18 @@
       "monthlyBudgetUsd": null
     },
     "r2:preview": {
+      "storageBytes": null,
+      "classARequests": null,
+      "classBRequests": null,
+      "monthlyBudgetUsd": null
+    },
+    "r2:map-contributions:production": {
+      "storageBytes": null,
+      "classARequests": null,
+      "classBRequests": null,
+      "monthlyBudgetUsd": null
+    },
+    "r2:map-contributions:preview": {
       "storageBytes": null,
       "classARequests": null,
       "classBRequests": null,

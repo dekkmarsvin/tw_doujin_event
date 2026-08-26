@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildUsageReport, classifyOperations, emptyHistory, parseR2Analytics, upsertUsageDay } from "../scripts/cloudflare-usage-core.mjs";
+import { buildUsageReport, classifyOperations, emptyHistory, isIsoDay, parseHistory, parseR2Analytics, parseUsageLimits, renderUsageMarkdown, upsertUsageDay } from "../scripts/cloudflare-usage-core.mjs";
 
 const classes = { classA: ["PutObject"], classB: ["GetObject"], free: ["DeleteObject"] };
 const productionConfig = JSON.parse(readFileSync(new URL("../monitoring/cloudflare-usage.config.json", import.meta.url), "utf8"));
 const resource = { id: "r2:production", kind: "r2", environment: "production", bucketName: "production-bucket" };
 const config = { resources: [resource], operationClasses: classes };
+
+test("monitoring covers account totals and every deployed project bucket", () => {
+  assert.deepEqual(productionConfig.resources.map((entry) => entry.id), [
+    "r2:account",
+    "r2:production",
+    "r2:preview",
+    "r2:map-contributions:production",
+    "r2:map-contributions:preview",
+  ]);
+});
 
 function snapshot(date, payloadBytes, classA = 0, classB = 0) {
   return {
@@ -63,19 +73,74 @@ test("missing metrics are marked delayed and malformed groups expose schema drif
   assert.equal(malformed.status, "schema-changed");
 });
 
-test("7 and 30 day increments and end-of-month forecasts stay resource-scoped", () => {
+test("account analytics sums the latest storage row per bucket and every operation", () => {
+  const account = parseR2Analytics({
+    r2StorageAdaptiveGroups: [
+      { dimensions: { bucketName: "one", datetime: "2026-08-20T22:00:00Z" }, max: { objectCount: 1, uploadCount: 1, payloadSize: 10, metadataSize: 2 } },
+      { dimensions: { bucketName: "one", datetime: "2026-08-20T23:00:00Z" }, max: { objectCount: 2, uploadCount: 2, payloadSize: 20, metadataSize: 3 } },
+      { dimensions: { bucketName: "two", datetime: "2026-08-20T23:30:00Z" }, max: { objectCount: 4, uploadCount: 4, payloadSize: 40, metadataSize: 5 } },
+    ],
+    r2OperationsAdaptiveGroups: [
+      { dimensions: { bucketName: "one", actionType: "PutObject", actionStatus: "success", responseStatusCode: 200 }, sum: { requests: 3 } },
+      { dimensions: { bucketName: "two", actionType: "GetObject", actionStatus: "success", responseStatusCode: 200 }, sum: { requests: 5 } },
+    ],
+  }, { id: "r2:account", kind: "r2", environment: "account", scope: "account" }, classes);
+  assert.equal(account.storage.objectCount, 6);
+  assert.equal(account.storage.payloadBytes, 60);
+  assert.equal(account.operations.totals.classA, 3);
+  assert.equal(account.operations.totals.classB, 5);
+});
+
+test("incomplete windows stay n/a and count only consecutive healthy snapshot days", () => {
   let history = emptyHistory();
-  history = upsertUsageDay(history, snapshot("2026-08-01", 100, 10, 20));
-  history = upsertUsageDay(history, snapshot("2026-08-10", 190, 20, 30));
-  history = upsertUsageDay(history, snapshot("2026-08-20", 290, 30, 40));
-  const report = buildUsageReport(history, config, "2026-08-20", { resources: { "r2:production": { storageBytes: 1_000, classARequests: 10_000 } } });
+  for (let day = 15; day <= 20; day += 1) history = upsertUsageDay(history, snapshot(`2026-08-${day}`, day * 10, 1, 2));
+  const report = buildUsageReport(history, config, "2026-08-20");
   const usage = report.resources[0];
-  assert.equal(usage.current.storageDelta7d, 100);
-  assert.equal(usage.current.storageDelta30d, null);
-  assert.equal(usage.current.classA7d, 30);
-  assert.equal(usage.current.classA30d, 60);
-  assert.equal(usage.forecast.classARequestsMonth, 620);
-  assert.equal(usage.forecast.storageBytesEndOfMonth, 400);
+  assert.equal(report.baselineDays, 6);
+  assert.equal(report.sevenDayWindowComplete, false);
+  assert.equal(usage.current.storageDelta7d, null);
+  assert.equal(usage.current.classA7d, null);
+  assert.equal(usage.current.classB7d, null);
+  assert.equal(usage.forecast.classARequestsMonth, null);
+  const markdown = renderUsageMarkdown(report);
+  assert.match(markdown, /7-day decision window: incomplete/);
+  assert.match(markdown, /n\/a \/ n\/a \/ n\/a/);
+});
+
+test("complete daily endpoints produce exact 7 and 30 day windows", () => {
+  let history = emptyHistory();
+  for (let day = 1; day <= 31; day += 1) {
+    history = upsertUsageDay(history, snapshot(`2026-08-${String(day).padStart(2, "0")}`, day * 10, 1, 2));
+  }
+  const report = buildUsageReport(history, config, "2026-08-31", { resources: { "r2:production": { storageBytes: 1_000, classARequests: 10_000 } } });
+  const usage = report.resources[0];
+  assert.equal(report.baselineDays, 31);
+  assert.equal(report.sevenDayWindowComplete, true);
+  assert.equal(report.thirtyDayWindowComplete, true);
+  assert.equal(usage.current.storageDelta7d, 70);
+  assert.equal(usage.current.storageDelta30d, 300);
+  assert.equal(usage.current.classA7d, 7);
+  assert.equal(usage.current.classA30d, 30);
+  assert.equal(usage.forecast.classARequestsMonth, 31);
+  assert.equal(usage.forecast.storageBytesEndOfMonth, 310);
   assert.equal(usage.limits.storageBytes, 1_000);
   assert.equal(usage.limits.classBRequests, null);
+});
+
+test("calendar dates and limits schemas fail closed", () => {
+  assert.equal(isIsoDay("2026-02-28"), true);
+  assert.equal(isIsoDay("2026-02-30"), false);
+  assert.throws(() => parseHistory({ schema: "cloudflare-usage-history/1", days: [{ date: "2026-02-30", resources: [] }] }), /schema is invalid/);
+  assert.throws(() => parseHistory({ schema: "cloudflare-usage-history/1", days: [{ date: "2026-08-21", resources: [] }] }, { latestAllowedDate: "2026-08-20" }), /disallowed date/);
+  assert.throws(() => parseHistory({ schema: "cloudflare-usage-history/1", days: [{ date: "2026-08-20", resources: [] }, { date: "2026-08-20", resources: [] }] }), /duplicate dates/);
+
+  const valid = {
+    schema: "cloudflare-usage-limits/1",
+    resources: { "r2:production": { storageBytes: null, classARequests: null, classBRequests: null, monthlyBudgetUsd: null } },
+    pricing: { storageUsdPerGbMonth: null, classAUsdPerMillion: null, classBUsdPerMillion: null },
+  };
+  assert.deepEqual(parseUsageLimits(valid, config), valid);
+  assert.throws(() => parseUsageLimits({ ...valid, schema: "cloudflare-usage-limits/0" }, config), /schema is invalid/);
+  assert.throws(() => parseUsageLimits({ ...valid, resources: {} }, config), /must contain exactly/);
+  assert.throws(() => parseUsageLimits({ ...valid, resources: { "r2:production": { ...valid.resources["r2:production"], monthlyBudgetUsd: 10 } } }, config), /not supported/);
 });
