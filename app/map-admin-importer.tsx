@@ -140,6 +140,9 @@ export default function MapAdminImporter({ eventId, initialMap, onPublished, onC
     setBaselineReport(next);
     setOrigin("manual");
     setImageDataUrl("");
+    // sourceName is the snapshot's only durable provenance, so a blank map must
+    // not inherit the description of the revision or image it replaced.
+    setSourceName("");
   };
 
   const currentDiagnostics = report ? diagnostics(report.layout) : null;

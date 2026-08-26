@@ -4,10 +4,14 @@ export type ResizeCorner = "nw" | "ne" | "se" | "sw";
 
 /** A row is described by where it starts, where it ends, how many booths sit on
  * it, and how those booths are numbered. Row labels are plain strings, so the
- * Chinese branch labels some organizers use need no special handling. */
+ * Chinese branch labels some organizers use need no special handling.
+ *
+ * Orientation is deliberately absent: it is derived from the endpoints rather
+ * than entered separately, because both renderers position the row label from
+ * `orientation` and a value that contradicts the geometry puts that label on
+ * the wrong axis. Correcting an unusual row stays possible after creation. */
 export type RowDefinition = {
   label: string;
-  orientation: MapOrientation;
   start: { x: number; y: number };
   end: { x: number; y: number };
   slotCount: number;
@@ -21,6 +25,13 @@ export type RowDefinition = {
 export type RowGenerationResult =
   | { ok: true; row: BoothRow; errors: [] }
   | { ok: false; row: null; errors: string[] };
+
+/** A row that spans further across than down is horizontal. A row with no
+ * extent at all — a single booth, or coincident endpoints — is called vertical,
+ * matching how every recognized row so far is stored. */
+export function rowOrientationFromEndpoints(start: { x: number; y: number }, end: { x: number; y: number }): MapOrientation {
+  return Math.abs(end.x - start.x) > Math.abs(end.y - start.y) ? "horizontal" : "vertical";
+}
 
 export function formatSlotCode(prefix: string, value: number, padding: number) {
   return `${prefix}${String(value).padStart(Math.max(0, padding), "0")}`;
@@ -59,7 +70,7 @@ export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect
   const duplicate = slots.find((slot, index) => slots.findIndex(({ code }) => code === slot.code) !== index);
   if (duplicate) return { ok: false, row: null, errors: [`這一排會產生重複的攤位代碼 ${duplicate.code}。`] };
 
-  return { ok: true, row: { label, orientation: definition.orientation, confidence: 1, slots }, errors: [] };
+  return { ok: true, row: { label, orientation: rowOrientationFromEndpoints(definition.start, definition.end), confidence: 1, slots }, errors: [] };
 }
 
 function clampToBound(value: number, size: number, bound: number) {

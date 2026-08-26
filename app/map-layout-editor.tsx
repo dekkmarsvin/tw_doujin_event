@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { resolveMapLandmarkKind, type EventMapLayout, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
-import { generateRowSlots, resizeRectFromCorner, snapRectToAdjacentRects, type ResizeCorner, type RowDefinition, type SnapGuide } from "./map-layout-editor-geometry";
+import { generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowDefinition, type SnapGuide } from "./map-layout-editor-geometry";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
 
@@ -44,7 +44,6 @@ type Props = {
  * not snap back to a default while the maintainer is still typing. */
 type RowFormState = {
   label: string;
-  orientation: MapOrientation;
   startX: string;
   startY: string;
   endX: string;
@@ -60,7 +59,6 @@ type RowFormState = {
 function blankRowForm(layout: EventMapLayout): RowFormState {
   return {
     label: "",
-    orientation: "vertical",
     startX: String(Math.round(layout.width * .2)),
     startY: String(Math.round(layout.height * .5)),
     endX: String(Math.round(layout.width * .8)),
@@ -77,7 +75,6 @@ function blankRowForm(layout: EventMapLayout): RowFormState {
 function rowDefinitionFrom(form: RowFormState): RowDefinition {
   return {
     label: form.label,
-    orientation: form.orientation,
     start: { x: Number(form.startX), y: Number(form.startY) },
     end: { x: Number(form.endX), y: Number(form.endY) },
     slotCount: Number(form.slotCount),
@@ -466,6 +463,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const rowField = (label: string, value: string, onValue: (value: string) => void, placeholder?: string) =>
     <label className={styles.wide}><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onValue(event.target.value)} /></label>;
 
+  const rowFormOrientation = rowForm
+    ? rowOrientationFromEndpoints({ x: Number(rowForm.startX), y: Number(rowForm.startY) }, { x: Number(rowForm.endX), y: Number(rowForm.endY) })
+    : "vertical";
+
   const rowCodePreview = (() => {
     if (!rowForm) return "";
     const definition = rowDefinitionFrom(rowForm);
@@ -509,10 +510,9 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
         <label className={styles.elementPicker}><span>精確選取地圖元素</span><select aria-label="選取地圖元素" value={activeKey} onChange={(event) => selectElement(event.target.value)}><option value="">請選擇攤位或設施</option>{elementOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
         {rowForm && <div className={styles.rowPanel}>
           <b>新增一排</b>
-          <p>起點與終點是這一排第一格與最後一格的中心；格數決定中間如何等分。排標籤可以是任意文字。</p>
+          <p>起點與終點是這一排第一格與最後一格的中心；格數決定中間如何等分。排標籤可以是任意文字。方向由端點自動判定，建立後仍可在排清單更改。</p>
           {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
           {rowField("新排標籤", rowForm.label, (value) => setRowForm({ ...rowForm, label: value }), "例：A、子、商")}
-          <label><span>方向</span><select value={rowForm.orientation} onChange={(event) => setRowForm({ ...rowForm, orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label>
           <div className={styles.fields}>
             {rowField("起點 X", rowForm.startX, (value) => setRowForm({ ...rowForm, startX: value }))}
             {rowField("起點 Y", rowForm.startY, (value) => setRowForm({ ...rowForm, startY: value }))}
@@ -525,7 +525,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
             {rowField("補零位數", rowForm.numberPadding, (value) => setRowForm({ ...rowForm, numberPadding: value }))}
           </div>
           {rowField("代碼前綴", rowForm.codePrefix, (value) => setRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
-          <p>預覽：{rowCodePreview}</p>
+          <p>方向：{rowFormOrientation === "horizontal" ? "橫排" : "直排"}（依端點判定）<br />預覽：{rowCodePreview}</p>
           <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>建立這一排</button></div>
         </div>}
         {!rowForm && !!layout.rows.length && <div className={styles.rowList}>

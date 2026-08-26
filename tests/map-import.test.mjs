@@ -10,7 +10,7 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { createBlankEventMapLayout, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { formatSlotCode, generateRowSlots, resizeRectFromCorner, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
 
@@ -182,7 +182,7 @@ test("a template without a recognition adapter still yields a publishable blank 
 
 test("a row is generated from two endpoints, a count and a numbering rule", () => {
   const definition = {
-    label: "B", orientation: "vertical", start: { x: 100, y: 50 }, end: { x: 100, y: 950 },
+    label: "B", start: { x: 100, y: 50 }, end: { x: 100, y: 950 },
     slotCount: 10, slotWidth: 40, slotHeight: 30, codePrefix: "B", startNumber: 1, numberPadding: 2,
   };
   const result = generateRowSlots(definition, { width: 1600, height: 1000 });
@@ -204,8 +204,8 @@ test("row labels and booth codes accept any script, including branch characters"
   // 駁二動漫祭 numbers eight of its rows with 地支 characters, and CWT gives its
   // commercial section the 商 prefix. Neither may need special handling.
   const rows = [
-    generateRowSlots({ label: "子", orientation: "vertical", start: { x: 20, y: 20 }, end: { x: 20, y: 80 }, slotCount: 32, slotWidth: 6, slotHeight: 2, codePrefix: "子", startNumber: 1, numberPadding: 2 }, { width: 100, height: 100 }),
-    generateRowSlots({ label: "商", orientation: "horizontal", start: { x: 20, y: 90 }, end: { x: 80, y: 90 }, slotCount: 4, slotWidth: 8, slotHeight: 4, codePrefix: "商", startNumber: 1, numberPadding: 2 }, { width: 100, height: 100 }),
+    generateRowSlots({ label: "子", start: { x: 20, y: 20 }, end: { x: 20, y: 80 }, slotCount: 32, slotWidth: 6, slotHeight: 2, codePrefix: "子", startNumber: 1, numberPadding: 2 }, { width: 100, height: 100 }),
+    generateRowSlots({ label: "商", start: { x: 20, y: 90 }, end: { x: 80, y: 90 }, slotCount: 4, slotWidth: 8, slotHeight: 4, codePrefix: "商", startNumber: 1, numberPadding: 2 }, { width: 100, height: 100 }),
   ];
   assert.deepEqual(rows.map(({ ok }) => ok), [true, true]);
   assert.equal(rows[0].row.slots[0].code, "子01");
@@ -219,7 +219,7 @@ test("row labels and booth codes accept any script, including branch characters"
 
 test("row generation refuses definitions that cannot produce a valid row", () => {
   const bounds = { width: 100, height: 100 };
-  const base = { label: "A", orientation: "vertical", start: { x: 10, y: 10 }, end: { x: 10, y: 90 }, slotCount: 4, slotWidth: 8, slotHeight: 8, codePrefix: "A", startNumber: 1, numberPadding: 2 };
+  const base = { label: "A", start: { x: 10, y: 10 }, end: { x: 10, y: 90 }, slotCount: 4, slotWidth: 8, slotHeight: 8, codePrefix: "A", startNumber: 1, numberPadding: 2 };
   assert.equal(generateRowSlots({ ...base, label: "  " }, bounds).ok, false);
   assert.equal(generateRowSlots({ ...base, slotCount: 0 }, bounds).ok, false);
   assert.equal(generateRowSlots({ ...base, slotCount: 2.5 }, bounds).ok, false);
@@ -234,4 +234,22 @@ test("row generation refuses definitions that cannot produce a valid row", () =>
   const clamped = generateRowSlots({ ...base, start: { x: 0, y: 0 }, end: { x: 100, y: 100 } }, bounds);
   assert.equal(clamped.ok, true);
   assert.ok(clamped.row.slots.every(({ rect }) => rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 100 && rect.y + rect.height <= 100));
+});
+
+test("row orientation comes from the endpoints, so it can never contradict them", () => {
+  // Both renderers place the row label from `orientation`
+  // (`row.orientation === "horizontal" ? maxY + 30 : minY - 13`), so a value
+  // that disagrees with the geometry puts the label on the wrong axis.
+  assert.equal(rowOrientationFromEndpoints({ x: 0, y: 0 }, { x: 100, y: 0 }), "horizontal");
+  assert.equal(rowOrientationFromEndpoints({ x: 0, y: 0 }, { x: 0, y: 100 }), "vertical");
+  assert.equal(rowOrientationFromEndpoints({ x: 100, y: 0 }, { x: 0, y: 0 }), "horizontal");
+  // A square span and coincident endpoints are called vertical, matching how
+  // every recognized row is stored.
+  assert.equal(rowOrientationFromEndpoints({ x: 0, y: 0 }, { x: 50, y: 50 }), "vertical");
+  assert.equal(rowOrientationFromEndpoints({ x: 20, y: 20 }, { x: 20, y: 20 }), "vertical");
+
+  const bounds = { width: 200, height: 200 };
+  const base = { label: "R", slotCount: 4, slotWidth: 10, slotHeight: 10, codePrefix: "R", startNumber: 1, numberPadding: 2 };
+  assert.equal(generateRowSlots({ ...base, start: { x: 20, y: 100 }, end: { x: 180, y: 100 } }, bounds).row.orientation, "horizontal");
+  assert.equal(generateRowSlots({ ...base, start: { x: 100, y: 20 }, end: { x: 100, y: 180 } }, bounds).row.orientation, "vertical");
 });
