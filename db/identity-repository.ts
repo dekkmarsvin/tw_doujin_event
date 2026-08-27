@@ -859,6 +859,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     eventId: string;
     authorAccountId: string;
     authorRole: "map_contributor" | "admin";
+    /** Pins the comment to a specific revision. Defaults to the draft's current
+     * one, which is right for a comment written about what is on screen; a
+     * review's change requests pass the revision that was actually reviewed. */
+    revision?: number;
     targetKind: "slot" | "landmark" | null;
     targetRef: string | null;
     body: string;
@@ -866,12 +870,21 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }) {
     await ensureTables();
     const id = crypto.randomUUID();
-    const result = await database.prepare(
-      `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
-       SELECT ?1, id, current_revision, ?2, ?3, ?4, ?5, ?6, ?7 FROM map_drafts
-       WHERE id = ?8 AND event_id = ?9 AND retention_action IS NULL`,
-    ).bind(id, input.authorAccountId, input.authorRole, input.targetKind, input.targetRef, input.body, input.now, input.draftId, input.eventId).run();
-    return (result.meta.changes ?? 0) === 1 ? id : null;
+    // Discussion is activity. Without the touch, a draft under review could sit
+    // out its inactivity window while it was being talked about and be purged
+    // on the next run. Batched with the insert so the two cannot disagree.
+    const results = await database.batch([
+      database.prepare(
+        `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
+         SELECT ?1, id, COALESCE(?2, current_revision), ?3, ?4, ?5, ?6, ?7, ?8 FROM map_drafts
+         WHERE id = ?9 AND event_id = ?10 AND retention_action IS NULL`,
+      ).bind(id, input.revision ?? null, input.authorAccountId, input.authorRole, input.targetKind, input.targetRef, input.body, input.now, input.draftId, input.eventId),
+      database.prepare(
+        `UPDATE map_drafts SET last_activity_at = ?1
+         WHERE id = ?2 AND event_id = ?3 AND retention_action IS NULL AND last_activity_at < ?1`,
+      ).bind(input.now, input.draftId, input.eventId),
+    ]);
+    return (results[0].meta.changes ?? 0) === 1 ? id : null;
   }
 
   async function getActiveApprovedMapDraft(eventId: string, periodKey: string, venueSpaceId: string) {

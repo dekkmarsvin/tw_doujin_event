@@ -47,9 +47,11 @@ async function raw(id, draftId, at) {
 
 const submitDraft = (input) => repository.submitMapDraft({ eventId: "ff47", ...input });
 
-const comment = (draftId, body, targetKind, targetRef) => repository.addMapDraftComment({
+/** `at` matters: a comment refreshes the draft's activity, so seeding one at
+ * "now" would pull an otherwise-abandoned draft back out of the purge window. */
+const comment = (draftId, body, targetKind, targetRef, at) => repository.addMapDraftComment({
   draftId, eventId: "ff47", authorAccountId: accountId, authorRole: "map_contributor",
-  targetKind, targetRef, body, now: NOW - DAY,
+  targetKind, targetRef, body, now: at,
 });
 
 const commentCount = async (draftId) =>
@@ -91,8 +93,8 @@ test("retention removes abandoned content, preserves submitted work, and is idem
 
   // Discussion on a draft that is about to be deleted, and on one about to be
   // anonymized: the two retention actions treat it differently.
-  await comment("never-submitted", "整份草稿的位置都要重畫。", null, null);
-  await comment("changes", "B 排第 7 格位置錯了。", "slot", "B07");
+  await comment("never-submitted", "整份草稿的位置都要重畫。", null, null, inactive);
+  await comment("changes", "B 排第 7 格位置錯了。", "slot", "B07", inactive);
 
   const deletedKeys = [];
   const store = { delete: async (keys) => deletedKeys.push(...(Array.isArray(keys) ? keys : [keys])) };
@@ -188,11 +190,11 @@ test("account deletion does not exempt requested changes from the 180-day cleanu
 
 test("deleting an account unnames its comments and takes the unsubmitted draft's thread with it", async () => {
   await draft("still-a-draft", NOW - DAY);
-  await comment("still-a-draft", "這格代碼可能打錯。", "slot", "A01");
+  await comment("still-a-draft", "這格代碼可能打錯。", "slot", "A01", NOW - DAY);
 
   await draft("under-review", NOW - 3 * DAY);
   await submitDraft({ draftId: "under-review", ownerAccountId: accountId, expectedRevision: 1, now: NOW - 2 * DAY });
-  await comment("under-review", "A 排整排往右偏了一格。", "slot", "A05");
+  await comment("under-review", "A 排整排往右偏了一格。", "slot", "A05", NOW - DAY);
 
   await repository.beginAccountDeletion({ accountId, email: "mapper@example.test", now: NOW });
   await repository.deleteAccount({
@@ -207,13 +209,13 @@ test("deleting an account unnames its comments and takes the unsubmitted draft's
 
 test("a comment is stamped with the revision it was written about and never moves", async () => {
   await draft("moving", NOW - 4 * DAY);
-  const id = await comment("moving", "第一版就有問題。", null, null);
+  const id = await comment("moving", "第一版就有問題。", null, null, NOW - 4 * DAY);
   assert.ok(id);
   await repository.writeMapDraftRevision({
     draftId: "moving", eventId: "ff47", ownerAccountId: accountId, expectedRevision: 1,
     contentJson: JSON.stringify({ id: "moving", pass: 2 }), now: NOW - 3 * DAY,
   });
-  const later = await comment("moving", "第二版已修好。", null, null);
+  const later = await comment("moving", "第二版已修好。", null, null, NOW - 2 * DAY);
   assert.ok(later);
 
   const thread = await repository.listMapDraftComments("moving");

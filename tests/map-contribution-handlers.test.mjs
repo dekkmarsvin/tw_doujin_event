@@ -21,6 +21,9 @@ after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const ORIGIN = "https://preview.example";
 const NOW = 1_786_500_000_000;
+const DAY = 24 * 60 * 60 * 1000;
+/** Reset per test. Advance it to age a session or a draft past a deadline. */
+let clock = NOW;
 let repository;
 let handlers;
 let sent;
@@ -39,6 +42,7 @@ function validContent() {
 }
 
 beforeEach(async () => {
+  clock = NOW;
   sent = [];
   objects = new Map();
   scopeConfig = {
@@ -73,7 +77,7 @@ beforeEach(async () => {
     config: {
       eventId: "ff47", origin: ORIGIN, sessionSecret: "session-secret", hashPepper: "pepper",
       adminEmails: ["admin@example.test"], dataUpdatedAt: "2026-08-25T00:00:00Z",
-      eventEndsAt: "2026-09-01T00:00:00Z", now: () => NOW,
+      eventEndsAt: "2026-09-01T00:00:00Z", now: () => clock,
     },
   });
 });
@@ -645,6 +649,46 @@ test("only the draft owner or an admin can add to its thread", async () => {
   )).status, 403, "commenting needs the same live grant that writing does");
 });
 
+test("speaking as an administrator needs a fresh session, like every other admin write", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const comment = (cookie) => handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "請調整 A07。" }, cookie), draft.draftId,
+  );
+  assert.equal((await comment(adminCookie)).status, 201);
+
+  clock = NOW + 25 * 60 * 60 * 1000;
+  assert.equal((await comment(adminCookie)).status, 401,
+    "a still-valid but stale admin session cannot put words in front of a contributor as a reviewer");
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 1);
+
+  // The contributor's own path is not an administrative write, so it is not
+  // held to the reauthentication boundary.
+  assert.equal((await comment(mapperCookie)).status, 201);
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ author_role }) => author_role),
+    ["admin", "map_contributor"]);
+});
+
+test("a comment counts as activity, so a draft under discussion is not treated as abandoned", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  assert.equal((await repository.getMapDraft(draft.draftId)).last_activity_at, NOW);
+
+  // Months on, nobody has saved a revision but the thread is still moving.
+  // The login session is long gone by then, so the contributor signs in again.
+  clock = NOW + 150 * DAY;
+  const returning = await signIn("mapper@example.test");
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "還在討論這一排。" }, returning), draft.draftId,
+  )).status, 201);
+  assert.equal((await repository.getMapDraft(draft.draftId)).last_activity_at, clock,
+    "without this the inactivity window would run out while the draft was being talked about");
+});
+
 test("requesting changes records the elements it is about, and only when it takes effect", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");
@@ -690,6 +734,8 @@ test("requesting changes records the elements it is about, and only when it take
 
   const reviews = await repository.listMapDraftReviews(draft.draftId);
   assert.equal(reviews.length, 2, "the state-machine trail stays one row per transition, not one per request");
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ revision }) => revision), [1, 1],
+    "requests name the revision the reviewer looked at, not whatever the draft reached afterwards");
 });
 
 test("a revoked grant outranks a stale revision so the panel never offers a reload that cannot help", async () => {

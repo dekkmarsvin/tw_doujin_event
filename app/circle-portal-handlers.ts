@@ -1072,21 +1072,33 @@ export function createCirclePortalHandlers({
     if (!current) return json({ error: "尚未登入。" }, 401);
     const admin = await isAdmin(current.email);
     const draft = await repository.getMapDraft(draftId, config.eventId);
+    // A stranger is told the draft is not there rather than that it is theirs
+    // to be refused, which is why the admin check comes before the gate.
     if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    if (!admin && !await repository.hasActiveMapContributor(current.accountId)) return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
+    // Writing under the admin role puts words in front of the contributor that
+    // they read as coming from a reviewer, so it is held to the same
+    // reauthentication boundary as every other administrative write. An admin
+    // commenting on a draft they own is a contributor here, grant and all.
+    const asAdmin = admin && draft.owner_account_id !== current.accountId;
+    if (asAdmin) {
+      const gate = await requireFreshAdmin(request);
+      if (!gate.ok) return gate.response;
+    } else if (!await repository.hasActiveMapContributor(current.accountId)) {
+      return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
+    }
     const body = await readJson(request);
     const text = typeof body?.body === "string" ? body.body.trim().slice(0, 2_000) : "";
     if (!text) return json({ error: "留言內容不可留空。" }, 400);
     const target = mapDraftCommentTarget(body);
     if (!target.ok) return json({ error: "指定的對象無效。" }, 400);
+    const role = asAdmin ? "admin" : "map_contributor";
     const id = await repository.addMapDraftComment({
-      draftId, eventId: config.eventId, authorAccountId: current.accountId,
-      authorRole: admin ? "admin" : "map_contributor",
+      draftId, eventId: config.eventId, authorAccountId: current.accountId, authorRole: role,
       targetKind: target.kind, targetRef: target.ref, body: text, now: config.now(),
     });
     if (!id) return json({ error: "找不到草稿。" }, 404);
     await repository.writeAudit({
-      at: config.now(), actorAccountId: current.accountId, actorRole: admin ? "admin" : "map_contributor",
+      at: config.now(), actorAccountId: current.accountId, actorRole: role,
       action: "map_draft.commented", subjectType: "map_draft", subjectId: draftId,
       detail: { revision: draft.current_revision, targetKind: target.kind }, ipHash: await clientIpHash(request),
     });
@@ -1178,6 +1190,11 @@ export function createCirclePortalHandlers({
     for (const target of targets) {
       await repository.addMapDraftComment({
         draftId, eventId: config.eventId, authorAccountId: gate.session.accountId, authorRole: "admin",
+        // Pinned to the revision that was reviewed. Left to the draft's current
+        // revision, a contributor saving between the transition and this loop
+        // would make the requests claim to be about a version that may no
+        // longer contain the elements they name.
+        revision: Number(expectedRevision),
         targetKind: target.kind, targetRef: target.ref, body: target.body, now: config.now(),
       });
     }

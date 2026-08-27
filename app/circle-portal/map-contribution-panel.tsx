@@ -225,7 +225,7 @@ export function AdminMapReviewPanel() {
   const [problems, setProblems] = useState<MapDraftProblem[]>([]);
   const [candidate, setCandidate] = useState<{ map: PublishedEventMap; diff: MapCandidateDiff; targetPath: string; sha256: string } | null>(null);
   const [targets, setTargets] = useState<MapDraftCommentTarget[]>([]);
-  const [targetKind, setTargetKind] = useState<"slot" | "landmark">("slot");
+  const [targetKind, setTargetKind] = useState<"slot" | "landmark" | "draft">("draft");
   const [targetRef, setTargetRef] = useState("");
   const [targetBody, setTargetBody] = useState("");
   const refreshList = useCallback(async () => setDrafts((await listAdminMapDrafts()).drafts), []);
@@ -266,17 +266,31 @@ export function AdminMapReviewPanel() {
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
       <Preview layout={detail.draft.content.layout} />
       <label>審閱說明<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} /></label>
-      <h3>局部修改請求</h3>
+      <h3>審閱留言</h3>
       <CommentThread comments={detail.comments} onFocus={null} />
       <div className={styles.commentTarget}>
-        <label>對象<select value={targetKind} onChange={(event) => setTargetKind(event.target.value as "slot" | "landmark")}><option value="slot">攤位</option><option value="landmark">區域</option></select></label>
-        <label>{targetKind === "slot" ? "攤位代碼" : "區域 ID"}<input value={targetRef} onChange={(event) => setTargetRef(event.target.value)} /></label>
+        <label>對象<select value={targetKind} onChange={(event) => setTargetKind(event.target.value as "slot" | "landmark" | "draft")}><option value="draft">整份草稿</option><option value="slot">攤位</option><option value="landmark">區域</option></select></label>
+        <label>{targetKind === "landmark" ? "區域 ID" : "攤位代碼"}<input disabled={targetKind === "draft"} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} /></label>
       </div>
-      <label>要改什麼<textarea rows={2} value={targetBody} onChange={(event) => setTargetBody(event.target.value)} /></label>
-      <button type="button" disabled={!targetRef.trim() || !targetBody.trim()} onClick={() => {
-        setTargets([...targets, { kind: targetKind, ref: targetRef.trim(), body: targetBody.trim() }]);
-        setTargetRef(""); setTargetBody("");
-      }}>加入這則請求</button>
+      <label>留言<textarea rows={2} value={targetBody} onChange={(event) => setTargetBody(event.target.value)} /></label>
+      <div className={styles.reviewActions}>
+        {/* Sent now, so a thread stays answerable after the draft has left
+            `submitted` and the decision buttons below are gone. */}
+        <button type="button" disabled={!targetBody.trim() || (targetKind !== "draft" && !targetRef.trim())} onClick={() => void run(async () => {
+          await postMapDraftComment({
+            draftId: detail.draft.id, body: targetBody.trim(),
+            ...(targetKind === "draft" ? {} : { targetKind, targetRef: targetRef.trim() }),
+          });
+          setTargetRef(""); setTargetBody(""); await openDraft(detail.draft.id);
+        }, "留言已送出。")}>送出留言</button>
+        {/* Queued instead, so the request rides the decision and is written
+            only once that transition takes effect. */}
+        <button type="button" disabled={targetKind === "draft" || !targetRef.trim() || !targetBody.trim()} onClick={() => {
+          if (targetKind === "draft") return;
+          setTargets([...targets, { kind: targetKind, ref: targetRef.trim(), body: targetBody.trim() }]);
+          setTargetRef(""); setTargetBody("");
+        }}>隨「要求修改」送出</button>
+      </div>
       {!!targets.length && <ul className={styles.auditList}>{targets.map((item, index) => <li key={`${item.kind}:${item.ref}:${index}`}>
         {TARGET_LABEL[item.kind]} {item.ref}・{item.body}
         <button type="button" onClick={() => setTargets(targets.filter((entry, position) => position !== index))}>移除</button>
