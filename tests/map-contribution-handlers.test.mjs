@@ -829,6 +829,8 @@ test("a grant revoked mid-request cannot slip a comment past the check", async (
   });
   assert.equal(id, null, "the write rechecks the live grant, so a revocation cannot be raced");
   assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+  assert.equal((await repository.getMapDraft(draft.draftId)).last_activity_at, NOW,
+    "a refused comment must not defer retention on a draft nobody was allowed to write to");
 });
 
 test("a revoked grant outranks a stale revision so the panel never offers a reload that cannot help", async () => {

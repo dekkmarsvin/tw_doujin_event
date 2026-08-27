@@ -877,6 +877,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     // The contributor branch rechecks ownership and the live grant inside the
     // write, the way a revision write does: a grant revoked between the
     // handler's check and this statement must refuse the comment, not race it.
+    // The touch then keys off the inserted row - the statements share one
+    // transaction and run in order - so a refused comment cannot defer
+    // retention on a draft nobody was allowed to write to.
     const results = await database.batch([
       database.prepare(
         `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
@@ -889,8 +892,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).bind(id, input.revision ?? null, input.authorAccountId, input.authorRole, input.targetKind, input.targetRef, input.body, input.now, input.draftId, input.eventId),
       database.prepare(
         `UPDATE map_drafts SET last_activity_at = ?1
-         WHERE id = ?2 AND event_id = ?3 AND retention_action IS NULL AND last_activity_at < ?1`,
-      ).bind(input.now, input.draftId, input.eventId),
+         WHERE id = ?2 AND event_id = ?3 AND retention_action IS NULL AND last_activity_at < ?1
+           AND EXISTS (SELECT 1 FROM map_draft_comments WHERE id = ?4)`,
+      ).bind(input.now, input.draftId, input.eventId, id),
     ]);
     return (results[0].meta.changes ?? 0) === 1 ? id : null;
   }

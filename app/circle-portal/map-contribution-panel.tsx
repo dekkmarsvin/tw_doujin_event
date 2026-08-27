@@ -97,15 +97,28 @@ const COMMENT_AT = new Intl.DateTimeFormat("zh-Hant", {
 });
 const TARGET_LABEL: Record<"slot" | "landmark", string> = { slot: "攤位", landmark: "區域" };
 
-/** The review thread. A comment that names an element is a request to change
- * that element; `onFocus` is supplied only where the element can actually be
- * reached, which is the contributor's editor. */
-function CommentThread({ comments, onFocus }: { comments: MapDraftComment[]; onFocus: ((comment: MapDraftComment) => void) | null }) {
+/** A request names an element the draft carried when it was written. The
+ * contributor can then remove that element - which is often what was asked for
+ * - so what is on the canvas now decides whether the reference is still
+ * reachable. An unreachable one reads as text; a button there would be one the
+ * reader can press and that does nothing. */
+function targetInLayout(layout: EventMapLayout | null, comment: MapDraftComment) {
+  if (!layout || !comment.target_kind || !comment.target_ref) return false;
+  return comment.target_kind === "slot"
+    ? layout.rows.some((row) => row.slots.some((slot) => slot.code === comment.target_ref))
+    : layout.landmarks.some((landmark) => landmark.id === comment.target_ref);
+}
+
+function CommentThread({ comments, layout, onFocus }: {
+  comments: MapDraftComment[];
+  layout: EventMapLayout | null;
+  onFocus: ((comment: MapDraftComment) => void) | null;
+}) {
   if (!comments.length) return null;
   return <ul className={styles.commentThread}>{comments.map((item) => <li key={item.id}>
     <span>{ACTOR_LABEL[item.author_role as MapDraftActorRole] ?? item.author_role}・版本 {item.revision}・{COMMENT_AT.format(item.at)}</span>
     {item.target_kind && item.target_ref
-      ? <b>{onFocus
+      ? <b>{onFocus && targetInLayout(layout, item)
         ? <button type="button" onClick={() => onFocus(item)}>{TARGET_LABEL[item.target_kind]} {item.target_ref}</button>
         : `${TARGET_LABEL[item.target_kind]} ${item.target_ref}`}</b>
       : null}
@@ -204,7 +217,7 @@ export function MapContributorPanel() {
         }, "來源檔已綁定目前版本。")}>上傳私人來源檔</button>
       </>}
       <h3>審閱留言</h3>
-      <CommentThread comments={detail.comments} onFocus={editable ? (item) => {
+      <CommentThread comments={detail.comments} layout={layout} onFocus={editable ? (item) => {
         if (item.target_kind && item.target_ref) setFocusTarget({ kind: item.target_kind, ref: item.target_ref, nonce: Date.now() });
       } : null} />
       <label>留言<textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
@@ -282,7 +295,7 @@ export function AdminMapReviewPanel() {
       <Preview layout={detail.draft.content.layout} />
       <label>審閱說明<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <h3>審閱留言</h3>
-      <CommentThread comments={detail.comments} onFocus={null} />
+      <CommentThread comments={detail.comments} layout={detail.draft.content.layout} onFocus={null} />
       <div className={styles.commentTarget}>
         <label>對象<select value={targetKind} onChange={(event) => setTargetKind(event.target.value as "slot" | "landmark" | "draft")}><option value="draft">整份草稿</option><option value="slot">攤位</option><option value="landmark">區域</option></select></label>
         <label>{targetKind === "landmark" ? "區域 ID" : "攤位代碼"}<input disabled={targetKind === "draft"} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} /></label>
