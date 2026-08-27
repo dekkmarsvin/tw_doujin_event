@@ -42,7 +42,17 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
 
 ### 3. 更新 pin
 
-把 data repo 的完整 40 字元 commit SHA 與四個 raw blob 的 SHA-256 寫入 `data/event-data-pins/<event>.json`：
+在 reference-data 與 event-data 依序完成 review／發布後，以 event-data repo 的完整 40 字元 commit SHA 執行：
+
+```bash
+npm run event:onboard -- ff47 <40-char-event-data-commit>
+```
+
+指令依活動 ID 讀取 `dekkmarsvin/tw_doujin_event-data-<event>`，取得固定 commit 下的四個檔案並沿用既有 hash 工具計算 SHA-256。它也會解析 `reference-data-pin.json`、從該檔固定的 reference commit 下載逐檔內容，並沿用既有 reference schema、hash、stable ID、selection 與 relationship 驗證。
+
+正式 pin 只會在 `data:fetch` → `data:stage` → `event-data:check` 全部成功後替換；下載、schema、hash 或 staging 驗證失敗時，既有 pin 保持不變，新活動也不會留下 pin。指令不接受 branch、tag 或縮短的 commit。
+
+手動流程的對照格式如下；需要除錯時，可逐一下載同一個 commit 的 raw blob、計算 SHA-256，再與生成結果比較：
 
 ```json
 {
@@ -59,7 +69,7 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
 }
 ```
 
-不得 pin branch、tag 或未逐檔核對的內容。
+不得手動 pin branch、tag 或未逐檔核對的內容。
 
 活動採用跨活動 reference-data 時，由 event-data repo 另外保存 `reference-data-pin/2`。先完成 reference review／發布，再更新 event-data 的完整 reference commit、逐檔 hash 與 assignment，最後才更新本 repo 的 event-data pin。格式與 fail-closed 行為見[共享 reference-data pin 契約](../contracts/reference-data-pin.md)。
 

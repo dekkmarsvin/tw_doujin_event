@@ -6,10 +6,19 @@ import { replaceVerifiedTrees, stageReferenceData } from "./reference-data-fetch
 import { parseJsonBytesStrict, readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const eventId = process.argv[2];
-if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) throw new Error("Usage: npm run data:fetch -- <event-id>");
+const [eventId, ...arguments_] = process.argv.slice(2);
+const pinIndex = arguments_.indexOf("--pin");
+const pinArgument = pinIndex >= 0 ? arguments_[pinIndex + 1] : null;
+const expectedArguments = pinArgument ? ["--pin", pinArgument] : [];
+if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)
+  || arguments_.length !== expectedArguments.length
+  || arguments_.some((value, index) => value !== expectedArguments[index])) {
+  throw new Error("Usage: npm run data:fetch -- <event-id> [--pin <event-data-pin.json>]");
+}
 
-const pinPath = path.join(root, "data", "event-data-pins", `${eventId}.json`);
+const pinPath = pinArgument
+  ? path.resolve(root, pinArgument)
+  : path.join(root, "data", "event-data-pins", `${eventId}.json`);
 const pin = assertEventDataPinIdentity(parseEventDataPin(await readJsonFileStrict(pinPath, `Event data pin ${eventId}`)), eventId);
 const destination = path.join(root, ".event-data", eventId);
 await mkdir(path.dirname(destination), { recursive: true });
