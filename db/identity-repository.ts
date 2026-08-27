@@ -312,11 +312,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     statements.push(
       database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
       database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft'`).bind(input.accountId),
       database.prepare(`UPDATE map_drafts SET owner_account_id = '[shredded]' WHERE owner_account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_revisions SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_reviews SET actor_account_id = NULL WHERE actor_account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE map_draft_comments SET author_account_id = NULL WHERE author_account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_files SET uploaded_by = NULL WHERE uploaded_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_exports SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_contributor_grants SET granted_by = '[shredded]' WHERE granted_by = ?1`).bind(input.email),
@@ -834,6 +836,69 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
+  /** Discussion is read without the author account id: participants on a draft
+   * are never identified to one another, only their role is. */
+  async function listMapDraftComments(draftId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT id, revision, author_role, target_kind, target_ref, body, at
+       FROM map_draft_comments WHERE draft_id = ?1 ORDER BY at ASC, rowid ASC`,
+    ).bind(draftId).all<{
+      id: string; revision: number; author_role: string;
+      target_kind: string | null; target_ref: string | null; body: string; at: number;
+    }>();
+    return result.results;
+  }
+
+  /** Writes one comment against the draft's revision as it stands, and returns
+   * null when the draft is gone or already claimed by retention. Discussion is
+   * not a state transition, so it carries no optimistic lock: a comment about
+   * revision 3 stays a comment about revision 3 even after the draft moves on. */
+  async function addMapDraftComment(input: {
+    draftId: string;
+    eventId: string;
+    authorAccountId: string;
+    authorRole: "map_contributor" | "admin";
+    /** Pins the comment to a specific revision. Defaults to the draft's current
+     * one, which is right for a comment written about what is on screen; a
+     * review's change requests pass the revision that was actually reviewed. */
+    revision?: number;
+    targetKind: "slot" | "landmark" | null;
+    targetRef: string | null;
+    body: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const id = crypto.randomUUID();
+    // Discussion is activity. Without the touch, a draft under review could sit
+    // out its inactivity window while it was being talked about and be purged
+    // on the next run. Batched with the insert so the two cannot disagree.
+    //
+    // The contributor branch rechecks ownership and the live grant inside the
+    // write, the way a revision write does: a grant revoked between the
+    // handler's check and this statement must refuse the comment, not race it.
+    // The touch then keys off the inserted row - the statements share one
+    // transaction and run in order - so a refused comment cannot defer
+    // retention on a draft nobody was allowed to write to.
+    const results = await database.batch([
+      database.prepare(
+        `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
+         SELECT ?1, id, COALESCE(?2, current_revision), ?3, ?4, ?5, ?6, ?7, ?8 FROM map_drafts
+         WHERE id = ?9 AND event_id = ?10 AND retention_action IS NULL
+           AND (?4 <> 'map_contributor' OR (owner_account_id = ?3 AND EXISTS (
+             SELECT 1 FROM map_contributor_grants
+             WHERE account_id = ?3 AND revoked_at IS NULL AND suspended_at IS NULL
+           )))`,
+      ).bind(id, input.revision ?? null, input.authorAccountId, input.authorRole, input.targetKind, input.targetRef, input.body, input.now, input.draftId, input.eventId),
+      database.prepare(
+        `UPDATE map_drafts SET last_activity_at = ?1
+         WHERE id = ?2 AND event_id = ?3 AND retention_action IS NULL AND last_activity_at < ?1
+           AND EXISTS (SELECT 1 FROM map_draft_comments WHERE id = ?4)`,
+      ).bind(input.now, input.draftId, input.eventId, id),
+    ]);
+    return (results[0].meta.changes ?? 0) === 1 ? id : null;
+  }
+
   async function getActiveApprovedMapDraft(eventId: string, periodKey: string, venueSpaceId: string) {
     await ensureTables();
     return database.prepare(
@@ -925,6 +990,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     actorAccountId: string | null;
     actorRole: "admin" | "system";
     note?: string | null;
+    /** Per-element change requests recorded with the decision. They are written
+     * in the same batch, guarded by the same transition token, so a transition
+     * can never land without its requests or leave a partial set behind that a
+     * retry could not restore - the retry would conflict on the new status. */
+    targets?: readonly { targetKind: "slot" | "landmark"; targetRef: string; body: string }[];
     now: number;
   }) {
     await ensureTables();
@@ -951,6 +1021,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?2 AND d.current_revision = ?3
              AND d.status = ?4 AND d.transition_token = ?5)`,
       ).bind(input.toStatus, input.draftId, input.expectedRevision, input.toStatus, transitionToken),
+      ...(input.targets ?? []).map((target) => database.prepare(
+        `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
+         SELECT ?1, id, ?2, ?3, 'admin', ?4, ?5, ?6, ?7 FROM map_drafts
+         WHERE id = ?8 AND current_revision = ?2 AND status = ?9 AND transition_token = ?10`,
+      ).bind(
+        crypto.randomUUID(), input.expectedRevision, input.actorAccountId, target.targetKind,
+        target.targetRef, target.body, input.now, input.draftId, input.toStatus, transitionToken,
+      )),
     ]);
     return results[0].meta.changes === 1 && results[1].meta.changes === 1;
   }
@@ -1178,7 +1256,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
-      "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_revisions", "map_drafts", "map_contributor_grants",
+      "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
   }
@@ -1196,6 +1274,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     manageMapContributor, hasActiveMapContributor,
     createMapDraft, getMapDraft, normalizeMapDraftPeriodAliases,
     listMapDraftsForOwner, listMapDraftsForAdmin, listMapDraftFiles, listMapDraftReviews,
+    listMapDraftComments, addMapDraftComment,
     getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,

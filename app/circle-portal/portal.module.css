@@ -356,3 +356,12 @@
   .linkRow > label:nth-of-type(1) { grid-column: 2; }
   .linkRow :is(input, select) { grid-column: auto; }
 }
+
+.commentThread { display:grid; gap:9px; margin:0 0 13px; padding:0; list-style:none; }
+.commentThread li { display:grid; gap:4px; padding:9px 11px; border:1px solid #e2e5e1; border-radius:9px; background:#fafbf9; }
+.commentThread li>span { color:#87918b; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; }
+.commentThread li>b { justify-self:start; }
+.commentThread li>b button { min-height:28px; padding:0 9px; border:1px solid #8fa899; border-radius:7px; background:#eef4f0; color:#26503c; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
+.commentThread li>b button:hover { background:#e2ede6; }
+.commentThread li>p { margin:0; color:#344039; font-size:calc(10px * var(--ui-font-scale,1)); line-height:1.6; overflow-wrap:anywhere; }
+.commentTarget { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:9px; }

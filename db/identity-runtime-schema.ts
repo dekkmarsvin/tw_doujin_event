@@ -204,6 +204,25 @@ export const IDENTITY_TABLES = [
     "note TEXT",
     "at INTEGER NOT NULL",
   ]),
+  /** Review discussion, kept apart from the state-machine trail in
+   * `map_draft_reviews`. That table is read as an audit source by retention and
+   * by account deletion, and folding free-form discussion into it would make
+   * "how long must this row be kept" depend on which kind of row it is.
+   *
+   * A comment with a `target_kind` is a request to change one element rather
+   * than the draft as a whole; `target_ref` is the booth code or landmark id it
+   * points at. Both are null for a comment about the whole draft. */
+  table("map_draft_comments", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "draft_id TEXT NOT NULL",
+    "revision INTEGER NOT NULL",
+    "author_account_id TEXT",
+    "author_role TEXT NOT NULL",
+    "target_kind TEXT",
+    "target_ref TEXT",
+    "body TEXT NOT NULL",
+    "at INTEGER NOT NULL",
+  ]),
   table("map_draft_files", [
     "id TEXT PRIMARY KEY NOT NULL",
     "draft_id TEXT NOT NULL",
@@ -260,6 +279,7 @@ export const IDENTITY_INDEXES = [
   index("map_drafts_one_active_approved_idx", "map_drafts", "event_id, period_key, venue_space_id", { unique: true, where: "status IN ('approved', 'exported')" }),
   index("map_draft_revisions_key_idx", "map_draft_revisions", "draft_id, revision", { unique: true }),
   index("map_draft_reviews_draft_idx", "map_draft_reviews", "draft_id, at"),
+  index("map_draft_comments_draft_idx", "map_draft_comments", "draft_id, at"),
   index("map_draft_files_draft_idx", "map_draft_files", "draft_id, revision"),
   index("map_draft_files_object_idx", "map_draft_files", "object_key", { unique: true, where: "object_key IS NOT NULL" }),
   index("map_draft_exports_key_idx", "map_draft_exports", "draft_id, revision", { unique: true }),

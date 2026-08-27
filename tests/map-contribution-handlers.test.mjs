@@ -21,30 +21,40 @@ after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const ORIGIN = "https://preview.example";
 const NOW = 1_786_500_000_000;
+const DAY = 24 * 60 * 60 * 1000;
+/** Reset per test. Advance it to age a session or a draft past a deadline. */
+let clock = NOW;
 let repository;
 let handlers;
 let sent;
 let objects;
 let scopeConfig;
 
+/** Carries one booth and one landmark so a targeted change request has
+ * something real to point at; a request naming an absent element is refused. */
 function validContent() {
   return {
     schema: "map-contribution-draft/1",
     layout: {
       version: 2, template: "SAMPLE", width: 100, height: 100,
       floor: { x: 0, y: 0, width: 100, height: 100 },
-      rows: [], pillars: [], accessPoints: [], landmarks: [],
+      rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A07", rect: { x: 10, y: 10, width: 20, height: 10 } }] }],
+      pillars: [], accessPoints: [],
+      landmarks: [{ id: "stage-1", kind: "stage", label: "舞台", rect: { x: 50, y: 50, width: 20, height: 10 } }],
     },
   };
 }
 
 beforeEach(async () => {
+  clock = NOW;
   sent = [];
   objects = new Map();
   scopeConfig = {
     eventId: "ff47", periodKey: "1", periodAliases: ["1", "day-1"],
     venueSpaceId: "zhengyan-exhibition-area", mapTemplate: "SAMPLE",
-    allowedBoothCodes: [], requiredBoothCodes: [], targetPath: "map.json",
+    // A07 is the booth validContent() draws, so a targeted change request has a
+    // real element to name without the draft failing official coverage.
+    allowedBoothCodes: ["A07"], requiredBoothCodes: [], targetPath: "map.json",
   };
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
   await repository.ensureTables();
@@ -73,7 +83,7 @@ beforeEach(async () => {
     config: {
       eventId: "ff47", origin: ORIGIN, sessionSecret: "session-secret", hashPepper: "pepper",
       adminEmails: ["admin@example.test"], dataUpdatedAt: "2026-08-25T00:00:00Z",
-      eventEndsAt: "2026-09-01T00:00:00Z", now: () => NOW,
+      eventEndsAt: "2026-09-01T00:00:00Z", now: () => clock,
     },
   });
 });
@@ -389,7 +399,8 @@ test("submission validates official coverage and requires evidence from the curr
   await grant("mapper@example.test", adminCookie);
   const { body: draft } = await newDraft(mapperCookie);
 
-  scopeConfig = { ...scopeConfig, allowedBoothCodes: ["A01"], requiredBoothCodes: ["A01"] };
+  // A07 stays allowed - it is the booth the draft draws - so the missing one is A01.
+  scopeConfig = { ...scopeConfig, allowedBoothCodes: ["A01", "A07"], requiredBoothCodes: ["A01"] };
   let response = await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
     expectedRevision: 1,
   }, mapperCookie), draft.draftId);
@@ -593,6 +604,233 @@ test("revoked permission and an unwritable status stay distinguishable from a ve
   }, mapperCookie), draft.draftId);
   assert.equal(submitRevoked.status, 409);
   assert.equal((await submitRevoked.json()).conflict.cause, "permission");
+});
+
+test("a review thread accumulates, points at single booths, and never names an account", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const post = (cookie, body) => handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", body, cookie), draft.draftId,
+  );
+
+  assert.equal((await post(mapperCookie, { body: "A 排的位置我不確定。" })).status, 201);
+  const targeted = await post(adminCookie, { body: "這一格往右偏了一格。", targetKind: "slot", targetRef: "A07" });
+  assert.equal(targeted.status, 201);
+  assert.equal((await post(mapperCookie, { body: "已修正 A07。", targetKind: "slot", targetRef: "A07" })).status, 201);
+
+  const detail = await (await handlers.getMapDraft(request(`/drafts/${draft.draftId}`, "GET", undefined, mapperCookie), draft.draftId)).json();
+  assert.deepEqual(detail.comments.map(({ author_role, target_kind, target_ref, revision, body }) => ({ author_role, target_kind, target_ref, revision, body })), [
+    { author_role: "map_contributor", target_kind: null, target_ref: null, revision: 1, body: "A 排的位置我不確定。" },
+    { author_role: "admin", target_kind: "slot", target_ref: "A07", revision: 1, body: "這一格往右偏了一格。" },
+    { author_role: "map_contributor", target_kind: "slot", target_ref: "A07", revision: 1, body: "已修正 A07。" },
+  ], "one draft accumulates many comments, in the order they were written");
+  assert.equal(detail.comments.every((item) => !Object.hasOwn(item, "author_account_id")), true,
+    "participants on a draft are named by role only");
+  assert.equal(detail.comments.every((item) => !JSON.stringify(item).includes("data:")), true, "no raw image bytes ride along");
+
+  assert.equal((await post(mapperCookie, { body: "   " })).status, 400);
+  assert.equal((await post(mapperCookie, { body: "沒有指定代碼。", targetKind: "slot" })).status, 400);
+  assert.equal((await post(mapperCookie, { body: "類型不存在。", targetKind: "pillar", targetRef: "p1" })).status, 400);
+  // A reference the draft does not contain would render as a link that does
+  // nothing when pressed, so it is refused rather than stored.
+  assert.equal((await post(adminCookie, { body: "這格不存在。", targetKind: "slot", targetRef: "Z99" })).status, 400);
+  assert.equal((await post(adminCookie, { body: "這個區域不存在。", targetKind: "landmark", targetRef: "stage-9" })).status, 400);
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 3, "none of the refusals wrote a row");
+});
+
+test("only the draft owner or an admin can add to its thread", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+
+  const strangerCookie = await signIn("stranger@example.test");
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "我也想留言。" }, strangerCookie), draft.draftId,
+  )).status, 404, "someone else's draft is not found rather than described");
+
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "沒登入。" }, undefined), draft.draftId,
+  )).status, 401);
+
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "權限沒了。" }, mapperCookie), draft.draftId,
+  )).status, 403, "commenting needs the same live grant that writing does");
+});
+
+test("speaking as an administrator needs a fresh session, like every other admin write", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const comment = (cookie) => handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "請調整 A07。" }, cookie), draft.draftId,
+  );
+  assert.equal((await comment(adminCookie)).status, 201);
+
+  clock = NOW + 25 * 60 * 60 * 1000;
+  assert.equal((await comment(adminCookie)).status, 401,
+    "a still-valid but stale admin session cannot put words in front of a contributor as a reviewer");
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 1);
+
+  // The contributor's own path is not an administrative write, so it is not
+  // held to the reauthentication boundary.
+  assert.equal((await comment(mapperCookie)).status, 201);
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ author_role }) => author_role),
+    ["admin", "map_contributor"]);
+});
+
+test("a comment counts as activity, so a draft under discussion is not treated as abandoned", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  assert.equal((await repository.getMapDraft(draft.draftId)).last_activity_at, NOW);
+
+  // Months on, nobody has saved a revision but the thread is still moving.
+  // The login session is long gone by then, so the contributor signs in again.
+  clock = NOW + 150 * DAY;
+  const returning = await signIn("mapper@example.test");
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "還在討論這一排。" }, returning), draft.draftId,
+  )).status, 201);
+  assert.equal((await repository.getMapDraft(draft.draftId)).last_activity_at, clock,
+    "without this the inactivity window would run out while the draft was being talked about");
+});
+
+test("requesting changes records the elements it is about, and only when it takes effect", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  const review = (body) => handlers.adminReviewMapDraft(
+    request(`/admin/drafts/${draft.draftId}/review`, "POST", body, adminCookie), draft.draftId,
+  );
+
+  assert.equal((await review({
+    expectedRevision: 1, decision: "changes_requested", note: "兩處要改",
+    targets: [{ kind: "slot", body: "缺代碼" }],
+  })).status, 400, "a request that names no element is refused rather than silently dropped");
+  assert.equal((await review({
+    expectedRevision: 1, decision: "changes_requested", note: "兩處要改",
+    targets: [{ targetKind: "slot", targetRef: "A07", body: "  " }],
+  })).status, 400);
+
+  // A refused transition must leave no requests behind.
+  assert.equal((await review({
+    expectedRevision: 99, decision: "changes_requested", note: "版本錯了",
+    targets: [{ targetKind: "slot", targetRef: "A07", body: "不該被寫入" }],
+  })).status, 409);
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+
+  assert.equal((await review({
+    expectedRevision: 1, decision: "changes_requested", note: "兩處要改",
+    targets: [
+      { targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" },
+      { targetKind: "landmark", targetRef: "stage-1", body: "舞台範圍比實際大。" },
+    ],
+  })).status, 200);
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "changes_requested");
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ author_role, target_kind, target_ref }) => ({ author_role, target_kind, target_ref })), [
+    { author_role: "admin", target_kind: "slot", target_ref: "A07" },
+    { author_role: "admin", target_kind: "landmark", target_ref: "stage-1" },
+  ]);
+
+  const reviews = await repository.listMapDraftReviews(draft.draftId);
+  assert.equal(reviews.length, 2, "the state-machine trail stays one row per transition, not one per request");
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ revision }) => revision), [1, 1],
+    "requests name the revision the reviewer looked at, not whatever the draft reached afterwards");
+});
+
+test("the review panel's own target shape is the one the endpoint parses", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  // Built exactly as MapDraftCommentTarget declares it, so a rename on either
+  // side fails here rather than turning every queued request into a 400.
+  const queued = [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }];
+  const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "changes_requested", note: "一處要改", targets: queued,
+  }, adminCookie), draft.draftId);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ target_kind, target_ref }) => ({ target_kind, target_ref })),
+    [{ target_kind: "slot", target_ref: "A07" }]);
+});
+
+test("only a change request can carry per-element requests", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "changes_requested", note: "要改",
+    targets: [{ targetKind: "slot", targetRef: "Z99", body: "這格不存在。" }],
+  }, adminCookie), draft.draftId)).status, 400, "a review cannot point at a booth the draft does not have");
+
+  const targets = [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }];
+  for (const decision of ["reject", "approve"]) {
+    const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+      expectedRevision: 1, decision, note: "說明", confirmOfficialSource: true, targets,
+    }, adminCookie), draft.draftId);
+    assert.equal(response.status, 400, `${decision} ends the draft, so a request pointing into it could never be acted on`);
+  }
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "submitted");
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+});
+
+test("a refused transition writes none of its change requests", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+
+  // Never submitted, so the transition cannot apply. The requests ride the same
+  // batch, so they cannot land on their own and leave a partial set behind.
+  const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "changes_requested", note: "要改",
+    targets: [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }],
+  }, adminCookie), draft.draftId);
+  assert.equal(response.status, 409);
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "draft");
+});
+
+test("a grant revoked mid-request cannot slip a comment past the check", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const accountId = (await repository.getMapDraft(draft.draftId)).owner_account_id;
+
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  // The repository call the handler would make once its own check had passed.
+  const id = await repository.addMapDraftComment({
+    draftId: draft.draftId, eventId: "ff47", authorAccountId: accountId, authorRole: "map_contributor",
+    targetKind: null, targetRef: null, body: "權限已被撤銷。", now: NOW,
+  });
+  assert.equal(id, null, "the write rechecks the live grant, so a revocation cannot be raced");
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+  assert.equal((await repository.getMapDraft(draft.draftId)).last_activity_at, NOW,
+    "a refused comment must not defer retention on a draft nobody was allowed to write to");
 });
 
 test("a revoked grant outranks a stale revision so the panel never offers a reload that cannot help", async () => {

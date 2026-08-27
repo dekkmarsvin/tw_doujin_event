@@ -10,7 +10,7 @@ import {
   buildMapCandidate, parseMapContributionDraftContent, validateMapContributionDraft,
   type MapContributionScope, type MapDraftActorRole, type MapDraftConflict,
 } from "./map-contribution-draft";
-import type { PublishedEventMap } from "./event-map";
+import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -809,14 +809,16 @@ export function createCirclePortalHandlers({
     if (admin && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    const [files, reviews] = await Promise.all([
+    const [files, reviews, comments] = await Promise.all([
       repository.listMapDraftFiles(draftId),
       repository.listMapDraftReviews(draftId),
+      repository.listMapDraftComments(draftId),
     ]);
     return json({
       draft: { ...draft, content: draft.content_json ? JSON.parse(draft.content_json) as unknown : null, content_json: undefined },
       files,
       reviews,
+      comments,
     });
   }
 
@@ -1050,6 +1052,87 @@ export function createCirclePortalHandlers({
     return json({ drafts: await repository.listMapDraftsForAdmin(config.eventId) });
   }
 
+  /** A comment carries a target when it asks for one element to change rather
+   * than the draft as a whole. The reference is the booth code or landmark id
+   * as the draft spells it, which is what lets the contributor's editor jump
+   * straight to it. */
+  type MapDraftCommentTarget = { kind: "slot" | "landmark" | null; ref: string | null };
+
+  function mapDraftCommentTarget(body: Record<string, unknown> | null): { ok: boolean } & MapDraftCommentTarget {
+    const kind = body?.targetKind;
+    if (kind === undefined || kind === null || kind === "") return { ok: true, kind: null, ref: null };
+    if (kind !== "slot" && kind !== "landmark") return { ok: false, kind: null, ref: null };
+    const ref = typeof body?.targetRef === "string" ? body.targetRef.trim().slice(0, 120) : "";
+    if (!ref) return { ok: false, kind: null, ref: null };
+    return { ok: true, kind, ref };
+  }
+
+  /** True when the draft actually contains the element a request names. A
+   * reference that is not there renders as a link the contributor can press
+   * and that then does nothing, so it is refused rather than stored. */
+  function mapDraftHasTarget(contentJson: string | null, kind: "slot" | "landmark", ref: string) {
+    const layout = mapDraftLayout(contentJson);
+    if (!layout) return false;
+    return kind === "slot"
+      ? layout.rows.some((row) => row.slots.some((slot) => slot.code === ref))
+      : layout.landmarks.some((landmark) => landmark.id === ref);
+  }
+
+  function mapDraftLayout(contentJson: string | null): EventMapLayout | null {
+    if (!contentJson) return null;
+    try {
+      const content = JSON.parse(contentJson) as { layout?: unknown };
+      return validateEventMapLayout(content?.layout).ok ? content.layout as EventMapLayout : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function postMapDraftComment(request: Request, draftId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const admin = await isAdmin(current.email);
+    const draft = await repository.getMapDraft(draftId, config.eventId);
+    // A stranger is told the draft is not there rather than that it is theirs
+    // to be refused, which is why the admin check comes before the gate.
+    if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
+    // Writing under the admin role puts words in front of the contributor that
+    // they read as coming from a reviewer, so it is held to the same
+    // reauthentication boundary as every other administrative write. An admin
+    // commenting on a draft they own is a contributor here, grant and all.
+    const asAdmin = admin && draft.owner_account_id !== current.accountId;
+    if (asAdmin) {
+      const gate = await requireFreshAdmin(request);
+      if (!gate.ok) return gate.response;
+    } else if (!await repository.hasActiveMapContributor(current.accountId)) {
+      return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
+    }
+    const body = await readJson(request);
+    const text = typeof body?.body === "string" ? body.body.trim().slice(0, 2_000) : "";
+    if (!text) return json({ error: "留言內容不可留空。" }, 400);
+    const target = mapDraftCommentTarget(body);
+    if (!target.ok) return json({ error: "指定的對象無效。" }, 400);
+    if (target.kind && target.ref && !mapDraftHasTarget(draft.content_json, target.kind, target.ref)) {
+      return json({ error: "草稿中沒有這個元素。" }, 400);
+    }
+    const role = asAdmin ? "admin" : "map_contributor";
+    const id = await repository.addMapDraftComment({
+      draftId, eventId: config.eventId, authorAccountId: current.accountId, authorRole: role,
+      // Pinned rather than left to the insert's own read, so the comment row
+      // and the audit entry below cannot name different revisions when the
+      // owner saves between the two.
+      revision: draft.current_revision,
+      targetKind: target.kind, targetRef: target.ref, body: text, now: config.now(),
+    });
+    if (!id) return json({ error: "找不到草稿。" }, 404);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: current.accountId, actorRole: role,
+      action: "map_draft.commented", subjectType: "map_draft", subjectId: draftId,
+      detail: { revision: draft.current_revision, targetKind: target.kind }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, draftId, commentId: id }, 201);
+  }
+
   async function adminReviewMapDraft(request: Request, draftId: string) {
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
@@ -1067,11 +1150,30 @@ export function createCirclePortalHandlers({
     if ((decision === "changes_requested" || decision === "reject") && !note) {
       return json({ error: "要求修改或拒絕時必須填寫說明。" }, 400);
     }
+    const requested: unknown[] = Array.isArray(body?.targets) ? body.targets : [];
+    // Only a change request can carry them: an approval or a rejection ends the
+    // draft, and a request pointing at one of its booths could never be acted
+    // on because the editor is closed to the contributor from then on.
+    if (requested.length && decision !== "changes_requested") {
+      return json({ error: "只有要求修改可以附帶局部修改請求。" }, 400);
+    }
+    const targets: { targetKind: "slot" | "landmark"; targetRef: string; body: string }[] = [];
+    for (const entry of requested) {
+      const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
+      const target = mapDraftCommentTarget(item);
+      const text = typeof item?.body === "string" ? item.body.trim().slice(0, 2_000) : "";
+      if (!target.ok || !target.kind || !target.ref || !text) return json({ error: "局部修改請求必須指定對象與內容。" }, 400);
+      targets.push({ targetKind: target.kind, targetRef: target.ref, body: text });
+    }
+
     if (decision === "approve" && !confirmOfficialSource) {
       return json({ error: "核准前必須確認目前版本的檔案來自活動官方說明頁面。" }, 400);
     }
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft) return json({ error: "找不到草稿。" }, 404);
+    if (targets.length && !targets.every(({ targetKind, targetRef }) => mapDraftHasTarget(draft.content_json, targetKind, targetRef))) {
+      return json({ error: "草稿中沒有這個元素。" }, 400);
+    }
 
     if (decision === "approve") {
       const evidence = await repository.listMapDraftFiles(draftId, Number(expectedRevision));
@@ -1112,7 +1214,7 @@ export function createCirclePortalHandlers({
       const ok = await repository.transitionMapDraft({
         draftId, expectedRevision: Number(expectedRevision),
         toStatus: decision === "reject" ? "rejected" : "changes_requested",
-        actorAccountId: gate.session.accountId, actorRole: "admin", note, now: config.now(),
+        actorAccountId: gate.session.accountId, actorRole: "admin", note, targets, now: config.now(),
       });
       if (!ok) {
         return mapDraftConflictResponse({
@@ -1123,7 +1225,7 @@ export function createCirclePortalHandlers({
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
       action: `map_draft.${decision}`, subjectType: "map_draft", subjectId: draftId,
-      detail: { revision: expectedRevision, replacementDraftId, confirmOfficialSource }, ipHash: await clientIpHash(request),
+      detail: { revision: expectedRevision, replacementDraftId, confirmOfficialSource, targets: targets.length }, ipHash: await clientIpHash(request),
     });
     return json({ ok: true, draftId, revision: expectedRevision });
   }
@@ -1382,7 +1484,7 @@ export function createCirclePortalHandlers({
     adminManageMapContributor, adminListStaleMapDrafts,
     listMyMapDrafts, getMapDraft, createMapDraft, updateMapDraft, submitMapDraft,
     uploadMapDraftFile, readMapDraftFile,
-    adminListMapDrafts, adminReviewMapDraft, adminExportMapDraft,
+    adminListMapDrafts, adminReviewMapDraft, adminExportMapDraft, postMapDraftComment,
     publicOverrides,
   };
 }

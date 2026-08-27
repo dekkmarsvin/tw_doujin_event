@@ -66,7 +66,7 @@ const MAP_RETENTION_D1_BIND_BATCH_SIZE = 90;
 
 const PURGE_TABLES = [
   "login_tokens", "sessions", "preview_mail_sink", "circle_overrides", "overrides_doc", "audit_log",
-  "map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_files",
+  "map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_comments", "map_draft_files",
 ] as const;
 
 async function existingTables(database: D1Database) {
@@ -147,6 +147,7 @@ async function purgeMapDraftData(
   database: D1Database,
   now: number,
   windows: RetentionWindows,
+  hasComments: boolean,
   objects?: Pick<R2Bucket, "delete">,
 ) {
   const editableCutoff = now - windows.mapDraftInactivity;
@@ -176,6 +177,11 @@ async function purgeMapDraftData(
       ).bind(editableCutoff, decisionCutoff).first<{ id: string }>();
       if (needsStorage) throw new Error("Private map evidence bucket is required before map draft retention can delete metadata.");
     }
+    // A comment posted after a draft was anonymized names an account again, and
+    // nothing else about that draft would ever make it claimable a second time.
+    const identifiableComments = hasComments
+      ? "OR EXISTS (SELECT 1 FROM map_draft_comments c WHERE c.draft_id = map_drafts.id AND c.author_account_id IS NOT NULL)"
+      : "";
     await database.prepare(
       `UPDATE map_drafts SET retention_action = CASE
          WHEN status = 'draft' THEN 'delete'
@@ -188,6 +194,7 @@ async function purgeMapDraftData(
            OR (status = 'changes_requested' AND last_activity_at <= ?1
              AND (owner_account_id != '[shredded]'
                OR EXISTS (SELECT 1 FROM map_draft_revisions r WHERE r.draft_id = map_drafts.id)
+               ${identifiableComments}
                OR EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = map_drafts.id AND f.object_key IS NOT NULL)))
            OR (status IN ('approved', 'rejected', 'exported', 'withdrawn') AND decision_at IS NOT NULL AND decision_at <= ?2
              AND EXISTS (SELECT 1 FROM map_draft_files f WHERE f.draft_id = map_drafts.id AND f.object_key IS NOT NULL))
@@ -238,11 +245,12 @@ async function purgeMapDraftData(
            FROM map_drafts WHERE id = ?3 AND retention_action = 'delete'`,
         ).bind(crypto.randomUUID(), now, draft.id),
         database.prepare("DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
+        ...(hasComments ? [database.prepare("DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id)] : []),
         database.prepare("DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
         database.prepare("DELETE FROM map_drafts WHERE id = ?1 AND retention_action = 'delete'").bind(draft.id),
       ]);
-      revisions += results[2].meta.changes ?? 0;
-      drafts += results[3].meta.changes ?? 0;
+      revisions += results.at(-2)?.meta.changes ?? 0;
+      drafts += results.at(-1)?.meta.changes ?? 0;
       continue;
     }
     if (draft.retention_action === "anonymize") {
@@ -255,10 +263,11 @@ async function purgeMapDraftData(
         database.prepare("UPDATE map_draft_files SET object_key = NULL, uploaded_by = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1) WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?2 AND retention_action = 'anonymize')").bind(now, draft.id),
         database.prepare("DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
         database.prepare("UPDATE map_draft_reviews SET actor_account_id = NULL WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
+        ...(hasComments ? [database.prepare("UPDATE map_draft_comments SET author_account_id = NULL WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id)] : []),
         database.prepare("UPDATE map_drafts SET owner_account_id = '[shredded]', retention_action = NULL WHERE id = ?1 AND retention_action = 'anonymize'").bind(draft.id),
       ]);
       revisions += results[2].meta.changes ?? 0;
-      anonymized += results[4].meta.changes ?? 0;
+      anonymized += results.at(-1)?.meta.changes ?? 0;
       continue;
     }
     await database.batch([
@@ -387,8 +396,13 @@ export async function purgeExpiredRecords(
   } else skipped.push("circle_overrides");
 
   if (!present.has("overrides_doc")) skipped.push("overrides_doc");
+  // `map_draft_comments` is deliberately not part of this gate. There is no
+  // migration step (ADR-0009): tables appear on the first Pages request, while
+  // this Worker neither creates them nor deploys with Pages. Requiring the
+  // newest table here would suspend every map-draft retention deadline on a
+  // control plane that had simply been idle since the deploy.
   if (present.has("audit_log") && present.has("map_drafts") && present.has("map_draft_revisions") && present.has("map_draft_reviews") && present.has("map_draft_files")) {
-    const result = await purgeMapDraftData(database, now, windows, mapObjects);
+    const result = await purgeMapDraftData(database, now, windows, present.has("map_draft_comments"), mapObjects);
     deleted.map_drafts = result.drafts;
     deleted.map_draft_revisions = result.revisions;
     deleted.map_raw_objects = result.rawObjects;

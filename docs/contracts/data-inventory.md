@@ -134,6 +134,16 @@
 
 **目的**：回答哪一版何時被提交、要求修改、核准、拒絕或匯出。**保存期**：不設期限；帳號刪除或 `changes_requested` 到期時將 actor 去識別化。
 
+### `map_draft_comments` — 地圖審閱留言
+
+`draft_id`、留言當下的 revision、author role／account、留言內容，以及可選的 `target_kind` / `target_ref`。帶 target 的留言是「只改這一個元素」的請求，`target_ref` 用草稿自己的寫法定位（攤位用代碼、非一般攤位區用 id）。只存文字，不含原始圖位元組。
+
+與 `map_draft_reviews` 分表：後者被保存期限與帳號刪除當成稽核來源，維持一次狀態轉換一列；自由留言混入會讓「這列要保存多久」取決於它是哪一種列。
+
+讀取面不回傳 `author_account_id`——草稿上的參與者彼此之間只以角色識別。留言會更新 `map_drafts.last_activity_at`，因此討論中的草稿不會被當成已棄置而清除。
+
+**目的**：讓審閱端累積留言，並對特定攤位或區域提出局部修改請求。**保存期**：隨草稿。草稿被刪除時一併刪除；`changes_requested` 到期匿名化時比照審閱 note，將 author 去識別化並保留內容；帳號刪除時全站留言的 author 去識別化，未送審草稿的留言隨草稿刪除。
+
 ### `map_draft_files` 與私人 R2 原始檔
 
 D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期、頁碼、SHA-256、MIME、容量、尺寸／頁數、上傳者／時間、審閱結果與原始檔刪除時間。JPEG、PNG、WebP 與 PDF bytes 位於獨立的 `MAP_CONTRIBUTIONS` R2 bucket；該 bucket 沒有公開網域，只能經 owner／管理者權限檢查讀取。

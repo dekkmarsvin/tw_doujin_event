@@ -244,13 +244,31 @@ export type MapDraftReview = {
   at: number;
 };
 
+/** One message on a draft's review thread. `target_kind` marks it as a request
+ * to change one element rather than the draft as a whole, and `target_ref` is
+ * the booth code or landmark id it points at. Authors are named by role only:
+ * participants on a draft are never identified to one another. */
+export type MapDraftComment = {
+  id: string;
+  revision: number;
+  author_role: string;
+  target_kind: "slot" | "landmark" | null;
+  target_ref: string | null;
+  body: string;
+  at: number;
+};
+
+/** Field names are the wire contract the review endpoint parses, so a panel
+ * that builds one of these cannot drift from what the server reads. */
+export type MapDraftCommentTarget = { targetKind: "slot" | "landmark"; targetRef: string; body: string };
+
 export function listMyMapDrafts() {
   return call<{ drafts: MapDraftSummary[] }>("/api/map-contributions/drafts");
 }
 
 export function readMapDraft(draftId: string, admin = false) {
   const base = admin ? "/api/admin/map-contributions/drafts" : "/api/map-contributions/drafts";
-  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[] }>(`${base}/${encodeURIComponent(draftId)}`);
+  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[] }>(`${base}/${encodeURIComponent(draftId)}`);
 }
 
 export function createMapContributionDraft(periodKey: string, venueSpaceId: string, layout: EventMapLayout) {
@@ -289,6 +307,15 @@ export function uploadMapContributionEvidence(input: {
   );
 }
 
+/** Discussion is not a state transition, so it carries no expected revision:
+ * the server stamps the comment with the draft's revision as it stands. */
+export function postMapDraftComment(input: { draftId: string; body: string; targetKind?: "slot" | "landmark"; targetRef?: string }) {
+  return call<{ ok: true; draftId: string; commentId: string }>(
+    `/api/map-contributions/drafts/${encodeURIComponent(input.draftId)}/comments`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
 export function listAdminMapDrafts() {
   return call<{ drafts: MapDraftSummary[] }>("/api/admin/map-contributions/drafts");
 }
@@ -300,6 +327,7 @@ export function reviewMapContributionDraft(input: {
   note?: string;
   replacementDraftId?: string;
   confirmOfficialSource?: boolean;
+  targets?: MapDraftCommentTarget[];
 }) {
   return call<{ ok: true }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(input.draftId)}/review`, {
     method: "POST", body: JSON.stringify(input),
