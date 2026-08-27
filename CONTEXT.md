@@ -57,10 +57,10 @@
 版本控制中的靜態 JSON 產物，是經審閱主辦基礎資料的唯一權威。`circles.json`（場刊）與 `map.json`（地圖）只由各活動主辦官方說明頁面及其可追溯證據生成；社團本人自填內容另由已驗證的 overlay 疊加。兩者合起來才是公開資料，不再有工作簿、社群試算表或其他第三方資料來源。避免只說「靜態檔」。
 
 **補充資料 / overlay**（override）
-社團自己在 `/circle` 填寫、疊加在快照之上的內容。可即時撤下，一律標示為「社團自述／尚未驗證」。避免說「社團資料」——那會和 `CircleRecord` 混淆。
+社團自己在 `/circle` 填寫、疊加在快照之上的內容。可即時撤下，畫面上一律標示為「由社團填寫」。**「社團自述」是內部詞彙，不是介面文字**；避免說「社團資料」——那會和 `CircleRecord` 混淆。
 
 **來源**（`SourceLink`）
-一筆內容的出處：提供者、內容類型、原始連結、擷取時間與狀態。現行生產者是 `official`（主辦）與 `circle`（社團本人）；`catalog`、`social`、`media` 只保留為歷史／連結分類，不抓取第三方內容。**只有主辦來源可標示「主辦來源」；其他一律不得使用「官方」措辭。**
+一筆內容的出處：提供者、內容類型、原始連結、擷取時間與狀態。現行生產者是 `official`（主辦）與 `circle`（社團本人）；`catalog`、`social`、`media` 只保留為歷史／連結分類，不抓取第三方內容。**只有主辦提供的資料可標示為主辦單位；其他一律不得使用「官方」措辭。**`status` 是資料欄位，不轉成畫面上的信任措辭（[ADR-0036](docs/adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
 
 **facet**
 資料生成階段已正規化的搜尋欄位（`circleCategory`、`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`）。`circleCategory` 只能選自活動定義所固定的主辦分類目錄；其他 facet 仍是社團自由填寫。UI 只消費，不再切割字串。

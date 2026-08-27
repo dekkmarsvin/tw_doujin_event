@@ -105,7 +105,7 @@ test("client draft projection is byte-for-byte the published read model projecti
   assert.deepEqual(clientRecords, publicCatalog.recordsByCircleId.get(circleId));
   assert.deepEqual(clientRecords[0].sources.map(({ provider, contentType, label, status }) => ({ provider, contentType, label, status })), [
     { provider: "活動主辦單位", contentType: "official", label: clientRecords[0].sources[0].label, status: "linked" },
-    { provider: "社團本人", contentType: "circle", label: "社團自行提供的補充資料", status: "unverified" },
+    { provider: "由社團填寫", contentType: "circle", label: "", status: "unverified" },
   ]);
 });
 

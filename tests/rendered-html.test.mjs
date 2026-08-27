@@ -301,10 +301,12 @@ test("separates the public static app from the retained editor implementation", 
   // placement separate while giving reader and portal one projection seam.
   assert.match(catalogStore, /const official = circleFromBase\(base, event, payload\.generatedAt\)/);
   assert.match(catalogStore, /projectCircleDraft\(official, override\.fields, override\.updatedAt\)/);
-  assert.match(catalogStore, /provider: "社團本人"/);
+  // ADR-0036: the source row names who typed it. `status` stays a data field
+  // and never reaches the screen as a trust label.
+  assert.match(catalogStore, /provider: "由社團填寫"/);
   assert.match(catalogStore, /status: "unverified"/);
-  assert.match(workspacePanels, /SOURCE_ORIGIN_LABEL/);
-  assert.match(workspacePanels, /circle: "社團自述"/);
+  assert.match(workspacePanels, /SOURCE_STATUS_NOTE/);
+  assert.doesNotMatch(workspacePanels, /社團自述|尚未驗證|可核對|主辦來源/);
   // Structural, not substring: a D1 binding is now legitimate, but advanced
   // mode is not. A `main` entry would route every asset request — including the
   // 1.8 MB catalog — through a Worker, which is exactly what these guards exist

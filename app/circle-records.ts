@@ -128,12 +128,12 @@ function buildOfficialSource(event: EventDefinition, fetchedAt: string, day?: Bo
   };
 }
 
-/** Circle-authored content is labelled as self-reported, never as organizer-confirmed. */
+/** The label says who typed it and nothing else; DESIGN.md forbids trust wording here. */
 function circleSelfSource(updatedAt: string): SourceLink {
   return {
-    provider: "社團本人",
+    provider: "由社團填寫",
     contentType: "circle",
-    label: "社團自行提供的補充資料",
+    label: "",
     url: "",
     fetchedAt: updatedAt,
     status: "unverified",

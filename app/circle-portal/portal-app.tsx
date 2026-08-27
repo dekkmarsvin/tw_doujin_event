@@ -134,7 +134,7 @@ export default function CirclePortalApp() {
         </>}
 
     <footer className={styles.footer}>
-      <p>你在這裡填寫的內容會標示為「社團自述」，與主辦提供的攤位資料分開呈現。攤位與日期由主辦公布，無法在此修改。</p>
+      <p>攤位與日期由主辦公布，無法在此修改。</p>
     </footer>
   </div>;
 }
@@ -144,7 +144,7 @@ function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDel
   const [status, setStatus] = useState<Status>(IDLE);
   return <section className={styles.card}>
     <h2>刪除帳號</h2>
-    <p>刪除會撤銷登入狀態與認領、移除目前由此帳號擁有的社團自述，並塗銷操作紀錄中的個人識別資料。主辦公布的社團名與攤位不受影響。</p>
+    <p>刪除會撤銷登入狀態與認領、移除目前由此帳號填寫的內容，並塗銷操作紀錄中的個人識別資料。主辦公布的社團名與攤位不受影響。</p>
     {session.isAdmin
       ? <p className={styles.notice}>管理者需先由另一位管理者移出名單，才能刪除帳號。</p>
       : <>

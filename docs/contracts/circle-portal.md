@@ -113,7 +113,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 標示
 
-社團自填內容一律附 `provider: "社團本人"`、`contentType: "circle"`、`status: "unverified"` 的來源條目，顯示為「**社團自述／尚未驗證**」，且不提供偽造的原始來源連結。
+社團自填內容一律附 `provider: "由社團填寫"`、`contentType: "circle"`、`status: "unverified"` 的來源條目，且不提供偽造的原始來源連結。
+
+來源列**只顯示 `由社團填寫` 與最後更新日期**：`status` 是資料欄位，不轉成「尚未驗證」之類的畫面措辭（[DESIGN.md](../../DESIGN.md#copy)、[ADR-0036](../adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
 
 **不得以任何版面權重、措辭或官方標誌暗示已獲主辦確認。**
 

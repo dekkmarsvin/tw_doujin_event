@@ -45,7 +45,7 @@ type CircleCatalogPayload = {
 - `circles[]` 只含主辦可確認的 ID 與顯示名稱。
 - `placements[]` 只含活動配置；座標由 event map 的 `boothCode` 解析，不重複存進 catalog。
 - base 不含筆名、作品、分類、販售資訊、外部連結或代表圖。缺少內容時 UI 直接省略欄位。
-- 分類的**選項集合**來自主辦分類目錄；分類的**逐社團值**不在 base，只有社團本人選擇後才出現在 overlay，並維持「社團自述／尚未驗證」標示。
+- 分類的**選項集合**來自主辦分類目錄；分類的**逐社團值**不在 base，只有社團本人選擇後才出現在 overlay，並維持 `由社團填寫` 標示。
 - `booths`、`templates`、`officialSupplementKeys` 與工作簿 `sourceRow` 都是退役欄位，任何一項出現在 staged payload 都使 build 失敗。
 
 ## 身分規則
@@ -61,8 +61,9 @@ type CircleCatalogPayload = {
 
 社團自填資料疊加在 base 之後，不得修改 `id`、`name` 或 placements。有效 overlay 會投影成：
 
-- `provider: "社團本人"`
+- `provider: "由社團填寫"`
 - `contentType: "circle"`
+- `label: ""`
 - `status: "unverified"`
 
 沒有 overlay 時，所有自填欄位皆為空；「繼承」代表回到這個空的官方 base。代表圖只可能來自社團本人，因此 `media` 為空是常態，介面不得保留空框或佔位圖。
@@ -81,7 +82,7 @@ type CircleCatalogPayload = {
 - 名稱與攤位在所有介面一致。
 - 缺少作品、筆名、販售資訊或圖片時省略對應區塊，不補寫推測內容。
 - 使用者選取、收藏或規劃的是 canonical circle ID；placement 只決定這次活動的日期與攤位。
-- 活動主辦資料標示為「活動主辦單位」；社團補充資料標示為「社團自述／尚未驗證」。
+- 活動主辦資料標示為「活動主辦單位」；社團補充資料標示為 `由社團填寫`。來源列不顯示驗證狀態或信任措辭（[ADR-0036](../adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
 - 主要創作類別的篩選選項一律由 active event 的 `circleCategories` 投影，不保留工作簿分類或 UI 常數。
 
 ## 驗收條件
