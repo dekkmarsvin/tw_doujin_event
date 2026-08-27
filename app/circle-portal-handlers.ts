@@ -8,7 +8,7 @@ import {
 } from "./map-contribution-files";
 import {
   buildMapCandidate, parseMapContributionDraftContent, validateMapContributionDraft,
-  type MapContributionScope,
+  type MapContributionScope, type MapDraftActorRole, type MapDraftConflict,
 } from "./map-contribution-draft";
 import type { PublishedEventMap } from "./event-map";
 
@@ -102,6 +102,16 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
     status,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers },
   });
+}
+
+function isMapDraftActorRole(value: string): value is MapDraftActorRole {
+  return value === "map_contributor" || value === "admin" || value === "system";
+}
+
+function mapDraftConflictMessage(conflict: MapDraftConflict) {
+  if (conflict.cause === "permission") return "沒有有效的地圖貢獻者權限。";
+  if (conflict.cause === "status") return "草稿狀態已變更。";
+  return `草稿已更新至版本 ${conflict.revision}。`;
 }
 
 function readCookie(request: Request, name: string) {
@@ -844,6 +854,56 @@ export function createCirclePortalHandlers({
     return json({ ok: true, draftId, revision: 1 }, 201);
   }
 
+  /** A refused optimistic-lock write has three causes that used to share one
+   * message. Re-reading the row after the refusal separates them, and reports
+   * the revision that now exists, when it changed and the role that changed
+   * it. Nothing here relaxes the lock: the write stays refused.
+   *
+   * The role is read off the draft's own rows rather than a timestamp compare,
+   * which two changes in the same millisecond would tie. Every status change
+   * writes a review row carrying the acting role; a plain revision write leaves
+   * none, and the owning contributor is the only account SQL lets write one. So
+   * a review row matching the current revision and status names the last actor,
+   * and its absence means the contributor moved the draft last. */
+  async function mapDraftConflict(input: {
+    draftId: string;
+    expectedRevision: number;
+    /** Set only when the caller's authority is the map contributor grant. */
+    contributorAccountId: string | null;
+  }): Promise<MapDraftConflict> {
+    const draft = await repository.getMapDraft(input.draftId, config.eventId);
+    const reviews = draft ? await repository.listMapDraftReviews(input.draftId) : [];
+    const last = draft
+      ? reviews.findLast((review) => review.revision === draft.current_revision && review.to_status === draft.status)
+      : undefined;
+    const updatedByRole: MapDraftActorRole = last && isMapDraftActorRole(last.actor_role)
+      ? last.actor_role
+      : "map_contributor";
+    const revoked = input.contributorAccountId !== null
+      && !await repository.hasActiveMapContributor(input.contributorAccountId);
+    // A revoked grant outranks a stale revision: reloading recovers a stale tab,
+    // but nothing the contributor does restores write access, so saying "version"
+    // first would send them round the same failed save again.
+    const cause = revoked ? "permission"
+      : !draft || draft.current_revision !== input.expectedRevision ? "version"
+        : "status";
+    return {
+      cause,
+      revision: draft?.current_revision ?? input.expectedRevision,
+      updatedAt: draft?.updated_at ?? config.now(),
+      updatedByRole,
+    };
+  }
+
+  async function mapDraftConflictResponse(input: {
+    draftId: string;
+    expectedRevision: number;
+    contributorAccountId: string | null;
+  }) {
+    const conflict = await mapDraftConflict(input);
+    return json({ error: mapDraftConflictMessage(conflict), conflict }, 409);
+  }
+
   async function updateMapDraft(request: Request, draftId: string) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
@@ -859,7 +919,11 @@ export function createCirclePortalHandlers({
       draftId, eventId: config.eventId, ownerAccountId: current.accountId, expectedRevision: expectedRevision as number,
       contentJson, now: config.now(),
     });
-    if (revision === null) return json({ error: "草稿版本已變更、狀態不可編輯，或權限已撤銷。" }, 409);
+    if (revision === null) {
+      return mapDraftConflictResponse({
+        draftId, expectedRevision: expectedRevision as number, contributorAccountId: current.accountId,
+      });
+    }
     return json({ ok: true, draftId, revision });
   }
 
@@ -871,9 +935,10 @@ export function createCirclePortalHandlers({
     if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1) return json({ error: "expectedRevision 無效。" }, 400);
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || draft.owner_account_id !== current.accountId) return json({ error: "找不到草稿。" }, 404);
-    if (draft.current_revision !== expectedRevision) return json({ error: "草稿版本已變更、狀態不可提交，或權限已撤銷。" }, 409);
-    if (!await repository.hasActiveMapContributor(current.accountId)) {
-      return json({ error: "草稿版本已變更、狀態不可提交，或權限已撤銷。" }, 409);
+    if (draft.current_revision !== expectedRevision || !await repository.hasActiveMapContributor(current.accountId)) {
+      return mapDraftConflictResponse({
+        draftId, expectedRevision: expectedRevision as number, contributorAccountId: current.accountId,
+      });
     }
     const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
     if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
@@ -896,7 +961,11 @@ export function createCirclePortalHandlers({
       draftId, eventId: config.eventId, ownerAccountId: current.accountId,
       expectedRevision: expectedRevision as number, now: config.now(),
     });
-    if (!submitted) return json({ error: "草稿版本已變更、狀態不可提交，或權限已撤銷。" }, 409);
+    if (!submitted) {
+      return mapDraftConflictResponse({
+        draftId, expectedRevision: expectedRevision as number, contributorAccountId: current.accountId,
+      });
+    }
     await repository.writeAudit({
       at: config.now(), actorAccountId: current.accountId, actorRole: "map_contributor",
       action: "map_draft.submitted", subjectType: "map_draft", subjectId: draftId,
@@ -924,7 +993,9 @@ export function createCirclePortalHandlers({
     }
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || draft.owner_account_id !== current.accountId) return json({ error: "找不到草稿。" }, 404);
-    if (draft.current_revision !== revision) return json({ error: "草稿版本已變更。" }, 409);
+    if (draft.current_revision !== revision) {
+      return mapDraftConflictResponse({ draftId, expectedRevision: revision, contributorAccountId: current.accountId });
+    }
     let prepared: Awaited<ReturnType<typeof prepareMapContributionFile>>;
     try { prepared = await prepareMapContributionFile({ file, sourceUrl, documentDate, pageNumber }); }
     catch (error) { return json({ error: error instanceof Error ? error.message : "檔案格式無效。" }, 400); }
@@ -946,7 +1017,7 @@ export function createCirclePortalHandlers({
     }
     if (!recorded) {
       await mapContributionStore.delete(objectKey);
-      return json({ error: "草稿版本已變更、狀態不可上傳，或權限已撤銷。" }, 409);
+      return mapDraftConflictResponse({ draftId, expectedRevision: revision, contributorAccountId: current.accountId });
     }
     return json({ ok: true, fileId, revision, sha256: prepared.sha256, mime: prepared.contentType, sizeBytes: prepared.sizeBytes }, 201);
   }
@@ -1025,11 +1096,15 @@ export function createCirclePortalHandlers({
         actorAccountId: gate.session.accountId, note: note || null, now: config.now(),
       });
       if (!result.ok) {
+        if (result.reason === "conflict") {
+          return mapDraftConflictResponse({
+            draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
+          });
+        }
         return json({
           error: result.reason === "replacement_required" ? "此範圍已有核准稿，必須明確指定要取代的 draftId。"
             : result.reason === "replacement_mismatch" ? "指定的取代稿不是此範圍目前的核准稿。"
-              : result.reason === "missing_evidence" ? "目前版本沒有可供審查的來源檔案。"
-              : "草稿版本或狀態已變更。",
+              : "目前版本沒有可供審查的來源檔案。",
           ...(result.reason === "replacement_required" ? { activeDraftId: result.activeDraftId } : {}),
         }, result.reason === "missing_evidence" ? 422 : 409);
       }
@@ -1039,7 +1114,11 @@ export function createCirclePortalHandlers({
         toStatus: decision === "reject" ? "rejected" : "changes_requested",
         actorAccountId: gate.session.accountId, actorRole: "admin", note, now: config.now(),
       });
-      if (!ok) return json({ error: "草稿版本或狀態已變更。" }, 409);
+      if (!ok) {
+        return mapDraftConflictResponse({
+          draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
+        });
+      }
     }
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
@@ -1057,7 +1136,11 @@ export function createCirclePortalHandlers({
     if (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 1) return json({ error: "expectedRevision 無效。" }, 400);
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft) return json({ error: "找不到草稿。" }, 404);
-    if (draft.current_revision !== expectedRevision) return json({ error: "草稿版本已變更。" }, 409);
+    if (draft.current_revision !== expectedRevision) {
+      return mapDraftConflictResponse({
+        draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
+      });
+    }
 
     const existing = await repository.getMapDraftExport(draftId, Number(expectedRevision));
     const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
@@ -1103,7 +1186,11 @@ export function createCirclePortalHandlers({
       candidateJson, diffJson: JSON.stringify(candidate.diff), candidateSha256,
       actorAccountId: gate.session.accountId, now: config.now(),
     });
-    if (!stored) return json({ error: "草稿版本或狀態已變更。" }, 409);
+    if (!stored) {
+      return mapDraftConflictResponse({
+        draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
+      });
+    }
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
       action: "map_draft.exported", subjectType: "map_draft", subjectId: draftId,
