@@ -22,6 +22,27 @@ export const EVENT_DATA_FILES = Object.freeze([
   "reference-data-pin.json",
 ]);
 
+export function onboardingWorkspaceReplacements(root, workspace, eventId) {
+  return [
+    {
+      temporary: path.join(workspace, ".event-data", eventId),
+      destination: path.join(root, ".event-data", eventId),
+    },
+    {
+      temporary: path.join(workspace, ".reference-data", eventId),
+      destination: path.join(root, ".reference-data", eventId),
+    },
+    {
+      temporary: path.join(workspace, "public", "data", "events"),
+      destination: path.join(root, "public", "data", "events"),
+    },
+    {
+      temporary: path.join(workspace, ".event-data-stage.json"),
+      destination: path.join(root, ".event-data-stage.json"),
+    },
+  ];
+}
+
 function repositoryFor(eventId) {
   return `dekkmarsvin/tw_doujin_event-data-${eventId}`;
 }
@@ -102,11 +123,18 @@ export async function onboardEvent({
   await mkdir(pinDirectory, { recursive: true });
   const temporaryDirectory = await mkdtemp(path.join(pinDirectory, `.tmp-onboard-${eventId}-`));
   const temporaryPin = path.join(temporaryDirectory, `${eventId}.json`);
+  const validationWorkspace = path.join(temporaryDirectory, "workspace");
   const destination = path.join(pinDirectory, `${eventId}.json`);
   try {
     await writeFile(temporaryPin, prepared.serialized);
-    await validate(temporaryPin);
-    await replaceVerifiedTrees([{ temporary: temporaryPin, destination }], fileSystemOverrides);
+    await mkdir(validationWorkspace);
+    const validation = await validate(temporaryPin, validationWorkspace);
+    const replacements = validation?.replacements ?? [];
+    for (const replacement of replacements) await mkdir(path.dirname(replacement.destination), { recursive: true });
+    await replaceVerifiedTrees([
+      ...replacements,
+      { temporary: temporaryPin, destination },
+    ], fileSystemOverrides);
     return { ...prepared, destination };
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });

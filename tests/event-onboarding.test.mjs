@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   onboardEvent,
+  onboardingWorkspaceReplacements,
   prepareEventOnboarding,
   serializeEventDataPin,
 } from "../scripts/event-onboarding.mjs";
@@ -98,6 +99,28 @@ function fetchFrom(responses) {
   };
 }
 
+async function writeWorkspaceState(root, value) {
+  const files = [
+    path.join(root, ".event-data", eventId, "sentinel.txt"),
+    path.join(root, ".reference-data", eventId, "sentinel.txt"),
+    path.join(root, "public", "data", "events", "sentinel.txt"),
+    path.join(root, ".event-data-stage.json"),
+  ];
+  for (const filePath of files) {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, value);
+  }
+}
+
+async function readWorkspaceState(root) {
+  return Promise.all([
+    readFile(path.join(root, ".event-data", eventId, "sentinel.txt"), "utf8"),
+    readFile(path.join(root, ".reference-data", eventId, "sentinel.txt"), "utf8"),
+    readFile(path.join(root, "public", "data", "events", "sentinel.txt"), "utf8"),
+    readFile(path.join(root, ".event-data-stage.json"), "utf8"),
+  ]);
+}
+
 test("onboarding hashes event files, verifies reference data and commits the pin only after validation", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-success-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
@@ -108,10 +131,12 @@ test("onboarding hashes event files, verifies reference data and commits the pin
     commit: eventCommit,
     root: temporary,
     fetchImpl: fetchFrom(data.responses),
-    validate: async (pinPath) => {
+    validate: async (pinPath, workspace) => {
       const parsed = parseEventDataPin(JSON.parse(await readFile(pinPath, "utf8")));
       assert.equal(parsed.commit, eventCommit);
+      await writeWorkspaceState(workspace, "candidate");
       validated = true;
+      return { replacements: onboardingWorkspaceReplacements(temporary, workspace, eventId) };
     },
   });
   assert.equal(validated, true);
@@ -121,31 +146,39 @@ test("onboarding hashes event files, verifies reference data and commits the pin
     written.files.map(({ path: filePath, sha256: hash }) => [filePath, hash]),
     [...data.eventFiles].map(([filePath, bytes]) => [filePath, sha256(bytes)]),
   );
+  assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("candidate"));
 });
 
-test("a validation failure preserves the previous pin and removes temporary output", async (t) => {
+test("a validation failure preserves the previous pin and every fetched or staged tree", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-validation-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const destination = path.join(temporary, "data", "event-data-pins", `${eventId}.json`);
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, "previous pin\n");
+  await writeWorkspaceState(temporary, "previous");
   await assert.rejects(onboardEvent({
     eventId,
     commit: eventCommit,
     root: temporary,
     fetchImpl: fetchFrom(fixture().responses),
-    validate: async () => { throw new Error("simulated staged validation failure"); },
+    validate: async (_pinPath, workspace) => {
+      await writeWorkspaceState(workspace, "rejected candidate");
+      assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("previous"));
+      throw new Error("simulated staged validation failure");
+    },
   }), /simulated staged validation failure/);
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
+  assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 
-test("a final rename failure restores the previous pin", async (t) => {
+test("a final rename failure restores the previous pin and every promoted tree", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-rename-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const destination = path.join(temporary, "data", "event-data-pins", `${eventId}.json`);
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, "previous pin\n");
+  await writeWorkspaceState(temporary, "previous");
   const renameWithFailure = async (sourcePath, destinationPath) => {
     if (sourcePath.includes(`.tmp-onboard-${eventId}-`) && destinationPath === destination) {
       throw new Error("simulated pin rename failure");
@@ -157,9 +190,14 @@ test("a final rename failure restores the previous pin", async (t) => {
     commit: eventCommit,
     root: temporary,
     fetchImpl: fetchFrom(fixture().responses),
+    validate: async (_pinPath, workspace) => {
+      await writeWorkspaceState(workspace, "candidate");
+      return { replacements: onboardingWorkspaceReplacements(temporary, workspace, eventId) };
+    },
     fileSystemOverrides: { rename: renameWithFailure },
   }), /simulated pin rename failure/);
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
+  assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 

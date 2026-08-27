@@ -50,7 +50,7 @@ npm run event:onboard -- ff47 <40-char-event-data-commit>
 
 指令依活動 ID 讀取 `dekkmarsvin/tw_doujin_event-data-<event>`，取得固定 commit 下的四個檔案並沿用既有 hash 工具計算 SHA-256。它也會解析 `reference-data-pin.json`、從該檔固定的 reference commit 下載逐檔內容，並沿用既有 reference schema、hash、stable ID、selection 與 relationship 驗證。
 
-正式 pin 只會在 `data:fetch` → `data:stage` → `event-data:check` 全部成功後替換；下載、schema、hash 或 staging 驗證失敗時，既有 pin 保持不變，新活動也不會留下 pin。指令不接受 branch、tag 或縮短的 commit。
+`data:fetch` → `data:stage` → `event-data:check` 全部在隔離的臨時 workspace 執行；成功後才把 event-data、reference-data、public staging 與正式 pin 配對換入。下載、schema、hash、staging 或最終 rename 失敗時，整組既有狀態保持不變，新活動也不會留下半成品。指令不接受 branch、tag 或縮短的 commit。
 
 手動流程的對照格式如下；需要除錯時，可逐一下載同一個 commit 的 raw blob、計算 SHA-256，再與生成結果比較：
 

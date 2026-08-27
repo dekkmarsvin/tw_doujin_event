@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { onboardEvent } from "./event-onboarding.mjs";
+import { onboardEvent, onboardingWorkspaceReplacements } from "./event-onboarding.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const [eventId, commit, ...extra] = process.argv.slice(2);
@@ -27,10 +27,11 @@ const result = await onboardEvent({
   eventId,
   commit,
   root,
-  validate: async (temporaryPin) => {
-    await runScript("fetch-event-data.mjs", [eventId, "--pin", temporaryPin]);
-    await runScript("stage-event-data.mjs", [eventId]);
-    await runScript("check-staged-event-data.mjs", []);
+  validate: async (temporaryPin, workspace) => {
+    await runScript("fetch-event-data.mjs", [eventId, "--pin", temporaryPin, "--workspace", workspace]);
+    await runScript("stage-event-data.mjs", [eventId, "--workspace", workspace]);
+    await runScript("check-staged-event-data.mjs", ["--workspace", workspace]);
+    return { replacements: onboardingWorkspaceReplacements(root, workspace, eventId) };
   },
 });
 console.log(`Onboarded ${eventId}: ${path.relative(root, result.destination)}`);
