@@ -809,14 +809,16 @@ export function createCirclePortalHandlers({
     if (admin && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    const [files, reviews] = await Promise.all([
+    const [files, reviews, comments] = await Promise.all([
       repository.listMapDraftFiles(draftId),
       repository.listMapDraftReviews(draftId),
+      repository.listMapDraftComments(draftId),
     ]);
     return json({
       draft: { ...draft, content: draft.content_json ? JSON.parse(draft.content_json) as unknown : null, content_json: undefined },
       files,
       reviews,
+      comments,
     });
   }
 
@@ -1050,6 +1052,47 @@ export function createCirclePortalHandlers({
     return json({ drafts: await repository.listMapDraftsForAdmin(config.eventId) });
   }
 
+  /** A comment carries a target when it asks for one element to change rather
+   * than the draft as a whole. The reference is the booth code or landmark id
+   * as the draft spells it, which is what lets the contributor's editor jump
+   * straight to it. */
+  type MapDraftCommentTarget = { kind: "slot" | "landmark" | null; ref: string | null };
+
+  function mapDraftCommentTarget(body: Record<string, unknown> | null): { ok: boolean } & MapDraftCommentTarget {
+    const kind = body?.targetKind;
+    if (kind === undefined || kind === null || kind === "") return { ok: true, kind: null, ref: null };
+    if (kind !== "slot" && kind !== "landmark") return { ok: false, kind: null, ref: null };
+    const ref = typeof body?.targetRef === "string" ? body.targetRef.trim().slice(0, 120) : "";
+    if (!ref) return { ok: false, kind: null, ref: null };
+    return { ok: true, kind, ref };
+  }
+
+  async function postMapDraftComment(request: Request, draftId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const admin = await isAdmin(current.email);
+    const draft = await repository.getMapDraft(draftId, config.eventId);
+    if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
+    if (!admin && !await repository.hasActiveMapContributor(current.accountId)) return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
+    const body = await readJson(request);
+    const text = typeof body?.body === "string" ? body.body.trim().slice(0, 2_000) : "";
+    if (!text) return json({ error: "留言內容不可留空。" }, 400);
+    const target = mapDraftCommentTarget(body);
+    if (!target.ok) return json({ error: "指定的對象無效。" }, 400);
+    const id = await repository.addMapDraftComment({
+      draftId, eventId: config.eventId, authorAccountId: current.accountId,
+      authorRole: admin ? "admin" : "map_contributor",
+      targetKind: target.kind, targetRef: target.ref, body: text, now: config.now(),
+    });
+    if (!id) return json({ error: "找不到草稿。" }, 404);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: current.accountId, actorRole: admin ? "admin" : "map_contributor",
+      action: "map_draft.commented", subjectType: "map_draft", subjectId: draftId,
+      detail: { revision: draft.current_revision, targetKind: target.kind }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, draftId, commentId: id }, 201);
+  }
+
   async function adminReviewMapDraft(request: Request, draftId: string) {
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
@@ -1066,6 +1109,15 @@ export function createCirclePortalHandlers({
     }
     if ((decision === "changes_requested" || decision === "reject") && !note) {
       return json({ error: "要求修改或拒絕時必須填寫說明。" }, 400);
+    }
+    const requested: unknown[] = Array.isArray(body?.targets) ? body.targets : [];
+    const targets: { kind: "slot" | "landmark"; ref: string; body: string }[] = [];
+    for (const entry of requested) {
+      const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
+      const target = mapDraftCommentTarget(item);
+      const text = typeof item?.body === "string" ? item.body.trim().slice(0, 2_000) : "";
+      if (!target.ok || !target.kind || !target.ref || !text) return json({ error: "局部修改請求必須指定對象與內容。" }, 400);
+      targets.push({ kind: target.kind, ref: target.ref, body: text });
     }
     if (decision === "approve" && !confirmOfficialSource) {
       return json({ error: "核准前必須確認目前版本的檔案來自活動官方說明頁面。" }, 400);
@@ -1120,10 +1172,19 @@ export function createCirclePortalHandlers({
         });
       }
     }
+    // Recorded after the transition so a refused review leaves no orphan
+    // requests behind, and as comments rather than as extra review rows: the
+    // review trail stays one row per status change.
+    for (const target of targets) {
+      await repository.addMapDraftComment({
+        draftId, eventId: config.eventId, authorAccountId: gate.session.accountId, authorRole: "admin",
+        targetKind: target.kind, targetRef: target.ref, body: target.body, now: config.now(),
+      });
+    }
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
       action: `map_draft.${decision}`, subjectType: "map_draft", subjectId: draftId,
-      detail: { revision: expectedRevision, replacementDraftId, confirmOfficialSource }, ipHash: await clientIpHash(request),
+      detail: { revision: expectedRevision, replacementDraftId, confirmOfficialSource, targets: targets.length }, ipHash: await clientIpHash(request),
     });
     return json({ ok: true, draftId, revision: expectedRevision });
   }
@@ -1382,7 +1443,7 @@ export function createCirclePortalHandlers({
     adminManageMapContributor, adminListStaleMapDrafts,
     listMyMapDrafts, getMapDraft, createMapDraft, updateMapDraft, submitMapDraft,
     uploadMapDraftFile, readMapDraftFile,
-    adminListMapDrafts, adminReviewMapDraft, adminExportMapDraft,
+    adminListMapDrafts, adminReviewMapDraft, adminExportMapDraft, postMapDraftComment,
     publicOverrides,
   };
 }

@@ -595,6 +595,103 @@ test("revoked permission and an unwritable status stay distinguishable from a ve
   assert.equal((await submitRevoked.json()).conflict.cause, "permission");
 });
 
+test("a review thread accumulates, points at single booths, and never names an account", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const post = (cookie, body) => handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", body, cookie), draft.draftId,
+  );
+
+  assert.equal((await post(mapperCookie, { body: "A 排的位置我不確定。" })).status, 201);
+  const targeted = await post(adminCookie, { body: "這一格往右偏了一格。", targetKind: "slot", targetRef: "A07" });
+  assert.equal(targeted.status, 201);
+  assert.equal((await post(mapperCookie, { body: "已修正 A07。", targetKind: "slot", targetRef: "A07" })).status, 201);
+
+  const detail = await (await handlers.getMapDraft(request(`/drafts/${draft.draftId}`, "GET", undefined, mapperCookie), draft.draftId)).json();
+  assert.deepEqual(detail.comments.map(({ author_role, target_kind, target_ref, revision, body }) => ({ author_role, target_kind, target_ref, revision, body })), [
+    { author_role: "map_contributor", target_kind: null, target_ref: null, revision: 1, body: "A 排的位置我不確定。" },
+    { author_role: "admin", target_kind: "slot", target_ref: "A07", revision: 1, body: "這一格往右偏了一格。" },
+    { author_role: "map_contributor", target_kind: "slot", target_ref: "A07", revision: 1, body: "已修正 A07。" },
+  ], "one draft accumulates many comments, in the order they were written");
+  assert.equal(detail.comments.every((item) => !Object.hasOwn(item, "author_account_id")), true,
+    "participants on a draft are named by role only");
+  assert.equal(detail.comments.every((item) => !JSON.stringify(item).includes("data:")), true, "no raw image bytes ride along");
+
+  assert.equal((await post(mapperCookie, { body: "   " })).status, 400);
+  assert.equal((await post(mapperCookie, { body: "沒有指定代碼。", targetKind: "slot" })).status, 400);
+  assert.equal((await post(mapperCookie, { body: "類型不存在。", targetKind: "pillar", targetRef: "p1" })).status, 400);
+});
+
+test("only the draft owner or an admin can add to its thread", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+
+  const strangerCookie = await signIn("stranger@example.test");
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "我也想留言。" }, strangerCookie), draft.draftId,
+  )).status, 404, "someone else's draft is not found rather than described");
+
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "沒登入。" }, undefined), draft.draftId,
+  )).status, 401);
+
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  assert.equal((await handlers.postMapDraftComment(
+    request(`/drafts/${draft.draftId}/comments`, "POST", { body: "權限沒了。" }, mapperCookie), draft.draftId,
+  )).status, 403, "commenting needs the same live grant that writing does");
+});
+
+test("requesting changes records the elements it is about, and only when it takes effect", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  const review = (body) => handlers.adminReviewMapDraft(
+    request(`/admin/drafts/${draft.draftId}/review`, "POST", body, adminCookie), draft.draftId,
+  );
+
+  assert.equal((await review({
+    expectedRevision: 1, decision: "changes_requested", note: "兩處要改",
+    targets: [{ kind: "slot", body: "缺代碼" }],
+  })).status, 400, "a request that names no element is refused rather than silently dropped");
+  assert.equal((await review({
+    expectedRevision: 1, decision: "changes_requested", note: "兩處要改",
+    targets: [{ targetKind: "slot", targetRef: "A07", body: "  " }],
+  })).status, 400);
+
+  // A refused transition must leave no requests behind.
+  assert.equal((await review({
+    expectedRevision: 99, decision: "changes_requested", note: "版本錯了",
+    targets: [{ targetKind: "slot", targetRef: "A07", body: "不該被寫入" }],
+  })).status, 409);
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+
+  assert.equal((await review({
+    expectedRevision: 1, decision: "changes_requested", note: "兩處要改",
+    targets: [
+      { targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" },
+      { targetKind: "landmark", targetRef: "stage-1", body: "舞台範圍比實際大。" },
+    ],
+  })).status, 200);
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "changes_requested");
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ author_role, target_kind, target_ref }) => ({ author_role, target_kind, target_ref })), [
+    { author_role: "admin", target_kind: "slot", target_ref: "A07" },
+    { author_role: "admin", target_kind: "landmark", target_ref: "stage-1" },
+  ]);
+
+  const reviews = await repository.listMapDraftReviews(draft.draftId);
+  assert.equal(reviews.length, 2, "the state-machine trail stays one row per transition, not one per request");
+});
+
 test("a revoked grant outranks a stale revision so the panel never offers a reload that cannot help", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");

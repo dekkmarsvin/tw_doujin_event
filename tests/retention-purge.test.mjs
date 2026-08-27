@@ -247,6 +247,7 @@ test("never creates a table it does not find", async () => {
     "audit_log",
     "circle_overrides",
     "login_tokens",
+    "map_draft_comments",
     "map_draft_files",
     "map_draft_reviews",
     "map_draft_revisions",

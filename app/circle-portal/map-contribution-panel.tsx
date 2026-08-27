@@ -4,18 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import {
   createMapContributionDraft, exportMapContributionCandidate, listAdminMapDrafts, listMyMapDrafts,
-  mapDraftConflict, mapDraftProblems, readMapDraft, reviewMapContributionDraft, saveMapContributionDraft,
+  mapDraftConflict, mapDraftProblems, postMapDraftComment, readMapDraft, reviewMapContributionDraft, saveMapContributionDraft,
   submitMapContributionDraft, uploadMapContributionEvidence,
-  type MapDraftDetail, type MapDraftFile, type MapDraftReview, type MapDraftStatus, type MapDraftSummary,
+  type MapDraftComment, type MapDraftCommentTarget, type MapDraftDetail, type MapDraftFile, type MapDraftReview,
+  type MapDraftStatus, type MapDraftSummary,
 } from "../circle-editor-client";
 import { ACTIVE_EVENT } from "../event-catalog";
 import type { EventMapLayout, PublishedEventMap } from "../event-map";
-import MapLayoutEditor from "../map-layout-editor";
+import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
 import { loadStaticEventMap } from "../static-event-map-client";
 import styles from "./portal.module.css";
 
-type Detail = { draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[] };
+type Detail = { draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[] };
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string; conflict?: MapDraftConflict };
 const IDLE: Status = { kind: "idle", message: "" };
 
@@ -91,6 +92,27 @@ function DraftList({ drafts, selected, onSelect }: { drafts: MapDraftSummary[]; 
   </li>)}</ul>;
 }
 
+const COMMENT_AT = new Intl.DateTimeFormat("zh-Hant", {
+  dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Taipei",
+});
+const TARGET_LABEL: Record<"slot" | "landmark", string> = { slot: "攤位", landmark: "區域" };
+
+/** The review thread. A comment that names an element is a request to change
+ * that element; `onFocus` is supplied only where the element can actually be
+ * reached, which is the contributor's editor. */
+function CommentThread({ comments, onFocus }: { comments: MapDraftComment[]; onFocus: ((comment: MapDraftComment) => void) | null }) {
+  if (!comments.length) return null;
+  return <ul className={styles.commentThread}>{comments.map((item) => <li key={item.id}>
+    <span>{ACTOR_LABEL[item.author_role as MapDraftActorRole] ?? item.author_role}・版本 {item.revision}・{COMMENT_AT.format(item.at)}</span>
+    {item.target_kind && item.target_ref
+      ? <b>{onFocus
+        ? <button type="button" onClick={() => onFocus(item)}>{TARGET_LABEL[item.target_kind]} {item.target_ref}</button>
+        : `${TARGET_LABEL[item.target_kind]} ${item.target_ref}`}</b>
+      : null}
+    <p>{item.body}</p>
+  </li>)}</ul>;
+}
+
 export function MapContributorPanel() {
   const [drafts, setDrafts] = useState<MapDraftSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -105,6 +127,8 @@ export function MapContributorPanel() {
   const [documentDate, setDocumentDate] = useState("");
   const [pageNumber, setPageNumber] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [comment, setComment] = useState("");
+  const [focusTarget, setFocusTarget] = useState<MapEditorFocusTarget | null>(null);
 
   const refreshList = useCallback(async () => setDrafts((await listMyMapDrafts()).drafts), []);
   const openDraft = useCallback(async (draftId: string) => {
@@ -143,7 +167,7 @@ export function MapContributorPanel() {
     </div>}
     {detail && layout && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
-      {editable && <MapLayoutEditor layout={layout} backgroundImageUrl={previewFile ? `/api/map-contributions/files/${encodeURIComponent(previewFile.id)}/preview` : undefined} onChange={setLayout} />}
+      {editable && <MapLayoutEditor layout={layout} backgroundImageUrl={previewFile ? `/api/map-contributions/files/${encodeURIComponent(previewFile.id)}/preview` : undefined} focusTarget={focusTarget} onChange={setLayout} />}
       <h3>公開地圖預覽</h3><Preview layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>
@@ -172,6 +196,15 @@ export function MapContributorPanel() {
           await openDraft(detail.draft.id); setFile(null);
         }, "來源檔已綁定目前版本。")}>上傳私人來源檔</button>
       </>}
+      <h3>審閱留言</h3>
+      <CommentThread comments={detail.comments} onFocus={editable ? (item) => {
+        if (item.target_kind && item.target_ref) setFocusTarget({ kind: item.target_kind, ref: item.target_ref, nonce: Date.now() });
+      } : null} />
+      <label>留言<textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
+      <button type="button" disabled={!comment.trim()} onClick={() => void run(async () => {
+        await postMapDraftComment({ draftId: detail.draft.id, body: comment });
+        setComment(""); await openDraft(detail.draft.id);
+      }, "留言已送出。")}>送出留言</button>
       <h3>來源與審閱軌跡</h3>
       <EvidenceList files={detail.files} />
       <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・版本 {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
@@ -191,8 +224,12 @@ export function AdminMapReviewPanel() {
   const [status, setStatus] = useState<Status>(IDLE);
   const [problems, setProblems] = useState<MapDraftProblem[]>([]);
   const [candidate, setCandidate] = useState<{ map: PublishedEventMap; diff: MapCandidateDiff; targetPath: string; sha256: string } | null>(null);
+  const [targets, setTargets] = useState<MapDraftCommentTarget[]>([]);
+  const [targetKind, setTargetKind] = useState<"slot" | "landmark">("slot");
+  const [targetRef, setTargetRef] = useState("");
+  const [targetBody, setTargetBody] = useState("");
   const refreshList = useCallback(async () => setDrafts((await listAdminMapDrafts()).drafts), []);
-  const openDraft = useCallback(async (id: string) => { setSelectedId(id); setDetail(await readMapDraft(id, true)); setProblems([]); setCandidate(null); setOfficialSourceConfirmed(false); }, []);
+  const openDraft = useCallback(async (id: string) => { setSelectedId(id); setDetail(await readMapDraft(id, true)); setProblems([]); setCandidate(null); setOfficialSourceConfirmed(false); setTargets([]); }, []);
   useEffect(() => { queueMicrotask(() => { void refreshList(); }); }, [refreshList]);
   const run = async (task: () => Promise<void>, ok: string) => {
     setStatus({ kind: "busy", message: "處理中…" }); setProblems([]);
@@ -207,6 +244,9 @@ export function AdminMapReviewPanel() {
       draftId: detail.draft.id, expectedRevision: detail.draft.current_revision, decision,
       note: note || undefined, replacementDraftId: replacementDraftId || undefined,
       confirmOfficialSource: decision === "approve" ? officialSourceConfirmed : undefined,
+      // Only a request to change carries per-element requests; an approval or a
+      // rejection ends the draft, so there is nothing left to point at.
+      targets: decision === "changes_requested" && targets.length ? targets : undefined,
     });
     await openDraft(detail.draft.id); await refreshList();
   }, decision === "approve" ? "草稿已核准。" : decision === "reject" ? "草稿已拒絕。" : "已要求修改。" );
@@ -226,6 +266,21 @@ export function AdminMapReviewPanel() {
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
       <Preview layout={detail.draft.content.layout} />
       <label>審閱說明<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} /></label>
+      <h3>局部修改請求</h3>
+      <CommentThread comments={detail.comments} onFocus={null} />
+      <div className={styles.commentTarget}>
+        <label>對象<select value={targetKind} onChange={(event) => setTargetKind(event.target.value as "slot" | "landmark")}><option value="slot">攤位</option><option value="landmark">區域</option></select></label>
+        <label>{targetKind === "slot" ? "攤位代碼" : "區域 ID"}<input value={targetRef} onChange={(event) => setTargetRef(event.target.value)} /></label>
+      </div>
+      <label>要改什麼<textarea rows={2} value={targetBody} onChange={(event) => setTargetBody(event.target.value)} /></label>
+      <button type="button" disabled={!targetRef.trim() || !targetBody.trim()} onClick={() => {
+        setTargets([...targets, { kind: targetKind, ref: targetRef.trim(), body: targetBody.trim() }]);
+        setTargetRef(""); setTargetBody("");
+      }}>加入這則請求</button>
+      {!!targets.length && <ul className={styles.auditList}>{targets.map((item, index) => <li key={`${item.kind}:${item.ref}:${index}`}>
+        {TARGET_LABEL[item.kind]} {item.ref}・{item.body}
+        <button type="button" onClick={() => setTargets(targets.filter((entry, position) => position !== index))}>移除</button>
+      </li>)}</ul>}
       <label>取代既有核准 draftId（只有同範圍已有核准稿時填寫）<input value={replacementDraftId} onChange={(event) => setReplacementDraftId(event.target.value)} /></label>
       <label className={styles.confirmCheck}><input type="checkbox" checked={officialSourceConfirmed} onChange={(event) => setOfficialSourceConfirmed(event.target.checked)} /><span>我已逐一確認目前版本的來源檔來自活動官方說明頁面。</span></label>
       {detail.draft.status === "submitted" && <div className={styles.reviewActions}><button type="button" onClick={() => void decide("changes_requested")}>要求修改</button><button type="button" onClick={() => void decide("reject")}>拒絕</button><button type="button" onClick={() => void decide("approve")}>核准</button></div>}

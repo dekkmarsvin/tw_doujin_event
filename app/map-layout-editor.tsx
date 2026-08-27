@@ -29,9 +29,15 @@ type BandDragState = { mode: "band"; pointerId: number; startX: number; startY: 
 
 type DragState = MoveDragState | ResizeDragState | BandDragState;
 
+/** A review comment can point at one booth or landmark. `nonce` is what makes
+ * the same target requestable twice: after the contributor clicks elsewhere,
+ * pressing the same comment again has to bring the selection back. */
+export type MapEditorFocusTarget = { kind: "slot" | "landmark"; ref: string; nonce: number };
+
 type Props = {
   layout: EventMapLayout;
   backgroundImageUrl?: string;
+  focusTarget?: MapEditorFocusTarget | null;
   onChange: (layout: EventMapLayout) => void;
 };
 
@@ -104,7 +110,22 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }: Props) {
+/** The element a review comment names, addressed the way the draft spells it:
+ * a booth by its code, a landmark by its id. Absent when the draft no longer
+ * carries it, which is what happens once the contributor has removed it. */
+function findFocusSelection(layout: EventMapLayout, target: MapEditorFocusTarget): Selection | null {
+  if (target.kind === "slot") {
+    for (const [rowIndex, row] of layout.rows.entries()) {
+      const itemIndex = row.slots.findIndex((slot) => slot.code === target.ref);
+      if (itemIndex >= 0) return { kind: "slot", rowIndex, itemIndex };
+    }
+    return null;
+  }
+  const itemIndex = layout.landmarks.findIndex((landmark) => landmark.id === target.ref);
+  return itemIndex >= 0 ? { kind: "landmark", itemIndex } : null;
+}
+
+export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarget, onChange }: Props) {
   const [selections, setSelections] = useState<Selection[]>([]);
   // The inspector's per-element fields only mean anything for exactly one
   // element, so a larger set falls through to the batch panel instead.
@@ -127,6 +148,17 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     // plan that is no longer there.
     setAnchors(null);
     setDraftRow(null);
+  }
+  // A review comment pointing at one element selects it. The nonce is compared
+  // rather than the target, so pressing the same comment twice works and an
+  // unrelated re-render does not pull the selection back. Adjusting state
+  // during render is the same pattern the history reset above uses.
+  const focusNonce = focusTarget?.nonce;
+  const focusMatch = focusTarget ? findFocusSelection(layout, focusTarget) : null;
+  const [focusedNonce, setFocusedNonce] = useState(focusNonce);
+  if (focusNonce !== focusedNonce) {
+    setFocusedNonce(focusNonce);
+    if (focusMatch) setSelections([focusMatch]);
   }
   const [zoom, setZoom] = useState(MIN_EDITOR_ZOOM);
   const [layoutUnitsPerPixel, setLayoutUnitsPerPixel] = useState(layout.width / 800);
@@ -589,6 +621,14 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
       top: centerY / layout.height * viewport.scrollHeight - viewport.clientHeight / 2,
     });
   };
+
+  // Scrolls to what the request named. Keyed on the nonce alone: re-running on
+  // every layout change would drag the viewport back while the contributor is
+  // still editing. Nothing here sets state, so the selection is not fought over.
+  useEffect(() => {
+    if (focusMatch) focusSelection(focusMatch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNonce]);
 
   const changeZoom = (nextZoom: number) => {
     const viewport = viewportRef.current;

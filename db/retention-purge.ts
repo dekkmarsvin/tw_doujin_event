@@ -66,7 +66,7 @@ const MAP_RETENTION_D1_BIND_BATCH_SIZE = 90;
 
 const PURGE_TABLES = [
   "login_tokens", "sessions", "preview_mail_sink", "circle_overrides", "overrides_doc", "audit_log",
-  "map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_files",
+  "map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_comments", "map_draft_files",
 ] as const;
 
 async function existingTables(database: D1Database) {
@@ -238,11 +238,12 @@ async function purgeMapDraftData(
            FROM map_drafts WHERE id = ?3 AND retention_action = 'delete'`,
         ).bind(crypto.randomUUID(), now, draft.id),
         database.prepare("DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
+        database.prepare("DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
         database.prepare("DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'delete')").bind(draft.id),
         database.prepare("DELETE FROM map_drafts WHERE id = ?1 AND retention_action = 'delete'").bind(draft.id),
       ]);
-      revisions += results[2].meta.changes ?? 0;
-      drafts += results[3].meta.changes ?? 0;
+      revisions += results[3].meta.changes ?? 0;
+      drafts += results[4].meta.changes ?? 0;
       continue;
     }
     if (draft.retention_action === "anonymize") {
@@ -255,10 +256,11 @@ async function purgeMapDraftData(
         database.prepare("UPDATE map_draft_files SET object_key = NULL, uploaded_by = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1) WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?2 AND retention_action = 'anonymize')").bind(now, draft.id),
         database.prepare("DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
         database.prepare("UPDATE map_draft_reviews SET actor_account_id = NULL WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
+        database.prepare("UPDATE map_draft_comments SET author_account_id = NULL WHERE draft_id IN (SELECT id FROM map_drafts WHERE id = ?1 AND retention_action = 'anonymize')").bind(draft.id),
         database.prepare("UPDATE map_drafts SET owner_account_id = '[shredded]', retention_action = NULL WHERE id = ?1 AND retention_action = 'anonymize'").bind(draft.id),
       ]);
       revisions += results[2].meta.changes ?? 0;
-      anonymized += results[4].meta.changes ?? 0;
+      anonymized += results[5].meta.changes ?? 0;
       continue;
     }
     await database.batch([
@@ -387,14 +389,14 @@ export async function purgeExpiredRecords(
   } else skipped.push("circle_overrides");
 
   if (!present.has("overrides_doc")) skipped.push("overrides_doc");
-  if (present.has("audit_log") && present.has("map_drafts") && present.has("map_draft_revisions") && present.has("map_draft_reviews") && present.has("map_draft_files")) {
+  if (present.has("audit_log") && present.has("map_drafts") && present.has("map_draft_revisions") && present.has("map_draft_reviews") && present.has("map_draft_comments") && present.has("map_draft_files")) {
     const result = await purgeMapDraftData(database, now, windows, mapObjects);
     deleted.map_drafts = result.drafts;
     deleted.map_draft_revisions = result.revisions;
     deleted.map_raw_objects = result.rawObjects;
     anonymized.map_drafts = result.anonymized;
   } else {
-    for (const table of ["map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_files"] as const) {
+    for (const table of ["map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_comments", "map_draft_files"] as const) {
       if (!present.has(table)) skipped.push(table);
     }
   }

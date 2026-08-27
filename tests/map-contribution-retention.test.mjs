@@ -47,6 +47,14 @@ async function raw(id, draftId, at) {
 
 const submitDraft = (input) => repository.submitMapDraft({ eventId: "ff47", ...input });
 
+const comment = (draftId, body, targetKind, targetRef) => repository.addMapDraftComment({
+  draftId, eventId: "ff47", authorAccountId: accountId, authorRole: "map_contributor",
+  targetKind, targetRef, body, now: NOW - DAY,
+});
+
+const commentCount = async (draftId) =>
+  (await database.prepare("SELECT COUNT(*) AS total FROM map_draft_comments WHERE draft_id = ?1").bind(draftId).first()).total;
+
 test("retention removes abandoned content, preserves submitted work, and is idempotent", async () => {
   const inactive = NOW - RETENTION_WINDOWS.mapDraftInactivity - DAY;
   const oldDecision = NOW - RETENTION_WINDOWS.mapDecisionRaw - DAY;
@@ -81,6 +89,11 @@ test("retention removes abandoned content, preserves submitted work, and is idem
   });
   assert.equal((await repository.getMapDraft("approved")).status, "withdrawn");
 
+  // Discussion on a draft that is about to be deleted, and on one about to be
+  // anonymized: the two retention actions treat it differently.
+  await comment("never-submitted", "整份草稿的位置都要重畫。", null, null);
+  await comment("changes", "B 排第 7 格位置錯了。", "slot", "B07");
+
   const deletedKeys = [];
   const store = { delete: async (keys) => deletedKeys.push(...(Array.isArray(keys) ? keys : [keys])) };
   const first = await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, undefined, store);
@@ -94,6 +107,10 @@ test("retention removes abandoned content, preserves submitted work, and is idem
   const changes = await database.prepare("SELECT owner_account_id, status FROM map_drafts WHERE id = 'changes'").first();
   assert.deepEqual(changes, { owner_account_id: "[shredded]", status: "changes_requested" });
   assert.equal((await database.prepare("SELECT actor_account_id FROM map_draft_reviews WHERE draft_id = 'changes'").first()).actor_account_id, null);
+  assert.equal(await commentCount("never-submitted"), 0, "a deleted draft takes its discussion with it");
+  const anonymized = await database.prepare("SELECT author_account_id, target_kind, target_ref, body FROM map_draft_comments WHERE draft_id = 'changes'").first();
+  assert.deepEqual(anonymized, { author_account_id: null, target_kind: "slot", target_ref: "B07", body: "B 排第 7 格位置錯了。" },
+    "anonymizing drops the author the way it drops a review's, and keeps what was asked for");
   const withdrawn = await repository.getMapDraftFile("raw-approved");
   assert.equal(withdrawn.object_key, null);
   assert.equal(withdrawn.review_result, "approved_official_source");
@@ -167,6 +184,44 @@ test("account deletion does not exempt requested changes from the 180-day cleanu
   assert.deepEqual(deleted, ["map-contributions/ff47/deleted-owner-changes/raw-deleted-owner.png"]);
   assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM map_draft_revisions WHERE draft_id = 'deleted-owner-changes'").first()).total, 0);
   assert.equal((await database.prepare("SELECT retention_action FROM map_drafts WHERE id = 'deleted-owner-changes'").first()).retention_action, null);
+});
+
+test("deleting an account unnames its comments and takes the unsubmitted draft's thread with it", async () => {
+  await draft("still-a-draft", NOW - DAY);
+  await comment("still-a-draft", "這格代碼可能打錯。", "slot", "A01");
+
+  await draft("under-review", NOW - 3 * DAY);
+  await submitDraft({ draftId: "under-review", ownerAccountId: accountId, expectedRevision: 1, now: NOW - 2 * DAY });
+  await comment("under-review", "A 排整排往右偏了一格。", "slot", "A05");
+
+  await repository.beginAccountDeletion({ accountId, email: "mapper@example.test", now: NOW });
+  await repository.deleteAccount({
+    accountId, email: "mapper@example.test", emailAuditDigest: "digest", legacyEmailAuditDigest: "legacy", now: NOW,
+  });
+
+  assert.equal(await commentCount("still-a-draft"), 0, "an unsubmitted draft is deleted outright, thread included");
+  const kept = await database.prepare("SELECT author_account_id, target_kind, target_ref, body FROM map_draft_comments WHERE draft_id = 'under-review'").first();
+  assert.deepEqual(kept, { author_account_id: null, target_kind: "slot", target_ref: "A05", body: "A 排整排往右偏了一格。" },
+    "a submitted draft keeps the request, with nobody named against it");
+});
+
+test("a comment is stamped with the revision it was written about and never moves", async () => {
+  await draft("moving", NOW - 4 * DAY);
+  const id = await comment("moving", "第一版就有問題。", null, null);
+  assert.ok(id);
+  await repository.writeMapDraftRevision({
+    draftId: "moving", eventId: "ff47", ownerAccountId: accountId, expectedRevision: 1,
+    contentJson: JSON.stringify({ id: "moving", pass: 2 }), now: NOW - 3 * DAY,
+  });
+  const later = await comment("moving", "第二版已修好。", null, null);
+  assert.ok(later);
+
+  const thread = await repository.listMapDraftComments("moving");
+  assert.deepEqual(thread.map(({ revision, body }) => ({ revision, body })), [
+    { revision: 1, body: "第一版就有問題。" },
+    { revision: 2, body: "第二版已修好。" },
+  ], "the first comment stays about revision 1 after the draft moves on");
+  assert.equal(Object.hasOwn(thread[0], "author_account_id"), false, "readers see a role, never an account");
 });
 
 function countedDatabase(inner) {
