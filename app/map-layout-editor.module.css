@@ -81,8 +81,12 @@
 .rowFormActions button:disabled { color:#a1aaa4; cursor:not-allowed; }
 .rowFormActions .rowConfirm { border-color:#8fa899; background:#eef4f0; color:#26503c; }
 .rowFormActions .rowConfirm:hover { background:#e2ede6; }
-.draftSlot rect { fill:#e9f0ec99; stroke:#3f7a5e; stroke-width:1.5; stroke-dasharray:5 3; vector-effect:non-scaling-stroke; pointer-events:none; }
-.draftSlot text { fill:#2c5a45; font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+.draftSlot rect,.draftSlotKept rect { vector-effect:non-scaling-stroke; pointer-events:none; }
+.draftSlot text,.draftSlotKept text { font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+.draftSlot rect { fill:#ffffff40; stroke:#8f9c95; stroke-width:1; stroke-dasharray:4 4; }
+.draftSlot text { fill:#8f9c95; }
+.draftSlotKept rect { fill:#e9f0eccc; stroke:#3f7a5e; stroke-width:2; }
+.draftSlotKept text { fill:#2c5a45; font-weight:900; }
 .anchor circle { fill:#fff; stroke:#3f7a5e; stroke-width:2.5; vector-effect:non-scaling-stroke; pointer-events:none; }
 .anchor text { fill:#2c5a45; font-family:var(--font-mono),ui-monospace,monospace; font-size:9px; font-weight:900; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
 .anchorPanel { margin-top:13px; padding-top:11px; border-top:1px solid #e2e5e1; }

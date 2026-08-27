@@ -285,7 +285,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     if (event.target !== event.currentTarget) return;
     const point = pointIn(event.currentTarget, event);
     if (rowForm && anchors) {
-      setAnchors([...anchors, { index: (anchors.at(-1)?.index ?? 0) + 1, x: Math.round(point.x), y: Math.round(point.y) }]);
+      changeAnchors([...anchors, { index: (anchors.at(-1)?.index ?? 0) + 1, x: Math.round(point.x), y: Math.round(point.y) }]);
       setRowErrors([]);
       return;
     }
@@ -599,6 +599,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     setDraftRow(null);
   };
 
+  /** Moving, adding or removing an anchor moves the fitted line, so the draft
+   * it produced no longer describes what the panel is showing. */
+  const changeAnchors = (next: RowAnchor[]) => {
+    setAnchors(next);
+    setDraftRow(null);
+  };
+
   /** Leaving the row panel ends anchor marking with it. Otherwise the canvas
    * would keep turning blank-paper presses into anchors with no visible
    * controls, and rubber-band selection would stay unavailable. */
@@ -650,7 +657,9 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
           {snapGuides.map((guide) => guide.axis === "x"
             ? <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.position} x2={guide.position} y1={guide.start} y2={guide.end} aria-hidden="true" />
             : <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.start} x2={guide.end} y1={guide.position} y2={guide.position} aria-hidden="true" />)}
-          {draftRow?.slots.map((slot, index) => draftRow.keep[index] && <g key={slot.code} className={styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
+          {/* Every candidate is drawn, confirmed or not: hiding the ones still
+              awaiting a decision would hide exactly what the decision is about. */}
+          {draftRow?.slots.map((slot, index) => <g key={slot.code} className={draftRow.keep[index] ? styles.draftSlotKept : styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
           {anchors?.map((anchor) => <g key={`${anchor.index}:${anchor.x}:${anchor.y}`} className={styles.anchor} aria-hidden="true"><circle cx={anchor.x} cy={anchor.y} r={7 * layoutUnitsPerPixel} /><text x={anchor.x} y={anchor.y - 12 * layoutUnitsPerPixel}>{anchor.index}</text></g>)}
           {band && <rect className={styles.band} {...band} aria-hidden="true" />}
           {handleBounds && ([
@@ -696,8 +705,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
               {!anchors.length && <p>在畫布空白處點選即可標記。</p>}
               {!!anchors.length && <ul className={styles.anchorList}>{anchors.map((anchor, index) => <li key={`${index}:${anchor.x}:${anchor.y}`}>
                 <span>{Math.round(anchor.x)}, {Math.round(anchor.y)}</span>
-                <input type="number" aria-label={`第 ${index + 1} 個錨點的格號`} value={anchor.index} onChange={(event) => { const next = Number(event.target.value); setAnchors(anchors.map((item, position) => position === index ? { ...item, index: Number.isFinite(next) ? next : item.index } : item)); }} />
-                <button type="button" aria-label={`移除第 ${index + 1} 個錨點`} onClick={() => setAnchors(anchors.filter((item, position) => position !== index))}>移除</button>
+                <input type="number" aria-label={`第 ${index + 1} 個錨點的格號`} value={anchor.index} onChange={(event) => { const next = Number(event.target.value); changeAnchors(anchors.map((item, position) => position === index ? { ...item, index: Number.isFinite(next) ? next : item.index } : item)); }} />
+                <button type="button" aria-label={`移除第 ${index + 1} 個錨點`} onClick={() => changeAnchors(anchors.filter((item, position) => position !== index))}>移除</button>
               </li>)}</ul>}
               {anchorInference?.ok && <p>格數 {anchorInference.inference.slotCount}・起始編號 {anchorInference.inference.startNumber}・最大偏差 {anchorInference.inference.residual.toFixed(1)}</p>}
               <div className={styles.rowFormActions}><button type="button" onClick={() => { setAnchors(null); setDraftRow(null); setRowErrors([]); }}>取消標記</button><button type="button" className={styles.rowConfirm} disabled={!anchorInference?.ok} onClick={inferDraftRow}>推算草稿</button></div>
