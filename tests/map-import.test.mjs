@@ -11,6 +11,7 @@ const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayou
 const { createBlankEventMapLayout, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { findRowConflicts, pasteRowAtOffset, selectionSetKey } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
@@ -253,6 +254,44 @@ test("row orientation comes from the endpoints, so it can never contradict them"
   const base = { label: "R", slotCount: 4, slotWidth: 10, slotHeight: 10, codePrefix: "R", startNumber: 1, numberPadding: 2 };
   assert.equal(generateRowSlots({ ...base, start: { x: 20, y: 100 }, end: { x: 180, y: 100 } }, bounds).row.orientation, "horizontal");
   assert.equal(generateRowSlots({ ...base, start: { x: 100, y: 20 }, end: { x: 100, y: 180 } }, bounds).row.orientation, "vertical");
+});
+
+test("multi-selection history keys distinguish every member without depending on order", () => {
+  const first = { kind: "slot", rowIndex: 0, itemIndex: 0 };
+  const second = { kind: "slot", rowIndex: 0, itemIndex: 1 };
+  const third = { kind: "slot", rowIndex: 0, itemIndex: 2 };
+  assert.notEqual(selectionSetKey([first, second]), selectionSetKey([first, third]));
+  assert.equal(selectionSetKey([first, second]), selectionSetKey([second, first]));
+});
+
+test("row conflict detection includes duplicate codes inside the candidate row", () => {
+  const layout = createBlankEventMapLayout("PIER2-2025", 100, 100);
+  const duplicate = {
+    label: "B", orientation: "horizontal", confidence: 1,
+    slots: [
+      { code: "B01", rect: { x: 10, y: 10, width: 10, height: 10 } },
+      { code: "B01", rect: { x: 30, y: 10, width: 10, height: 10 } },
+    ],
+  };
+  assert.deepEqual(findRowConflicts(duplicate, layout), ["攤位代碼 B01 重複。"]);
+});
+
+test("offset paste stops a whole row at the canvas edge without collapsing its geometry", () => {
+  const layout = createBlankEventMapLayout("PIER2-2025", 50, 30);
+  const result = pasteRowAtOffset({
+    label: "A",
+    slots: [
+      { code: "A1", rect: { x: 10, y: 5, width: 10, height: 10 } },
+      { code: "A2", rect: { x: 30, y: 5, width: 10, height: 10 } },
+    ],
+  }, layout, { offsetX: 100, offsetY: 0, label: "B" });
+  assert.equal(result.ok, true);
+  assert.equal(result.row.orientation, "horizontal");
+  assert.deepEqual(result.row.slots.map(({ rect }) => rect), [
+    { x: 20, y: 5, width: 10, height: 10 },
+    { x: 40, y: 5, width: 10, height: 10 },
+  ]);
+  assert.equal(validateEventMapLayout({ ...layout, rows: [result.row] }).ok, true);
 });
 
 function historyLayout(marker) {
