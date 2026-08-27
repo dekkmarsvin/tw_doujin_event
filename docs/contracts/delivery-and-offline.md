@@ -30,12 +30,14 @@
 
 | 資源 | 策略 |
 |---|---|
-| 導覽 | network-first，回退已快取 shell |
+| 閱讀端導覽（`/`、`/index.html`） | network-first，回退已快取 shell |
+| 其他導覽（`/circle`、`/privacy`） | network-only；不讀也不寫 shell 快取 |
 | static `/data/events/*`（`circles.json`、`map.json`） | stale-while-revalidate |
 | Function `/data/events/:eventId/overrides.json` | network-only；失敗時 publication module 使用 reviewed base |
 | 雜湊資產 | cache-first |
 
 - precache 清單由 build 時產生，**只涵蓋 `index.html` 實際載入的資源**，不含社團入口。
+- **只有閱讀端自己的路徑可以更新 shell 快取。** `/circle` 與 `/privacy` 是各自獨立的文件，其資產刻意不進 precache；若把它們的回應寫進 shell，下一次離線啟動閱讀端就會拿到入口文件而不是地圖，且缺少從未快取的資產。閱讀端狀態全部放在 query parameter，因此閱讀端就是這兩條路徑。
 - **絕不把被重新導向的回應當成 shell 或場刊快取。**
 - 展場離線可重新載入並繼續使用已下載的場刊、地圖、字型與介面。
 - **離線範圍只涵蓋自家靜態產物。** 外部社團縮圖與外部連結不快取；離線時維持既有的降級狀態，不得改以本地內容假冒。

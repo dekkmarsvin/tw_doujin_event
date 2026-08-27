@@ -53,6 +53,10 @@ export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLa
         <li><strong>收藏與安排行程</strong><span>收藏、加入行程與設為下一站是三個獨立動作。行程建立後可使用「導航模式」只看當日預定攤位並標記已走訪。</span></li>
         <li><strong>備份本機資料</strong><span>收藏、備註、群組、購買項目與預算只存在此瀏覽器。「資料管理」可匯出 JSON 或 CSV；目前網頁尚未提供匯入。</span></li>
       </ol>
+      <section className={styles.circleEntry} aria-labelledby="reader-circle-entry-title">
+        <h3 id="reader-circle-entry-title">你是參展社團嗎？</h3>
+        <p>攤位與社團名稱來自主辦資料，本頁不接受一般讀者修改。參展社團可到<a href="/circle">社團專區</a>驗證身分後補充販售資訊、連結與代表圖，補上的內容會直接出現在這裡。</p>
+      </section>
       <section className={styles.about} aria-labelledby="reader-about-title">
         <h3 id="reader-about-title">關於本頁</h3>
         <p>本頁是非官方同人展逛攤工具，不代表 Fancy Frontier 主辦單位。實際活動資訊請以主辦單位與社團最新公告為準。</p>

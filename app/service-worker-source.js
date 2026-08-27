@@ -6,7 +6,9 @@
  * the built asset list and a version derived from it, then writes `dist/sw.js`.
  *
  * Strategies:
- *   navigations    network-first, cached shell on failure
+ *   reader navigations network-first, cached shell on failure
+ *   other navigations  network-only — the circle portal and the policy
+ *                      notice are separate documents, not the reader shell
  *   static event data stale-while-revalidate — instant catalog, refreshed in place
  *   overrides.json network-only — failed freshness confirmation falls back to base
  *   hashed assets  cache-first — the filename already carries the version
@@ -62,6 +64,20 @@ self.addEventListener("activate", (event) => {
     await self.clients.claim();
   })());
 });
+
+/**
+ * Only the reader has an offline shell. The circle portal and the policy
+ * notice are separate documents, and `scripts/build-service-worker.mjs`
+ * deliberately precaches neither: the portal needs the network for its session
+ * anyway, and a policy document pinned into an offline cache is one a reader
+ * can be shown after it has been superseded. Storing either under `SHELL_URL`
+ * would hand the next offline reader launch the wrong document — with assets
+ * that were never precached — instead of the map. Reader state lives entirely
+ * in query parameters, so the reader is exactly these two paths.
+ */
+function isReaderNavigation(url) {
+  return url.pathname === "/" || url.pathname === "/index.html";
+}
 
 async function networkFirstNavigation(request) {
   const cache = await caches.open(CACHE_NAME);
@@ -122,7 +138,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(request));
+    event.respondWith(isReaderNavigation(url) ? networkFirstNavigation(request) : fetch(request));
     return;
   }
   if (/^\/data\/events\/[^/]+\/overrides\.json$/.test(url.pathname)) {

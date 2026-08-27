@@ -36,7 +36,13 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   assert.match(worker, /\/overrides\\\.json\$\/\.test\(url\.pathname\)/);
   assert.match(worker, /event\.respondWith\(fetch\(request\)\)/, "dynamic overlays must not be served from an arbitrarily stale offline cache");
   assert.match(worker, /request\.mode === "navigate"/);
-  assert.match(worker, /event\.respondWith\(networkFirstNavigation\(request\)\)/);
+  assert.match(worker, /event\.respondWith\(isReaderNavigation\(url\) \? networkFirstNavigation\(request\) : fetch\(request\)\)/);
+
+  // The circle portal and the privacy notice are separate documents whose
+  // assets are never precached. Storing one under the shell URL would hand the
+  // next offline reader launch the portal instead of the map, so only the
+  // reader's own two paths may refresh the shell.
+  assert.match(worker, /function isReaderNavigation\(url\) \{\s*return url\.pathname === "\/" \|\| url\.pathname === "\/index\.html";/);
   assert.doesNotMatch(worker, /\/api\//);
 
   // Vite emits a `crossorigin` bundle, so cached responses carry `Vary: Origin`
