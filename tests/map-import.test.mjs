@@ -10,7 +10,7 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { confirmedDraftSlots, formatSlotCode, generateRowSlots, inferRowFromAnchors, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { alignBoxesToEdge, applySelectionBoxes, boundingBox, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
@@ -323,6 +323,81 @@ test("row generation refuses definitions that cannot produce a valid row", () =>
   const clamped = generateRowSlots({ ...base, start: { x: 0, y: 0 }, end: { x: 100, y: 100 } }, bounds);
   assert.equal(clamped.ok, true);
   assert.ok(clamped.row.slots.every(({ rect }) => rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 100 && rect.y + rect.height <= 100));
+});
+
+test("three anchors on a straight row extrapolate every booth between them", () => {
+  // The 1st, 5th and 12th booth of a row pitched 30 units apart, marked exactly.
+  const result = inferRowFromAnchors([{ index: 1, x: 40, y: 60 }, { index: 5, x: 160, y: 60 }, { index: 12, x: 370, y: 60 }]);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.inference.start, { x: 40, y: 60 });
+  assert.deepEqual(result.inference.end, { x: 370, y: 60 });
+  assert.equal(result.inference.slotCount, 12, "the row runs from the lowest anchor ordinal to the highest");
+  assert.equal(result.inference.startNumber, 1);
+  assert.equal(result.inference.residual, 0, "an exact fit leaves no anchor off the line");
+});
+
+test("anchors given out of order, on a diagonal row, describe the same row", () => {
+  const result = inferRowFromAnchors([{ index: 9, x: 100, y: 190 }, { index: 1, x: 20, y: 30 }, { index: 5, x: 60, y: 110 }]);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.inference.start, { x: 20, y: 30 });
+  assert.deepEqual(result.inference.end, { x: 100, y: 190 });
+  assert.equal(result.inference.slotCount, 9);
+  assert.equal(result.inference.residual, 0);
+});
+
+test("a mis-clicked anchor is averaged out and reported as the residual", () => {
+  const clean = inferRowFromAnchors([{ index: 1, x: 10, y: 50 }, { index: 2, x: 40, y: 50 }, { index: 3, x: 70, y: 50 }]);
+  const nudged = inferRowFromAnchors([{ index: 1, x: 10, y: 50 }, { index: 2, x: 40, y: 62 }, { index: 3, x: 70, y: 50 }]);
+  assert.equal(clean.inference.residual, 0);
+  assert.ok(nudged.inference.residual > 7, `a 12-unit slip shows up as a residual, got ${nudged.inference.residual}`);
+  assert.deepEqual(nudged.inference.start, { x: 10, y: 54 }, "the fit splits the error instead of following the stray anchor");
+});
+
+test("anchor inference refuses input it cannot fit", () => {
+  assert.deepEqual(inferRowFromAnchors([{ index: 1, x: 0, y: 0 }, { index: 2, x: 10, y: 0 }]).errors, ["至少需要三個錨點。"]);
+  assert.deepEqual(inferRowFromAnchors([{ index: 1, x: 0, y: 0 }, { index: 1, x: 10, y: 0 }, { index: 3, x: 20, y: 0 }]).errors, ["錨點編號不可重複。"]);
+  assert.deepEqual(inferRowFromAnchors([{ index: 1.5, x: 0, y: 0 }, { index: 2, x: 10, y: 0 }, { index: 3, x: 20, y: 0 }]).errors, ["錨點編號必須是 0 或正整數。"]);
+  assert.deepEqual(inferRowFromAnchors([{ index: 1, x: Number.NaN, y: 0 }, { index: 2, x: 10, y: 0 }, { index: 3, x: 20, y: 0 }]).errors, ["錨點座標必須是有效數字。"]);
+  assert.equal(inferRowFromAnchors([]).inference, null);
+});
+
+test("an inferred row is only placed booth by booth, on a template with no recognizer", () => {
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 400, 300);
+  assert.equal(hasMapTemplateRecognizer(layout.template), false, "inference must not depend on a venue-specific recognizer");
+  const inferred = inferRowFromAnchors([{ index: 1, x: 60, y: 80 }, { index: 4, x: 150, y: 80 }, { index: 8, x: 270, y: 80 }]);
+  assert.equal(inferred.ok, true);
+  const { start, end, slotCount, startNumber } = inferred.inference;
+  const generated = generateRowSlots({
+    label: "甲", start, end, slotCount, startNumber, slotWidth: 24, slotHeight: 18, codePrefix: "甲", numberPadding: 2,
+  }, layout);
+  assert.equal(generated.ok, true);
+  assert.deepEqual(generated.row.slots.map((slot) => slot.code), ["甲01", "甲02", "甲03", "甲04", "甲05", "甲06", "甲07", "甲08"]);
+
+  // The draft never enters the layout whole: only what was confirmed is placed.
+  const draft = { slots: generated.row.slots, keep: generated.row.slots.map((slot, index) => index !== 2 && index !== 6) };
+  const confirmed = confirmedDraftSlots(draft);
+  assert.deepEqual(confirmed.map((slot) => slot.code), ["甲01", "甲02", "甲04", "甲05", "甲06", "甲08"], "the two booths that were dropped are not placed");
+  layout.rows.push({ label: "甲", orientation: "horizontal", confidence: 1, slots: confirmed });
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  assert.deepEqual(confirmedDraftSlots({ slots: generated.row.slots, keep: generated.row.slots.map(() => false) }), [],
+    "a draft nobody confirmed contributes nothing, so it can never reach a submission");
+});
+
+test("interpolation invents booths, so confirmation starts empty rather than pre-ticked", () => {
+  // Anchors on the 1st and 9th booth of a row whose 5th position is a gangway:
+  // the fit has no way to know, so booth 5 is generated and must be dropped.
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 400, 300);
+  const inferred = inferRowFromAnchors([{ index: 1, x: 40, y: 100 }, { index: 3, x: 120, y: 100 }, { index: 9, x: 360, y: 100 }]);
+  const { start, end, slotCount, startNumber } = inferred.inference;
+  const generated = generateRowSlots({
+    label: "A", start, end, slotCount, startNumber, slotWidth: 30, slotHeight: 20, codePrefix: "A", numberPadding: 2,
+  }, layout);
+  assert.equal(generated.row.slots.length, 9);
+  const untouched = { slots: generated.row.slots, keep: generated.row.slots.map(() => false) };
+  assert.deepEqual(confirmedDraftSlots(untouched), [], "pressing place on an untouched draft must have nothing to place");
+  const reviewed = { slots: generated.row.slots, keep: generated.row.slots.map((slot, index) => index !== 4) };
+  assert.equal(confirmedDraftSlots(reviewed).length, 8);
+  assert.equal(confirmedDraftSlots(reviewed).some((slot) => slot.code === "A05"), false, "the invented booth stays out of the layout");
 });
 
 test("row orientation comes from the endpoints, so it can never contradict them", () => {

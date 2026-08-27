@@ -81,6 +81,23 @@
 .rowFormActions button:disabled { color:#a1aaa4; cursor:not-allowed; }
 .rowFormActions .rowConfirm { border-color:#8fa899; background:#eef4f0; color:#26503c; }
 .rowFormActions .rowConfirm:hover { background:#e2ede6; }
+.draftSlot rect,.draftSlotKept rect { vector-effect:non-scaling-stroke; pointer-events:none; }
+.draftSlot text,.draftSlotKept text { font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+.draftSlot rect { fill:#ffffff40; stroke:#8f9c95; stroke-width:1; stroke-dasharray:4 4; }
+.draftSlot text { fill:#8f9c95; }
+.draftSlotKept rect { fill:#e9f0eccc; stroke:#3f7a5e; stroke-width:2; }
+.draftSlotKept text { fill:#2c5a45; font-weight:900; }
+.anchor circle { fill:#fff; stroke:#3f7a5e; stroke-width:2.5; vector-effect:non-scaling-stroke; pointer-events:none; }
+.anchor text { fill:#2c5a45; font-family:var(--font-mono),ui-monospace,monospace; font-size:9px; font-weight:900; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+.anchorPanel { margin-top:13px; padding-top:11px; border-top:1px solid #e2e5e1; }
+.anchorPanel>b { display:block; margin-bottom:7px; font-size:calc(9px * var(--ui-font-scale,1)); }
+.anchorList,.draftList { display:grid; gap:4px; max-height:190px; margin:0 0 9px; padding:0; overflow-y:auto; list-style:none; }
+.anchorList li { display:flex; align-items:center; gap:5px; }
+.anchorList li>span { flex:1 1 auto; overflow-wrap:anywhere; color:#657069; font:800 calc(8px * var(--ui-font-scale,1)) var(--font-mono),ui-monospace,monospace; }
+.anchorList li input { flex:0 0 58px; height:30px; }
+.anchorList li button { flex:0 0 auto; min-height:28px; padding:0 7px; border:1px solid #e1b8b1; border-radius:6px; background:#fff5f3; color:#9b3f33; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
+.draftList li label { display:flex; align-items:center; gap:6px; margin:0; color:#344039; font:800 calc(9px * var(--ui-font-scale,1)) var(--font-mono),ui-monospace,monospace; }
+.draftList li input { flex:0 0 auto; width:16px; height:16px; }
 .rowErrors { margin:0 0 9px; padding:8px 9px; border:1px solid #e1b8b1; border-radius:7px; background:#fff5f3; color:#9b3f33; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }
 .rowErrors span { display:block; }
 .rowList { margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }

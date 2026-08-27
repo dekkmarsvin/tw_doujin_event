@@ -22,6 +22,76 @@ export type RowDefinition = {
   numberPadding: number;
 };
 
+/** A point the contributor marked on the plan, tagged with which booth of the
+ * row it sits on. The index is that booth's ordinal, so anchors need not be
+ * adjacent or given in order: marking the 1st, 5th and 12th booth is enough. */
+export type RowAnchor = { index: number; x: number; y: number };
+
+export type RowInference = {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  slotCount: number;
+  startNumber: number;
+  /** How far the worst-placed anchor sits from where the fitted line puts it,
+   * in layout units. A large value means an anchor landed on the wrong booth. */
+  residual: number;
+};
+
+export type RowInferenceResult =
+  | { ok: true; inference: RowInference; errors: [] }
+  | { ok: false; inference: null; errors: string[] };
+
+function fitAxis(indices: readonly number[], values: readonly number[]) {
+  const count = indices.length;
+  const sumIndex = indices.reduce((total, value) => total + value, 0);
+  const sumValue = values.reduce((total, value) => total + value, 0);
+  const sumIndexSquared = indices.reduce((total, value) => total + value * value, 0);
+  const sumProduct = indices.reduce((total, value, position) => total + value * values[position], 0);
+  const slope = (count * sumProduct - sumIndex * sumValue) / (count * sumIndexSquared - sumIndex * sumIndex);
+  return { slope, intercept: (sumValue - slope * sumIndex) / count };
+}
+
+/** Fits a line through three or more marked booths by least squares on each
+ * axis, then extrapolates it to every booth between the lowest and highest
+ * anchor ordinal. The result feeds `generateRowSlots` as endpoints and a count,
+ * so anchors change how a row is described, not how it is built.
+ *
+ * Two anchors already determine a line, but three is the smallest number that
+ * can disagree: the fit absorbs the imprecision of clicking a booth centre by
+ * eye, and `residual` reports how far the worst anchor missed, which is the
+ * only signal that one of them was put on the wrong booth.
+ *
+ * Nothing here knows about any particular venue. It takes marked points and
+ * ordinals, so it works on any plan whose booths are evenly spaced along a
+ * line, which is what makes a row a row. */
+export function inferRowFromAnchors(anchors: readonly RowAnchor[]): RowInferenceResult {
+  const errors: string[] = [];
+  if (anchors.length < 3) errors.push("至少需要三個錨點。");
+  if (anchors.some(({ index }) => !Number.isInteger(index) || index < 0)) errors.push("錨點編號必須是 0 或正整數。");
+  if (anchors.some(({ x, y }) => !Number.isFinite(x) || !Number.isFinite(y))) errors.push("錨點座標必須是有效數字。");
+  if (new Set(anchors.map(({ index }) => index)).size !== anchors.length) errors.push("錨點編號不可重複。");
+  if (errors.length) return { ok: false, inference: null, errors };
+
+  const indices = anchors.map(({ index }) => index);
+  const x = fitAxis(indices, anchors.map((anchor) => anchor.x));
+  const y = fitAxis(indices, anchors.map((anchor) => anchor.y));
+  const at = (index: number) => ({ x: x.slope * index + x.intercept, y: y.slope * index + y.intercept });
+  const startNumber = Math.min(...indices);
+  const endNumber = Math.max(...indices);
+  const residual = Math.max(...anchors.map((anchor) => Math.hypot(at(anchor.index).x - anchor.x, at(anchor.index).y - anchor.y)));
+  return { ok: true, inference: { start: at(startNumber), end: at(endNumber), slotCount: endNumber - startNumber + 1, startNumber, residual }, errors: [] };
+}
+
+export type RowDraft = { slots: BoothSlot[]; keep: boolean[] };
+
+/** The booths an inferred draft still carries after the contributor went
+ * through it. An inferred row is never written into the layout as a whole:
+ * only what survives this filter is committed, so a booth nobody looked at
+ * cannot reach a submission. */
+export function confirmedDraftSlots(draft: RowDraft): BoothSlot[] {
+  return draft.slots.filter((slot, index) => draft.keep[index]);
+}
+
 export type RowGenerationResult =
   | { ok: true; row: BoothRow; errors: [] }
   | { ok: false; row: null; errors: string[] };
