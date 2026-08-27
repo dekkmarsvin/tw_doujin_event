@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import type { MouseEvent } from "react";
-import type { CircleCatalogStatus, CircleMedia, CircleViewRecord } from "./circle-records";
+import type { CircleCatalogStatus, CircleMedia, CircleViewRecord, SourceContentType } from "./circle-records";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
 import styles from "./event-workspace-panels.module.css";
@@ -13,20 +13,12 @@ const RESULT_LIMIT = 80;
 
 export type ActiveResultFilter = { id: string; label: string; onClear: () => void };
 
-const SOURCE_STATUS_LABEL = {
-  linked: "可核對",
+/** Only the states that change what a reader can do; healthy sources stay silent. */
+const SOURCE_STATUS_NOTE = {
+  linked: "",
   stale: "可能已過期",
-  unavailable: "暫時無法核對",
-  unverified: "尚未驗證",
-} as const;
-
-/** Only organizer data may read as official; circle-authored content says so. */
-const SOURCE_ORIGIN_LABEL = {
-  official: "主辦來源",
-  circle: "社團自述",
-  catalog: "公開整理資料",
-  social: "社群來源",
-  media: "外部媒體",
+  unavailable: "來源暫時無法開啟",
+  unverified: "",
 } as const;
 
 /** Shared with the circle portal so an author picks kinds by the name readers see. */
@@ -43,6 +35,11 @@ export const LINK_KIND_LABEL = {
 function sourceDate(value: string) {
   const date = value.slice(0, 10).replaceAll("-", ".");
   return date || "時間不明";
+}
+
+/** Organizer rows were imported; circle rows were typed here, so they read as an update. */
+function sourceDateLabel(source: { contentType: SourceContentType; fetchedAt: string }) {
+  return `${source.contentType === "circle" ? "最後更新" : "匯入"} ${sourceDate(source.fetchedAt)}`;
 }
 
 export function SearchResults({ records, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
@@ -211,8 +208,7 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
       </div>}
       {!compact && <div className={styles.sources} aria-label="資料來源">
         <b>資料來源</b>
-        {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong><small>{source.label} · {SOURCE_ORIGIN_LABEL[source.contentType]} · {SOURCE_STATUS_LABEL[source.status]}</small><small>匯入 {sourceDate(source.fetchedAt)}</small></span>{source.url ? <a href={source.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}>查看原始來源 <UiIcon name="external" /></a> : <small className={styles.sourceNoLink}>於本站填寫</small>}</div>)}
-        <p>攤位與社團名稱以主辦資料為準；其他內容由社團自行提供。</p>
+        {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong>{source.label && <small>{source.label}</small>}{SOURCE_STATUS_NOTE[source.status] && <small>{SOURCE_STATUS_NOTE[source.status]}</small>}<small>{sourceDateLabel(source)}</small></span>{source.url && <a href={source.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}>原始來源 <UiIcon name="external" /></a>}</div>)}
       </div>}
     </div>
   </section>;

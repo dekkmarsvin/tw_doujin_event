@@ -170,9 +170,6 @@
 .sources strong, .sources small { display:block; }
 .sources small { color:#8f8781; }
 .sources a { flex:0 0 auto; color:#a54d3f; text-decoration:underline; text-underline-offset:2px; }
-/* Self-reported rows have no external page to open; keep the slot, drop the link. */
-.sources .sourceNoLink { flex:0 0 auto; color:#8f8781; white-space:nowrap; }
-.sources p { margin:6px 0 0; color:#8f8781; }
 .sourceSummary { display:flex; align-items:center; gap:8px; margin-top:10px; padding:9px 10px; border:1px solid #eadfd6; border-radius:8px; background:#fffaf6; font-size:calc(8px * var(--ui-font-scale,1)); }
 .sourceSummary b { flex:0 0 auto; }.sourceSummary span { min-width:0; overflow:hidden; color:#827970; text-overflow:ellipsis; white-space:nowrap; }
 .fullDetailButton { width:100%; min-height:34px; margin-top:7px; border:1px solid #ccd3cd; border-radius:8px; background:#fff; color:#3e4a43; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }

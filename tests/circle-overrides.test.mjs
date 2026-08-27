@@ -127,20 +127,20 @@ test("an absent overlay produces exactly the reviewed catalog", () => {
   assert.deepEqual(records.buildCircleCatalog(payload, undefined).records[0], base.records[0]);
 });
 
-test("circle-authored content is labelled as self-reported, never as organizer data", () => {
+test("circle-authored content names who typed it, never the organizer", () => {
   const edited = records.buildCircleCatalog(payload, withFields(placed.id, { saleInfo: "新刊 300 元" }));
   const circle = edited.circlesById.get(placed.id);
 
-  const self = circle.sources.find((source) => source.provider === "社團本人");
+  const self = circle.sources.find((source) => source.provider === "由社團填寫");
   assert.ok(self, "an override must add its own provenance entry");
   assert.equal(self.contentType, "circle");
   assert.equal(self.status, "unverified");
-  assert.equal(self.url, "", "self-reported content has no external page to link");
+  assert.equal(self.url, "", "circle-authored content has no external page to link");
   assert.equal(circle.updatedAt, "2026-08-13T00:00:00.000Z");
 
   // The organizer source is still present and still first.
   assert.equal(edited.recordsByCircleId.get(placed.id)[0].sources[0].provider, "活動主辦單位");
-  assert.equal(base.circlesById.get(placed.id).sources.some((source) => source.provider === "社團本人"), false);
+  assert.equal(base.circlesById.get(placed.id).sources.some((source) => source.provider === "由社團填寫"), false);
 });
 
 test("edited text flows into the derived read model and becomes searchable", () => {

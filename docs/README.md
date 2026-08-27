@@ -5,7 +5,7 @@
 | 我想知道… | 去哪裡 |
 |---|---|
 | 產品要解決什麼、給誰用、邊界在哪 | [`PRODUCT.md`](../PRODUCT.md) |
-| 介面長什麼樣、用哪些 token 與視覺規則 | [`DESIGN.md`](../DESIGN.md) |
+| 介面長什麼樣、用哪些 token、視覺規則與對外文案規則 | [`DESIGN.md`](../DESIGN.md) |
 | 這個詞在本專案是什麼意思 | [`CONTEXT.md`](../CONTEXT.md) |
 | **某個模組現在的行為是什麼、怎麼驗收** | [`contracts/`](#契約) |
 | **怎麼做某件事** | [`runbooks/`](#流程) |
@@ -83,6 +83,7 @@
 | [0033](./adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) | 地圖貢獻採管理者授權、私人平行草稿與明確保存期限 |
 | [0034](./adr/0034-production-origin-gates-deployment.md) | Pages production origin 阻擋壞部署，自訂網域 smoke 提供非阻塞訊號 |
 | [0035](./adr/0035-new-event-onboarding-is-data-driven.md) | **草稿**：新活動 onboarding 資料驅動；只有空白畫布、來源說明與排原語的第一階段已實作 |
+| [0036](./adr/0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 |
 
 ## 對外文件
 
