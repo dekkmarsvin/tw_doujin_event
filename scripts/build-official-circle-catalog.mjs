@@ -5,12 +5,23 @@ import { assertExactOrganizerEvidenceCoverage, consumeOrganizerEvidenceKey } fro
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const eventId = process.argv[2];
-const check = process.argv.includes("--check");
-if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) throw new Error("Usage: node scripts/build-official-circle-catalog.mjs <event-id> [--check]");
+const [eventId, ...arguments_] = process.argv.slice(2);
+const check = arguments_.includes("--check");
+const workspaceIndex = arguments_.indexOf("--workspace");
+const workspaceArgument = workspaceIndex >= 0 ? arguments_[workspaceIndex + 1] : null;
+const expectedArguments = [
+  ...(check ? ["--check"] : []),
+  ...(workspaceArgument ? ["--workspace", workspaceArgument] : []),
+];
+if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)
+  || arguments_.length !== expectedArguments.length
+  || arguments_.some((value, index) => value !== expectedArguments[index])) {
+  throw new Error("Usage: node scripts/build-official-circle-catalog.mjs <event-id> [--check] [--workspace <directory>]");
+}
+const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
 
-const dataDir = path.join(root, ".event-data", eventId);
-const outputPath = path.join(root, "public", "data", "events", eventId, "circles.json");
+const dataDir = path.join(workspace, ".event-data", eventId);
+const outputPath = path.join(workspace, "public", "data", "events", eventId, "circles.json");
 const [event, official, evidence] = await Promise.all([
   readJsonFileStrict(path.join(dataDir, "event.json"), "event.json"),
   readJsonFileStrict(path.join(dataDir, "official-booths.json"), "official-booths.json"),

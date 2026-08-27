@@ -6,12 +6,28 @@ import { replaceVerifiedTrees, stageReferenceData } from "./reference-data-fetch
 import { parseJsonBytesStrict, readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const eventId = process.argv[2];
-if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) throw new Error("Usage: npm run data:fetch -- <event-id>");
+const [eventId, ...arguments_] = process.argv.slice(2);
+let pinArgument = null;
+let workspaceArgument = null;
+for (let index = 0; index < arguments_.length; index += 2) {
+  const [option, value] = arguments_.slice(index, index + 2);
+  if (!value || (option === "--pin" && pinArgument) || (option === "--workspace" && workspaceArgument)) {
+    throw new Error("Usage: npm run data:fetch -- <event-id> [--pin <event-data-pin.json>] [--workspace <directory>]");
+  }
+  if (option === "--pin") pinArgument = value;
+  else if (option === "--workspace") workspaceArgument = value;
+  else throw new Error("Usage: npm run data:fetch -- <event-id> [--pin <event-data-pin.json>] [--workspace <directory>]");
+}
+if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) {
+  throw new Error("Usage: npm run data:fetch -- <event-id> [--pin <event-data-pin.json>] [--workspace <directory>]");
+}
 
-const pinPath = path.join(root, "data", "event-data-pins", `${eventId}.json`);
+const pinPath = pinArgument
+  ? path.resolve(root, pinArgument)
+  : path.join(root, "data", "event-data-pins", `${eventId}.json`);
 const pin = assertEventDataPinIdentity(parseEventDataPin(await readJsonFileStrict(pinPath, `Event data pin ${eventId}`)), eventId);
-const destination = path.join(root, ".event-data", eventId);
+const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
+const destination = path.join(workspace, ".event-data", eventId);
 await mkdir(path.dirname(destination), { recursive: true });
 // A sibling temp directory keeps the final rename atomic on Windows too; the
 // system temp directory may be on C: while the checkout is on D: (EXDEV).
@@ -40,14 +56,15 @@ try {
     throw new Error("Pinned reference-data-pin.json is not valid UTF-8 JSON.");
   }
   if (referencePin.eventId !== eventId) throw new Error(`Reference data pin identity mismatch: expected ${eventId}, got ${referencePin.eventId}.`);
-  const referenceDestination = path.join(root, ".reference-data", eventId);
+  const referenceDestination = path.join(workspace, ".reference-data", eventId);
   const stagedReference = await stageReferenceData(referencePin, referenceDestination);
   temporaryReference = stagedReference.temporary;
   await replaceVerifiedTrees([
     { temporary: temporaryReference, destination: referenceDestination },
     { temporary, destination },
   ]);
-  console.log(`Fetched ${pin.repository}@${pin.commit} to ${path.relative(root, destination)}`);
+  const location = workspaceArgument ? "isolated onboarding workspace" : path.relative(root, destination);
+  console.log(`Fetched ${pin.repository}@${pin.commit} to ${location}`);
 } catch (error) {
   await rm(temporary, { recursive: true, force: true });
   if (temporaryReference) await rm(temporaryReference, { recursive: true, force: true });
