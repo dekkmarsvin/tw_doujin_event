@@ -17,14 +17,24 @@ export type BoothRow = {
 
 export type MapPillar = MapRect & { id: string };
 
+export const MAP_ACCESS_DIRECTIONS = ["north", "south", "east", "west"] as const;
+export type MapAccessDirection = (typeof MAP_ACCESS_DIRECTIONS)[number];
+
 export type MapAccessPoint = {
   id: string;
   kind: "entrance" | "exit";
-  direction: "north" | "south";
+  direction: MapAccessDirection;
   x: number;
   y: number;
   label: string;
 };
+
+/** 三個 renderer 的箭頭都畫成向北，其餘方向以繞著出入口座標旋轉表示；
+ * 標籤文字留在旋轉群組外，維持水平可讀。 */
+export function mapAccessArrowTransform(point: Pick<MapAccessPoint, "direction" | "x" | "y">): string | undefined {
+  const degrees = { north: 0, east: 90, south: 180, west: 270 }[point.direction] ?? 0;
+  return degrees ? `rotate(${degrees}, ${point.x}, ${point.y})` : undefined;
+}
 
 export type MapLandmarkKind = "enterprise" | "stage" | "other";
 
@@ -177,7 +187,7 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
       else if (accessIds.has(point.id)) errors.push(`出入口 id ${point.id} 重複。`);
       else accessIds.add(point.id);
       if (point.kind !== "entrance" && point.kind !== "exit") errors.push(`出入口 ${point.id || "未命名"} 的類型無效。`);
-      if (point.direction !== "north" && point.direction !== "south") errors.push(`出入口 ${point.id || "未命名"} 的方向無效。`);
+      if (!MAP_ACCESS_DIRECTIONS.includes(point.direction as MapAccessDirection)) errors.push(`出入口 ${point.id || "未命名"} 的方向無效。`);
       if (typeof point.label !== "string" || !point.label.trim()) errors.push(`出入口 ${point.id || "未命名"} 必須有顯示名稱。`);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`出入口 ${point.id || "未命名"} 的座標無效。`);
     });
