@@ -30,13 +30,17 @@ let sent;
 let objects;
 let scopeConfig;
 
+/** Carries one booth and one landmark so a targeted change request has
+ * something real to point at; a request naming an absent element is refused. */
 function validContent() {
   return {
     schema: "map-contribution-draft/1",
     layout: {
       version: 2, template: "SAMPLE", width: 100, height: 100,
       floor: { x: 0, y: 0, width: 100, height: 100 },
-      rows: [], pillars: [], accessPoints: [], landmarks: [],
+      rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A07", rect: { x: 10, y: 10, width: 20, height: 10 } }] }],
+      pillars: [], accessPoints: [],
+      landmarks: [{ id: "stage-1", kind: "stage", label: "舞台", rect: { x: 50, y: 50, width: 20, height: 10 } }],
     },
   };
 }
@@ -48,7 +52,9 @@ beforeEach(async () => {
   scopeConfig = {
     eventId: "ff47", periodKey: "1", periodAliases: ["1", "day-1"],
     venueSpaceId: "zhengyan-exhibition-area", mapTemplate: "SAMPLE",
-    allowedBoothCodes: [], requiredBoothCodes: [], targetPath: "map.json",
+    // A07 is the booth validContent() draws, so a targeted change request has a
+    // real element to name without the draft failing official coverage.
+    allowedBoothCodes: ["A07"], requiredBoothCodes: [], targetPath: "map.json",
   };
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
   await repository.ensureTables();
@@ -393,7 +399,8 @@ test("submission validates official coverage and requires evidence from the curr
   await grant("mapper@example.test", adminCookie);
   const { body: draft } = await newDraft(mapperCookie);
 
-  scopeConfig = { ...scopeConfig, allowedBoothCodes: ["A01"], requiredBoothCodes: ["A01"] };
+  // A07 stays allowed - it is the booth the draft draws - so the missing one is A01.
+  scopeConfig = { ...scopeConfig, allowedBoothCodes: ["A01", "A07"], requiredBoothCodes: ["A01"] };
   let response = await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
     expectedRevision: 1,
   }, mapperCookie), draft.draftId);
@@ -626,6 +633,11 @@ test("a review thread accumulates, points at single booths, and never names an a
   assert.equal((await post(mapperCookie, { body: "   " })).status, 400);
   assert.equal((await post(mapperCookie, { body: "沒有指定代碼。", targetKind: "slot" })).status, 400);
   assert.equal((await post(mapperCookie, { body: "類型不存在。", targetKind: "pillar", targetRef: "p1" })).status, 400);
+  // A reference the draft does not contain would render as a link that does
+  // nothing when pressed, so it is refused rather than stored.
+  assert.equal((await post(adminCookie, { body: "這格不存在。", targetKind: "slot", targetRef: "Z99" })).status, 400);
+  assert.equal((await post(adminCookie, { body: "這個區域不存在。", targetKind: "landmark", targetRef: "stage-9" })).status, 400);
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 3, "none of the refusals wrote a row");
 });
 
 test("only the draft owner or an admin can add to its thread", async () => {
@@ -768,6 +780,11 @@ test("only a change request can carry per-element requests", async () => {
   assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
     expectedRevision: 1,
   }, mapperCookie), draft.draftId)).status, 200);
+
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "changes_requested", note: "要改",
+    targets: [{ targetKind: "slot", targetRef: "Z99", body: "這格不存在。" }],
+  }, adminCookie), draft.draftId)).status, 400, "a review cannot point at a booth the draft does not have");
 
   const targets = [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }];
   for (const decision of ["reject", "approve"]) {

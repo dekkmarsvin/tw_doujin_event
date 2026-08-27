@@ -10,7 +10,7 @@ import {
   buildMapCandidate, parseMapContributionDraftContent, validateMapContributionDraft,
   type MapContributionScope, type MapDraftActorRole, type MapDraftConflict,
 } from "./map-contribution-draft";
-import type { PublishedEventMap } from "./event-map";
+import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -1067,6 +1067,27 @@ export function createCirclePortalHandlers({
     return { ok: true, kind, ref };
   }
 
+  /** True when the draft actually contains the element a request names. A
+   * reference that is not there renders as a link the contributor can press
+   * and that then does nothing, so it is refused rather than stored. */
+  function mapDraftHasTarget(contentJson: string | null, kind: "slot" | "landmark", ref: string) {
+    const layout = mapDraftLayout(contentJson);
+    if (!layout) return false;
+    return kind === "slot"
+      ? layout.rows.some((row) => row.slots.some((slot) => slot.code === ref))
+      : layout.landmarks.some((landmark) => landmark.id === ref);
+  }
+
+  function mapDraftLayout(contentJson: string | null): EventMapLayout | null {
+    if (!contentJson) return null;
+    try {
+      const content = JSON.parse(contentJson) as { layout?: unknown };
+      return validateEventMapLayout(content?.layout).ok ? content.layout as EventMapLayout : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function postMapDraftComment(request: Request, draftId: string) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
@@ -1091,6 +1112,9 @@ export function createCirclePortalHandlers({
     if (!text) return json({ error: "留言內容不可留空。" }, 400);
     const target = mapDraftCommentTarget(body);
     if (!target.ok) return json({ error: "指定的對象無效。" }, 400);
+    if (target.kind && target.ref && !mapDraftHasTarget(draft.content_json, target.kind, target.ref)) {
+      return json({ error: "草稿中沒有這個元素。" }, 400);
+    }
     const role = asAdmin ? "admin" : "map_contributor";
     const id = await repository.addMapDraftComment({
       draftId, eventId: config.eventId, authorAccountId: current.accountId, authorRole: role,
@@ -1141,11 +1165,15 @@ export function createCirclePortalHandlers({
       if (!target.ok || !target.kind || !target.ref || !text) return json({ error: "局部修改請求必須指定對象與內容。" }, 400);
       targets.push({ targetKind: target.kind, targetRef: target.ref, body: text });
     }
+
     if (decision === "approve" && !confirmOfficialSource) {
       return json({ error: "核准前必須確認目前版本的檔案來自活動官方說明頁面。" }, 400);
     }
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft) return json({ error: "找不到草稿。" }, 404);
+    if (targets.length && !targets.every(({ targetKind, targetRef }) => mapDraftHasTarget(draft.content_json, targetKind, targetRef))) {
+      return json({ error: "草稿中沒有這個元素。" }, 400);
+    }
 
     if (decision === "approve") {
       const evidence = await repository.listMapDraftFiles(draftId, Number(expectedRevision));
