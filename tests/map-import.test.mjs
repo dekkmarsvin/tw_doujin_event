@@ -302,13 +302,24 @@ test("a gesture collapses into one step, and sealing ends the run", () => {
   assert.equal(history.past.length, 2);
   assert.equal(undoLayoutHistory(history).present.marker, "drag-3");
 
+  // Arrow-key runs need the same treatment on key release: two runs in the
+  // same direction share a key, so an unsealed second run would swallow the
+  // first run's step and undo would jump back past both.
+  history = pushLayoutHistory(history, historyLayout("nudge-1"), "nudge:slot:0:0:-1,0");
+  history = pushLayoutHistory(history, historyLayout("nudge-2"), "nudge:slot:0:0:-1,0");
+  assert.equal(history.past.length, 3);
+  history = sealLayoutHistory(history);
+  history = pushLayoutHistory(history, historyLayout("nudge-3"), "nudge:slot:0:0:-1,0");
+  assert.equal(history.past.length, 4);
+  assert.equal(undoLayoutHistory(history).present.marker, "nudge-2");
+
   // A different key ends the run without an explicit seal.
   history = pushLayoutHistory(history, historyLayout("typed"), "field:slot:0:0:code");
-  assert.equal(history.past.length, 3);
+  assert.equal(history.past.length, 5);
   // Unkeyed pushes never coalesce, not even with each other.
   history = pushLayoutHistory(history, historyLayout("added"));
   history = pushLayoutHistory(history, historyLayout("removed"));
-  assert.equal(history.past.length, 5);
+  assert.equal(history.past.length, 7);
 });
 
 test("editing after an undo discards the redo branch", () => {
