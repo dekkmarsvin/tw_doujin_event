@@ -190,6 +190,30 @@ export function itemIndicesOf(selections: readonly Selection[], kind: "pillar" |
   return selections.filter((item): item is Extract<Selection, { itemIndex: number }> => item.kind === kind).map(({ itemIndex }) => itemIndex);
 }
 
+function descending(indices: readonly number[]) {
+  return [...new Set(indices)].sort((a, b) => b - a);
+}
+
+/** Removes every selected element in one pass. A `Selection` addresses its
+ * element by array index, so each list is spliced from its highest index down:
+ * removing a low one first would shift every index still waiting its turn onto
+ * the wrong element. Rows emptied by the removal go too, matching what deleting
+ * a row's last booth has always done. The hall outline is not removable and is
+ * ignored here rather than refused, so a mixed selection still deletes. */
+export function removeSelectionsFrom(draft: EventMapLayout, selections: readonly Selection[]) {
+  const byRow = new Map<number, number[]>();
+  slotSelections(selections).forEach(({ rowIndex, itemIndex }) => byRow.set(rowIndex, [...(byRow.get(rowIndex) ?? []), itemIndex]));
+  descending([...byRow.keys()]).forEach((rowIndex) => {
+    const row = draft.rows[rowIndex];
+    if (!row) return;
+    descending(byRow.get(rowIndex) ?? []).forEach((itemIndex) => row.slots.splice(itemIndex, 1));
+    if (!row.slots.length) draft.rows.splice(rowIndex, 1);
+  });
+  descending(itemIndicesOf(selections, "pillar")).forEach((itemIndex) => draft.pillars.splice(itemIndex, 1));
+  descending(itemIndicesOf(selections, "access")).forEach((itemIndex) => draft.accessPoints.splice(itemIndex, 1));
+  descending(itemIndicesOf(selections, "landmark")).forEach((itemIndex) => draft.landmarks.splice(itemIndex, 1));
+}
+
 /** The two uniqueness rules a row has to satisfy before it can join a layout:
  * one label per row, one code per booth across the whole map. Row creation and
  * offset paste both go through here so neither can drift from the other. */

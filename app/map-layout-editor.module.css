@@ -22,7 +22,7 @@
 .zoomSurface { min-width:100%; border:1px solid #bdc4be; border-radius:8px; background:#fff; overflow:hidden; }
 .canvas svg { display:block; width:100%; height:100%; background:#fff; touch-action:auto; user-select:none; }
 .canvas svg:focus-visible { outline:3px solid #9fb4aa; outline-offset:2px; }
-.paper { fill:#f8f7f2; }
+.paper { fill:#f8f7f2; pointer-events:none; }
 .sourceImage { opacity:.3; pointer-events:none; }
 .floor { fill:#fff9; stroke:#67736c; stroke-width:3; vector-effect:non-scaling-stroke; pointer-events:none; }
 .floorHandle { fill:none; stroke:#0000; stroke-width:16; vector-effect:non-scaling-stroke; pointer-events:stroke; }
@@ -47,6 +47,7 @@
 .resizeHandle:active .resizeKnob { fill:#f8ddd8; }
 .resizeNwSe { cursor:nwse-resize; }
 .resizeNeSw { cursor:nesw-resize; }
+.band { fill:#e86f5d14; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:6 4; vector-effect:non-scaling-stroke; pointer-events:none; }
 .snapGuide { fill:none; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke; pointer-events:none; }
 .inspector { min-width:0; padding:15px; border-left:1px solid #d4dad5; background:#fff; }
 .canvasSize { margin-top:0; margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
@@ -65,6 +66,10 @@
 .inspector input:focus,.inspector select:focus { border-color:#7d8981; outline:3px solid #dfe8e3; outline-offset:1px; }
 .remove { width:100%; min-height:34px; margin-top:9px; border:1px solid #e1b8b1; border-radius:7px; background:#fff5f3; color:#9b3f33; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
 .remove:hover { background:#ffebe7; }.remove:active { background:#f8ddd8; }
+.batchTools { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px; }
+.batchTools button { flex:1 1 44%; min-height:34px; border:1px solid #d4dad5; border-radius:7px; background:#fff; color:#344039; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
+.batchTools button:hover { border-color:#79857d; background:#f2f4f1; }
+.batchTools button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
 .hint { margin:13px 0 0; color:#89928c; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }
 @media (max-width:820px) { .editor>header { align-items:flex-start; flex-direction:column; }.addTools { justify-content:flex-start; }.workspace { grid-template-columns:1fr; }.canvasToolbar { align-items:flex-start; flex-direction:column; }.canvasToolbar>div { width:100%; flex-wrap:wrap; }.canvasToolbar button span { display:none; }.canvasViewport { height:420px; }.inspector { min-height:220px; border-top:1px solid #d4dad5; border-left:0; } }
 .rowPanel { margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
@@ -72,7 +77,8 @@
 .rowPanel p { margin:0 0 9px; color:#748078; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }
 .rowFormActions { display:flex; gap:6px; margin-top:4px; }
 .rowFormActions button { flex:1; min-height:34px; border:1px solid #d4dad5; border-radius:7px; background:#fff; color:#344039; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
-.rowFormActions button:hover { border-color:#79857d; background:#f2f4f1; }
+.rowFormActions button:hover:not(:disabled) { border-color:#79857d; background:#f2f4f1; }
+.rowFormActions button:disabled { color:#a1aaa4; cursor:not-allowed; }
 .rowFormActions .rowConfirm { border-color:#8fa899; background:#eef4f0; color:#26503c; }
 .rowFormActions .rowConfirm:hover { background:#e2ede6; }
 .rowErrors { margin:0 0 9px; padding:8px 9px; border:1px solid #e1b8b1; border-radius:7px; background:#fff5f3; color:#9b3f33; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }
