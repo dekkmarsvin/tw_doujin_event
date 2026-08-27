@@ -1,46 +1,33 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowDefinition, type SnapGuide } from "./map-layout-editor-geometry";
+import { alignBoxesToEdge, applySelectionBoxes, boundingBox, boxFor, findRowConflicts, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection, type SlotClipboard } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
 
-type Selection =
-  | { kind: "floor" }
-  | { kind: "slot"; rowIndex: number; itemIndex: number }
-  | { kind: "pillar"; itemIndex: number }
-  | { kind: "access"; itemIndex: number }
-  | { kind: "landmark"; itemIndex: number };
-
-/** Everything except an access point is a rectangle, so moving, corner resizing
- * and the coordinate fields all take one path. */
-type RectSelection = Exclude<Selection, { kind: "access" }>;
-
-type MoveDragState = {
-  mode: "move";
+/** A gesture holds the box every selected element had when it started, so each
+ * pointer move is applied to that starting state instead of compounding onto
+ * the previous frame. Both gestures carry the whole selection: a batch of one
+ * takes the same path as a batch of thirty. */
+type GestureState = {
   pointerId: number;
   historyKey: string;
-  selection: Selection;
+  selections: Selection[];
+  boxes: MapRect[];
   startX: number;
   startY: number;
-  originX: number;
-  originY: number;
 };
 
-type ResizeDragState = {
-  mode: "resize";
-  pointerId: number;
-  historyKey: string;
-  selection: RectSelection;
-  corner: ResizeCorner;
-  startX: number;
-  startY: number;
-  originRect: MapRect;
-};
+type MoveDragState = GestureState & { mode: "move" };
+type ResizeDragState = GestureState & { mode: "resize"; corner: ResizeCorner; originBounds: MapRect };
+/** A rubber band selects rather than edits, so it carries no boxes and never
+ * reaches `commit`. `base` is the selection to merge into when Shift is held. */
+type BandDragState = { mode: "band"; pointerId: number; startX: number; startY: number; additive: boolean; base: Selection[] };
 
-type DragState = MoveDragState | ResizeDragState;
+type DragState = MoveDragState | ResizeDragState | BandDragState;
 
 type Props = {
   layout: EventMapLayout;
@@ -117,42 +104,11 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function selectionKey(selection: Selection) {
-  if (selection.kind === "floor") return "floor";
-  return `${selection.kind}:${selection.kind === "slot" ? `${selection.rowIndex}:` : ""}${selection.itemIndex}`;
-}
-
-/** The rectangle as it lives inside `layout`, so a caller holding a draft edits
- * the element in place. */
-function rectFor(layout: EventMapLayout, selection: RectSelection): MapRect | undefined {
-  if (selection.kind === "slot") return layout.rows[selection.rowIndex]?.slots[selection.itemIndex]?.rect;
-  if (selection.kind === "pillar") return layout.pillars[selection.itemIndex];
-  if (selection.kind === "landmark") return layout.landmarks[selection.itemIndex]?.rect;
-  return layout.floor;
-}
-
-function selectedPosition(layout: EventMapLayout, selection: Selection) {
-  return selection.kind === "access" ? layout.accessPoints[selection.itemIndex] : rectFor(layout, selection);
-}
-
-/** Snap partners are the other rectangles of the same kind: booths align with
- * booths, pillars with pillars, enterprise landmarks with enterprise landmarks.
- * The hall outline has nothing of its kind to align to. */
-function snapTargetsFor(layout: EventMapLayout, selection: RectSelection) {
-  if (selection.kind === "slot") return layout.rows.flatMap((row, rowIndex) => row.slots
-    .filter((slot, itemIndex) => rowIndex !== selection.rowIndex || itemIndex !== selection.itemIndex)
-    .map((slot) => ({ id: slot.code, rect: slot.rect })));
-  if (selection.kind === "pillar") return layout.pillars
-    .filter((pillar, itemIndex) => itemIndex !== selection.itemIndex)
-    .map((pillar) => ({ id: pillar.id, rect: pillar as MapRect }));
-  if (selection.kind === "landmark" && resolveMapLandmarkKind(layout.landmarks[selection.itemIndex] ?? { label: "" }) === "enterprise") return layout.landmarks
-    .filter((landmark, itemIndex) => itemIndex !== selection.itemIndex && resolveMapLandmarkKind(landmark) === "enterprise")
-    .map((landmark) => ({ id: landmark.id, rect: landmark.rect }));
-  return [];
-}
-
 export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }: Props) {
-  const [selection, setSelection] = useState<Selection | null>(null);
+  const [selections, setSelections] = useState<Selection[]>([]);
+  // The inspector's per-element fields only mean anything for exactly one
+  // element, so a larger set falls through to the batch panel instead.
+  const selection = selections.length === 1 ? selections[0] : null;
   const [history, setHistory] = useState<LayoutHistory>(() => createLayoutHistory(layout));
   // The parent owns the layout: recognizing a new image, starting a blank map
   // or restoring the baseline replaces it wholesale. None of those are editor
@@ -164,6 +120,9 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const [rowForm, setRowForm] = useState<RowFormState | null>(null);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
+  const [band, setBand] = useState<MapRect | null>(null);
+  const [clipboard, setClipboard] = useState<SlotClipboard | null>(null);
+  const [pasteForm, setPasteForm] = useState({ offsetX: "0", offsetY: "0", label: "" });
   const drag = useRef<DragState | null>(null);
   const editorRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -200,7 +159,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     const next = undoLayoutHistory(history);
     if (next === history) return;
     setHistory(next);
-    setSelection(null);
+    setSelections([]);
     onChange(next.present);
   };
 
@@ -208,7 +167,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     const next = redoLayoutHistory(history);
     if (next === history) return;
     setHistory(next);
-    setSelection(null);
+    setSelections([]);
     onChange(next.present);
   };
 
@@ -264,47 +223,47 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     commit((draft) => Object.assign(draft, scaleEventMapLayout(draft, { width, height })), coalesceKey);
   };
 
-  const pointInLayout = (event: PointerEvent<SVGSVGElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
+  const pointIn = (element: SVGSVGElement, event: { clientX: number; clientY: number }) => {
+    const bounds = element.getBoundingClientRect();
     return {
       x: (event.clientX - bounds.left) * layout.width / bounds.width,
       y: (event.clientY - bounds.top) * layout.height / bounds.height,
     };
   };
 
-  const startDrag = (event: PointerEvent<SVGElement>, nextSelection: Selection) => {
+  /** Shift adds to or removes from the set; pressing a member of an existing
+   * multi-selection drags the whole group, which is what makes a batch move
+   * possible at all; anything else selects only what was pressed. A Shift-click
+   * ends there rather than starting a drag, so building a set cannot nudge it. */
+  const startDrag = (event: PointerEvent<SVGElement>, target: Selection) => {
     const svg = svgRef.current;
-    const position = selectedPosition(layout, nextSelection);
-    if (!svg || !position) return;
-    const bounds = svg.getBoundingClientRect();
-    const point = {
-      x: (event.clientX - bounds.left) * layout.width / bounds.width,
-      y: (event.clientY - bounds.top) * layout.height / bounds.height,
-    };
+    if (!svg) return;
+    const next = event.shiftKey ? toggleSelection(selections, target)
+      : selections.some((item) => selectionKey(item) === selectionKey(target)) ? selections
+        : [target];
     event.preventDefault();
     event.stopPropagation();
+    setSelections(next);
+    if (event.shiftKey) return;
+    const resolved = resolveSelectionBoxes(layout, next);
+    if (!resolved.boxes.length) return;
+    const point = pointIn(svg, event);
     svg.setPointerCapture(event.pointerId);
     svg.focus({ preventScroll: true });
     setSnapGuides([]);
-    setSelection(nextSelection);
-    drag.current = { mode: "move", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:move:${selectionKey(nextSelection)}`, selection: nextSelection, startX: point.x, startY: point.y, originX: position.x, originY: position.y };
+    drag.current = { mode: "move", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:move:${selectionSetKey(next)}`, selections: resolved.selections, boxes: resolved.boxes, startX: point.x, startY: point.y };
   };
 
-  const startResize = (event: PointerEvent<SVGElement>, svg: SVGSVGElement, nextSelection: RectSelection, corner: ResizeCorner) => {
-    const rect = rectFor(layout, nextSelection);
-    if (!rect) return;
-    const bounds = svg.getBoundingClientRect();
-    const point = {
-      x: (event.clientX - bounds.left) * layout.width / bounds.width,
-      y: (event.clientY - bounds.top) * layout.height / bounds.height,
-    };
+  const startResize = (event: PointerEvent<SVGElement>, svg: SVGSVGElement, corner: ResizeCorner) => {
+    const resolved = resolveSelectionBoxes(layout, selections);
+    if (!resolved.boxes.length) return;
+    const point = pointIn(svg, event);
     event.preventDefault();
     event.stopPropagation();
     svg.setPointerCapture(event.pointerId);
     svg.focus({ preventScroll: true });
     setSnapGuides([]);
-    setSelection(nextSelection);
-    drag.current = { mode: "resize", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:resize:${selectionKey(nextSelection)}`, selection: nextSelection, corner, startX: point.x, startY: point.y, originRect: { ...rect } };
+    drag.current = { mode: "resize", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:resize:${selectionSetKey(selections)}`, selections: resolved.selections, boxes: resolved.boxes, originBounds: boundingBox(resolved.boxes), corner, startX: point.x, startY: point.y };
   };
 
   /** Handles are drawn only around whatever is selected, so the corner in the
@@ -312,58 +271,69 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const handleResizePointerDown = (event: PointerEvent<SVGGElement>) => {
     const svg = event.currentTarget.ownerSVGElement;
     const corner = event.currentTarget.dataset.resizeCorner as ResizeCorner | undefined;
-    if (svg && corner && selection && selection.kind !== "access") startResize(event, svg, selection, corner);
+    if (svg && corner) startResize(event, svg, corner);
+  };
+
+  /** Pressing blank paper starts a rubber band. Shift keeps what is already
+   * selected, so a band can extend a set built by clicking. */
+  const startBand = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.target !== event.currentTarget) return;
+    const point = pointIn(event.currentTarget, event);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.focus({ preventScroll: true });
+    setBand(null);
+    drag.current = { mode: "band", pointerId: event.pointerId, startX: point.x, startY: point.y, additive: event.shiftKey, base: selections };
   };
 
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
     const active = drag.current;
     if (!active || active.pointerId !== event.pointerId) return;
-    const point = pointInLayout(event);
+    const point = pointIn(event.currentTarget, event);
+    if (active.mode === "band") {
+      setBand({ x: Math.min(active.startX, point.x), y: Math.min(active.startY, point.y), width: Math.abs(point.x - active.startX), height: Math.abs(point.y - active.startY) });
+      return;
+    }
+    const dx = point.x - active.startX;
+    const dy = point.y - active.startY;
+    // One rectangle keeps its snapping; a group is mapped from the bounding box
+    // it started with into the resized one, so the spacing inside it survives.
+    const lone = active.selections.length === 1 ? active.selections[0] : null;
+    let nextGuides: SnapGuide[] = [];
     if (active.mode === "resize") {
-      const resizing = active.selection;
-      let nextGuides: SnapGuide[] = [];
+      const resized = resizeRectFromCorner(active.originBounds, active.corner, dx, dy, layout);
       commit((draft) => {
-        const rect = rectFor(draft, resizing);
-        if (!rect) return;
-        const resized = resizeRectFromCorner(active.originRect, active.corner, point.x - active.startX, point.y - active.startY, draft);
-        const snapped = event.altKey ? null : snapRectToAdjacentRects(resized, snapTargetsFor(draft, resizing), { bounds: draft, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
-        Object.assign(rect, snapped?.rect ?? resized);
+        const snapped = lone && lone.kind !== "access" && !event.altKey
+          ? snapRectToAdjacentRects(resized, snapTargetsFor(draft, lone), { bounds: draft, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel })
+          : null;
+        applySelectionBoxes(draft, active.selections, scaleBoxesIntoBox(active.boxes, active.originBounds, snapped?.rect ?? resized, draft));
         nextGuides = snapped?.guides ?? [];
       }, active.historyKey);
       setSnapGuides(nextGuides);
       return;
     }
-    const x = active.originX + point.x - active.startX;
-    const y = active.originY + point.y - active.startY;
-    if (active.selection.kind === "access") {
-      const itemIndex = active.selection.itemIndex;
-      commit((draft) => {
-        const target = draft.accessPoints[itemIndex];
-        target.x = clamp(x, 0, draft.width);
-        target.y = clamp(y, 0, draft.height);
-      }, active.historyKey);
-      return;
-    }
-    const moving = active.selection;
-    let nextGuides: SnapGuide[] = [];
+    const moved = translateBoxesWithin(active.boxes, dx, dy, layout);
     commit((draft) => {
-      const rect = rectFor(draft, moving);
-      if (!rect) return;
-      const moved = { ...rect, x: clamp(x, 0, draft.width - rect.width), y: clamp(y, 0, draft.height - rect.height) };
       // Moving snaps for landmarks only: a booth is placed by its row, and a
       // row that has already been laid out should not drift onto its neighbour.
-      const snapped = !event.altKey && moving.kind === "landmark"
-        ? snapRectToAdjacentRects(moved, snapTargetsFor(draft, moving), { bounds: draft, mode: "move", threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel })
+      const snapped = lone?.kind === "landmark" && !event.altKey
+        ? snapRectToAdjacentRects(moved[0], snapTargetsFor(draft, lone), { bounds: draft, mode: "move", threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel })
         : null;
-      Object.assign(rect, snapped?.rect ?? moved);
+      applySelectionBoxes(draft, active.selections, snapped ? [snapped.rect] : moved);
       nextGuides = snapped?.guides ?? [];
     }, active.historyKey);
     setSnapGuides(nextGuides);
   };
 
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
-    if (drag.current?.pointerId !== event.pointerId) return;
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) return;
     drag.current = null;
+    if (active.mode === "band") {
+      // A band nobody dragged is a click on blank paper, which clears instead.
+      const kept = active.additive ? active.base : [];
+      setSelections(band && (band.width >= 1 || band.height >= 1) ? mergeSelections(kept, selectionsWithinBox(layout, band)) : kept);
+      setBand(null);
+    }
     // Without sealing, dragging the same element twice with one pointer would
     // reuse the key and collapse both gestures into a single undo step.
     setHistory(sealLayoutHistory);
@@ -371,17 +341,45 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
+  /** Arrow keys nudge the whole selection through the same shared-delta path a
+   * drag uses, so a group keeps its internal spacing at the canvas edge. */
   const moveSelection = (dx: number, dy: number) => {
-    if (!selection) return;
-    const position = selectedPosition(layout, selection);
-    if (!position) return;
-    const nudgeKey = `nudge:${selectionKey(selection)}:${dx},${dy}`;
-    if (selection.kind === "access") updateAccess({ x: position.x + dx, y: position.y + dy }, nudgeKey);
-    else updateRect({ x: position.x + dx, y: position.y + dy }, nudgeKey);
+    const resolved = resolveSelectionBoxes(layout, selections);
+    if (!resolved.boxes.length) return;
+    const boxes = translateBoxesWithin(resolved.boxes, dx, dy, layout);
+    commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `nudge:${selectionSetKey(selections)}:${dx},${dy}`);
+  };
+
+  const alignSelection = (edge: AlignEdge) => {
+    const resolved = resolveSelectionBoxes(layout, selections);
+    if (resolved.boxes.length < 2) return;
+    const boxes = alignBoxesToEdge(resolved.boxes, edge, layout);
+    commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `align:${selectionSetKey(selections)}:${edge}`);
+  };
+
+  const copySelectedSlots = () => {
+    const picked = slotSelections(selections);
+    const slots = picked.map(({ rowIndex, itemIndex }) => layout.rows[rowIndex]?.slots[itemIndex]).filter((slot): slot is BoothSlot => !!slot);
+    if (!slots.length) return;
+    setClipboard({ label: layout.rows[picked[0].rowIndex]?.label ?? "", slots: slots.map((slot) => ({ code: slot.code, rect: { ...slot.rect } })) });
+    setPasteForm({ offsetX: "0", offsetY: String(Math.round(layout.height * .06)), label: "" });
+    setRowErrors([]);
+  };
+
+  /** The pasted row lands selected, so the offset can be corrected by dragging
+   * the result rather than by undoing and retyping the numbers. */
+  const pasteClipboard = () => {
+    if (!clipboard) return;
+    const result = pasteRowAtOffset(clipboard, layout, { offsetX: Number(pasteForm.offsetX), offsetY: Number(pasteForm.offsetY), label: pasteForm.label });
+    if (!result.ok) { setRowErrors(result.errors); return; }
+    const rowIndex = layout.rows.length;
+    commit((draft) => draft.rows.push(result.row));
+    setRowErrors([]);
+    setSelections(result.row.slots.map((slot, itemIndex) => ({ kind: "slot", rowIndex, itemIndex })));
   };
 
   const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
-    if (!selection) return;
+    if (!selections.length) return;
     const direction = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const)[event.key];
     if (!direction) return;
     event.preventDefault();
@@ -408,7 +406,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
       label,
       rect: { x: draft.width * .42, y: draft.height * .42, width: draft.width * .16, height: draft.height * .1 },
     }));
-    setSelection({ kind: "landmark", itemIndex: index });
+    setSelections([{ kind: "landmark", itemIndex: index }]);
   };
 
   const uniqueId = (prefix: string, values: readonly string[]) => {
@@ -431,7 +429,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
         rect: { x: draft.width * .45, y: draft.height * .45, width: draft.width * .06, height: draft.height * .04 },
       });
     });
-    setSelection({ kind: "slot", rowIndex, itemIndex: layout.rows[rowIndex]?.slots.length ?? 0 });
+    setSelections([{ kind: "slot", rowIndex, itemIndex: layout.rows[rowIndex]?.slots.length ?? 0 }]);
   };
 
   const createRow = () => {
@@ -439,21 +437,18 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     const definition = rowDefinitionFrom(rowForm);
     const result = generateRowSlots(definition, layout);
     if (!result.ok) { setRowErrors(result.errors); return; }
-    const label = result.row.label;
-    if (layout.rows.some((row) => row.label === label)) { setRowErrors([`排標籤 ${label} 已經存在。`]); return; }
-    const existingCodes = new Set(layout.rows.flatMap((row) => row.slots.map(({ code }) => code)));
-    const collision = result.row.slots.find(({ code }) => existingCodes.has(code));
-    if (collision) { setRowErrors([`攤位代碼 ${collision.code} 與其他排重複。`]); return; }
+    const conflicts = findRowConflicts(result.row, layout);
+    if (conflicts.length) { setRowErrors(conflicts); return; }
     const rowIndex = layout.rows.length;
     commit((draft) => draft.rows.push(result.row));
     setRowErrors([]);
     setRowForm(null);
-    setSelection({ kind: "slot", rowIndex, itemIndex: 0 });
+    setSelections([{ kind: "slot", rowIndex, itemIndex: 0 }]);
   };
 
   const removeRow = (rowIndex: number) => {
     commit((draft) => draft.rows.splice(rowIndex, 1));
-    setSelection(null);
+    setSelections([]);
   };
 
   const updateRow = (rowIndex: number, next: Partial<{ label: string; orientation: MapOrientation }>, coalesceKey: string | null = null) => {
@@ -466,7 +461,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     commit((draft) => draft.pillars.push({
       id, x: draft.width * .48, y: draft.height * .48, width: draft.width * .03, height: draft.height * .03,
     }));
-    setSelection({ kind: "pillar", itemIndex });
+    setSelections([{ kind: "pillar", itemIndex }]);
   };
 
   const addAccess = (kind: "entrance" | "exit") => {
@@ -476,22 +471,19 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
       id, kind, direction: "north", x: draft.width * .5, y: draft.height * .9,
       label: kind === "entrance" ? "入口" : "出口",
     }));
-    setSelection({ kind: "access", itemIndex });
+    setSelections([{ kind: "access", itemIndex }]);
   };
 
   const removeSelection = () => {
-    if (!selection || selection.kind === "floor") return;
-    commit((draft) => {
-      if (selection.kind === "slot") {
-        draft.rows[selection.rowIndex].slots.splice(selection.itemIndex, 1);
-        if (draft.rows[selection.rowIndex].slots.length === 0) draft.rows.splice(selection.rowIndex, 1);
-      } else if (selection.kind === "pillar") draft.pillars.splice(selection.itemIndex, 1);
-      else if (selection.kind === "access") draft.accessPoints.splice(selection.itemIndex, 1);
-      else draft.landmarks.splice(selection.itemIndex, 1);
-    });
-    setSelection(null);
+    const removable = selections.filter((item) => item.kind !== "floor");
+    if (!removable.length) return;
+    commit((draft) => removeSelectionsFrom(draft, removable));
+    setSelections([]);
   };
 
+  const selectedKeys = new Set(selections.map(selectionKey));
+  const selectionBoxes = resolveSelectionBoxes(layout, selections).boxes;
+  const copyableSlots = slotSelections(selections).length;
   const rectSelection = selection && selection.kind !== "access" ? selection : undefined;
   const selectedRect = rectSelection ? rectFor(layout, rectSelection) : undefined;
   const selectedAccess = selection?.kind === "access" ? layout.accessPoints[selection.itemIndex] : undefined;
@@ -505,6 +497,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const resizeHitRadius = 14 * layoutUnitsPerPixel;
   const resizeKnobHalfSize = 6 * layoutUnitsPerPixel;
   const activeKey = selection ? selectionKey(selection) : "";
+  // Handles frame the whole selection, so one corner resizes the group.
+  const handleBounds = selections.length > 1 ? boundingBox(selectionBoxes) : selectedRect;
   const canUndo = canUndoLayoutHistory(history);
   const canRedo = canRedoLayoutHistory(history);
   const elementOptions: { key: string; label: string; selection: Selection }[] = [
@@ -517,10 +511,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
 
   const focusSelection = (nextSelection: Selection) => {
     const viewport = viewportRef.current;
-    const position = selectedPosition(layout, nextSelection);
+    const position = boxFor(layout, nextSelection);
     if (!viewport || !position) return;
-    const centerX = position.x + ("width" in position ? position.width / 2 : 0);
-    const centerY = position.y + ("height" in position ? position.height / 2 : 0);
+    const centerX = position.x + position.width / 2;
+    const centerY = position.y + position.height / 2;
     viewport.scrollTo({
       left: centerX / layout.width * viewport.scrollWidth - viewport.clientWidth / 2,
       top: centerY / layout.height * viewport.scrollHeight - viewport.clientHeight / 2,
@@ -549,7 +543,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
 
   const selectElement = (key: string) => {
     const option = elementOptions.find((item) => item.key === key);
-    setSelection(option?.selection ?? null);
+    setSelections(option ? [option.selection] : []);
     if (option) requestAnimationFrame(() => focusSelection(option.selection));
   };
 
@@ -572,31 +566,32 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => { setRowErrors([]); setRowForm((current) => current ? null : blankRowForm(layout)); }} aria-expanded={!!rowForm}>新增一排</button><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => { setRowErrors([]); setRowForm((current) => current ? null : blankRowForm(layout)); }} aria-expanded={!!rowForm}>新增一排</button><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
-        <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selection} onClick={() => selection && focusSelection(selection)}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
+        <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${zoom * 100}%`, aspectRatio: `${layout.width} / ${layout.height}` }}>
-        <svg ref={svgRef} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelection(null); }}>
+        <svg ref={svgRef} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
-          <rect className={`${styles.floor} ${activeKey === "floor" ? styles.selected : ""}`} {...layout.floor} />
+          <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />
           {/* The outline, not the hall's whole area, is what drags: a floor that
               fills the sheet would otherwise swallow every click on blank paper. */}
           <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
-          {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${activeKey === `landmark:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
-          {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${activeKey === `slot:${rowIndex}:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
-          {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${activeKey === `pillar:${itemIndex}` ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
-          {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "entrance" ? styles.entrance : styles.exit} ${activeKey === `access:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path transform={mapAccessArrowTransform(point)} d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
+          {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${selectedKeys.has(`landmark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
+          {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
+          {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
+          {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "entrance" ? styles.entrance : styles.exit} ${selectedKeys.has(`access:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path transform={mapAccessArrowTransform(point)} d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
           {snapGuides.map((guide) => guide.axis === "x"
             ? <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.position} x2={guide.position} y1={guide.start} y2={guide.end} aria-hidden="true" />
             : <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.start} x2={guide.end} y1={guide.position} y2={guide.position} aria-hidden="true" />)}
-          {selectedRect && ([
-            ["nw", selectedRect.x, selectedRect.y],
-            ["ne", selectedRect.x + selectedRect.width, selectedRect.y],
-            ["se", selectedRect.x + selectedRect.width, selectedRect.y + selectedRect.height],
-            ["sw", selectedRect.x, selectedRect.y + selectedRect.height],
+          {band && <rect className={styles.band} {...band} aria-hidden="true" />}
+          {handleBounds && ([
+            ["nw", handleBounds.x, handleBounds.y],
+            ["ne", handleBounds.x + handleBounds.width, handleBounds.y],
+            ["se", handleBounds.x + handleBounds.width, handleBounds.y + handleBounds.height],
+            ["sw", handleBounds.x, handleBounds.y + handleBounds.height],
           ] as const).map(([corner, x, y]) => <g key={corner} data-resize-corner={corner} className={`${styles.resizeHandle} ${corner === "nw" || corner === "se" ? styles.resizeNwSe : styles.resizeNeSw}`} aria-hidden="true" onPointerDown={handleResizePointerDown}><circle className={styles.resizeHitArea} cx={x} cy={y} r={resizeHitRadius} /><rect className={styles.resizeKnob} x={x - resizeKnobHalfSize} y={y - resizeKnobHalfSize} width={resizeKnobHalfSize * 2} height={resizeKnobHalfSize * 2} rx={2 * layoutUnitsPerPixel} /></g>)}
         </svg>
         </div>
@@ -635,7 +630,30 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
             <button type="button" onClick={() => removeRow(rowIndex)} aria-label={`移除 ${row.label} 排`}>移除整排</button>
           </li>)}</ul>
         </div>}
-        {!selection && <div className={styles.empty}><b>選取地圖元素</b></div>}
+        {!rowForm && (!!copyableSlots || clipboard) && <div className={styles.rowPanel}>
+          <b>複製整排</b>
+          {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
+          <div className={styles.rowFormActions}><button type="button" disabled={!copyableSlots} onClick={copySelectedSlots}>複製選取的 {copyableSlots} 格</button></div>
+          {clipboard && <>
+            <div className={styles.fields}>
+              {rowField("位移 X", pasteForm.offsetX, (value) => setPasteForm({ ...pasteForm, offsetX: value }))}
+              {rowField("位移 Y", pasteForm.offsetY, (value) => setPasteForm({ ...pasteForm, offsetY: value }))}
+            </div>
+            {rowField("新排標籤", pasteForm.label, (value) => setPasteForm({ ...pasteForm, label: value }), "留空則沿用原標籤")}
+            <div className={styles.rowFormActions}><button type="button" onClick={() => { setClipboard(null); setRowErrors([]); }}>清除</button><button type="button" className={styles.rowConfirm} onClick={pasteClipboard}>貼上 {clipboard.slots.length} 格</button></div>
+          </>}
+        </div>}
+        {!selections.length && <div className={styles.empty}><b>選取地圖元素</b></div>}
+        {selections.length > 1 && <>
+          <div className={styles.selectionTitle}><small>已選取</small><b>{selections.length} 個元素</b></div>
+          <div className={styles.batchTools}>
+            <button type="button" onClick={() => alignSelection("left")}>靠左對齊</button>
+            <button type="button" onClick={() => alignSelection("right")}>靠右對齊</button>
+            <button type="button" onClick={() => alignSelection("top")}>靠上對齊</button>
+            <button type="button" onClick={() => alignSelection("bottom")}>靠下對齊</button>
+          </div>
+          <button className={styles.remove} onClick={removeSelection}>移除選取的元素</button>
+        </>}
         {selection && <>
           <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : selection.kind === "floor" ? "場館外框" : "非一般攤位區"}</small><b>{selection.kind === "floor" ? layout.template : selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
           {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input value={selectedSlot.code} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }, `field:${activeKey}:code`); }} /></label><label className={styles.wide}><span>所屬排標籤</span><input value={layout.rows[selectedSlotSelection.rowIndex].label} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { label: event.target.value.trim() }, `row:${selectedSlotSelection.rowIndex}:label`)} /></label><label className={styles.wide}><span>所屬排方向</span><select value={layout.rows[selectedSlotSelection.rowIndex].orientation} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label></>}

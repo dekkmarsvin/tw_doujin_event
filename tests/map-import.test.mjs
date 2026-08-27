@@ -11,7 +11,7 @@ const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayou
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
-const { findRowConflicts, pasteRowAtOffset, selectionSetKey } = await environment.runner.import("/app/map-layout-editor-selection.ts");
+const { alignBoxesToEdge, applySelectionBoxes, boundingBox, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
@@ -361,6 +361,115 @@ test("row conflict detection includes duplicate codes inside the candidate row",
     ],
   };
   assert.deepEqual(findRowConflicts(duplicate, layout), ["攤位代碼 B01 重複。"]);
+});
+
+function multiSelectLayout() {
+  return {
+    version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 120,
+    floor: { x: 0, y: 0, width: 200, height: 120 },
+    rows: [
+      { label: "A", orientation: "horizontal", confidence: 1, slots: [
+        { code: "A01", rect: { x: 10, y: 10, width: 20, height: 10 } },
+        { code: "A02", rect: { x: 40, y: 14, width: 20, height: 10 } },
+        { code: "A03", rect: { x: 70, y: 18, width: 20, height: 10 } },
+      ] },
+      { label: "B", orientation: "horizontal", confidence: 1, slots: [{ code: "B01", rect: { x: 10, y: 60, width: 20, height: 10 } }] },
+    ],
+    pillars: [{ id: "pillar-1", x: 120, y: 20, width: 8, height: 8 }, { id: "pillar-2", x: 140, y: 20, width: 8, height: 8 }],
+    accessPoints: [{ id: "entrance-1", kind: "entrance", direction: "north", x: 50, y: 100, label: "入口" }],
+    landmarks: [{ id: "stage-1", kind: "stage", label: "舞台", rect: { x: 150, y: 80, width: 30, height: 20 } }],
+  };
+}
+
+test("shift clicking builds a selection set and clicking the same element again drops it", () => {
+  const first = { kind: "slot", rowIndex: 0, itemIndex: 0 };
+  const second = { kind: "pillar", itemIndex: 1 };
+  const both = toggleSelection(toggleSelection([], first), second);
+  assert.deepEqual(both, [first, second]);
+  assert.deepEqual(toggleSelection(both, first), [second], "a second shift click removes rather than duplicates");
+  assert.deepEqual(mergeSelections(both, [second, { kind: "landmark", itemIndex: 0 }]), [...both, { kind: "landmark", itemIndex: 0 }],
+    "a band merged into an existing set adds only what is new");
+});
+
+test("a rubber band picks up every kind of element it touches, but never the hall outline", () => {
+  const layout = multiSelectLayout();
+  assert.deepEqual(selectionsWithinBox(layout, { x: 0, y: 0, width: 95, height: 30 }), [
+    { kind: "slot", rowIndex: 0, itemIndex: 0 },
+    { kind: "slot", rowIndex: 0, itemIndex: 1 },
+    { kind: "slot", rowIndex: 0, itemIndex: 2 },
+  ]);
+  const wide = selectionsWithinBox(layout, { x: 0, y: 0, width: 200, height: 120 });
+  assert.equal(wide.length, 4 + 2 + 1 + 1, "every booth, pillar, access point and landmark is inside");
+  assert.equal(wide.some((item) => item.kind === "floor"), false, "the outline spans the sheet, so a band would always catch it");
+});
+
+test("a multi-selection moves as one group and stops at the canvas without losing its spacing", () => {
+  const layout = multiSelectLayout();
+  const selections = [
+    { kind: "slot", rowIndex: 0, itemIndex: 0 },
+    { kind: "slot", rowIndex: 0, itemIndex: 2 },
+    { kind: "access", itemIndex: 0 },
+  ];
+  const resolved = resolveSelectionBoxes(layout, selections);
+  assert.deepEqual(resolved.boxes.map((box) => box.x), [10, 70, 50]);
+  const moved = translateBoxesWithin(resolved.boxes, 9999, 5, layout);
+  assert.deepEqual(moved.map((box) => box.x), [120, 180, 160], "the shared delta stops when the group's right edge reaches the canvas");
+  applySelectionBoxes(layout, resolved.selections, moved);
+  assert.equal(layout.rows[0].slots[0].rect.x, 120);
+  assert.equal(layout.rows[0].slots[2].rect.x, 180);
+  assert.deepEqual([layout.accessPoints[0].x, layout.accessPoints[0].y], [160, 105], "an access point moves by the same delta as a rectangle");
+  assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("aligning a multi-selection keeps every element inside the canvas", () => {
+  const layout = multiSelectLayout();
+  const selections = [0, 1, 2].map((itemIndex) => ({ kind: "slot", rowIndex: 0, itemIndex }));
+  const resolved = resolveSelectionBoxes(layout, selections);
+  applySelectionBoxes(layout, resolved.selections, alignBoxesToEdge(resolved.boxes, "top", layout));
+  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.y), [10, 10, 10]);
+  applySelectionBoxes(layout, resolved.selections, alignBoxesToEdge(resolveSelectionBoxes(layout, selections).boxes, "right", layout));
+  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.x), [70, 70, 70]);
+  assert.equal(validateEventMapLayout(layout).ok, true, "alignment never pushes an element past an edge");
+});
+
+test("resizing a multi-selection maps every box from the old bounding box into the new one", () => {
+  const boxes = [{ x: 10, y: 10, width: 20, height: 10 }, { x: 70, y: 10, width: 20, height: 10 }];
+  const from = boundingBox(boxes);
+  assert.deepEqual(from, { x: 10, y: 10, width: 80, height: 10 });
+  const scaled = scaleBoxesIntoBox(boxes, from, { x: 10, y: 10, width: 40, height: 10 }, { width: 200, height: 120 });
+  assert.deepEqual(scaled, [{ x: 10, y: 10, width: 10, height: 10 }, { x: 40, y: 10, width: 10, height: 10 }],
+    "halving the group halves each booth and the gap between them");
+});
+
+test("removing a multi-selection splices from the highest index down so the rest stay addressable", () => {
+  const layout = multiSelectLayout();
+  removeSelectionsFrom(layout, [
+    { kind: "slot", rowIndex: 0, itemIndex: 0 },
+    { kind: "slot", rowIndex: 0, itemIndex: 2 },
+    { kind: "slot", rowIndex: 1, itemIndex: 0 },
+    { kind: "pillar", itemIndex: 0 },
+  ]);
+  assert.deepEqual(layout.rows.map((row) => row.label), ["A"], "row B lost its last booth, so the row went with it");
+  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.code), ["A02"], "the surviving booth is the untouched middle one");
+  assert.deepEqual(layout.pillars.map((pillar) => pillar.id), ["pillar-2"]);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("a copied row pasted at an offset never duplicates a booth code", () => {
+  const layout = multiSelectLayout();
+  const clipboard = { label: "A", slots: layout.rows[0].slots.map((slot) => ({ code: slot.code, rect: { ...slot.rect } })) };
+  const renamed = pasteRowAtOffset(clipboard, layout, { offsetX: 0, offsetY: 30, label: "C" });
+  assert.equal(renamed.ok, true);
+  assert.deepEqual(renamed.row.slots.map((slot) => slot.code), ["C01", "C02", "C03"], "codes follow the pasted row's label");
+  layout.rows.push(renamed.row);
+
+  // Pasting again with no label reuses the copied one, which is already taken.
+  const repeated = pasteRowAtOffset(clipboard, layout, { offsetX: 0, offsetY: 60, label: "" });
+  assert.equal(repeated.ok, true);
+  assert.equal(repeated.row.label, "A-2", "the row label is made unique rather than refused");
+  assert.deepEqual(repeated.row.slots.map((slot) => slot.code), ["A-201", "A-202", "A-203"], "codes track the deduplicated label, so they need no suffix of their own");
+  layout.rows.push(repeated.row);
+  assert.equal(validateEventMapLayout(layout).ok, true, "no duplicate row label and no duplicate booth code survives");
 });
 
 test("offset paste stops a whole row at the canvas edge without collapsing its geometry", () => {
