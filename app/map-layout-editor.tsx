@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { mapAccessArrowTransform, resolveMapLandmarkKind, MAP_ACCESS_DIRECTIONS, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowDefinition, type SnapGuide } from "./map-layout-editor-geometry";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
 
 type Selection =
+  | { kind: "floor" }
   | { kind: "slot"; rowIndex: number; itemIndex: number }
   | { kind: "pillar"; itemIndex: number }
   | { kind: "access"; itemIndex: number }
   | { kind: "landmark"; itemIndex: number };
+
+/** Everything except an access point is a rectangle, so moving, corner resizing
+ * and the coordinate fields all take one path. */
+type RectSelection = Exclude<Selection, { kind: "access" }>;
 
 type MoveDragState = {
   mode: "move";
@@ -28,7 +33,7 @@ type ResizeDragState = {
   mode: "resize";
   pointerId: number;
   historyKey: string;
-  selection: Extract<Selection, { kind: "landmark" }>;
+  selection: RectSelection;
   corner: ResizeCorner;
   startX: number;
   startY: number;
@@ -113,14 +118,37 @@ function clamp(value: number, minimum: number, maximum: number) {
 }
 
 function selectionKey(selection: Selection) {
+  if (selection.kind === "floor") return "floor";
   return `${selection.kind}:${selection.kind === "slot" ? `${selection.rowIndex}:` : ""}${selection.itemIndex}`;
 }
 
-function selectedPosition(layout: EventMapLayout, selection: Selection) {
+/** The rectangle as it lives inside `layout`, so a caller holding a draft edits
+ * the element in place. */
+function rectFor(layout: EventMapLayout, selection: RectSelection): MapRect | undefined {
   if (selection.kind === "slot") return layout.rows[selection.rowIndex]?.slots[selection.itemIndex]?.rect;
   if (selection.kind === "pillar") return layout.pillars[selection.itemIndex];
   if (selection.kind === "landmark") return layout.landmarks[selection.itemIndex]?.rect;
-  return layout.accessPoints[selection.itemIndex];
+  return layout.floor;
+}
+
+function selectedPosition(layout: EventMapLayout, selection: Selection) {
+  return selection.kind === "access" ? layout.accessPoints[selection.itemIndex] : rectFor(layout, selection);
+}
+
+/** Snap partners are the other rectangles of the same kind: booths align with
+ * booths, pillars with pillars, enterprise landmarks with enterprise landmarks.
+ * The hall outline has nothing of its kind to align to. */
+function snapTargetsFor(layout: EventMapLayout, selection: RectSelection) {
+  if (selection.kind === "slot") return layout.rows.flatMap((row, rowIndex) => row.slots
+    .filter((slot, itemIndex) => rowIndex !== selection.rowIndex || itemIndex !== selection.itemIndex)
+    .map((slot) => ({ id: slot.code, rect: slot.rect })));
+  if (selection.kind === "pillar") return layout.pillars
+    .filter((pillar, itemIndex) => itemIndex !== selection.itemIndex)
+    .map((pillar) => ({ id: pillar.id, rect: pillar as MapRect }));
+  if (selection.kind === "landmark" && resolveMapLandmarkKind(layout.landmarks[selection.itemIndex] ?? { label: "" }) === "enterprise") return layout.landmarks
+    .filter((landmark, itemIndex) => itemIndex !== selection.itemIndex && resolveMapLandmarkKind(landmark) === "enterprise")
+    .map((landmark) => ({ id: landmark.id, rect: landmark.rect }));
+  return [];
 }
 
 export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }: Props) {
@@ -205,12 +233,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
 
   const updateRect = (next: Partial<MapRect>, coalesceKey: string | null = null) => {
     if (!selection || selection.kind === "access") return;
+    const target = selection;
     commit((draft) => {
-      const rect = selection.kind === "slot"
-        ? draft.rows[selection.rowIndex].slots[selection.itemIndex].rect
-        : selection.kind === "pillar"
-          ? draft.pillars[selection.itemIndex]
-          : draft.landmarks[selection.itemIndex].rect;
+      const rect = rectFor(draft, target);
+      if (!rect) return;
       const width = clamp(next.width ?? rect.width, .5, draft.width - rect.x);
       const height = clamp(next.height ?? rect.height, .5, draft.height - rect.y);
       rect.x = clamp(next.x ?? rect.x, 0, draft.width - width);
@@ -228,6 +254,14 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
       point.x = clamp(point.x, 0, draft.width);
       point.y = clamp(point.y, 0, draft.height);
     }, coalesceKey);
+  };
+
+  /** The canvas is the coordinate space every element lives in, so changing it
+   * rescales the whole layout rather than only the viewBox. */
+  const resizeCanvas = (next: Partial<Pick<EventMapLayout, "width" | "height">>, coalesceKey: string) => {
+    const width = Math.max(1, next.width ?? layout.width);
+    const height = Math.max(1, next.height ?? layout.height);
+    commit((draft) => Object.assign(draft, scaleEventMapLayout(draft, { width, height })), coalesceKey);
   };
 
   const pointInLayout = (event: PointerEvent<SVGSVGElement>) => {
@@ -256,9 +290,9 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     drag.current = { mode: "move", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:move:${selectionKey(nextSelection)}`, selection: nextSelection, startX: point.x, startY: point.y, originX: position.x, originY: position.y };
   };
 
-  const startResize = (event: PointerEvent<SVGElement>, svg: SVGSVGElement, itemIndex: number, corner: ResizeCorner) => {
-    const landmark = layout.landmarks[itemIndex];
-    if (!landmark) return;
+  const startResize = (event: PointerEvent<SVGElement>, svg: SVGSVGElement, nextSelection: RectSelection, corner: ResizeCorner) => {
+    const rect = rectFor(layout, nextSelection);
+    if (!rect) return;
     const bounds = svg.getBoundingClientRect();
     const point = {
       x: (event.clientX - bounds.left) * layout.width / bounds.width,
@@ -269,16 +303,16 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     svg.setPointerCapture(event.pointerId);
     svg.focus({ preventScroll: true });
     setSnapGuides([]);
-    const nextSelection = { kind: "landmark", itemIndex } as const;
     setSelection(nextSelection);
-    drag.current = { mode: "resize", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:resize:${selectionKey(nextSelection)}`, selection: nextSelection, corner, startX: point.x, startY: point.y, originRect: { ...landmark.rect } };
+    drag.current = { mode: "resize", pointerId: event.pointerId, historyKey: `drag:${event.pointerId}:resize:${selectionKey(nextSelection)}`, selection: nextSelection, corner, startX: point.x, startY: point.y, originRect: { ...rect } };
   };
 
+  /** Handles are drawn only around whatever is selected, so the corner in the
+   * dataset is all the handler needs to know. */
   const handleResizePointerDown = (event: PointerEvent<SVGGElement>) => {
     const svg = event.currentTarget.ownerSVGElement;
     const corner = event.currentTarget.dataset.resizeCorner as ResizeCorner | undefined;
-    const itemIndex = Number(event.currentTarget.dataset.resizeIndex);
-    if (svg && corner && Number.isInteger(itemIndex)) startResize(event, svg, itemIndex, corner);
+    if (svg && corner && selection && selection.kind !== "access") startResize(event, svg, selection, corner);
   };
 
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
@@ -286,18 +320,15 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     if (!active || active.pointerId !== event.pointerId) return;
     const point = pointInLayout(event);
     if (active.mode === "resize") {
+      const resizing = active.selection;
       let nextGuides: SnapGuide[] = [];
       commit((draft) => {
-        const target = draft.landmarks[active.selection.itemIndex];
-        if (!target) return;
+        const rect = rectFor(draft, resizing);
+        if (!rect) return;
         const resized = resizeRectFromCorner(active.originRect, active.corner, point.x - active.startX, point.y - active.startY, draft);
-        if (!event.altKey && resolveMapLandmarkKind(target) === "enterprise") {
-          const snapped = snapRectToAdjacentRects(resized, draft.landmarks
-            .filter((landmark, itemIndex) => itemIndex !== active.selection.itemIndex && resolveMapLandmarkKind(landmark) === "enterprise")
-            .map((landmark) => ({ id: landmark.id, rect: landmark.rect })), { bounds: draft, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
-          target.rect = snapped.rect;
-          nextGuides = snapped.guides;
-        } else target.rect = resized;
+        const snapped = event.altKey ? null : snapRectToAdjacentRects(resized, snapTargetsFor(draft, resizing), { bounds: draft, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
+        Object.assign(rect, snapped?.rect ?? resized);
+        nextGuides = snapped?.guides ?? [];
       }, active.historyKey);
       setSnapGuides(nextGuides);
       return;
@@ -305,38 +336,29 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     const x = active.originX + point.x - active.startX;
     const y = active.originY + point.y - active.startY;
     if (active.selection.kind === "access") {
+      const itemIndex = active.selection.itemIndex;
       commit((draft) => {
-        const target = draft.accessPoints[active.selection.itemIndex];
+        const target = draft.accessPoints[itemIndex];
         target.x = clamp(x, 0, draft.width);
         target.y = clamp(y, 0, draft.height);
       }, active.historyKey);
       return;
     }
-    if (active.selection.kind === "landmark") {
-      let nextGuides: SnapGuide[] = [];
-      commit((draft) => {
-        const target = draft.landmarks[active.selection.itemIndex];
-        const moved = { ...target.rect, x: clamp(x, 0, draft.width - target.rect.width), y: clamp(y, 0, draft.height - target.rect.height) };
-        if (!event.altKey && resolveMapLandmarkKind(target) === "enterprise") {
-          const snapped = snapRectToAdjacentRects(moved, draft.landmarks
-            .filter((landmark, itemIndex) => itemIndex !== active.selection.itemIndex && resolveMapLandmarkKind(landmark) === "enterprise")
-            .map((landmark) => ({ id: landmark.id, rect: landmark.rect })), { bounds: draft, mode: "move", threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
-          target.rect = snapped.rect;
-          nextGuides = snapped.guides;
-        } else target.rect = moved;
-      }, active.historyKey);
-      setSnapGuides(nextGuides);
-      return;
-    }
+    const moving = active.selection;
+    let nextGuides: SnapGuide[] = [];
     commit((draft) => {
-      const rect = active.selection.kind === "slot"
-        ? draft.rows[active.selection.rowIndex].slots[active.selection.itemIndex].rect
-        : active.selection.kind === "pillar"
-          ? draft.pillars[active.selection.itemIndex]
-          : draft.landmarks[active.selection.itemIndex].rect;
-      rect.x = clamp(x, 0, draft.width - rect.width);
-      rect.y = clamp(y, 0, draft.height - rect.height);
+      const rect = rectFor(draft, moving);
+      if (!rect) return;
+      const moved = { ...rect, x: clamp(x, 0, draft.width - rect.width), y: clamp(y, 0, draft.height - rect.height) };
+      // Moving snaps for landmarks only: a booth is placed by its row, and a
+      // row that has already been laid out should not drift onto its neighbour.
+      const snapped = !event.altKey && moving.kind === "landmark"
+        ? snapRectToAdjacentRects(moved, snapTargetsFor(draft, moving), { bounds: draft, mode: "move", threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel })
+        : null;
+      Object.assign(rect, snapped?.rect ?? moved);
+      nextGuides = snapped?.guides ?? [];
     }, active.historyKey);
+    setSnapGuides(nextGuides);
   };
 
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
@@ -458,7 +480,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   };
 
   const removeSelection = () => {
-    if (!selection) return;
+    if (!selection || selection.kind === "floor") return;
     commit((draft) => {
       if (selection.kind === "slot") {
         draft.rows[selection.rowIndex].slots.splice(selection.itemIndex, 1);
@@ -470,21 +492,23 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     setSelection(null);
   };
 
-  const selectedRect = selection && selection.kind !== "access" ? selectedPosition(layout, selection) as MapRect | undefined : undefined;
+  const rectSelection = selection && selection.kind !== "access" ? selection : undefined;
+  const selectedRect = rectSelection ? rectFor(layout, rectSelection) : undefined;
   const selectedAccess = selection?.kind === "access" ? layout.accessPoints[selection.itemIndex] : undefined;
   const selectedSlotSelection = selection?.kind === "slot" ? selection : undefined;
   const selectedSlot = selection?.kind === "slot" ? layout.rows[selection.rowIndex]?.slots[selection.itemIndex] : undefined;
   const selectedPillarSelection = selection?.kind === "pillar" ? selection : undefined;
   const selectedPillar = selection?.kind === "pillar" ? layout.pillars[selection.itemIndex] : undefined;
+  const selectedLandmarkSelection = selection?.kind === "landmark" ? selection : undefined;
   const selectedLandmark = selection?.kind === "landmark" ? layout.landmarks[selection.itemIndex] : undefined;
   const selectedLandmarkKind = selectedLandmark ? resolveMapLandmarkKind(selectedLandmark) : undefined;
-  const selectedLandmarkIndex = selection?.kind === "landmark" ? selection.itemIndex : -1;
   const resizeHitRadius = 14 * layoutUnitsPerPixel;
   const resizeKnobHalfSize = 6 * layoutUnitsPerPixel;
   const activeKey = selection ? selectionKey(selection) : "";
   const canUndo = canUndoLayoutHistory(history);
   const canRedo = canRedoLayoutHistory(history);
   const elementOptions: { key: string; label: string; selection: Selection }[] = [
+    { key: "floor", label: "場館外框", selection: { kind: "floor" } },
     ...layout.rows.flatMap((row, rowIndex) => row.slots.map((slot, itemIndex) => ({ key: `slot:${rowIndex}:${itemIndex}`, label: `攤位 ${slot.code}`, selection: { kind: "slot", rowIndex, itemIndex } as Selection }))),
     ...layout.pillars.map((pillar, itemIndex) => ({ key: `pillar:${itemIndex}`, label: `柱子 ${pillar.id}`, selection: { kind: "pillar", itemIndex } as Selection })),
     ...layout.accessPoints.map((point, itemIndex) => ({ key: `access:${itemIndex}`, label: `出入口 ${point.label}`, selection: { kind: "access", itemIndex } as Selection })),
@@ -557,7 +581,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
         <svg ref={svgRef} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelection(null); }}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
-          <rect className={styles.floor} {...layout.floor} />
+          <rect className={`${styles.floor} ${activeKey === "floor" ? styles.selected : ""}`} {...layout.floor} />
+          {/* The outline, not the hall's whole area, is what drags: a floor that
+              fills the sheet would otherwise swallow every click on blank paper. */}
+          <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
           {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${activeKey === `landmark:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${activeKey === `slot:${rowIndex}:${itemIndex}` ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${activeKey === `pillar:${itemIndex}` ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
@@ -565,17 +592,21 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
           {snapGuides.map((guide) => guide.axis === "x"
             ? <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.position} x2={guide.position} y1={guide.start} y2={guide.end} aria-hidden="true" />
             : <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.start} x2={guide.end} y1={guide.position} y2={guide.position} aria-hidden="true" />)}
-          {selectedLandmark && ([
-            ["nw", selectedLandmark.rect.x, selectedLandmark.rect.y],
-            ["ne", selectedLandmark.rect.x + selectedLandmark.rect.width, selectedLandmark.rect.y],
-            ["se", selectedLandmark.rect.x + selectedLandmark.rect.width, selectedLandmark.rect.y + selectedLandmark.rect.height],
-            ["sw", selectedLandmark.rect.x, selectedLandmark.rect.y + selectedLandmark.rect.height],
-          ] as const).map(([corner, x, y]) => <g key={corner} data-resize-corner={corner} data-resize-index={selectedLandmarkIndex} className={`${styles.resizeHandle} ${corner === "nw" || corner === "se" ? styles.resizeNwSe : styles.resizeNeSw}`} aria-hidden="true" onPointerDown={handleResizePointerDown}><circle className={styles.resizeHitArea} cx={x} cy={y} r={resizeHitRadius} /><rect className={styles.resizeKnob} x={x - resizeKnobHalfSize} y={y - resizeKnobHalfSize} width={resizeKnobHalfSize * 2} height={resizeKnobHalfSize * 2} rx={2 * layoutUnitsPerPixel} /></g>)}
+          {selectedRect && ([
+            ["nw", selectedRect.x, selectedRect.y],
+            ["ne", selectedRect.x + selectedRect.width, selectedRect.y],
+            ["se", selectedRect.x + selectedRect.width, selectedRect.y + selectedRect.height],
+            ["sw", selectedRect.x, selectedRect.y + selectedRect.height],
+          ] as const).map(([corner, x, y]) => <g key={corner} data-resize-corner={corner} className={`${styles.resizeHandle} ${corner === "nw" || corner === "se" ? styles.resizeNwSe : styles.resizeNeSw}`} aria-hidden="true" onPointerDown={handleResizePointerDown}><circle className={styles.resizeHitArea} cx={x} cy={y} r={resizeHitRadius} /><rect className={styles.resizeKnob} x={x - resizeKnobHalfSize} y={y - resizeKnobHalfSize} width={resizeKnobHalfSize * 2} height={resizeKnobHalfSize * 2} rx={2 * layoutUnitsPerPixel} /></g>)}
         </svg>
         </div>
         </div>
       </div>
       <aside className={styles.inspector} aria-label="選取元素屬性">
+        <div className={`${styles.fields} ${styles.canvasSize}`}>
+          {numberField("畫布寬", layout.width, (value) => resizeCanvas({ width: value }, "field:canvas:width"))}
+          {numberField("畫布高", layout.height, (value) => resizeCanvas({ height: value }, "field:canvas:height"))}
+        </div>
         <label className={styles.elementPicker}><span>精確選取地圖元素</span><select aria-label="選取地圖元素" value={activeKey} onChange={(event) => selectElement(event.target.value)}><option value="">請選擇攤位或設施</option>{elementOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
         {rowForm && <div className={styles.rowPanel}>
           <b>新增一排</b>
@@ -606,10 +637,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
         </div>}
         {!selection && <div className={styles.empty}><b>選取地圖元素</b></div>}
         {selection && <>
-          <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : "非一般攤位區"}</small><b>{selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
+          <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : selection.kind === "floor" ? "場館外框" : "非一般攤位區"}</small><b>{selection.kind === "floor" ? layout.template : selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
           {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input value={selectedSlot.code} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }, `field:${activeKey}:code`); }} /></label><label className={styles.wide}><span>所屬排標籤</span><input value={layout.rows[selectedSlotSelection.rowIndex].label} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { label: event.target.value.trim() }, `row:${selectedSlotSelection.rowIndex}:label`)} /></label><label className={styles.wide}><span>所屬排方向</span><select value={layout.rows[selectedSlotSelection.rowIndex].orientation} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label></>}
           {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子 ID</span><input value={selectedPillar.id} onChange={(event) => { const next = event.target.value.trim(); commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }, `field:${activeKey}:id`); }} /></label>}
-          {selectedLandmark && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selection.itemIndex].kind = stableKind; draft.landmarks[selection.itemIndex].label = event.target.value; }, `field:${activeKey}:label`); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
+          {selectedLandmark && selectedLandmarkSelection && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = stableKind; draft.landmarks[selectedLandmarkSelection.itemIndex].label = event.target.value; }, `field:${activeKey}:label`); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
           {selectedAccess && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedAccess.label} onChange={(event) => updateAccess({ label: event.target.value }, `field:${activeKey}:label`)} /></label><label><span>類型</span><select value={selectedAccess.kind} onChange={(event) => updateAccess({ kind: event.target.value as "entrance" | "exit" })}><option value="entrance">入口</option><option value="exit">出口</option></select></label><label><span>方向</span><select value={selectedAccess.direction} onChange={(event) => updateAccess({ direction: event.target.value as MapAccessDirection })}>{MAP_ACCESS_DIRECTIONS.map((direction) => <option key={direction} value={direction}>{ACCESS_DIRECTION_LABELS[direction]}</option>)}</select></label></>}
           <div className={styles.fields}>
             {numberField("X", selectedAccess?.x ?? selectedRect?.x ?? 0, (value) => selectedAccess ? updateAccess({ x: value }, `field:${activeKey}:x`) : updateRect({ x: value }, `field:${activeKey}:x`))}
@@ -617,8 +648,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
             {selectedRect && numberField("寬", selectedRect.width, (value) => updateRect({ width: value }, `field:${activeKey}:width`))}
             {selectedRect && numberField("高", selectedRect.height, (value) => updateRect({ height: value }, `field:${activeKey}:height`))}
           </div>
-          <button className={styles.remove} onClick={removeSelection}>移除此元素</button>
-          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selectedLandmark ? "拖曳物件可移動，拖曳四角可調整大小。" : "拖曳會直接更新預覽。"}</p>
+          {selection.kind !== "floor" && <button className={styles.remove} onClick={removeSelection}>移除此元素</button>}
+          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selection.kind === "access" ? "拖曳會直接更新預覽。" : "拖曳物件可移動，拖曳四角可調整大小。"}</p>
         </>}
       </aside>
     </div>

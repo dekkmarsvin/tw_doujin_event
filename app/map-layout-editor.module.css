@@ -25,6 +25,7 @@
 .paper { fill:#f8f7f2; }
 .sourceImage { opacity:.3; pointer-events:none; }
 .floor { fill:#fff9; stroke:#67736c; stroke-width:3; vector-effect:non-scaling-stroke; pointer-events:none; }
+.floorHandle { fill:none; stroke:#0000; stroke-width:16; vector-effect:non-scaling-stroke; pointer-events:stroke; }
 .editable { cursor:move; outline:none; touch-action:none; }
 .editable :is(rect,circle) { vector-effect:non-scaling-stroke; }
 .slot { fill:#eff1edcc; stroke:#7f8982; stroke-width:1; }
@@ -48,6 +49,7 @@
 .resizeNeSw { cursor:nesw-resize; }
 .snapGuide { fill:none; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke; pointer-events:none; }
 .inspector { min-width:0; padding:15px; border-left:1px solid #d4dad5; background:#fff; }
+.canvasSize { margin-top:0; margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker { margin-bottom:15px!important; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker select { width:100%; }
 .empty { min-height:100%; display:grid; align-content:center; gap:5px; color:#657069; text-align:center; }
