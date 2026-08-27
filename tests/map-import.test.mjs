@@ -8,7 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
-const { createBlankEventMapLayout, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
+const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
@@ -104,6 +104,16 @@ test("accepts a generic future event layout without FF47-specific counts", () =>
   const layout = { version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 100, floor: { x: 0, y: 0, width: 100, height: 100 }, rows: [{ label: "創作區", orientation: "horizontal", confidence: 1, slots: [{ code: "創01", rect: { x: 10, y: 10, width: 10, height: 10 } }] }], pillars: [], accessPoints: [], landmarks: [] };
   assert.equal(validateEventMapLayout(layout).ok, true);
   assert.equal(validateFf47Layout(layout).ok, false);
+});
+
+test("access points point at all four compass directions", () => {
+  // 倉庫群、多棟園區與跨館場地的出入口開在東西側，只有南北時只能畫成錯的方向。
+  const base = { version: 2, template: "PIER2-2025", width: 100, height: 100, floor: { x: 0, y: 0, width: 100, height: 100 }, rows: [], pillars: [], landmarks: [] };
+  const accessPoint = (id, direction, x) => ({ id, kind: "entrance", direction, x, y: 50, label: `${id} 出入口` });
+  assert.equal(validateEventMapLayout({ ...base, accessPoints: [accessPoint("east-1", "east", 90), accessPoint("west-1", "west", 10)] }).ok, true);
+  assert.equal(validateEventMapLayout({ ...base, accessPoints: [accessPoint("north-1", "north", 40), accessPoint("south-1", "south", 60)] }).ok, true);
+  assert.equal(validateEventMapLayout({ ...base, accessPoints: [accessPoint("up-1", "up", 50)] }).ok, false);
+  assert.deepEqual(MAP_ACCESS_DIRECTIONS.map((direction) => mapAccessArrowTransform({ direction, x: 10, y: 20 })), [undefined, "rotate(180, 10, 20)", "rotate(90, 10, 20)", "rotate(270, 10, 20)"]);
 });
 
 test("rejects malformed or duplicate non-booth landmarks", () => {

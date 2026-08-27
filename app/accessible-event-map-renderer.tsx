@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
-import type { EventMapLayout } from "./event-map";
+import { mapAccessArrowTransform, type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 
 export type MapSlotView = {
@@ -108,6 +108,6 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
       })()}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>
     <g aria-label="場內柱子">{layout.pillars.map((pillar) => <rect key={pillar.id} className={styles.pillar} x={pillar.x} y={pillar.y} width={pillar.width} height={pillar.height} rx="1" />)}</g>
-    <g aria-label="出入口">{layout.accessPoints.map((point) => <g key={point.id} className={point.kind === "entrance" ? styles.entrance : styles.exit}><line x1={point.x} y1={point.y + 24} x2={point.x} y2={point.y - 20} /><path d={`M ${point.x - 7} ${point.y - 10} L ${point.x} ${point.y - 22} L ${point.x + 7} ${point.y - 10}`} /><text x={point.x} y={point.kind === "exit" ? point.y - 34 : point.y + 42}>{point.label}</text></g>)}</g>
+    <g aria-label="出入口">{layout.accessPoints.map((point) => <g key={point.id} className={point.kind === "entrance" ? styles.entrance : styles.exit}><g transform={mapAccessArrowTransform(point)}><line x1={point.x} y1={point.y + 24} x2={point.x} y2={point.y - 20} /><path d={`M ${point.x - 7} ${point.y - 10} L ${point.x} ${point.y - 22} L ${point.x + 7} ${point.y - 10}`} /></g><text x={point.x} y={point.kind === "exit" ? point.y - 34 : point.y + 42}>{point.label}</text></g>)}</g>
   </svg>;
 }
