@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
-import { generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowDefinition, type SnapGuide } from "./map-layout-editor-geometry";
+import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { confirmedDraftSlots, generateRowSlots, inferRowFromAnchors, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, applySelectionBoxes, boundingBox, boxFor, findRowConflicts, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection, type SlotClipboard } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
@@ -121,6 +121,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const [rowForm, setRowForm] = useState<RowFormState | null>(null);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
+  // A non-null list turns canvas clicks into anchor marks. The inferred booths
+  // live here rather than in `layout`, which is what keeps a booth nobody
+  // confirmed out of anything that can be submitted.
+  const [anchors, setAnchors] = useState<RowAnchor[] | null>(null);
+  const [draftRow, setDraftRow] = useState<RowDraft | null>(null);
   const [clipboard, setClipboard] = useState<SlotClipboard | null>(null);
   const [pasteForm, setPasteForm] = useState({ offsetX: "0", offsetY: "0", label: "" });
   const drag = useRef<DragState | null>(null);
@@ -279,6 +284,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const startBand = (event: PointerEvent<SVGSVGElement>) => {
     if (event.target !== event.currentTarget) return;
     const point = pointIn(event.currentTarget, event);
+    if (anchors) {
+      setAnchors([...anchors, { index: (anchors.at(-1)?.index ?? 0) + 1, x: Math.round(point.x), y: Math.round(point.y) }]);
+      setRowErrors([]);
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     event.currentTarget.focus({ preventScroll: true });
     setBand(null);
@@ -432,18 +442,48 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     setSelections([{ kind: "slot", rowIndex, itemIndex: layout.rows[rowIndex]?.slots.length ?? 0 }]);
   };
 
-  const createRow = () => {
-    if (!rowForm) return;
-    const definition = rowDefinitionFrom(rowForm);
-    const result = generateRowSlots(definition, layout);
-    if (!result.ok) { setRowErrors(result.errors); return; }
-    const conflicts = findRowConflicts(result.row, layout);
+  /** Places a finished row and selects it, whether it was described by hand or
+   * inferred from anchors and then confirmed booth by booth. Both paths meet
+   * the same uniqueness rules before anything is written. */
+  const placeRow = (row: BoothRow) => {
+    const conflicts = findRowConflicts(row, layout);
     if (conflicts.length) { setRowErrors(conflicts); return; }
     const rowIndex = layout.rows.length;
-    commit((draft) => draft.rows.push(result.row));
+    commit((draft) => draft.rows.push(row));
     setRowErrors([]);
     setRowForm(null);
-    setSelections([{ kind: "slot", rowIndex, itemIndex: 0 }]);
+    setAnchors(null);
+    setDraftRow(null);
+    setSelections(row.slots.map((slot, itemIndex) => ({ kind: "slot", rowIndex, itemIndex })));
+  };
+
+  const createRow = () => {
+    if (!rowForm) return;
+    const result = generateRowSlots(rowDefinitionFrom(rowForm), layout);
+    if (!result.ok) { setRowErrors(result.errors); return; }
+    placeRow(result.row);
+  };
+
+  /** Turns the marked anchors into a draft row. The draft is held outside the
+   * layout so every booth has to be looked at before any of them is placed. */
+  const inferDraftRow = () => {
+    if (!rowForm || !anchors) return;
+    const inferred = inferRowFromAnchors(anchors);
+    if (!inferred.ok) { setRowErrors(inferred.errors); return; }
+    const { start, end, slotCount, startNumber } = inferred.inference;
+    const result = generateRowSlots({ ...rowDefinitionFrom(rowForm), start, end, slotCount, startNumber }, layout);
+    if (!result.ok) { setRowErrors(result.errors); return; }
+    setRowErrors([]);
+    setDraftRow({ slots: result.row.slots, keep: result.row.slots.map(() => true) });
+  };
+
+  const placeDraftRow = () => {
+    if (!rowForm || !draftRow) return;
+    const slots = confirmedDraftSlots(draftRow);
+    if (!slots.length) { setRowErrors(["至少要保留一格。"]); return; }
+    const label = rowForm.label.trim();
+    if (!label) { setRowErrors(["排標籤不可留空。"]); return; }
+    placeRow({ label, orientation: rowOrientationFromEndpoints(slots[0].rect, slots[slots.length - 1].rect), confidence: 1, slots });
   };
 
   const removeRow = (rowIndex: number) => {
@@ -554,6 +594,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     ? rowOrientationFromEndpoints({ x: Number(rowForm.startX), y: Number(rowForm.startY) }, { x: Number(rowForm.endX), y: Number(rowForm.endY) })
     : "vertical";
 
+  const anchorInference = anchors ? inferRowFromAnchors(anchors) : null;
+
   const rowCodePreview = (() => {
     if (!rowForm) return "";
     const definition = rowDefinitionFrom(rowForm);
@@ -586,6 +628,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
           {snapGuides.map((guide) => guide.axis === "x"
             ? <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.position} x2={guide.position} y1={guide.start} y2={guide.end} aria-hidden="true" />
             : <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.start} x2={guide.end} y1={guide.position} y2={guide.position} aria-hidden="true" />)}
+          {draftRow?.slots.map((slot, index) => draftRow.keep[index] && <g key={slot.code} className={styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
+          {anchors?.map((anchor) => <g key={`${anchor.index}:${anchor.x}:${anchor.y}`} className={styles.anchor} aria-hidden="true"><circle cx={anchor.x} cy={anchor.y} r={7 * layoutUnitsPerPixel} /><text x={anchor.x} y={anchor.y - 12 * layoutUnitsPerPixel}>{anchor.index}</text></g>)}
           {band && <rect className={styles.band} {...band} aria-hidden="true" />}
           {handleBounds && ([
             ["nw", handleBounds.x, handleBounds.y],
@@ -621,7 +665,28 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
           </div>
           {rowField("代碼前綴", rowForm.codePrefix, (value) => setRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
           <p>方向：{rowFormOrientation === "horizontal" ? "橫排" : "直排"}（依端點判定）<br />預覽：{rowCodePreview}</p>
-          <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>建立這一排</button></div>
+          <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); setAnchors(null); setDraftRow(null); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>建立這一排</button></div>
+          <div className={styles.anchorPanel}>
+            <b>錨點推算</b>
+            <p>在原圖上點選三格以上的中心並填入該格在這一排的編號，工具會推算整排；每一格都要逐格確認後才會加入地圖。</p>
+            {!anchors && <div className={styles.rowFormActions}><button type="button" onClick={() => { setAnchors([]); setDraftRow(null); setRowErrors([]); }}>開始標記錨點</button></div>}
+            {anchors && <>
+              {!anchors.length && <p>在畫布空白處點選即可標記。</p>}
+              {!!anchors.length && <ul className={styles.anchorList}>{anchors.map((anchor, index) => <li key={`${index}:${anchor.x}:${anchor.y}`}>
+                <span>{Math.round(anchor.x)}, {Math.round(anchor.y)}</span>
+                <input type="number" aria-label={`第 ${index + 1} 個錨點的格號`} value={anchor.index} onChange={(event) => { const next = Number(event.target.value); setAnchors(anchors.map((item, position) => position === index ? { ...item, index: Number.isFinite(next) ? next : item.index } : item)); }} />
+                <button type="button" aria-label={`移除第 ${index + 1} 個錨點`} onClick={() => setAnchors(anchors.filter((item, position) => position !== index))}>移除</button>
+              </li>)}</ul>}
+              {anchorInference?.ok && <p>格數 {anchorInference.inference.slotCount}・起始編號 {anchorInference.inference.startNumber}・最大偏差 {anchorInference.inference.residual.toFixed(1)}</p>}
+              <div className={styles.rowFormActions}><button type="button" onClick={() => { setAnchors(null); setDraftRow(null); setRowErrors([]); }}>取消標記</button><button type="button" className={styles.rowConfirm} disabled={!anchorInference?.ok} onClick={inferDraftRow}>推算草稿</button></div>
+            </>}
+            {draftRow && <>
+              <ul className={styles.draftList}>{draftRow.slots.map((slot, index) => <li key={slot.code}>
+                <label><input type="checkbox" checked={draftRow.keep[index]} onChange={(event) => setDraftRow({ ...draftRow, keep: draftRow.keep.map((kept, position) => position === index ? event.target.checked : kept) })} />{slot.code}</label>
+              </li>)}</ul>
+              <div className={styles.rowFormActions}><button type="button" onClick={() => { setDraftRow(null); setRowErrors([]); }}>捨棄草稿</button><button type="button" className={styles.rowConfirm} onClick={placeDraftRow}>加入保留的 {confirmedDraftSlots(draftRow).length} 格</button></div>
+            </>}
+          </div>
         </div>}
         {!rowForm && !!layout.rows.length && <div className={styles.rowList}>
           <b>已建立的排（{layout.rows.length}）</b>
