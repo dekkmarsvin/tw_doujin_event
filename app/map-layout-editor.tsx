@@ -284,7 +284,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const startBand = (event: PointerEvent<SVGSVGElement>) => {
     if (event.target !== event.currentTarget) return;
     const point = pointIn(event.currentTarget, event);
-    if (anchors) {
+    if (rowForm && anchors) {
       setAnchors([...anchors, { index: (anchors.at(-1)?.index ?? 0) + 1, x: Math.round(point.x), y: Math.round(point.y) }]);
       setRowErrors([]);
       return;
@@ -474,7 +474,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     const result = generateRowSlots({ ...rowDefinitionFrom(rowForm), start, end, slotCount, startNumber }, layout);
     if (!result.ok) { setRowErrors(result.errors); return; }
     setRowErrors([]);
-    setDraftRow({ slots: result.row.slots, keep: result.row.slots.map(() => true) });
+    // Every inferred booth starts unconfirmed. Interpolation invents the
+    // booths between the anchors, so some of them may not exist on the plan at
+    // all; defaulting them to kept would make the confirmation step a no-op and
+    // let a booth nobody looked at reach a submission after one press.
+    setDraftRow({ slots: result.row.slots, keep: result.row.slots.map(() => false) });
   };
 
   const placeDraftRow = () => {
@@ -587,6 +591,24 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     if (option) requestAnimationFrame(() => focusSelection(option.selection));
   };
 
+  /** Any change to a generation field discards the draft it produced. Keeping
+   * it would let the contributor correct the prefix or the booth size, see the
+   * form say one thing, and place the codes and rectangles of the other. */
+  const changeRowForm = (next: RowFormState) => {
+    setRowForm(next);
+    setDraftRow(null);
+  };
+
+  /** Leaving the row panel ends anchor marking with it. Otherwise the canvas
+   * would keep turning blank-paper presses into anchors with no visible
+   * controls, and rubber-band selection would stay unavailable. */
+  const toggleRowForm = () => {
+    setRowErrors([]);
+    setAnchors(null);
+    setDraftRow(null);
+    setRowForm((current) => current ? null : blankRowForm(layout));
+  };
+
   const rowField = (label: string, value: string, onValue: (value: string) => void, placeholder?: string) =>
     <label className={styles.wide}><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onValue(event.target.value)} /></label>;
 
@@ -608,7 +630,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={() => { setRowErrors([]); setRowForm((current) => current ? null : blankRowForm(layout)); }} aria-expanded={!!rowForm}>新增一排</button><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={toggleRowForm} aria-expanded={!!rowForm}>新增一排</button><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
@@ -651,19 +673,19 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
           <b>新增一排</b>
           <p>起點與終點是這一排第一格與最後一格的中心；格數決定中間如何等分。排標籤可以是任意文字。方向由端點自動判定，建立後仍可在排清單更改。</p>
           {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
-          {rowField("新排標籤", rowForm.label, (value) => setRowForm({ ...rowForm, label: value }), "例：A、子、商")}
+          {rowField("新排標籤", rowForm.label, (value) => changeRowForm({ ...rowForm, label: value }), "例：A、子、商")}
           <div className={styles.fields}>
-            {rowField("起點 X", rowForm.startX, (value) => setRowForm({ ...rowForm, startX: value }))}
-            {rowField("起點 Y", rowForm.startY, (value) => setRowForm({ ...rowForm, startY: value }))}
-            {rowField("終點 X", rowForm.endX, (value) => setRowForm({ ...rowForm, endX: value }))}
-            {rowField("終點 Y", rowForm.endY, (value) => setRowForm({ ...rowForm, endY: value }))}
-            {rowField("格數", rowForm.slotCount, (value) => setRowForm({ ...rowForm, slotCount: value }))}
-            {rowField("每格寬", rowForm.slotWidth, (value) => setRowForm({ ...rowForm, slotWidth: value }))}
-            {rowField("每格高", rowForm.slotHeight, (value) => setRowForm({ ...rowForm, slotHeight: value }))}
-            {rowField("起始編號", rowForm.startNumber, (value) => setRowForm({ ...rowForm, startNumber: value }))}
-            {rowField("補零位數", rowForm.numberPadding, (value) => setRowForm({ ...rowForm, numberPadding: value }))}
+            {rowField("起點 X", rowForm.startX, (value) => changeRowForm({ ...rowForm, startX: value }))}
+            {rowField("起點 Y", rowForm.startY, (value) => changeRowForm({ ...rowForm, startY: value }))}
+            {rowField("終點 X", rowForm.endX, (value) => changeRowForm({ ...rowForm, endX: value }))}
+            {rowField("終點 Y", rowForm.endY, (value) => changeRowForm({ ...rowForm, endY: value }))}
+            {rowField("格數", rowForm.slotCount, (value) => changeRowForm({ ...rowForm, slotCount: value }))}
+            {rowField("每格寬", rowForm.slotWidth, (value) => changeRowForm({ ...rowForm, slotWidth: value }))}
+            {rowField("每格高", rowForm.slotHeight, (value) => changeRowForm({ ...rowForm, slotHeight: value }))}
+            {rowField("起始編號", rowForm.startNumber, (value) => changeRowForm({ ...rowForm, startNumber: value }))}
+            {rowField("補零位數", rowForm.numberPadding, (value) => changeRowForm({ ...rowForm, numberPadding: value }))}
           </div>
-          {rowField("代碼前綴", rowForm.codePrefix, (value) => setRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
+          {rowField("代碼前綴", rowForm.codePrefix, (value) => changeRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
           <p>方向：{rowFormOrientation === "horizontal" ? "橫排" : "直排"}（依端點判定）<br />預覽：{rowCodePreview}</p>
           <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); setAnchors(null); setDraftRow(null); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>建立這一排</button></div>
           <div className={styles.anchorPanel}>
@@ -684,7 +706,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
               <ul className={styles.draftList}>{draftRow.slots.map((slot, index) => <li key={slot.code}>
                 <label><input type="checkbox" checked={draftRow.keep[index]} onChange={(event) => setDraftRow({ ...draftRow, keep: draftRow.keep.map((kept, position) => position === index ? event.target.checked : kept) })} />{slot.code}</label>
               </li>)}</ul>
-              <div className={styles.rowFormActions}><button type="button" onClick={() => { setDraftRow(null); setRowErrors([]); }}>捨棄草稿</button><button type="button" className={styles.rowConfirm} onClick={placeDraftRow}>加入保留的 {confirmedDraftSlots(draftRow).length} 格</button></div>
+              <div className={styles.rowFormActions}><button type="button" onClick={() => { setDraftRow(null); setRowErrors([]); }}>捨棄草稿</button><button type="button" className={styles.rowConfirm} disabled={!confirmedDraftSlots(draftRow).length} onClick={placeDraftRow}>加入確認的 {confirmedDraftSlots(draftRow).length} / {draftRow.slots.length} 格</button></div>
             </>}
           </div>
         </div>}

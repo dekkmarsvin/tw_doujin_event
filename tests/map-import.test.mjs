@@ -383,6 +383,23 @@ test("an inferred row is only placed booth by booth, on a template with no recog
     "a draft nobody confirmed contributes nothing, so it can never reach a submission");
 });
 
+test("interpolation invents booths, so confirmation starts empty rather than pre-ticked", () => {
+  // Anchors on the 1st and 9th booth of a row whose 5th position is a gangway:
+  // the fit has no way to know, so booth 5 is generated and must be dropped.
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 400, 300);
+  const inferred = inferRowFromAnchors([{ index: 1, x: 40, y: 100 }, { index: 3, x: 120, y: 100 }, { index: 9, x: 360, y: 100 }]);
+  const { start, end, slotCount, startNumber } = inferred.inference;
+  const generated = generateRowSlots({
+    label: "A", start, end, slotCount, startNumber, slotWidth: 30, slotHeight: 20, codePrefix: "A", numberPadding: 2,
+  }, layout);
+  assert.equal(generated.row.slots.length, 9);
+  const untouched = { slots: generated.row.slots, keep: generated.row.slots.map(() => false) };
+  assert.deepEqual(confirmedDraftSlots(untouched), [], "pressing place on an untouched draft must have nothing to place");
+  const reviewed = { slots: generated.row.slots, keep: generated.row.slots.map((slot, index) => index !== 4) };
+  assert.equal(confirmedDraftSlots(reviewed).length, 8);
+  assert.equal(confirmedDraftSlots(reviewed).some((slot) => slot.code === "A05"), false, "the invented booth stays out of the layout");
+});
+
 test("row orientation comes from the endpoints, so it can never contradict them", () => {
   // Both renderers place the row label from `orientation`
   // (`row.orientation === "horizontal" ? maxY + 30 : minY - 13`), so a value
