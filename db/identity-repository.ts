@@ -873,11 +873,19 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     // Discussion is activity. Without the touch, a draft under review could sit
     // out its inactivity window while it was being talked about and be purged
     // on the next run. Batched with the insert so the two cannot disagree.
+    //
+    // The contributor branch rechecks ownership and the live grant inside the
+    // write, the way a revision write does: a grant revoked between the
+    // handler's check and this statement must refuse the comment, not race it.
     const results = await database.batch([
       database.prepare(
         `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
          SELECT ?1, id, COALESCE(?2, current_revision), ?3, ?4, ?5, ?6, ?7, ?8 FROM map_drafts
-         WHERE id = ?9 AND event_id = ?10 AND retention_action IS NULL`,
+         WHERE id = ?9 AND event_id = ?10 AND retention_action IS NULL
+           AND (?4 <> 'map_contributor' OR (owner_account_id = ?3 AND EXISTS (
+             SELECT 1 FROM map_contributor_grants
+             WHERE account_id = ?3 AND revoked_at IS NULL AND suspended_at IS NULL
+           )))`,
       ).bind(id, input.revision ?? null, input.authorAccountId, input.authorRole, input.targetKind, input.targetRef, input.body, input.now, input.draftId, input.eventId),
       database.prepare(
         `UPDATE map_drafts SET last_activity_at = ?1

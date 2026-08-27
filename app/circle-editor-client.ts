@@ -258,7 +258,9 @@ export type MapDraftComment = {
   at: number;
 };
 
-export type MapDraftCommentTarget = { kind: "slot" | "landmark"; ref: string; body: string };
+/** Field names are the wire contract the review endpoint parses, so a panel
+ * that builds one of these cannot drift from what the server reads. */
+export type MapDraftCommentTarget = { targetKind: "slot" | "landmark"; targetRef: string; body: string };
 
 export function listMyMapDrafts() {
   return call<{ drafts: MapDraftSummary[] }>("/api/map-contributions/drafts");

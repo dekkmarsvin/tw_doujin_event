@@ -1094,6 +1094,10 @@ export function createCirclePortalHandlers({
     const role = asAdmin ? "admin" : "map_contributor";
     const id = await repository.addMapDraftComment({
       draftId, eventId: config.eventId, authorAccountId: current.accountId, authorRole: role,
+      // Pinned rather than left to the insert's own read, so the comment row
+      // and the audit entry below cannot name different revisions when the
+      // owner saves between the two.
+      revision: draft.current_revision,
       targetKind: target.kind, targetRef: target.ref, body: text, now: config.now(),
     });
     if (!id) return json({ error: "找不到草稿。" }, 404);

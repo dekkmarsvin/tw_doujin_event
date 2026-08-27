@@ -229,7 +229,15 @@ export function AdminMapReviewPanel() {
   const [targetRef, setTargetRef] = useState("");
   const [targetBody, setTargetBody] = useState("");
   const refreshList = useCallback(async () => setDrafts((await listAdminMapDrafts()).drafts), []);
-  const openDraft = useCallback(async (id: string) => { setSelectedId(id); setDetail(await readMapDraft(id, true)); setProblems([]); setCandidate(null); setOfficialSourceConfirmed(false); setTargets([]); }, []);
+  /** Refreshes the thread without touching what the reviewer has queued or
+   * typed, which is what a standalone reply needs. */
+  const reloadDetail = useCallback(async (id: string) => setDetail(await readMapDraft(id, true)), []);
+  // Everything draft-scoped is reset together. Leaving the composer filled
+  // would let review text typed against one draft be sent to another.
+  const openDraft = useCallback(async (id: string) => {
+    setSelectedId(id); setDetail(await readMapDraft(id, true)); setProblems([]); setCandidate(null);
+    setOfficialSourceConfirmed(false); setTargets([]); setTargetKind("draft"); setTargetRef(""); setTargetBody("");
+  }, []);
   useEffect(() => { queueMicrotask(() => { void refreshList(); }); }, [refreshList]);
   const run = async (task: () => Promise<void>, ok: string) => {
     setStatus({ kind: "busy", message: "處理中…" }); setProblems([]);
@@ -281,18 +289,18 @@ export function AdminMapReviewPanel() {
             draftId: detail.draft.id, body: targetBody.trim(),
             ...(targetKind === "draft" ? {} : { targetKind, targetRef: targetRef.trim() }),
           });
-          setTargetRef(""); setTargetBody(""); await openDraft(detail.draft.id);
+          setTargetRef(""); setTargetBody(""); await reloadDetail(detail.draft.id);
         }, "留言已送出。")}>送出留言</button>
         {/* Queued instead, so the request rides the decision and is written
             only once that transition takes effect. */}
         <button type="button" disabled={targetKind === "draft" || !targetRef.trim() || !targetBody.trim()} onClick={() => {
           if (targetKind === "draft") return;
-          setTargets([...targets, { kind: targetKind, ref: targetRef.trim(), body: targetBody.trim() }]);
+          setTargets([...targets, { targetKind, targetRef: targetRef.trim(), body: targetBody.trim() }]);
           setTargetRef(""); setTargetBody("");
         }}>隨「要求修改」送出</button>
       </div>
-      {!!targets.length && <ul className={styles.auditList}>{targets.map((item, index) => <li key={`${item.kind}:${item.ref}:${index}`}>
-        {TARGET_LABEL[item.kind]} {item.ref}・{item.body}
+      {!!targets.length && <ul className={styles.auditList}>{targets.map((item, index) => <li key={`${item.targetKind}:${item.targetRef}:${index}`}>
+        {TARGET_LABEL[item.targetKind]} {item.targetRef}・{item.body}
         <button type="button" onClick={() => setTargets(targets.filter((entry, position) => position !== index))}>移除</button>
       </li>)}</ul>}
       <label>取代既有核准 draftId（只有同範圍已有核准稿時填寫）<input value={replacementDraftId} onChange={(event) => setReplacementDraftId(event.target.value)} /></label>

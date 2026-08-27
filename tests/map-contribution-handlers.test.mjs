@@ -738,6 +738,44 @@ test("requesting changes records the elements it is about, and only when it take
     "requests name the revision the reviewer looked at, not whatever the draft reached afterwards");
 });
 
+test("the review panel's own target shape is the one the endpoint parses", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  // Built exactly as MapDraftCommentTarget declares it, so a rename on either
+  // side fails here rather than turning every queued request into a 400.
+  const queued = [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }];
+  const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "changes_requested", note: "一處要改", targets: queued,
+  }, adminCookie), draft.draftId);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ target_kind, target_ref }) => ({ target_kind, target_ref })),
+    [{ target_kind: "slot", target_ref: "A07" }]);
+});
+
+test("a grant revoked mid-request cannot slip a comment past the check", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const accountId = (await repository.getMapDraft(draft.draftId)).owner_account_id;
+
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  // The repository call the handler would make once its own check had passed.
+  const id = await repository.addMapDraftComment({
+    draftId: draft.draftId, eventId: "ff47", authorAccountId: accountId, authorRole: "map_contributor",
+    targetKind: null, targetRef: null, body: "權限已被撤銷。", now: NOW,
+  });
+  assert.equal(id, null, "the write rechecks the live grant, so a revocation cannot be raced");
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+});
+
 test("a revoked grant outranks a stale revision so the panel never offers a reload that cannot help", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");
