@@ -130,10 +130,10 @@ function png() {
   ]);
 }
 
-function uploadRequest(draftId, cookie) {
+function uploadRequest(draftId, cookie, revision = 1) {
   const form = new FormData();
   form.set("draftId", draftId);
-  form.set("revision", "1");
+  form.set("revision", String(revision));
   form.set("sourceUrl", "https://organizer.example/map");
   form.set("documentDate", "2026-08-25");
   form.set("file", new File([png()], "map.png", { type: "image/png" }));
@@ -501,4 +501,96 @@ test("approving a parallel draft requires an explicit replacement id", async () 
   }, adminCookie), second.draftId)).status, 200);
   assert.equal((await repository.getMapDraft(first.draftId)).status, "withdrawn");
   assert.equal((await repository.getMapDraft(second.draftId)).status, "approved");
+});
+
+test("a version conflict names the revision, the time and the role that moved the draft", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const save = (expectedRevision) => handlers.updateMapDraft(request(`/drafts/${draft.draftId}`, "PUT", {
+    expectedRevision, content: validContent(),
+  }, mapperCookie), draft.draftId);
+
+  // The stale session still holds revision 1 while the other one saves twice.
+  assert.equal((await save(1)).status, 200, "the first writer wins");
+  assert.equal((await save(2)).status, 200);
+  const stale = await save(1);
+  assert.equal(stale.status, 409, "the second writer is still refused; the lock is unchanged");
+  assert.deepEqual(await stale.json(), {
+    error: "草稿已更新至版本 3。",
+    conflict: { cause: "version", revision: 3, updatedAt: NOW, updatedByRole: "map_contributor" },
+  });
+  assert.equal((await repository.getMapDraft(draft.draftId)).current_revision, 3, "no auto-merge");
+
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie, 3));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 3,
+  }, mapperCookie), draft.draftId)).status, 200);
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 3, decision: "changes_requested", note: "row A is off by one slot",
+  }, adminCookie), draft.draftId)).status, 200);
+  assert.equal((await save(3)).status, 200);
+
+  const afterReview = await save(1);
+  assert.equal(afterReview.status, 409);
+  assert.deepEqual((await afterReview.json()).conflict, {
+    cause: "version", revision: 4, updatedAt: NOW, updatedByRole: "map_contributor",
+  }, "a revision write is attributed to the contributor even right after an admin review");
+
+  const adminMoved = await handlers.adminExportMapDraft(request(`/admin/drafts/${draft.draftId}/export`, "POST", {
+    expectedRevision: 3,
+  }, adminCookie), draft.draftId);
+  assert.equal(adminMoved.status, 409);
+  assert.deepEqual((await adminMoved.json()).conflict, {
+    cause: "version", revision: 4, updatedAt: NOW, updatedByRole: "map_contributor",
+  });
+
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie, 4));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 4,
+  }, mapperCookie), draft.draftId)).status, 200);
+  assert.equal((await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 4, decision: "reject", note: "superseded",
+  }, adminCookie), draft.draftId)).status, 200);
+  const afterAdminMove = await save(1);
+  assert.deepEqual((await afterAdminMove.json()).conflict, {
+    cause: "version", revision: 4, updatedAt: NOW, updatedByRole: "admin",
+  }, "a status change is attributed to the reviewing role, never to an account");
+});
+
+test("revoked permission and an unwritable status stay distinguishable from a version conflict", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  const submitted = await handlers.updateMapDraft(request(`/drafts/${draft.draftId}`, "PUT", {
+    expectedRevision: 1, content: validContent(),
+  }, mapperCookie), draft.draftId);
+  assert.equal(submitted.status, 409);
+  assert.deepEqual(await submitted.json(), {
+    error: "草稿狀態已變更。",
+    conflict: { cause: "status", revision: 1, updatedAt: NOW, updatedByRole: "map_contributor" },
+  });
+
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+  const revoked = await handlers.updateMapDraft(request(`/drafts/${draft.draftId}`, "PUT", {
+    expectedRevision: 1, content: validContent(),
+  }, mapperCookie), draft.draftId);
+  assert.equal(revoked.status, 409);
+  assert.deepEqual(await revoked.json(), {
+    error: "沒有有效的地圖貢獻者權限。",
+    conflict: { cause: "permission", revision: 1, updatedAt: NOW, updatedByRole: "map_contributor" },
+  }, "revocation outranks the status message and never shares the version wording");
+
+  const submitRevoked = await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId);
+  assert.equal(submitRevoked.status, 409);
+  assert.equal((await submitRevoked.json()).conflict.cause, "permission");
 });

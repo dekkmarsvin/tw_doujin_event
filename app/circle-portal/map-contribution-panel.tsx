@@ -4,19 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import {
   createMapContributionDraft, exportMapContributionCandidate, listAdminMapDrafts, listMyMapDrafts,
-  mapDraftProblems, readMapDraft, reviewMapContributionDraft, saveMapContributionDraft,
+  mapDraftConflict, mapDraftProblems, readMapDraft, reviewMapContributionDraft, saveMapContributionDraft,
   submitMapContributionDraft, uploadMapContributionEvidence,
   type MapDraftDetail, type MapDraftFile, type MapDraftReview, type MapDraftStatus, type MapDraftSummary,
 } from "../circle-editor-client";
 import { ACTIVE_EVENT } from "../event-catalog";
 import type { EventMapLayout, PublishedEventMap } from "../event-map";
 import MapLayoutEditor from "../map-layout-editor";
-import type { MapCandidateDiff, MapDraftProblem } from "../map-contribution-draft";
+import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
 import { loadStaticEventMap } from "../static-event-map-client";
 import styles from "./portal.module.css";
 
 type Detail = { draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[] };
-type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
+type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string; conflict?: MapDraftConflict };
 const IDLE: Status = { kind: "idle", message: "" };
 
 const STATUS_LABEL: Record<MapDraftStatus, string> = {
@@ -24,8 +24,32 @@ const STATUS_LABEL: Record<MapDraftStatus, string> = {
   rejected: "已拒絕", exported: "已匯出候選", withdrawn: "已被取代",
 };
 
+const ACTOR_LABEL: Record<MapDraftActorRole, string> = {
+  map_contributor: "地圖貢獻者", admin: "管理者", system: "系統",
+};
+const CONFLICT_AT = new Intl.DateTimeFormat("zh-Hant", {
+  dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Taipei",
+});
+
 function message(error: unknown) {
   return error instanceof Error ? error.message : "操作失敗，請稍後再試。";
+}
+
+/** A version conflict is the one refusal the contributor can act on, so it
+ * names the revision that now exists, when it changed and the role that
+ * changed it. The other two refusals keep their own distinct message. */
+function StatusNotice({ status, onReload }: { status: Status; onReload: (() => void) | null }) {
+  if (status.kind === "idle") return null;
+  const conflict = status.conflict;
+  const text = conflict?.cause === "version"
+    ? `草稿已更新至版本 ${conflict.revision}・${CONFLICT_AT.format(conflict.updatedAt)}・${ACTOR_LABEL[conflict.updatedByRole]}`
+    : status.message;
+  return <>
+    <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{text}</p>
+    {conflict && conflict.cause !== "permission" && onReload
+      ? <button type="button" onClick={onReload}>重新載入草稿</button>
+      : null}
+  </>;
 }
 
 function Preview({ layout }: { layout: EventMapLayout }) {
@@ -93,7 +117,10 @@ export function MapContributorPanel() {
   const run = async (task: () => Promise<void>, ok: string) => {
     setStatus({ kind: "busy", message: "處理中…" }); setProblems([]);
     try { await task(); setStatus({ kind: "ok", message: ok }); }
-    catch (error) { setProblems(mapDraftProblems(error)); setStatus({ kind: "error", message: message(error) }); }
+    catch (error) {
+      setProblems(mapDraftProblems(error));
+      setStatus({ kind: "error", message: message(error), conflict: mapDraftConflict(error) ?? undefined });
+    }
   };
 
   const editable = detail?.draft.status === "draft" || detail?.draft.status === "changes_requested";
@@ -150,7 +177,7 @@ export function MapContributorPanel() {
       <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・版本 {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
     </>}
     <Problems problems={problems} />
-    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+    <StatusNotice status={status} onReload={detail ? () => void run(() => openDraft(detail.draft.id), "草稿已載入。") : null} />
   </section>;
 }
 
@@ -170,7 +197,10 @@ export function AdminMapReviewPanel() {
   const run = async (task: () => Promise<void>, ok: string) => {
     setStatus({ kind: "busy", message: "處理中…" }); setProblems([]);
     try { await task(); setStatus({ kind: "ok", message: ok }); }
-    catch (error) { setProblems(mapDraftProblems(error)); setStatus({ kind: "error", message: message(error) }); }
+    catch (error) {
+      setProblems(mapDraftProblems(error));
+      setStatus({ kind: "error", message: message(error), conflict: mapDraftConflict(error) ?? undefined });
+    }
   };
   const decide = (decision: "changes_requested" | "approve" | "reject") => detail && run(async () => {
     await reviewMapContributionDraft({
@@ -210,6 +240,6 @@ export function AdminMapReviewPanel() {
       <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・版本 {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
     </>}
     <Problems problems={problems} />
-    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+    <StatusNotice status={status} onReload={detail ? () => void run(() => openDraft(detail.draft.id), "審閱資料已載入。") : null} />
   </section>;
 }

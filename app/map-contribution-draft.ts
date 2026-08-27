@@ -46,6 +46,27 @@ export type MapDraftProblem = {
   boothCodes?: string[];
 };
 
+export type MapDraftActorRole = "map_contributor" | "admin" | "system";
+
+/** Why an optimistic-lock write on a draft was refused, plus the facts a
+ * contributor needs to decide what to do next. `updatedByRole` is a role, not
+ * an actor: participants on a draft are never identified to one another. */
+export type MapDraftConflict = {
+  cause: "version" | "permission" | "status";
+  revision: number;
+  updatedAt: number;
+  updatedByRole: MapDraftActorRole;
+};
+
+export function parseMapDraftConflict(value: unknown): MapDraftConflict | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { cause, revision, updatedAt, updatedByRole } = value as Record<string, unknown>;
+  if (cause !== "version" && cause !== "permission" && cause !== "status") return null;
+  if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(updatedAt)) return null;
+  if (updatedByRole !== "map_contributor" && updatedByRole !== "admin" && updatedByRole !== "system") return null;
+  return { cause, revision: revision as number, updatedAt: updatedAt as number, updatedByRole };
+}
+
 export type MapDraftValidation =
   | { ok: true; content: MapContributionDraftContent; problems: [] }
   | { ok: false; content: MapContributionDraftContent | null; problems: MapDraftProblem[] };

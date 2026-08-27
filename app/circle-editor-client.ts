@@ -1,6 +1,6 @@
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
 import type { EventMapLayout, PublishedEventMap } from "./event-map";
-import type { MapCandidateDiff, MapDraftProblem } from "./map-contribution-draft";
+import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } from "./map-contribution-draft";
 
 /**
  * Every authenticated write in one place, so the boundary is auditable: the
@@ -318,4 +318,11 @@ export function exportMapContributionCandidate(draftId: string, expectedRevision
 export function mapDraftProblems(error: unknown) {
   if (!(error instanceof PortalError) || !Array.isArray(error.body?.problems)) return [];
   return error.body.problems as MapDraftProblem[];
+}
+
+/** A refused write carries the draft's own state back, so the panel can name
+ * the conflict and offer a reload instead of a dead-end error string. */
+export function mapDraftConflict(error: unknown) {
+  if (!(error instanceof PortalError) || error.status !== 409) return null;
+  return parseMapDraftConflict(error.body?.conflict);
 }
