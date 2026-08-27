@@ -194,6 +194,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(readerHelp, /使用說明/);
   assert.match(readerHelp, /收藏、加入行程與設為下一站是三個獨立動作/);
   assert.match(readerHelp, /目前網頁尚未提供匯入/);
+  assert.match(readerHelp, /你是參展社團嗎？/);
+  assert.match(readerHelp, /href="\/circle"/);
   assert.match(readerHelp, /關於本頁/);
   assert.match(readerHelp, /非官方同人展逛攤工具/);
   assert.match(readerHelp, /Discord ID <strong>dekkorakki<\/strong>/);
