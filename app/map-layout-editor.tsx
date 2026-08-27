@@ -225,6 +225,15 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   const resizeCanvas = (next: Partial<Pick<EventMapLayout, "width" | "height">>, coalesceKey: string) => {
     const width = Math.max(1, next.width ?? layout.width);
     const height = Math.max(1, next.height ?? layout.height);
+    // Anchors are plan coordinates like everything else, so they ride the same
+    // rescale the layout does. The draft they produced is discarded rather than
+    // rescaled: it has to be inferred again from the moved anchors, and keeping
+    // rectangles in the old space would put booths outside a shrunken canvas
+    // and leave the preview off the source plan.
+    const scaleX = width / layout.width;
+    const scaleY = height / layout.height;
+    if (anchors) setAnchors(anchors.map((anchor) => ({ ...anchor, x: anchor.x * scaleX, y: anchor.y * scaleY })));
+    setDraftRow(null);
     commit((draft) => Object.assign(draft, scaleEventMapLayout(draft, { width, height })), coalesceKey);
   };
 
