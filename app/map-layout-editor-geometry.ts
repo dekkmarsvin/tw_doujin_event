@@ -102,10 +102,15 @@ export function resizeRectFromCorner(rect: MapRect, corner: ResizeCorner, dx: nu
   const originalBottom = rect.y + rect.height;
   const movesLeft = corner === "nw" || corner === "sw";
   const movesTop = corner === "nw" || corner === "ne";
-  const left = movesLeft ? Math.max(0, Math.min(rect.x + dx, originalRight - minimumSize)) : rect.x;
-  const top = movesTop ? Math.max(0, Math.min(rect.y + dy, originalBottom - minimumSize)) : rect.y;
-  const right = movesLeft ? originalRight : Math.min(bounds.width, Math.max(originalRight + dx, rect.x + minimumSize));
-  const bottom = movesTop ? originalBottom : Math.min(bounds.height, Math.max(originalBottom + dy, rect.y + minimumSize));
+  // Recognition traces the plan's own line spacing, so a real slot is routinely
+  // shorter than the handle-sized minimum. Floor each axis at whatever it already
+  // measures: a corner grab must never enlarge the rectangle it is there to edit.
+  const minWidth = Math.min(minimumSize, rect.width);
+  const minHeight = Math.min(minimumSize, rect.height);
+  const left = movesLeft ? Math.max(0, Math.min(rect.x + dx, originalRight - minWidth)) : rect.x;
+  const top = movesTop ? Math.max(0, Math.min(rect.y + dy, originalBottom - minHeight)) : rect.y;
+  const right = movesLeft ? originalRight : Math.min(bounds.width, Math.max(originalRight + dx, rect.x + minWidth));
+  const bottom = movesTop ? originalBottom : Math.min(bounds.height, Math.max(originalBottom + dy, rect.y + minHeight));
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 

@@ -136,6 +136,17 @@ test("resizes any non-booth landmark rectangle from all four corners", () => {
   assert.deepEqual(resizeRectFromCorner(rect, "nw", 100, 100, bounds, 12), { x: 48, y: 38, width: 12, height: 12 });
 });
 
+test("a corner grab never enlarges a rectangle already smaller than the handle minimum", () => {
+  // Recognised FF47 booths are 18 units tall, well under the 24-unit default.
+  const slot = { x: 40, y: 40, width: 28, height: 18 };
+  const bounds = { width: 2400, height: 1696 };
+  assert.deepEqual(resizeRectFromCorner(slot, "se", 1, 1, bounds), { x: 40, y: 40, width: 29, height: 19 });
+  assert.deepEqual(resizeRectFromCorner(slot, "nw", -1, -1, bounds), { x: 39, y: 39, width: 29, height: 19 });
+  assert.deepEqual(resizeRectFromCorner(slot, "se", 0, 0, bounds), slot, "an idle grab leaves the booth untouched");
+  assert.deepEqual(resizeRectFromCorner(slot, "se", -999, -999, bounds), { x: 40, y: 40, width: 24, height: 18 },
+    "the height floor is the booth's own 18, never the default that would inflate it");
+});
+
 test("snaps enterprise rectangles to the nearest overlapping adjacent edge", () => {
   const bounds = { width: 200, height: 120 };
   const target = { id: "enterprise-a", rect: { x: 20, y: 8, width: 30, height: 28 } };
