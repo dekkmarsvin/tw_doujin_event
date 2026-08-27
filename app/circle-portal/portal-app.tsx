@@ -105,7 +105,6 @@ export default function CirclePortalApp() {
   return <div className={styles.page}>
     <header className={styles.masthead}>
       <div>
-        <small>CIRCLE PORTAL</small>
         <h1>社團資料維護</h1>
         <p>{ACTIVE_EVENT.name}・{ACTIVE_EVENT.dateRangeLabel}</p>
       </div>
@@ -133,9 +132,6 @@ export default function CirclePortalApp() {
           {session.isAdmin && <AdminPanel />}
         </>}
 
-    <footer className={styles.footer}>
-      <p>攤位與日期由主辦公布，無法在此修改。</p>
-    </footer>
   </div>;
 }
 
@@ -185,7 +181,7 @@ function SignIn() {
 
   return <section className={styles.card}>
     <h2>登入</h2>
-    <p>輸入 email，我們會寄一封只能使用一次的登入連結給你（15 分鐘內有效）。送出前需要通過真人驗證。</p>
+    <p>輸入 email 取得 15 分鐘內有效的一次性登入連結。</p>
     <form onSubmit={(event) => {
       event.preventDefault();
       if (!humanToken) return;
@@ -554,7 +550,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
 
   return <section className={`${styles.card} ${styles.editorCard}`}>
     <h2>編輯：{claim.circleName}</h2>
-    <p>以下欄位需先預覽確認才會儲存，儲存後約一分鐘內公開。社團名稱、攤位與日期由主辦公布，無法在此修改；名稱有誤請聯絡管理者更正來源資料。</p>
+    <p>儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。</p>
 
     <div className={styles.editorLayout}>
       <div id={`editor-fields-${claim.circleId}`} className={styles.editorForm} tabIndex={-1} inert={reviewOpen ? true : undefined}>
@@ -585,11 +581,12 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       {ACTIVE_EVENT.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
     </select>
     <p className={styles.editorHint}>
-      請依本次主要販售內容選擇一項。選項來自
+      請依本次主要販售內容選擇一項。
+      {selectedCircleCategory?.description && <>目前類別：{selectedCircleCategory.description}。</>}
+      {" "}
       {ACTIVE_EVENT.circleCategories.sources.map((source, index) => <span key={source.id}>
-        {index > 0 && "、"}<a href={source.url} target="_blank" rel="noreferrer">活動官方說明頁{ACTIVE_EVENT.circleCategories.sources.length > 1 ? ` ${index + 1}` : ""}</a>
-      </span>)}。
-      {selectedCircleCategory?.description && <>目前類別：{selectedCircleCategory.description}</>}
+        {index > 0 && "、"}<a href={source.url} target="_blank" rel="noreferrer">原始來源{ACTIVE_EVENT.circleCategories.sources.length > 1 ? ` ${index + 1}` : ""}</a>
+      </span>)}
     </p>
     <FieldModeControls
       mode={modeFor("circleCategory")} label="社團主題類別"
@@ -604,15 +601,12 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     </div>)}
 
     <h3 className={styles.editorSection}>外部連結</h3>
-    <p className={styles.editorHint}>
-      填寫的連結會顯示在參觀者的完整詳細資訊，其中<b>前 {SIDE_PANEL_LINK_LIMIT} 個</b>也會出現在地圖側欄——
-      側欄是參觀者決定「要不要去這攤」的地方，所以把最重要的排在前面。最多 {OVERRIDE_LIMITS.links} 個，網址必須是 https。
-    </p>
+    <p className={styles.editorHint}>前 {SIDE_PANEL_LINK_LIMIT} 個連結會顯示在地圖側欄；最多 {OVERRIDE_LIMITS.links} 個，網址須使用 HTTPS。</p>
 
     <FieldModeControls mode={modeFor("links")} label="外部連結" onInherit={() => inheritField("links")} onClear={() => clearField("links")} />
 
     {links.length === 0
-      ? <p className={styles.editorHint}>{modeFor("links") === "clear" ? "已明確清除場刊整理的連結。" : "目前沿用場刊整理的連結。新增一筆之後，這裡的清單會整組取代它們。"}</p>
+      ? modeFor("links") === "inherit" && <p className={styles.editorHint}>新增連結會取代沿用的場刊連結。</p>
       : <ol className={styles.linkList}>
         {links.map((link, index) => {
           const problem = linkUrlProblem(link.url);
@@ -659,12 +653,9 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
     </button>
 
     <h3 className={styles.editorSection}>代表圖</h3>
-    <p className={styles.editorHint}>
-      建議直接上傳 JPEG、PNG 或 WebP（最多 2 MiB）；也可在下方改用允許清單內的外部圖片網址。
-    </p>
     <FieldModeControls mode={modeFor("thumbnail")} label="代表圖" onInherit={() => inheritField("thumbnail")} onClear={() => clearField("thumbnail")} />
 
-    <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片（主要方式）</label>
+    <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片（JPEG、PNG、WebP，最多 2 MiB）</label>
     <input
       id={`thumb-file-${claim.circleId}`} type="file" accept="image/jpeg,image/png,image/webp"
       disabled={status.kind === "busy"}
@@ -691,7 +682,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       }}
     />
 
-    <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址（次要方式）</label>
+    <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址</label>
     <input
       id={`thumb-url-${claim.circleId}`} value={thumbnail?.url ?? ""} inputMode="url" placeholder="https://"
       aria-invalid={thumbnail?.url && thumbnailUrlProblem(thumbnail.url) ? true : undefined}
@@ -740,9 +731,8 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
           <small>{option.detail}</small>
         </label>)}
       </div>
-      <p>{retention === "purge" && retentionExpiresAt !== null
-        ? `預定刪除日期：${RETENTION_DATE.format(new Date(retentionExpiresAt))}。要更早消失不必等期限，寫信到 maintain@kotoban.top 即可。`
-        : "只影響你自己填寫的補充資料；主辦公布的社團名、攤位與日期不受影響。"}</p>
+      {retention === "purge" && retentionExpiresAt !== null
+        && <p>預定刪除：{RETENTION_DATE.format(new Date(retentionExpiresAt))}</p>}
     </fieldset>
 
     <div className={styles.editorActions}>
@@ -769,9 +759,6 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
         />
         <span>活動結束後，不再公開我在此填寫的內容</span>
       </label>
-      <p>
-        僅影響你自己填寫的補充資料；主辦公布的社團名、攤位與日期不受影響，仍會留在場刊。
-      </p>
     </div>
 
     {saved && <div className={styles.danger}>
@@ -779,11 +766,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       {/* Clearing a field writes an empty value and leaves the row; this
           removes the row. ADR-0020 requires the two to read as different
           things, because only one of them is undoable. */}
-      <p>
-        這與各欄位的「清除此欄」不同：清除是把內容留空，資料列還在；這裡是把整筆補充資料從資料庫刪掉，
-        包含上一版的備份與你選的保存期限，<b>無法復原</b>。主辦公布的社團名、攤位與日期不受影響。
-        不想等到期限自動清除的話，這裡隨時可以自己來。
-      </p>
+      <p>永久刪除這筆補充資料、上一版備份與保存期限，<b>無法復原</b>。主辦公布的社團名、攤位與日期不受影響。</p>
       <p>將被刪除的內容：</p>
       {deletionSummary(savedFields).length === 0
         ? <ul className={styles.dangerSummary}><li>（目前沒有任何欄位有內容，但資料列仍然存在）</li></ul>
@@ -825,10 +808,9 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
         {reviewOpen && reviewedFields && serverPreview
           ? <div ref={reviewPanel} className={styles.reviewPanel} role="region" tabIndex={-1} aria-labelledby={`review-title-${claim.circleId}`}>
             <div className={styles.reviewHeading}>
-              <div><small>SERVER PREVIEW</small><h3 id={`review-title-${claim.circleId}`}>儲存前確認</h3></div>
+              <div><h3 id={`review-title-${claim.circleId}`}>儲存前確認</h3></div>
               <button type="button" className={styles.backButton} onClick={closeReview}>返回修改</button>
             </div>
-            <p>以下是伺服器以公開端規則重新檢查後的版本。確認後才會儲存。</p>
             <PublicationPreview records={serverPreview} />
             <h4>這次填寫的欄位</h4>
             <ReviewSummary fields={reviewedFields} retention={reviewedRetention} />
@@ -852,8 +834,8 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
             {status.kind === "error" && <p className={styles.error} role="status">{status.message}</p>}
           </div>
           : <div className={styles.livePreview}>
-            <small>LIVE PREVIEW · 尚未儲存</small>
-            <h3>參觀者會看到的樣子</h3>
+            <small>尚未儲存</small>
+            <h3>公開預覽</h3>
             {livePreview ? <PublicationPreview records={livePreview} /> : <p>正在準備預覽…</p>}
           </div>}
       </aside>
@@ -893,7 +875,7 @@ function AdminPanel() {
     <h2>撤下社團補充資料</h2>
     <label htmlFor="takedown-circle">社團 ID</label>
     <input id="takedown-circle" value={takedownId} onChange={(event) => setTakedownId(event.target.value)} placeholder="c-000001" />
-    <label htmlFor="takedown-reason">原因（會寫入稽核記錄）</label>
+    <label htmlFor="takedown-reason">原因</label>
     <input id="takedown-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
     <button type="button" onClick={() => {
       void takedownOverride(takedownId, reason)
@@ -931,7 +913,6 @@ function AdminRoster() {
 
   return <>
     <h2>管理者名單</h2>
-    <p>名單存在資料庫，新增或移除立即生效，不需重新部署。</p>
     <ul className={styles.claimList}>
       {admins.map((admin) => <li key={admin.email}>
         <div>

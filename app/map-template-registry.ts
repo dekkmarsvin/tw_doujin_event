@@ -34,6 +34,6 @@ export function hasMapTemplateRecognizer(template: string) {
 
 export function recognizeMapTemplate(template: string, source: PixelSource) {
   const recognize = TEMPLATE_RECOGNIZERS.get(template);
-  if (!recognize) throw new Error(`地圖模板 ${template} 尚未提供圖片辨識 adapter。`);
+  if (!recognize) throw new Error(`地圖模板 ${template} 不支援自動辨識。`);
   return recognize(source);
 }

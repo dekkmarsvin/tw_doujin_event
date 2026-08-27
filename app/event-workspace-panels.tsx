@@ -74,11 +74,14 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
       {records.slice(0, visibleCount).map((record) => {
         const plan = plans.get(record.circle.id);
         const thumbnail = record.circle.media[0];
+        const circleSummary = [record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean);
+        const showsCircleAuthoredContent = record.sources.some((source) => source.contentType === "circle")
+          && (circleSummary.length > 0 || (mediaCount > 0 && !!thumbnail));
         return <article key={record.recordId} className={`${selectedId === record.recordId ? styles.selectedResult : ""} ${density === "compact" ? styles.compactResult : ""}`}>
           <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
             {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
-            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{(record.circle.circleCategory || record.circle.creatorTypes.length > 0 || record.circle.work) && <small>{[record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean).join(" · ")}</small>}<small className={styles.sourceHint}>來源：活動主辦單位{thumbnail ? " · 社團自填縮圖" : ""}</small></>}</span>
+            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{circleSummary.length > 0 && <small>{circleSummary.join(" · ")}</small>}{showsCircleAuthoredContent && <small className={styles.sourceHint}>由社團填寫</small>}</>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>
@@ -108,9 +111,9 @@ export function DayItinerary({ day, entries, recordsById, variant = "compact", o
   const shoppingCount = entries.filter((entry) => entry.purchaseMemo.trim() || entry.budget !== null).length;
   const formatBudget = (value: number) => new Intl.NumberFormat("zh-TW").format(value);
   return <section className={`${styles.itinerary} ${variant === "full" ? styles.fullItinerary : styles.compactItinerary}`} aria-label={`DAY ${day} 當日行程列表`}>
-    <header><div><small>DAY {day} ROUTE</small><h2>當日行程列表</h2></div><span>{entries.length} 站</span></header>
+    <header><div><h2>當日行程列表</h2></div><span>{entries.length} 站</span></header>
     {entries.length > 0 && <div className={styles.shoppingSummary}><b>今日購物規劃</b><span>{shoppingCount > 0 ? `${shoppingCount} 攤已填寫 · ` : "尚未填寫購買項目 · "}預算合計 NT$ {formatBudget(budgetTotal)}</span></div>}
-    {entries.length === 0 ? <div className={styles.empty}><b>還沒有安排攤位</b><p>從搜尋結果或社團詳細資訊加入；資料只會儲存在此裝置。</p></div> : <ol>
+    {entries.length === 0 ? <div className={styles.empty}><b>還沒有安排攤位</b><p>從搜尋結果或社團詳細資訊加入。</p></div> : <ol>
       {entries.map((entry, index) => {
         const record = recordsById.get(entry.circleId);
         if (!record) return null;
@@ -158,7 +161,7 @@ function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onA
         <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" disabled={readOnly} key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
         <button type="button" disabled={readOnly} onClick={() => move(1)} aria-label="下一張圖片"><UiIcon name="chevron-right" /></button>
       </div>}
-      <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>查看原始圖片</span><UiIcon name="external" /></a>
+      <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>原始來源</span><UiIcon name="external" /></a>
     </div>}
   </div>;
 }
@@ -186,7 +189,7 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
 }) {
   const [newGroup, setNewGroup] = useState("");
   const [mediaSelection, setMediaSelection] = useState({ circleId: "", index: 0 });
-  if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳細資訊"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b><p>作品資訊、收藏備註與行程動作會集中顯示在這裡。</p></section>;
+  if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳細資訊"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b></section>;
   const activeMediaIndex = mediaSelection.circleId === record.circle.id ? mediaSelection.index : 0;
   const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
   return <section className={`${styles.details} ${compact ? styles.compactDetails : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} aria-label="攤位詳細資訊">

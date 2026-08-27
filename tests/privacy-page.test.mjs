@@ -49,7 +49,8 @@ test("publishes every line of the notice, so nothing can be dropped in translati
 });
 
 test("states the date the notice itself states", () => {
-  assert.match(page, new RegExp(`最後更新：${lastUpdatedFrom(markdown)}`));
+  assert.match(page, new RegExp(`最後更新日期：${lastUpdatedFrom(markdown)}`));
+  assert.doesNotMatch(page, /最後更新：/);
 });
 
 test("carries both contact mailboxes, since the notice is where they reach a person", () => {
@@ -66,6 +67,8 @@ test("uses minimum-necessary disclosure without defensive disclaimers or build p
     "無法保證絕對的資安防護水準",
     "IP 暴露",
     "docs/policy/privacy-notice.md 於建置時產生",
+    "本站不會以任何方式暗示",
+    "保留操作紀錄的理由是",
   ]) {
     assert.ok(!page.includes(phrase), `the published notice must not include ${JSON.stringify(phrase)}`);
   }

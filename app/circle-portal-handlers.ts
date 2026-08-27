@@ -289,8 +289,8 @@ export function createCirclePortalHandlers({
     const now = config.now();
     let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
     let mapDraftKeys = await repository.listUnsubmittedMapDraftObjectKeysForAccount(current.accountId);
-    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
-    if (!mapContributionStore && mapDraftKeys.length > 0) return json({ error: "私人地圖檔案儲存服務尚未設定完成。" }, 503);
+    if (!thumbnailStore && claimScopes.length > 0) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if (!mapContributionStore && mapDraftKeys.length > 0) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
     if (!await repository.beginAccountDeletion({
       accountId: current.accountId, email: current.email, now, retrySessionId: current.sessionId,
     })) {
@@ -522,7 +522,7 @@ export function createCirclePortalHandlers({
     const keepsHostedThumbnail = !!(previousKey && thumbnailStore
       && thumbnailUrl === thumbnailStore.url(previousKey));
     const nextHostedKey = uploadedKey ?? (keepsHostedThumbnail ? previousKey : null);
-    if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
     const saved = await repository.putOverride({
       accountId: current.accountId, eventId: config.eventId, circleId,
       fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
@@ -563,7 +563,7 @@ export function createCirclePortalHandlers({
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
     }
-    if (!thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (!thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
 
     let form: FormData;
     try {
@@ -628,7 +628,7 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
     if (thumbnailStore) {
       const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
       await deleteObjectKeys(thumbnailStore, keys);
@@ -884,12 +884,12 @@ export function createCirclePortalHandlers({
       draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
       scope,
     );
-    if (!validation.ok) return json({ error: "地圖草稿尚未通過提交驗證。", problems: validation.problems }, 422);
+    if (!validation.ok) return json({ error: "請修正地圖草稿後再提交。", problems: validation.problems }, 422);
     const evidence = await repository.listMapDraftFiles(draftId, expectedRevision as number);
     if (evidence.length === 0) {
       return json({
         error: "目前版本至少需要一份活動官方說明頁面的來源檔案。",
-        problems: [{ code: "missing_evidence", message: "請上傳目前 revision 對應的官方來源檔案與來源 metadata。" }],
+        problems: [{ code: "missing_evidence", message: "請上傳目前版本的官方來源檔與來源資訊。" }],
       }, 422);
     }
     const submitted = await repository.submitMapDraft({
@@ -908,7 +908,7 @@ export function createCirclePortalHandlers({
   async function uploadMapDraftFile(request: Request) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!mapContributionStore) return json({ error: "私人地圖檔案儲存服務尚未設定完成。" }, 503);
+    if (!mapContributionStore) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
     let form: FormData;
     try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
     const file = form.get("file");
@@ -920,7 +920,7 @@ export function createCirclePortalHandlers({
     const pageNumber = typeof pageValue === "string" && pageValue !== "" ? Number(pageValue) : null;
     if (!(file instanceof File) || typeof draftId !== "string" || !validMapScope(draftId)
       || !Number.isSafeInteger(revision) || revision < 1 || typeof sourceUrl !== "string" || typeof documentDate !== "string") {
-      return json({ error: "檔案、draftId、revision 與官方來源 metadata 是必填欄位。" }, 400);
+      return json({ error: "請選擇檔案並填寫官方來源與文件日期。" }, 400);
     }
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || draft.owner_account_id !== current.accountId) return json({ error: "找不到草稿。" }, 404);
@@ -954,11 +954,11 @@ export function createCirclePortalHandlers({
   async function readMapDraftFile(request: Request, fileId: string, preview = false) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!mapContributionStore) return json({ error: "私人地圖檔案儲存服務尚未設定完成。" }, 503);
+    if (!mapContributionStore) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
     const metadata = await repository.getMapDraftFile(fileId, config.eventId);
     if (!metadata?.object_key) return json({ error: "找不到檔案。" }, 404);
     if (metadata.owner_account_id !== current.accountId && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
-    if (preview && metadata.mime === "application/pdf") return json({ error: "PDF 不提供 inline 預覽，請使用授權下載。" }, 415);
+    if (preview && metadata.mime === "application/pdf") return json({ error: "PDF 無法直接預覽，請下載查看。" }, 415);
     const object = await mapContributionStore.get(metadata.object_key);
     if (!object) return json({ error: "找不到檔案。" }, 404);
     const extension = metadata.mime === "image/jpeg" ? "jpg" : metadata.mime === "image/png" ? "png" : metadata.mime === "image/webp" ? "webp" : "pdf";
@@ -997,7 +997,7 @@ export function createCirclePortalHandlers({
       return json({ error: "要求修改或拒絕時必須填寫說明。" }, 400);
     }
     if (decision === "approve" && !confirmOfficialSource) {
-      return json({ error: "核准前必須確認目前 revision 的檔案來自活動官方說明頁面。" }, 400);
+      return json({ error: "核准前必須確認目前版本的檔案來自活動官方說明頁面。" }, 400);
     }
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft) return json({ error: "找不到草稿。" }, 404);
@@ -1006,8 +1006,8 @@ export function createCirclePortalHandlers({
       const evidence = await repository.listMapDraftFiles(draftId, Number(expectedRevision));
       if (evidence.length === 0) {
         return json({
-          error: "目前 revision 沒有可供審查的活動官方來源檔案，不能核准。",
-          problems: [{ code: "missing_evidence", message: "請要求貢獻者補上目前 revision 的來源檔案後重新提交。" }],
+          error: "目前版本缺少活動官方來源檔，無法核准。",
+          problems: [{ code: "missing_evidence", message: "請要求貢獻者補上來源檔後重新提交。" }],
         }, 422);
       }
       const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
@@ -1019,7 +1019,7 @@ export function createCirclePortalHandlers({
         draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
         scope,
       );
-      if (!validation.ok) return json({ error: "草稿未通過伺服器驗證，不能核准。", problems: validation.problems }, 422);
+      if (!validation.ok) return json({ error: "請修正草稿後再核准。", problems: validation.problems }, 422);
       const result = await repository.approveMapDraft({
         draftId, expectedRevision: Number(expectedRevision), replacementDraftId,
         actorAccountId: gate.session.accountId, note: note || null, now: config.now(),
@@ -1028,7 +1028,7 @@ export function createCirclePortalHandlers({
         return json({
           error: result.reason === "replacement_required" ? "此範圍已有核准稿，必須明確指定要取代的 draftId。"
             : result.reason === "replacement_mismatch" ? "指定的取代稿不是此範圍目前的核准稿。"
-              : result.reason === "missing_evidence" ? "目前 revision 沒有可供審查的來源檔案。"
+              : result.reason === "missing_evidence" ? "目前版本沒有可供審查的來源檔案。"
               : "草稿版本或狀態已變更。",
           ...(result.reason === "replacement_required" ? { activeDraftId: result.activeDraftId } : {}),
         }, result.reason === "missing_evidence" ? 422 : 409);
@@ -1090,7 +1090,7 @@ export function createCirclePortalHandlers({
       draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
       scope,
     );
-    if (!validation.ok) return json({ error: "草稿未通過伺服器驗證，不能匯出。", problems: validation.problems }, 422);
+    if (!validation.ok) return json({ error: "請修正草稿後再匯出。", problems: validation.problems }, 422);
     const previous = await readPublishedEventMap?.(scope.targetPath) ?? null;
     const candidate = buildMapCandidate({
       scope, draftId, draftRevision: draft.current_revision, layout: validation.content.layout,
@@ -1235,7 +1235,7 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "圖片儲存服務尚未設定完成。" }, 503);
+    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
     if (thumbnailStore) {
       const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
       await deleteObjectKeys(thumbnailStore, keys);

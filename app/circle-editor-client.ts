@@ -64,13 +64,13 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
       throw new PortalError(
         response.redirected
           ? "這個操作被存取控制擋下了。請先在同一個瀏覽器開啟本站首頁完成驗證，再回來重試。"
-          : "伺服器回應格式非預期，請稍後再試。",
+          : "收到無法處理的回應，請稍後再試。",
         response.status,
       );
     }
   }
 
-  if (!response.ok) throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗。", response.status, body);
+  if (!response.ok) throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗，請稍後再試。", response.status, body);
   return body as T;
 }
 
