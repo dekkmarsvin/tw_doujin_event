@@ -82,8 +82,9 @@
 | [0032](./adr/0032-shared-reference-data-is-public-and-pinned.md) | 共享 reference-data 公開、經 review 發布，活動只使用 pinned revision |
 | [0033](./adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) | 地圖貢獻採管理者授權、私人平行草稿與明確保存期限 |
 | [0034](./adr/0034-production-origin-gates-deployment.md) | Pages production origin 阻擋壞部署，自訂網域 smoke 提供非阻塞訊號 |
-| [0035](./adr/0035-new-event-onboarding-is-data-driven.md) | **草稿**：新活動 onboarding 資料驅動；只有空白畫布、來源說明與排原語的第一階段已實作 |
+| [0035](./adr/0035-new-event-onboarding-is-data-driven.md) | 新活動 onboarding 資料驅動；機械工序自動化與編輯器排原語已實作，authoring 搬上 Pages 已定案待實作 |
 | [0036](./adr/0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 |
+| [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併 |
 
 ## 對外文件
 
