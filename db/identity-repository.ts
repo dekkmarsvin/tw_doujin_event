@@ -986,6 +986,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     actorAccountId: string | null;
     actorRole: "admin" | "system";
     note?: string | null;
+    /** Per-element change requests recorded with the decision. They are written
+     * in the same batch, guarded by the same transition token, so a transition
+     * can never land without its requests or leave a partial set behind that a
+     * retry could not restore - the retry would conflict on the new status. */
+    targets?: readonly { targetKind: "slot" | "landmark"; targetRef: string; body: string }[];
     now: number;
   }) {
     await ensureTables();
@@ -1012,6 +1017,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            AND EXISTS (SELECT 1 FROM map_drafts d WHERE d.id = ?2 AND d.current_revision = ?3
              AND d.status = ?4 AND d.transition_token = ?5)`,
       ).bind(input.toStatus, input.draftId, input.expectedRevision, input.toStatus, transitionToken),
+      ...(input.targets ?? []).map((target) => database.prepare(
+        `INSERT INTO map_draft_comments (id, draft_id, revision, author_account_id, author_role, target_kind, target_ref, body, at)
+         SELECT ?1, id, ?2, ?3, 'admin', ?4, ?5, ?6, ?7 FROM map_drafts
+         WHERE id = ?8 AND current_revision = ?2 AND status = ?9 AND transition_token = ?10`,
+      ).bind(
+        crypto.randomUUID(), input.expectedRevision, input.actorAccountId, target.targetKind,
+        target.targetRef, target.body, input.now, input.draftId, input.toStatus, transitionToken,
+      )),
     ]);
     return results[0].meta.changes === 1 && results[1].meta.changes === 1;
   }

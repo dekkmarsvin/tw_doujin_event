@@ -1127,13 +1127,19 @@ export function createCirclePortalHandlers({
       return json({ error: "要求修改或拒絕時必須填寫說明。" }, 400);
     }
     const requested: unknown[] = Array.isArray(body?.targets) ? body.targets : [];
-    const targets: { kind: "slot" | "landmark"; ref: string; body: string }[] = [];
+    // Only a change request can carry them: an approval or a rejection ends the
+    // draft, and a request pointing at one of its booths could never be acted
+    // on because the editor is closed to the contributor from then on.
+    if (requested.length && decision !== "changes_requested") {
+      return json({ error: "只有要求修改可以附帶局部修改請求。" }, 400);
+    }
+    const targets: { targetKind: "slot" | "landmark"; targetRef: string; body: string }[] = [];
     for (const entry of requested) {
       const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
       const target = mapDraftCommentTarget(item);
       const text = typeof item?.body === "string" ? item.body.trim().slice(0, 2_000) : "";
       if (!target.ok || !target.kind || !target.ref || !text) return json({ error: "局部修改請求必須指定對象與內容。" }, 400);
-      targets.push({ kind: target.kind, ref: target.ref, body: text });
+      targets.push({ targetKind: target.kind, targetRef: target.ref, body: text });
     }
     if (decision === "approve" && !confirmOfficialSource) {
       return json({ error: "核准前必須確認目前版本的檔案來自活動官方說明頁面。" }, 400);
@@ -1180,27 +1186,13 @@ export function createCirclePortalHandlers({
       const ok = await repository.transitionMapDraft({
         draftId, expectedRevision: Number(expectedRevision),
         toStatus: decision === "reject" ? "rejected" : "changes_requested",
-        actorAccountId: gate.session.accountId, actorRole: "admin", note, now: config.now(),
+        actorAccountId: gate.session.accountId, actorRole: "admin", note, targets, now: config.now(),
       });
       if (!ok) {
         return mapDraftConflictResponse({
           draftId, expectedRevision: Number(expectedRevision), contributorAccountId: null,
         });
       }
-    }
-    // Recorded after the transition so a refused review leaves no orphan
-    // requests behind, and as comments rather than as extra review rows: the
-    // review trail stays one row per status change.
-    for (const target of targets) {
-      await repository.addMapDraftComment({
-        draftId, eventId: config.eventId, authorAccountId: gate.session.accountId, authorRole: "admin",
-        // Pinned to the revision that was reviewed. Left to the draft's current
-        // revision, a contributor saving between the transition and this loop
-        // would make the requests claim to be about a version that may no
-        // longer contain the elements they name.
-        revision: Number(expectedRevision),
-        targetKind: target.kind, targetRef: target.ref, body: target.body, now: config.now(),
-      });
     }
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",

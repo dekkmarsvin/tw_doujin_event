@@ -759,6 +759,44 @@ test("the review panel's own target shape is the one the endpoint parses", async
     [{ target_kind: "slot", target_ref: "A07" }]);
 });
 
+test("only a change request can carry per-element requests", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  await handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie));
+  assert.equal((await handlers.submitMapDraft(request(`/drafts/${draft.draftId}/submit`, "POST", {
+    expectedRevision: 1,
+  }, mapperCookie), draft.draftId)).status, 200);
+
+  const targets = [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }];
+  for (const decision of ["reject", "approve"]) {
+    const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+      expectedRevision: 1, decision, note: "說明", confirmOfficialSource: true, targets,
+    }, adminCookie), draft.draftId);
+    assert.equal(response.status, 400, `${decision} ends the draft, so a request pointing into it could never be acted on`);
+  }
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "submitted");
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+});
+
+test("a refused transition writes none of its change requests", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+
+  // Never submitted, so the transition cannot apply. The requests ride the same
+  // batch, so they cannot land on their own and leave a partial set behind.
+  const response = await handlers.adminReviewMapDraft(request(`/admin/drafts/${draft.draftId}/review`, "POST", {
+    expectedRevision: 1, decision: "changes_requested", note: "要改",
+    targets: [{ targetKind: "slot", targetRef: "A07", body: "往右偏了一格。" }],
+  }, adminCookie), draft.draftId);
+  assert.equal(response.status, 409);
+  assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 0);
+  assert.equal((await repository.getMapDraft(draft.draftId)).status, "draft");
+});
+
 test("a grant revoked mid-request cannot slip a comment past the check", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");

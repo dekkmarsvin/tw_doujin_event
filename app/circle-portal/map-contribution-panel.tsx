@@ -136,6 +136,13 @@ export function MapContributorPanel() {
     setSelectedId(draftId); setDetail(next); setLayout(next.draft.content.layout);
     setSavedLayoutJson(JSON.stringify(next.draft.content.layout)); setProblems([]);
   }, []);
+  /** Opening a different draft resets what was typed against the last one: the
+   * send button posts to whichever draft is open, so a leftover reply would go
+   * to the wrong thread. Reloading the same draft keeps it. */
+  const selectDraft = useCallback(async (draftId: string) => {
+    setComment(""); setFocusTarget(null);
+    await openDraft(draftId);
+  }, [openDraft]);
   useEffect(() => { queueMicrotask(() => { void refreshList(); }); }, [refreshList]);
 
   const run = async (task: () => Promise<void>, ok: string) => {
@@ -155,7 +162,7 @@ export function MapContributorPanel() {
   return <section className={`${styles.card} ${styles.editorCard}`} id="map-contribution">
     <h2>活動地圖貢獻</h2>
     <p>草稿與來源檔僅供審閱。提交、核准與匯出候選都不會直接變更公開地圖；公開資料仍須進入 event-data repository 審查。</p>
-    <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "草稿已載入。")} />
+    <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
     {!detail && <div className={styles.mapDraftCreate}>
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{ACTIVE_EVENT.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
       <label>場地空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{ACTIVE_EVENT.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
