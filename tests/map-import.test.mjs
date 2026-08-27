@@ -8,7 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
-const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
+const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { findRowConflicts, pasteRowAtOffset, selectionSetKey } = await environment.runner.import("/app/map-layout-editor-selection.ts");
@@ -171,6 +171,72 @@ test("keeps landmark types editable and scales manual regions for a replacement 
   assert.deepEqual(
     scaleMapLandmarks([{ id: "stage-1", kind: "stage", label: "主舞台", rect: { x: 10, y: 20, width: 30, height: 40 } }], { width: 100, height: 200 }, { width: 200, height: 100 }),
     [{ id: "stage-1", kind: "stage", label: "主舞台", rect: { x: 20, y: 10, width: 60, height: 20 } }],
+  );
+});
+
+test("resizes and snaps booth and pillar rectangles exactly like a landmark rectangle", () => {
+  const bounds = { width: 200, height: 100 };
+  const rect = { x: 40, y: 20, width: 40, height: 28 };
+  const deltas = { nw: [-8, -6], ne: [8, -6], se: [8, 6], sw: [-8, 6] };
+  const expected = {
+    nw: { x: 32, y: 14, width: 48, height: 34 },
+    ne: { x: 40, y: 14, width: 48, height: 34 },
+    se: { x: 40, y: 20, width: 48, height: 34 },
+    sw: { x: 32, y: 20, width: 48, height: 34 },
+  };
+  for (const corner of ["nw", "ne", "se", "sw"]) {
+    assert.deepEqual(resizeRectFromCorner(rect, corner, ...deltas[corner], bounds), expected[corner]);
+  }
+
+  // A booth, a pillar and an enterprise landmark differ only in which siblings
+  // the editor offers as snap partners; the geometry itself is one path.
+  const neighbour = { x: 90, y: 20, width: 40, height: 28 };
+  const resized = resizeRectFromCorner(rect, "se", 8, 6, bounds);
+  const snapTo = (id) => snapRectToAdjacentRects(resized, [{ id, rect: neighbour }], { bounds, mode: "se", threshold: 3 });
+  const asSlot = snapTo("A02");
+  const asPillar = snapTo("pillar-2");
+  const asLandmark = snapTo("landmark-2");
+  assert.deepEqual(asSlot.rect, { x: 40, y: 20, width: 50, height: 34 });
+  assert.deepEqual(asPillar.rect, asSlot.rect);
+  assert.deepEqual(asLandmark.rect, asSlot.rect);
+  assert.deepEqual(asSlot.guides.map(({ axis, position, targetId }) => [axis, position, targetId]), [["x", 90, "A02"]]);
+  assert.deepEqual(asPillar.guides.map(({ axis, position }) => [axis, position]), [["x", 90]]);
+
+  assert.equal(validateEventMapLayout({
+    version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 100, floor: { x: 10, y: 5, width: 180, height: 90 },
+    rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { ...asSlot.rect } }, { code: "A02", rect: { ...neighbour } }] }],
+    pillars: [{ id: "pillar-1", ...asPillar.rect, y: 60 }, { id: "pillar-2", x: 90, y: 60, width: 40, height: 28 }],
+    accessPoints: [{ id: "entrance-1", kind: "entrance", direction: "north", x: 100, y: 95, label: "入口" }],
+    landmarks: [{ id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 140, y: 20, width: 40, height: 28 } }],
+  }).ok, true);
+});
+
+test("resizing the canvas keeps rows, pillars, access points and landmarks in place proportionally", () => {
+  const layout = {
+    version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 100, floor: { x: 10, y: 5, width: 180, height: 90 },
+    rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 20, y: 20, width: 40, height: 28 } }] }],
+    pillars: [{ id: "pillar-1", x: 90, y: 60, width: 40, height: 28 }],
+    accessPoints: [{ id: "entrance-1", kind: "entrance", direction: "north", x: 100, y: 95, label: "入口" }],
+    landmarks: [{ id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 140, y: 20, width: 40, height: 28 } }],
+  };
+  assert.equal(validateEventMapLayout(layout).ok, true);
+
+  const scaled = scaleEventMapLayout(layout, { width: 400, height: 300 });
+  assert.equal(validateEventMapLayout(scaled).ok, true);
+  assert.deepEqual([scaled.width, scaled.height], [400, 300]);
+  assert.deepEqual(scaled.floor, { x: 20, y: 15, width: 360, height: 270 });
+  assert.deepEqual(scaled.rows[0].slots[0], { code: "A01", rect: { x: 40, y: 60, width: 80, height: 84 } });
+  assert.deepEqual(scaled.pillars[0], { id: "pillar-1", x: 180, y: 180, width: 80, height: 84 });
+  assert.deepEqual(scaled.accessPoints[0], { id: "entrance-1", kind: "entrance", direction: "north", x: 200, y: 285, label: "入口" });
+  assert.deepEqual(scaled.landmarks[0], { id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 280, y: 60, width: 80, height: 84 } });
+
+  // Relative placement is the invariant, so scaling back lands on the original,
+  // and the layout handed in is never mutated.
+  assert.deepEqual(scaleEventMapLayout(scaled, { width: 200, height: 100 }), layout);
+  assert.deepEqual([layout.width, layout.height, layout.rows[0].slots[0].rect.x], [200, 100, 20]);
+  assert.deepEqual(
+    scaleEventMapLayout(layout, { width: 200, height: 100 }).landmarks,
+    scaleMapLandmarks(layout.landmarks, layout, { width: 200, height: 100 }),
   );
 });
 

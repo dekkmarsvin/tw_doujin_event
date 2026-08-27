@@ -52,6 +52,13 @@ export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "lab
   return "other";
 }
 
+function scaleRectBy(rect: MapRect, scaleX: number, scaleY: number): MapRect {
+  return { x: rect.x * scaleX, y: rect.y * scaleY, width: rect.width * scaleX, height: rect.height * scaleY };
+}
+
+/** The importer's narrower case: a replacement image only carries over the
+ * regions the maintainer drew by hand, so the rest of the layout comes from the
+ * new recognition run rather than from the previous canvas. */
 export function scaleMapLandmarks(
   landmarks: MapLandmark[],
   sourceSize: Pick<EventMapLayout, "width" | "height">,
@@ -59,15 +66,7 @@ export function scaleMapLandmarks(
 ): MapLandmark[] {
   const scaleX = targetSize.width / sourceSize.width;
   const scaleY = targetSize.height / sourceSize.height;
-  return landmarks.map((landmark) => ({
-    ...landmark,
-    rect: {
-      x: landmark.rect.x * scaleX,
-      y: landmark.rect.y * scaleY,
-      width: landmark.rect.width * scaleX,
-      height: landmark.rect.height * scaleY,
-    },
-  }));
+  return landmarks.map((landmark) => ({ ...landmark, rect: scaleRectBy(landmark.rect, scaleX, scaleY) }));
 }
 
 export type EventMapLayout = {
@@ -81,6 +80,25 @@ export type EventMapLayout = {
   accessPoints: MapAccessPoint[];
   landmarks: MapLandmark[];
 };
+
+/** Rescales every coordinate onto a new canvas size. A canvas is only ever the
+ * pixel grid of the plan being traced, so changing it must keep each element
+ * where it sits in the hall instead of leaving it clamped against a corner. */
+export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<EventMapLayout, "width" | "height">): EventMapLayout {
+  const scaleX = targetSize.width / layout.width;
+  const scaleY = targetSize.height / layout.height;
+  const scaleRect = (rect: MapRect) => scaleRectBy(rect, scaleX, scaleY);
+  return {
+    ...layout,
+    width: targetSize.width,
+    height: targetSize.height,
+    floor: scaleRect(layout.floor),
+    rows: layout.rows.map((row) => ({ ...row, slots: row.slots.map((slot) => ({ ...slot, rect: scaleRect(slot.rect) })) })),
+    pillars: layout.pillars.map((pillar) => ({ ...pillar, ...scaleRect(pillar) })),
+    accessPoints: layout.accessPoints.map((point) => ({ ...point, x: point.x * scaleX, y: point.y * scaleY })),
+    landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: scaleRect(landmark.rect) })),
+  };
+}
 
 /** Authoring starts here whenever recognition cannot: a new template with no
  * adapter, or a venue whose plan is only ever traced by hand. The floor fills
