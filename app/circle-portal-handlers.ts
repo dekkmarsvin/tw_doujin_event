@@ -881,8 +881,11 @@ export function createCirclePortalHandlers({
       : "map_contributor";
     const revoked = input.contributorAccountId !== null
       && !await repository.hasActiveMapContributor(input.contributorAccountId);
-    const cause = !draft || draft.current_revision !== input.expectedRevision ? "version"
-      : revoked ? "permission"
+    // A revoked grant outranks a stale revision: reloading recovers a stale tab,
+    // but nothing the contributor does restores write access, so saying "version"
+    // first would send them round the same failed save again.
+    const cause = revoked ? "permission"
+      : !draft || draft.current_revision !== input.expectedRevision ? "version"
         : "status";
     return {
       cause,

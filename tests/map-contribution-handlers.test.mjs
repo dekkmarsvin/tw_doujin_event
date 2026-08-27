@@ -594,3 +594,24 @@ test("revoked permission and an unwritable status stay distinguishable from a ve
   assert.equal(submitRevoked.status, 409);
   assert.equal((await submitRevoked.json()).conflict.cause, "permission");
 });
+
+test("a revoked grant outranks a stale revision so the panel never offers a reload that cannot help", async () => {
+  const mapperCookie = await signIn("mapper@example.test");
+  const adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body: draft } = await newDraft(mapperCookie);
+  const save = (expectedRevision) => handlers.updateMapDraft(request(`/drafts/${draft.draftId}`, "PUT", {
+    expectedRevision, content: validContent(),
+  }, mapperCookie), draft.draftId);
+
+  // The tab is left holding revision 1 while another session moves the draft on.
+  assert.equal((await save(1)).status, 200);
+  assert.equal((await grant("mapper@example.test", adminCookie, "revoke")).status, 200);
+
+  const stale = await save(1);
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), {
+    error: "沒有有效的地圖貢獻者權限。",
+    conflict: { cause: "permission", revision: 2, updatedAt: NOW, updatedByRole: "map_contributor" },
+  }, "both conditions hold at once; only the one a reload cannot fix is reported");
+});

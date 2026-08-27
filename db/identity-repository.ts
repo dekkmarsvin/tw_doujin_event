@@ -883,7 +883,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
          SELECT ?1, id, ?2, ?3, ?4, ?5 FROM map_drafts
-         WHERE id = ?6 AND owner_account_id = ?4 AND current_revision = ?2 AND updated_at = ?5`,
+         WHERE id = ?6 AND owner_account_id = ?4 AND current_revision = ?2 AND updated_at = ?5
+           AND NOT EXISTS (SELECT 1 FROM map_draft_revisions WHERE draft_id = ?6 AND revision = ?2)`,
       ).bind(crypto.randomUUID(), nextRevision, input.contentJson, input.ownerAccountId, input.now, input.draftId),
     ]);
     return results[0].meta.changes === 1 && results[1].meta.changes === 1 ? nextRevision : null;
