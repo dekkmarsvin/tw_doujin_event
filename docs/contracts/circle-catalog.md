@@ -61,8 +61,9 @@ type CircleCatalogPayload = {
 
 社團自填資料疊加在 base 之後，不得修改 `id`、`name` 或 placements。有效 overlay 會投影成：
 
-- `provider: "社團本人"`
+- `provider: "由社團填寫"`
 - `contentType: "circle"`
+- `label: ""`
 - `status: "unverified"`
 
 沒有 overlay 時，所有自填欄位皆為空；「繼承」代表回到這個空的官方 base。代表圖只可能來自社團本人，因此 `media` 為空是常態，介面不得保留空框或佔位圖。
