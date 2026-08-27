@@ -10,7 +10,7 @@
 .workspace { display:grid; grid-template-columns:minmax(0,1fr) 230px; min-height:520px; }
 .canvas { display:grid; min-width:0; grid-template-rows:auto minmax(0,1fr); background-color:#e7e8e1; background-image:linear-gradient(#d7dad2 1px,transparent 1px),linear-gradient(90deg,#d7dad2 1px,transparent 1px); background-size:22px 22px; }
 .canvasToolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid #cbd0ca; background:#f8f9f7; }
-.canvasToolbar>span { color:#657069; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; letter-spacing:.06em; }
+.canvasToolbar span { color:#657069; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; letter-spacing:.06em; }
 .canvasToolbar>div { display:flex; align-items:center; gap:5px; }
 .canvasToolbar button { display:flex; flex:0 0 auto; min-width:32px; height:32px; align-items:center; justify-content:center; gap:5px; padding:0 8px; border:1px solid #cdd3ce; border-radius:7px; background:#fff; color:#344039; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; white-space:nowrap; cursor:pointer; }
 .canvasToolbar button:hover:not(:disabled) { border-color:#79857d; background:#f0f3ef; }

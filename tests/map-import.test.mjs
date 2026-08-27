@@ -11,6 +11,7 @@ const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayou
 const { createBlankEventMapLayout, resolveMapLandmarkKind, scaleMapLandmarks, validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { formatSlotCode, generateRowSlots, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
 
@@ -252,4 +253,97 @@ test("row orientation comes from the endpoints, so it can never contradict them"
   const base = { label: "R", slotCount: 4, slotWidth: 10, slotHeight: 10, codePrefix: "R", startNumber: 1, numberPadding: 2 };
   assert.equal(generateRowSlots({ ...base, start: { x: 20, y: 100 }, end: { x: 180, y: 100 } }, bounds).row.orientation, "horizontal");
   assert.equal(generateRowSlots({ ...base, start: { x: 100, y: 20 }, end: { x: 100, y: 180 } }, bounds).row.orientation, "vertical");
+});
+
+function historyLayout(marker) {
+  return { ...createBlankEventMapLayout("PIER2-2025", 100, 100), marker };
+}
+
+test("editor history steps back and forward through every intermediate layout", () => {
+  const [first, second, third] = ["a", "b", "c"].map(historyLayout);
+  let history = createLayoutHistory(first);
+  assert.equal(canUndoLayoutHistory(history), false);
+  assert.equal(canRedoLayoutHistory(history), false);
+
+  history = pushLayoutHistory(history, second);
+  history = pushLayoutHistory(history, third);
+  assert.equal(history.present.marker, "c");
+
+  history = undoLayoutHistory(history);
+  assert.equal(history.present.marker, "b");
+  history = undoLayoutHistory(history);
+  assert.equal(history.present.marker, "a");
+  assert.equal(canUndoLayoutHistory(history), false);
+  // Undoing past the start is a no-op rather than an error state.
+  assert.equal(undoLayoutHistory(history), history);
+
+  history = redoLayoutHistory(history);
+  assert.equal(history.present.marker, "b");
+  history = redoLayoutHistory(history);
+  assert.equal(history.present.marker, "c");
+  assert.equal(canRedoLayoutHistory(history), false);
+  assert.equal(redoLayoutHistory(history), history);
+});
+
+test("a gesture collapses into one step, and sealing ends the run", () => {
+  // Every pointer move during a drag commits, so without coalescing one drag
+  // would bury the previous edit under hundreds of undo steps.
+  let history = createLayoutHistory(historyLayout("start"));
+  history = pushLayoutHistory(history, historyLayout("drag-1"), "drag:1:move:slot:0:0");
+  history = pushLayoutHistory(history, historyLayout("drag-2"), "drag:1:move:slot:0:0");
+  history = pushLayoutHistory(history, historyLayout("drag-3"), "drag:1:move:slot:0:0");
+  assert.equal(history.past.length, 1);
+  assert.equal(undoLayoutHistory(history).present.marker, "start");
+
+  // A second drag of the same element reuses the pointer id, so the seal on
+  // pointer up is what keeps the two gestures separately undoable.
+  history = sealLayoutHistory(history);
+  history = pushLayoutHistory(history, historyLayout("drag-4"), "drag:1:move:slot:0:0");
+  assert.equal(history.past.length, 2);
+  assert.equal(undoLayoutHistory(history).present.marker, "drag-3");
+
+  // Arrow-key runs need the same treatment on key release: two runs in the
+  // same direction share a key, so an unsealed second run would swallow the
+  // first run's step and undo would jump back past both.
+  history = pushLayoutHistory(history, historyLayout("nudge-1"), "nudge:slot:0:0:-1,0");
+  history = pushLayoutHistory(history, historyLayout("nudge-2"), "nudge:slot:0:0:-1,0");
+  assert.equal(history.past.length, 3);
+  history = sealLayoutHistory(history);
+  history = pushLayoutHistory(history, historyLayout("nudge-3"), "nudge:slot:0:0:-1,0");
+  assert.equal(history.past.length, 4);
+  assert.equal(undoLayoutHistory(history).present.marker, "nudge-2");
+
+  // A different key ends the run without an explicit seal.
+  history = pushLayoutHistory(history, historyLayout("typed"), "field:slot:0:0:code");
+  assert.equal(history.past.length, 5);
+  // Unkeyed pushes never coalesce, not even with each other.
+  history = pushLayoutHistory(history, historyLayout("added"));
+  history = pushLayoutHistory(history, historyLayout("removed"));
+  assert.equal(history.past.length, 7);
+});
+
+test("editing after an undo discards the redo branch", () => {
+  let history = createLayoutHistory(historyLayout("a"));
+  history = pushLayoutHistory(history, historyLayout("b"));
+  history = pushLayoutHistory(history, historyLayout("c"));
+  history = undoLayoutHistory(history);
+  assert.equal(canRedoLayoutHistory(history), true);
+  history = pushLayoutHistory(history, historyLayout("d"));
+  assert.equal(canRedoLayoutHistory(history), false);
+  assert.equal(history.present.marker, "d");
+  assert.equal(undoLayoutHistory(history).present.marker, "b");
+});
+
+test("history keeps a bounded number of layouts and never image bytes", () => {
+  let history = createLayoutHistory(historyLayout("step-0"));
+  for (let step = 1; step <= LAYOUT_HISTORY_LIMIT + 20; step += 1) history = pushLayoutHistory(history, historyLayout(`step-${step}`));
+  assert.equal(history.past.length, LAYOUT_HISTORY_LIMIT);
+  // The oldest steps fall off the back; what remains is contiguous.
+  assert.equal(history.past[0].marker, `step-${20}`);
+  assert.equal(history.past.at(-1).marker, `step-${LAYOUT_HISTORY_LIMIT + 19}`);
+  // Entries are the layout objects themselves, so nothing but layout data —
+  // never the source image — is retained by undo.
+  const entries = [...history.past, history.present, ...history.future];
+  assert.ok(entries.every((entry) => validateEventMapLayout({ ...entry, marker: undefined }).ok));
+  assert.ok(entries.every((entry) => Object.keys(entry).every((key) => key !== "image" && key !== "source")));
 });
