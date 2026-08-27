@@ -7,7 +7,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { CircleDetails } = await environment.runner.import("/app/event-workspace-panels.tsx");
+const { CircleDetails, SearchResults } = await environment.runner.import("/app/event-workspace-panels.tsx");
 after(() => vite.close());
 
 const source = {
@@ -41,4 +41,26 @@ test("read-only publication preview keeps all content but removes keyboard activ
   assert.match(markup, /https:\/\/circle\.example\//);
   assert.equal([...markup.matchAll(/<button\b/g)].length, [...markup.matchAll(/<button\b[^>]*\bdisabled=""/g)].length);
   assert.equal([...markup.matchAll(/<a\b/g)].length, [...markup.matchAll(/<a\b[^>]*aria-disabled="true"[^>]*tabindex="-1"/g)].length);
+});
+
+test("informative results identify circle-authored summaries without trust wording", () => {
+  const circleSource = {
+    provider: "由社團填寫", contentType: "circle", label: "", url: "",
+    fetchedAt: "2026-08-27T00:00:00.000Z", status: "unverified",
+  };
+  const authoredRecord = {
+    ...record,
+    sources: [source, circleSource],
+    circle: { ...circle, sources: [source, circleSource] },
+  };
+  const markup = renderToStaticMarkup(React.createElement(SearchResults, {
+    records: [authoredRecord], catalogStatus: "ready", catalogError: "", selectedId: null,
+    favoriteIds: new Set(), favoriteGroupLabels: new Map(), plans: new Map(),
+    density: "informative", mediaCount: 1, query: "", activeFilters: [], advancedSearchActive: false,
+    onSelect() {}, onToggleFavorite() {}, onResetAdvancedSearch() {}, onClearFilters() {}, onClearQuery() {},
+  }));
+
+  assert.match(markup, /原創 · 長篇作品/);
+  assert.match(markup, /由社團填寫/);
+  assert.doesNotMatch(markup, /尚未驗證|社團自述/);
 });

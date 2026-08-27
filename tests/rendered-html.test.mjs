@@ -305,6 +305,8 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(catalogStore, /provider: "由社團填寫"/);
   assert.match(catalogStore, /status: "unverified"/);
   assert.match(workspacePanels, /SOURCE_STATUS_NOTE/);
+  assert.match(workspacePanels, /record\.sources\.some\(\(source\) => source\.contentType === "circle"\)/);
+  assert.match(workspacePanels, /className=\{styles\.sourceHint\}>由社團填寫/);
   assert.doesNotMatch(workspacePanels, /社團自述|尚未驗證|可核對|主辦來源|來源：活動主辦單位|社團自填縮圖|查看原始圖片/);
   // Structural, not substring: a D1 binding is now legitimate, but advanced
   // mode is not. A `main` entry would route every asset request — including the

@@ -74,11 +74,14 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
       {records.slice(0, visibleCount).map((record) => {
         const plan = plans.get(record.circle.id);
         const thumbnail = record.circle.media[0];
+        const circleSummary = [record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean);
+        const showsCircleAuthoredContent = record.sources.some((source) => source.contentType === "circle")
+          && (circleSummary.length > 0 || (mediaCount > 0 && !!thumbnail));
         return <article key={record.recordId} className={`${selectedId === record.recordId ? styles.selectedResult : ""} ${density === "compact" ? styles.compactResult : ""}`}>
           <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
             {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
-            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && (record.circle.circleCategory || record.circle.creatorTypes.length > 0 || record.circle.work) && <small>{[record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean).join(" · ")}</small>}</span>
+            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{circleSummary.length > 0 && <small>{circleSummary.join(" · ")}</small>}{showsCircleAuthoredContent && <small className={styles.sourceHint}>由社團填寫</small>}</>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>
