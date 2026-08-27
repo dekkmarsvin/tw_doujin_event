@@ -4,7 +4,7 @@
 
 **這是受信任維護者的本機工作，不是產品功能。** 公開 Pages 介面不得出現檔案欄位、管理入口或寫入 route；讀取失敗只說明公開資料錯誤，不提供管理修復入口。地圖的資料不變量與前台契約見[活動地圖契約](../contracts/event-map.md)。
 
-**實作**：[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/editor/`](../../app/editor)、[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-admin-importer.tsx`](../../app/map-admin-importer.tsx)、[`db/event-map-repository.ts`](../../db/event-map-repository.ts)、[`app/event-map-route-handlers.ts`](../../app/event-map-route-handlers.ts)
+**實作**：[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/editor/`](../../app/editor)、[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-admin-importer.tsx`](../../app/map-admin-importer.tsx)、[`db/event-map-repository.ts`](../../db/event-map-repository.ts)、[`app/event-map-route-handlers.ts`](../../app/event-map-route-handlers.ts)
 **測試**：`tests/map-import.test.mjs`、`tests/event-map-route.test.mjs`
 
 ## 流程
@@ -49,6 +49,11 @@ authoring build 會讀取目前 staged event definition，據此選擇 recognize
 - 選取任一非一般攤位區後，物件四角顯示直接縮放把手。
 - **吸附**：企業攤移動或縮放至相鄰企業攤 8 個螢幕像素內，且另一軸至少重疊四分之一時，自動吸附最近的相對邊並顯示對齊導引線。**按住 Alt 暫停吸附。**
 - 方向鍵移動 1px，Shift + 方向鍵移動 10px。
+- **逐步復原**：工具列的「復原」與「重做」（`Ctrl`／`Cmd` + `Z`，加 `Shift` 或 `Ctrl` + `Y` 重做）可回到任一中間狀態，不必整份還原。快捷鍵在 inspector 有焦點時同樣有效，但文字欄位內保留瀏覽器原生的復原。
+  - **一次手勢算一步**：一次拖曳或縮放、一段連續同方向的方向鍵微調、同一欄位的連續輸入各自合併成單一步驟；改變方向或換欄位就開始新的步驟。
+  - 復原後再編輯會捨棄可重做的分支。
+  - 歷史只保存最近 `LAYOUT_HISTORY_LIMIT`（50）份 layout，**不保存原始圖位元組**。超出上限的最舊步驟會被丟棄。
+  - 重新辨識圖片、改用空白地圖或按「還原本次編輯」是整份替換 layout，不是編輯步驟，歷史會從新的 layout 重新開始。
 - 720px 以下貼底並改為單欄預覽，主要發布動作固定在工作面板底部。此規則不增加任何公開 Pages route。
 
 ### 5. 發布到本機 D1
