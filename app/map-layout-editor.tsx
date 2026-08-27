@@ -109,23 +109,31 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
   // The inspector's per-element fields only mean anything for exactly one
   // element, so a larger set falls through to the batch panel instead.
   const selection = selections.length === 1 ? selections[0] : null;
+  // A non-null list turns canvas clicks into anchor marks. The inferred booths
+  // live here rather than in `layout`, which is what keeps a booth nobody
+  // confirmed out of anything that can be submitted.
+  const [anchors, setAnchors] = useState<RowAnchor[] | null>(null);
+  const [draftRow, setDraftRow] = useState<RowDraft | null>(null);
   const [history, setHistory] = useState<LayoutHistory>(() => createLayoutHistory(layout));
   // The parent owns the layout: recognizing a new image, starting a blank map
   // or restoring the baseline replaces it wholesale. None of those are editor
   // steps, so the stack restarts from whatever arrived rather than offering an
   // undo back into a layout that no longer matches the canvas.
-  if (history.present !== layout) setHistory(createLayoutHistory(layout));
+  if (history.present !== layout) {
+    setHistory(createLayoutHistory(layout));
+    // Anchors and the draft they produced belong to the layout that was on
+    // screen when they were marked. A wholesale replacement - another draft,
+    // a new recognition run, a restored baseline - leaves them describing a
+    // plan that is no longer there.
+    setAnchors(null);
+    setDraftRow(null);
+  }
   const [zoom, setZoom] = useState(MIN_EDITOR_ZOOM);
   const [layoutUnitsPerPixel, setLayoutUnitsPerPixel] = useState(layout.width / 800);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const [rowForm, setRowForm] = useState<RowFormState | null>(null);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
-  // A non-null list turns canvas clicks into anchor marks. The inferred booths
-  // live here rather than in `layout`, which is what keeps a booth nobody
-  // confirmed out of anything that can be submitted.
-  const [anchors, setAnchors] = useState<RowAnchor[] | null>(null);
-  const [draftRow, setDraftRow] = useState<RowDraft | null>(null);
   const [clipboard, setClipboard] = useState<SlotClipboard | null>(null);
   const [pasteForm, setPasteForm] = useState({ offsetX: "0", offsetY: "0", label: "" });
   const drag = useRef<DragState | null>(null);
@@ -159,12 +167,20 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
 
   // Indices in a selection do not survive a step that added or removed
   // elements, so undo and redo drop the selection rather than risk pointing the
-  // inspector at a different booth than the one that is highlighted.
+  // inspector at a different booth than the one that is highlighted. Anchors go
+  // with it: a step that resized the canvas moved them, and undoing restores
+  // the layout snapshot without restoring where they were marked.
+  const endAnchorRun = () => {
+    setSelections([]);
+    setAnchors((current) => current && []);
+    setDraftRow(null);
+  };
+
   const undo = () => {
     const next = undoLayoutHistory(history);
     if (next === history) return;
     setHistory(next);
-    setSelections([]);
+    endAnchorRun();
     onChange(next.present);
   };
 
@@ -172,7 +188,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, onChange }
     const next = redoLayoutHistory(history);
     if (next === history) return;
     setHistory(next);
-    setSelections([]);
+    endAnchorRun();
     onChange(next.present);
   };
 
