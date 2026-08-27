@@ -5,7 +5,6 @@
 .backdrop { position:fixed; z-index:50; inset:0; display:grid; place-items:center; padding:20px; background:#202a3566; }
 .dialog { width:min(620px,100%); max-height:min(760px,calc(100vh - 40px)); overflow:auto; border:1px solid #dfe3df; border-radius:18px; background:#f9faf8; box-shadow:0 28px 80px #11182066; }
 .dialog>header { position:sticky; z-index:2; top:0; display:flex; justify-content:space-between; align-items:center; padding:18px 20px 14px; border-bottom:1px solid #dfe3df; background:#f9faf8f5; }
-.dialog>header small { color:#8a928d; font:800 calc(8px * var(--ui-font-scale,1)) ui-monospace,monospace; letter-spacing:.12em; }
 .dialog h2 { margin:3px 0 0; font-size:calc(19px * var(--ui-font-scale,1)); }
 .dialog>header button { width:30px; height:30px; border:1px solid #dfe3df; border-radius:50%; background:#fff; cursor:pointer; }
 .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:14px 20px; border-bottom:1px solid #dfe3df; }

@@ -258,7 +258,7 @@
 }
 .previewColumn { display: none; min-width: 0; }
 .previewColumn.reviewOpen { display: block; }
-.livePreview > small, .reviewHeading small {
+.livePreview > small {
   color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .1em;
 }
 .livePreview h3, .reviewPanel h3 { margin: 4px 0 0; font-size: 13px; }
@@ -297,8 +297,6 @@
   .previewColumn { display: block; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
   .previewColumn.reviewOpen { display: block; }
 }
-
-.footer { margin-top: 24px; color: var(--muted); font-size: 10px; line-height: 1.7; }
 
 @media (max-width: 520px) {
   .masthead { flex-direction: column; align-items: start; }

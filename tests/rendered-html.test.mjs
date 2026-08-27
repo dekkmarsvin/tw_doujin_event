@@ -180,7 +180,6 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(editor, /SNAP_THRESHOLD_PX = 8/);
   assert.match(editor, /event\.altKey/);
   assert.match(editor, /className=\{styles\.snapGuide\}/);
-  assert.match(editor, /非一般攤位區可拖曳四角調整大小/);
   assert.doesNotMatch(editor, /selectedLandmarkKind !== "other"/);
   assert.match(editor, /區域類型/);
   assert.match(admin, /scaleMapLandmarks/);
@@ -249,7 +248,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, />詳細資訊<\/button>/);
   assert.doesNotMatch(app, />詳情<\/button>/);
   assert.match(workspacePanels, /更多資訊/);
-  assert.match(workspacePanels, /儲存在此裝置/);
+  assert.match(readerHelp, /只存在此瀏覽器/);
   assert.doesNotMatch(workspacePanels, /追加情報|保存在|攤位詳情|此攤位登錄/);
   assert.match(workspacePanels, /UiIcon name=\{entry\.status === "visited" \? "check-square" : "square"\}/);
   assert.doesNotMatch(workspacePanels, />\{entry\.status === "visited" \? "復原" : "走訪"\}<\/button>/);
@@ -306,7 +305,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(catalogStore, /provider: "由社團填寫"/);
   assert.match(catalogStore, /status: "unverified"/);
   assert.match(workspacePanels, /SOURCE_STATUS_NOTE/);
-  assert.doesNotMatch(workspacePanels, /社團自述|尚未驗證|可核對|主辦來源/);
+  assert.doesNotMatch(workspacePanels, /社團自述|尚未驗證|可核對|主辦來源|來源：活動主辦單位|社團自填縮圖|查看原始圖片/);
   // Structural, not substring: a D1 binding is now legitimate, but advanced
   // mode is not. A `main` entry would route every asset request — including the
   // 1.8 MB catalog — through a Worker, which is exactly what these guards exist

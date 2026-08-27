@@ -46,7 +46,6 @@ export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLa
         <h2 id="reader-help-title">使用說明</h2>
         <button type="button" onClick={() => { setOpen(false); buttonRef.current?.focus(); }} aria-label="關閉使用說明"><UiIcon name="close" /></button>
       </header>
-      <p className={styles.intro}>先選日期與展區，再從搜尋結果或地圖攤位開啟社團資訊。兩個入口會顯示同一筆收藏與行程狀態。</p>
       <ol className={styles.steps}>
         <li><strong>找社團與作品</strong><span>輸入社團、攤位或作品；「詳細搜尋」可再依創作者、作品類型與分級篩選。按 Ctrl/Command + K 可直接聚焦搜尋欄。</span></li>
         <li><strong>查看攤位</strong><span>拖曳、縮放或重設地圖位置。鍵盤使用者可進入地圖後以方向鍵移動，按 Enter 或空白鍵開啟攤位。</span></li>
@@ -55,11 +54,11 @@ export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLa
       </ol>
       <section className={styles.circleEntry} aria-labelledby="reader-circle-entry-title">
         <h3 id="reader-circle-entry-title">你是參展社團嗎？</h3>
-        <p>攤位與社團名稱來自主辦資料，本頁不接受一般讀者修改。參展社團可到<a href="/circle">社團專區</a>驗證身分後補充販售資訊、連結與代表圖，補上的內容會直接出現在這裡。</p>
+        <p>到<a href="/circle">社團專區</a>驗證身分後，即可補充販售資訊、連結與代表圖。</p>
       </section>
       <section className={styles.about} aria-labelledby="reader-about-title">
         <h3 id="reader-about-title">關於本頁</h3>
-        <p>本頁是非官方同人展逛攤工具，不代表 Fancy Frontier 主辦單位。實際活動資訊請以主辦單位與社團最新公告為準。</p>
+        <p>本頁是非官方同人展逛攤工具，不代表 Fancy Frontier 主辦單位。</p>
         <dl><div><dt>資料最後更新</dt><dd>{dataLastUpdatedLabel}</dd></div><div><dt>聯絡</dt><dd>Discord ID <strong>dekkorakki</strong></dd></div></dl>
       </section>
     </section>}

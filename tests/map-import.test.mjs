@@ -96,7 +96,7 @@ test("template registry dispatches event-specific adapters without making them g
   const fixture = JSON.parse('{"version":2,"template":"SAMPLE","width":10,"height":10,"floor":{"x":0,"y":0,"width":10,"height":10},"rows":[{"label":"S","orientation":"horizontal","confidence":1,"slots":[{"code":"S01","rect":{"x":1,"y":1,"width":2,"height":2}}]}],"pillars":[],"accessPoints":[],"landmarks":[]}');
   assert.equal(validateMapTemplateLayout("SAMPLE", fixture).ok, true);
   assert.equal(validateMapTemplateLayout("FF47", fixture).ok, false);
-  assert.throws(() => recognizeMapTemplate("SAMPLE", syntheticFF47Image()), /尚未提供圖片辨識 adapter/);
+  assert.throws(() => recognizeMapTemplate("SAMPLE", syntheticFF47Image()), /不支援自動辨識/);
 });
 
 test("accepts a generic future event layout without FF47-specific counts", () => {

@@ -11,8 +11,7 @@
 .panel header button { width:28px; height:28px; display:grid; flex:0 0 auto; place-items:center; padding:0; border:1px solid var(--line); border-radius:7px; background:#f9faf8; color:var(--muted); cursor:pointer; }
 .panel header button:hover { background:var(--paper); color:var(--ink); }
 .panel header button:active { background:var(--cream); }
-.intro,.steps span,.about p,.circleEntry p { color:var(--muted); font-size:calc(11px * var(--ui-font-scale,1)); line-height:1.65; }
-.intro { margin:0; }
+.steps span,.about p,.circleEntry p { color:var(--muted); font-size:calc(11px * var(--ui-font-scale,1)); line-height:1.65; }
 .steps { display:grid; gap:10px; margin:14px 0 0; padding:0; list-style:none; counter-reset:help-step; }
 .steps li { display:grid; grid-template-columns:26px 1fr; column-gap:10px; counter-increment:help-step; }
 .steps li::before { content:counter(help-step); display:grid; place-items:center; width:24px; height:24px; grid-row:1 / span 2; border-radius:50%; background:var(--paper); color:var(--ink); font:800 calc(10px * var(--ui-font-scale,1)) ui-monospace,monospace; }

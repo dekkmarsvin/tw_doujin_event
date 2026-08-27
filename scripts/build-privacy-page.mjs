@@ -153,7 +153,7 @@ export function lastUpdatedFrom(markdown) {
 }
 
 export function buildPrivacyPage(markdown) {
-  const updated = lastUpdatedFrom(markdown);
+  lastUpdatedFrom(markdown);
   const body = renderMarkdown(markdown).split("\n").map((line) => `      ${line}`).join("\n");
   return `<!doctype html>
 <html lang="zh-Hant">
@@ -195,7 +195,6 @@ export function buildPrivacyPage(markdown) {
       table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
       th, td { padding: 8px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
       th { background: var(--paper); }
-      footer { max-width: 46rem; margin: 16px auto 0; color: var(--muted); font-size: 12px; }
       @media (max-width: 480px) { body { padding: 20px 12px 56px; } main { padding: 20px 16px 26px; } }
     </style>
   </head>
@@ -204,7 +203,6 @@ export function buildPrivacyPage(markdown) {
     <main>
 ${body}
     </main>
-    <footer>最後更新：${updated}</footer>
   </body>
 </html>
 `;

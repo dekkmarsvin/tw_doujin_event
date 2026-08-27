@@ -2,9 +2,7 @@
 
 同人展逛攤地圖。介面把社團搜尋、SVG 攤位地圖、收藏分組、備註與每日行程整合在同一個工作區，支援桌面與行動版。
 
-公開閱讀的 reviewed base 是**純靜態**的：場刊與地圖以版本化 JSON 快照隨 build 發布，由靜態邊緣直接服務。社團自填資料則由公開的 Pages Function overlay 疊加；overlay 無法讀取時仍顯示完整 base。另有一個獨立入口 `/circle` 供參展社團登入並維護補充資料，由 `functions/` 與 D1 承載。publication 與離線邊界見[交付與離線契約](docs/contracts/delivery-and-offline.md)。
-
-正式公開網站：<https://map.kotoban.top/>。一般閱讀與社團入口皆可公開到達；一般讀者不需登入，社團端仍以 Turnstile、email 一次性連結與應用程式權限保護。Pull request 與不可變 preview deployment 則繼續由 Cloudflare Access 閘控，決策見 [ADR-0029](docs/adr/0029-public-production-gated-preview.md)，實際設定與驗證方式見[部署 runbook](docs/runbooks/deployment.md#cloudflare-accessproduction-公開preview-閘控)。
+正式網站：<https://map.kotoban.top/>。一般閱讀不需登入；參展社團可在 <https://map.kotoban.top/circle> 登入並維護補充資料。
 
 地圖辨識與細部編輯器是本機 authoring 工具，不是公開 Pages 入口的一部分。
 
@@ -19,11 +17,11 @@
 3. 「收藏」、「加入行程」與「設為下一站」是三個獨立動作。行程可排序、記錄購買項目與預算，並在「導航模式」只看當日預定攤位與已走訪狀態；本站不做 GPS 定位或自動路徑推算。
 4. 收藏群組、備註與行程只存在目前瀏覽器。「資料管理」可匯出 JSON／CSV 備份；一般網頁尚未提供匯入或跨裝置同步。
 
-同一份精簡說明也可由網站右上角的「使用說明」開啟。詳細行為見[搜尋契約](docs/contracts/search.md)、[活動地圖契約](docs/contracts/event-map.md)與[規劃契約](docs/contracts/planning.md)。
+詳細行為見[搜尋契約](docs/contracts/search.md)、[活動地圖契約](docs/contracts/event-map.md)與[規劃契約](docs/contracts/planning.md)。
 
 ### 參展社團與地圖貢獻者：`/circle`
 
-- 社團在 <https://map.kotoban.top/circle> 通過真人驗證並以 email 一次性連結登入，認領社團後補充販售資訊、連結、代表圖與作品標籤。送出前會以閱讀端元件預覽；社團名稱、攤位與日期仍由主辦資料決定，無法在此修改。
+- 社團在 <https://map.kotoban.top/circle> 通過真人驗證並以 email 一次性連結登入，認領社團後補充販售資訊、連結、代表圖與作品標籤。送出前可預覽；社團名稱、攤位與日期無法在此修改。
 - 經管理者另外授權的地圖貢獻者，登入同一控制面後可建立私人地圖草稿、綁定官方來源檔並送審。核准與匯出只產生 event-data 候選，不會直接發布公開地圖。
 
 完整邊界見[社團自助控制面契約](docs/contracts/circle-portal.md)與[地圖貢獻控制面契約](docs/contracts/map-contributions.md)。

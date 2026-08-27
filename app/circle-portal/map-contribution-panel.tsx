@@ -50,10 +50,10 @@ function EvidenceList({ files, showReviewResult = false }: { files: MapDraftFile
     const fileUrl = `/api/map-contributions/files/${encodeURIComponent(item.id)}`;
     const canReadRaw = item.raw_deleted_at == null;
     return <li key={item.id}>
-      {item.document_date}・<a href={item.source_url} rel="noreferrer" target="_blank">投稿來源頁面</a>
+      {item.document_date}・<a href={item.source_url} rel="noreferrer" target="_blank">原始來源</a>
       {canReadRaw && item.mime.startsWith("image/") ? <>・<a href={`${fileUrl}/preview`} rel="noreferrer" target="_blank">預覽上傳檔</a></> : null}
       {canReadRaw ? <>・<a href={fileUrl}>下載上傳檔</a></> : <>・原始檔已依保存期限刪除</>}
-      ・revision {item.revision}{showReviewResult ? `・${item.review_result ?? "尚未確認來源"}` : ""}・SHA-256 {item.sha256}
+      ・版本 {item.revision}{showReviewResult ? `・${item.review_result ?? "尚未確認來源"}` : ""}・SHA-256 {item.sha256}
     </li>;
   })}</ul>;
 }
@@ -61,7 +61,7 @@ function EvidenceList({ files, showReviewResult = false }: { files: MapDraftFile
 function DraftList({ drafts, selected, onSelect }: { drafts: MapDraftSummary[]; selected: string | null; onSelect: (id: string) => void }) {
   if (!drafts.length) return <p>目前沒有草稿。</p>;
   return <ul className={styles.claimList}>{drafts.map((draft) => <li key={draft.id}>
-    <div><b>{draft.period_key}・{draft.venue_space_id}</b><small>{draft.id}・revision {draft.current_revision}{draft.owner_email ? `・${draft.owner_email}` : ""}</small></div>
+    <div><b>{draft.period_key}・{draft.venue_space_id}</b><small>{draft.id}・版本 {draft.current_revision}{draft.owner_email ? `・${draft.owner_email}` : ""}</small></div>
     <span>{STATUS_LABEL[draft.status]}</span>
     <button type="button" aria-pressed={selected === draft.id} onClick={() => onSelect(draft.id)}>開啟</button>
   </li>)}</ul>;
@@ -115,23 +115,23 @@ export function MapContributorPanel() {
       }, "私人草稿已建立。")}>從目前公開地圖建立私人草稿</button>
     </div>}
     {detail && layout && <>
-      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・revision {detail.draft.current_revision}</dd></div></dl>
+      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
       {editable && <MapLayoutEditor layout={layout} backgroundImageUrl={previewFile ? `/api/map-contributions/files/${encodeURIComponent(previewFile.id)}/preview` : undefined} onChange={setLayout} />}
-      <h3>共用公開 renderer 預覽</h3><Preview layout={layout} />
+      <h3>公開地圖預覽</h3><Preview layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>
           <button type="button" onClick={() => void run(async () => {
             const saved = await saveMapContributionDraft(detail.draft.id, detail.draft.current_revision, layout);
             await openDraft(detail.draft.id); await refreshList();
-            setStatus({ kind: "ok", message: `已儲存 revision ${saved.revision}；請為這個 revision 上傳來源檔。` });
-          }, "草稿已儲存。")}>儲存新 revision</button>
+            setStatus({ kind: "ok", message: `已儲存版本 ${saved.revision}；請為這個版本上傳來源檔。` });
+          }, "草稿已儲存。")}>儲存新版本</button>
           <button type="button" disabled={hasUnsavedChanges} onClick={() => void run(async () => {
             await submitMapContributionDraft(detail.draft.id, detail.draft.current_revision);
             await openDraft(detail.draft.id); await refreshList();
           }, "草稿已送審。")}>提交審閱</button>
         </div>
-        {hasUnsavedChanges && <p className={styles.notice}>請先儲存新 revision，再為該 revision 上傳來源並提交。</p>}
-        <h3>目前 revision 的官方來源</h3>
+        {hasUnsavedChanges && <p className={styles.notice}>請先儲存新版本，再為該版本上傳來源並提交。</p>}
+        <h3>目前版本的官方來源</h3>
         <label>活動官方說明頁 URL<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
         <label>文件日期<input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /></label>
         <label>頁碼（選填）<input type="number" min="1" value={pageNumber} onChange={(event) => setPageNumber(event.target.value)} /></label>
@@ -143,11 +143,11 @@ export function MapContributorPanel() {
             pageNumber: pageNumber ? Number(pageNumber) : null,
           });
           await openDraft(detail.draft.id); setFile(null);
-        }, "來源檔已綁定目前 revision。")}>上傳私人來源檔</button>
+        }, "來源檔已綁定目前版本。")}>上傳私人來源檔</button>
       </>}
       <h3>來源與審閱軌跡</h3>
       <EvidenceList files={detail.files} />
-      <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・revision {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
+      <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・版本 {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
     </>}
     <Problems problems={problems} />
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
@@ -193,11 +193,11 @@ export function AdminMapReviewPanel() {
     <p>核准只確認私人草稿；「匯出候選」仍不會發布。請以候選 JSON 與語意差異建立 event-data repository 的可審查變更。</p>
     <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "審閱資料已載入。")} />
     {detail && <>
-      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・revision {detail.draft.current_revision}</dd></div></dl>
+      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
       <Preview layout={detail.draft.content.layout} />
       <label>審閱說明<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <label>取代既有核准 draftId（只有同範圍已有核准稿時填寫）<input value={replacementDraftId} onChange={(event) => setReplacementDraftId(event.target.value)} /></label>
-      <label className={styles.confirmCheck}><input type="checkbox" checked={officialSourceConfirmed} onChange={(event) => setOfficialSourceConfirmed(event.target.checked)} /><span>我已逐一確認目前 revision 的來源檔來自活動官方說明頁面。</span></label>
+      <label className={styles.confirmCheck}><input type="checkbox" checked={officialSourceConfirmed} onChange={(event) => setOfficialSourceConfirmed(event.target.checked)} /><span>我已逐一確認目前版本的來源檔來自活動官方說明頁面。</span></label>
       {detail.draft.status === "submitted" && <div className={styles.reviewActions}><button type="button" onClick={() => void decide("changes_requested")}>要求修改</button><button type="button" onClick={() => void decide("reject")}>拒絕</button><button type="button" onClick={() => void decide("approve")}>核准</button></div>}
       {(detail.draft.status === "approved" || detail.draft.status === "exported") && <button type="button" onClick={() => void run(async () => {
         const result = await exportMapContributionCandidate(detail.draft.id, detail.draft.current_revision);
@@ -207,7 +207,7 @@ export function AdminMapReviewPanel() {
       {candidate && <div className={styles.candidate}><b>{candidate.targetPath}</b><small>SHA-256 {candidate.sha256}</small><pre>{JSON.stringify(candidate.diff, null, 2)}</pre><button type="button" onClick={downloadCandidate}>下載候選 JSON</button></div>}
       <h3>官方來源與狀態軌跡</h3>
       <EvidenceList files={detail.files} showReviewResult />
-      <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・revision {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
+      <ul className={styles.auditList}>{detail.reviews.map((item, index) => <li key={`${item.at}:${index}`}>{item.from_status} → {item.to_status}・版本 {item.revision}{item.note ? `・${item.note}` : ""}</li>)}</ul>
     </>}
     <Problems problems={problems} />
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}

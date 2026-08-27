@@ -98,8 +98,7 @@
   .mobileDock[data-mobile-sheet-level="peek"] .mobilePanel { visibility:hidden; opacity:0; pointer-events:none; }
   .mobileFilters { padding:14px 16px 18px; }
   .mobileFilters header { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:14px; }
-  .mobileFilters header small,.mobileFilters header b { display:block; }
-  .mobileFilters header small { color:#939a96; font:800 calc(8px * var(--ui-font-scale,1)) var(--font-mono),monospace; letter-spacing:.14em; }
+  .mobileFilters header b { display:block; }
   .mobileFilters header b { margin-top:2px; font-size:calc(14px * var(--ui-font-scale,1)); }
   .mobileFilters header .clearFilters { min-height:44px; }
   .mobileFilters fieldset { margin:0 0 14px; padding:0; border:0; }
