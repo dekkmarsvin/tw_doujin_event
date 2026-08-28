@@ -2,11 +2,15 @@
 
 把配置圖辨識成向量 layout、人工微調、發布到本機 D1，再匯出成公開靜態快照。
 
-**本篇描述的是本機 authoring 環境。** 它自 [ADR-0035](../adr/0035-new-event-onboarding-is-data-driven.md) 決策第 9 點起是**離線備援，不再是新活動的必要路徑**；瀏覽器內的 authoring 走 `/circle` 的管理者控制面，見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)。
+**本篇描述的是本機 authoring 環境。它目前仍是一個新活動畫出第一份地圖的唯一路徑。**
 
-**讀者介面（`index.html`）不得出現檔案欄位、管理入口或寫入 route**；讀取失敗只說明公開資料錯誤，不提供管理修復入口。這條約束只約束讀者介面。`circle.html` 是自始分離的獨立 entry（`vite.pages.config.ts`），它在身分驗證後方提供檔案上傳與管理入口，那是 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 的既有機制，不是本條的例外。
+`/circle` 的貢獻面板雖然已在 Pages 上運作，但它建立草稿的唯一入口是「從目前公開地圖建立私人草稿」（`app/circle-portal/map-contribution-panel.tsx`）。新活動沒有公開地圖，那一步必定失敗。
 
-> 2026-08-28 修訂。本段原文為「**這是受信任維護者的本機工作，不是產品功能。** 公開 Pages 介面不得出現檔案欄位、管理入口或寫入 route」。該無條件措辭自 #72／#73 落地起即與現況不符——`/circle` 早已有檔案上傳與管理入口——並且會擋住 ADR-0035 選項 B。限縮為只約束讀者介面。
+[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 3 點已定：瀏覽器端的空白／描摹起點（[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)）落地後，本篇降為離線備援。**在那之前不是。** 該 PR 必須在同一個 commit 改寫本段。
+
+**讀者介面（`index.html`）不得出現檔案欄位、管理入口或寫入 route**；讀取失敗只說明公開資料錯誤，不提供管理修復入口。這條約束只約束讀者介面。`circle.html` 是自始分離的獨立 entry（`vite.pages.config.ts`），它在身分驗證後方提供檔案上傳與管理入口，那是 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 的既有機制，不是本條的例外。見 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 2 點。
+
+> 2026-08-28 修訂。本段原文為「**這是受信任維護者的本機工作，不是產品功能。** 公開 Pages 介面不得出現檔案欄位、管理入口或寫入 route」。該無條件措辭自 #72／#73 落地起即與現況不符——`/circle` 早已有檔案上傳與管理入口——並且會擋住 ADR-0035 選項 B。依 ADR-0038 限縮為只約束讀者介面。
 
 地圖的資料不變量與前台契約見[活動地圖契約](../contracts/event-map.md)。
 
@@ -96,7 +100,7 @@ npm test
 
 ## 持久化 seam
 
-本機 authoring 的持久化由純 repository、純 route handlers 與環境 wrapper 構成。**這一段持久化不在 Pages deployment 內**，且依 ADR-0035 決策第 8 點維持如此——瀏覽器內的 authoring 不使用它，改走 `/circle` 的私人草稿與版本化候選匯出路徑。
+本機 authoring 的持久化由純 repository、純 route handlers 與環境 wrapper 構成。**這一段持久化不在 Pages deployment 內**，且依 ADR-0038 決策第 2 點維持如此——瀏覽器內的 authoring 不使用它，改走 `/circle` 的私人草稿與版本化候選匯出路徑。
 
 - `createEventMapRepository(database)` 只接收注入的 `D1Database`，負責資料表就緒、驗證、查詢與 revision UPSERT。
 - `createEventMapHandlers(repository)` 只依賴 `getEventMap` / `publishEventMap`，負責參數與 payload 驗證及 HTTP 回應。Cloudflare route wrapper 才讀取環境 binding。
@@ -112,5 +116,5 @@ npm test
 
 ## 現行限制與後續範圍
 
-- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。**ADR-0035 選項 B 定案後這句仍然有效**：B 把 authoring **介面**搬上 Pages，持久化改走 `/circle` 既有的管理者授權、私人草稿、審閱與版本化候選匯出機制，不部署這個 route。見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)。
+- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。**ADR-0038 對選項 B 定案後這句仍然有效**：B 把 authoring **介面**搬上 Pages，持久化改走 `/circle` 既有的管理者授權、私人草稿、審閱與版本化候選匯出機制，不部署這個 route。見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)。
 - 對非一般攤位文字做 OCR。第一階段只保存可可靠辨識的相對矩形。

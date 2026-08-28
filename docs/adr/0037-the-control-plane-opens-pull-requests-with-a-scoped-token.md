@@ -28,10 +28,16 @@ fine-grained personal access token，逐項限定：
 | 項目 | 設定 |
 |---|---|
 | 型別 | fine-grained PAT，非 classic、非 OAuth app |
-| 目標 repository | 僅 `tw_doujin_event`、`tw_doujin_event-event-data`、`tw_doujin_event-reference-data` |
+| 目標 repository | 僅 `dekkmarsvin/tw_doujin_event`、`dekkmarsvin/tw_doujin_event-reference-data`，**加上該活動自己的 event-data repository** |
 | 權限 | Contents: read/write；Pull requests: read/write；其餘全部 no access |
 | 保存位置 | `wrangler pages secret put`。不進 repository、不進 bundle、不進任何 build artifact |
 | 有效期 | 設定到期日並排入輪替，不使用永不過期的憑證 |
+
+**event-data 是每場活動一個 repository，不是固定的第三個名字。** ADR-0014 讓每場活動的授權與公開時程各自獨立，pin 檔逐筆記錄 repository：`data/event-data-pins/ff47.json` 的 `repository` 是 `dekkmarsvin/tw_doujin_event-data-ff47`。因此 fine-grained PAT 的 repository 選取**每接一場新活動就要更新一次**。這是本決策已知的營運成本，寫在這裡以免日後被當成 bug：
+
+- 新活動的 event-data repository 建立後，必須先把它加進 token 的 repository 選取，控制面才推得動該活動的候選。
+- 這個手動步驟**刻意保留**。它是唯一一道「哪些 repository 可被自動化寫入」的人工關卡，自動化它等於把 token 的範圍變成「未來所有 repository」。
+- 若日後活動數量讓這個步驟變成負擔，正確的替代是改用只安裝在指定 repository 上的 GitHub App，而不是放寬 PAT 的範圍。
 
 ### 不可讓步的邊界
 
@@ -44,15 +50,35 @@ fine-grained personal access token，逐項限定：
 
 ### 憑證外洩時
 
-持有者可以在三個 repository 開 PR、推新分支，並讀取三者的內容（三者本來就是公開 repository，讀取不新增暴露）。持有者**不能**合併、不能改寫 `main`、不能改 workflow、不能改動這三個 repository 以外的任何東西，也不能讓任何資料在未經 merge 的情況下抵達 production——production 只從 `main` 的 pin 建置。
+**上一節的邊界約束的是控制面這支程式，不是憑證本身。** 一個 `Contents: write` + `Pull requests: write` 的 token 在 GitHub 端**有能力**直接 push 既有分支（含 `main`）並呼叫 merge API。持有 token 的人不會照著本 ADR 的邊界走。因此那些邊界必須在 repository 端強制，否則「外洩也改不到 `main`」是一句假話。
 
-復原：撤銷 token、刪除控制面推出的分支、關閉未經預期的 PR、以 `wrangler pages secret put` 換發新 token。不需要重建任何公開資料，因為公開資料的真相仍在 `main` 的 pin 與靜態快照。
+#### 發行 token 前必須先到位的 repository 端強制
+
+查證於 2026-08-28：
+
+| Repository | 現況 | 需要 |
+|---|---|---|
+| `dekkmarsvin/tw_doujin_event` | ruleset `branch_main` 存在但 **enforcement 為 disabled**，且規則只有 `deletion` 與 `non_fast_forward`，不含 pull request 要求 | 啟用，並加上「`main` 必須經 pull request」 |
+| 各活動的 event-data repository（例如 `dekkmarsvin/tw_doujin_event-data-ff47`） | **沒有任何 ruleset** | 建立與 main repo 同等的保護 |
+| `dekkmarsvin/tw_doujin_event-reference-data` | ruleset `reference-data-main` **active** | 確認其規則涵蓋直接 push 與 merge |
+
+- [ ] 上表三者到位前**不得發行本 ADR 的 token**。這是發行的前置條件，不是後續改善。
+- [ ] token 的 actor 不得列入任何 ruleset 的 bypass 清單。
+
+#### 強制到位後，外洩的實際影響
+
+持有者可以開 PR、推**新**分支，並讀取三者的內容（三者本來就是公開 repository，讀取不新增暴露）。ruleset 擋住直接 push `main` 與繞過 PR 的合併；merge 仍需通過 ruleset 要求的關卡。
+
+**未強制前，外洩者可直接寫 `main` 並經 GitHub Actions 抵達 production。** 這正是上表為發行前置條件的原因。
+
+復原：撤銷 token、刪除控制面推出的分支、關閉未經預期的 PR、以 `wrangler pages secret put` 換發新 token，並比對 `main` 近期 commit 是否有非預期作者。公開資料的真相仍在 `main` 的 pin 與靜態快照，但**若 `main` 曾被直接寫入，該真相本身就是待查對象**。
 
 ## 後果
 
 - [地圖貢獻控制面基礎契約](../contracts/map-contributions.md)「不呼叫 GitHub」一句必須改寫，寫明控制面可開 PR、不可合併，以及此能力只在管理者身分後方可達。改寫由 [#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) 執行。
 - 「候選匯出不改變任何匿名公開 endpoint」一句**不變**。開 PR 不改變任何匿名可達的回應。
 - 稽核邊界不變：要回答「這格攤位為什麼屬於這個社團」，需要的仍是 `main` 的那份 diff。控制面只是把 diff 的產生自動化，diff 本身仍是紀錄。
+- **`branch_main` ruleset 目前是 disabled**，且其規則不含 pull request 要求；各活動的 event-data repository 沒有任何 ruleset。這在本 ADR 之前只是「沒設定」，在本 ADR 之後是**發行憑證的阻擋項**。[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) 不得在它到位前發行 token。
 - 單人維護時 PR review 是自我 review。**這不是放寬理由**：review 之所以留著，是因為 diff 本身是稽核紀錄（ADR-0035 對選項 D 的否決理由），與有幾個人 review 無關。
 
 ## 未決
