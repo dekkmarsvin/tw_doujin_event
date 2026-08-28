@@ -84,7 +84,17 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 
 ### 5. ADR-0037 暫緩實施，不撤銷
 
-控制面持有 GitHub 憑證的**決策內容維持有效**，包括憑證範圍表、不可讓步的邊界、外洩影響分析，以及三個 repository 的 ruleset 為發行前置這一項。
+控制面持有 GitHub 憑證的**決策內容維持有效**：不可讓步的邊界（不得 merge、不得改寫既有分支、不得改動 workflow 檔案、不得繞過既有驗證、不得留下部分狀態）、外洩影響分析，以及「repository 端強制到位前不得發行 token」這個前置條件本身。
+
+**但那兩張表點名的 repository 由本 ADR 取代。**ADR-0037 的憑證範圍表列出 `tw_doujin_event`、`tw_doujin_event-reference-data` 與「該活動自己的 event-data repository」，發行前置表同樣以這三者為對象。決策第 1 點之後，後兩者是 archive 的 repository——照字面執行會保護不再可寫的 repository，而真正可寫的 `tw_doujin_event-data` 沒有任何保護。因此逐條改寫：
+
+| ADR-0037 的項目 | 本 ADR 取代為 |
+|---|---|
+| 憑證範圍表「目標 repository」列 | 僅 `dekkmarsvin/tw_doujin_event` 與 `dekkmarsvin/tw_doujin_event-data`。不再有逐活動追加的第三個名字 |
+| 憑證範圍表其餘各列（型別、權限、保存位置、有效期） | 不變 |
+| 「event-data 是每場活動一個 repository」整段，含「新活動的 repository 必須先加進 token 選取」這道刻意保留的人工關卡 | 刪除。該關卡的目的是擋住「token 範圍等於未來所有 repository」，決策第 1 點讓範圍恆為固定兩個，關卡失去對象 |
+| 發行前置的 ruleset 表 | 對象改為上述兩個 repository。`tw_doujin_event` 的要求不變（啟用 `branch_main`、加上「`main` 必須經 pull request」）；`tw_doujin_event-data` 在建立時即比照設定，見後果「遷移面」。archive 的兩個舊 repository 不在此列 |
+| 「token 的 actor 不得列入任何 ruleset 的 bypass 清單」 | 不變 |
 
 暫緩的是**實施時點**。理由是本 ADR 拿掉了它大部分的動機：
 
