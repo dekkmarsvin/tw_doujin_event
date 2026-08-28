@@ -22,6 +22,7 @@
     "pages:prepare": "node scripts/prepare-pages-build.mjs",
     "map:snapshot": "npm run build:editor && node scripts/export-static-event-map.mjs",
     "event:generate": "node scripts/generate-event.mjs",
+    "booths:import": "node scripts/import-official-booths.mjs",
     "event:onboard": "node scripts/onboard-event.mjs",
     "data:fetch": "node scripts/fetch-event-data.mjs",
     "data:stage": "node scripts/stage-event-data.mjs",

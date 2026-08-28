@@ -32,6 +32,14 @@ Wizard 會建立 `events/<eventId>/event.json`、`reference-selection.json` 與�
 
 相同答案重跑是 no-op。若活動資料夾或 reference stable ID 已存在但內容不同，generator 會拒絕覆寫，交由維護者 review 現有 diff 後處理。它不建立 `official-booths.json` 或 `map.json`，兩者仍由後續匯入與地圖 authoring 產生。
 
+### 0.1 匯入官方攤位表（新活動才需要）
+
+```bash
+npm run booths:import -- --workspace ../tw_doujin_event-data --event <eventId>
+```
+
+Importer 可接 CSV、TSV 或單一 HTML table；每個輸入批次都要明確指定 booth code、circle name 與 day／period 對映。主辦將不同日期放在不同頁面時，可分批貼上並為每批指定固定 day。它會先顯示列數、booth 數、完整 JSON 預覽與所有重複／缺漏／無法對映的來源列；只有輸入 `WRITE` 後才原子更新 `events/<eventId>/official-booths.json`。完成後仍需 review data repo diff。
+
 ### 1. 在 data repo 更新官方資料
 
 更新 `events/<eventId>/` 底下的 `event.json`、`official-booths.json`、`map.json` 或 `reference-selection.json`，依該活動的 `NOTICE` 檢查來源與差異，開 PR 通過 `data / check` 與人工 diff review 後合併。不要在程式 repo 直接建立真實活動快照。

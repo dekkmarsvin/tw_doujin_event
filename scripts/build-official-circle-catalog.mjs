@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertExactOrganizerEvidenceCoverage, consumeOrganizerEvidenceKey } from "./official-catalog-core.mjs";
+import { parseOfficialBoothData } from "./official-booth-importer.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,16 +23,15 @@ const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : ro
 
 const dataDir = path.join(workspace, ".event-data", eventId);
 const outputPath = path.join(workspace, "public", "data", "events", eventId, "circles.json");
-const [event, official, evidence] = await Promise.all([
+const [event, officialValue, evidence] = await Promise.all([
   readJsonFileStrict(path.join(dataDir, "event.json"), "event.json"),
   readJsonFileStrict(path.join(dataDir, "official-booths.json"), "official-booths.json"),
   readJsonFileStrict(path.join(root, "data", "circle-identities", "evidence.json"), "identity evidence"),
 ]);
 if (event.id !== eventId) throw new Error(`Event definition identity mismatch: expected ${eventId}, got ${event.id}.`);
+const official = parseOfficialBoothData(officialValue, event);
 const defaultArea = event.areas?.[0]?.id;
 if (typeof defaultArea !== "string" || !defaultArea) throw new Error("Event definition must declare a default area.");
-if (!Array.isArray(official.days) || official.days.length === 0) throw new Error("Official booth data has no days.");
-
 const normalize = (value) => value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase("zh-Hant");
 const sourceIndex = new Map();
 for (const entry of evidence.entries) {

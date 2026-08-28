@@ -114,6 +114,7 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 4. **B 最後**：屬於可及性改善而非能力改善，且 C 完成後需要搬移的程式面積會顯著縮小。
 5. **不可讓步的邊界**：無論 B 或 C，核准後仍只產出候選 `map.json`，仍須經 event-data repository 的 diff、測試與 review 才會公開。任何「按一下即公開」的路徑都不在本 ADR 授權範圍內。
 6. **不預先建立 template descriptor。** 先做排原語，再以實際使用判斷 descriptor 是否仍有存在理由。初稿把 descriptor 當成 C 的核心，該定位已撤回。
+7. **官方攤位匯入採獨立的 ephemeral model，不共用 `circle-plan-csv/1`。** CSV／TSV／HTML table 只在本機解析、明確對映與預覽；人工確認後才輸出既有 `official-booths.json`。使用者規劃匯入發生在 Circle ID 已存在之後，官方攤位匯入則發生在配號之前，兩者的 authority、核心欄位與寫入目標不同，共用 schema 會混淆資料層。
 
 ## 後果
 
@@ -121,7 +122,7 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 
 - **選項 A 已落地。** `npm run event:onboard`（`scripts/onboard-event.mjs`）取得固定 event-data commit、計算 SHA-256、驗證 reference pin 與 schema、staging 並原子更新 pin。第 8、9 步的手抄雜湊值已消失。見 [#90](https://github.com/dekkmarsvin/tw_doujin_event/issues/90)。
 - **選項 C 的 authoring 面已全數落地，含第二輪。** 三道硬阻擋已解除、排原語（`generateRowSlots`／`createRow`）已可建立整排；選項 C 定為「第二輪、屬主線前置」的三點錨定推算亦已實作（`inferRowFromAnchors`，[#99](https://github.com/dekkmarsvin/tw_doujin_event/issues/99)）。其後另有四項效率工作落地：逐步 undo/redo（[#96](https://github.com/dekkmarsvin/tw_doujin_event/issues/96)）、所有矩形型別的四角縮放與畫布尺寸可編輯（[#97](https://github.com/dekkmarsvin/tw_doujin_event/issues/97)）、多選與批次操作（[#98](https://github.com/dekkmarsvin/tw_doujin_event/issues/98)）、審閱留言串與草稿衝突具名（[#100](https://github.com/dekkmarsvin/tw_doujin_event/issues/100)、[#101](https://github.com/dekkmarsvin/tw_doujin_event/issues/101)）。**手動繪製任何場館已是可行路徑，#87 列出的五項 authoring 效率缺口已解決四項**（未解的活動選擇器不影響繪製速度，見下）。
-- **C 的第 3 步（貼上官方表格取代逐主辦爬蟲）不在上述範圍內。** 選項 C 已標明它「不因排原語而消失，是獨立問題」；它仍未實作，由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §2 承擔。
+- **C 的第 3 步（貼上官方表格取代逐主辦爬蟲）已由 [#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115) 落地。** CSV、TSV 與單一 HTML table 先轉為帶來源列號的 ephemeral 候選，欄位與 day／period 由維護者明確對映；重複、缺漏或歧義會停在預覽，輸入確認後才原子寫入既有 `official-booths.json` schema。新主辦不再需要 production adapter。
 - **選項 B 在本 ADR 中未定案。** 決策第 4 點把 B 定位為「可及性改善而非能力改善」。#104 §4a 指出這個定位不成立：`/editor` 只由 `vite.config.ts`（本機 vinext）建置，Pages build 的 rollup input 只有 `index.html` 與 `circle.html`（`vite.pages.config.ts`），因此**在 B 落地前，「不開 IDE 完成新活動」不是慢，是做不到**。B 另有一項本 ADR 未預見的前置：控制面在資料上只能定址目前 Pages 設定的單一 `eventId`（#104 §0）。B 的定案見 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)，實作範圍見 #104 §4（#117）。
 
 ### 既有後果
@@ -141,5 +142,5 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 - ~~是否為 `PublishedEventMap` 增加 provenance 欄位。~~ **已裁決（2026-08-27，[#89](https://github.com/dekkmarsvin/tw_doujin_event/issues/89) 以 not planned 關閉）：不加。**理由是目前沒有任何消費者會因 provenance 不同而改變發布、審閱或呈現行為；`ReportOrigin` 只存在 authoring UI，已發布快照仍由必填 `sourceName` 與 `confidence` 承載來源語意。出現明確消費者（例如人工繪製須套用不同審閱政策）時可重新開啟。
 - 排原語的編號規則要支援到什麼程度（等距、雙面對排、跳號、連格如 `A01,A02` 與 `A01A02`）。應由駁二與 CWT 的實際編號決定，見[主辦官方攤位頁面盤點](../research/taiwan-organizer-booth-pages.md)。
 - 企業／商業攤的表示方式。FF47 於 authoring 階段以 landmark 人工加入，CWT 的 `商` 則是官方編號的一等公民。排原語必須先解這一題。
-- 「貼上官方表格 → 預覽差異」的輸入格式是否共用[資料匯入契約](../contracts/data-import.md)的 CSV v1，或另立格式。
+- ~~「貼上官方表格 → 預覽差異」的輸入格式是否共用[資料匯入契約](../contracts/data-import.md)的 CSV v1，或另立格式。~~ **已裁決（2026-08-28，[#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115)）：不共用 `circle-plan-csv/1`。** 官方攤位匯入採不保存的 ephemeral model，確認後直接輸出既有 `official-booths.json`；只有未來需要交換中間檔時，才另立獨立 versioned schema。
 - ~~B 落地後，本機 authoring 環境是否保留為離線備援，或完全退場。~~ **已裁決於 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)（2026-08-28）：保留為離線備援。**
