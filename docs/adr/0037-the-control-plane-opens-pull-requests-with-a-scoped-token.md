@@ -1,6 +1,7 @@
 # ADR-0037：控制面以受限 GitHub 憑證開 PR，不得合併
 
-- 狀態：已定案（2026-08-28）
+- 狀態：已定案（2026-08-28）；**實施暫緩**，見 [ADR-0039](./0039-one-data-repo-for-events-and-references.md) 決策第 5 點。憑證範圍、不可讓步的邊界、外洩分析與 ruleset 前置全部維持有效；暫緩的是發行時點，重新評估的條件是第二場真實活動跑完一次
+- **部分被取代**：「fine-grained PAT 的 repository 選取每接一場新活動就要更新一次」由 ADR-0039 決策第 1 點消滅，token 目標固定為 `tw_doujin_event` 與 `tw_doujin_event-data` 兩個
 - 相關 issue：[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §5、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)
 - 延續：[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md)、[ADR-0032](./0032-shared-reference-data-is-public-and-pinned.md)、[ADR-0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)、[ADR-0035](./0035-new-event-onboarding-is-data-driven.md)
 - 部分取代：[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)「候選匯出不呼叫 GitHub」一句
