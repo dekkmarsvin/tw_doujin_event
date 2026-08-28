@@ -78,13 +78,16 @@ test("CSV columns are explicitly mapped and quoted cells produce the existing of
     ],
   });
   assert.equal(parseOfficialBoothData(preview.payload, event), preview.payload);
+  const placementCollision = structuredClone(preview.payload);
+  placementCollision.days[0].booths.push({ codes: ["a01"], name: "大小寫衝突" });
+  assert.throws(() => parseOfficialBoothData(placementCollision, event), /duplicate placement ID/);
 });
 
 test("TSV import reports missing, duplicate, and unmapped rows without producing a candidate", () => {
   const table = parseOfficialBoothImportTable([
     "period\tspace\tname",
     "D1\tA01\t社團甲",
-    "D1\tA01\t社團乙",
+    "D1\ta01\t社團乙",
     "D2\t\t社團丙",
     "unknown\tC01\t社團丁",
   ].join("\n"), "tsv");

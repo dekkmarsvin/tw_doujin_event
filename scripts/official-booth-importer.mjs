@@ -160,6 +160,10 @@ function boothCodes(value) {
   return normalizedText(value).split(/[\s,，、;；/]+/u).filter(Boolean);
 }
 
+function placementCodeKey(value) {
+  return value.toLocaleLowerCase("en-US");
+}
+
 export function prepareOfficialBoothImport({ table, event, mapping, headerRow = 1, requireEveryDay = true }) {
   const { event: validatedEvent, dayIds, daySet } = eventImportDefinition(event);
   if (!isRecord(table) || !Array.isArray(table.rows)) throw new Error("Parsed official booth table is required.");
@@ -188,20 +192,22 @@ export function prepareOfficialBoothImport({ table, event, mapping, headerRow = 
     if (codes.length === 0) errors.push({ row: row.line, code: "missing_booth", message: "booth code is missing" });
     if (!name) errors.push({ row: row.line, code: "missing_circle", message: "circle name is missing" });
     if (!day || codes.length === 0 || !name) continue;
-    if (new Set(codes).size !== codes.length) {
-      errors.push({ row: row.line, code: "duplicate_booth", message: `booth ${codes.find((code, index) => codes.indexOf(code) !== index)} is repeated in the same row` });
+    const rowCodeKeys = codes.map(placementCodeKey);
+    if (new Set(rowCodeKeys).size !== codes.length) {
+      const duplicateIndex = rowCodeKeys.findIndex((key, index) => rowCodeKeys.indexOf(key) !== index);
+      errors.push({ row: row.line, code: "duplicate_booth", message: `booth ${codes[duplicateIndex]} collapses to a repeated placement ID in the same row` });
       continue;
     }
     let duplicate = false;
     for (const code of codes) {
-      const previous = usedCodes.get(day).get(code);
+      const previous = usedCodes.get(day).get(placementCodeKey(code));
       if (previous !== undefined) {
-        errors.push({ row: row.line, code: "duplicate_booth", message: `booth ${code} for day ${day} was already imported from row ${previous}` });
+        errors.push({ row: row.line, code: "duplicate_booth", message: `booth ${code} for day ${day} collapses to the same placement ID as ${previous.code} from row ${previous.row}` });
         duplicate = true;
       }
     }
     if (duplicate) continue;
-    codes.forEach((code) => usedCodes.get(day).set(code, row.line));
+    codes.forEach((code) => usedCodes.get(day).set(placementCodeKey(code), { code, row: row.line }));
     groups.get(day).push({ codes, name });
     candidates.push({ day, codes, name, sourceRow: row.line });
   }
@@ -249,14 +255,14 @@ export function mergeOfficialBoothImports(previews, event) {
       for (const group of day.booths) {
         let duplicate = false;
         for (const code of group.codes) {
-          const previous = seenCodes.get(dayId).get(code);
+          const previous = seenCodes.get(dayId).get(placementCodeKey(code));
           if (previous !== undefined) {
-            errors.push({ row: null, code: "duplicate_booth", message: `booth ${code} for day ${dayId} appears in import batches ${previous} and ${previewIndex + 1}` });
+            errors.push({ row: null, code: "duplicate_booth", message: `booth ${code} for day ${dayId} collapses to the same placement ID as ${previous.code} from import batch ${previous.batch}` });
             duplicate = true;
           }
         }
         if (duplicate) continue;
-        group.codes.forEach((code) => seenCodes.get(dayId).set(code, previewIndex + 1));
+        group.codes.forEach((code) => seenCodes.get(dayId).set(placementCodeKey(code), { code, batch: previewIndex + 1 }));
         groups.get(dayId).push(group);
       }
     }
@@ -304,8 +310,9 @@ export function parseOfficialBoothData(value, event) {
       }
       if (normalizedText(group.name) !== group.name || group.name === "") throw new Error(`Official booth group ${id}/${groupIndex} has an invalid circle name.`);
       for (const code of group.codes) {
-        if (seenCodes.has(code)) throw new Error(`Official booth day ${id} has duplicate booth ${code}.`);
-        seenCodes.add(code);
+        const placementKey = placementCodeKey(code);
+        if (seenCodes.has(placementKey)) throw new Error(`Official booth day ${id} has booth ${code} that collapses to a duplicate placement ID.`);
+        seenCodes.add(placementKey);
       }
     }
   }
