@@ -57,11 +57,11 @@
 | [0007](./adr/0007-circle-name-is-not-circle-editable.md) | 社團名稱不可由社團自行編輯 |
 | [0008](./adr/0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker |
 | [0009](./adr/0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload |
-| [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**已實作**，取代 0003） |
+| [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**已實作**，取代 0003；0039 保留全域唯一 namespace，但暫緩跨活動沿用） |
 | [0011](./adr/0011-ff47-is-not-a-public-launch.md) | FF47 期間全站不公開，含社團端（**資料留在 repo 內一句已被 0014 取代；解除條件已被 0015 取代**） |
 | [0012](./adr/0012-first-party-sources-only.md) | 資料來源只留主辦官網與社團本人 |
 | [0013](./adr/0013-drop-the-legacy-circle-id-compatibility-path.md) | 移除舊 circle ID 的相容路徑（**部分取代 0010**） |
-| [0014](./adr/0014-event-data-lives-outside-the-code-repo.md) | 活動資料移出程式碼 repo，以固定 commit 引用（**部分取代 0011**） |
+| [0014](./adr/0014-event-data-lives-outside-the-code-repo.md) | 活動資料移出程式碼 repo，以固定 commit 引用（**部分取代 0011；一活動一 repo 已被 0039 取代**） |
 | [0015](./adr/0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含有第三方位元組時解除（**部分取代 0011**） |
 | [0016](./adr/0016-human-verification-guards-the-mailer.md) | 真人驗證擋在寄信入口，不擋全站 |
 | [0017](./adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 |
@@ -79,13 +79,14 @@
 | [0029](./adr/0029-public-production-gated-preview.md) | production 公開、preview 持續受 Access 保護 |
 | [0030](./adr/0030-organizer-category-catalog-circle-selected-value.md) | 主辦分類目錄是活動資料，逐社團類別是社團自述 |
 | [0031](./adr/0031-quota-exhaustion-is-not-a-release-gate.md) | 不以不可安全重現的配額耗盡作發布 gate，Pages Functions 設為 fail-open |
-| [0032](./adr/0032-shared-reference-data-is-public-and-pinned.md) | 共享 reference-data 公開、經 review 發布，活動只使用 pinned revision |
+| [0032](./adr/0032-shared-reference-data-is-public-and-pinned.md) | 共享 reference-data 公開、經 review 發布，活動只使用 pinned revision（**獨立 repo 與更新順序已被 0039 取代**） |
 | [0033](./adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) | 地圖貢獻採管理者授權、私人平行草稿與明確保存期限 |
 | [0034](./adr/0034-production-origin-gates-deployment.md) | Pages production origin 阻擋壞部署，自訂網域 smoke 提供非阻塞訊號 |
 | [0035](./adr/0035-new-event-onboarding-is-data-driven.md) | 新活動 onboarding 資料驅動；機械工序自動化與編輯器排原語已實作。選項 B 的定案見 0038 |
 | [0036](./adr/0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 |
-| [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併 |
+| [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併（**實施暫緩，見 0039 決策第 5 點**） |
 | [0038](./adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援（取代 0035 決策第 4 點）|
+| [0039](./adr/0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後（取代 0014 決策第 3 點、0032 決策第 1／5 點，限縮 0010 規則一）|
 
 ## 對外文件
 

@@ -1,6 +1,7 @@
 # ADR-0014：活動資料移出程式碼 repo，以固定 commit 引用
 
 - 狀態：已定案（2026-08-18）
+- **部分被取代**：決策第 3 點（一活動一個資料 repo）已由 [ADR-0039](./0039-one-data-repo-for-events-and-references.md)（2026-08-28）取代為單一資料 repo 分目錄。其餘決策點與「問題不在位元組住哪個 repo，而在資料變更有沒有一個可 review 的 diff」不變
 - 部分取代：[ADR-0011：FF47 期間全站不公開](./0011-ff47-is-not-a-public-launch.md) 的「FF47 的資料與地圖留在 repo 內」一句
 - 延續：[ADR-0008](./0008-static-public-reading-path.md)、[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md)、[ADR-0012](./0012-first-party-sources-only.md)
 - 相關契約：[社團目錄契約](../contracts/circle-catalog.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)

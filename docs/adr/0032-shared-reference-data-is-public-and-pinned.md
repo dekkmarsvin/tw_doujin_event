@@ -1,6 +1,7 @@
 # ADR-0032：共享 reference-data 公開且由活動固定版本
 
 - 狀態：已定案（2026-08-24）
+- **部分被取代**：決策第 1 點（獨立 reference repository）與第 5 點的三段更新順序已由 [ADR-0039](./0039-one-data-repo-for-events-and-references.md)（2026-08-28）取代。第 5 點的實質保證「reference 修正不會自動改變既有活動」由該 ADR 的逐活動 pin 承接，未放寬；第 2、3、4、6 點不變
 - 相關 issue：[#67](https://github.com/dekkmarsvin/tw_doujin_event/issues/67)、[#69](https://github.com/dekkmarsvin/tw_doujin_event/issues/69)、[#70](https://github.com/dekkmarsvin/tw_doujin_event/issues/70)
 - 延續：[ADR-0012](./0012-first-party-sources-only.md)、[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md)、[ADR-0028](./0028-versioned-json-event-definitions.md)、[ADR-0030](./0030-organizer-category-catalog-circle-selected-value.md)
 

@@ -16,6 +16,8 @@
 
 第三方工作簿與原始配置圖不在本 repo，也不參與 production catalog 生成。
 
+> **轉換狀態（2026-08-28）**：[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md) 已決定停止跨活動 identity linkage，但 #116 的產生器尚未落地。本 runbook 以下人工裁決步驟仍是目前可執行流程；在 #116 合併前不得省略。目標流程會保留全域唯一配號與 evidence exact coverage，只取消從其他活動名稱尋找沿用候選。
+
 ## 更新流程
 
 ### 1. 在 data repo 更新官方資料
@@ -35,8 +37,10 @@
 - 既有 booth 與既有社團沿用既有 ID。
 - 新社團先在 `allocations.json` 追加下一個序號，再在 `evidence.json` 增加 entry。
 - 只有名稱相同不足以合併；跨活動沿用或一對多情形必須人工核對可追溯證據。
-- 改名保留 `previousNames`，並更新 `currentName`。
+- 改名把舊名稱保留在 `aliases`，並更新 `currentName`。
 - 不刪除或重用已配發 ID。
+
+ADR-0039 的 #116 目標會把新活動的本節改成機械式產生：每個同活動 identity group 配置新的全域唯一 ID，同名不跨活動沿用。主辦來源若明確證明不同日期的群組屬於同一社團，grouping 會把所有 `<day>:<booth>` sources 配到同一 ID；只有名稱相同但沒有 grouping 證據時 fail closed。產生器以 dry-run 顯示 grouping 與 registry diff，核准後原子更新 allocations 與 evidence。identity registry 與新 pin 一起進同一張 main PR。這段是計畫，不是目前可用命令。
 
 FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀錄保存在 `ff47-official-migration-decisions.json`。它只說明已完成的裁決，不應在日常更新時修改。
 
