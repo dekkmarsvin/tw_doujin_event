@@ -1,15 +1,16 @@
-import { createHash } from "node:crypto";
 import { TextDecoder } from "node:util";
 
-export const REFERENCE_DATA_PIN_SCHEMA = "reference-data-pin/2";
-export const REFERENCE_DATA_REPOSITORY = "dekkmarsvin/tw_doujin_event-reference-data";
+// ADR-0039 removed the locator face of `reference-data-pin/2`: the repository,
+// the commit and the second fetch are gone because references now live in the
+// same commit the event data pin already names. What this module still owns is
+// the semantics — organizer roles, the category catalog revision, and the venue
+// and venue-space stable IDs — which moved to `events/<eventId>/reference-selection.json`.
+export const REFERENCE_SELECTION_SCHEMA = "reference-selection/1";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/;
 const REVISION = /^[a-z0-9][a-z0-9.-]*$/;
-const COMMIT = /^[0-9a-f]{40}$/;
-const HASH = /^[0-9a-f]{64}$/;
-const DATA_PATH = /^data\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.json$/;
+const REFERENCE_PATH = /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.json$/;
 const SOURCE_KINDS = new Set(["organizer-official", "venue-official"]);
 
 function isRecord(value) {
@@ -62,9 +63,9 @@ function requireTimestamp(value, label) {
     || Number.isNaN(Date.parse(value))) fail(`${label} must be an ISO timestamp.`);
 }
 
-function normalizeDataPath(value, label) {
+function normalizeReferencePath(value, label) {
   requireString(value, label);
-  if (!DATA_PATH.test(value) || value.startsWith("/") || value.includes("\\") || value.split("/").includes("..")) fail(`${label} is invalid.`);
+  if (!REFERENCE_PATH.test(value) || value.startsWith("/") || value.includes("\\") || value.split("/").includes("..")) fail(`${label} is invalid.`);
   return value;
 }
 
@@ -103,7 +104,7 @@ function parseReferenceRecord(value, relativePath) {
     requireString(record.name, `${relativePath}.name`);
     requireHttpsUrl(record.officialUrl, `${relativePath}.officialUrl`);
     validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`, new Set(["organizer-official"])), ["/name", "/officialUrl"], `${relativePath}.provenance`);
-    if (relativePath !== `data/organizers/${record.id}.json`) fail(`${relativePath} does not match organizer stable ID ${record.id}.`);
+    if (relativePath !== `references/organizers/${record.id}.json`) fail(`${relativePath} does not match organizer stable ID ${record.id}.`);
     return record;
   }
   if (record.schema === "category-catalog/1") {
@@ -128,7 +129,7 @@ function parseReferenceRecord(value, relativePath) {
       }
     }
     validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`, new Set(["organizer-official"])), requiredPointers, `${relativePath}.provenance`);
-    const expected = `data/category-catalogs/${record.organizerId}/${record.id}/${record.revision}.json`;
+    const expected = `references/category-catalogs/${record.organizerId}/${record.id}/${record.revision}.json`;
     if (relativePath !== expected) fail(`${relativePath} does not match category catalog identity.`);
     return record;
   }
@@ -138,7 +139,7 @@ function parseReferenceRecord(value, relativePath) {
     requireString(record.name, `${relativePath}.name`);
     requireHttpsUrl(record.officialUrl, `${relativePath}.officialUrl`);
     validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`), ["/name", "/officialUrl"], `${relativePath}.provenance`);
-    if (relativePath !== `data/venues/${record.id}.json`) fail(`${relativePath} does not match venue stable ID ${record.id}.`);
+    if (relativePath !== `references/venues/${record.id}.json`) fail(`${relativePath} does not match venue stable ID ${record.id}.`);
     return record;
   }
   if (record.schema === "venue-space/1") {
@@ -147,7 +148,7 @@ function parseReferenceRecord(value, relativePath) {
     requireString(record.venueId, `${relativePath}.venueId`, ID);
     requireString(record.name, `${relativePath}.name`);
     validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`), ["/name"], `${relativePath}.provenance`);
-    if (relativePath !== `data/venue-spaces/${record.id}.json`) fail(`${relativePath} does not match venue-space stable ID ${record.id}.`);
+    if (relativePath !== `references/venue-spaces/${record.id}.json`) fail(`${relativePath} does not match venue-space stable ID ${record.id}.`);
     return record;
   }
   fail(`${relativePath} uses unsupported reference schema ${record.schema ?? "(missing)"}.`);
@@ -158,7 +159,7 @@ function parseIdPath(value, label, category = false) {
   const keys = category ? ["id", "organizerId", "revision", "path"] : ["id", "path"];
   requireKeys(selection, keys, keys, label);
   requireString(selection.id, `${label}.id`, ID);
-  normalizeDataPath(selection.path, `${label}.path`);
+  normalizeReferencePath(selection.path, `${label}.path`);
   if (category) {
     requireString(selection.organizerId, `${label}.organizerId`, ID);
     requireString(selection.revision, `${label}.revision`, REVISION);
@@ -166,90 +167,88 @@ function parseIdPath(value, label, category = false) {
   return selection;
 }
 
-export function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
+/** Every `references/` path the selection names, each exactly once. */
+export function referenceSelectionPaths(selection) {
+  const paths = [
+    ...selection.organizers.map(({ path }) => path),
+    selection.categoryCatalog.path,
+    ...selection.venues.flatMap((venue) => [venue.path, ...venue.spaces.map(({ path }) => path)]),
+  ];
+  const unique = new Set();
+  for (const filePath of paths) {
+    if (unique.has(filePath)) fail(`Reference path is selected more than once: ${filePath}.`);
+    unique.add(filePath);
+  }
+  return paths;
 }
 
-export function parseReferenceDataPin(value) {
-  const pin = requireRecord(value, "reference data pin");
-  requireKeys(pin, ["schema", "eventId", "repository", "commit", "files", "selection"], ["schema", "eventId", "repository", "commit", "files", "selection"], "reference data pin");
-  if (pin.schema !== REFERENCE_DATA_PIN_SCHEMA) fail("Unsupported reference data pin schema.");
-  requireString(pin.eventId, "reference data pin eventId", EVENT_ID);
-  if (pin.repository !== REFERENCE_DATA_REPOSITORY) fail(`Reference data repository must be ${REFERENCE_DATA_REPOSITORY}.`);
-  requireString(pin.commit, "Reference data pin full commit SHA", COMMIT);
-  if (!Array.isArray(pin.files) || pin.files.length === 0) fail("Reference data pin must list files.");
-  const filePaths = new Set();
-  for (const [index, fileValue] of pin.files.entries()) {
-    const file = requireRecord(fileValue, `reference data pin files[${index}]`);
-    requireKeys(file, ["path", "sha256"], ["path", "sha256"], `reference data pin files[${index}]`);
-    normalizeDataPath(file.path, `reference data pin files[${index}].path`);
-    requireString(file.sha256, `reference data pin files[${index}].sha256`, HASH);
-    if (filePaths.has(file.path)) fail(`Duplicate reference data pin path ${file.path}.`);
-    filePaths.add(file.path);
-  }
-  const selection = requireRecord(pin.selection, "reference data pin selection");
-  requireKeys(selection, ["organizers", "categoryCatalog", "venues"], ["organizers", "categoryCatalog", "venues"], "reference data pin selection");
-  if (!Array.isArray(selection.organizers) || selection.organizers.length === 0) fail("Reference data pin must select organizers.");
+export function parseReferenceSelection(value) {
+  const selection = requireRecord(value, "reference selection");
+  requireKeys(
+    selection,
+    ["schema", "eventId", "organizers", "categoryCatalog", "venues"],
+    ["schema", "eventId", "organizers", "categoryCatalog", "venues"],
+    "reference selection",
+  );
+  if (selection.schema !== REFERENCE_SELECTION_SCHEMA) fail("Unsupported reference selection schema.");
+  requireString(selection.eventId, "reference selection eventId", EVENT_ID);
+  if (!Array.isArray(selection.organizers) || selection.organizers.length === 0) fail("Reference selection must select organizers.");
   const organizerIds = new Set();
   for (const [index, organizer] of selection.organizers.entries()) {
-    const parsed = parseIdPath(organizer, `reference data pin organizers[${index}]`);
+    const parsed = parseIdPath(organizer, `reference selection organizers[${index}]`);
     if (organizerIds.has(parsed.id)) fail(`Duplicate organizer stable ID ${parsed.id}.`);
     organizerIds.add(parsed.id);
   }
-  parseIdPath(selection.categoryCatalog, "reference data pin categoryCatalog", true);
+  parseIdPath(selection.categoryCatalog, "reference selection categoryCatalog", true);
   if (!organizerIds.has(selection.categoryCatalog.organizerId)) fail("Category catalog organizer must be selected.");
-  if (!Array.isArray(selection.venues) || selection.venues.length === 0) fail("Reference data pin must select venues.");
+  if (!Array.isArray(selection.venues) || selection.venues.length === 0) fail("Reference selection must select venues.");
   const venueIds = new Set();
   const spaceIds = new Set();
   for (const [venueIndex, venueValue] of selection.venues.entries()) {
-    const venue = requireRecord(venueValue, `reference data pin venues[${venueIndex}]`);
-    requireKeys(venue, ["id", "path", "spaces"], ["id", "path", "spaces"], `reference data pin venues[${venueIndex}]`);
-    parseIdPath({ id: venue.id, path: venue.path }, `reference data pin venues[${venueIndex}]`);
+    const venue = requireRecord(venueValue, `reference selection venues[${venueIndex}]`);
+    requireKeys(venue, ["id", "path", "spaces"], ["id", "path", "spaces"], `reference selection venues[${venueIndex}]`);
+    parseIdPath({ id: venue.id, path: venue.path }, `reference selection venues[${venueIndex}]`);
     if (venueIds.has(venue.id)) fail(`Duplicate venue stable ID ${venue.id}.`);
     venueIds.add(venue.id);
-    if (!Array.isArray(venue.spaces) || venue.spaces.length === 0) fail(`Reference data pin venues[${venueIndex}] must select spaces.`);
+    if (!Array.isArray(venue.spaces) || venue.spaces.length === 0) fail(`Reference selection venues[${venueIndex}] must select spaces.`);
     for (const [spaceIndex, space] of venue.spaces.entries()) {
-      const parsed = parseIdPath(space, `reference data pin venues[${venueIndex}].spaces[${spaceIndex}]`);
+      const parsed = parseIdPath(space, `reference selection venues[${venueIndex}].spaces[${spaceIndex}]`);
       if (spaceIds.has(parsed.id)) fail(`Duplicate venue-space stable ID ${parsed.id}.`);
       spaceIds.add(parsed.id);
     }
   }
-  const selectedRecords = [
-    ...selection.organizers,
-    selection.categoryCatalog,
-    ...selection.venues.flatMap((venue) => [{ id: venue.id, path: venue.path }, ...venue.spaces]),
-  ];
-  const selectedPaths = new Set();
-  for (const selected of selectedRecords) {
-    if (!filePaths.has(selected.path)) fail(`Selected reference path is not pinned: ${selected.path}.`);
-    if (selectedPaths.has(selected.path)) fail(`Reference path is selected more than once: ${selected.path}.`);
-    selectedPaths.add(selected.path);
+  referenceSelectionPaths(selection);
+  return selection;
+}
+
+/**
+ * The boundary the shared repository must keep: the pinned `references/` files
+ * and the selected paths are the same set, each used exactly once, and every
+ * record parses and relates as the selection claims.
+ */
+export function verifyReferenceFiles(value, filesByPath, eventId) {
+  const selection = parseReferenceSelection(value);
+  if (eventId !== undefined && selection.eventId !== eventId) {
+    fail(`Reference selection identity mismatch: expected ${eventId}, got ${selection.eventId}.`);
   }
-  if (selectedPaths.size !== filePaths.size) fail("Every pinned reference file must be selected exactly once.");
-  return pin;
-}
-
-export function rawReferenceFileUrl(pin, file) {
-  return `https://raw.githubusercontent.com/${pin.repository}/${pin.commit}/${file.path}`;
-}
-
-export function verifyReferenceDataFiles(value, filesByPath) {
-  const pin = parseReferenceDataPin(value);
+  const selectedPaths = new Set(referenceSelectionPaths(selection));
+  for (const filePath of filesByPath.keys()) {
+    if (!selectedPaths.has(filePath)) fail(`Pinned reference file is not selected: ${filePath}.`);
+  }
   const records = new Map();
-  for (const file of pin.files) {
-    const bytes = filesByPath.get(file.path);
-    if (!bytes) fail(`Pinned reference file is missing: ${file.path}.`);
-    const actual = sha256(bytes);
-    if (actual !== file.sha256) fail(`SHA-256 mismatch for ${file.path}: expected ${file.sha256}, got ${actual}.`);
+  for (const filePath of selectedPaths) {
+    const bytes = filesByPath.get(filePath);
+    if (!bytes) fail(`Selected reference file is missing: ${filePath}.`);
     let parsed;
     try {
       parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
-      fail(`Pinned reference file is not valid JSON: ${file.path}.`);
+      fail(`Pinned reference file is not valid JSON: ${filePath}.`);
     }
-    records.set(file.path, parseReferenceRecord(parsed, file.path));
+    records.set(filePath, parseReferenceRecord(parsed, filePath));
   }
-  const { organizers, categoryCatalog, venues } = pin.selection;
+
+  const { organizers, categoryCatalog, venues } = selection;
   const catalogRecord = records.get(categoryCatalog.path);
   for (const organizer of organizers) {
     const organizerRecord = records.get(organizer.path);
@@ -269,7 +268,7 @@ export function verifyReferenceDataFiles(value, filesByPath) {
       if (record.venueId !== venueRecord.id) fail(`Venue-space ${selected.id} does not belong to venue ${venueRecord.id}.`);
     }
   }
-  return { pin, records };
+  return { selection, records };
 }
 
 function equalSets(left, right) {
@@ -277,17 +276,17 @@ function equalSets(left, right) {
 }
 
 export function selectEventReferenceRecords(value, records, event) {
-  const pin = parseReferenceDataPin(value);
+  const selection = parseReferenceSelection(value);
   const definition = requireRecord(event, "event definition");
-  if (definition.id !== pin.eventId) fail(`Reference data pin identity mismatch: expected ${definition.id}, got ${pin.eventId}.`);
+  if (definition.id !== selection.eventId) fail(`Reference selection identity mismatch: expected ${definition.id}, got ${selection.eventId}.`);
   if (!Array.isArray(definition.organizerAssignments) || !Array.isArray(definition.venueAssignments)) {
     fail("Event definition reference assignments are invalid.");
   }
   const eventOrganizerIds = new Set(definition.organizerAssignments.map((assignment) => requireRecord(assignment, "event organizer assignment").organizerId));
-  const selectedOrganizerIds = new Set(pin.selection.organizers.map(({ id }) => id));
+  const selectedOrganizerIds = new Set(selection.organizers.map(({ id }) => id));
   if (!equalSets(eventOrganizerIds, selectedOrganizerIds)) fail("Event organizer assignments do not match the pinned selection.");
   const categoryCatalog = requireRecord(definition.categoryCatalog, "event category catalog");
-  const selectedCatalog = pin.selection.categoryCatalog;
+  const selectedCatalog = selection.categoryCatalog;
   if (categoryCatalog.id !== selectedCatalog.id || categoryCatalog.organizerId !== selectedCatalog.organizerId
     || categoryCatalog.revision !== selectedCatalog.revision) fail("Event category catalog does not match the pinned selection.");
   const eventVenueSpaces = new Map();
@@ -296,10 +295,14 @@ export function selectEventReferenceRecords(value, records, event) {
     if (!eventVenueSpaces.has(assignment.venueId)) eventVenueSpaces.set(assignment.venueId, new Set());
     eventVenueSpaces.get(assignment.venueId).add(assignment.venueSpaceId);
   }
-  const selectedVenueSpaces = new Map(pin.selection.venues.map((venue) => [venue.id, new Set(venue.spaces.map(({ id }) => id))]));
+  const selectedVenueSpaces = new Map(selection.venues.map((venue) => [venue.id, new Set(venue.spaces.map(({ id }) => id))]));
   if (!equalSets(new Set(eventVenueSpaces.keys()), new Set(selectedVenueSpaces.keys()))
     || [...eventVenueSpaces].some(([venueId, spaces]) => !equalSets(spaces, selectedVenueSpaces.get(venueId)))) {
     fail("Event venue assignments do not match the pinned selection.");
   }
-  return pin.files.map(({ path: filePath }) => records.get(filePath));
+  // Sorted rather than selection-authored order, so `reference-records.json`
+  // does not change when a selection is reordered without changing what it
+  // selects. The sort reproduces the byte order the two-repository layout
+  // published, because the old pin listed its files in the same order.
+  return referenceSelectionPaths(selection).sort().map((filePath) => records.get(filePath));
 }

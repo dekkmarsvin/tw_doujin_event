@@ -1,12 +1,16 @@
 {
-  "schema": "event-data-pin/1",
+  "schema": "event-data-pin/2",
   "eventId": "ff47",
-  "repository": "dekkmarsvin/tw_doujin_event-data-ff47",
-  "commit": "3d0aa0e1358a889b7af2889f5a5af2678bba9193",
+  "repository": "dekkmarsvin/tw_doujin_event-data",
+  "commit": "8c645303fa6838383549fbe8433ece081c514e1e",
   "files": [
-    { "path": "event.json", "sha256": "e25267996005ae465ce2008f044887194042cc7eb5b2bbd1df97e8aa5b809875" },
-    { "path": "official-booths.json", "sha256": "444c6c9c51c5dd6925f756886b2a0508139962b3039bb59a0f98eb8d710d1428" },
-    { "path": "map.json", "sha256": "d5f047a673baf166aba8e78794391523d305f340991eb608f74bc37de53f2a96" },
-    { "path": "reference-data-pin.json", "sha256": "c22baa5f4f00ab9dbf37aea95b5d5712ca41fb18c9c881a766096eb658c0b672" }
+    { "path": "events/ff47/event.json", "sha256": "e25267996005ae465ce2008f044887194042cc7eb5b2bbd1df97e8aa5b809875" },
+    { "path": "events/ff47/official-booths.json", "sha256": "444c6c9c51c5dd6925f756886b2a0508139962b3039bb59a0f98eb8d710d1428" },
+    { "path": "events/ff47/map.json", "sha256": "d5f047a673baf166aba8e78794391523d305f340991eb608f74bc37de53f2a96" },
+    { "path": "events/ff47/reference-selection.json", "sha256": "3eec20d97f03ea32bfb94ebb492b95308f51d8aad34dfc1ea675077cfdc1e1a4" },
+    { "path": "references/category-catalogs/frontier-anime/circle-topics/2026-08-25.json", "sha256": "94af076b77c08cdd5f28875b7578c86892242e991a4deb212194c8c7a50f60e3" },
+    { "path": "references/organizers/frontier-anime.json", "sha256": "72b920e6aea5fc61f0675cff5dde59f8b6eb9e6ec25a61da24afc1e434e5aef2" },
+    { "path": "references/venue-spaces/zhengyan-exhibition-area.json", "sha256": "f90fe419e34852637bee4078cdcb8f009b9602b40ea19273f543c32cce450b1e" },
+    { "path": "references/venues/taipei-expo-park-zhengyan-hall.json", "sha256": "b7a5c3be4758db71a264bbf994b57329c377abcea68f5e7edefd288494c2e244" }
   ]
 }

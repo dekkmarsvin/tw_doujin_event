@@ -10,9 +10,15 @@ import tseslint from "typescript-eslint";
 const eslintConfig = defineConfig([
   globalIgnores([
     ".next/**",
+    ".vinext/**",
+    ".wrangler/**",
     "dist/**",
     "out/**",
     "build/**",
+    // Isolated clones live here during onboarding and data migrations. They
+    // carry their own dist bundles, which the top-level "dist/**" pattern does
+    // not reach.
+    "work/**",
     "next-env.d.ts",
   ]),
   eslint.configs.recommended,

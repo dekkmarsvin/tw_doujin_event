@@ -30,7 +30,7 @@
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
 | [資料匯入](./contracts/data-import.md) | **P2，尚未對外開放**。規劃檔案交換已有底層能力；一般介面與外部服務串接尚未實作 |
 | [資料 inventory](./contracts/data-inventory.md) | 實際持有的資料、欄位、有效期與第三方；保存期限、到期處置與清除機制 |
-| [共享 reference-data pin](./contracts/reference-data-pin.md) | 主辦／分類／場館資料的完整 commit、逐檔 hash、stable ID 與 fail-closed fetch 契約 |
+| [共享 reference 選擇](./contracts/reference-selection.md) | 主辦／分類／場館資料的 stable ID selection 與 fail-closed 驗證邊界 |
 
 ## 流程
 

@@ -83,7 +83,7 @@ authoring build 會讀取目前 staged event definition，據此選擇 recognize
 ### 6. 匯出公開快照
 
 ```bash
-npm run map:snapshot -- ff47 ../tw_doujin_event-data-ff47/map.json
+npm run map:snapshot -- ff47 ../tw_doujin_event-data/events/ff47/map.json
 ```
 
 ```bash
