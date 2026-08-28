@@ -130,7 +130,8 @@ function parseHtml(text) {
       }
       column += colspan;
     }
-    const line = row.sourceCodeLocation?.startLine;
+    const line = row.sourceCodeLocation?.startLine
+      ?? cellMatches.find((cellMatch) => Number.isInteger(cellMatch.sourceCodeLocation?.startLine))?.sourceCodeLocation.startLine;
     if (!Number.isInteger(line)) throw new Error("HTML table row has no source location.");
     rows.push({ line, cells });
   }
