@@ -6,7 +6,7 @@
 - **暫緩**：[ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) 的實施時點，決策不撤銷，見決策第 5 點
 - 相關 issue：[#121](https://github.com/dekkmarsvin/tw_doujin_event/issues/121)、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)、[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)
 - 延續：[ADR-0026](./0026-public-sanitized-event-data-and-history-rewrite.md)、[ADR-0035](./0035-new-event-onboarding-is-data-driven.md)
-- 相關契約：[共享 reference-data pin 契約](../contracts/reference-data-pin.md)、[社團目錄契約](../contracts/circle-catalog.md)
+- 相關契約：[共享 reference 選擇契約](../contracts/reference-selection.md)、[社團目錄契約](../contracts/circle-catalog.md)
 
 ## 脈絡
 
@@ -69,7 +69,7 @@ ADR-0014 決策第 3 點「不是一個資料 repo 分目錄」由本點取代�
 
 pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `references/*`，全部帶逐檔 SHA-256，全部取自同一個 commit。**`reference-data-pin/2` 的 `repository` 與 `commit` 欄位隨之消失，第二次 fetch 與第二次原子替換也消失。**
 
-**`selection` 區塊不消失。**organizer 角色、category catalog revision、venue 與 venue-space 的 stable ID 關聯是語意，不是定位資訊，改存於 `events/<eventId>/reference-selection.json`。[共享 reference-data pin 契約](../contracts/reference-data-pin.md)的驗證邊界——每個 pinned file 恰好被 selection 使用一次、不接受未選取的額外記錄、event definition 的 assignment 必須與 selection 集合完全相等、任一項不符即 fail closed——原封不動。
+**`selection` 區塊不消失。**organizer 角色、category catalog revision、venue 與 venue-space 的 stable ID 關聯是語意，不是定位資訊，改存於 `events/<eventId>/reference-selection.json`。[共享 reference 選擇契約](../contracts/reference-selection.md)的驗證邊界——每個 pinned file 恰好被 selection 使用一次、不接受未選取的額外記錄、event definition 的 assignment 必須與 selection 集合完全相等、任一項不符即 fail closed——原封不動。
 
 ### 3. 否決 monorepo，但不宣稱逐活動歷史隔離
 
@@ -138,16 +138,16 @@ main PR 必須先在同一分支產生並 review identity registry diff，再執
 
 | 檔案 | 變更 |
 |---|---|
-| [`scripts/reference-data-fetcher.mjs`](../../scripts/reference-data-fetcher.mjs) | 第二次 fetch 與雙樹原子替換移除；`replaceVerifiedTrees` 降為單樹 |
+| `scripts/reference-data-fetcher.mjs` → [`scripts/event-data-fetcher.mjs`](../../scripts/event-data-fetcher.mjs)、[`scripts/verified-tree-replace.mjs`](../../scripts/verified-tree-replace.mjs) | 第二次 fetch 與雙樹原子替換移除；`replaceVerifiedTrees` 降為單樹 |
 | [`scripts/fetch-event-data.mjs`](../../scripts/fetch-event-data.mjs) | 移除 reference pin 的第二段解析與 `stageReferenceData` 呼叫；`files` 直接涵蓋 references |
 | [`scripts/event-data-pin-utils.mjs`](../../scripts/event-data-pin-utils.mjs) | pin schema 升版，`files` 路徑允許 `events/` 與 `references/` 兩個前綴 |
-| [`scripts/reference-data-pin-utils.mjs`](../../scripts/reference-data-pin-utils.mjs) | **只移除定位面**：`REFERENCE_DATA_REPOSITORY`、`rawReferenceFileUrl`、pin 的 `repository`／`commit` 欄位驗證。記錄 schema、`validateSources`、`validateProvenance`、`selectEventReferenceRecords` 與 selection 驗證**全部保留** |
+| `scripts/reference-data-pin-utils.mjs` → [`scripts/reference-selection-utils.mjs`](../../scripts/reference-selection-utils.mjs) | **只移除定位面**：`REFERENCE_DATA_REPOSITORY`、`rawReferenceFileUrl`、pin 的 `repository`／`commit` 欄位驗證。記錄 schema、`validateSources`、`validateProvenance`、`selectEventReferenceRecords` 與 selection 驗證**全部保留** |
 | [`scripts/stage-event-data.mjs`](../../scripts/stage-event-data.mjs) | selection 來源改為 `events/<eventId>/reference-selection.json` |
 | [`scripts/circle-identity-registry.mjs`](../../scripts/circle-identity-registry.mjs) 與 #116 的產生器 | 保留全域唯一配號；新增 event-local linkage 模式，以可 review 的主辦來源 grouping 合併同活動多日 sources；名稱只用於 drift 檢查，不得作為 grouping 依據，也不得從其他活動產生候選或沿用 ID |
 | [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) | main identity evidence 的完整 coverage gate 不變；main identity + pin PR 必須在同一分支通過 |
 | `npm run reference-data:fetch` | 移除。獨立維護 reference 時直接 clone 資料 repo |
-| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-data-pin.test.mjs`](../../tests/reference-data-pin.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、具主辦證據的同活動多日群組沿用同一 ID、只有同名但無 grouping 證據時 fail closed、同活動既有 source 重跑為 no-op |
-| [共享 reference-data pin 契約](../contracts/reference-data-pin.md)、[社團目錄契約](../contracts/circle-catalog.md)、[社團資料更新 runbook](../runbooks/catalog-data-update.md) | 前者只改定位面；後兩者改寫跨活動 linkage 與兩 PR 流程，完整 coverage 邊界不動 |
+| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-selection.test.mjs`](../../tests/reference-selection.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、具主辦證據的同活動多日群組沿用同一 ID、只有同名但無 grouping 證據時 fail closed、同活動既有 source 重跑為 no-op |
+| [共享 reference 選擇契約](../contracts/reference-selection.md)、[社團目錄契約](../contracts/circle-catalog.md)、[社團資料更新 runbook](../runbooks/catalog-data-update.md) | 前者只改定位面；後兩者改寫跨活動 linkage 與兩 PR 流程，完整 coverage 邊界不動 |
 
 **現在做最便宜。**只有一場活動時遷移是一個 PR；每多一場活動就多一個 repository 要搬、一組 ruleset 要建、一份 pin 要重算。
 
