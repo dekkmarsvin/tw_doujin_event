@@ -43,7 +43,7 @@ function parseDelimited(text, delimiter) {
         quoted = false;
       } else {
         cell += character;
-        if (character === "\n") line += 1;
+        if (character === "\r" || (character === "\n" && input[index - 1] !== "\r")) line += 1;
       }
       continue;
     }

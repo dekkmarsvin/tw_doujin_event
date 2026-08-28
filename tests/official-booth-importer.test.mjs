@@ -82,6 +82,14 @@ test("CSV columns are explicitly mapped and quoted cells produce the existing of
   const placementCollision = structuredClone(preview.payload);
   placementCollision.days[0].booths.push({ codes: ["a01"], name: "大小寫衝突" });
   assert.throws(() => parseOfficialBoothData(placementCollision, event), /duplicate placement ID/);
+
+  for (const lineEnding of ["\r", "\r\n"]) {
+    const multiline = parseOfficialBoothImportTable(
+      `name,day,booth${lineEnding}"甲${lineEnding}乙",sat,A01${lineEnding}丙,sun,B01`,
+      "csv",
+    );
+    assert.deepEqual(multiline.rows.map((row) => row.line), [1, 2, 4]);
+  }
 });
 
 test("TSV import reports missing, duplicate, and unmapped rows without producing a candidate", () => {
