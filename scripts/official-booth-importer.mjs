@@ -1,0 +1,398 @@
+import { lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { parseFragment } from "parse5";
+import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
+
+const FORMATS = new Set(["csv", "tsv", "html"]);
+
+function isRecord(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function onlyKeys(value, allowed, label) {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  if (unknown) throw new Error(`${label} contains unknown field ${unknown}.`);
+}
+
+function normalizedText(value) {
+  return String(value ?? "").normalize("NFKC").trim().replace(/\s+/gu, " ");
+}
+
+function parseDelimited(text, delimiter) {
+  const input = String(text ?? "").replace(/^\uFEFF/u, "");
+  const rows = [];
+  let cells = [];
+  let cell = "";
+  let quoted = false;
+  let line = 1;
+  let rowLine = 1;
+  function finishRow() {
+    cells.push(cell);
+    rows.push({ line: rowLine, cells });
+    cells = [];
+    cell = "";
+    rowLine = line;
+  }
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (quoted) {
+      if (character === '"' && input[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        cell += character;
+        if (character === "\r" || (character === "\n" && input[index - 1] !== "\r")) line += 1;
+      }
+      continue;
+    }
+    if (character === '"' && cell === "") quoted = true;
+    else if (character === delimiter) {
+      cells.push(cell);
+      cell = "";
+    } else if (character === "\r" || character === "\n") {
+      if (character === "\r" && input[index + 1] === "\n") index += 1;
+      line += 1;
+      finishRow();
+      rowLine = line;
+    } else cell += character;
+  }
+  if (quoted) throw new Error(`Delimited input has an unterminated quoted field starting on line ${rowLine}.`);
+  if (cell !== "" || cells.length > 0 || (input.length > 0 && !/[\r\n]$/u.test(input))) finishRow();
+  return rows;
+}
+
+function elementsByTag(node, tagName) {
+  const elements = [];
+  for (const child of node.childNodes ?? []) {
+    if (child.tagName === tagName) elements.push(child);
+    elements.push(...elementsByTag(child, tagName));
+  }
+  return elements;
+}
+
+function tableRows(table) {
+  const rows = [];
+  function visit(node) {
+    for (const child of node.childNodes ?? []) {
+      if (child.tagName === "table") continue;
+      if (child.tagName === "tr") rows.push(child);
+      else visit(child);
+    }
+  }
+  visit(table);
+  return rows;
+}
+
+function htmlText(node) {
+  if (node.nodeName === "#text") return node.value;
+  if (node.tagName === "br") return "\n";
+  return (node.childNodes ?? []).map(htmlText).join("");
+}
+
+function positiveSpan(element, name, zeroValue = null) {
+  const attribute = element.attrs.find(({ name: attributeName }) => attributeName === name);
+  if (!attribute) return 1;
+  if (!/^\d+$/u.test(attribute.value)) throw new Error(`HTML table has an invalid ${name}.`);
+  const value = Number(attribute.value);
+  if (value === 0 && zeroValue !== null) return zeroValue;
+  if (!Number.isInteger(value) || value < 1) throw new Error(`HTML table has an invalid ${name}.`);
+  return value;
+}
+
+function parseHtml(text) {
+  const input = String(text ?? "");
+  const fragment = parseFragment(input, { sourceCodeLocationInfo: true });
+  const tables = elementsByTag(fragment, "table");
+  if (tables.length !== 1) throw new Error(`HTML input must contain exactly one table; found ${tables.length}.`);
+  const table = tables[0];
+  const rows = [];
+  const spans = new Map();
+  const parsedRows = tableRows(table);
+  for (let rowIndex = 0; rowIndex < parsedRows.length; rowIndex += 1) {
+    const row = parsedRows[rowIndex];
+    let groupEndIndex = rowIndex + 1;
+    while (groupEndIndex < parsedRows.length && parsedRows[groupEndIndex].parentNode === row.parentNode) groupEndIndex += 1;
+    const rowsRemainingInGroup = groupEndIndex - rowIndex;
+    const cells = [];
+    for (const [column, span] of spans) {
+      cells[column] = span.value;
+      span.remaining -= 1;
+      if (span.remaining === 0) spans.delete(column);
+    }
+    let column = 0;
+    const cellMatches = row.childNodes.filter(({ tagName }) => tagName === "td" || tagName === "th");
+    if (cellMatches.length === 0) continue;
+    for (const cellMatch of cellMatches) {
+      while (cells[column] !== undefined) column += 1;
+      const value = normalizedText(htmlText(cellMatch));
+      const colspan = positiveSpan(cellMatch, "colspan");
+      const rowspan = Math.min(positiveSpan(cellMatch, "rowspan", rowsRemainingInGroup), rowsRemainingInGroup);
+      for (let offset = 0; offset < colspan; offset += 1) {
+        if (cells[column + offset] !== undefined) throw new Error("HTML table has overlapping spans.");
+        cells[column + offset] = value;
+        if (rowspan > 1) spans.set(column + offset, { value, remaining: rowspan - 1 });
+      }
+      column += colspan;
+    }
+    const line = row.sourceCodeLocation?.startLine
+      ?? cellMatches.find((cellMatch) => Number.isInteger(cellMatch.sourceCodeLocation?.startLine))?.sourceCodeLocation.startLine;
+    if (!Number.isInteger(line)) throw new Error("HTML table row has no source location.");
+    rows.push({ line, cells });
+  }
+  if (spans.size > 0) throw new Error("HTML table rowspan extends beyond the last row.");
+  return rows;
+}
+
+export function parseOfficialBoothImportTable(text, format) {
+  if (!FORMATS.has(format)) throw new Error(`Unsupported official booth import format ${format}.`);
+  const parsed = format === "html" ? parseHtml(text) : parseDelimited(text, format === "csv" ? "," : "\t");
+  const rows = parsed.filter((row) => row.cells.some((cell) => normalizedText(cell) !== ""));
+  if (rows.length < 2) throw new Error("Official booth input must contain a header and at least one data row.");
+  return { format, rows };
+}
+
+function eventImportDefinition(event) {
+  if (!isRecord(event) || !Array.isArray(event.days) || event.days.length === 0
+    || !isRecord(event.officialData) || !isRecord(event.officialData.boothListUrls)) {
+    throw new Error("A validated event definition is required for official booth import.");
+  }
+  const dayIds = event.days.map(({ id }) => String(id));
+  if (new Set(dayIds).size !== dayIds.length) throw new Error("Event day ids must be unique.");
+  for (const day of dayIds) {
+    const url = event.officialData.boothListUrls[day];
+    if (typeof url !== "string" || !url.startsWith("https://")) throw new Error(`Event is missing an official booth URL for day ${day}.`);
+  }
+  return { event, dayIds, daySet: new Set(dayIds) };
+}
+
+function mappedDay(mapping, row, daySet) {
+  if (mapping.fixedDay !== undefined && mapping.fixedDay !== null && String(mapping.fixedDay).trim() !== "") {
+    const fixed = String(mapping.fixedDay);
+    return daySet.has(fixed) ? fixed : null;
+  }
+  const raw = normalizedText(row.cells[mapping.dayColumn]);
+  const mapped = mapping.dayValues instanceof Map ? mapping.dayValues.get(raw) : mapping.dayValues?.[raw];
+  const value = mapped === undefined || mapped === null ? null : String(mapped);
+  return value && daySet.has(value) ? value : null;
+}
+
+function boothCodes(value, mapping) {
+  const raw = normalizedText(value);
+  if (!raw) return { codes: [], error: null };
+  if (mapping.boothCodeMode === "single") return { codes: [raw], error: null };
+  if (mapping.boothCodeMode === "delimited") {
+    return { codes: raw.split(/[\s,，、;；/]+/u).filter(Boolean), error: null };
+  }
+  if (mapping.boothCodeMode === "fixed-width") {
+    const width = mapping.boothCodeWidth;
+    if (!Number.isInteger(width) || width < 1) throw new Error("Fixed-width booth parsing requires a positive code width.");
+    if (/[\s,，、;；/]/u.test(raw)) {
+      return { codes: [], error: "fixed-width booth input must not contain delimiters" };
+    }
+    const characters = [...raw];
+    if (characters.length % width !== 0) {
+      return { codes: [], error: `booth value has ${characters.length} characters and cannot be split into width-${width} codes` };
+    }
+    const codes = [];
+    for (let index = 0; index < characters.length; index += width) codes.push(characters.slice(index, index + width).join(""));
+    return { codes, error: null };
+  }
+  throw new Error("Official booth code parsing mode must be single, delimited, or fixed-width.");
+}
+
+function placementCodeKey(value) {
+  return value.toLocaleLowerCase("en-US");
+}
+
+export function prepareOfficialBoothImport({ table, event, mapping, headerRow = 1, requireEveryDay = true }) {
+  const { event: validatedEvent, dayIds, daySet } = eventImportDefinition(event);
+  if (!isRecord(table) || !Array.isArray(table.rows)) throw new Error("Parsed official booth table is required.");
+  if (!Number.isInteger(headerRow) || headerRow < 1 || headerRow >= table.rows.length) {
+    throw new Error("Header row must select a row before the imported data.");
+  }
+  if (!isRecord(mapping) || !Number.isInteger(mapping.boothColumn) || !Number.isInteger(mapping.circleColumn)
+    || !["single", "delimited", "fixed-width"].includes(mapping.boothCodeMode)
+    || (mapping.boothCodeMode === "fixed-width" && (!Number.isInteger(mapping.boothCodeWidth) || mapping.boothCodeWidth < 1))
+    || ((mapping.fixedDay === undefined || mapping.fixedDay === null) && !Number.isInteger(mapping.dayColumn))) {
+    throw new Error("Official booth column mapping is incomplete.");
+  }
+  const usesDayColumn = mapping.fixedDay === undefined || mapping.fixedDay === null;
+  const mappedColumns = [mapping.boothColumn, mapping.circleColumn, ...(usesDayColumn ? [mapping.dayColumn] : [])];
+  if (mappedColumns.some((column) => column < 0) || new Set(mappedColumns).size !== mappedColumns.length) {
+    throw new Error("Official booth column mapping must use distinct non-negative columns.");
+  }
+
+  const errors = [];
+  const candidates = [];
+  const groups = new Map(dayIds.map((day) => [day, []]));
+  const usedCodes = new Map(dayIds.map((day) => [day, new Map()]));
+  for (const row of table.rows.slice(headerRow)) {
+    const day = mappedDay(mapping, row, daySet);
+    const parsedBooths = boothCodes(row.cells[mapping.boothColumn], mapping);
+    const codes = parsedBooths.codes;
+    const name = normalizedText(row.cells[mapping.circleColumn]);
+    if (!day) errors.push({ row: row.line, code: "unmapped_day", message: "day/period is missing or not explicitly mapped to this event" });
+    if (parsedBooths.error) errors.push({ row: row.line, code: "unparseable_booth", message: parsedBooths.error });
+    else if (codes.length === 0) errors.push({ row: row.line, code: "missing_booth", message: "booth code is missing" });
+    if (!name) errors.push({ row: row.line, code: "missing_circle", message: "circle name is missing" });
+    if (!day || parsedBooths.error || codes.length === 0 || !name) continue;
+    const rowCodeKeys = codes.map(placementCodeKey);
+    if (new Set(rowCodeKeys).size !== codes.length) {
+      const duplicateIndex = rowCodeKeys.findIndex((key, index) => rowCodeKeys.indexOf(key) !== index);
+      errors.push({ row: row.line, code: "duplicate_booth", message: `booth ${codes[duplicateIndex]} collapses to a repeated placement ID in the same row` });
+      continue;
+    }
+    let duplicate = false;
+    for (const code of codes) {
+      const previous = usedCodes.get(day).get(placementCodeKey(code));
+      if (previous !== undefined) {
+        errors.push({ row: row.line, code: "duplicate_booth", message: `booth ${code} for day ${day} collapses to the same placement ID as ${previous.code} from row ${previous.row}` });
+        duplicate = true;
+      }
+    }
+    if (duplicate) continue;
+    codes.forEach((code) => usedCodes.get(day).set(placementCodeKey(code), { code, row: row.line }));
+    groups.get(day).push({ codes, name });
+    candidates.push({ day, codes, name, sourceRow: row.line });
+  }
+  if (requireEveryDay) {
+    for (const day of dayIds) {
+      if (groups.get(day).length === 0) errors.push({ row: null, code: "missing_day", message: `no booth rows were imported for event day ${day}` });
+    }
+  }
+  const payload = {
+    schemaVersion: 1,
+    days: validatedEvent.days.map(({ id }) => ({
+      day: id,
+      url: validatedEvent.officialData.boothListUrls[String(id)],
+      booths: groups.get(String(id)),
+    })).filter((day) => requireEveryDay || day.booths.length > 0),
+  };
+  if (errors.length === 0 && requireEveryDay) parseOfficialBoothData(payload, validatedEvent);
+  return {
+    header: table.rows[headerRow - 1].cells.map(normalizedText),
+    importedRows: [...groups.values()].reduce((count, booths) => count + booths.length, 0),
+    boothCount: [...usedCodes.values()].reduce((count, codes) => count + codes.size, 0),
+    candidates,
+    errors,
+    payload: errors.length === 0 ? payload : null,
+  };
+}
+
+export function mergeOfficialBoothImports(previews, event) {
+  const { event: validatedEvent, dayIds } = eventImportDefinition(event);
+  if (!Array.isArray(previews) || previews.length === 0) throw new Error("At least one official booth import preview is required.");
+  const errors = [];
+  const groups = new Map(dayIds.map((day) => [day, []]));
+  const seenCodes = new Map(dayIds.map((day) => [day, new Map()]));
+  for (const [previewIndex, preview] of previews.entries()) {
+    if (!isRecord(preview) || preview.errors?.length > 0 || !isRecord(preview.payload)) {
+      errors.push({ row: null, code: "invalid_batch", message: `import batch ${previewIndex + 1} has unresolved errors` });
+      continue;
+    }
+    for (const day of preview.payload.days ?? []) {
+      const dayId = String(day.day);
+      if (!groups.has(dayId) || day.url !== validatedEvent.officialData.boothListUrls[dayId] || !Array.isArray(day.booths)) {
+        errors.push({ row: null, code: "invalid_batch", message: `import batch ${previewIndex + 1} does not match the event` });
+        continue;
+      }
+      for (const group of day.booths) {
+        let duplicate = false;
+        for (const code of group.codes) {
+          const previous = seenCodes.get(dayId).get(placementCodeKey(code));
+          if (previous !== undefined) {
+            errors.push({ row: null, code: "duplicate_booth", message: `booth ${code} for day ${dayId} collapses to the same placement ID as ${previous.code} from import batch ${previous.batch}` });
+            duplicate = true;
+          }
+        }
+        if (duplicate) continue;
+        group.codes.forEach((code) => seenCodes.get(dayId).set(placementCodeKey(code), { code, batch: previewIndex + 1 }));
+        groups.get(dayId).push(group);
+      }
+    }
+  }
+  for (const day of dayIds) {
+    if (groups.get(day).length === 0) errors.push({ row: null, code: "missing_day", message: `no booth rows were imported for event day ${day}` });
+  }
+  const payload = {
+    schemaVersion: 1,
+    days: validatedEvent.days.map(({ id }) => ({
+      day: id,
+      url: validatedEvent.officialData.boothListUrls[String(id)],
+      booths: groups.get(String(id)),
+    })),
+  };
+  if (errors.length === 0) parseOfficialBoothData(payload, validatedEvent);
+  return {
+    errors,
+    payload: errors.length === 0 ? payload : null,
+    importedRows: [...groups.values()].reduce((count, booths) => count + booths.length, 0),
+    boothCount: [...seenCodes.values()].reduce((count, codes) => count + codes.size, 0),
+  };
+}
+
+export function parseOfficialBoothData(value, event) {
+  const { event: validatedEvent, dayIds } = eventImportDefinition(event);
+  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.days)) throw new Error("Unsupported official booth data schema.");
+  onlyKeys(value, ["schemaVersion", "days"], "Official booth data");
+  if (value.days.length !== dayIds.length) throw new Error("Official booth data must cover every event day exactly once.");
+  const seenDays = new Set();
+  for (const [dayIndex, day] of value.days.entries()) {
+    if (!isRecord(day)) throw new Error(`Official booth day ${dayIndex} is invalid.`);
+    onlyKeys(day, ["day", "url", "booths"], `Official booth day ${dayIndex}`);
+    const id = String(day.day);
+    if (!dayIds.includes(id) || seenDays.has(id)) throw new Error(`Official booth day ${id} is unknown or duplicated.`);
+    seenDays.add(id);
+    if (day.url !== validatedEvent.officialData.boothListUrls[id]) throw new Error(`Official booth day ${id} does not use the event's official URL.`);
+    if (!Array.isArray(day.booths) || day.booths.length === 0) throw new Error(`Official booth day ${id} has no booths.`);
+    const seenCodes = new Set();
+    for (const [groupIndex, group] of day.booths.entries()) {
+      if (!isRecord(group)) throw new Error(`Official booth group ${id}/${groupIndex} is invalid.`);
+      onlyKeys(group, ["codes", "name"], `Official booth group ${id}/${groupIndex}`);
+      if (!Array.isArray(group.codes) || group.codes.length === 0 || !group.codes.every((code) => normalizedText(code) === code && code !== "")) {
+        throw new Error(`Official booth group ${id}/${groupIndex} has invalid codes.`);
+      }
+      if (normalizedText(group.name) !== group.name || group.name === "") throw new Error(`Official booth group ${id}/${groupIndex} has an invalid circle name.`);
+      for (const code of group.codes) {
+        const placementKey = placementCodeKey(code);
+        if (seenCodes.has(placementKey)) throw new Error(`Official booth day ${id} has booth ${code} that collapses to a duplicate placement ID.`);
+        seenCodes.add(placementKey);
+      }
+    }
+  }
+  return value;
+}
+
+async function exists(target) {
+  try { return await lstat(target); } catch (error) { if (error?.code === "ENOENT") return null; throw error; }
+}
+
+export async function writeOfficialBoothCandidate({ workspace, eventId, payload, event, confirmed, fileSystemOverrides = {} }) {
+  if (confirmed !== true) throw new Error("Official booth candidate was not confirmed; nothing was written.");
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(eventId ?? "") || event?.id !== eventId) {
+    throw new Error("Official booth candidate event identity does not match its destination.");
+  }
+  parseOfficialBoothData(payload, event);
+  const eventDirectory = path.join(path.resolve(workspace), "events", eventId);
+  const directoryStat = await exists(eventDirectory);
+  if (!directoryStat?.isDirectory()) throw new Error(`Event directory does not exist: ${eventDirectory}.`);
+  const destination = path.join(eventDirectory, "official-booths.json");
+  const serialized = `${JSON.stringify(payload, null, 2)}\n`;
+  try {
+    if (await readFile(destination, "utf8") === serialized) return { changed: false, destination };
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const temporaryRoot = await mkdtemp(path.join(eventDirectory, ".tmp-official-booths-"));
+  try {
+    const temporary = path.join(temporaryRoot, "official-booths.json");
+    await mkdir(path.dirname(temporary), { recursive: true });
+    await writeFile(temporary, serialized);
+    await replaceVerifiedTrees([{ temporary, destination }], fileSystemOverrides);
+    return { changed: true, destination };
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
