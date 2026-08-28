@@ -91,11 +91,12 @@ function htmlText(node) {
   return (node.childNodes ?? []).map(htmlText).join("");
 }
 
-function positiveSpan(element, name) {
+function positiveSpan(element, name, zeroValue = null) {
   const attribute = element.attrs.find(({ name: attributeName }) => attributeName === name);
   if (!attribute) return 1;
   if (!/^\d+$/u.test(attribute.value)) throw new Error(`HTML table has an invalid ${name}.`);
   const value = Number(attribute.value);
+  if (value === 0 && zeroValue !== null) return zeroValue;
   if (!Number.isInteger(value) || value < 1) throw new Error(`HTML table has an invalid ${name}.`);
   return value;
 }
@@ -108,7 +109,12 @@ function parseHtml(text) {
   const table = tables[0];
   const rows = [];
   const spans = new Map();
-  for (const row of tableRows(table)) {
+  const parsedRows = tableRows(table);
+  for (let rowIndex = 0; rowIndex < parsedRows.length; rowIndex += 1) {
+    const row = parsedRows[rowIndex];
+    let groupEndIndex = rowIndex + 1;
+    while (groupEndIndex < parsedRows.length && parsedRows[groupEndIndex].parentNode === row.parentNode) groupEndIndex += 1;
+    const rowsRemainingInGroup = groupEndIndex - rowIndex;
     const cells = [];
     for (const [column, span] of spans) {
       cells[column] = span.value;
@@ -122,7 +128,7 @@ function parseHtml(text) {
       while (cells[column] !== undefined) column += 1;
       const value = normalizedText(htmlText(cellMatch));
       const colspan = positiveSpan(cellMatch, "colspan");
-      const rowspan = positiveSpan(cellMatch, "rowspan");
+      const rowspan = Math.min(positiveSpan(cellMatch, "rowspan", rowsRemainingInGroup), rowsRemainingInGroup);
       for (let offset = 0; offset < colspan; offset += 1) {
         if (cells[column + offset] !== undefined) throw new Error("HTML table has overlapping spans.");
         cells[column + offset] = value;
