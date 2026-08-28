@@ -21,6 +21,7 @@
     "pages:deploy": "npm run build:production && wrangler pages deploy dist --project-name=tw-catalog --branch=main",
     "pages:prepare": "node scripts/prepare-pages-build.mjs",
     "map:snapshot": "npm run build:editor && node scripts/export-static-event-map.mjs",
+    "event:generate": "node scripts/generate-event.mjs",
     "event:onboard": "node scripts/onboard-event.mjs",
     "data:fetch": "node scripts/fetch-event-data.mjs",
     "data:stage": "node scripts/stage-event-data.mjs",
