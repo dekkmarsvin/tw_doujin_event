@@ -156,8 +156,28 @@ function mappedDay(mapping, row, daySet) {
   return value && daySet.has(value) ? value : null;
 }
 
-function boothCodes(value) {
-  return normalizedText(value).split(/[\s,，、;；/]+/u).filter(Boolean);
+function boothCodes(value, mapping) {
+  const raw = normalizedText(value);
+  if (!raw) return { codes: [], error: null };
+  if (mapping.boothCodeMode === "single") return { codes: [raw], error: null };
+  if (mapping.boothCodeMode === "delimited") {
+    return { codes: raw.split(/[\s,，、;；/]+/u).filter(Boolean), error: null };
+  }
+  if (mapping.boothCodeMode === "fixed-width") {
+    const width = mapping.boothCodeWidth;
+    if (!Number.isInteger(width) || width < 1) throw new Error("Fixed-width booth parsing requires a positive code width.");
+    if (/[\s,，、;；/]/u.test(raw)) {
+      return { codes: [], error: "fixed-width booth input must not contain delimiters" };
+    }
+    const characters = [...raw];
+    if (characters.length % width !== 0) {
+      return { codes: [], error: `booth value has ${characters.length} characters and cannot be split into width-${width} codes` };
+    }
+    const codes = [];
+    for (let index = 0; index < characters.length; index += width) codes.push(characters.slice(index, index + width).join(""));
+    return { codes, error: null };
+  }
+  throw new Error("Official booth code parsing mode must be single, delimited, or fixed-width.");
 }
 
 function placementCodeKey(value) {
@@ -171,6 +191,8 @@ export function prepareOfficialBoothImport({ table, event, mapping, headerRow = 
     throw new Error("Header row must select a row before the imported data.");
   }
   if (!isRecord(mapping) || !Number.isInteger(mapping.boothColumn) || !Number.isInteger(mapping.circleColumn)
+    || !["single", "delimited", "fixed-width"].includes(mapping.boothCodeMode)
+    || (mapping.boothCodeMode === "fixed-width" && (!Number.isInteger(mapping.boothCodeWidth) || mapping.boothCodeWidth < 1))
     || ((mapping.fixedDay === undefined || mapping.fixedDay === null) && !Number.isInteger(mapping.dayColumn))) {
     throw new Error("Official booth column mapping is incomplete.");
   }
@@ -186,12 +208,14 @@ export function prepareOfficialBoothImport({ table, event, mapping, headerRow = 
   const usedCodes = new Map(dayIds.map((day) => [day, new Map()]));
   for (const row of table.rows.slice(headerRow)) {
     const day = mappedDay(mapping, row, daySet);
-    const codes = boothCodes(row.cells[mapping.boothColumn]);
+    const parsedBooths = boothCodes(row.cells[mapping.boothColumn], mapping);
+    const codes = parsedBooths.codes;
     const name = normalizedText(row.cells[mapping.circleColumn]);
     if (!day) errors.push({ row: row.line, code: "unmapped_day", message: "day/period is missing or not explicitly mapped to this event" });
-    if (codes.length === 0) errors.push({ row: row.line, code: "missing_booth", message: "booth code is missing" });
+    if (parsedBooths.error) errors.push({ row: row.line, code: "unparseable_booth", message: parsedBooths.error });
+    else if (codes.length === 0) errors.push({ row: row.line, code: "missing_booth", message: "booth code is missing" });
     if (!name) errors.push({ row: row.line, code: "missing_circle", message: "circle name is missing" });
-    if (!day || codes.length === 0 || !name) continue;
+    if (!day || parsedBooths.error || codes.length === 0 || !name) continue;
     const rowCodeKeys = codes.map(placementCodeKey);
     if (new Set(rowCodeKeys).size !== codes.length) {
       const duplicateIndex = rowCodeKeys.findIndex((key, index) => rowCodeKeys.indexOf(key) !== index);

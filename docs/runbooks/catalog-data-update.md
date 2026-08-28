@@ -38,7 +38,7 @@ Wizard 會建立 `events/<eventId>/event.json`、`reference-selection.json` 與�
 npm run booths:import -- --workspace ../tw_doujin_event-data --event <eventId>
 ```
 
-Importer 可接 CSV、TSV 或單一 HTML table；每個輸入批次都要明確指定 booth code、circle name 與 day／period 對映。主辦將不同日期放在不同頁面時，可分批貼上並為每批指定固定 day。它會先顯示列數、booth 數、完整 JSON 預覽與所有重複／缺漏／無法對映的來源列；只有輸入 `WRITE` 後才原子更新 `events/<eventId>/official-booths.json`。完成後仍需 review data repo diff。
+Importer 可接 CSV、TSV 或單一 HTML table；每個輸入批次都要明確指定 booth code、circle name、day／period 對映與 booth code 解析模式。`single` 把儲存格當成一個 code，`delimited` 解析逗號、斜線或空白分隔的多攤，`fixed-width` 依維護者指定的字元寬度拆開 CWT 類型的 `A01A02`。無法整除的 concatenated 值會停在預覽。主辦將不同日期放在不同頁面時，可分批貼上並為每批指定固定 day。Importer 會先顯示列數、booth 數、完整 JSON 預覽與所有重複／缺漏／無法對映的來源列；只有輸入 `WRITE` 後才原子更新 `events/<eventId>/official-booths.json`。完成後仍需 review data repo diff。
 
 ### 1. 在 data repo 更新官方資料
 

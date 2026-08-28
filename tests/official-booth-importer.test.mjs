@@ -51,6 +51,7 @@ test("CSV columns are explicitly mapped and quoted cells produce the existing of
       circleColumn: 0,
       dayColumn: 1,
       boothColumn: 2,
+      boothCodeMode: "delimited",
       dayValues: { 第一天: "sat", 第二天: "sun" },
     },
   });
@@ -94,7 +95,7 @@ test("TSV import reports missing, duplicate, and unmapped rows without producing
   const preview = prepareOfficialBoothImport({
     table,
     event,
-    mapping: { dayColumn: 0, boothColumn: 1, circleColumn: 2, dayValues: { D1: "sat", D2: "sun" } },
+    mapping: { dayColumn: 0, boothColumn: 1, circleColumn: 2, boothCodeMode: "delimited", dayValues: { D1: "sat", D2: "sun" } },
   });
 
   assert.equal(preview.payload, null);
@@ -110,7 +111,7 @@ test("separate pasted tables can map a fixed day and merge into one event candid
   const table = parseOfficialBoothImportTable(`
     <table>
       <tr><th>區域</th><th>攤位</th><th>社團</th></tr>
-      <tr><td rowspan="2">北區</td><td>A01 / A02</td><td>甲&amp;乙</td></tr>
+      <tr><td rowspan="2">北區</td><td>A01A02</td><td>甲&amp;乙</td></tr>
       <tr><td>A03</td><td>丙</td></tr>
     </table>
   `, "html");
@@ -118,7 +119,7 @@ test("separate pasted tables can map a fixed day and merge into one event candid
   const preview = prepareOfficialBoothImport({
     table,
     event,
-    mapping: { fixedDay: "sat", boothColumn: 1, circleColumn: 2 },
+    mapping: { fixedDay: "sat", boothColumn: 1, circleColumn: 2, boothCodeMode: "fixed-width", boothCodeWidth: 3 },
     requireEveryDay: false,
   });
   assert.deepEqual(preview.errors, []);
@@ -129,7 +130,7 @@ test("separate pasted tables can map a fixed day and merge into one event candid
   const second = prepareOfficialBoothImport({
     table: parseOfficialBoothImportTable("booth\tcircle\nB01\t丁", "tsv"),
     event,
-    mapping: { fixedDay: "sun", boothColumn: 0, circleColumn: 1 },
+    mapping: { fixedDay: "sun", boothColumn: 0, circleColumn: 1, boothCodeMode: "single" },
     requireEveryDay: false,
   });
   const merged = mergeOfficialBoothImports([preview, second], event);
@@ -137,6 +138,15 @@ test("separate pasted tables can map a fixed day and merge into one event candid
   assert.equal(merged.importedRows, 3);
   assert.equal(merged.boothCount, 4);
   assert.deepEqual(merged.payload.days[1].booths, [{ codes: ["B01"], name: "丁" }]);
+
+  const ambiguous = prepareOfficialBoothImport({
+    table: parseOfficialBoothImportTable("booth,circle\nA01A02X,戊", "csv"),
+    event,
+    mapping: { fixedDay: "sat", boothColumn: 0, circleColumn: 1, boothCodeMode: "fixed-width", boothCodeWidth: 3 },
+    requireEveryDay: false,
+  });
+  assert.deepEqual(ambiguous.errors.map(({ row, code }) => [row, code]), [[2, "unparseable_booth"]]);
+  assert.equal(ambiguous.payload, null);
 });
 
 test("nothing is written before confirmation; confirmed writes are atomic and exact reruns are no-ops", async (t) => {
@@ -145,7 +155,7 @@ test("nothing is written before confirmation; confirmed writes are atomic and ex
   const preview = prepareOfficialBoothImport({
     table,
     event,
-    mapping: { dayColumn: 0, boothColumn: 1, circleColumn: 2, dayValues: { 1: "sat", 2: "sun" } },
+    mapping: { dayColumn: 0, boothColumn: 1, circleColumn: 2, boothCodeMode: "single", dayValues: { 1: "sat", 2: "sun" } },
   });
   const destination = path.join(workspace, "events", event.id, "official-booths.json");
 
@@ -217,6 +227,7 @@ test("the interactive CLI accepts pasted CSV, previews it, and writes only after
       ["表頭列", "\n"],
       ["booth code欄位編號", "2\n"],
       ["circle name欄位編號", "3\n"],
+      ["booth code 解析模式", "single\n"],
       ["day／period 欄位編號", "1\n"],
       ["來源值「D1」", "1\n"],
       ["來源值「D2」", "2\n"],

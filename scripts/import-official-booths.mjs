@@ -134,6 +134,10 @@ try {
     console.log(header.map((name, index) => `${index + 1}:${name || "（空白）"}`).join(" | "));
     const boothColumn = await selectColumn(readline, "booth code", header);
     const circleColumn = await selectColumn(readline, "circle name", header);
+    const boothCodeMode = (await required(readline, "booth code 解析模式（single/delimited/fixed-width）")).toLowerCase();
+    const boothCodeWidth = boothCodeMode === "fixed-width"
+      ? await positiveInteger(readline, "每個 booth code 的字元寬度")
+      : undefined;
     const dayAnswer = compact(await readline.question("day／period 欄位編號（若整張表屬同一天則留空）: "));
     let dayColumn;
     let fixedDay;
@@ -151,7 +155,7 @@ try {
       table,
       event,
       headerRow,
-      mapping: { boothColumn, circleColumn, dayColumn, fixedDay, dayValues },
+      mapping: { boothColumn, circleColumn, boothCodeMode, boothCodeWidth, dayColumn, fixedDay, dayValues },
       requireEveryDay: false,
     });
     previews.push(preview);
