@@ -78,7 +78,8 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 ### 4. ID namespace 維持全域唯一，跨活動 identity linkage 延後
 
 - **不變**：`c-xxxxxx` 仍由單一全域遞增序列配發，不從名稱、列號或任何可變欄位推導，配發一次永久保存且永不重用。ID 本身不因活動而重複，因此現有 URL、規劃資料與 D1 的 `(event_id, circle_id)` key 不需要 schema migration。
-- **改變**：新活動不再以名稱或舊 evidence 判斷是否沿用既有 ID。每個尚無本活動 reviewed source 的主辦攤位群組一律配發新的全域唯一 ID；同名只表示同名，不產生 adjudication，也不建立跨活動關係。
+- **改變**：新活動不再以名稱或舊 evidence 判斷是否沿用既有 ID。每個尚無本活動 reviewed source 的**同活動 identity group** 一律配發新的全域唯一 ID；一個 identity group 可包含主辦方明確標示為同一社團的多日、多攤 booth sources。同名只表示同名，不得自動形成 identity group，也不建立跨活動關係。
+- **同活動 linkage**：`official-booths.json` 目前按日期列出群組，不能單靠名稱證明兩日的群組是同一社團。#116 必須接受或產生一份可 review 的同活動 grouping：只有主辦來源本身的穩定鍵或人工確認的主辦證據能把不同日期的群組放進同一 group；缺少這種證據時 fail closed，不得以名稱相同猜測。group 中每個 `<day>:<booth>` 都保存為同一 ID 的 source，因此既有 FF47 多日社團及未來活動的收藏、規劃、認領與 overlay 不會在活動內被拆開。
 - **保留**：`data/circle-identities/evidence.json` 與 `allocations.json` 繼續是 main repo 的 identity authority。前者保存 `eventId + organizer booth` 到 ID 的 reviewed source，後者保存全域配號 ledger。它們也讓日後可另外建立 optional cross-event mapping，但 mapping 不得回頭改寫既有活動 ID。
 - **重新開啟的條件**：出現一個確實依賴跨活動 canonical identity 的產品情境時（例如同一畫面同時呈現多場活動、或社團覆蓋資料要跨活動沿用），以新 ADR 恢復，並以保留的 evidence 重建。
 
@@ -94,7 +95,7 @@ main repo PR
 
 main PR 必須先在同一分支產生並 review identity registry diff，再執行 staging 與 pin gate。現行 [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) 讀取 main repo 的 `evidence.json` 且要求完整 coverage；這項 fail-closed seam 保留。
 
-[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) 不關閉，改為「新活動 identity 配號與 evidence 產生器」：移除跨活動候選、沿用與改名裁決 UI，只保留從 `official-booths.json` 產生全域唯一 allocation／本活動 evidence、dry-run、原子寫入與 coverage 驗證。該產生器完成前，不能宣稱新活動已達兩個 PR 的穩定流程。
+[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) 不關閉，改為「新活動 identity 配號與 evidence 產生器」：移除跨活動候選、沿用與改名裁決 UI；從 `official-booths.json` 加上可 review 的同活動 grouping 產生全域唯一 allocation／本活動 evidence，並提供 dry-run、原子寫入與 coverage 驗證。該產生器完成前，不能宣稱新活動已達兩個 PR 的穩定流程。
 
 ### 5. ADR-0037 暫緩實施，不撤銷
 
@@ -142,10 +143,10 @@ main PR 必須先在同一分支產生並 review identity registry diff，再執
 | [`scripts/event-data-pin-utils.mjs`](../../scripts/event-data-pin-utils.mjs) | pin schema 升版，`files` 路徑允許 `events/` 與 `references/` 兩個前綴 |
 | [`scripts/reference-data-pin-utils.mjs`](../../scripts/reference-data-pin-utils.mjs) | **只移除定位面**：`REFERENCE_DATA_REPOSITORY`、`rawReferenceFileUrl`、pin 的 `repository`／`commit` 欄位驗證。記錄 schema、`validateSources`、`validateProvenance`、`selectEventReferenceRecords` 與 selection 驗證**全部保留** |
 | [`scripts/stage-event-data.mjs`](../../scripts/stage-event-data.mjs) | selection 來源改為 `events/<eventId>/reference-selection.json` |
-| [`scripts/circle-identity-registry.mjs`](../../scripts/circle-identity-registry.mjs) 與 #116 的產生器 | 保留全域唯一配號；新增 event-local linkage 模式，名稱只在同一活動內檢查，不得從其他活動產生候選或沿用 ID |
+| [`scripts/circle-identity-registry.mjs`](../../scripts/circle-identity-registry.mjs) 與 #116 的產生器 | 保留全域唯一配號；新增 event-local linkage 模式，以可 review 的主辦來源 grouping 合併同活動多日 sources；名稱只用於 drift 檢查，不得作為 grouping 依據，也不得從其他活動產生候選或沿用 ID |
 | [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) | main identity evidence 的完整 coverage gate 不變；main identity + pin PR 必須在同一分支通過 |
 | `npm run reference-data:fetch` | 移除。獨立維護 reference 時直接 clone 資料 repo |
-| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-data-pin.test.mjs`](../../tests/reference-data-pin.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、同活動既有 source 重跑為 no-op |
+| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-data-pin.test.mjs`](../../tests/reference-data-pin.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、具主辦證據的同活動多日群組沿用同一 ID、只有同名但無 grouping 證據時 fail closed、同活動既有 source 重跑為 no-op |
 | [共享 reference-data pin 契約](../contracts/reference-data-pin.md)、[社團目錄契約](../contracts/circle-catalog.md)、[社團資料更新 runbook](../runbooks/catalog-data-update.md) | 前者只改定位面；後兩者改寫跨活動 linkage 與兩 PR 流程，完整 coverage 邊界不動 |
 
 **現在做最便宜。**只有一場活動時遷移是一個 PR；每多一場活動就多一個 repository 要搬、一組 ruleset 要建、一份 pin 要重算。

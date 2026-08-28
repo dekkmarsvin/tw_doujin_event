@@ -62,8 +62,9 @@ type CircleCatalogPayload = {
 ### ADR-0039 的目標狀態（尚未實作）
 
 - `c-xxxxxx` 仍由單一全域 ledger 配發、永不重用；不同活動不會出現相同 ID。
-- 新活動的每個主辦攤位群組配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
-- 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個主辦群組含多個 booth code 時只配發一個 ID，並為每個 booth code 保存 source。
+- 新活動的每個同活動 identity group 配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
+- 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。名稱只用於 drift 檢查，不得作為跨日合併依據；沒有 grouping 證據時必須 fail closed。
+- 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個 identity group 的所有 `<day>:<booth>` sources 只配發一個 ID，並逐一保存 source。
 - 新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
 
 ## 社團 overlay

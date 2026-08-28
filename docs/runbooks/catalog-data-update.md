@@ -40,7 +40,7 @@
 - 改名把舊名稱保留在 `aliases`，並更新 `currentName`。
 - 不刪除或重用已配發 ID。
 
-ADR-0039 的 #116 目標會把新活動的本節改成機械式產生：每個主辦攤位群組配置新的全域唯一 ID，同名不跨活動沿用；產生器以 dry-run 顯示 registry diff，核准後原子更新 allocations 與 evidence。identity registry 與新 pin 一起進同一張 main PR。這段是計畫，不是目前可用命令。
+ADR-0039 的 #116 目標會把新活動的本節改成機械式產生：每個同活動 identity group 配置新的全域唯一 ID，同名不跨活動沿用。主辦來源若明確證明不同日期的群組屬於同一社團，grouping 會把所有 `<day>:<booth>` sources 配到同一 ID；只有名稱相同但沒有 grouping 證據時 fail closed。產生器以 dry-run 顯示 grouping 與 registry diff，核准後原子更新 allocations 與 evidence。identity registry 與新 pin 一起進同一張 main PR。這段是計畫，不是目前可用命令。
 
 FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀錄保存在 `ff47-official-migration-decisions.json`。它只說明已完成的裁決，不應在日常更新時修改。
 
