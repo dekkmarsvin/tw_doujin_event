@@ -131,7 +131,7 @@ main PR 必須先在同一分支產生並 review identity registry diff，再執
 2. 建立最小 data-repo CI：拒絕無法解析的 JSON、`references/`／`events/<eventId>/` 以外的資料路徑、原始配置圖或其他 ADR-0026 禁入位元組，以及缺少逐活動權利／來源說明的資料夾。完整 schema、reference selection 與 SHA-256 authority 仍由 main pin PR 的既有 gate 驗證。
 3. 以現有兩個 repository 的內容建立 `references/` 與 `events/ff47/`，但保留舊 repository 可用。
 4. 在 main PR 更新 fetch／pin 契約與 `data/event-data-pins/ff47.json`，通過 `npm test`、lint、TypeScript、production build 與 preview smoke。
-5. 合併與部署後執行一次 no-op production rebuild；確認同一 pin 產生相同快照後才 archive 舊 repository。回滾期間維持舊 pin 與舊 repository 不變。
+5. 合併與部署後執行一次 no-op production rebuild；確認同一 pin 產生相同快照後才 archive 舊 repository。回滾期間維持舊 pin 與舊 repository 不變。Archive 仍是 public readable history，不等於 purge；未來的移除要求必須一併盤點這些來源 repository。
 
 程式面（依影響面大小）：
 
@@ -197,8 +197,9 @@ main PR 必須先在同一分支產生並 review identity registry diff，再執
 
 一般更正與停止發布優先使用 forward commit。只有要求從 Git 歷史移除位元組時才執行 rewrite；執行前必須：
 
-1. 列出 main 中所有指向共享 data repo 的活動 pin。
-2. 判定哪些 pin commit 是被重寫 commit 的 descendant；不得只檢查被要求下架的活動。
-3. 在隔離 clone 完成 rewrite、重算所有受影響 pin，並讓每個活動通過 fetch／SHA-256／schema／staging gate。
-4. 以協調式 maintenance window 更新 data repo 與 main pins；任何活動缺少可驗證的新 pin 都不得 force-push。
-5. 完成後重跑 production build 與 no-op retry。data repo 的既有 clone 失效必須記錄；code repo clone 不受影響。
+1. 列出 main 中所有指向共享 data repo 的活動 pin，並列出仍保存相同位元組的來源 repository；包含已 archive 的 `tw_doujin_event-data-ff47`、`tw_doujin_event-reference-data` 與未來其他來源。Archive 是唯讀，不是不可存取。
+2. 判定共享 data repo 中哪些 pin commit 是被重寫 commit 的 descendant；不得只檢查被要求下架的活動。同時確認移除要求涵蓋哪些來源 repository 副本。
+3. 在隔離 clone 對共享 data repo 與所有受要求涵蓋的來源 repository 完成 rewrite。若 archived repository 需要改寫，先依平台程序解除 archive，改寫並驗證後再 archive；只改共享 repo 而讓來源 archive 保留相同位元組不算完成。
+4. 重算所有受影響 pin，並讓每個活動通過 fetch／SHA-256／schema／staging gate。
+5. 以協調式 maintenance window 更新各受影響 data repository 與 main pins；任何活動缺少可驗證的新 pin、或任一應移除的 repository 副本尚可存取時，都不得宣告 purge 完成。
+6. 完成後重跑 production build 與 no-op retry。被重寫 data repository 的既有 clone 失效必須記錄；code repo clone 不受影響，除非移除要求本身也涵蓋 code repo 內的副本。
