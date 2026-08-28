@@ -1,12 +1,12 @@
-# ADR-0039：活動與 reference 資料收斂為單一資料 repo，identity 序號改為活動範圍
+# ADR-0039：活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後
 
 - 狀態：已定案（2026-08-28）
 - **取代**：[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md) 決策第 3 點（一活動一資料 repo）、[ADR-0032](./0032-shared-reference-data-is-public-and-pinned.md) 決策第 1 點（獨立 reference repository）與第 5 點的更新順序
-- **修訂**：[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 規則一（序號不含活動範圍）
+- **修訂**：[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 規則一（ID namespace 維持全域唯一，但不再要求跨活動沿用同一 ID）
 - **暫緩**：[ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) 的實施時點，決策不撤銷，見決策第 5 點
 - 相關 issue：[#121](https://github.com/dekkmarsvin/tw_doujin_event/issues/121)、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)、[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)
 - 延續：[ADR-0026](./0026-public-sanitized-event-data-and-history-rewrite.md)、[ADR-0035](./0035-new-event-onboarding-is-data-driven.md)
-- 相關契約：[共享 reference-data pin 契約](../contracts/reference-data-pin.md)
+- 相關契約：[共享 reference-data pin 契約](../contracts/reference-data-pin.md)、[社團目錄契約](../contracts/circle-catalog.md)
 
 ## 脈絡
 
@@ -30,7 +30,9 @@ ADR-0014 真正在承重、且本 ADR **不改**的是它的核心句：「問�
 
 [ADR-0026](./0026-public-sanitized-event-data-and-history-rewrite.md) 明文保留歷史重寫空間，[ADR-0015](./0015-access-lifts-when-no-third-party-bytes-remain.md) 也已經實際執行過一次 `git filter-repo` 重寫與 force-push。
 
-**若日後某場活動的資料收到下架要求，資料放在程式碼 repo 裡（#121 的選項 C）就等於要重寫程式碼 repo 的歷史，所有既有 clone 失效。**這是 monorepo 唯一擋不掉的代價，也是「程式碼與資料分屬不同 repository」這條線必須保留的理由——但它只需要**一條**線，不需要逐活動一條。
+**若日後某場活動的資料收到下架要求，資料放在程式碼 repo 裡（#121 的選項 C）就等於要重寫程式碼 repo 的歷史，所有既有 code clone 失效。**這是保留「程式碼與資料分屬不同 repository」這條線的理由。
+
+但選項 B **只隔離 code repo 與 data repo，不隔離 data repo 內的各活動**。若在共享 data repo 對某個活動執行 history rewrite，該點之後的 descendant commit SHA 都可能改變；其他活動若 pin 到這些 commit，也要一起重算 pin。逐活動 pin 能阻止一般 forward update 漂移，不能抵擋 history rewrite。這個爆炸半徑必須由下架 runbook 與協調式 repin 承擔，不能再稱為逐活動隔離。
 
 ### Circle identity 的實測
 
@@ -69,18 +71,30 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 
 **`selection` 區塊不消失。**organizer 角色、category catalog revision、venue 與 venue-space 的 stable ID 關聯是語意，不是定位資訊，改存於 `events/<eventId>/reference-selection.json`。[共享 reference-data pin 契約](../contracts/reference-data-pin.md)的驗證邊界——每個 pinned file 恰好被 selection 使用一次、不接受未選取的額外記錄、event definition 的 assignment 必須與 selection 集合完全相等、任一項不符即 fail closed——原封不動。
 
-### 3. 否決 monorepo
+### 3. 否決 monorepo，但不宣稱逐活動歷史隔離
 
-#121 的選項 C 不採用，理由是脈絡「仍然成立、而 #121 沒有列出的那個理由」一節：下架與歷史重寫的隔離。選項 B 保留該隔離，選項 C 不保留。
+#121 的選項 C 不採用。選項 B 在真正需要 purge 時仍可能重寫共享 data repo 與重算多場活動的 pin，但不會改寫 code repo；選項 C 會連 code repo 一起重寫。B 保留的是 **code/data 歷史隔離**，不是 per-event 歷史隔離。
 
-### 4. Circle identity 序號範圍改為活動範圍，跨活動 mapping 延後
+### 4. ID namespace 維持全域唯一，跨活動 identity linkage 延後
 
-- **不變**：序號仍是配發的，不從名稱、列號或任何可變欄位推導，配發一次永久保存。[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 規則二與規則三完全不動——那兩條擋的是「改名就換 ID」，與範圍無關。
-- **改變**：規則一「序號不含活動範圍、跨活動延續」限縮為活動範圍。新活動不再需要與既有序號比對。
-- **保留**：`data/circle-identities/evidence.json` 與 `allocations.json` 不刪。它們是日後要建立跨活動 mapping 時的重建依據。
+- **不變**：`c-xxxxxx` 仍由單一全域遞增序列配發，不從名稱、列號或任何可變欄位推導，配發一次永久保存且永不重用。ID 本身不因活動而重複，因此現有 URL、規劃資料與 D1 的 `(event_id, circle_id)` key 不需要 schema migration。
+- **改變**：新活動不再以名稱或舊 evidence 判斷是否沿用既有 ID。每個尚無本活動 reviewed source 的主辦攤位群組一律配發新的全域唯一 ID；同名只表示同名，不產生 adjudication，也不建立跨活動關係。
+- **保留**：`data/circle-identities/evidence.json` 與 `allocations.json` 繼續是 main repo 的 identity authority。前者保存 `eventId + organizer booth` 到 ID 的 reviewed source，後者保存全域配號 ledger。它們也讓日後可另外建立 optional cross-event mapping，但 mapping 不得回頭改寫既有活動 ID。
 - **重新開啟的條件**：出現一個確實依賴跨活動 canonical identity 的產品情境時（例如同一畫面同時呈現多場活動、或社團覆蓋資料要跨活動沿用），以新 ADR 恢復，並以保留的 evidence 重建。
 
-[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) 的人工裁決介面隨之關閉。
+這個決策不會讓 identity 步驟消失，只會把需要產品判斷的「同名是否同社團」改成機械式配號。因此兩個 PR 的發布路徑明確為：
+
+```text
+data repo PR
+  events/<eventId>/event.json + official-booths.json + map.json + reference-selection.json
+  ↓
+main repo PR
+  allocations.json + evidence.json + data/event-data-pins/<eventId>.json
+```
+
+main PR 必須先在同一分支產生並 review identity registry diff，再執行 staging 與 pin gate。現行 [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) 讀取 main repo 的 `evidence.json` 且要求完整 coverage；這項 fail-closed seam 保留。
+
+[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) 不關閉，改為「新活動 identity 配號與 evidence 產生器」：移除跨活動候選、沿用與改名裁決 UI，只保留從 `official-booths.json` 產生全域唯一 allocation／本活動 evidence、dry-run、原子寫入與 coverage 驗證。該產生器完成前，不能宣稱新活動已達兩個 PR 的穩定流程。
 
 ### 5. ADR-0037 暫緩實施，不撤銷
 
@@ -99,7 +113,7 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 暫緩的是**實施時點**。理由是本 ADR 拿掉了它大部分的動機：
 
 - ADR-0037 明列的營運成本「fine-grained PAT 的 repository 選取每接一場新活動就要更新一次」由決策第 1 點消滅，token 目標固定為兩個 repository。
-- 決策第 1、2、4 點把發布路徑由「四個 PR、三個 repository、順序不可調換」降為「資料 repo 一個 PR → main pin 一個 PR」。一年數次的手動路徑不構成需要自動化的維運負擔。
+- 決策第 1、2、4 點把發布路徑由「四個 PR、三個 repository、順序不可調換」降為「資料 repo 一個 PR → main identity + pin 一個 PR」。一年數次的手動路徑不構成需要 GitHub write credential 自動化的維運負擔。
 
 重新評估的條件：**第二場真實活動以本 ADR 的架構跑完一次之後**，依實測的手動步驟數決定是否發行憑證。在那之前不發行，[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) 凍結。
 
@@ -111,7 +125,13 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 
 ### 遷移面
 
-一次性工作：建立 `tw_doujin_event-data`、以現有兩個 repository 的內容建立 `references/` 與 `events/ff47/`、比照 ADR-0037 前置建立 ruleset、重算 `data/event-data-pins/ff47.json`、開一個 PR、archive 舊 repository。
+一次性工作依下列順序執行，不得提早 archive 舊 repository：
+
+1. 建立 `tw_doujin_event-data`，先啟用要求 PR 的 ruleset。
+2. 建立最小 data-repo CI：拒絕無法解析的 JSON、`references/`／`events/<eventId>/` 以外的資料路徑、原始配置圖或其他 ADR-0026 禁入位元組，以及缺少逐活動權利／來源說明的資料夾。完整 schema、reference selection 與 SHA-256 authority 仍由 main pin PR 的既有 gate 驗證。
+3. 以現有兩個 repository 的內容建立 `references/` 與 `events/ff47/`，但保留舊 repository 可用。
+4. 在 main PR 更新 fetch／pin 契約與 `data/event-data-pins/ff47.json`，通過 `npm test`、lint、TypeScript、production build 與 preview smoke。
+5. 合併與部署後執行一次 no-op production rebuild；確認同一 pin 產生相同快照後才 archive 舊 repository。回滾期間維持舊 pin 與舊 repository 不變。
 
 程式面（依影響面大小）：
 
@@ -122,9 +142,11 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 | [`scripts/event-data-pin-utils.mjs`](../../scripts/event-data-pin-utils.mjs) | pin schema 升版，`files` 路徑允許 `events/` 與 `references/` 兩個前綴 |
 | [`scripts/reference-data-pin-utils.mjs`](../../scripts/reference-data-pin-utils.mjs) | **只移除定位面**：`REFERENCE_DATA_REPOSITORY`、`rawReferenceFileUrl`、pin 的 `repository`／`commit` 欄位驗證。記錄 schema、`validateSources`、`validateProvenance`、`selectEventReferenceRecords` 與 selection 驗證**全部保留** |
 | [`scripts/stage-event-data.mjs`](../../scripts/stage-event-data.mjs) | selection 來源改為 `events/<eventId>/reference-selection.json` |
+| [`scripts/circle-identity-registry.mjs`](../../scripts/circle-identity-registry.mjs) 與 #116 的產生器 | 保留全域唯一配號；新增 event-local linkage 模式，名稱只在同一活動內檢查，不得從其他活動產生候選或沿用 ID |
+| [`scripts/build-official-circle-catalog.mjs`](../../scripts/build-official-circle-catalog.mjs) | main identity evidence 的完整 coverage gate 不變；main identity + pin PR 必須在同一分支通過 |
 | `npm run reference-data:fetch` | 移除。獨立維護 reference 時直接 clone 資料 repo |
-| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-data-pin.test.mjs`](../../tests/reference-data-pin.test.mjs) | 隨 schema 升版調整 |
-| [共享 reference-data pin 契約](../contracts/reference-data-pin.md) | 改寫定位面，驗證邊界不動 |
+| [`tests/event-data-pin.test.mjs`](../../tests/event-data-pin.test.mjs)、[`tests/reference-data-pin.test.mjs`](../../tests/reference-data-pin.test.mjs)、[`tests/circle-identity-registry.test.mjs`](../../tests/circle-identity-registry.test.mjs) | 隨 pin schema 升版調整，並證明跨活動同名會配發新 ID、同活動既有 source 重跑為 no-op |
+| [共享 reference-data pin 契約](../contracts/reference-data-pin.md)、[社團目錄契約](../contracts/circle-catalog.md)、[社團資料更新 runbook](../runbooks/catalog-data-update.md) | 前者只改定位面；後兩者改寫跨活動 linkage 與兩 PR 流程，完整 coverage 邊界不動 |
 
 **現在做最便宜。**只有一場活動時遷移是一個 PR；每多一場活動就多一個 repository 要搬、一組 ruleset 要建、一份 pin 要重算。
 
@@ -136,7 +158,7 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 | 新活動新增 repository | 0 | 0 |
 | 新活動新增 PAT／secret | 0 | 0 |
 | 新活動 publication PR | 1，最多 2 | 2 |
-| 必須記得的跨 repo merge 順序 | 0 | 1 步（資料 repo → main pin） |
+| 必須記得的跨 repo merge 順序 | 0 | 1 步（資料 repo → main identity + pin） |
 | 新活動需要修改 TypeScript | 0 | 0，待 [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 解除 `build:production` 的 `ff47` 硬編 |
 | organizer-specific production adapter | 0 | 待 [#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115) |
 | control plane 持有 GitHub write credential | 盡量 0 | 0（決策第 5 點暫緩） |
@@ -145,10 +167,11 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 
 | Issue | 處置 |
 |---|---|
-| [#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112) | 承載本 ADR；ADR-0037／0038 的定案不受影響 |
-| [#113](https://github.com/dekkmarsvin/tw_doujin_event/issues/113) | 降優先 |
-| [#114](https://github.com/dekkmarsvin/tw_doujin_event/issues/114)、[#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115)、[#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) | 不受影響，照做。#114 的輸出改為資料 repo 的 `events/<eventId>/` 資料夾 |
-| [#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) | 關閉（決策第 4 點） |
+| [#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112) | 維持關閉，只承載 ADR-0037／0038；本 ADR 與 #104 完成定義改寫由 #121 承載，不把新工作塞回已關閉 issue |
+| [#113](https://github.com/dekkmarsvin/tw_doujin_event/issues/113) | 降為 browser-only P2；不再阻擋本機 onboarding |
+| [#114](https://github.com/dekkmarsvin/tw_doujin_event/issues/114) | P0 改為本機 wizard／generator，直接產生資料 repo 的 `events/<eventId>/` 資料夾，不依賴 #113；browser UI 留待 #113 解除後再做 |
+| [#115](https://github.com/dekkmarsvin/tw_doujin_event/issues/115)、[#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) | 不受 repository 收斂影響，照做 |
+| [#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116) | 重新界定為本機 identity 配號與 evidence 產生器；刪除跨活動 adjudication UI |
 | [#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117) | 降優先。[ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 指出的能力缺口是真的，但接受「每場活動 checkout 一次」時它由能力前置降為可及性改善 |
 | [#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118) | 凍結（決策第 5 點） |
 
@@ -162,10 +185,20 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 
 - 舊 repository 的 archive 時點與其 issue／PR 的搬移。
 - `events/<eventId>/NOTICE` 的實際措辭。
-- 資料 repo 內是否需要 CI（schema gate 目前在程式碼 repo 的 build 前置執行）。
-- [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 完成定義的改寫。本 ADR 只否定「不使用 terminal」作為驗收條件的必要性；改寫本身由 #112 執行。
+- 完整 schema authority 是否日後抽成可在 data repo 獨立執行的套件。初始 migration 已要求最小 repository-local CI；main pin PR 仍是完整 authority。
+- [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 完成定義的實際 issue body 改寫。它由 #121 執行，且是 #121 關閉前置；不指派給已關閉的 #112。
 
 ## 未決
 
 - pin schema 升版後是否仍需要 `events/` 與 `references/` 兩個路徑前綴的區分，或只需一份扁平的檔案清單。等實作時看驗證訊息的可讀性決定。
 - 第二場活動跑完後，決策第 5 點的重新評估要用什麼數字判定「手動步驟仍太多」。傾向以「從資料備妥到 production 上線的人工步驟數」為準，但門檻等實測再定。
+
+## 下架與 history rewrite gate
+
+一般更正與停止發布優先使用 forward commit。只有要求從 Git 歷史移除位元組時才執行 rewrite；執行前必須：
+
+1. 列出 main 中所有指向共享 data repo 的活動 pin。
+2. 判定哪些 pin commit 是被重寫 commit 的 descendant；不得只檢查被要求下架的活動。
+3. 在隔離 clone 完成 rewrite、重算所有受影響 pin，並讓每個活動通過 fetch／SHA-256／schema／staging gate。
+4. 以協調式 maintenance window 更新 data repo 與 main pins；任何活動缺少可驗證的新 pin 都不得 force-push。
+5. 完成後重跑 production build 與 no-op retry。data repo 的既有 clone 失效必須記錄；code repo clone 不受影響。

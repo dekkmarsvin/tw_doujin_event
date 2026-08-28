@@ -7,6 +7,8 @@
 **活動資料**：公開 data repo，由 `data/event-data-pins/<event>.json` 固定版本
 **流程**：[社團資料更新](../runbooks/catalog-data-update.md)
 
+> **實作狀態（2026-08-28）**：[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md) 已決定保留全域唯一 ID namespace、停止跨活動沿用，但 #116 的 event-local 配號產生器尚未實作。下列跨活動沿用規則仍描述目前程式；#116 落地時必須以同一個 PR 更新本契約與測試，不得把 ADR 決策誤報為已出貨行為。
+
 ## 權威順序
 
 公開社團資料只有兩個組成：各活動主辦官方說明頁面建立的 reviewed base，以及社團本人經驗證後自填的 overlay。工作簿、社群試算表與其他第三方資料不具輸入、fallback 或補充地位。
@@ -51,11 +53,18 @@ type CircleCatalogPayload = {
 ## 身分規則
 
 - ID 是只增不減、不重排、不重用的 `c-xxxxxx` 配發序號，見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md)。
-- 同一社團可在同日、跨日或跨活動有多筆 placement，仍沿用同一 ID。
+- 同一社團可在同日、跨日或跨活動有多筆 placement，仍沿用同一 ID。**這是目前實作；跨活動沿用待 #116 依 ADR-0039 取代。**
 - `evidence.json` 的正式活動證據為 `{ eventId, kind: "organizer-booth", value: "<day>:<booth>" }`。
 - 同名不是合併依據；一個 booth 證據對到多個 ID、官方群組內的 booth 對到不同 ID、或目前名稱與官方名稱漂移時一律 fail closed。
 - 已裁決的 migration 例外保存在 `ff47-official-migration-decisions.json`；它是稽核紀錄，不是執行期 fallback。
 - 舊 `ff47-<hash>` ID 沒有相容路徑，見 [ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。攤位 scoped ID 只由當前 records 即時解析。
+
+### ADR-0039 的目標狀態（尚未實作）
+
+- `c-xxxxxx` 仍由單一全域 ledger 配發、永不重用；不同活動不會出現相同 ID。
+- 新活動的每個主辦攤位群組配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
+- 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個主辦群組含多個 booth code 時只配發一個 ID，並為每個 booth code 保存 source。
+- 新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
 
 ## 社團 overlay
 

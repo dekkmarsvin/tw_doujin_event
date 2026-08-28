@@ -57,7 +57,7 @@
 | [0007](./adr/0007-circle-name-is-not-circle-editable.md) | 社團名稱不可由社團自行編輯 |
 | [0008](./adr/0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker |
 | [0009](./adr/0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload |
-| [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**已實作**，取代 0003；**序號範圍已被 0039 限縮為活動範圍**） |
+| [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**已實作**，取代 0003；0039 保留全域唯一 namespace，但暫緩跨活動沿用） |
 | [0011](./adr/0011-ff47-is-not-a-public-launch.md) | FF47 期間全站不公開，含社團端（**資料留在 repo 內一句已被 0014 取代；解除條件已被 0015 取代**） |
 | [0012](./adr/0012-first-party-sources-only.md) | 資料來源只留主辦官網與社團本人 |
 | [0013](./adr/0013-drop-the-legacy-circle-id-compatibility-path.md) | 移除舊 circle ID 的相容路徑（**部分取代 0010**） |
@@ -86,7 +86,7 @@
 | [0036](./adr/0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 |
 | [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併（**實施暫緩，見 0039 決策第 5 點**） |
 | [0038](./adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援（取代 0035 決策第 4 點）|
-| [0039](./adr/0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo，identity 序號改為活動範圍（取代 0014 決策第 3 點、0032 決策第 1／5 點，限縮 0010 規則一）|
+| [0039](./adr/0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後（取代 0014 決策第 3 點、0032 決策第 1／5 點，限縮 0010 規則一）|
 
 ## 對外文件
 
