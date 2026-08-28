@@ -9,13 +9,10 @@ import {
   prepareEventOnboarding,
   serializeEventDataPin,
 } from "../scripts/event-onboarding.mjs";
-import { parseEventDataPin, sha256 } from "../scripts/event-data-pin-utils.mjs";
+import { EVENT_DATA_REPOSITORY, parseEventDataPin, sha256 } from "../scripts/event-data-pin-utils.mjs";
 
 const eventId = "event-alpha";
-const eventCommit = "a".repeat(40);
-const referenceCommit = "b".repeat(40);
-const eventRepository = `dekkmarsvin/tw_doujin_event-data-${eventId}`;
-const referenceRepository = "dekkmarsvin/tw_doujin_event-reference-data";
+const commit = "a".repeat(40);
 const source = {
   id: "official-page",
   kind: "organizer-official",
@@ -28,66 +25,60 @@ function jsonBytes(value) {
   return Buffer.from(`${JSON.stringify(value)}\n`);
 }
 
+function rawUrl(filePath, revision = commit) {
+  return `https://raw.githubusercontent.com/${EVENT_DATA_REPOSITORY}/${revision}/${filePath}`;
+}
+
 function fixture() {
+  const referenceSelection = {
+    schema: "reference-selection/1",
+    eventId,
+    organizers: [{ id: "example-organizer", path: "references/organizers/example-organizer.json" }],
+    categoryCatalog: {
+      id: "main",
+      organizerId: "example-organizer",
+      revision: "2026-01-01",
+      path: "references/category-catalogs/example-organizer/main/2026-01-01.json",
+    },
+    venues: [{
+      id: "example-venue",
+      path: "references/venues/example-venue.json",
+      spaces: [{ id: "example-hall", path: "references/venue-spaces/example-hall.json" }],
+    }],
+  };
   const referenceFiles = new Map([
-    ["data/organizers/example-organizer.json", jsonBytes({
+    ["references/organizers/example-organizer.json", jsonBytes({
       schema: "organizer/1", id: "example-organizer", name: "虛構主辦", officialUrl: source.url,
       sources: [source], provenance: { "/name": [source.id], "/officialUrl": [source.id] },
     })],
-    ["data/category-catalogs/example-organizer/main/2026-01-01.json", jsonBytes({
+    ["references/category-catalogs/example-organizer/main/2026-01-01.json", jsonBytes({
       schema: "category-catalog/1", id: "main", organizerId: "example-organizer", revision: "2026-01-01",
       categories: [{ id: "illustration", label: "插畫" }], sources: [source], provenance: { "/categories/0/label": [source.id] },
     })],
-    ["data/venues/example-venue.json", jsonBytes({
+    ["references/venues/example-venue.json", jsonBytes({
       schema: "venue/1", id: "example-venue", name: "虛構場館", officialUrl: venueSource.url,
       sources: [venueSource], provenance: { "/name": [source.id], "/officialUrl": [source.id] },
     })],
-    ["data/venue-spaces/example-hall.json", jsonBytes({
+    ["references/venue-spaces/example-hall.json", jsonBytes({
       schema: "venue-space/1", id: "example-hall", venueId: "example-venue", name: "虛構展館",
       sources: [venueSource], provenance: { "/name": [source.id] },
     })],
   ]);
-  const referencePin = {
-    schema: "reference-data-pin/2",
-    eventId,
-    repository: referenceRepository,
-    commit: referenceCommit,
-    files: [...referenceFiles].map(([filePath, bytes]) => ({ path: filePath, sha256: sha256(bytes) })),
-    selection: {
-      organizers: [{ id: "example-organizer", path: "data/organizers/example-organizer.json" }],
-      categoryCatalog: {
-        id: "main", organizerId: "example-organizer", revision: "2026-01-01",
-        path: "data/category-catalogs/example-organizer/main/2026-01-01.json",
-      },
-      venues: [{
-        id: "example-venue",
-        path: "data/venues/example-venue.json",
-        spaces: [{ id: "example-hall", path: "data/venue-spaces/example-hall.json" }],
-      }],
-    },
-  };
   const eventFiles = new Map([
-    ["event.json", jsonBytes({
+    [`events/${eventId}/event.json`, jsonBytes({
       id: eventId,
       organizerAssignments: [{ organizerId: "example-organizer", role: "lead" }],
       categoryCatalog: { organizerId: "example-organizer", id: "main", revision: "2026-01-01" },
       venueAssignments: [{ venueId: "example-venue", venueSpaceId: "example-hall", areaIds: ["all"] }],
     })],
-    ["official-booths.json", jsonBytes({ schema: "official-booths/1" })],
-    ["map.json", jsonBytes({ schema: "event-map/1" })],
-    ["reference-data-pin.json", jsonBytes(referencePin)],
+    [`events/${eventId}/official-booths.json`, jsonBytes({ schema: "official-booths/1" })],
+    [`events/${eventId}/map.json`, jsonBytes({ schema: "event-map/1" })],
+    [`events/${eventId}/reference-selection.json`, jsonBytes(referenceSelection)],
   ]);
-  const responses = new Map([
-    ...[...eventFiles].map(([filePath, bytes]) => [
-      `https://raw.githubusercontent.com/${eventRepository}/${eventCommit}/${filePath}`,
-      bytes,
-    ]),
-    ...[...referenceFiles].map(([filePath, bytes]) => [
-      `https://raw.githubusercontent.com/${referenceRepository}/${referenceCommit}/${filePath}`,
-      bytes,
-    ]),
-  ]);
-  return { eventFiles, referenceFiles, referencePin, responses };
+  const responses = new Map(
+    [...eventFiles, ...referenceFiles].map(([filePath, bytes]) => [rawUrl(filePath), bytes]),
+  );
+  return { eventFiles, referenceFiles, referenceSelection, responses };
 }
 
 function fetchFrom(responses) {
@@ -99,10 +90,11 @@ function fetchFrom(responses) {
   };
 }
 
+// The reference tree is no longer a separate workspace target: one fetch
+// installs it inside `.event-data/<eventId>/`.
 async function writeWorkspaceState(root, value) {
   const files = [
     path.join(root, ".event-data", eventId, "sentinel.txt"),
-    path.join(root, ".reference-data", eventId, "sentinel.txt"),
     path.join(root, "public", "data", "events", "sentinel.txt"),
     path.join(root, ".event-data-stage.json"),
   ];
@@ -115,25 +107,24 @@ async function writeWorkspaceState(root, value) {
 async function readWorkspaceState(root) {
   return Promise.all([
     readFile(path.join(root, ".event-data", eventId, "sentinel.txt"), "utf8"),
-    readFile(path.join(root, ".reference-data", eventId, "sentinel.txt"), "utf8"),
     readFile(path.join(root, "public", "data", "events", "sentinel.txt"), "utf8"),
     readFile(path.join(root, ".event-data-stage.json"), "utf8"),
   ]);
 }
 
-test("onboarding hashes event files, verifies reference data and commits the pin only after validation", async (t) => {
+test("onboarding hashes both trees from one commit and commits the pin only after validation", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-success-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const data = fixture();
   let validated = false;
   const result = await onboardEvent({
     eventId,
-    commit: eventCommit,
+    commit,
     root: temporary,
     fetchImpl: fetchFrom(data.responses),
     validate: async (pinPath, workspace) => {
       const parsed = parseEventDataPin(JSON.parse(await readFile(pinPath, "utf8")));
-      assert.equal(parsed.commit, eventCommit);
+      assert.equal(parsed.commit, commit);
       await writeWorkspaceState(workspace, "candidate");
       validated = true;
       return { replacements: onboardingWorkspaceReplacements(temporary, workspace, eventId) };
@@ -144,9 +135,10 @@ test("onboarding hashes event files, verifies reference data and commits the pin
   const written = parseEventDataPin(JSON.parse(await readFile(result.destination, "utf8")));
   assert.deepEqual(
     written.files.map(({ path: filePath, sha256: hash }) => [filePath, hash]),
-    [...data.eventFiles].map(([filePath, bytes]) => [filePath, sha256(bytes)]),
+    [...data.eventFiles, ...[...data.referenceFiles].sort(([left], [right]) => left.localeCompare(right))]
+      .map(([filePath, bytes]) => [filePath, sha256(bytes)]),
   );
-  assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("candidate"));
+  assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("candidate"));
 });
 
 test("a validation failure preserves the previous pin and every fetched or staged tree", async (t) => {
@@ -158,17 +150,17 @@ test("a validation failure preserves the previous pin and every fetched or stage
   await writeWorkspaceState(temporary, "previous");
   await assert.rejects(onboardEvent({
     eventId,
-    commit: eventCommit,
+    commit,
     root: temporary,
     fetchImpl: fetchFrom(fixture().responses),
     validate: async (_pinPath, workspace) => {
       await writeWorkspaceState(workspace, "rejected candidate");
-      assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("previous"));
+      assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("previous"));
       throw new Error("simulated staged validation failure");
     },
   }), /simulated staged validation failure/);
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
-  assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("previous"));
+  assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 
@@ -187,7 +179,7 @@ test("a final rename failure restores the previous pin and every promoted tree",
   };
   await assert.rejects(onboardEvent({
     eventId,
-    commit: eventCommit,
+    commit,
     root: temporary,
     fetchImpl: fetchFrom(fixture().responses),
     validate: async (_pinPath, workspace) => {
@@ -197,7 +189,7 @@ test("a final rename failure restores the previous pin and every promoted tree",
     fileSystemOverrides: { rename: renameWithFailure },
   }), /simulated pin rename failure/);
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
-  assert.deepEqual(await readWorkspaceState(temporary), Array(4).fill("previous"));
+  assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 
@@ -205,7 +197,7 @@ test("branch names and tags are rejected before fetching or writing", async (t) 
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-revision-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   let fetches = 0;
-  for (const revision of ["main", "v1.0.0", eventCommit.slice(0, 12)]) {
+  for (const revision of ["main", "v1.0.0", commit.slice(0, 12)]) {
     await assert.rejects(onboardEvent({
       eventId,
       commit: revision,
@@ -217,8 +209,8 @@ test("branch names and tags are rejected before fetching or writing", async (t) 
   await assert.rejects(readFile(path.join(temporary, "data", "event-data-pins", `${eventId}.json`)), /ENOENT/);
 });
 
-test("a missing commit or tampered reference file leaves no pin", async (t) => {
-  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-failure-"));
+test("a missing commit leaves no pin", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-missing-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   await assert.rejects(onboardEvent({
     eventId,
@@ -226,37 +218,38 @@ test("a missing commit or tampered reference file leaves no pin", async (t) => {
     root: temporary,
     fetchImpl: async () => new Response("not found", { status: 404 }),
   }), /HTTP 404/);
-
-  const data = fixture();
-  const [tamperedPath] = data.referenceFiles.keys();
-  data.responses.set(
-    `https://raw.githubusercontent.com/${referenceRepository}/${referenceCommit}/${tamperedPath}`,
-    Buffer.from("tampered"),
-  );
-  await assert.rejects(onboardEvent({
-    eventId,
-    commit: eventCommit,
-    root: temporary,
-    fetchImpl: fetchFrom(data.responses),
-  }), /SHA-256 mismatch/);
   await assert.rejects(readFile(path.join(temporary, "data", "event-data-pins", `${eventId}.json`)), /ENOENT/);
 });
 
-test("an unsupported reference pin schema leaves no pin", async (t) => {
+test("a reference file the selection does not describe leaves no pin", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-tampered-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const data = fixture();
+  const [tamperedPath] = data.referenceFiles.keys();
+  data.responses.set(rawUrl(tamperedPath), Buffer.from("tampered"));
+  await assert.rejects(onboardEvent({
+    eventId,
+    commit,
+    root: temporary,
+    fetchImpl: fetchFrom(data.responses),
+  }), /not valid JSON/);
+  await assert.rejects(readFile(path.join(temporary, "data", "event-data-pins", `${eventId}.json`)), /ENOENT/);
+});
+
+test("an unsupported reference selection schema leaves no pin", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-schema-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const data = fixture();
-  const invalid = { ...data.referencePin, schema: "reference-data-pin/3" };
   data.responses.set(
-    `https://raw.githubusercontent.com/${eventRepository}/${eventCommit}/reference-data-pin.json`,
-    jsonBytes(invalid),
+    rawUrl(`events/${eventId}/reference-selection.json`),
+    jsonBytes({ ...data.referenceSelection, schema: "reference-data-pin/2" }),
   );
   await assert.rejects(onboardEvent({
     eventId,
-    commit: eventCommit,
+    commit,
     root: temporary,
     fetchImpl: fetchFrom(data.responses),
-  }), /Unsupported reference data pin schema/);
+  }), /Unsupported reference selection schema/);
   await assert.rejects(readFile(path.join(temporary, "data", "event-data-pins", `${eventId}.json`)), /ENOENT/);
 });
 
@@ -267,6 +260,6 @@ test("the generated FF47 pin serialization is byte-for-byte identical to the rev
 
 test("preparing an onboarding pin does not write to disk", async () => {
   const data = fixture();
-  const prepared = await prepareEventOnboarding({ eventId, commit: eventCommit, fetchImpl: fetchFrom(data.responses) });
-  assert.equal(prepared.pin.repository, eventRepository);
+  const prepared = await prepareEventOnboarding({ eventId, commit, fetchImpl: fetchFrom(data.responses) });
+  assert.equal(prepared.pin.repository, EVENT_DATA_REPOSITORY);
 });

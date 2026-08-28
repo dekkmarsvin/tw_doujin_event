@@ -2,35 +2,29 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   EVENT_DATA_PIN_SCHEMA,
+  EVENT_DATA_REPOSITORY,
+  EVENT_FILE_NAMES,
+  REFERENCE_SELECTION_FILE,
+  assertEventDataLocator,
+  eventFilePath,
   parseEventDataPin,
   rawFileUrl,
   sha256,
 } from "./event-data-pin-utils.mjs";
-import { replaceVerifiedTrees } from "./reference-data-fetcher.mjs";
 import {
-  parseReferenceDataPin,
-  rawReferenceFileUrl,
+  parseReferenceSelection,
+  referenceSelectionPaths,
   selectEventReferenceRecords,
-  verifyReferenceDataFiles,
-} from "./reference-data-pin-utils.mjs";
+  verifyReferenceFiles,
+} from "./reference-selection-utils.mjs";
+import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
 import { parseJsonBytesStrict } from "./strict-json-file.mjs";
-
-export const EVENT_DATA_FILES = Object.freeze([
-  "event.json",
-  "official-booths.json",
-  "map.json",
-  "reference-data-pin.json",
-]);
 
 export function onboardingWorkspaceReplacements(root, workspace, eventId) {
   return [
     {
       temporary: path.join(workspace, ".event-data", eventId),
       destination: path.join(root, ".event-data", eventId),
-    },
-    {
-      temporary: path.join(workspace, ".reference-data", eventId),
-      destination: path.join(root, ".reference-data", eventId),
     },
     {
       temporary: path.join(workspace, "public", "data", "events"),
@@ -41,10 +35,6 @@ export function onboardingWorkspaceReplacements(root, workspace, eventId) {
       destination: path.join(root, ".event-data-stage.json"),
     },
   ];
-}
-
-function repositoryFor(eventId) {
-  return `dekkmarsvin/tw_doujin_event-data-${eventId}`;
 }
 
 async function fetchBytes(url, label, fetchImpl) {
@@ -72,41 +62,52 @@ export function serializeEventDataPin(value) {
   ].join("\n");
 }
 
+/**
+ * Two passes, because the shared repository made the reference file set
+ * event-specific. The first pass fetches the event folder, which is a fixed
+ * list of names. Only after `reference-selection.json` is in hand does the
+ * second pass know which `references/` files this event resolves.
+ */
 export async function prepareEventOnboarding({ eventId, commit, fetchImpl = globalThis.fetch }) {
   if (typeof fetchImpl !== "function") throw new Error("A fetch implementation is required.");
-  const seedPin = parseEventDataPin({
+  assertEventDataLocator(eventId, commit);
+  const locator = { repository: EVENT_DATA_REPOSITORY, commit };
+  async function fetchPinned(filePath) {
+    return fetchBytes(rawFileUrl(locator, { path: filePath }), filePath, fetchImpl);
+  }
+
+  const bytesByPath = new Map();
+  for (const name of EVENT_FILE_NAMES) {
+    const filePath = eventFilePath(eventId, name);
+    bytesByPath.set(filePath, await fetchPinned(filePath));
+  }
+
+  const selection = parseReferenceSelection(parseJsonBytesStrict(
+    bytesByPath.get(eventFilePath(eventId, REFERENCE_SELECTION_FILE)),
+    `Pinned ${REFERENCE_SELECTION_FILE}`,
+  ));
+  if (selection.eventId !== eventId) {
+    throw new Error(`Reference selection identity mismatch: expected ${eventId}, got ${selection.eventId}.`);
+  }
+
+  const referenceBytes = new Map();
+  for (const filePath of referenceSelectionPaths(selection).sort()) {
+    const bytes = await fetchPinned(filePath);
+    referenceBytes.set(filePath, bytes);
+    bytesByPath.set(filePath, bytes);
+  }
+
+  const verified = verifyReferenceFiles(selection, referenceBytes, eventId);
+  const event = parseJsonBytesStrict(bytesByPath.get(eventFilePath(eventId, "event.json")), "Pinned event.json");
+  selectEventReferenceRecords(selection, verified.records, event);
+
+  const pin = parseEventDataPin({
     schema: EVENT_DATA_PIN_SCHEMA,
     eventId,
-    repository: repositoryFor(eventId),
+    repository: EVENT_DATA_REPOSITORY,
     commit,
-    files: EVENT_DATA_FILES.map((filePath) => ({ path: filePath, sha256: "0".repeat(64) })),
+    files: [...bytesByPath].map(([filePath, bytes]) => ({ path: filePath, sha256: sha256(bytes) })),
   });
-  const eventFiles = new Map();
-  for (const file of seedPin.files) {
-    eventFiles.set(file.path, await fetchBytes(rawFileUrl(seedPin, file), file.path, fetchImpl));
-  }
-  const pin = parseEventDataPin({
-    ...seedPin,
-    files: seedPin.files.map((file) => ({ path: file.path, sha256: sha256(eventFiles.get(file.path)) })),
-  });
-
-  const referencePin = parseReferenceDataPin(parseJsonBytesStrict(
-    eventFiles.get("reference-data-pin.json"),
-    "Pinned reference-data-pin.json",
-  ));
-  if (referencePin.eventId !== eventId) {
-    throw new Error(`Reference data pin identity mismatch: expected ${eventId}, got ${referencePin.eventId}.`);
-  }
-  const referenceFiles = new Map();
-  for (const file of referencePin.files) {
-    referenceFiles.set(
-      file.path,
-      await fetchBytes(rawReferenceFileUrl(referencePin, file), `reference data ${file.path}`, fetchImpl),
-    );
-  }
-  const verified = verifyReferenceDataFiles(referencePin, referenceFiles);
-  const event = parseJsonBytesStrict(eventFiles.get("event.json"), "Pinned event.json");
-  selectEventReferenceRecords(referencePin, verified.records, event);
   return { pin, serialized: serializeEventDataPin(pin) };
 }
 

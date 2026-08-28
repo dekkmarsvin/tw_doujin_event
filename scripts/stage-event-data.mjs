@@ -2,7 +2,13 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { parseReferenceDataPin, selectEventReferenceRecords, verifyReferenceDataFiles } from "./reference-data-pin-utils.mjs";
+import { REFERENCE_SELECTION_FILE } from "./event-data-pin-utils.mjs";
+import {
+  parseReferenceSelection,
+  referenceSelectionPaths,
+  selectEventReferenceRecords,
+  verifyReferenceFiles,
+} from "./reference-selection-utils.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,15 +48,17 @@ await cp(path.join(source, "map.json"), path.join(destination, "map.json"));
 if (fixture) {
   await cp(path.join(source, "reference-records.json"), path.join(destination, "reference-records.json"));
 } else {
-  const referencePin = parseReferenceDataPin(await readJsonFileStrict(path.join(source, "reference-data-pin.json"), "reference-data-pin.json"));
-  if (referencePin.eventId !== eventId) throw new Error(`Reference data pin identity mismatch: expected ${eventId}, got ${referencePin.eventId}.`);
-  const referenceRoot = path.join(workspace, ".reference-data", eventId);
-  const filesByPath = new Map(await Promise.all(referencePin.files.map(async (file) => [
-    file.path,
-    await readFile(path.join(referenceRoot, file.path)),
+  const selection = parseReferenceSelection(
+    await readJsonFileStrict(path.join(source, REFERENCE_SELECTION_FILE), REFERENCE_SELECTION_FILE),
+  );
+  // Selection paths are repository-relative, and `data:fetch` keeps the
+  // `references/` prefix on disk, so they resolve against the fetched tree.
+  const filesByPath = new Map(await Promise.all(referenceSelectionPaths(selection).map(async (filePath) => [
+    filePath,
+    await readFile(path.join(source, filePath)),
   ])));
-  const verified = verifyReferenceDataFiles(referencePin, filesByPath);
-  const selectedRecords = selectEventReferenceRecords(referencePin, verified.records, event);
+  const verified = verifyReferenceFiles(selection, filesByPath, eventId);
+  const selectedRecords = selectEventReferenceRecords(selection, verified.records, event);
   await writeFile(
     path.join(destination, "reference-records.json"),
     `${JSON.stringify(selectedRecords, null, 2)}\n`,
