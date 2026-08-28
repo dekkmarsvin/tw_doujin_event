@@ -111,10 +111,11 @@ test("separate pasted tables can map a fixed day and merge into one event candid
   const table = parseOfficialBoothImportTable(`
     <table>
       <tr><th>區域</th><th>攤位</th><th>社團</th></tr>
-      <tr><td rowspan="2">北區</td><td>A01A02</td><td>甲&amp;乙</td></tr>
+      <tr><td rowspan="2">北區</td><td>A01A02</td><td>甲&middot;乙&amp;丙</td></tr>
       <tr><td>A03</td><td>丙</td></tr>
     </table>
   `, "html");
+  assert.deepEqual(table.rows.map((row) => row.line), [3, 4, 5]);
   assert.deepEqual(table.rows[2].cells, ["北區", "A03", "丙"]);
   const preview = prepareOfficialBoothImport({
     table,
@@ -124,7 +125,7 @@ test("separate pasted tables can map a fixed day and merge into one event candid
   });
   assert.deepEqual(preview.errors, []);
   assert.deepEqual(preview.payload.days[0].booths, [
-    { codes: ["A01", "A02"], name: "甲&乙" },
+    { codes: ["A01", "A02"], name: "甲·乙&丙" },
     { codes: ["A03"], name: "丙" },
   ]);
   const second = prepareOfficialBoothImport({

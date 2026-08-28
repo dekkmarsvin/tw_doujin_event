@@ -1,5 +1,6 @@
 import { lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { decodeHTML } from "entities";
 import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
 
 const FORMATS = new Set(["csv", "tsv", "html"]);
@@ -63,20 +64,9 @@ function parseDelimited(text, delimiter) {
 }
 
 function decodeHtml(value) {
-  const named = new Map([
-    ["amp", "&"], ["lt", "<"], ["gt", ">"], ["quot", '"'], ["apos", "'"], ["nbsp", " "],
-  ]);
-  return value
+  return decodeHTML(value
     .replace(/<br\s*\/?\s*>/giu, "\n")
-    .replace(/<[^>]*>/gu, " ")
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/giu, (match, entity) => {
-      if (entity[0] === "#") {
-        const hexadecimal = entity[1]?.toLowerCase() === "x";
-        const codePoint = Number.parseInt(entity.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
-        try { return String.fromCodePoint(codePoint); } catch { return match; }
-      }
-      return named.get(entity.toLowerCase()) ?? match;
-    });
+    .replace(/<[^>]*>/gu, " "));
 }
 
 function positiveSpan(attributes, name) {
@@ -89,9 +79,10 @@ function positiveSpan(attributes, name) {
 
 function parseHtml(text) {
   const input = String(text ?? "");
-  const tables = [...input.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/giu)];
+  const tables = [...input.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/dgiu)];
   if (tables.length !== 1) throw new Error(`HTML input must contain exactly one table; found ${tables.length}.`);
   const table = tables[0];
+  const tableContentIndex = table.indices[1][0];
   const rows = [];
   const spans = new Map();
   for (const rowMatch of table[1].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/giu)) {
@@ -116,7 +107,7 @@ function parseHtml(text) {
       }
       column += colspan;
     }
-    const absoluteIndex = (table.index ?? 0) + (rowMatch.index ?? 0);
+    const absoluteIndex = tableContentIndex + (rowMatch.index ?? 0);
     rows.push({ line: input.slice(0, absoluteIndex).split(/\r\n|\r|\n/u).length, cells });
   }
   if (spans.size > 0) throw new Error("HTML table rowspan extends beyond the last row.");
