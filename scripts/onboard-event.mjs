@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { onboardEvent, onboardingWorkspaceReplacements } from "./event-onboarding.mjs";
@@ -29,6 +30,13 @@ const result = await onboardEvent({
   root,
   validate: async (temporaryPin, workspace) => {
     await runScript("fetch-event-data.mjs", [eventId, "--pin", temporaryPin, "--workspace", workspace]);
+    const registryDirectory = path.join(workspace, "data", "circle-identities");
+    await mkdir(registryDirectory, { recursive: true });
+    await Promise.all([
+      cp(path.join(root, "data", "circle-identities", "allocations.json"), path.join(registryDirectory, "allocations.json")),
+      cp(path.join(root, "data", "circle-identities", "evidence.json"), path.join(registryDirectory, "evidence.json")),
+    ]);
+    await runScript("generate-circle-identities.mjs", [eventId, "--workspace", workspace, "--write"]);
     await runScript("stage-event-data.mjs", [eventId, "--workspace", workspace]);
     await runScript("check-staged-event-data.mjs", ["--workspace", workspace]);
     return { replacements: onboardingWorkspaceReplacements(root, workspace, eventId) };

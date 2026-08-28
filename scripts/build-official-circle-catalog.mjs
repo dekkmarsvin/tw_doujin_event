@@ -26,7 +26,7 @@ const outputPath = path.join(workspace, "public", "data", "events", eventId, "ci
 const [event, officialValue, evidence] = await Promise.all([
   readJsonFileStrict(path.join(dataDir, "event.json"), "event.json"),
   readJsonFileStrict(path.join(dataDir, "official-booths.json"), "official-booths.json"),
-  readJsonFileStrict(path.join(root, "data", "circle-identities", "evidence.json"), "identity evidence"),
+  readJsonFileStrict(path.join(workspace, "data", "circle-identities", "evidence.json"), "identity evidence"),
 ]);
 if (event.id !== eventId) throw new Error(`Event definition identity mismatch: expected ${eventId}, got ${event.id}.`);
 const official = parseOfficialBoothData(officialValue, event);
