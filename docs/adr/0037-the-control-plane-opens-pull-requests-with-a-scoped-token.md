@@ -1,7 +1,7 @@
 # ADR-0037：控制面以受限 GitHub 憑證開 PR，不得合併
 
 - 狀態：已定案（2026-08-28）；**實施暫緩**，見 [ADR-0039](./0039-one-data-repo-for-events-and-references.md) 決策第 5 點。憑證範圍、不可讓步的邊界、外洩分析與 ruleset 前置全部維持有效；暫緩的是發行時點，重新評估的條件是第二場真實活動跑完一次
-- **部分被取代**：「fine-grained PAT 的 repository 選取每接一場新活動就要更新一次」由 ADR-0039 決策第 1 點消滅，token 目標固定為 `tw_doujin_event` 與 `tw_doujin_event-data` 兩個
+- **部分被取代**：本 ADR 兩張表點名的 repository 由 [ADR-0039](./0039-one-data-repo-for-events-and-references.md) 決策第 5 點逐條改寫——憑證範圍表的「目標 repository」列與發行前置的 ruleset 表，對象都改為 `dekkmarsvin/tw_doujin_event` 與 `dekkmarsvin/tw_doujin_event-data` 兩個；「event-data 是每場活動一個 repository」整段（含逐活動更新 token 選取那道人工關卡）刪除。**下方兩張表的 `tw_doujin_event-reference-data` 與 `tw_doujin_event-data-ff47` 在遷移後是 archive 的 repository，照字面執行會保護錯的對象。**其餘各列、不可讓步的邊界與外洩分析不變
 - 相關 issue：[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §5、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)
 - 延續：[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md)、[ADR-0032](./0032-shared-reference-data-is-public-and-pinned.md)、[ADR-0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)、[ADR-0035](./0035-new-event-onboarding-is-data-driven.md)
 - 部分取代：[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)「候選匯出不呼叫 GitHub」一句
