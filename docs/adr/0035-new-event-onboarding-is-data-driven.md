@@ -1,6 +1,7 @@
 # ADR-0035：新活動 onboarding 以資料驅動，authoring 逐步搬離本機
 
-- 狀態：**部分定案（2026-08-26 起草，2026-08-28 修訂狀態與後果）** — **選項 A 與選項 C 的 authoring 面已全數實作，兩者不再是提案而是現況**；**選項 D 已否決**；**選項 B（authoring 搬上 Pages）仍未落地，是本 ADR 唯一未定案的部分**，其範圍與前置決策已移交 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)。
+- 狀態：**已定案（2026-08-26）** — **選項 A 與選項 C 的 authoring 面已實作**，**選項 D 已否決**。**選項 B 當時未定案**，其定案與本 ADR 決策第 4 點的推翻記於 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)（2026-08-28）。
+- **部分被取代**：選項 B 的定案與決策第 4 點的推翻見 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)；控制面持有 GitHub 憑證見 [ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md)
 - 相關 issue：[#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85)、[#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86)（已切分並關閉）、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - 輸入研究：[台灣同人展主辦官方攤位頁面盤點](../research/taiwan-organizer-booth-pages.md)
 - 延續：[ADR-0008](./0008-static-public-reading-path.md)、[ADR-0012](./0012-first-party-sources-only.md)、[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md)、[ADR-0032](./0032-shared-reference-data-is-public-and-pinned.md)、[ADR-0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)
@@ -105,7 +106,7 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 - 單人維護時 pull request review 本來就是自我 review，**但 diff 本身仍是稽核紀錄**。要回答「這格攤位為什麼屬於這個社團」時，需要的是那份 diff，不是一列沒有歷史的 D1 record。這正是 [ADR-0012](./0012-first-party-sources-only.md) 的「只用官方來源」宣稱唯一撐得住的憑據。
 - 合併三個 repository 一併否決：[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md) 的理由是每場活動的授權與公開時程各自獨立，[ADR-0026](./0026-public-sanitized-event-data-and-history-rewrite.md) 另外預留歷史重寫空間。這些邊界與維護負擔無關，合併只會讓它們更難維持。
 
-## 決策（草案）
+## 決策
 
 1. **採用 A、C、B，依此順序；否決 D。**
 2. **A 先行**：onboarding 腳本不改變任何契約，只把既有手動步驟自動化。pin 的計算與 fail-closed 語意維持不變。
@@ -121,12 +122,13 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 - **選項 A 已落地。** `npm run event:onboard`（`scripts/onboard-event.mjs`）取得固定 event-data commit、計算 SHA-256、驗證 reference pin 與 schema、staging 並原子更新 pin。第 8、9 步的手抄雜湊值已消失。見 [#90](https://github.com/dekkmarsvin/tw_doujin_event/issues/90)。
 - **選項 C 的 authoring 面已全數落地，含第二輪。** 三道硬阻擋已解除、排原語（`generateRowSlots`／`createRow`）已可建立整排；選項 C 定為「第二輪、屬主線前置」的三點錨定推算亦已實作（`inferRowFromAnchors`，[#99](https://github.com/dekkmarsvin/tw_doujin_event/issues/99)）。其後另有四項效率工作落地：逐步 undo/redo（[#96](https://github.com/dekkmarsvin/tw_doujin_event/issues/96)）、所有矩形型別的四角縮放與畫布尺寸可編輯（[#97](https://github.com/dekkmarsvin/tw_doujin_event/issues/97)）、多選與批次操作（[#98](https://github.com/dekkmarsvin/tw_doujin_event/issues/98)）、審閱留言串與草稿衝突具名（[#100](https://github.com/dekkmarsvin/tw_doujin_event/issues/100)、[#101](https://github.com/dekkmarsvin/tw_doujin_event/issues/101)）。**手動繪製任何場館已是可行路徑，#87 列出的五項 authoring 效率缺口已解決四項**（未解的活動選擇器不影響繪製速度，見下）。
 - **C 的第 3 步（貼上官方表格取代逐主辦爬蟲）不在上述範圍內。** 選項 C 已標明它「不因排原語而消失，是獨立問題」；它仍未實作，由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §2 承擔。
-- **選項 B 仍未落地，且本 ADR 低估了它。** 決策第 4 點把 B 定位為「可及性改善而非能力改善」。#104 §4a 指出這個定位不成立：`/editor` 只由 `vite.config.ts`（本機 vinext）建置，Pages build 的 rollup input 只有 `index.html` 與 `circle.html`（`vite.pages.config.ts`），因此**在 B 落地前，「不開 IDE 完成新活動」不是慢，是做不到**。B 另有一項本 ADR 未預見的前置：控制面在資料上只能定址目前 Pages 設定的單一 `eventId`（#104 §0）。B 的完整範圍與前置決策移交 #104。
+- **選項 B 在本 ADR 中未定案。** 決策第 4 點把 B 定位為「可及性改善而非能力改善」。#104 §4a 指出這個定位不成立：`/editor` 只由 `vite.config.ts`（本機 vinext）建置，Pages build 的 rollup input 只有 `index.html` 與 `circle.html`（`vite.pages.config.ts`），因此**在 B 落地前，「不開 IDE 完成新活動」不是慢，是做不到**。B 另有一項本 ADR 未預見的前置：控制面在資料上只能定址目前 Pages 設定的單一 `eventId`（#104 §0）。B 的定案見 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)，實作範圍見 #104 §4（#117）。
 
 ### 既有後果
 
 - 接一場新活動的步驟由十步降為以資料填寫為主，程式變更只在出現全新配置拓樸時才需要。
-- [地圖 authoring runbook](../runbooks/map-authoring.md) 關於 `PUT` route 不得部署的敘述**目前仍然有效**，因為 B 尚未落地。它在 B 落地時必須同步改寫並註明推翻理由；該改寫已列為 #104 的前置決策之一。
+- 本 ADR 起草時寫「採用 B 等於推翻 runbook 的 `PUT` route 部署禁令」。[ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 推翻該推導：被限縮的是另一句話，`PUT` 禁令本身維持有效。
+- 控制面持有 GitHub 寫入憑證另立 [ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md)：可 push 新分支與開 PR，不得合併。決策第 5 點的「不得按一下即公開」因此不變。
 - 自動辨識由「每個場館都要有」降級為「FF47 既有實作保留，新場館不強制提供」。既有 FF47 辨識器不移除。
 - **不新增任何場館專屬辨識器。** 原敘述為「排原語落地前不新增」；排原語已落地，該限制轉為常設邊界，不因落地而解除。
 - [#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86) 要求的重新切分**已完成**：錨定推算切為 #99（主線前置，已實作），審閱協作切為 #100／#101（次要，亦已實作），效率缺口切為 #96／#97／#98。#86 已於 2026-08-27 關閉。
@@ -140,4 +142,4 @@ type BoothRow = { label: string; orientation: MapOrientation; confidence: number
 - 排原語的編號規則要支援到什麼程度（等距、雙面對排、跳號、連格如 `A01,A02` 與 `A01A02`）。應由駁二與 CWT 的實際編號決定，見[主辦官方攤位頁面盤點](../research/taiwan-organizer-booth-pages.md)。
 - 企業／商業攤的表示方式。FF47 於 authoring 階段以 landmark 人工加入，CWT 的 `商` 則是官方編號的一等公民。排原語必須先解這一題。
 - 「貼上官方表格 → 預覽差異」的輸入格式是否共用[資料匯入契約](../contracts/data-import.md)的 CSV v1，或另立格式。
-- B 落地後，本機 authoring 環境是否保留為離線備援，或完全退場。此項與 B 的定案一併移交 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 的前置決策。
+- ~~B 落地後，本機 authoring 環境是否保留為離線備援，或完全退場。~~ **已裁決於 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)（2026-08-28）：保留為離線備援。**
