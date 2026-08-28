@@ -20,6 +20,18 @@
 
 ## 更新流程
 
+### 0. 建立新活動資料夾（新活動才需要）
+
+從本 repository 執行互動式 generator，並明確指定單一 data repo checkout：
+
+```bash
+npm run event:generate -- --workspace ../tw_doujin_event-data
+```
+
+Wizard 會建立 `events/<eventId>/event.json`、`reference-selection.json` 與必要的 `NOTICE`；選到尚不存在的 organizer、category catalog、venue 或 venue-space 時，也會在同一個 workspace 建立對應的 `references/` 候選檔。它使用 main repository 現行 parser 與 selection validator，在任何寫入前 fail closed。
+
+相同答案重跑是 no-op。若活動資料夾或 reference stable ID 已存在但內容不同，generator 會拒絕覆寫，交由維護者 review 現有 diff 後處理。它不建立 `official-booths.json` 或 `map.json`，兩者仍由後續匯入與地圖 authoring 產生。
+
 ### 1. 在 data repo 更新官方資料
 
 更新 `events/<eventId>/` 底下的 `event.json`、`official-booths.json`、`map.json` 或 `reference-selection.json`，依該活動的 `NOTICE` 檢查來源與差異，開 PR 通過 `data / check` 與人工 diff review 後合併。不要在程式 repo 直接建立真實活動快照。
