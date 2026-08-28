@@ -110,9 +110,9 @@ test("TSV import reports missing, duplicate, and unmapped rows without producing
 test("separate pasted tables can map a fixed day and merge into one event candidate", () => {
   const table = parseOfficialBoothImportTable(`
     <table>
-      <tr><th>區域</th><th>攤位</th><th>社團</th></tr>
-      <tr><td rowspan="2">北區</td><td>A01A02</td><td>甲&middot;乙&amp;丙</td></tr>
-      <tr><td>A03</td><td>丙</td></tr>
+      <tr><th>區域<th>攤位<th>社團
+      <tr><td rowspan="2">北區<td>A01A02<td>甲&middot;乙&amp;丙
+      <tr><td>A03<td>丙
     </table>
   `, "html");
   assert.deepEqual(table.rows.map((row) => row.line), [3, 4, 5]);

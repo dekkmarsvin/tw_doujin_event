@@ -1,6 +1,6 @@
 import { lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { decodeHTML } from "entities";
+import { parseFragment } from "parse5";
 import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
 
 const FORMATS = new Set(["csv", "tsv", "html"]);
@@ -63,29 +63,52 @@ function parseDelimited(text, delimiter) {
   return rows;
 }
 
-function decodeHtml(value) {
-  return decodeHTML(value
-    .replace(/<br\s*\/?\s*>/giu, "\n")
-    .replace(/<[^>]*>/gu, " "));
+function elementsByTag(node, tagName) {
+  const elements = [];
+  for (const child of node.childNodes ?? []) {
+    if (child.tagName === tagName) elements.push(child);
+    elements.push(...elementsByTag(child, tagName));
+  }
+  return elements;
 }
 
-function positiveSpan(attributes, name) {
-  const match = new RegExp(`\\b${name}\\s*=\\s*(?:["'](\\d+)["']|(\\d+))`, "iu").exec(attributes);
-  if (!match) return 1;
-  const value = Number(match[1] ?? match[2]);
+function tableRows(table) {
+  const rows = [];
+  function visit(node) {
+    for (const child of node.childNodes ?? []) {
+      if (child.tagName === "table") continue;
+      if (child.tagName === "tr") rows.push(child);
+      else visit(child);
+    }
+  }
+  visit(table);
+  return rows;
+}
+
+function htmlText(node) {
+  if (node.nodeName === "#text") return node.value;
+  if (node.tagName === "br") return "\n";
+  return (node.childNodes ?? []).map(htmlText).join("");
+}
+
+function positiveSpan(element, name) {
+  const attribute = element.attrs.find(({ name: attributeName }) => attributeName === name);
+  if (!attribute) return 1;
+  if (!/^\d+$/u.test(attribute.value)) throw new Error(`HTML table has an invalid ${name}.`);
+  const value = Number(attribute.value);
   if (!Number.isInteger(value) || value < 1) throw new Error(`HTML table has an invalid ${name}.`);
   return value;
 }
 
 function parseHtml(text) {
   const input = String(text ?? "");
-  const tables = [...input.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/dgiu)];
+  const fragment = parseFragment(input, { sourceCodeLocationInfo: true });
+  const tables = elementsByTag(fragment, "table");
   if (tables.length !== 1) throw new Error(`HTML input must contain exactly one table; found ${tables.length}.`);
   const table = tables[0];
-  const tableContentIndex = table.indices[1][0];
   const rows = [];
   const spans = new Map();
-  for (const rowMatch of table[1].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/giu)) {
+  for (const row of tableRows(table)) {
     const cells = [];
     for (const [column, span] of spans) {
       cells[column] = span.value;
@@ -93,13 +116,13 @@ function parseHtml(text) {
       if (span.remaining === 0) spans.delete(column);
     }
     let column = 0;
-    const cellMatches = [...rowMatch[1].matchAll(/<(td|th)\b([^>]*)>([\s\S]*?)<\/\1>/giu)];
+    const cellMatches = row.childNodes.filter(({ tagName }) => tagName === "td" || tagName === "th");
     if (cellMatches.length === 0) continue;
     for (const cellMatch of cellMatches) {
       while (cells[column] !== undefined) column += 1;
-      const value = normalizedText(decodeHtml(cellMatch[3]));
-      const colspan = positiveSpan(cellMatch[2], "colspan");
-      const rowspan = positiveSpan(cellMatch[2], "rowspan");
+      const value = normalizedText(htmlText(cellMatch));
+      const colspan = positiveSpan(cellMatch, "colspan");
+      const rowspan = positiveSpan(cellMatch, "rowspan");
       for (let offset = 0; offset < colspan; offset += 1) {
         if (cells[column + offset] !== undefined) throw new Error("HTML table has overlapping spans.");
         cells[column + offset] = value;
@@ -107,8 +130,9 @@ function parseHtml(text) {
       }
       column += colspan;
     }
-    const absoluteIndex = tableContentIndex + (rowMatch.index ?? 0);
-    rows.push({ line: input.slice(0, absoluteIndex).split(/\r\n|\r|\n/u).length, cells });
+    const line = row.sourceCodeLocation?.startLine;
+    if (!Number.isInteger(line)) throw new Error("HTML table row has no source location.");
+    rows.push({ line, cells });
   }
   if (spans.size > 0) throw new Error("HTML table rowspan extends beyond the last row.");
   return rows;
