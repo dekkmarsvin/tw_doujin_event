@@ -87,7 +87,7 @@ pin 的 `files` 同時列出該活動使用的 `events/<eventId>/*` 與 `referen
 
 ```text
 data repo PR
-  events/<eventId>/event.json + official-booths.json + map.json + reference-selection.json
+  events/<eventId>/event.json + official-booths.json + circle-identity-groups.json + map.json + reference-selection.json
   ↓
 main repo PR
   allocations.json + evidence.json + data/event-data-pins/<eventId>.json

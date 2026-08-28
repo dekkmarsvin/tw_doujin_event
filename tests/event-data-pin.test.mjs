@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   EVENT_DATA_REPOSITORY,
   EVENT_FILE_NAMES,
+  REQUIRED_EVENT_FILE_NAMES,
   assertEventDataPinIdentity,
   eventDataFiles,
   parseEventDataPin,
@@ -19,7 +20,7 @@ test("event data is pinned to a full commit in the shared repository with per-fi
   assert.match(pin.commit, /^[0-9a-f]{40}$/);
   assert.deepEqual(
     eventDataFiles(pin).map((file) => file.path),
-    EVENT_FILE_NAMES.map((name) => `events/ff47/${name}`),
+    REQUIRED_EVENT_FILE_NAMES.map((name) => `events/ff47/${name}`),
   );
   assert.equal(referenceDataFiles(pin).length > 0, true, "the pin resolves its references from the same commit");
   for (const file of pin.files) {
@@ -60,8 +61,21 @@ test("a pin whose folder names another event is not accepted for this one", () =
   assert.throws(() => parseEventDataPin({ ...pin, eventId: "other-event" }), /must start with events\/other-event\//);
 });
 
-test("a pin must carry every event file and at least one reference", () => {
-  for (const name of EVENT_FILE_NAMES) {
+test("new pins may carry the reviewed circle identity grouping", () => {
+  const groupingPath = "events/ff47/circle-identity-groups.json";
+  const withGrouping = {
+    ...pin,
+    files: [...eventDataFiles(pin), { path: groupingPath, sha256: "0".repeat(64) }, ...referenceDataFiles(pin)],
+  };
+  assert.deepEqual(eventDataFiles(parseEventDataPin(withGrouping)).map(({ path }) => path), [
+    ...REQUIRED_EVENT_FILE_NAMES.map((name) => `events/ff47/${name}`),
+    groupingPath,
+  ]);
+  assert.equal(EVENT_FILE_NAMES.includes("circle-identity-groups.json"), true);
+});
+
+test("a pin must carry every legacy event file and at least one reference", () => {
+  for (const name of REQUIRED_EVENT_FILE_NAMES) {
     const missing = { ...pin, files: pin.files.filter((file) => file.path !== `events/ff47/${name}`) };
     assert.throws(() => parseEventDataPin(missing), new RegExp(`missing events/ff47/${name}`));
   }
