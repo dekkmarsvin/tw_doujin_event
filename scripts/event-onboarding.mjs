@@ -17,28 +17,36 @@ import {
   selectEventReferenceRecords,
   verifyReferenceFiles,
 } from "./reference-selection-utils.mjs";
-import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
+import {
+  recoverInterruptedTreeTransaction,
+  replaceVerifiedTreesTransaction,
+} from "./verified-tree-replace.mjs";
 import { parseJsonBytesStrict } from "./strict-json-file.mjs";
 
-export function onboardingWorkspaceReplacements(root, workspace, eventId) {
+export function onboardingWorkspaceDestinations(root, eventId) {
   return [
-    {
-      temporary: path.join(workspace, ".event-data", eventId),
-      destination: path.join(root, ".event-data", eventId),
-    },
-    {
-      temporary: path.join(workspace, "public", "data", "events"),
-      destination: path.join(root, "public", "data", "events"),
-    },
-    {
-      temporary: path.join(workspace, ".event-data-stage.json"),
-      destination: path.join(root, ".event-data-stage.json"),
-    },
-    {
-      temporary: path.join(workspace, "data", "circle-identities"),
-      destination: path.join(root, "data", "circle-identities"),
-    },
+    path.join(root, ".event-data", eventId),
+    path.join(root, "public", "data", "events"),
+    path.join(root, ".event-data-stage.json"),
+    path.join(root, "data", "circle-identities"),
   ];
+}
+
+export function onboardingWorkspaceReplacements(root, workspace, eventId) {
+  const temporaryPaths = [
+    path.join(workspace, ".event-data", eventId),
+    path.join(workspace, "public", "data", "events"),
+    path.join(workspace, ".event-data-stage.json"),
+    path.join(workspace, "data", "circle-identities"),
+  ];
+  return onboardingWorkspaceDestinations(root, eventId).map((destination, index) => ({
+    temporary: temporaryPaths[index],
+    destination,
+  }));
+}
+
+export function onboardingTransactionFile(root, eventId) {
+  return path.join(root, "data", "event-data-pins", `.onboard-${eventId}.transaction.json`);
 }
 
 async function fetchBytes(url, label, fetchImpl) {
@@ -123,23 +131,31 @@ export async function onboardEvent({
   validate = async () => {},
   fileSystemOverrides = {},
 }) {
-  const prepared = await prepareEventOnboarding({ eventId, commit, fetchImpl });
+  assertEventDataLocator(eventId, commit);
   const pinDirectory = path.join(root, "data", "event-data-pins");
   await mkdir(pinDirectory, { recursive: true });
+  const destination = path.join(pinDirectory, `${eventId}.json`);
+  const transactionFile = onboardingTransactionFile(root, eventId);
+  await recoverInterruptedTreeTransaction(
+    [...onboardingWorkspaceDestinations(root, eventId), destination],
+    transactionFile,
+    fileSystemOverrides,
+  );
+  const prepared = await prepareEventOnboarding({ eventId, commit, fetchImpl });
   const temporaryDirectory = await mkdtemp(path.join(pinDirectory, `.tmp-onboard-${eventId}-`));
   const temporaryPin = path.join(temporaryDirectory, `${eventId}.json`);
   const validationWorkspace = path.join(temporaryDirectory, "workspace");
-  const destination = path.join(pinDirectory, `${eventId}.json`);
   try {
     await writeFile(temporaryPin, prepared.serialized);
     await mkdir(validationWorkspace);
     const validation = await validate(temporaryPin, validationWorkspace);
     const replacements = validation?.replacements ?? [];
     for (const replacement of replacements) await mkdir(path.dirname(replacement.destination), { recursive: true });
-    await replaceVerifiedTrees([
-      ...replacements,
-      { temporary: temporaryPin, destination },
-    ], fileSystemOverrides);
+    await replaceVerifiedTreesTransaction(
+      [...replacements, { temporary: temporaryPin, destination }],
+      transactionFile,
+      fileSystemOverrides,
+    );
     return { ...prepared, destination };
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });

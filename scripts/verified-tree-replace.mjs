@@ -1,4 +1,5 @@
-import { lstat, rename, rm } from "node:fs/promises";
+import { lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 // Swapping already-verified trees into place. Callers download and verify into
 // a sibling temporary directory first, then hand the finished trees here so a
@@ -21,9 +22,34 @@ async function pathExists(target, lstatImpl) {
 function fileSystem(overrides = {}) {
   return {
     lstat: overrides.lstat ?? lstat,
+    readFile: overrides.readFile ?? readFile,
     rename: overrides.rename ?? rename,
     rm: overrides.rm ?? rm,
+    writeFile: overrides.writeFile ?? writeFile,
   };
+}
+
+function transactionTemporaryPath(transactionFile) {
+  return `${transactionFile}.temporary`;
+}
+
+function assertExpectedDestinations(journal, destinations) {
+  if (journal?.schema !== "verified-tree-transaction/1" || !Array.isArray(journal.destinations)) {
+    throw new Error("Invalid verified-tree transaction journal.");
+  }
+  const expected = destinations.map((destination) => path.resolve(destination));
+  const actual = journal.destinations.map((entry) => path.resolve(entry?.destination ?? ""));
+  if (actual.length !== expected.length || actual.some((destination, index) => destination !== expected[index])) {
+    throw new Error("Verified-tree transaction journal does not match the requested destinations.");
+  }
+  if (journal.destinations.some((entry) => typeof entry.hadPrevious !== "boolean")) {
+    throw new Error("Invalid verified-tree transaction journal state.");
+  }
+  return journal.destinations.map((entry) => ({
+    destination: entry.destination,
+    backup: `${entry.destination}.previous`,
+    hadPrevious: entry.hadPrevious,
+  }));
 }
 
 export async function recoverInterruptedReplacement(destination, overrides = {}) {
@@ -35,6 +61,86 @@ export async function recoverInterruptedReplacement(destination, overrides = {})
     await fs.rename(backup, destination);
   } else if (destinationExists && backupExists) {
     await fs.rm(backup, { recursive: true, force: true });
+  }
+}
+
+export async function recoverInterruptedTreeTransaction(destinations, transactionFile, overrides = {}) {
+  const fs = fileSystem(overrides);
+  const temporaryJournal = transactionTemporaryPath(transactionFile);
+  const journalExists = await pathExists(transactionFile, fs.lstat);
+  if (!journalExists) {
+    await fs.rm(temporaryJournal, { force: true });
+    for (const destination of destinations) await recoverInterruptedReplacement(destination, fs);
+    return false;
+  }
+
+  const journal = JSON.parse(await fs.readFile(transactionFile, "utf8"));
+  const states = assertExpectedDestinations(journal, destinations);
+  for (const state of [...states].reverse()) {
+    const destinationExists = await pathExists(state.destination, fs.lstat);
+    const backupExists = await pathExists(state.backup, fs.lstat);
+    if (state.hadPrevious) {
+      if (backupExists) {
+        if (destinationExists) await fs.rm(state.destination, { recursive: true, force: true });
+        await fs.rename(state.backup, state.destination);
+      } else if (!destinationExists) {
+        throw new Error(`Cannot recover interrupted replacement for ${state.destination}.`);
+      }
+    } else if (destinationExists) {
+      await fs.rm(state.destination, { recursive: true, force: true });
+    }
+  }
+  await fs.rm(transactionFile, { force: true });
+  await fs.rm(temporaryJournal, { force: true });
+  return true;
+}
+
+export async function replaceVerifiedTreesTransaction(
+  replacements,
+  transactionFile,
+  overrides = {},
+) {
+  const fs = fileSystem(overrides);
+  const destinations = replacements.map(({ destination }) => destination);
+  await recoverInterruptedTreeTransaction(destinations, transactionFile, fs);
+  const states = replacements.map(({ temporary, destination }) => ({
+    temporary,
+    destination,
+    backup: `${destination}.previous`,
+    hadPrevious: false,
+    installed: false,
+  }));
+  for (const state of states) state.hadPrevious = await pathExists(state.destination, fs.lstat);
+
+  const temporaryJournal = transactionTemporaryPath(transactionFile);
+  const journal = {
+    schema: "verified-tree-transaction/1",
+    destinations: states.map(({ destination, hadPrevious }) => ({ destination, hadPrevious })),
+  };
+  await fs.writeFile(temporaryJournal, `${JSON.stringify(journal)}\n`, { flag: "wx" });
+  try {
+    await fs.rename(temporaryJournal, transactionFile);
+    for (const state of states) {
+      if (state.hadPrevious) await fs.rename(state.destination, state.backup);
+    }
+    for (const state of states) {
+      await fs.rename(state.temporary, state.destination);
+      state.installed = true;
+    }
+    await fs.rm(transactionFile, { force: true });
+  } catch (error) {
+    try {
+      await recoverInterruptedTreeTransaction(destinations, transactionFile, fs);
+    } catch (recoveryError) {
+      throw new AggregateError(
+        [error, recoveryError],
+        `Verified-tree replacement failed and recovery was incomplete: ${error.message}`,
+      );
+    }
+    throw error;
+  }
+  for (const state of states) {
+    if (state.hadPrevious) await fs.rm(state.backup, { recursive: true, force: true });
   }
 }
 

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
   onboardEvent,
+  onboardingTransactionFile,
+  onboardingWorkspaceDestinations,
   onboardingWorkspaceReplacements,
   prepareEventOnboarding,
   serializeEventDataPin,
@@ -204,6 +206,43 @@ test("a final rename failure restores the previous pin and every promoted tree",
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
   assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
+});
+
+test("the next onboarding run rolls back every target after interruption between registry and pin install", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-interrupted-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const destination = path.join(temporary, "data", "event-data-pins", `${eventId}.json`);
+  await mkdir(path.dirname(destination), { recursive: true });
+  await writeFile(destination, "previous pin\n");
+  await writeWorkspaceState(temporary, "previous");
+
+  const destinations = [...onboardingWorkspaceDestinations(temporary, eventId), destination];
+  const transactionFile = onboardingTransactionFile(temporary, eventId);
+  await writeFile(transactionFile, `${JSON.stringify({
+    schema: "verified-tree-transaction/1",
+    destinations: destinations.map((transactionDestination) => ({
+      destination: transactionDestination,
+      hadPrevious: true,
+    })),
+  })}\n`);
+  for (const transactionDestination of destinations) {
+    await rename(transactionDestination, `${transactionDestination}.previous`);
+  }
+  await writeWorkspaceState(temporary, "candidate");
+
+  await assert.rejects(onboardEvent({
+    eventId,
+    commit,
+    root: temporary,
+    fetchImpl: async () => new Response("not found", { status: 404 }),
+  }), /HTTP 404/);
+
+  assert.equal(await readFile(destination, "utf8"), "previous pin\n");
+  assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("previous"));
+  await assert.rejects(readFile(transactionFile), /ENOENT/);
+  for (const transactionDestination of destinations) {
+    await assert.rejects(lstat(`${transactionDestination}.previous`), /ENOENT/);
+  }
 });
 
 test("branch names and tags are rejected before fetching or writing", async (t) => {
