@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
@@ -65,15 +65,34 @@ export async function acquireEventOnboardingLock(
 ) {
   const pinDirectory = path.join(root, "data", "event-data-pins");
   const lockDirectory = eventOnboardingLockDirectory(root);
+  let reclaimedDirectory = null;
   if (await pathExists(lockDirectory)) {
-    const activeOwner = await readOwner(lockDirectory);
+    let activeOwner = await readOwner(lockDirectory);
     if (token && activeOwner.token === token) {
       return { token, release: async () => {} };
     }
     if (activeOwner.hostname !== hostname() || processIsAlive(activeOwner.pid)) {
       throw new Error(`Event onboarding is already active on ${activeOwner.hostname} (PID ${activeOwner.pid}).`);
     }
-    await rm(lockDirectory, { recursive: true, force: true });
+    const revalidatedOwner = await readOwner(lockDirectory);
+    if (revalidatedOwner.token !== activeOwner.token) {
+      if (attempt >= 2) throw new Error("Event onboarding lock ownership kept changing during recovery.");
+      return acquireEventOnboardingLock(root, token, attempt + 1);
+    }
+    activeOwner = revalidatedOwner;
+    const tokenDigest = createHash("sha256").update(activeOwner.token).digest("hex").slice(0, 16);
+    reclaimedDirectory = path.join(pinDirectory, `.onboard.lock.stale-${tokenDigest}`);
+    try {
+      await rename(lockDirectory, reclaimedDirectory);
+    } catch (error) {
+      if (!["EACCES", "EEXIST", "ENOENT", "ENOTEMPTY", "EPERM"].includes(error?.code)) throw error;
+      if (attempt >= 2) throw new Error("Could not claim the stale event onboarding lock.", { cause: error });
+      return acquireEventOnboardingLock(root, token, attempt + 1);
+    }
+    const claimedOwner = await readOwner(reclaimedDirectory);
+    if (claimedOwner.token !== activeOwner.token) {
+      throw new Error("Event onboarding lock ownership changed while claiming the stale lock.");
+    }
   }
 
   const candidate = await mkdtemp(path.join(pinDirectory, ".tmp-onboard-lock-"));
@@ -88,6 +107,7 @@ export async function acquireEventOnboardingLock(
     await rename(candidate, lockDirectory);
   } catch (error) {
     await rm(candidate, { recursive: true, force: true });
+    if (reclaimedDirectory) await rm(reclaimedDirectory, { recursive: true, force: true });
     if (!["EACCES", "EEXIST", "ENOTEMPTY", "EPERM"].includes(error?.code)) throw error;
     if (attempt >= 2) throw new Error("Could not acquire the event onboarding lock.", { cause: error });
     return acquireEventOnboardingLock(root, token, attempt + 1);
@@ -99,6 +119,7 @@ export async function acquireEventOnboardingLock(
       const activeOwner = await readOwner(lockDirectory);
       if (activeOwner.token !== owner.token) throw new Error("Event onboarding lock ownership changed before release.");
       await rm(lockDirectory, { recursive: true, force: true });
+      if (reclaimedDirectory) await rm(reclaimedDirectory, { recursive: true, force: true });
     },
   };
 }

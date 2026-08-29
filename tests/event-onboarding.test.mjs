@@ -12,6 +12,10 @@ import {
   serializeEventDataPin,
 } from "../scripts/event-onboarding.mjs";
 import { EVENT_DATA_REPOSITORY, EVENT_FILE_NAMES, parseEventDataPin, sha256 } from "../scripts/event-data-pin-utils.mjs";
+import {
+  acquireEventOnboardingLock,
+  eventOnboardingLockDirectory,
+} from "../scripts/event-onboarding-lock.mjs";
 
 const eventId = "event-alpha";
 const commit = "a".repeat(40);
@@ -294,6 +298,40 @@ test("an active repository-wide lock refuses overlapping onboarding and is relea
     root: temporary,
     fetchImpl: async () => new Response("not found", { status: 404 }),
   }), /HTTP 404/);
+});
+
+test("two commands racing to reclaim one stale lock produce exactly one live owner", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-stale-race-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const pinDirectory = path.join(temporary, "data", "event-data-pins");
+  const lockDirectory = eventOnboardingLockDirectory(temporary);
+  await mkdir(pinDirectory, { recursive: true });
+  for (let round = 0; round < 5; round += 1) {
+    await mkdir(lockDirectory);
+    await writeFile(path.join(lockDirectory, "owner.json"), `${JSON.stringify({
+      schema: "event-onboarding-lock/1",
+      hostname: os.hostname(),
+      pid: 2147483647,
+      token: `stale-owner-${round}`,
+    })}\n`);
+    const results = await Promise.allSettled([
+      acquireEventOnboardingLock(temporary),
+      acquireEventOnboardingLock(temporary),
+    ]);
+    const acquired = results.filter(({ status }) => status === "fulfilled");
+    const refused = results.filter(({ status }) => status === "rejected");
+    assert.equal(acquired.length, 1);
+    assert.equal(refused.length, 1);
+    assert.match(refused[0].reason?.message ?? "", /already active|Could not claim|Could not acquire/);
+    const owner = JSON.parse(await readFile(path.join(lockDirectory, "owner.json"), "utf8"));
+    assert.equal(owner.token, acquired[0].value.token);
+    await acquired[0].value.release();
+    await assert.rejects(lstat(lockDirectory), /ENOENT/);
+    assert.deepEqual(
+      (await readdir(pinDirectory)).filter((name) => name.startsWith(".onboard.lock.stale-")),
+      [],
+    );
+  }
 });
 
 test("every standalone root transaction writer acquires the shared onboarding lock", async () => {
