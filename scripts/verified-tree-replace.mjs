@@ -33,22 +33,37 @@ function transactionTemporaryPath(transactionFile) {
   return `${transactionFile}.temporary`;
 }
 
-function assertExpectedDestinations(journal, destinations) {
+function transactionCommittedPath(transactionFile) {
+  return `${transactionFile}.committed`;
+}
+
+function transactionCommittedTemporaryPath(transactionFile) {
+  return `${transactionCommittedPath(transactionFile)}.temporary`;
+}
+
+function parseTransactionJournal(journal, root) {
   if (journal?.schema !== "verified-tree-transaction/1" || !Array.isArray(journal.destinations)) {
     throw new Error("Invalid verified-tree transaction journal.");
   }
-  const expected = destinations.map((destination) => path.resolve(destination));
-  const actual = journal.destinations.map((entry) => path.resolve(entry?.destination ?? ""));
-  if (actual.length !== expected.length || actual.some((destination, index) => destination !== expected[index])) {
-    throw new Error("Verified-tree transaction journal does not match the requested destinations.");
-  }
-  if (journal.destinations.some((entry) => typeof entry.hadPrevious !== "boolean")) {
+  if (journal.destinations.some((entry) => !path.isAbsolute(entry?.destination ?? "")
+    || typeof entry.hadPrevious !== "boolean")) {
     throw new Error("Invalid verified-tree transaction journal state.");
   }
-  return journal.destinations.map((entry) => ({
-    destination: entry.destination,
-    backup: `${entry.destination}.previous`,
-    hadPrevious: entry.hadPrevious,
+  const resolvedRoot = path.resolve(root);
+  const destinations = journal.destinations.map((entry) => path.resolve(entry.destination));
+  if (new Set(destinations).size !== destinations.length) {
+    throw new Error("Verified-tree transaction journal contains duplicate destinations.");
+  }
+  if (destinations.some((destination) => {
+    const relative = path.relative(resolvedRoot, destination);
+    return relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  })) {
+    throw new Error("Verified-tree transaction journal contains a destination outside its repository.");
+  }
+  return journal.destinations.map((entry, index) => ({
+    ...entry,
+    destination: destinations[index],
+    backup: `${destinations[index]}.previous`,
   }));
 }
 
@@ -64,18 +79,39 @@ export async function recoverInterruptedReplacement(destination, overrides = {})
   }
 }
 
-export async function recoverInterruptedTreeTransaction(destinations, transactionFile, overrides = {}) {
+export async function recoverInterruptedTreeTransaction(transactionFile, root, overrides = {}) {
   const fs = fileSystem(overrides);
   const temporaryJournal = transactionTemporaryPath(transactionFile);
+  const committedJournal = transactionCommittedPath(transactionFile);
+  const temporaryCommittedJournal = transactionCommittedTemporaryPath(transactionFile);
+  const committedExists = await pathExists(committedJournal, fs.lstat);
+  if (committedExists) {
+    const journal = JSON.parse(await fs.readFile(committedJournal, "utf8"));
+    const states = parseTransactionJournal(journal, root);
+    for (const state of states) {
+      if (!await pathExists(state.destination, fs.lstat)) {
+        throw new Error(`Cannot finish committed replacement for ${state.destination}.`);
+      }
+    }
+    for (const state of states) {
+      await fs.rm(state.backup, { recursive: true, force: true });
+    }
+    await fs.rm(transactionFile, { force: true });
+    await fs.rm(committedJournal, { force: true });
+    await fs.rm(temporaryJournal, { force: true });
+    await fs.rm(temporaryCommittedJournal, { force: true });
+    return "committed";
+  }
+
   const journalExists = await pathExists(transactionFile, fs.lstat);
   if (!journalExists) {
     await fs.rm(temporaryJournal, { force: true });
-    for (const destination of destinations) await recoverInterruptedReplacement(destination, fs);
+    await fs.rm(temporaryCommittedJournal, { force: true });
     return false;
   }
 
   const journal = JSON.parse(await fs.readFile(transactionFile, "utf8"));
-  const states = assertExpectedDestinations(journal, destinations);
+  const states = parseTransactionJournal(journal, root);
   for (const state of [...states].reverse()) {
     const destinationExists = await pathExists(state.destination, fs.lstat);
     const backupExists = await pathExists(state.backup, fs.lstat);
@@ -92,23 +128,23 @@ export async function recoverInterruptedTreeTransaction(destinations, transactio
   }
   await fs.rm(transactionFile, { force: true });
   await fs.rm(temporaryJournal, { force: true });
-  return true;
+  await fs.rm(temporaryCommittedJournal, { force: true });
+  return "rolled-back";
 }
 
 export async function replaceVerifiedTreesTransaction(
   replacements,
   transactionFile,
+  root,
   overrides = {},
 ) {
   const fs = fileSystem(overrides);
-  const destinations = replacements.map(({ destination }) => destination);
-  await recoverInterruptedTreeTransaction(destinations, transactionFile, fs);
+  await recoverInterruptedTreeTransaction(transactionFile, root, fs);
   const states = replacements.map(({ temporary, destination }) => ({
     temporary,
     destination,
     backup: `${destination}.previous`,
     hadPrevious: false,
-    installed: false,
   }));
   for (const state of states) state.hadPrevious = await pathExists(state.destination, fs.lstat);
 
@@ -117,7 +153,10 @@ export async function replaceVerifiedTreesTransaction(
     schema: "verified-tree-transaction/1",
     destinations: states.map(({ destination, hadPrevious }) => ({ destination, hadPrevious })),
   };
-  await fs.writeFile(temporaryJournal, `${JSON.stringify(journal)}\n`, { flag: "wx" });
+  const serializedJournal = `${JSON.stringify(journal)}\n`;
+  const committedJournal = transactionCommittedPath(transactionFile);
+  const temporaryCommittedJournal = transactionCommittedTemporaryPath(transactionFile);
+  await fs.writeFile(temporaryJournal, serializedJournal, { flag: "wx" });
   try {
     await fs.rename(temporaryJournal, transactionFile);
     for (const state of states) {
@@ -125,12 +164,12 @@ export async function replaceVerifiedTreesTransaction(
     }
     for (const state of states) {
       await fs.rename(state.temporary, state.destination);
-      state.installed = true;
     }
-    await fs.rm(transactionFile, { force: true });
+    await fs.writeFile(temporaryCommittedJournal, serializedJournal, { flag: "wx" });
+    await fs.rename(temporaryCommittedJournal, committedJournal);
   } catch (error) {
     try {
-      await recoverInterruptedTreeTransaction(destinations, transactionFile, fs);
+      await recoverInterruptedTreeTransaction(transactionFile, root, fs);
     } catch (recoveryError) {
       throw new AggregateError(
         [error, recoveryError],
@@ -139,9 +178,11 @@ export async function replaceVerifiedTreesTransaction(
     }
     throw error;
   }
+  await fs.rm(transactionFile, { force: true });
   for (const state of states) {
     if (state.hadPrevious) await fs.rm(state.backup, { recursive: true, force: true });
   }
+  await fs.rm(committedJournal, { force: true });
 }
 
 export async function replaceVerifiedTrees(replacements, overrides = {}) {

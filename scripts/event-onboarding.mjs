@@ -45,8 +45,8 @@ export function onboardingWorkspaceReplacements(root, workspace, eventId) {
   }));
 }
 
-export function onboardingTransactionFile(root, eventId) {
-  return path.join(root, "data", "event-data-pins", `.onboard-${eventId}.transaction.json`);
+export function onboardingTransactionFile(root) {
+  return path.join(root, "data", "event-data-pins", ".onboard.transaction.json");
 }
 
 async function fetchBytes(url, label, fetchImpl) {
@@ -135,12 +135,8 @@ export async function onboardEvent({
   const pinDirectory = path.join(root, "data", "event-data-pins");
   await mkdir(pinDirectory, { recursive: true });
   const destination = path.join(pinDirectory, `${eventId}.json`);
-  const transactionFile = onboardingTransactionFile(root, eventId);
-  await recoverInterruptedTreeTransaction(
-    [...onboardingWorkspaceDestinations(root, eventId), destination],
-    transactionFile,
-    fileSystemOverrides,
-  );
+  const transactionFile = onboardingTransactionFile(root);
+  await recoverInterruptedTreeTransaction(transactionFile, root, fileSystemOverrides);
   const prepared = await prepareEventOnboarding({ eventId, commit, fetchImpl });
   const temporaryDirectory = await mkdtemp(path.join(pinDirectory, `.tmp-onboard-${eventId}-`));
   const temporaryPin = path.join(temporaryDirectory, `${eventId}.json`);
@@ -154,6 +150,7 @@ export async function onboardEvent({
     await replaceVerifiedTreesTransaction(
       [...replacements, { temporary: temporaryPin, destination }],
       transactionFile,
+      root,
       fileSystemOverrides,
     );
     return { ...prepared, destination };

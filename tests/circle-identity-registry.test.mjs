@@ -105,6 +105,22 @@ test("a name alone cannot join separate official groups", () => {
   }), /name alone is not grouping evidence/);
 });
 
+test("organizer linkage requires a parsed HTTPS URL with a hostname", () => {
+  const officialValue = official([
+    { day: 1, booths: [{ codes: ["A01"], name: "同名社團" }] },
+    { day: 2, booths: [{ codes: ["B01"], name: "同名社團" }] },
+  ]);
+  for (const reference of ["https://", "https://#evidence", "http://organizer.example.invalid/evidence"]) {
+    assert.throws(() => plan({
+      officialValue,
+      groups: [{
+        sources: ["1:A01", "2:B01"],
+        linkage: { kind: "organizer-stable-key", value: "application:1234", reference },
+      }],
+    }), /invalid or untraceable organizer linkage evidence/);
+  }
+});
+
 test("grouping must cover every booth exactly once and may not split an official group", () => {
   assert.throws(() => plan({ groups: [{ sources: ["1:A01"] }] }), /splits official booth group/);
   assert.throws(() => plan({ groups: [{ sources: ["1:A01", "1:A02"] }, { sources: ["1:A02"] }] }), /more than one identity group/);

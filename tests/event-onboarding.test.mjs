@@ -208,7 +208,7 @@ test("a final rename failure restores the previous pin and every promoted tree",
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 
-test("the next onboarding run rolls back every target after interruption between registry and pin install", async (t) => {
+test("onboarding another event recovers the repository-wide transaction interrupted before pin install", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-interrupted-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const destination = path.join(temporary, "data", "event-data-pins", `${eventId}.json`);
@@ -217,7 +217,7 @@ test("the next onboarding run rolls back every target after interruption between
   await writeWorkspaceState(temporary, "previous");
 
   const destinations = [...onboardingWorkspaceDestinations(temporary, eventId), destination];
-  const transactionFile = onboardingTransactionFile(temporary, eventId);
+  const transactionFile = onboardingTransactionFile(temporary);
   await writeFile(transactionFile, `${JSON.stringify({
     schema: "verified-tree-transaction/1",
     destinations: destinations.map((transactionDestination) => ({
@@ -231,7 +231,7 @@ test("the next onboarding run rolls back every target after interruption between
   await writeWorkspaceState(temporary, "candidate");
 
   await assert.rejects(onboardEvent({
-    eventId,
+    eventId: "event-beta",
     commit,
     root: temporary,
     fetchImpl: async () => new Response("not found", { status: 404 }),

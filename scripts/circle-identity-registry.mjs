@@ -88,8 +88,14 @@ function officialGroups(eventId, official) {
 function validateLinkage(linkage, label) {
   if (!isRecord(linkage)) throw new Error(`${label} needs organizer linkage evidence; a name alone is not grouping evidence.`);
   onlyKeys(linkage, ["kind", "value", "reference"], `${label} linkage`);
+  let reference;
+  try {
+    reference = new URL(linkage.reference);
+  } catch {
+    reference = null;
+  }
   if (!LINKAGE_KINDS.has(linkage.kind) || typeof linkage.value !== "string" || linkage.value.trim() === ""
-    || typeof linkage.reference !== "string" || !linkage.reference.startsWith("https://")) {
+    || !reference || reference.protocol !== "https:" || reference.hostname === "") {
     throw new Error(`${label} has invalid or untraceable organizer linkage evidence.`);
   }
 }
