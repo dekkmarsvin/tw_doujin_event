@@ -150,17 +150,18 @@ test("blank names and allocation cursor mismatches fail closed", () => {
   assert.throws(() => plan({ registryValue: invalid }), /nextSequence must be 2/);
 });
 
-test("paired registry replacement restores both previous files when the second install fails", async (t) => {
+test("registry directory replacement restores the complete previous pair when install fails", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "circle-identity-write-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await Promise.all([
     writeFile(path.join(directory, "allocations.json"), "previous allocations\n"),
     writeFile(path.join(directory, "evidence.json"), "previous evidence\n"),
+    writeFile(path.join(directory, "audit.json"), "preserved audit\n"),
   ]);
   const candidate = plan();
   const renameWithFailure = async (source, destination) => {
-    if (source.includes(".tmp-circle-identities-") && destination.endsWith("evidence.json")) {
-      throw new Error("simulated evidence install failure");
+    if (source.includes(".tmp-circle-identities-") && destination === directory) {
+      throw new Error("simulated registry directory install failure");
     }
     return rename(source, destination);
   };
@@ -169,9 +170,10 @@ test("paired registry replacement restores both previous files when the second i
     allocations: candidate.allocations,
     evidence: candidate.evidence,
     fileSystemOverrides: { rename: renameWithFailure },
-  }), /simulated evidence install failure/);
+  }), /simulated registry directory install failure/);
   assert.equal(await readFile(path.join(directory, "allocations.json"), "utf8"), "previous allocations\n");
   assert.equal(await readFile(path.join(directory, "evidence.json"), "utf8"), "previous evidence\n");
+  assert.equal(await readFile(path.join(directory, "audit.json"), "utf8"), "preserved audit\n");
 });
 
 function runGenerator(workspace, ...arguments_) {
@@ -182,6 +184,25 @@ function runGenerator(workspace, ...arguments_) {
       "--workspace",
       workspace,
       ...arguments_,
+    ], { cwd: path.resolve("."), stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("exit", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+function runStaging(workspace) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      path.resolve("scripts/stage-event-data.mjs"),
+      eventId,
+      "--workspace",
+      workspace,
     ], { cwd: path.resolve("."), stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
@@ -214,26 +235,33 @@ test("the CLI defaults to dry-run, --write updates both files, and --check prove
     writeFile(path.join(eventDirectory, "circle-identity-groups.json"), serializeCircleIdentityRegistry(groupingValue)),
     writeFile(path.join(registryDirectory, "allocations.json"), serializeCircleIdentityRegistry(registryValue.allocations)),
     writeFile(path.join(registryDirectory, "evidence.json"), serializeCircleIdentityRegistry(registryValue.evidence)),
+    writeFile(path.join(registryDirectory, "audit.json"), "preserved audit\n"),
   ]);
   const before = await Promise.all([
     readFile(path.join(registryDirectory, "allocations.json"), "utf8"),
     readFile(path.join(registryDirectory, "evidence.json"), "utf8"),
   ]);
 
+  await rename(registryDirectory, `${registryDirectory}.previous`);
   const dryRun = await runGenerator(workspace);
   assert.equal(dryRun.code, 0, dryRun.stderr);
   assert.equal(JSON.parse(dryRun.stdout).mode, "dry-run");
+  await assert.rejects(readFile(path.join(`${registryDirectory}.previous`, "allocations.json"), "utf8"), /ENOENT/);
   assert.deepEqual(await Promise.all([
     readFile(path.join(registryDirectory, "allocations.json"), "utf8"),
     readFile(path.join(registryDirectory, "evidence.json"), "utf8"),
   ]), before);
 
+  const staleStage = await runStaging(workspace);
+  assert.notEqual(staleStage.code, 0);
+  assert.match(staleStage.stderr, /Identity registry is missing 1 reviewed/);
   const staleCheck = await runGenerator(workspace, "--check");
   assert.notEqual(staleCheck.code, 0);
   assert.match(staleCheck.stderr, /missing 1 reviewed/);
   const written = await runGenerator(workspace, "--write");
   assert.equal(written.code, 0, written.stderr);
   assert.equal(JSON.parse(written.stdout).mode, "write");
+  assert.equal(await readFile(path.join(registryDirectory, "audit.json"), "utf8"), "preserved audit\n");
 
   const afterWrite = await Promise.all([
     readFile(path.join(registryDirectory, "allocations.json"), "utf8"),
