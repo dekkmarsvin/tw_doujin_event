@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertExactOrganizerEvidenceCoverage, consumeOrganizerEvidenceKey } from "./official-catalog-core.mjs";
 import { parseOfficialBoothData } from "./official-booth-importer.mjs";
+import { recoverCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,6 +24,7 @@ const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : ro
 
 const dataDir = path.join(workspace, ".event-data", eventId);
 const outputPath = path.join(workspace, "public", "data", "events", eventId, "circles.json");
+await recoverCircleIdentityRegistry(path.join(workspace, "data", "circle-identities"));
 const [event, officialValue, evidence] = await Promise.all([
   readJsonFileStrict(path.join(dataDir, "event.json"), "event.json"),
   readJsonFileStrict(path.join(dataDir, "official-booths.json"), "official-booths.json"),

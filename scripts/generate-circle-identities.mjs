@@ -1,7 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseOfficialBoothData } from "./official-booth-importer.mjs";
-import { planCircleIdentityRegistryUpdate, writeCircleIdentityRegistry } from "./circle-identity-registry.mjs";
+import {
+  planCircleIdentityRegistryUpdate,
+  recoverCircleIdentityRegistry,
+  writeCircleIdentityRegistry,
+} from "./circle-identity-registry.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,6 +30,7 @@ if (!/^[a-z0-9][a-z0-9-]*$/u.test(eventId ?? "")) {
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
 const eventDirectory = path.join(workspace, ".event-data", eventId);
 const registryDirectory = path.join(workspace, "data", "circle-identities");
+await recoverCircleIdentityRegistry(registryDirectory);
 const [event, officialValue, grouping, allocations, evidence] = await Promise.all([
   readJsonFileStrict(path.join(eventDirectory, "event.json"), "event.json"),
   readJsonFileStrict(path.join(eventDirectory, "official-booths.json"), "official-booths.json"),

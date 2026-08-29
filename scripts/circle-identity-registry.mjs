@@ -1,6 +1,6 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
+import { recoverInterruptedReplacement, replaceVerifiedTrees } from "./verified-tree-replace.mjs";
 
 const CANONICAL_ID = /^c-\d{6}$/u;
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/u;
@@ -208,22 +208,24 @@ export function serializeCircleIdentityRegistry(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+export async function recoverCircleIdentityRegistry(directory, fileSystemOverrides = {}) {
+  await recoverInterruptedReplacement(path.resolve(directory), fileSystemOverrides);
+}
+
 export async function writeCircleIdentityRegistry({ directory, allocations, evidence, fileSystemOverrides = {} }) {
   const destinationDirectory = path.resolve(directory);
+  await recoverCircleIdentityRegistry(destinationDirectory, fileSystemOverrides);
   await mkdir(destinationDirectory, { recursive: true });
-  const temporaryDirectory = await mkdtemp(path.join(destinationDirectory, ".tmp-circle-identities-"));
+  const temporaryRoot = await mkdtemp(path.join(path.dirname(destinationDirectory), ".tmp-circle-identities-"));
+  const temporaryDirectory = path.join(temporaryRoot, path.basename(destinationDirectory));
   try {
-    const temporaryAllocations = path.join(temporaryDirectory, "allocations.json");
-    const temporaryEvidence = path.join(temporaryDirectory, "evidence.json");
+    await cp(destinationDirectory, temporaryDirectory, { recursive: true });
     await Promise.all([
-      writeFile(temporaryAllocations, serializeCircleIdentityRegistry(allocations)),
-      writeFile(temporaryEvidence, serializeCircleIdentityRegistry(evidence)),
+      writeFile(path.join(temporaryDirectory, "allocations.json"), serializeCircleIdentityRegistry(allocations)),
+      writeFile(path.join(temporaryDirectory, "evidence.json"), serializeCircleIdentityRegistry(evidence)),
     ]);
-    await replaceVerifiedTrees([
-      { temporary: temporaryAllocations, destination: path.join(destinationDirectory, "allocations.json") },
-      { temporary: temporaryEvidence, destination: path.join(destinationDirectory, "evidence.json") },
-    ], fileSystemOverrides);
+    await replaceVerifiedTrees([{ temporary: temporaryDirectory, destination: destinationDirectory }], fileSystemOverrides);
   } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
+    await rm(temporaryRoot, { recursive: true, force: true });
   }
 }
