@@ -57,7 +57,11 @@ test("a pin whose folder names another event is not accepted for this one", () =
     eventId: "other-event",
     files: pin.files.map((file) => ({ ...file, path: file.path.replace("events/ff47/", "events/other-event/") })),
   };
-  assert.throws(() => assertEventDataPinIdentity(parseEventDataPin(foreign), "ff47"), /identity mismatch/);
+  const completeForeign = {
+    ...foreign,
+    files: [...foreign.files, { path: "events/other-event/circle-identity-groups.json", sha256: "0".repeat(64) }],
+  };
+  assert.throws(() => assertEventDataPinIdentity(parseEventDataPin(completeForeign), "ff47"), /identity mismatch/);
   assert.throws(() => parseEventDataPin({ ...pin, eventId: "other-event" }), /must start with events\/other-event\//);
 });
 
@@ -72,6 +76,16 @@ test("new pins may carry the reviewed circle identity grouping", () => {
     groupingPath,
   ]);
   assert.equal(EVENT_FILE_NAMES.includes("circle-identity-groups.json"), true);
+});
+
+test("only the immutable FF47 pin may omit circle identity grouping", () => {
+  const anotherEvent = {
+    ...pin,
+    eventId: "event-alpha",
+    files: pin.files.map((file) => ({ ...file, path: file.path.replace("events/ff47/", "events/event-alpha/") })),
+  };
+  assert.throws(() => parseEventDataPin(anotherEvent), /missing events\/event-alpha\/circle-identity-groups\.json/);
+  assert.throws(() => parseEventDataPin({ ...pin, commit: "f".repeat(40) }), /missing events\/ff47\/circle-identity-groups\.json/);
 });
 
 test("a pin must carry every legacy event file and at least one reference", () => {
