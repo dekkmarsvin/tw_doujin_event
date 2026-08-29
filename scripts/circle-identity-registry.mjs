@@ -1,5 +1,6 @@
 import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertEventOnboardingOwnership } from "./event-onboarding-lock.mjs";
 import { recoverInterruptedReplacement, replaceVerifiedTrees } from "./verified-tree-replace.mjs";
 
 const CANONICAL_ID = /^c-\d{6}$/u;
@@ -214,13 +215,25 @@ export function serializeCircleIdentityRegistry(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-export async function recoverCircleIdentityRegistry(directory, fileSystemOverrides = {}) {
-  await recoverInterruptedReplacement(path.resolve(directory), fileSystemOverrides);
+export async function recoverCircleIdentityRegistry(
+  directory,
+  fileSystemOverrides = {},
+  onboardingLockToken,
+) {
+  const destinationDirectory = path.resolve(directory);
+  await assertEventOnboardingOwnership(path.resolve(destinationDirectory, "..", ".."), onboardingLockToken);
+  await recoverInterruptedReplacement(destinationDirectory, fileSystemOverrides);
 }
 
-export async function writeCircleIdentityRegistry({ directory, allocations, evidence, fileSystemOverrides = {} }) {
+export async function writeCircleIdentityRegistry({
+  directory,
+  allocations,
+  evidence,
+  fileSystemOverrides = {},
+  onboardingLockToken,
+}) {
   const destinationDirectory = path.resolve(directory);
-  await recoverCircleIdentityRegistry(destinationDirectory, fileSystemOverrides);
+  await recoverCircleIdentityRegistry(destinationDirectory, fileSystemOverrides, onboardingLockToken);
   await mkdir(destinationDirectory, { recursive: true });
   const temporaryRoot = await mkdtemp(path.join(path.dirname(destinationDirectory), ".tmp-circle-identities-"));
   const temporaryDirectory = path.join(temporaryRoot, path.basename(destinationDirectory));

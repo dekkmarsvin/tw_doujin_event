@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   planCircleIdentityRegistryUpdate,
+  recoverCircleIdentityRegistry,
   serializeCircleIdentityRegistry,
   writeCircleIdentityRegistry,
 } from "../scripts/circle-identity-registry.mjs";
@@ -190,6 +191,35 @@ test("registry directory replacement restores the complete previous pair when in
   assert.equal(await readFile(path.join(directory, "allocations.json"), "utf8"), "previous allocations\n");
   assert.equal(await readFile(path.join(directory, "evidence.json"), "utf8"), "previous evidence\n");
   assert.equal(await readFile(path.join(directory, "audit.json"), "utf8"), "preserved audit\n");
+});
+
+test("registry recovery cannot consume an active onboarding transaction backup", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "circle-identity-onboarding-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directory = path.join(root, "data", "circle-identities");
+  const backup = `${directory}.previous`;
+  const pinDirectory = path.join(root, "data", "event-data-pins");
+  const lockDirectory = path.join(pinDirectory, ".onboard.lock");
+  const transactionFile = path.join(pinDirectory, ".onboard.transaction.json");
+  await mkdir(directory, { recursive: true });
+  await mkdir(backup, { recursive: true });
+  await mkdir(lockDirectory, { recursive: true });
+  await writeFile(path.join(directory, "allocations.json"), "candidate\n");
+  await writeFile(path.join(backup, "allocations.json"), "previous\n");
+  await writeFile(path.join(lockDirectory, "owner.json"), `${JSON.stringify({
+    schema: "event-onboarding-lock/1",
+    hostname: os.hostname(),
+    pid: process.pid,
+    token: "active-onboarding",
+  })}\n`);
+  await writeFile(transactionFile, `${JSON.stringify({
+    schema: "verified-tree-transaction/1",
+    destinations: [{ destination: directory, hadPrevious: true }],
+  })}\n`);
+
+  await assert.rejects(recoverCircleIdentityRegistry(directory), /unfinished event onboarding transaction/);
+  assert.equal(await readFile(path.join(directory, "allocations.json"), "utf8"), "candidate\n");
+  assert.equal(await readFile(path.join(backup, "allocations.json"), "utf8"), "previous\n");
 });
 
 function runGenerator(workspace, ...arguments_) {

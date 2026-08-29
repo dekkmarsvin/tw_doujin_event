@@ -1,6 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { hostname } from "node:os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   EVENT_DATA_PIN_SCHEMA,
@@ -23,6 +21,10 @@ import {
   recoverInterruptedTreeTransaction,
   replaceVerifiedTreesTransaction,
 } from "./verified-tree-replace.mjs";
+import {
+  acquireEventOnboardingLock,
+  eventOnboardingTransactionFile,
+} from "./event-onboarding-lock.mjs";
 import { parseJsonBytesStrict } from "./strict-json-file.mjs";
 
 export function onboardingWorkspaceDestinations(root, eventId) {
@@ -48,63 +50,7 @@ export function onboardingWorkspaceReplacements(root, workspace, eventId) {
 }
 
 export function onboardingTransactionFile(root) {
-  return path.join(root, "data", "event-data-pins", ".onboard.transaction.json");
-}
-
-function onboardingLockDirectory(root) {
-  return path.join(root, "data", "event-data-pins", ".onboard.lock");
-}
-
-function processIsAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error?.code !== "ESRCH";
-  }
-}
-
-async function acquireOnboardingLock(root, attempt = 0) {
-  const pinDirectory = path.join(root, "data", "event-data-pins");
-  const lockDirectory = onboardingLockDirectory(root);
-  const candidate = await mkdtemp(path.join(pinDirectory, ".tmp-onboard-lock-"));
-  const owner = {
-    schema: "event-onboarding-lock/1",
-    hostname: hostname(),
-    pid: process.pid,
-    token: randomUUID(),
-  };
-  await writeFile(path.join(candidate, "owner.json"), `${JSON.stringify(owner)}\n`);
-  try {
-    await rename(candidate, lockDirectory);
-  } catch (error) {
-    await rm(candidate, { recursive: true, force: true });
-    if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(error?.code)) throw error;
-    let activeOwner;
-    try {
-      activeOwner = JSON.parse(await readFile(path.join(lockDirectory, "owner.json"), "utf8"));
-    } catch (ownerError) {
-      if (ownerError?.code === "ENOENT" && attempt < 2) return acquireOnboardingLock(root, attempt + 1);
-      throw new Error("Event onboarding lock ownership cannot be verified.", { cause: ownerError });
-    }
-    const validOwner = activeOwner?.schema === "event-onboarding-lock/1"
-      && typeof activeOwner.hostname === "string"
-      && Number.isInteger(activeOwner.pid) && activeOwner.pid > 0
-      && typeof activeOwner.token === "string" && activeOwner.token !== "";
-    if (!validOwner) throw new Error("Event onboarding lock ownership is invalid.");
-    if (activeOwner.hostname !== hostname() || processIsAlive(activeOwner.pid)) {
-      throw new Error(`Event onboarding is already active on ${activeOwner.hostname} (PID ${activeOwner.pid}).`);
-    }
-    await rm(lockDirectory, { recursive: true, force: true });
-    if (attempt >= 2) throw new Error("Could not acquire the event onboarding lock.");
-    return acquireOnboardingLock(root, attempt + 1);
-  }
-
-  return async () => {
-    const activeOwner = JSON.parse(await readFile(path.join(lockDirectory, "owner.json"), "utf8"));
-    if (activeOwner?.token !== owner.token) throw new Error("Event onboarding lock ownership changed before release.");
-    await rm(lockDirectory, { recursive: true, force: true });
-  };
+  return eventOnboardingTransactionFile(root);
 }
 
 async function fetchBytes(url, label, fetchImpl) {
@@ -192,7 +138,7 @@ export async function onboardEvent({
   assertEventDataLocator(eventId, commit);
   const pinDirectory = path.join(root, "data", "event-data-pins");
   await mkdir(pinDirectory, { recursive: true });
-  const releaseLock = await acquireOnboardingLock(root);
+  const lock = await acquireEventOnboardingLock(root);
   try {
     const destination = path.join(pinDirectory, `${eventId}.json`);
     const transactionFile = onboardingTransactionFile(root);
@@ -204,7 +150,9 @@ export async function onboardEvent({
     try {
       await writeFile(temporaryPin, prepared.serialized);
       await mkdir(validationWorkspace);
-      const validation = await validate(temporaryPin, validationWorkspace);
+      const validation = await validate(temporaryPin, validationWorkspace, {
+        onboardingLockToken: lock.token,
+      });
       const replacements = validation?.replacements ?? [];
       for (const replacement of replacements) await mkdir(path.dirname(replacement.destination), { recursive: true });
       await replaceVerifiedTreesTransaction(
@@ -218,6 +166,6 @@ export async function onboardEvent({
       await rm(temporaryDirectory, { recursive: true, force: true });
     }
   } finally {
-    await releaseLock();
+    await lock.release();
   }
 }

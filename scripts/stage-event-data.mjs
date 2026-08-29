@@ -5,6 +5,10 @@ import { spawn } from "node:child_process";
 import { CIRCLE_IDENTITY_GROUPS_FILE, REFERENCE_SELECTION_FILE } from "./event-data-pin-utils.mjs";
 import { recoverCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import {
+  acquireEventOnboardingLock,
+  EVENT_ONBOARDING_LOCK_TOKEN_ENV,
+} from "./event-onboarding-lock.mjs";
+import {
   parseReferenceSelection,
   referenceSelectionPaths,
   selectEventReferenceRecords,
@@ -31,11 +35,14 @@ if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) {
   throw new Error("Usage: npm run data:stage -- (--fixture [event-id] | <event-id>) [--workspace <directory>]");
 }
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
+const lock = !fixture && workspace === root ? await acquireEventOnboardingLock(root) : null;
+try {
 
 async function runScript(script, args, label) {
   await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(root, "scripts", script), ...args], {
       cwd: root,
+      env: lock ? { ...process.env, [EVENT_ONBOARDING_LOCK_TOKEN_ENV]: lock.token } : process.env,
       stdio: "inherit",
     });
     child.on("error", reject);
@@ -53,7 +60,7 @@ const event = await readJsonFileStrict(path.join(source, "event.json"), "event.j
 if (event.id !== eventId) throw new Error(`Staged event identity mismatch: expected ${eventId}, got ${event.id}.`);
 
 if (!fixture) {
-  await recoverCircleIdentityRegistry(path.join(workspace, "data", "circle-identities"));
+  await recoverCircleIdentityRegistry(path.join(workspace, "data", "circle-identities"), {}, lock?.token);
   const groupingPath = path.join(source, CIRCLE_IDENTITY_GROUPS_FILE);
   let hasGrouping = true;
   try {
@@ -114,3 +121,6 @@ if (fixture) {
 
 await writeFile(path.join(workspace, ".event-data-stage.json"), `${JSON.stringify({ eventId, source: fixture ? "fixture" : "pin" })}\n`);
 console.log(`Staged ${eventId} (${fixture ? "fixture" : "pinned data"}) for the Pages build.`);
+} finally {
+  await lock?.release();
+}

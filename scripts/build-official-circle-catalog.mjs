@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { assertExactOrganizerEvidenceCoverage, consumeOrganizerEvidenceKey } from "./official-catalog-core.mjs";
 import { parseOfficialBoothData } from "./official-booth-importer.mjs";
 import { recoverCircleIdentityRegistry } from "./circle-identity-registry.mjs";
+import { acquireEventOnboardingLock } from "./event-onboarding-lock.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -21,10 +22,12 @@ if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)
   throw new Error("Usage: node scripts/build-official-circle-catalog.mjs <event-id> [--check] [--workspace <directory>]");
 }
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
+const lock = workspace === root ? await acquireEventOnboardingLock(root) : null;
+try {
 
 const dataDir = path.join(workspace, ".event-data", eventId);
 const outputPath = path.join(workspace, "public", "data", "events", eventId, "circles.json");
-await recoverCircleIdentityRegistry(path.join(workspace, "data", "circle-identities"));
+await recoverCircleIdentityRegistry(path.join(workspace, "data", "circle-identities"), {}, lock?.token);
 const [event, officialValue, evidence] = await Promise.all([
   readJsonFileStrict(path.join(dataDir, "event.json"), "event.json"),
   readJsonFileStrict(path.join(dataDir, "official-booths.json"), "official-booths.json"),
@@ -92,4 +95,7 @@ if (check) {
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, serialized);
   console.log(`Built official-only ${eventId} catalog: ${payload.circles.length} circles, ${placements.length} placements.`);
+}
+} finally {
+  await lock?.release();
 }

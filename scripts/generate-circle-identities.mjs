@@ -6,6 +6,7 @@ import {
   recoverCircleIdentityRegistry,
   writeCircleIdentityRegistry,
 } from "./circle-identity-registry.mjs";
+import { acquireEventOnboardingLock } from "./event-onboarding-lock.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,7 +31,9 @@ if (!/^[a-z0-9][a-z0-9-]*$/u.test(eventId ?? "")) {
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
 const eventDirectory = path.join(workspace, ".event-data", eventId);
 const registryDirectory = path.join(workspace, "data", "circle-identities");
-await recoverCircleIdentityRegistry(registryDirectory);
+const lock = workspace === root ? await acquireEventOnboardingLock(root) : null;
+try {
+await recoverCircleIdentityRegistry(registryDirectory, {}, lock?.token);
 const [event, officialValue, grouping, allocations, evidence] = await Promise.all([
   readJsonFileStrict(path.join(eventDirectory, "event.json"), "event.json"),
   readJsonFileStrict(path.join(eventDirectory, "official-booths.json"), "official-booths.json"),
@@ -46,6 +49,14 @@ if (mode === "check" && planned.summary.changed) {
   throw new Error(`Identity registry is missing ${planned.summary.newAllocationCount} reviewed ${eventId} group(s). Run with --write and review the diff.`);
 }
 if (mode === "write" && planned.summary.changed) {
-  await writeCircleIdentityRegistry({ directory: registryDirectory, allocations: planned.allocations, evidence: planned.evidence });
+  await writeCircleIdentityRegistry({
+    directory: registryDirectory,
+    allocations: planned.allocations,
+    evidence: planned.evidence,
+    onboardingLockToken: lock?.token,
+  });
 }
 console.log(JSON.stringify({ ...planned.summary, mode }, null, 2));
+} finally {
+  await lock?.release();
+}
