@@ -296,6 +296,21 @@ test("an active repository-wide lock refuses overlapping onboarding and is relea
   }), /HTTP 404/);
 });
 
+test("every standalone root transaction writer acquires the shared onboarding lock", async () => {
+  const writers = [
+    "fetch-event-data.mjs",
+    "stage-event-data.mjs",
+    "generate-circle-identities.mjs",
+    "build-official-circle-catalog.mjs",
+  ];
+  for (const script of writers) {
+    const sourceText = await readFile(path.join("scripts", script), "utf8");
+    assert.match(sourceText, /workspace === root \? await acquireEventOnboardingLock\(root\) : null/u, script);
+  }
+  const staging = await readFile(path.join("scripts", "stage-event-data.mjs"), "utf8");
+  assert.doesNotMatch(staging, /!fixture\s*&&\s*workspace === root/u);
+});
+
 test("branch names and tags are rejected before fetching or writing", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-revision-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));

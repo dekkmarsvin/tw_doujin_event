@@ -35,7 +35,7 @@ if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) {
   throw new Error("Usage: npm run data:stage -- (--fixture [event-id] | <event-id>) [--workspace <directory>]");
 }
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
-const lock = !fixture && workspace === root ? await acquireEventOnboardingLock(root) : null;
+const lock = workspace === root ? await acquireEventOnboardingLock(root) : null;
 try {
 
 async function runScript(script, args, label) {
