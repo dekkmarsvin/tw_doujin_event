@@ -229,6 +229,14 @@ test("onboarding another event recovers the repository-wide transaction interrup
     await rename(transactionDestination, `${transactionDestination}.previous`);
   }
   await writeWorkspaceState(temporary, "candidate");
+  const staleLock = path.join(temporary, "data", "event-data-pins", ".onboard.lock");
+  await mkdir(staleLock);
+  await writeFile(path.join(staleLock, "owner.json"), `${JSON.stringify({
+    schema: "event-onboarding-lock/1",
+    hostname: os.hostname(),
+    pid: 2147483647,
+    token: "stale-owner",
+  })}\n`);
 
   await assert.rejects(onboardEvent({
     eventId: "event-beta",
@@ -240,9 +248,52 @@ test("onboarding another event recovers the repository-wide transaction interrup
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
   assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("previous"));
   await assert.rejects(readFile(transactionFile), /ENOENT/);
+  await assert.rejects(lstat(staleLock), /ENOENT/);
   for (const transactionDestination of destinations) {
     await assert.rejects(lstat(`${transactionDestination}.previous`), /ENOENT/);
   }
+});
+
+test("an active repository-wide lock refuses overlapping onboarding and is released after failure", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-lock-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  let releaseFetch;
+  let reportFetchStarted;
+  const fetchStarted = new Promise((resolve) => { reportFetchStarted = resolve; });
+  const fetchGate = new Promise((resolve) => { releaseFetch = resolve; });
+  const first = onboardEvent({
+    eventId,
+    commit,
+    root: temporary,
+    fetchImpl: async () => {
+      reportFetchStarted();
+      await fetchGate;
+      return new Response("not found", { status: 404 });
+    },
+  });
+  await fetchStarted;
+
+  let secondFetches = 0;
+  const secondError = await onboardEvent({
+    eventId: "event-beta",
+    commit,
+    root: temporary,
+    fetchImpl: async () => {
+      secondFetches += 1;
+      return new Response("not found", { status: 404 });
+    },
+  }).then(() => null, (error) => error);
+  releaseFetch();
+  await assert.rejects(first, /HTTP 404/);
+
+  assert.match(secondError?.message ?? "", /already active/);
+  assert.equal(secondFetches, 0);
+  await assert.rejects(onboardEvent({
+    eventId: "event-beta",
+    commit,
+    root: temporary,
+    fetchImpl: async () => new Response("not found", { status: 404 }),
+  }), /HTTP 404/);
 });
 
 test("branch names and tags are rejected before fetching or writing", async (t) => {
