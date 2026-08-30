@@ -41,15 +41,17 @@ function official(days = [
   return { schemaVersion: 1, days: days.map((day) => ({ url: `https://example.invalid/day-${day.day}`, ...day })) };
 }
 
-function grouping(groups) {
-  return { schema: "circle-identity-groups/1", eventId, groups };
+function grouping(groups, transitions) {
+  return transitions
+    ? { schema: "circle-identity-groups/2", eventId, groups, transitions }
+    : { schema: "circle-identity-groups/1", eventId, groups };
 }
 
-function plan({ officialValue = official(), groups = [{ sources: ["1:A01", "1:A02"] }], registryValue = registry() } = {}) {
+function plan({ officialValue = official(), groups = [{ sources: ["1:A01", "1:A02"] }], registryValue = registry(), transitions } = {}) {
   return planCircleIdentityRegistryUpdate({
     eventId,
     official: officialValue,
-    grouping: grouping(groups),
+    grouping: grouping(groups, transitions),
     ...registryValue,
     today: () => "2026-08-29",
   });
@@ -171,6 +173,107 @@ test("partial and conflicting existing groups fail closed without mutating calle
   const conflictBefore = structuredClone(conflicting);
   assert.throws(() => plan({ registryValue: conflicting }), /conflicting circle IDs/);
   assert.deepEqual(conflicting, conflictBefore);
+});
+
+/*
+ * What happens after publication, when the organizer changes the list.
+ *
+ * ADR-0044 decision 6 lists four transitions and records that three of them
+ * fail closed with no documented recovery, and that none of them is covered by
+ * a test. These pin today's behaviour — including the exact message an
+ * organizer would hit — so that when #139 lands a correction path, the change
+ * is visible in this diff instead of being silent.
+ *
+ * The shared guarantee underneath all four: a `c-xxxxxx` that has been
+ * published never quietly starts pointing at a different circle.
+ */
+
+/** Two circles published, so a later run can drop one without emptying the list. */
+const twoPublished = () => {
+  const first = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["A01"], name: "甲社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:A01"] }, { sources: ["1:B01"] }],
+  });
+  return { allocations: first.allocations, evidence: first.evidence };
+};
+
+const idFor = (registryValue, value) => registryValue.evidence.entries
+  .find((entry) => entry.sources.some((source) => source.eventId === eventId && source.value === value))?.circleId;
+
+test("a circle that withdraws after publication fails closed rather than vanishing", () => {
+  const published = twoPublished();
+  assert.equal(idFor(published, "1:A01"), "c-000002");
+  const before = structuredClone(published);
+
+  // 甲社 is gone from the organizer's list. Its allocated booth source is still
+  // in the registry, so the coverage gate refuses the whole update.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    registryValue: published,
+  }), /organizer booth sources outside the reviewed event-alpha grouping: 1:A01/);
+  assert.deepEqual(published, before, "a refused update leaves the registry untouched");
+});
+
+test("a booth handed to another circle cannot inherit the previous circle's ID", () => {
+  const published = twoPublished();
+  const before = structuredClone(published);
+
+  // Same booth, different circle. Silently accepting this would repoint an
+  // already published ID — every favourite and shared link for 甲社 would land
+  // on whoever took the booth.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["A01"], name: "丙社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:A01"] }, { sources: ["1:B01"] }],
+    registryValue: published,
+  }), /Organizer name drift for 1:A01: evidence=甲社, official=丙社/);
+  assert.deepEqual(published, before);
+});
+
+test("a booth that moves is not yet expressible, and fails closed both ways", () => {
+  const published = twoPublished();
+  const before = structuredClone(published);
+
+  // 甲社 moved from A01 to C09. There is no way to say so, so the run is
+  // refused — which is the safe outcome, because the alternative the generator
+  // would otherwise reach is worse: C09 has no evidence, so it would allocate a
+  // *second* ID for a circle that already has one.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["C09"], name: "甲社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:C09"] }, { sources: ["1:B01"] }],
+    registryValue: published,
+  }), /organizer booth sources outside the reviewed event-alpha grouping: 1:A01/);
+  assert.deepEqual(published, before);
+});
+
+test("a full renumbering fails closed as one refusal, not a partial rewrite", () => {
+  const published = twoPublished();
+  const before = structuredClone(published);
+
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["D01"], name: "甲社" }, { codes: ["D02"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:D01"] }, { sources: ["1:D02"] }],
+    registryValue: published,
+  }), /organizer booth sources outside the reviewed event-alpha grouping: 1:A01, 1:B01/);
+  assert.deepEqual(published, before, "no half-renumbered registry is left behind");
+});
+
+test("adding a circle after publication is the one transition that already works", () => {
+  const published = twoPublished();
+
+  const result = plan({
+    officialValue: official([{ day: 1, booths: [
+      { codes: ["A01"], name: "甲社" }, { codes: ["B01"], name: "乙社" }, { codes: ["C01"], name: "丁社" },
+    ] }]),
+    groups: [{ sources: ["1:A01"] }, { sources: ["1:B01"] }, { sources: ["1:C01"] }],
+    registryValue: published,
+  });
+
+  assert.equal(result.summary.newAllocationCount, 1);
+  assert.equal(idFor(result, "1:C01"), "c-000004");
+  // The point of the transition being cheap: nothing already published moved.
+  assert.equal(idFor(result, "1:A01"), "c-000002");
+  assert.equal(idFor(result, "1:B01"), "c-000003");
 });
 
 test("blank names and allocation cursor mismatches fail closed", () => {
@@ -304,4 +407,194 @@ test("the CLI defaults to dry-run, --write updates both files, and --check prove
     readFile(path.join(registryDirectory, "allocations.json"), "utf8"),
     readFile(path.join(registryDirectory, "evidence.json"), "utf8"),
   ]), afterWrite);
+});
+
+/*
+ * Declared transitions: the correction path for #139.
+ *
+ * These are declarations, not inferences. The tests above prove that an
+ * undeclared change is still refused; these prove that a declared one is
+ * applied without any published ID changing what it points at.
+ */
+
+const retired = (registryValue, circleId) => registryValue.evidence.entries
+  .find((entry) => entry.circleId === circleId)?.retiredSources ?? [];
+const activeSources = (registryValue, circleId) => registryValue.evidence.entries
+  .find((entry) => entry.circleId === circleId).sources.map((source) => source.value);
+
+test("a declared withdrawal retires the booth and keeps the circle's identity", () => {
+  const published = twoPublished();
+
+  const result = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "withdrawn", reference: "https://organizer.invalid/notice" }],
+    registryValue: published,
+  });
+
+  // The ID survives the withdrawal. A reader's saved link still resolves — to a
+  // circle that is no longer attending, rather than to nothing or to someone else.
+  assert.equal(idFor(result, "1:B01"), "c-000003");
+  assert.deepEqual(activeSources(result, "c-000002"), []);
+  assert.deepEqual(retired(result, "c-000002"), [{
+    eventId, kind: "organizer-booth", value: "1:A01",
+    retirement: { kind: "withdrawn", at: "2026-08-29", reference: "https://organizer.invalid/notice" },
+  }]);
+  assert.equal(result.evidence.schema, "circle-identity-evidence/2");
+  assert.equal(result.summary.newAllocationCount, 0, "a withdrawal allocates nothing");
+  assert.equal(result.summary.changed, true, "retiring a booth is a change even with no new IDs");
+  assert.deepEqual(result.summary.retirements, [
+    { circleId: "c-000002", name: "甲社", source: "1:A01", kind: "withdrawn", to: null },
+  ]);
+});
+
+test("a declared move keeps the ID on the circle, not on the booth it left", () => {
+  const published = twoPublished();
+
+  const result = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["C09"], name: "甲社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:C09"] }, { sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "moved", to: "1:C09" }],
+    registryValue: published,
+  });
+
+  assert.equal(idFor(result, "1:C09"), "c-000002", "the circle took its ID to the new booth");
+  assert.equal(result.summary.newAllocationCount, 0, "a move must not allocate a second ID for the same circle");
+  assert.deepEqual(activeSources(result, "c-000002"), ["1:C09"]);
+  assert.deepEqual(retired(result, "c-000002")[0].retirement, { kind: "moved", to: "1:C09", at: "2026-08-29" });
+});
+
+test("a declared handover gives the booth a new circle and a new ID", () => {
+  const published = twoPublished();
+
+  const result = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["A01"], name: "丙社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:A01"] }, { sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "released" }],
+    registryValue: published,
+  });
+
+  // The whole point: the booth changed hands, the identity did not follow it.
+  assert.equal(idFor(result, "1:A01"), "c-000004");
+  assert.equal(result.evidence.entries.find((entry) => entry.circleId === "c-000004").currentName, "丙社");
+  assert.equal(result.evidence.entries.find((entry) => entry.circleId === "c-000002").currentName, "甲社");
+  assert.deepEqual(activeSources(result, "c-000002"), []);
+  assert.equal(result.summary.newAllocationCount, 1);
+});
+
+test("a declared renumbering moves every circle without reallocating any of them", () => {
+  const published = twoPublished();
+
+  const result = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["D01"], name: "甲社" }, { codes: ["D02"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:D01"] }, { sources: ["1:D02"] }],
+    transitions: [
+      { source: "1:A01", kind: "moved", to: "1:D01" },
+      { source: "1:B01", kind: "moved", to: "1:D02" },
+    ],
+    registryValue: published,
+  });
+
+  assert.equal(result.summary.newAllocationCount, 0);
+  assert.equal(idFor(result, "1:D01"), "c-000002");
+  assert.equal(idFor(result, "1:D02"), "c-000003");
+  assert.equal(result.summary.retirementCount, 2);
+});
+
+test("a transition that contradicts the organizer's list is refused", () => {
+  const published = twoPublished();
+  const before = structuredClone(published);
+
+  // Retiring a booth the organizer still lists would leave a line in the file
+  // that nothing checks and nobody re-reads.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["A01"], name: "甲社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:A01"] }, { sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "withdrawn" }],
+    registryValue: published,
+  }), /still lists that booth/);
+
+  // Moving to a booth that is not in the list would point the circle at nothing.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "moved", to: "1:ZZ9" }],
+    registryValue: published,
+  }), /move 1:A01 to a booth the organizer currently lists/);
+
+  // Retiring something that was never allocated is a typo, not a correction.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:Z99", kind: "withdrawn" }, { source: "1:A01", kind: "withdrawn" }],
+    registryValue: published,
+  }), /1:Z99 has no allocated identity to retire/);
+
+  // A release names a handover. If the organizer still lists the same circle at
+  // that booth, nothing changed hands and the declaration is describing a
+  // handover that did not happen.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["A01"], name: "甲社" }, { codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:A01"] }, { sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "released" }],
+    registryValue: published,
+  }), /still listed under 甲社; nothing was released/);
+
+  // And a withdrawal cannot stand in for a handover: the booth is still listed.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "released" }],
+    registryValue: published,
+  }), /no longer lists that booth; it withdrew/);
+
+  assert.deepEqual(published, before, "every refusal leaves the registry untouched");
+});
+
+test("transitions need the schema that declares them, and cannot repeat a source", () => {
+  const published = twoPublished();
+  assert.throws(() => planCircleIdentityRegistryUpdate({
+    eventId,
+    official: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    grouping: { schema: "circle-identity-groups/1", eventId, groups: [{ sources: ["1:B01"] }], transitions: [] },
+    ...published,
+    today: () => "2026-08-29",
+  }), /must declare circle-identity-groups\/2/);
+
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "withdrawn" }, { source: "1:A01", kind: "withdrawn" }],
+    registryValue: published,
+  }), /declares 1:A01 twice/);
+});
+
+test("a retired booth stays retired on a rerun", () => {
+  const published = twoPublished();
+  const afterWithdrawal = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "withdrawn" }],
+    registryValue: published,
+  });
+  const settled = { allocations: afterWithdrawal.allocations, evidence: afterWithdrawal.evidence };
+
+  // The declaration has already been applied, so repeating it is a mistake, not
+  // an idempotent no-op — the line should be dropped once it has landed.
+  assert.throws(() => plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    transitions: [{ source: "1:A01", kind: "withdrawn" }],
+    registryValue: settled,
+  }), /already retired from c-000002/);
+
+  // Without the declaration the rerun is a clean no-op: the retired booth is no
+  // longer expected in the organizer's list.
+  const rerun = plan({
+    officialValue: official([{ day: 1, booths: [{ codes: ["B01"], name: "乙社" }] }]),
+    groups: [{ sources: ["1:B01"] }],
+    registryValue: settled,
+  });
+  assert.equal(rerun.summary.changed, false);
+  assert.equal(serializeCircleIdentityRegistry(rerun.evidence), serializeCircleIdentityRegistry(settled.evidence));
 });

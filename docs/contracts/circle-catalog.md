@@ -56,6 +56,9 @@ type CircleCatalogPayload = {
 - 同一活動中，經主辦穩定鍵或可追溯主辦證據連結的同一社團可在同日或跨日有多筆 placement，仍使用同一 ID。不同活動不建立 identity linkage。
 - `evidence.json` 的正式活動證據為 `{ eventId, kind: "organizer-booth", value: "<day>:<booth>" }`。
 - 同名不是合併依據；一個 booth 證據對到多個 ID、官方群組內的 booth 對到不同 ID、或目前名稱與官方名稱漂移時一律 fail closed。
+- **已發布名單的變動由人工宣告後套用，不由差異推論**，見 [ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)。`circle-identity-groups/2` 的 `transitions` 宣告 `withdrawn`／`moved`／`released`；未宣告的差異維持 fail closed。
+- **攤位換手時，新的社團拿到新的 ID。** 前一個社團的 `c-xxxxxx` 留在前一個社團身上——收藏與分享連結帶的正是它，讓 ID 跟著攤位走會使讀者收藏的社團某天變成別人。移動則相反：ID 跟著社團到新攤位。
+- 退役的攤位證據保存在 evidence 的 `retiredSources`（`circle-identity-evidence/2`，只在真的有退役時寫入）。
 - 已裁決的 migration 例外保存在 `ff47-official-migration-decisions.json`；它是稽核紀錄，不是執行期 fallback。
 - 舊 `ff47-<hash>` ID 沒有相容路徑，見 [ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。攤位 scoped ID 只由當前 records 即時解析。
 
@@ -110,6 +113,8 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 - `npm run build:production` 依 [`data/published-events.json`](../../data/published-events.json) 逐一下載並核對逐檔 SHA-256，再由主辦 booth evidence 生成 v3 catalog，並把**每一個已發布活動** staging 到 `dist`。該檔案是 production 唯一列出活動的地方：新增活動是加一筆 pin 與一個 id，不改 `package.json`、不改 workflow、不新增活動專屬 constant。
 - **pin 存在不等於已發布。** 未列在 `published-events.json` 的活動即使已有 pin 也不進入 build，對讀者不存在。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界。
 - 讀者端的活動選擇器與 `event` 定址由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案，[#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 尚未完成該部分；目前 bundle 已可承載多活動，但公開入口仍只進入預設活動。
+- **退出或移動的社團留在 catalog 裡**，而不是消失：它們是 `status` 為 `cancelled` 或 `moved` 的 placement，社團本身仍列在 `circles`。直接刪除會讓收藏與分享連結指向不存在的東西，讀起來像連結壞掉而不是「這個社團沒有參加」。Reader 如何呈現由 [#140](https://github.com/dekkmarsvin/tw_doujin_event/issues/140) 決定。
+- placement id：沒有新主人的攤位保留 `<day>-<code>`，換手的攤位由新主人取得該 id，離開的社團改用帶自己 ID 的形式，因此兩者都仍可被連結定址。
 - overlay 無法取得時仍顯示完整的官方名稱與攤位 base；不得把 overlay 當成目錄存在的前提。
 
 ## 呈現契約
