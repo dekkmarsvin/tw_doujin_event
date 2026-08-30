@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createClaim, decideClaim, deleteMyAccount, deleteMyOverride, disableAccount, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
-  previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, uploadThumbnail, verifyLoginToken,
+  previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, uploadThumbnail, verifyLoginToken, withdrawClaim,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import {
@@ -226,7 +226,7 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
           <small>{claim.circleId}</small>
         </div>
         <span className={styles[`claim_${claim.status}`]}>{
-          { pending: "審核中", verified: "已通過", rejected: "已婉拒", revoked: "已撤銷" }[claim.status]
+          { pending: "審核中", verified: "已通過", rejected: "已婉拒", revoked: "已撤銷", withdrawn: "已撤回" }[claim.status]
         }</span>
         {claim.status === "pending" && claim.targetUrl && <button type="button" onClick={() => {
           setStatus({ kind: "busy", message: "驗證中…" });
@@ -237,8 +237,21 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
             })
             .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
         }}>重新驗證</button>}
+        {claim.status === "pending" && <button type="button" onClick={() => {
+          setStatus({ kind: "busy", message: "撤回中…" });
+          void withdrawClaim(claim.id)
+            .then(() => {
+              setStatus({ kind: "ok", message: "已撤回。可以重新送出這個社團的認領，並取得新的驗證碼。" });
+              onChanged();
+            })
+            .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+        }}>撤回</button>}
       </li>)}
     </ul>
+    {/* The recovery path only works if it is visible before the code goes missing. */}
+    {claims.some((claim) => claim.status === "pending") && <p className={styles.notice}>
+      驗證碼遺失或過期時，撤回該筆認領後重新送出，即可取得新的驗證碼，不需要聯絡管理者。
+    </p>}
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;
 }
@@ -300,8 +313,12 @@ function ClaimForm({ onCreated }: { onCreated: () => void }) {
         {selected.links.map((link) => <option key={link.url} value={link.url}>{link.provider}：{link.url}</option>)}
       </select>
 
+      {/* Manual review is the third tier and never issues a code: the reviewer
+          reads the link and the note. Asking for a code here described the
+          second tier's flow in the third tier's field (#142). */}
       <label htmlFor="portal-evidence">佐證連結（人工審核用，選填）</label>
-      <input id="portal-evidence" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="https://…（含驗證碼的公開貼文）" />
+      <input id="portal-evidence" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="https://…（可證明你是這個社團的頁面）" />
+      <small>人工審核不會發驗證碼。管理者會看這個連結與下方說明，人工核對你與社團的關係。</small>
 
       <label htmlFor="portal-note">補充說明（選填）</label>
       <textarea id="portal-note" rows={2} value={evidenceNote} onChange={(event) => setEvidenceNote(event.target.value)} />

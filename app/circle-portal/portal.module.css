@@ -114,7 +114,7 @@
 .claimList a { color: var(--danger); font-size: 10px; }
 .claimList button { margin-top: 0; }
 
-.claim_pending, .claim_verified, .claim_rejected, .claim_revoked {
+.claim_pending, .claim_verified, .claim_rejected, .claim_revoked, .claim_withdrawn {
   flex: 0 0 auto;
   padding: 3px 8px;
   border-radius: 5px;
@@ -125,6 +125,8 @@
 .claim_pending { background: #fff6e6; color: #8a6414; }
 .claim_verified { background: #edf8f3; color: var(--success); }
 .claim_rejected, .claim_revoked { background: #fff3f1; color: var(--danger); }
+/* Withdrawn is the circle's own doing, not a refusal: it reads as neutral. */
+.claim_withdrawn { background: #f1f2f4; color: var(--muted); }
 
 .matchList { display: grid; gap: 5px; margin-top: 8px; padding: 0; list-style: none; }
 .matchList button {

@@ -388,8 +388,19 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const mine = await repository.listClaimsForAccount(current.accountId, config.eventId);
-    if (mine.some((claim) => claim.circle_id === circleId && (claim.status === "pending" || claim.status === "verified"))) {
-      return json({ error: "你已經送出過這個社團的認領。" }, 409);
+    const existing = mine.find((claim) => claim.circle_id === circleId
+      && (claim.status === "pending" || claim.status === "verified"));
+    if (existing) {
+      // Naming the way out matters more than naming the problem: a claimant who
+      // lost their challenge lands here, and "you already submitted this" alone
+      // is what turned a lost code into a dead end (#141).
+      return json({
+        error: existing.status === "verified"
+          ? "你已經通過這個社團的認領。"
+          : "你已經送出過這個社團的認領。若驗證碼遺失或過期，請先撤回這筆認領，再重新送出取得新的驗證碼。",
+        claimId: existing.id,
+        claimStatus: existing.status,
+      }, 409);
     }
     if (mine.filter((claim) => claim.created_at >= now - 24 * 60 * 60 * 1000).length >= LIMITS.claimsPerAccountPerDay) {
       return json({ error: "今日認領次數已達上限。" }, 429);
@@ -415,8 +426,10 @@ export function createCirclePortalHandlers({
     const challengeable = !!recorded && FETCHABLE_EVIDENCE_PROVIDERS.has(recorded.provider);
     const challenge = challengeable ? randomChallengeCode(config.eventId) : null;
 
+    // A resubmission after a withdrawal reuses the withdrawn row, so the id in
+    // force is whatever the repository reports, not necessarily this one.
     const id = crypto.randomUUID();
-    const created = await repository.createClaim({
+    const claimId = await repository.createClaim({
       id,
       accountId: current.accountId,
       eventId: config.eventId,
@@ -433,16 +446,43 @@ export function createCirclePortalHandlers({
       evidenceNote,
       now,
     });
-    if (!created) return json({ error: "此帳號正在刪除，無法建立認領。" }, 409);
+    if (!claimId) return json({ error: "此帳號正在刪除，無法建立認領。" }, 409);
     await repository.writeAudit({
       at: now, actorAccountId: current.accountId, actorRole: "circle",
       action: domainMatch ? "claim.auto_verified" : "claim.created",
-      subjectType: "claim", subjectId: id,
+      subjectType: "claim", subjectId: claimId,
       detail: { circleId, circleName: circle.name, method: domainMatch ? "email_domain" : null, evidenceUrl },
       ipHash: await clientIpHash(request),
     });
 
-    return json({ id, status: domainMatch ? "verified" : "pending", challenge, targetUrl: challengeable ? targetUrl : null }, 201);
+    return json({ id: claimId, status: domainMatch ? "verified" : "pending", challenge, targetUrl: challengeable ? targetUrl : null }, 201);
+  }
+
+  /**
+   * The claimant's own way out of a lost or expired challenge. Withdrawing then
+   * resubmitting issues a new code, which is why no admin has to be involved in
+   * the ordinary case and why no plaintext challenge is kept anywhere.
+   */
+  async function withdrawClaim(request: Request, claimId: string) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+
+    const claim = await repository.getClaim(claimId);
+    if (!claim || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
+    if (claim.status !== "pending") {
+      return json({ error: "只有審核中的認領可以撤回。" }, 409);
+    }
+    if (!await repository.withdrawClaim(claimId, current.accountId)) {
+      return json({ error: "只有審核中的認領可以撤回。" }, 409);
+    }
+
+    const now = config.now();
+    await repository.writeAudit({
+      at: now, actorAccountId: current.accountId, actorRole: "circle",
+      action: "claim.withdrawn", subjectType: "claim", subjectId: claimId,
+      detail: { circleId: claim.circle_id }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true });
   }
 
   async function runChallenge(request: Request, claimId: string) {
@@ -456,7 +496,7 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     if (claim.challenge_expires_at !== null && claim.challenge_expires_at < now) {
-      return json({ error: "驗證碼已過期，請重新送出認領。" }, 410);
+      return json({ error: "驗證碼已過期。請撤回這筆認領後重新送出，即可取得新的驗證碼。" }, 410);
     }
     if (claim.challenge_attempts >= LIMITS.challengeAttemptsPerClaim) {
       return json({ error: "驗證次數已達上限，請改用人工審核。" }, 429);
@@ -1482,7 +1522,7 @@ export function createCirclePortalHandlers({
 
   return {
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
-    listClaims, createClaim, runChallenge, searchCatalog,
+    listClaims, createClaim, withdrawClaim, runChallenge, searchCatalog,
     getMyOverride, putOverride, uploadThumbnail, deleteMyOverride, previewOverride, setPostEventVisibility,
     adminListClaims, adminDecideClaim, adminTakedown,
     adminListAdmins, adminManageAdmins, adminDisableAccount,

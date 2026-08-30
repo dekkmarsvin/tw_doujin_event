@@ -381,6 +381,79 @@ test("a claim cannot be challenged by anyone but its author", async () => {
   assert.equal((await handlers.runChallenge(post(`/api/claims/${id}/challenge`, {}, other), id)).status, 404);
 });
 
+const del = (path, cookie) => new Request(`${ORIGIN}${path}`, {
+  method: "DELETE",
+  headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) },
+});
+
+test("a lost challenge is recovered by the claimant, without an admin", async () => {
+  const started = clock;
+  try {
+    const cookie = await signIn("lost-challenge@example.com");
+    const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, cookie));
+    const { id, challenge: lost } = await created.json();
+
+    // The code was never stored in the clear, so a claimant who lost it has
+    // nothing to look up — a day later it is expired as well.
+    clock = started + 25 * 60 * 60 * 1000;
+    const expired = await handlers.runChallenge(post(`/api/claims/${id}/challenge`, {}, cookie), id);
+    assert.equal(expired.status, 410);
+    assert.match((await expired.json()).error, /撤回/, "the error has to name the way out, not just the problem");
+
+    // Resubmitting first is the dead end this test exists for.
+    const blocked = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, cookie));
+    assert.equal(blocked.status, 409);
+    assert.match((await blocked.json()).error, /撤回/);
+
+    assert.equal((await handlers.withdrawClaim(del(`/api/claims/${id}`, cookie), id)).status, 200);
+
+    const again = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, cookie));
+    assert.equal(again.status, 201);
+    const { id: resubmitted, challenge } = await again.json();
+    assert.notEqual(challenge, lost, "a resubmission must issue a new code");
+
+    evidenceBody = `<html>驗證碼 ${lost}</html>`;
+    assert.equal((await (await handlers.runChallenge(post(`/api/claims/${resubmitted}/challenge`, {}, cookie), resubmitted)).json()).verified,
+      false, "the withdrawn claim's code must be dead");
+
+    evidenceBody = `<html>驗證碼 ${challenge}</html>`;
+    assert.equal((await (await handlers.runChallenge(post(`/api/claims/${resubmitted}/challenge`, {}, cookie), resubmitted)).json()).verified, true);
+    assert.equal(await repository.ownsCircle((await repository.getClaim(resubmitted)).account_id, "ff47", "ff47-site"), true);
+  } finally {
+    clock = started;
+  }
+});
+
+test("only the claimant can withdraw, and only while the claim is pending", async () => {
+  const owner = await signIn("withdraw-owner@example.com");
+  const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site", targetUrl: "https://circle.example/home" }, owner));
+  const { id } = await created.json();
+
+  const other = await signIn("withdraw-other@example.com");
+  assert.equal((await handlers.withdrawClaim(del(`/api/claims/${id}`, other), id)).status, 404,
+    "someone else's claim must not even be identifiable");
+
+  const admin = await signIn("admin@example.com");
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin));
+  assert.equal((await handlers.withdrawClaim(del(`/api/claims/${id}`, owner), id)).status, 409,
+    "withdrawing is an escape from a pending challenge, not a way to drop ownership");
+});
+
+test("withdrawing does not buy more claims than the daily limit allows", async () => {
+  const cookie = await signIn("claim-limit@example.com");
+  for (const circleId of ["ff47-site", "ff47-social", "ff47-domain"]) {
+    const created = await handlers.createClaim(post("/api/claims", { circleId }, cookie));
+    assert.equal(created.status, 201);
+    const { id } = await created.json();
+    assert.equal((await handlers.withdrawClaim(del(`/api/claims/${id}`, cookie), id)).status, 200);
+  }
+
+  // Withdrawn claims still occupy the window: the row is reused rather than
+  // removed, so the counter cannot be reset by withdrawing.
+  const blocked = await handlers.createClaim(post("/api/claims", { circleId: "ff47-site" }, cookie));
+  assert.equal(blocked.status, 429);
+});
+
 test("a verified owner can publish, and the reader document reflects it", async () => {
   const admin = await signIn("admin@example.com");
   const owner = await signIn("publisher@example.com");
