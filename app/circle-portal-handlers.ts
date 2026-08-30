@@ -498,12 +498,23 @@ export function createCirclePortalHandlers({
    * resubmitting issues a new code, which is why no admin has to be involved in
    * the ordinary case and why no plaintext challenge is kept anywhere.
    */
+  /**
+   * A claim id is global; the request's authority is not. Every claim-addressed
+   * route therefore checks the row's own event, not just who owns it: without
+   * it an id from event A could be acted on through event B's control plane,
+   * which is the isolation ADR-0043 exists for. Another event's claim reads as
+   * absent, the same as an id that does not exist.
+   */
+  function claimInScope<Claim extends { event_id: string }>(claim: Claim | null): claim is Claim {
+    return !!claim && claim.event_id === config.eventId;
+  }
+
   async function withdrawClaim(request: Request, claimId: string) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const claim = await repository.getClaim(claimId);
-    if (!claim || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
+    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
     if (claim.status !== "pending") {
       return json({ error: "只有審核中的認領可以撤回。" }, 409);
     }
@@ -525,7 +536,7 @@ export function createCirclePortalHandlers({
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const claim = await repository.getClaim(claimId);
-    if (!claim || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
+    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
     if (claim.status !== "pending") return json({ error: "這筆認領已經處理過了。" }, 409);
     if (!claim.challenge_token_hash || !claim.target_url) return json({ error: "這筆認領需要人工審核。" }, 409);
 
@@ -1409,7 +1420,10 @@ export function createCirclePortalHandlers({
     }
 
     const claim = await repository.getClaim(claimId);
-    if (!claim) return json({ error: "找不到這筆認領。" }, 404);
+    // A revoke rebuilds this event's public document. Deciding another event's
+    // claim from here would withdraw ownership in that event while leaving its
+    // document — and so the revoked content — standing.
+    if (!claimInScope(claim)) return json({ error: "找不到這筆認領。" }, 404);
 
     const now = config.now();
     const method: ClaimMethod = "admin";
