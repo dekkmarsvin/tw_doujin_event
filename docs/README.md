@@ -90,6 +90,7 @@
 | [0040](./adr/0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍與已記錄的威脅模型為界；資料維運指令假設單一維護者、單一序列執行 |
 | [0041](./adr/0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界，邊緣契約降級為紀錄（把 0040 的判準擴大到 backlog 與契約文件）|
 | [0042](./adr/0042-the-public-entry-is-an-event-chooser.md) | 公開入口支援多活動選擇，已發布活動 deep link 保持有效；生命週期分組延後至 P1 #134 |
+| [0043](./adr/0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口；帳號跨活動、claim 與 ownership 逐活動隔離 |
 
 ## 對外文件
 
