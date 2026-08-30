@@ -92,6 +92,7 @@
 | [0042](./adr/0042-the-public-entry-is-an-event-chooser.md) | 公開入口支援多活動選擇，已發布活動 deep link 保持有效；生命週期分組延後至 P1 #134 |
 | [0043](./adr/0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口；帳號跨活動、claim 與 ownership 逐活動隔離 |
 | [0044](./adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目；身分只由可追溯的主辦攤位配置配發。不可回頭的分界線是首次公開發布；authenticated Organizer import 納入第一方來源 |
+| [0045](./adr/0045-list-changes-are-declared-not-inferred.md) | 已發布名單的退出、換手、移動與重編號由人工宣告後套用，不由差異推論；已發布 ID 永不跟著攤位換手（補上 0044 決策 6 的缺口）|
 
 ## 對外文件
 

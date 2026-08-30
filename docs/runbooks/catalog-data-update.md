@@ -83,7 +83,38 @@ npm run identity:generate -- <eventId> --workspace <verified-workspace> --check
 
 FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀錄保存在 `ff47-official-migration-decisions.json`。它只說明已完成的裁決，不應在日常更新時修改。
 
-新活動的 identity registry 差異在首次公開發布前仍是候選，現行流程把它和該活動 pin 放在同一張 main PR 審閱；若來源或 grouping 有誤，可以整組捨棄並重跑。公開發布後，Reader URL、收藏、認領與行程可能已引用這些 ID，此時不得重配或重用。社團退出、攤位換手、移動或重編號目前會讓 generator fail closed；不要手動繞過。[#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139) 是 Organizer P0 的正式修正路徑，必須讓 Organizer 在套用前理解受影響 placement，且最終不要求操作 Git、CLI 或 evidence 檔案。
+新活動的 identity registry 差異在首次公開發布前仍是候選，現行流程把它和該活動 pin 放在同一張 main PR 審閱；若來源或 grouping 有誤，可以整組捨棄並重跑。公開發布後，Reader URL、收藏、認領與行程可能已引用這些 ID，此時不得重配或重用。
+
+#### 已發布名單變動了
+
+主辦在公布編號後調整名單時，**不要手動配號或編輯 `evidence.json`**。在 data repo 的 `circle-identity-groups.json` 宣告該次變動，並把 schema 升為 `circle-identity-groups/2`：
+
+```json
+{
+  "schema": "circle-identity-groups/2",
+  "eventId": "<eventId>",
+  "groups": [ … ],
+  "transitions": [
+    { "source": "1:A01", "kind": "withdrawn", "reference": "https://organizer.example/notice" },
+    { "source": "1:A02", "kind": "moved", "to": "1:C09" },
+    { "source": "1:B01", "kind": "released" }
+  ]
+}
+```
+
+| kind | 什麼時候用 | 主辦名單上的該攤位 |
+|---|---|---|
+| `withdrawn` | 社團退出，沒有人接手 | 已消失 |
+| `moved` | 同一個社團換到 `to` 的攤位 | 已消失，`to` 出現 |
+| `released` | 攤位換手給別的社團 | **仍在**，但名稱不同 |
+
+宣告與名單不符時 generator 會拒絕（例如宣告退出但攤位還在、移動到不存在的攤位、對從未配號的攤位宣告變動）。**未宣告的差異仍然 fail closed**——一個抓壞的名單頁看起來就像一批社團同時退出，所以不從差異推論。理由見 [ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)。
+
+`identity:generate` 的 dry-run 摘要會列出 `retirements`：這次會改變的每一筆**已發布** placement，含社團 ID、社團名、攤位與變動種類。**套用前逐項核對它**，那是唯一能在寫入前看見影響範圍的地方。
+
+宣告在套用之後就完成任務，下一次更新時應從檔案移除；重複宣告已退役的攤位會被拒絕。
+
+這條路徑要求編輯 JSON 與執行 CLI，因此是 migration path 而不是 Organizer 產品流程。[#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139) 與 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要把它收斂成 UI，屆時 UI 產生的就是同一份宣告。
 
 ### 3. 更新 pin
 
