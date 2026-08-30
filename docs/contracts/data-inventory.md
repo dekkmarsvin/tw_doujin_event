@@ -2,9 +2,9 @@
 
 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 與 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 決定。
 
-**schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（14 張表由 `ensureTables()` 於首次請求建立；既有資料庫用同檔案的 additive column migrations 升級）
+**schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（runtime tables 由 `ensureTables()` 於首次請求建立；既有資料庫用同檔案的 additive column migrations 升級。表名與數量直接以該檔為準，不在本文複製一個會漂移的計數）
 **寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**行為契約**：[社團自助控制面](./circle-portal.md)、[地圖貢獻控制面基礎](./map-contributions.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
+**行為契約**：[社團自助控制面](./circle-portal.md)、[地圖貢獻控制面](./map-contributions.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
 **外部對照**：[性質相近的服務如何公開自己的資料收集](../research/data-collection-policies-in-comparable-projects.md)
 
 ## 三件要先知道的事
@@ -172,7 +172,8 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 - 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`
 - 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
 - 管理者名冊：`admin.added`、`admin.removed`
-- 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
+- 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
+- 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.rejected`／`map_draft.approved`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
 兩點值得單獨記下：
@@ -188,7 +189,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 **保存期**：7 天，全站最短。 **到期處置**：由排程 Worker **刪除資料列**。期限最短的理由是它存的是登入信全文（含連結），而 preview 的沙盒收件人是真實的個人信箱；測試不需要昨天的信。preview 環境的 Worker 另行部署為 `tw-catalog-retention-purge-preview`。
 
-preview 清除端點會先刪除隔離 preview 的公開縮圖與私人地圖貢獻 R2 bucket 內全部物件，再由 `clearPreviewData()` 清空除 `admins` 外的 13 張 runtime table，**保留 admins**。它只在 preview 可達，且與排程清除無關。
+preview 清除端點會先刪除隔離 preview 的公開縮圖與私人地圖貢獻 R2 bucket 內全部物件，再由 `clearPreviewData()` 清空除 `admins` 外的所有 runtime tables，**保留 admins**。它只在 preview 可達，且與排程清除無關。
 
 ## IP 的處理
 

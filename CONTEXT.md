@@ -115,8 +115,11 @@ A–W。A–V 縱向，W 橫向。
 **landmark**
 非一般攤位區（企業攤、舞台等），保存相對矩形，不自動辨識。
 
-**authoring**
-受信任維護者在本機辨識、微調並發布地圖 layout 的工作。**不是產品功能**，不出現在公開 Pages。
+**本機 authoring**
+受信任維護者在本機辨識、微調並匯出地圖 layout 的現行內部工具。它不出現在公開 Pages，並保留為 migration／離線備援；但它也**不是 Organizer P0 的完成狀態**，不能把 repository、Git 或 CLI 操作暴露成 Organizer 必須學會的產品流程。
+
+**Organizer authoring**
+Organizer 透過受驗證的 Web UI 建立活動、選擇 Venue／Floor（venue space）、設定 EventDay／Area／Space、匯入主辦社團與攤位資料、檢查、預覽及發布的 P0 產品流程。它修改 Organizer-owned data，不授權 Circle 修改 placement；最終流程不得要求 Organizer 修改程式、操作 Git／CLI 或依賴 agent。完整產品邊界見 [`PRODUCT.md`](PRODUCT.md)，實作缺口由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤。
 
 **地圖貢獻者**（`map_contributor`）
 由管理者授權、使用既有 magic-link 帳號整理主辦官方配置證據的人。它不是社團認領附帶的角色，也不新增工作簿或第三方資料來源。

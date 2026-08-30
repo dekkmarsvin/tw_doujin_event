@@ -5,6 +5,8 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 **實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec 與 history intent）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）
 **測試**：`tests/event-url-state.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`
 
+> **實作狀態（2026-08-30）**：現行 UI 仍只有一個 active event，所以下方 fail-closed 規則描述的是目前程式。多活動 bundle、活動選擇器與「已發布活動可由 `event` 定址」已由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案，但 [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 尚未實作；實作 PR 必須在同一個 commit 改寫本契約與驗收條件。
+
 ## 參數
 
 所有可分享狀態都掛在根路徑的 query string，不建立會和 Pages `index.html` 正規化衝突的 SPA rewrite。

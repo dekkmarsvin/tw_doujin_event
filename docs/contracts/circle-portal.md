@@ -6,6 +6,8 @@
 **測試**：`tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 
+> **實作狀態（2026-08-30）**：社團控制面目前仍由 `env.EVENT_ID` 決定唯一可操作活動。通用 `/circle`、登入後選場次與逐活動 ownership 已由 [ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 定案，但 [#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 尚未實作；公開 `overrides.json` 的多活動放行則屬 [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119)。本文在兩票落地前只描述現行行為。
+
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
 ## 公開入口與 preview 邊界

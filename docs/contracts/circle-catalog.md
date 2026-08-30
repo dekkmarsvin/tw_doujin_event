@@ -52,7 +52,7 @@ type CircleCatalogPayload = {
 
 ## 身分規則
 
-- ID 是只增不減、不重排、不重用的 `c-xxxxxx` 配發序號，見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md)。
+- **已公開發布**的 ID 是只增不減、不重排、不重用的 `c-xxxxxx` 配發序號。尚未公開的候選 registry／pin 沒有 Reader 連結、收藏或認領依賴，可以整組捨棄並重跑；首次公開發布才是不可回頭的邊界。見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md) 與 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
 - 同一活動中，經主辦穩定鍵或可追溯主辦證據連結的同一社團可在同日或跨日有多筆 placement，仍使用同一 ID。不同活動不建立 identity linkage。
 - `evidence.json` 的正式活動證據為 `{ eventId, kind: "organizer-booth", value: "<day>:<booth>" }`。
 - 同名不是合併依據；一個 booth 證據對到多個 ID、官方群組內的 booth 對到不同 ID、或目前名稱與官方名稱漂移時一律 fail closed。
@@ -61,11 +61,14 @@ type CircleCatalogPayload = {
 
 ### 新活動配號流程
 
-- `c-xxxxxx` 仍由單一全域 ledger 配發、永不重用；不同活動不會出現相同 ID。
+- `c-xxxxxx` 仍由單一全域 ledger 配發；已公開發布的序號永不重用，不同活動不會出現相同 ID。
 - 新活動的每個同活動 identity group 配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
 - 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。名稱只用於 drift 檢查，不得作為跨日合併依據；沒有 grouping 證據時必須 fail closed。
 - 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個 identity group 的所有 `<day>:<booth>` sources 只配發一個 ID，並逐一保存 source。
-- 新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
+- 現行 repository pipeline 把新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
+- 首次公開發布前，registry 與 pin 都是候選，可一起捨棄並由同一份 reviewed source 重建；不得把工作樹中間配號誤寫成已發布相容性承諾。公開後若主辦名單退出、換手、移動或重編號，現行 generator 會 fail closed；Organizer 可理解且不需操作 Git／CLI 的 P0 修正路徑由 [#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139) 追蹤。
+
+上述 main PR、pin 與 generator 是目前內部發布實作，不是 Organizer 產品流程的永久限制。[`PRODUCT.md`](../../PRODUCT.md) 與 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要求未來 Web UI 在不暴露 repository workflow 的前提下維持相同的 evidence、validation 與發布後相容性規則。
 
 data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identity group 的完整 booth sources：
 
@@ -104,7 +107,7 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 
 - 主 repo 不追蹤真實活動的 `event.json`、`official-booths.json`、`circles.json` 或 `map.json`。
 - `npm run build` 使用 repo 內最小 fictional fixture，確保共同 gate 不依賴網路或真實活動資料。
-- `npm run build:production` 先依 pin 下載並核對逐檔 SHA-256，再由官方 booth evidence 生成 v3 catalog，最後只把單一活動 staging 到 `dist`。
+- `npm run build:production` 先依 pin 下載並核對逐檔 SHA-256，再由主辦 booth evidence 生成 v3 catalog，最後只把單一活動 staging 到 `dist`。這是現行已出貨行為；多活動 bundle 與活動選擇器已由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案，但 [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 尚未實作，不能先把未出貨決策寫成現況。
 - overlay 無法取得時仍顯示完整的官方名稱與攤位 base；不得把 overlay 當成目錄存在的前提。
 
 ## 呈現契約

@@ -7,6 +7,8 @@
 **實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)
 **測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`
 
+> **實作狀態（2026-08-30）**：地圖貢獻 route 目前仍只服務 Pages 設定的單一 `eventId`。[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 將社團入口改為通用入口，但沒有決定 `map_contributor` 是否逐活動授權；[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 也明確不擴張此流程。因此下方單一活動範圍仍是現行契約，未來若要改必須另行定案，不能從社團多活動 ownership 自動類推。
+
 ## 授權邊界
 
 - `map_contributor` 沿用 magic-link 帳號，由具有近期 session 的管理者以 `POST /api/admin/map-contributors` 授予、撤銷或停權。
