@@ -3,7 +3,7 @@
 - 狀態：已定案（2026-08-30）
 - 延續：[ADR-0039](./0039-one-data-repo-for-events-and-references.md) 的 single-maintainer 前提
 - 相關 issue：[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
-- 相關 PR：[#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128)（未合併關閉）、[#129](https://github.com/dekkmarsvin/tw_doujin_event/pull/129)
+- 相關 PR：[#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128)（未合併關閉）、[#129](https://github.com/dekkmarsvin/tw_doujin_event/pull/129)（已合併）
 - 相關流程：[review-fix 迴圈守則](../agents/review-loop.md)
 
 ## 問題
@@ -22,14 +22,14 @@
 
 ### 1. 資料維運指令的威脅模型：單一維護者、單一序列執行
 
-`scripts/` 下的資料維運指令（`event:onboard`、`data:fetch`、`data:stage`、`event-data:check`，以及 catalog builder 與 identity registry 相關腳本）假設同一時間只有一位維護者、在本機依 runbook 順序執行一條指令。
+`scripts/` 下的資料維運指令（`event:onboard`、`data:fetch`、`data:stage`、`identity:generate`、`event-data:check`，以及 `build-official-circle-catalog.mjs`）假設同一時間只有一位維護者、在本機依 runbook 順序執行一條指令。
 
 明確**不**假設：多行程並發執行、CI 並行呼叫、任意 instruction boundary 被外部終止後仍可自動回復。
 
 可回復性的界線是：
 
-- **指令自己回報的失敗**（驗證失敗、rename 失敗、下載失敗）必須保持原狀，兩個 registry 檔不得成為混合狀態。這是 #116 就寫下的要求，仍然有效。
-- **被外部終止的指令**以「用同一 event ID 與同一 commit 重跑同一條指令」復原，不承諾自動 crash recovery。
+- **指令自己回報的失敗**（驗證失敗、rename 失敗、下載失敗）必須復原既有狀態。這是 #116 就寫下的要求，仍然有效。
+- **被外部終止的指令**不承諾自動 crash recovery，復原方式是人工重跑。實際步驟見[社團資料更新 runbook](../runbooks/catalog-data-update.md)，本 ADR 不複述。
 
 ### 2. review finding 的處置以 ticket 為界
 
