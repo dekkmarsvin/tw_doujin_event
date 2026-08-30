@@ -6,6 +6,7 @@ import { CIRCLE_IDENTITY_GROUPS_FILE, REFERENCE_SELECTION_FILE } from "./event-d
 import { recoverCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import {
   acquireEventOnboardingLock,
+  assertNoUnfinishedEventOnboardingTransaction,
   EVENT_ONBOARDING_LOCK_TOKEN_ENV,
 } from "./event-onboarding-lock.mjs";
 import {
@@ -37,6 +38,7 @@ if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) {
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
 const lock = workspace === root ? await acquireEventOnboardingLock(root) : null;
 try {
+if (lock) await assertNoUnfinishedEventOnboardingTransaction(root);
 
 async function runScript(script, args, label) {
   await new Promise((resolve, reject) => {

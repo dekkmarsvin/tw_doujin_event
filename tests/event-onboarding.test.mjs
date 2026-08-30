@@ -14,6 +14,7 @@ import {
 import { EVENT_DATA_REPOSITORY, EVENT_FILE_NAMES, parseEventDataPin, sha256 } from "../scripts/event-data-pin-utils.mjs";
 import {
   acquireEventOnboardingLock,
+  assertNoUnfinishedEventOnboardingTransaction,
   eventOnboardingLockDirectory,
 } from "../scripts/event-onboarding-lock.mjs";
 
@@ -347,6 +348,25 @@ test("every standalone root transaction writer acquires the shared onboarding lo
   }
   const staging = await readFile(path.join("scripts", "stage-event-data.mjs"), "utf8");
   assert.doesNotMatch(staging, /!fixture\s*&&\s*workspace === root/u);
+  for (const script of ["fetch-event-data.mjs", "stage-event-data.mjs"]) {
+    const sourceText = await readFile(path.join("scripts", script), "utf8");
+    assert.match(sourceText, /assertNoUnfinishedEventOnboardingTransaction\(root\)/u, script);
+  }
+});
+
+test("non-onboarding writers refuse rollback and committed transaction journals", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-preflight-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const transactionFile = onboardingTransactionFile(temporary);
+  await mkdir(path.dirname(transactionFile), { recursive: true });
+  for (const marker of [transactionFile, `${transactionFile}.committed`]) {
+    await writeFile(marker, "{}\n");
+    await assert.rejects(
+      assertNoUnfinishedEventOnboardingTransaction(temporary),
+      /unfinished event onboarding transaction/,
+    );
+    await rm(marker);
+  }
 });
 
 test("branch names and tags are rejected before fetching or writing", async (t) => {

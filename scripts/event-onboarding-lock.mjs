@@ -46,15 +46,19 @@ export async function assertEventOnboardingOwnership(
   root,
   token = process.env[EVENT_ONBOARDING_LOCK_TOKEN_ENV],
 ) {
-  const transactionFile = eventOnboardingTransactionFile(root);
-  if (await pathExists(transactionFile) || await pathExists(`${transactionFile}.committed`)) {
-    throw new Error("Circle identity registry belongs to an unfinished event onboarding transaction.");
-  }
+  await assertNoUnfinishedEventOnboardingTransaction(root);
   const lockDirectory = eventOnboardingLockDirectory(root);
   if (!await pathExists(lockDirectory)) return;
   const owner = await readOwner(lockDirectory);
   if (!token || owner.token !== token) {
     throw new Error(`Event onboarding is already active on ${owner.hostname} (PID ${owner.pid}).`);
+  }
+}
+
+export async function assertNoUnfinishedEventOnboardingTransaction(root) {
+  const transactionFile = eventOnboardingTransactionFile(root);
+  if (await pathExists(transactionFile) || await pathExists(`${transactionFile}.committed`)) {
+    throw new Error("Repository state belongs to an unfinished event onboarding transaction; rerun event:onboard to recover it.");
   }
 }
 

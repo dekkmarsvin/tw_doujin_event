@@ -3,7 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertEventDataPinIdentity, parseEventDataPin } from "./event-data-pin-utils.mjs";
 import { fetchEventData } from "./event-data-fetcher.mjs";
-import { acquireEventOnboardingLock } from "./event-onboarding-lock.mjs";
+import {
+  acquireEventOnboardingLock,
+  assertNoUnfinishedEventOnboardingTransaction,
+} from "./event-onboarding-lock.mjs";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +32,7 @@ const pinPath = pinArgument
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
 const lock = workspace === root ? await acquireEventOnboardingLock(root) : null;
 try {
+if (lock) await assertNoUnfinishedEventOnboardingTransaction(root);
 const pin = assertEventDataPinIdentity(parseEventDataPin(await readJsonFileStrict(pinPath, `Event data pin ${eventId}`)), eventId);
 const destination = path.join(workspace, ".event-data", eventId);
 // A sibling temp directory keeps the final rename atomic on Windows too; the
