@@ -30,6 +30,7 @@
 .resultCopy b { font-size:calc(10px * var(--ui-font-scale,1)); }
 .resultCopy small { margin-top:3px; color:#8a928d; font-size:calc(8px * var(--ui-font-scale,1)); }
 .state { padding:3px 5px; border-radius:4px; background:#edf4f0; color:#39715d; font-size:calc(7px * var(--ui-font-scale,1)); font-weight:800; }
+.retiredState { padding:3px 5px; border-radius:4px; border:1px solid #ccc7bf; background:#f2f0ec; color:#4f4b45; font-size:calc(7px * var(--ui-font-scale,1)); font-weight:800; }
 .heart { width:30px; height:30px; border:1px solid #e2e5e1; border-radius:8px; background:#fff; color:#bdc3bf; cursor:pointer; }
 .heart.saved { border-color:#f1c8c0; background:#fff3ef; color:var(--coral); }
 .empty,.detailEmpty { display:grid; place-items:center; align-content:center; gap:5px; padding:24px 16px; text-align:center; }
@@ -129,6 +130,10 @@
 .title h2 { margin:0; font-size:calc(17px * var(--ui-font-scale,1)); line-height:1.25; }
 .title p { margin:3px 0 0; color:#7d8680; font-size:calc(9px * var(--ui-font-scale,1)); }
 .rating { display:block; margin-top:5px; color:#a04e42; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; }
+.retiredNotice { display:grid; gap:5px; margin:9px 0; padding:9px 10px; border:1px solid #c9c4bc; border-radius:9px; background:#f4f2ee; }
+.retiredNotice b { font-size:calc(10px * var(--ui-font-scale,1)); color:#3f3b36; }
+.retiredNotice p { margin:0; color:#63605a; font-size:calc(9px * var(--ui-font-scale,1)); line-height:1.55; }
+.retiredNotice button { justify-self:start; min-height:32px; padding:6px 10px; border:1px solid #b8b2a9; border-radius:7px; background:#fff; color:#3f3b36; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:700; cursor:pointer; }
 .tags { display:flex; flex-wrap:wrap; gap:5px; margin:11px 0; }
 .tags span { padding:4px 6px; border-radius:5px; background:#f1f3ef; color:#647069; font-size:calc(8px * var(--ui-font-scale,1)); }
 .work { padding:11px; border:1px solid #e1e4df; border-radius:9px; background:#fafbf8; }
@@ -186,7 +191,7 @@
   .results,.itinerary,.details,.detailEmpty { width:100%; height:100%; }
   .resultList,.itinerary ol { max-height:none; }
   .resultList article { grid-template-columns:minmax(0,1fr) 44px; }
-  .resultMain,.planMain,.purchaseToggle,.resultHeaderActions button,.empty button,.heart,.loadMore,.fullDetailButton,.shared button,.externalLinks a { min-height:44px; }
+  .resultMain,.planMain,.purchaseToggle,.resultHeaderActions button,.empty button,.heart,.loadMore,.fullDetailButton,.shared button,.externalLinks a,.retiredNotice button { min-height:44px; }
   .heart { width:44px; height:44px; }
   .itinerary>header h2 { font-size:16px; }
   .shoppingSummary b { font-size:11px; }.shoppingSummary span { font-size:10px; }
