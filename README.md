@@ -12,7 +12,7 @@
 
 開啟 <https://map.kotoban.top/> 後：
 
-1. 先選活動日期與展區，再搜尋社團、攤位或作品；「詳細搜尋」可依創作者、作品類型與分級縮小結果。
+1. 先選活動日期與展區，再搜尋社團、攤位或作品；「詳細搜尋」可依創作者、作品類型與分級縮小結果，也可加入多枚作品題材（符合任一或全部符合）並排除不想看的題材。結果卡會說明這一筆為什麼在結果裡。
 2. 從搜尋結果或地圖攤位開啟社團資訊。兩個入口共用同一筆收藏、備註與行程狀態；地圖可拖曳、縮放，也支援方向鍵與 Enter／空白鍵操作攤位。
 3. 「收藏」、「加入行程」與「設為下一站」是三個獨立動作。行程可排序、記錄購買項目與預算，並在「導航模式」只看當日預定攤位與已走訪狀態；本站不做 GPS 定位或自動路徑推算。
 4. 收藏群組、備註與行程只存在目前瀏覽器。「資料管理」可匯出 JSON／CSV 備份；一般網頁尚未提供匯入或跨裝置同步。
@@ -23,6 +23,8 @@
 
 - 社團在 <https://map.kotoban.top/circle> 通過真人驗證並以 email 一次性連結登入，認領社團後補充販售資訊、連結、代表圖與作品標籤。送出前可預覽；社團名稱、攤位與日期無法在此修改。
 - 經管理者另外授權的地圖貢獻者，登入同一控制面後可建立私人地圖草稿、綁定官方來源檔並送審。核准與匯出只產生 event-data 候選，不會直接發布公開地圖。
+
+- 審閱者可對整份草稿或單一攤位留言；被要求修改時，貢獻者會看到指向該攤位的請求。草稿版本落後時提示會指名目前版本，不是一句籠統的失敗。
 
 完整邊界見[社團自助控制面契約](docs/contracts/circle-portal.md)與[地圖貢獻控制面契約](docs/contracts/map-contributions.md)。
 
@@ -37,12 +39,20 @@
 | 公開場刊與地圖 | **已實作**：FF47 是目前唯一正式活動；公開端提供搜尋、詳細搜尋、互動地圖、分享 URL 與離線 shell。|
 | 收藏與走訪規劃 | **已實作**：收藏群組、備註、行程、下一站、已走訪、購買項目、預算、導航模式與 JSON／CSV 匯出。資料只存於目前瀏覽器。|
 | 社團自助維護 | **已實作**：登入、認領、預覽、補充資料、代表圖、保存期限、活動後退出、自助刪除與管理者撤下。|
-| 地圖貢獻控制面 | **已實作基礎流程**：角色授權、私人 revision、官方來源檔、送審、核准替換與 event-data 候選匯出。錨定推算、留言串與局部修改請求尚未實作。|
+| 地圖貢獻控制面 | **已實作**：角色授權、私人 revision、官方來源檔、送審、核准替換、event-data 候選匯出、錨定推算、審閱留言串、指向單一 slot 的局部修改請求與具名版本衝突提示。|
 | 本機地圖 authoring | **已實作**：可從既有 revision、辨識結果或空白畫布開始，建立整排與個別地圖元素；仍需本機 D1 與 repository review。|
 | 規劃資料匯入、外部服務、跨裝置同步 | **P2，未對外開放**：底層已有 JSON／CSV 解析與衝突預覽，但一般介面只有安全匯出。|
-| 詳細搜尋進階語意 | **部分實作**：創作者、作品、原創／二創與分級可用；多主題 AND／OR、排除主題與命中原因仍未實作。|
+| 詳細搜尋進階語意 | **已實作**：創作者、作品、原創／二創、分級，以及多枚題材的「符合任一／全部符合」、排除題材與結果卡的命中原因。|
 
-目前 open issues 是待辦或待決策的追蹤面，不等於都已承諾實作：其餘五個場館官方編目 [#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85)、地圖貢獻效率與協作 [#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86)、本機 editor 效率 [#87](https://github.com/dekkmarsvin/tw_doujin_event/issues/87)、東西向出入口 [#88](https://github.com/dekkmarsvin/tw_doujin_event/issues/88)、發布地圖 provenance 的必要性評估 [#89](https://github.com/dekkmarsvin/tw_doujin_event/issues/89)，以及自動產生 pin [#90](https://github.com/dekkmarsvin/tw_doujin_event/issues/90)。其中 #86、#89 仍需先釐清需求或價值；ADR-0035 的整體方向也仍是草稿，只有空白畫布、來源說明與排原語的第一階段已落地。
+交付範圍以**使用者能完成的任務**為界，不以完備性為界；判準與代價見 [ADR-0041](docs/adr/0041-scope-is-bounded-by-shippable-features.md)。open issues 是追蹤面，不等於都已承諾實作：
+
+| Issue | 是什麼 | 分類 |
+|---|---|---|
+| [#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85) | 場館 reference 編目 | 需求驅動——有活動確定場館才建立該筆 record |
+| [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) | 新活動 onboarding epic | 維護者工序 |
+| [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) | production event selection 不硬編 FF47 | 第二場活動的實際前置 |
+
+[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)（authoring 上 Pages）與 [#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)（GitHub PR／pin orchestration）已依 ADR-0041 關閉：兩者的解除條件都是「第二場真實活動跑完之後再評估」，那是重新評估的觸發器，不是待辦。重啟條件保存在 #104 的 epic 內文。
 
 ## 快速開始
 

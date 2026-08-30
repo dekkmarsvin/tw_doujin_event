@@ -116,5 +116,5 @@ npm test
 
 ## 現行限制與後續範圍
 
-- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。**ADR-0038 對選項 B 定案後這句仍然有效**：B 把 authoring **介面**搬上 Pages，持久化改走 `/circle` 既有的管理者授權、私人草稿、審閱與版本化候選匯出機制，不部署這個 route。見[地圖貢獻控制面基礎契約](../contracts/map-contributions.md)。
+- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。**ADR-0038 對選項 B 定案後這句仍然有效**：B 把 authoring **介面**搬上 Pages，持久化改走 `/circle` 既有的管理者授權、私人草稿、審閱與版本化候選匯出機制，不部署這個 route。見[地圖貢獻控制面契約](../contracts/map-contributions.md)。
 - 對非一般攤位文字做 OCR。第一階段只保存可可靠辨識的相對矩形。

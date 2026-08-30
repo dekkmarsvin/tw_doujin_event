@@ -7,7 +7,7 @@
 **活動資料**：公開 data repo，由 `data/event-data-pins/<event>.json` 固定版本
 **流程**：[社團資料更新](../runbooks/catalog-data-update.md)
 
-> **實作狀態（2026-08-28）**：[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md) 已決定保留全域唯一 ID namespace、停止跨活動沿用，但 #116 的 event-local 配號產生器尚未實作。下列跨活動沿用規則仍描述目前程式；#116 落地時必須以同一個 PR 更新本契約與測試，不得把 ADR 決策誤報為已出貨行為。
+> **實作狀態（2026-08-30）**：[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md) 的 event-local 配號已由 [#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)（PR #129）實作。`scripts/circle-identity-registry.mjs` 會在既有配號帶有其他活動證據時 fail closed，要求新活動配發新 ID。下方「新活動配號流程」描述的就是目前程式行為，不再是尚未出貨的 ADR 決策。
 
 ## 權威順序
 
