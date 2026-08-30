@@ -59,7 +59,7 @@
 | [0009](./adr/0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload |
 | [0010](./adr/0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號（**已實作**，取代 0003；0039 保留全域唯一 namespace，但暫緩跨活動沿用） |
 | [0011](./adr/0011-ff47-is-not-a-public-launch.md) | FF47 期間全站不公開，含社團端（**資料留在 repo 內一句已被 0014 取代；解除條件已被 0015 取代**） |
-| [0012](./adr/0012-first-party-sources-only.md) | 資料來源只留主辦官網與社團本人 |
+| [0012](./adr/0012-first-party-sources-only.md) | 資料來源只留第一方主辦與社團本人；主辦 transport 由 0044 部分取代，可含 authenticated Organizer import |
 | [0013](./adr/0013-drop-the-legacy-circle-id-compatibility-path.md) | 移除舊 circle ID 的相容路徑（**部分取代 0010**） |
 | [0014](./adr/0014-event-data-lives-outside-the-code-repo.md) | 活動資料移出程式碼 repo，以固定 commit 引用（**部分取代 0011；一活動一 repo 已被 0039 取代**） |
 | [0015](./adr/0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含有第三方位元組時解除（**部分取代 0011**） |
@@ -91,6 +91,7 @@
 | [0041](./adr/0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界，邊緣契約降級為紀錄（把 0040 的判準擴大到 backlog 與契約文件）|
 | [0042](./adr/0042-the-public-entry-is-an-event-chooser.md) | 公開入口支援多活動選擇，已發布活動 deep link 保持有效；生命週期分組延後至 P1 #134 |
 | [0043](./adr/0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口；帳號跨活動、claim 與 ownership 逐活動隔離 |
+| [0044](./adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目；身分只由可追溯的主辦攤位配置配發。不可回頭的分界線是首次公開發布；authenticated Organizer import 納入第一方來源 |
 
 ## 對外文件
 

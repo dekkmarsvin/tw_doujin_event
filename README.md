@@ -4,7 +4,7 @@
 
 正式網站：<https://map.kotoban.top/>。一般閱讀不需登入；參展社團可在 <https://map.kotoban.top/circle> 登入並維護補充資料。
 
-地圖辨識與細部編輯器是本機 authoring 工具，不是公開 Pages 入口的一部分。
+地圖辨識與細部編輯目前仍依賴本機 authoring 工具，尚未成為 Organizer 可從 Web 完成的流程。這是現行 migration path，不是 [`PRODUCT.md`](PRODUCT.md) 的 Organizer P0 完成狀態；完整缺口由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤。
 
 ## 網站使用方式
 
@@ -28,9 +28,9 @@
 
 完整邊界見[社團自助控制面契約](docs/contracts/circle-portal.md)與[地圖貢獻控制面契約](docs/contracts/map-contributions.md)。
 
-### 維護者：本機地圖 authoring
+### Organizer／維護者：目前仍是本機地圖 authoring
 
-`npm run dev` 的 `/editor` 可從既有 revision、配置圖辨識結果或空白地圖開始，並以「新增一排」或個別元素編輯一般攤位、柱子、出入口與非一般攤位區。來源說明會進入快照；發布本機 revision 後仍須匯出到 event-data repository 並經 diff、schema 與 review。逐步操作見[地圖 authoring runbook](docs/runbooks/map-authoring.md)。
+`npm run dev` 的 `/editor` 可從既有 revision、配置圖辨識結果或空白地圖開始，並以「新增一排」或個別元素編輯一般攤位、柱子、出入口與非一般攤位區。來源說明會進入快照；發布本機 revision 後仍須匯出到 event-data repository 並經 diff、schema 與 review。這是現行內部發布實作；Organizer P0 最終必須能由 Web UI 建立、匯入、驗證、預覽與發布，不操作 Git、CLI 或 agent。逐步操作見[地圖 authoring runbook](docs/runbooks/map-authoring.md)。
 
 ## 功能狀態
 
@@ -41,18 +41,11 @@
 | 社團自助維護 | **已實作**：登入、認領、預覽、補充資料、代表圖、保存期限、活動後退出、自助刪除與管理者撤下。|
 | 地圖貢獻控制面 | **已實作**：角色授權、私人 revision、官方來源檔、送審、核准替換、event-data 候選匯出、錨定推算、審閱留言串、指向單一 slot 的局部修改請求與具名版本衝突提示。|
 | 本機地圖 authoring | **已實作**：可從既有 revision、辨識結果或空白畫布開始，建立整排與個別地圖元素；仍需本機 D1 與 repository review。|
+| Organizer no-code onboarding | **P0，未實作**：目前建立、匯入與發布新活動仍需本機工具及 repository workflow；[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要把它收斂成 Web UI，且不要求 Organizer 修改程式或操作 Git、CLI、agent。|
 | 規劃資料匯入、外部服務、跨裝置同步 | **P2，未對外開放**：底層已有 JSON／CSV 解析與衝突預覽，但一般介面只有安全匯出。|
 | 詳細搜尋進階語意 | **已實作**：創作者、作品、原創／二創、分級，以及多枚題材的「符合任一／全部符合」、排除題材與結果卡的命中原因。|
 
-交付範圍以**使用者能完成的任務**為界，不以完備性為界；判準與代價見 [ADR-0041](docs/adr/0041-scope-is-bounded-by-shippable-features.md)。open issues 是追蹤面，不等於都已承諾實作：
-
-| Issue | 是什麼 | 分類 |
-|---|---|---|
-| [#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85) | 場館 reference 編目 | 需求驅動——有活動確定場館才建立該筆 record |
-| [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) | 新活動 onboarding epic | 維護者工序 |
-| [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) | production event selection 不硬編 FF47 | 第二場活動的實際前置 |
-
-[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)（authoring 上 Pages）與 [#118](https://github.com/dekkmarsvin/tw_doujin_event/issues/118)（GitHub PR／pin orchestration）已依 ADR-0041 關閉：兩者的解除條件都是「第二場真實活動跑完之後再評估」，那是重新評估的觸發器，不是待辦。重啟條件保存在 #104 的 epic 內文。
+交付範圍以**使用者能完成的任務**為界，不以完備性為界；判準與代價見 [ADR-0041](docs/adr/0041-scope-is-bounded-by-shippable-features.md)。GitHub issues 是會持續變動的追蹤面，不在 README 複製一份容易失真的清單。每張要排入開發的票都必須對應 `PRODUCT.md` 的既有使用者與 Core User Task；issue 本身不能新增產品使用者、資料 ownership 或完成定義。若需要改變這些邊界，先更新 `PRODUCT.md`；若同時推翻既有技術或流程決策，再新增 ADR 明確取代舊決策，之後才排實作。
 
 ## 快速開始
 
@@ -98,7 +91,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 | 要重新產生地圖快照 | [地圖 authoring](docs/runbooks/map-authoring.md) |
 | 首次部署、改密鑰、回滾 | [部署](docs/runbooks/deployment.md) |
 
-> 社團 ID 由版本化 registry 配發且永不重算；更新場刊時必須審閱 `data/circle-identities/` 的 `allocations.json` 與 `evidence.json` 差異。規則見 [ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)；舊 `ff47-<hash>` ID 的對照表與相容路徑已移除，見 [ADR-0013](docs/adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。
+> 社團 ID 的配發、候選重建與首次公開發布後相容性規則，以[社團目錄契約](docs/contracts/circle-catalog.md)、[ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)與[ADR-0044](docs/adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)為準。
 
 ## 專案結構
 
@@ -130,7 +123,7 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 - `scripts/build-official-circle-catalog.mjs`：由主辦攤位資料與 identity evidence 生成 official-only catalog
 - `.event-data/`、`public/data/events/`：本機／CI 產物，不進版控
 
-**本機 authoring（不部署到 Pages）**
+**本機 authoring（現行內部工具，不是 Organizer P0 最終流程）**
 
 - `app/map-recognition.ts`、`app/map-admin-importer.tsx`、`app/map-layout-editor.tsx`
 - `db/event-map-repository.ts`、`worker/`、`drizzle/`

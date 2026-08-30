@@ -17,6 +17,10 @@
 
 第三方工作簿與原始配置圖不在本 repo，也不參與 production catalog 生成。
 
+> **流程定位**：本篇是目前維護者操作 repository pipeline 的 migration runbook，不是 Organizer P0 的最終操作介面。[`PRODUCT.md`](../../PRODUCT.md) 與 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要求未來由 Web UI 完成建立、匯入、驗證、預覽與發布；UI 可以沿用本篇的 parser、evidence 與 validation 規則，但不得要求 Organizer 操作 Git、CLI、pin 或 agent。
+
+> **現行 pipeline 的新活動前置條件**：主辦只公布錄取名單時，不產生可公開的 catalog、不配發 `c-*`、也不開放認領。`event-definition/3` 目前需要每一活動日的 `officialData.boothListUrls`，identity evidence 也只接受 `<day>:<booth>`；只有名稱與攤數的錄取名單不符合這兩個契約。等待攤位編號期間可以先完成 references、活動日與不依賴 placement 的 map layout。未來 Organizer CSV／XLSX 匯入若成為主辦配置的權威輸入，仍須在 #104 的受驗證草稿／預覽／發布流程中產生等價且可追溯的 booth evidence，不能在本 runbook 偷開特例。見 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
+
 ## 更新流程
 
 ### 0. 建立新活動資料夾（新活動才需要）
@@ -78,6 +82,8 @@ npm run identity:generate -- <eventId> --workspace <verified-workspace> --check
 明確加上 `--write` 才會以配對原子替換更新該 workspace 的 `allocations.json` 與 `evidence.json`。`--check` 只在 registry 已完整涵蓋 grouping 且重跑為 no-op 時成功。
 
 FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀錄保存在 `ff47-official-migration-decisions.json`。它只說明已完成的裁決，不應在日常更新時修改。
+
+新活動的 identity registry 差異在首次公開發布前仍是候選，現行流程把它和該活動 pin 放在同一張 main PR 審閱；若來源或 grouping 有誤，可以整組捨棄並重跑。公開發布後，Reader URL、收藏、認領與行程可能已引用這些 ID，此時不得重配或重用。社團退出、攤位換手、移動或重編號目前會讓 generator fail closed；不要手動繞過。[#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139) 是 Organizer P0 的正式修正路徑，必須讓 Organizer 在套用前理解受影響 placement，且最終不要求操作 Git、CLI 或 evidence 檔案。
 
 ### 3. 更新 pin
 

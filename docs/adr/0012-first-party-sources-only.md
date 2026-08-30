@@ -1,6 +1,7 @@
 # ADR-0012：資料來源只留主辦官網與社團本人
 
 - 狀態：已定案（2026-08-18）
+- **部分被取代**：[ADR-0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) 依最新 PRODUCT 把 authenticated Organizer 直接匯入納入第一方活動事實 transport；非主辦第三方來源仍禁止。
 - 延續：[ADR-0010：社團身分改用配發的流水號](./0010-circle-identity-is-an-allocated-serial.md)
 - 相關契約：[社團目錄契約](../contracts/circle-catalog.md)、[資料匯入契約](../contracts/data-import.md)
 - 相關流程：[社團資料更新](../runbooks/catalog-data-update.md)
