@@ -4,8 +4,7 @@ import sampleTwoDefinition from "../fixtures/events/sample-two/event.json";
 import sampleTwoReferences from "../fixtures/events/sample-two/reference-records.json";
 import { circleCategoryLabels, parseCircleCategoryCatalog, type CircleCategoryCatalog } from "./circle-categories";
 
-declare const __ACTIVE_EVENT_DEFINITION__: unknown;
-declare const __ACTIVE_REFERENCE_RECORDS__: unknown;
+declare const __PUBLISHED_EVENTS__: readonly { definition: unknown; references: unknown }[];
 
 export const EVENT_DEFINITION_SCHEMA = "event-definition/3" as const;
 
@@ -248,16 +247,28 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
   };
 }
 
-const injectedDefinition = typeof __ACTIVE_EVENT_DEFINITION__ === "undefined" ? sampleDefinition : __ACTIVE_EVENT_DEFINITION__;
-const injectedReferences = typeof __ACTIVE_REFERENCE_RECORDS__ === "undefined" ? sampleReferences : __ACTIVE_REFERENCE_RECORDS__;
-const activeDefinition = parseEventDefinition(injectedDefinition, injectedReferences);
+const injectedEvents = typeof __PUBLISHED_EVENTS__ === "undefined"
+  ? [{ definition: sampleDefinition, references: sampleReferences }]
+  : __PUBLISHED_EVENTS__;
+
+/**
+ * Exactly the events this build serves, in the order a reader is offered them.
+ * The set comes from the staged data, so adding an event is a data change: no
+ * event is named in code, and nothing here is a per-event constant.
+ */
+export const PUBLISHED_EVENTS: readonly EventDefinition[] = injectedEvents
+  .map(({ definition, references }) => parseEventDefinition(definition, references));
+
+const PUBLISHED_IDS = new Set(PUBLISHED_EVENTS.map((event) => event.id));
+// Fixtures stay resolvable so tests and the dev server can name them, but they
+// are never published: `isPublishedEvent` is what any public surface asks.
 const fixtureDefinitions = [
   parseEventDefinition(sampleDefinition, sampleReferences),
   parseEventDefinition(sampleTwoDefinition, sampleTwoReferences),
 ];
 const EVENT_DEFINITIONS: readonly EventDefinition[] = [
-  activeDefinition,
-  ...fixtureDefinitions.filter((event) => event.id !== activeDefinition.id),
+  ...PUBLISHED_EVENTS,
+  ...fixtureDefinitions.filter((event) => !PUBLISHED_IDS.has(event.id)),
 ];
 
 export const EVENT_REGISTRY: ReadonlyMap<string, EventDefinition> = new Map(EVENT_DEFINITIONS.map((event) => [event.id, event]));
@@ -266,7 +277,20 @@ export function getEventDefinition(eventId: string) {
   return EVENT_REGISTRY.get(eventId) ?? null;
 }
 
-export const ACTIVE_EVENT = EVENT_DEFINITIONS[0];
+export function isPublishedEvent(eventId: string) {
+  return PUBLISHED_IDS.has(eventId);
+}
+
+/** Resolves only to something a reader may reach; unpublished ids give null. */
+export function getPublishedEvent(eventId: string) {
+  return PUBLISHED_EVENTS.find((event) => event.id === eventId) ?? null;
+}
+
+/**
+ * The event to show when a URL names none. It is a default, not a product
+ * concept: nothing may assume it is the only event that exists.
+ */
+export const ACTIVE_EVENT = PUBLISHED_EVENTS[0];
 export const ACTIVE_EVENT_ID = ACTIVE_EVENT.id;
 
 export function eventUsesAreaSwitcher(event: EventDefinition) {

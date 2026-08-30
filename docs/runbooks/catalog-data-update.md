@@ -123,13 +123,21 @@ npm run event:onboard -- <eventId> <40-char-data-commit>
 ### 4. 本機驗證 production staging
 
 ```bash
-npm run data:fetch -- ff47
-npm run data:stage -- ff47
+npm run data:fetch -- <event>
+npm run data:stage -- <event>
 npm run event-data:check
 npm run build:production
 ```
 
+單一活動的 `data:fetch`／`data:stage` 用來檢查你正在處理的那一場。`build:production` 則走 `--published`：它依 [`data/published-events.json`](../../data/published-events.json) 逐一取得並 staging **每一個已發布活動**，因此驗證的是實際會部署的整組資料。
+
 `data:fetch` 把該 commit 下 pin 列出的所有檔案下載到暫存位置並核對 SHA-256，驗證 reference selection 後才把 `.event-data/<event>/` 換入；rename 失敗會復原舊 tree。活動自身檔案落在該目錄根層，`references/` 保留 repository 路徑。`data:stage` 先以 pinned grouping 對 identity registry 執行 no-op check，再驗證 selection 與 relationships，由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`reference-records.json`、`circles.json`、`map.json` staging 到忽略版控的 `public/data/events/<event>/`。
+
+`data:stage` 每次都會先清空 `public/data/events/`，所以 staging 的樹永遠等於這次要服務的集合，不會是歷次執行的聯集。`event-data:check` 會斷言這件事。
+
+### 首次發布一個新活動
+
+pin 存在不等於已發布。活動要對讀者出現，必須把它的 id 加進 `data/published-events.json`；未列入的活動即使已有 pin 也不會進入 build。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界，也是[社團目錄契約](../contracts/circle-catalog.md)所說「首次公開發布」的實際開關。
 
 以下任一情形會 fail closed：
 

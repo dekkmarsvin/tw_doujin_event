@@ -3,20 +3,36 @@ import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+type StagedEvent = { eventId: string };
+type Stage = { eventId: string; events?: readonly StagedEvent[] };
+
 const stagePath = resolve(import.meta.dirname, ".event-data-stage.json");
-const staged = existsSync(stagePath) ? JSON.parse(readFileSync(stagePath, "utf8")) as { eventId: string } : { eventId: "sample" };
-const eventPath = resolve(import.meta.dirname, "public", "data", "events", staged.eventId, "event.json");
-const fixturePath = resolve(import.meta.dirname, "fixtures", "events", "sample", "event.json");
-const referencePath = resolve(import.meta.dirname, "public", "data", "events", staged.eventId, "reference-records.json");
-const fixtureReferencePath = resolve(import.meta.dirname, "fixtures", "events", "sample", "reference-records.json");
-const activeEvent = JSON.parse(readFileSync(existsSync(eventPath) ? eventPath : fixturePath, "utf8"));
-const activeReferences = JSON.parse(readFileSync(existsSync(referencePath) ? referencePath : fixtureReferencePath, "utf8"));
+const staged: Stage = existsSync(stagePath)
+  ? JSON.parse(readFileSync(stagePath, "utf8")) as Stage
+  : { eventId: "sample" };
+// The manifest carries the whole staged set; `eventId` alone is the pre-#119
+// shape and still means "the one event", so it reads as a set of one.
+const stagedEvents = staged.events ?? [{ eventId: staged.eventId }];
+
+const fixture = (eventId: string, file: string) => resolve(import.meta.dirname, "fixtures", "events", eventId, file);
+const stagedFile = (eventId: string, file: string) => resolve(import.meta.dirname, "public", "data", "events", eventId, file);
+const readEventFile = (eventId: string, file: string) => {
+  const staged = stagedFile(eventId, file);
+  const path = existsSync(staged) ? staged : fixture(existsSync(fixture(eventId, file)) ? eventId : "sample", file);
+  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+};
+
+// The order here is the order the reader offers the events in, and the first is
+// the default when a URL names no event.
+const publishedEvents = stagedEvents.map(({ eventId }) => ({
+  definition: readEventFile(eventId, "event.json"),
+  references: readEventFile(eventId, "reference-records.json"),
+}));
 
 export default defineConfig({
   plugins: [react()],
   define: {
-    __ACTIVE_EVENT_DEFINITION__: JSON.stringify(activeEvent),
-    __ACTIVE_REFERENCE_RECORDS__: JSON.stringify(activeReferences),
+    __PUBLISHED_EVENTS__: JSON.stringify(publishedEvents),
   },
   build: {
     outDir: "dist",
