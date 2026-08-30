@@ -12,7 +12,7 @@
 | **為什麼當初這樣決定** | [`adr/`](#決策紀錄) |
 | 外部產品實際長什麼樣 | [`research/`](#研究) |
 | **對外承諾了什麼** | [`policy/`](#對外文件) |
-| 代理人的 issue tracker 與標籤設定 | [`agents/`](./agents) |
+| 代理人的 issue tracker、標籤設定與 review-fix 迴圈守則 | [`agents/`](./agents) |
 
 ## 契約
 
@@ -87,6 +87,7 @@
 | [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併（**實施暫緩，見 0039 決策第 5 點**） |
 | [0038](./adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援（取代 0035 決策第 4 點）|
 | [0039](./adr/0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後（取代 0014 決策第 3 點、0032 決策第 1／5 點，限縮 0010 規則一）|
+| [0040](./adr/0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍與已記錄的威脅模型為界；資料維運指令假設單一維護者、單一序列執行 |
 
 ## 對外文件
 
