@@ -75,6 +75,20 @@ test("rerunning reviewed sources in the same event is a no-op", () => {
   assert.equal(serializeCircleIdentityRegistry(second.evidence), serializeCircleIdentityRegistry(first.evidence));
 });
 
+test("an existing entry shared with another event is rejected instead of reused", () => {
+  const shared = registry([{
+    circleId: "c-000002",
+    currentName: "同名社團",
+    aliases: [],
+    sources: [
+      { eventId, kind: "organizer-booth", value: "1:A01" },
+      { eventId, kind: "organizer-booth", value: "1:A02" },
+      { eventId: "event-older", kind: "organizer-booth", value: "1:Z99" },
+    ],
+  }]);
+  assert.throws(() => plan({ registryValue: shared }), /contains cross-event evidence/);
+});
+
 test("traceable organizer evidence joins multi-day and multi-booth sources under one ID", () => {
   const result = plan({
     officialValue: official([
@@ -103,6 +117,22 @@ test("a name alone cannot join separate official groups", () => {
     ]),
     groups: [{ sources: ["1:A01", "2:B01"] }],
   }), /name alone is not grouping evidence/);
+});
+
+test("organizer linkage requires a parsed HTTPS URL with a hostname", () => {
+  const officialValue = official([
+    { day: 1, booths: [{ codes: ["A01"], name: "同名社團" }] },
+    { day: 2, booths: [{ codes: ["B01"], name: "同名社團" }] },
+  ]);
+  for (const reference of ["https://", "https://#evidence", "http://organizer.example.invalid/evidence"]) {
+    assert.throws(() => plan({
+      officialValue,
+      groups: [{
+        sources: ["1:A01", "2:B01"],
+        linkage: { kind: "organizer-stable-key", value: "application:1234", reference },
+      }],
+    }), /invalid or untraceable organizer linkage evidence/);
+  }
 });
 
 test("grouping must cover every booth exactly once and may not split an official group", () => {

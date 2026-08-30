@@ -88,8 +88,14 @@ function officialGroups(eventId, official) {
 function validateLinkage(linkage, label) {
   if (!isRecord(linkage)) throw new Error(`${label} needs organizer linkage evidence; a name alone is not grouping evidence.`);
   onlyKeys(linkage, ["kind", "value", "reference"], `${label} linkage`);
+  let reference;
+  try {
+    reference = new URL(linkage.reference);
+  } catch {
+    reference = null;
+  }
   if (!LINKAGE_KINDS.has(linkage.kind) || typeof linkage.value !== "string" || linkage.value.trim() === ""
-    || typeof linkage.reference !== "string" || !linkage.reference.startsWith("https://")) {
+    || !reference || reference.protocol !== "https:" || reference.hostname === "") {
     throw new Error(`${label} has invalid or untraceable organizer linkage evidence.`);
   }
 }
@@ -154,6 +160,10 @@ export function planCircleIdentityRegistryUpdate({ eventId, official, grouping, 
     if (matched.size > 1) throw new Error(`Identity group ${group.sources.join(", ")} points to conflicting circle IDs.`);
     if (matched.size === 1) {
       const [entry] = matched;
+      const foreignSources = entry.sources.filter((source) => source.eventId !== eventId);
+      if (foreignSources.length > 0) {
+        throw new Error(`Existing ${entry.circleId} contains cross-event evidence; ${eventId} requires a fresh event-local identity.`);
+      }
       if (sources.some((source) => entriesBySource.get(sourceKey(source)) !== entry)) {
         throw new Error(`Identity group ${group.sources.join(", ")} has only partial existing evidence.`);
       }
