@@ -2,10 +2,8 @@
 
 URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。
 
-**實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec 與 history intent）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）
-**測試**：`tests/event-url-state.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`
-
-> **實作狀態（2026-08-30）**：現行 UI 仍只有一個 active event，所以下方 fail-closed 規則描述的是目前程式。多活動 bundle、活動選擇器與「已發布活動可由 `event` 定址」已由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案，但 [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 尚未實作；實作 PR 必須在同一個 commit 改寫本契約與驗收條件。
+**實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec、活動解析與 history intent）、[`app/event-entry.tsx`](../../app/event-entry.tsx)（選擇器與讀者畫面的分流）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）
+**測試**：`tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`
 
 ## 參數
 
@@ -13,12 +11,12 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 
 | 參數 | 負責模組 | 說明 |
 |---|---|---|
-| `event` | 活動 | 目前活動 ID，永遠寫出 |
+| `event` | 活動 | 目前活動 ID，永遠寫出。只接受已發布活動 |
 | `day` | 活動 | 活動日，永遠寫出 |
 | `area` | 活動 | 展區，永遠寫出。讀取時接受 legacy 別名 `hall` |
 | `venueSpaceId` | 活動 | 場館空間 stable ID；只有活動分配多個場館空間時寫出 |
 | `query` | 探索搜尋 | 一般關鍵字 |
-| `genre` | 探索搜尋 | 社團主題類別；值為 active event 分類目錄中的顯示名稱 |
+| `genre` | 探索搜尋 | 社團主題類別；值為目前活動分類目錄中的顯示名稱 |
 | `creator` | 詳細搜尋 | 創作者類型 |
 | `work` | 詳細搜尋 | 作品名稱／題材。**可重複**，一枚題材一個參數 |
 | `workMode` | 詳細搜尋 | 多枚題材的組合方式；只有 `all` 會寫出，`any` 是預設 |
@@ -40,10 +38,22 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 
 - **`selectedCircle` 與 `selectedBooth` 必須互相驗證。** 兩者都在時取交集；只有 `selectedCircle` 時取該社團在該日的第一筆配置；無效或已變更的關聯降級為只開啟仍有效的活動與區域，**不顯示錯誤社團**。
 - **攤位範圍 deep link 在 selection seam 解析。** `selectedCircle` 若帶的是攤位範圍 ID（`1-e19`、`1-e19-0`），先從 records 解析為 allocated ID，再與日期／攤位取交集；成功恢復後只會重新序列化 canonical `c-*`。舊的 `ff47-<hash>` ID 已無相容路徑，解析不到就 fail closed（[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)）。
-- **採多活動資料模型、單一 active-event UI。** codec 與 workspace projection 都接受 event definition；`event` 缺少時使用 active event，等於其他活動時整份 query fail closed 回 active event defaults，不讓篩選或選取跨活動洩漏。加入第二個活動前不先顯示活動選擇器。
+- **`event` 先於其他所有參數解析。** 它是唯一決定「其餘參數在講哪一場活動」的參數，因此不能像未知的 `day` 或 `genre` 那樣退回預設值。`resolveUrlEvent` 有三種結果：
+
+| URL | 結果 |
+|---|---|
+| `event` 指向已發布活動 | 進入該活動 |
+| 沒有 `event`，且只有一場已發布活動 | 進入該活動 |
+| 沒有 `event`，且有多場已發布活動 | 顯示活動選擇器（[ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md)） |
+| `event` 指向未發布或不存在的活動 | **fail closed**：顯示選擇器並說明該連結無法開啟，不改用其他活動作答 |
+
+  最後一列是刻意的：在別人分享的連結底下安靜地端出另一場活動的地圖，比誠實說「這個連結打不開」更糟。未發布活動不出現在選擇器，也不能由 `event` 定址。
+
+- **已發布活動的既有連結永遠有效。** 連結是本站唯一的跨裝置狀態轉移方式（[ADR-0002](../adr/0002-planning-data-stays-on-device.md)），壞掉沒有補救路徑，因此新增活動不得讓既有 `?event=…&day=…&selectedCircle=…` 解析到不同畫面。
+- **一次只呈現一場活動。** codec 與 workspace projection 都接受 event definition；選定活動後，篩選、選取與 planning 都在該活動範圍內，不跨活動洩漏。切換活動會以新的活動定義重新掛載讀者畫面，不沿用上一場的日期或展區。
 - **defaults 從 event definition 推導。** `day`、`area` 與 genre 預設分別取活動定義的第一筆，不在 codec 內硬編碼 FF47 的 `1`、`ALL` 或「全部類別」。
 - **場館空間與展區成對驗證。** `area` 是活動分區，`venueSpaceId` 是 pinned 場館空間，兩者不得互換。無效的 space 或不屬於該 space 的 area 一律回到該活動的預設 assignment；單一場館空間活動會移除殘留的 `venueSpaceId`。
-- `genre` 只接受 active event 的衍生分類字彙；舊工作簿類別或其他活動的值一律回到「全部類別」，不跨活動猜測對應。
+- `genre` 只接受目前活動的衍生分類字彙；舊工作簿類別或其他活動的值一律回到「全部類別」，不跨活動猜測對應。
 - **恢復時機**：初始化、重新整理與 `popstate` 必須恢復篩選及選取。地圖資料延後完成時，以保存的攤位代碼重新聚焦。
 - **延後套用選取**：可分享連結的社團與攤位選取要等社團快照可解析後才套用。**在此之前不得改寫 URL**，否則會把使用者分享的深層連結洗掉。
 - **不寫入 URL 的狀態**：hover、拖曳中的 viewport、動畫進度、尚未套用的篩選草稿，以及詳細搜尋題材輸入框裡尚未加入的文字。

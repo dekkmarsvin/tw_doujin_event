@@ -40,6 +40,34 @@ export function defaultEventUrlState<TDay extends string | number, TArea extends
   };
 }
 
+export type ResolvedUrlEvent =
+  /** The URL addresses this event, either by naming it or by there being one. */
+  | { kind: "event"; event: EventDefinition }
+  /** No event named and more than one to offer, so the reader picks. */
+  | { kind: "choose" }
+  /** Named an event this build does not serve. */
+  | { kind: "unpublished"; requested: string };
+
+/**
+ * Which event a URL addresses, before any of its other state is read.
+ *
+ * `event` is the only parameter that selects *what* the rest of the URL is
+ * about, so an unknown one cannot fall back the way an unknown `day` or `genre`
+ * does: silently answering with another event's map under someone's shared link
+ * is worse than saying the link does not resolve. A URL that names nothing is
+ * not an error — with one published event it means that event, and with several
+ * it means the reader has not chosen yet.
+ */
+export function resolveUrlEvent(events: readonly EventDefinition[], input: URL | string): ResolvedUrlEvent {
+  const url = typeof input === "string" ? new URL(input, "https://event.invalid/") : input;
+  const requested = url.searchParams.get("event");
+  if (requested === null) {
+    return events.length === 1 && events[0] ? { kind: "event", event: events[0] } : { kind: "choose" };
+  }
+  const found = events.find(({ id }) => id === requested);
+  return found ? { kind: "event", event: found } : { kind: "unpublished", requested };
+}
+
 export function parseEventUrlState<TDay extends string | number, TArea extends string>(event: EventDefinition<TDay, TArea>, input: URL | string) {
   const url = typeof input === "string" ? new URL(input, "https://event.invalid/") : input;
   const defaults = defaultEventUrlState(event);

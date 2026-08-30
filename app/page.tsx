@@ -1,5 +1,5 @@
-import EventMapApp from "./event-map-app";
+import EventEntry from "./event-entry";
 
 export default function Home() {
-  return <EventMapApp />;
+  return <EventEntry />;
 }

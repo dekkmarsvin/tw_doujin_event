@@ -101,7 +101,9 @@ test("circle category controls consume event data rather than organizer constant
   ]);
   assert.match(portal, /ACTIVE_EVENT\.circleCategories\.categories\.map/);
   assert.match(portal, /ACTIVE_EVENT\.circleCategories\.sources\.map/);
-  assert.match(reader, /const GENRES: readonly string\[\] = ACTIVE_EVENT\.genres/);
+  // The reader takes its categories from the event it was handed, not from a
+  // module constant that assumes one event exists.
+  assert.match(reader, /const genres: readonly string\[\] = event\.genres/);
   for (const organizerSpecificLabel of ["總合動漫畫", "東方Project", "學校漫研"]) {
     assert.doesNotMatch(portal, new RegExp(organizerSpecificLabel));
     assert.doesNotMatch(reader, new RegExp(organizerSpecificLabel));
@@ -152,8 +154,8 @@ test("separates the public static app from the retained editor implementation", 
   const globalStyles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const pagesEntry = await readFile(new URL("../main.tsx", import.meta.url), "utf8");
   const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
-  assert.match(app, /loadStaticEventMap\(ACTIVE_EVENT_ID\)/);
-  assert.match(app, /<AccessibleEventMapRenderer eventName=\{ACTIVE_EVENT\.name\} layout=\{publishedMap\.layout\}/);
+  assert.match(app, /loadStaticEventMap\(eventId\)/);
+  assert.match(app, /<AccessibleEventMapRenderer eventName=\{event\.name\} layout=\{publishedMap\.layout\}/);
   assert.match(app, /showFullDetail/);
   assert.match(app, /fullDetailsPanel/);
   assert.match(app, /導航模式/);
@@ -200,7 +202,9 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(readerHelp, /Discord ID <strong>dekkorakki<\/strong>/);
   assert.match(app, /資料僅儲存於瀏覽器/);
   assert.match(app, /<PlanningTools \/>/);
-  assert.match(page, /return <EventMapApp \/>/);
+  // Both entrypoints go through the resolver, so which event a URL addresses
+  // is decided in one place rather than once per entry.
+  assert.match(page, /return <EventEntry \/>/);
   assert.doesNotMatch(pagesEntry, /PlanningTools/);
   assert.match(planningTools, />資料管理<\/button>/);
   assert.match(planningTools, /import \{ createPortal \} from "react-dom"/);
@@ -274,7 +278,7 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(catalogClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/circles\.json`/);
   assert.match(catalogClient, /isCircleCatalogPayload/);
   assert.doesNotMatch(catalogClient, /\/api\/|method: "PUT"/);
-  assert.match(app, /useCircleCatalog\(ACTIVE_EVENT_ID\)/);
+  assert.match(app, /useCircleCatalog\(eventId\)/);
   assert.doesNotMatch(app, /from "\.\/ff47-booths"|from "\.\/ff47-circle-templates"/);
   assert.match(catalogStore, /export function buildCircleCatalog/);
   assert.doesNotMatch(catalogStore, /ff47-booths|generated\.json/);
