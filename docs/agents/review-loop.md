@@ -40,13 +40,16 @@ Then open a follow-up issue with `needs-triage` if the finding is worth keeping,
 Stop and hand back to the maintainer when **any** of these hold. Do not push another fix first.
 
 - **Three rounds.** A PR has had 3 review-fix rounds.
-- **The loop is reviewing its own output.** A finding's `path` points at a file that does not exist on `main`. Check it directly:
+- **The loop is reviewing its own output.** A finding's `path` points at a file that no review-fix round had yet seen — that is, a file created *after* review started, by a fix rather than by the ticket's implementation. The anchor is the commit the **first** review ran against (Codex prints it as `Reviewed commit:`; otherwise use the PR's first commit):
 
   ```bash
-  git cat-file -e origin/main:<path> 2>/dev/null || echo "OUT OF LOOP: <path> was created by this PR"
+  git cat-file -e <first-reviewed-sha>:<path> 2>/dev/null \
+    || echo "OUT OF LOOP: <path> did not exist when review round 1 ran"
   ```
 
-  A finding against a file this PR invented is a finding against a previous round's fix, not against the ticket.
+  A finding against a file that some later round invented is a finding against a previous fix, not against the ticket.
+
+  Absence from `main` alone is **not** the test. A ticket may legitimately add files — issue #116 asked for a generator, and `scripts/generate-circle-identities.mjs` arrived in the implementation commit — and the first finding against such a file is ordinary in-scope review. What makes [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) different is that `scripts/event-onboarding-lock.mjs` appeared in round 6, in a `fix:` commit answering round 5, and then drew four findings of its own.
 - **The same subsystem returns.** Three or more findings land on one file or one concern across different rounds, each fix opening the next window. The property being demanded is probably unreachable with the tools at hand; that needs a decision, not another patch.
 - **The PR body no longer describes the ticket.** If the Summary needs a new bullet with no counterpart in the issue, the drift is already shipped. Do not rewrite the body to match the code — stop.
 
