@@ -89,6 +89,7 @@
 | [0039](./adr/0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後（取代 0014 決策第 3 點、0032 決策第 1／5 點，限縮 0010 規則一）|
 | [0040](./adr/0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍與已記錄的威脅模型為界；資料維運指令假設單一維護者、單一序列執行 |
 | [0041](./adr/0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界，邊緣契約降級為紀錄（把 0040 的判準擴大到 backlog 與契約文件）|
+| [0042](./adr/0042-the-public-entry-is-an-event-chooser.md) | 公開入口是活動選擇器，活動依生命週期分層（取代 url-state 契約「不先顯示活動選擇器」一句）|
 
 ## 對外文件
 
