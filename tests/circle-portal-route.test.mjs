@@ -1247,3 +1247,32 @@ test("an event this deployment does not serve is a 404, not another event's data
   // working whatever event the client last named.
   assert.equal((await unknown.session(get("/api/auth/session", owner))).status, 200);
 });
+
+test("a claim id from another event cannot be acted on through this one", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const first = handlersForEvent("ff47");
+  const second = handlersForEvent("ff48");
+
+  // Challengeable, so the claim carries a token and `runChallenge` would have
+  // work to do if the event check were not the first thing it did.
+  const created = await first.createClaim(post("/api/claims", {
+    circleId: "ff47-site", targetUrl: "https://circle.example/home",
+  }, owner));
+  const { id } = await created.json();
+
+  // The owner's own claim, addressed through the other event's control plane.
+  assert.equal((await second.withdrawClaim(post(`/api/claims/${id}`, {}, owner), id)).status, 404);
+  assert.equal((await second.runChallenge(post(`/api/claims/${id}/challenge`, {}, owner), id)).status, 404);
+  // And an admin decision, which would otherwise revoke ownership in one event
+  // while rebuilding the other event's public document.
+  assert.equal((await second.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin))).status, 404);
+  assert.equal((await second.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "revoke" }, admin))).status, 404);
+
+  // Untouched: still pending, and still this account's claim in its own event.
+  const mine = await (await first.listClaims(get("/api/claims", owner))).json();
+  assert.deepEqual(mine.claims.map((claim) => claim.status), ["pending"]);
+  assert.equal((await first.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin))).status, 200);
+  assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff47", "ff47-site"), true);
+  assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff48", "ff47-site"), false);
+});

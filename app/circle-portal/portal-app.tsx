@@ -95,22 +95,32 @@ export default function CirclePortalApp() {
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
   const [eventId, setEventId] = useState(initialPortalEventId);
   const event = getPublishedEvent(eventId) ?? PUBLISHED_EVENTS[0];
+  /** What a late answer is compared against; `claims` lives above the keyed subtree. */
+  const maintainedEventId = useRef(event.id);
 
   const refreshClaims = useCallback(async () => {
     // Set here as well as in the effect below: the claim list is the first
     // event-scoped call after a sign-in, and reading it for the wrong event
     // would show the account claims it does not hold in this one.
     setPortalEventId(event.id);
+    const requested = event.id;
     try {
-      setClaims((await listMyClaims()).claims);
+      const answer = await listMyClaims();
+      // A switch while this request was in flight leaves an older answer
+      // arriving late. The server says which event it answered for, so a stale
+      // one is dropped rather than rendered — with its editors — under the
+      // event now on screen.
+      if (requested !== maintainedEventId.current || answer.eventId !== requested) return;
+      setClaims(answer.claims);
     } catch {
-      setClaims([]);
+      if (requested === maintainedEventId.current) setClaims([]);
     }
   }, [event.id]);
 
   // Declared before the session effect so the scope is in place for every
   // event-scoped call of this commit.
   useEffect(() => {
+    maintainedEventId.current = event.id;
     setPortalEventId(event.id);
     try {
       window.localStorage.setItem(PORTAL_EVENT_STORAGE_KEY, event.id);

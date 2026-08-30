@@ -120,6 +120,9 @@ test("the portal asks which event only when this build serves more than one", as
   // And whichever event is being maintained travels on every request, so the
   // server never has to guess which one the session meant.
   assert.match(portal, /setPortalEventId\(event\.id\)/);
+  // A switch during an in-flight claim list leaves a late answer arriving for
+  // the event that is no longer on screen; it has to be dropped, not rendered.
+  assert.match(portal, /answer\.eventId !== requested/);
 });
 
 test("map reviewers can inspect the authenticated evidence bytes before approval", async () => {
