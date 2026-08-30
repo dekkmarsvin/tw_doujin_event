@@ -142,3 +142,47 @@ test("a single legacy work parameter still restores as one topic", () => {
   assert.equal(codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/").searchParams.has("workMode"), false);
 });
 
+
+test("a URL naming a published event resolves to it, whichever it is", () => {
+  const published = [eventA, eventB];
+  for (const event of published) {
+    const resolved = codec.resolveUrlEvent(published, `https://map.example/?event=${event.id}&day=7`);
+    assert.equal(resolved.kind, "event");
+    assert.equal(resolved.event.id, event.id);
+  }
+
+  // The hard constraint in #119: a link shared before a second event existed
+  // must still open the same screen. Links are the only way state moves between
+  // devices (ADR-0002), so there is no recovery path if they stop resolving.
+  const shared = "https://map.example/?event=event-a&day=8&area=EAST&selectedCircle=c-000001";
+  const resolved = codec.resolveUrlEvent(published, shared);
+  assert.equal(resolved.kind, "event");
+  const state = codec.parseEventUrlState(resolved.event, shared);
+  assert.equal(state.eventMatched, true);
+  assert.equal(state.state.day, 8);
+  assert.equal(state.state.area, "EAST");
+  assert.equal(state.state.selection.circleId, "c-000001");
+});
+
+test("only an unpublished event fails closed; naming none is not an error", () => {
+  const published = [eventA, eventB];
+
+  // Answering with another event's map under someone's link is worse than
+  // saying the link does not resolve, so this never falls back to a default.
+  assert.deepEqual(
+    codec.resolveUrlEvent(published, "https://map.example/?event=event-c&day=8"),
+    { kind: "unpublished", requested: "event-c" },
+  );
+  assert.deepEqual(
+    codec.resolveUrlEvent(published, "https://map.example/?event=&day=8"),
+    { kind: "unpublished", requested: "" },
+  );
+
+  // Naming no event means "not chosen yet" once there is a choice to make…
+  assert.deepEqual(codec.resolveUrlEvent(published, "https://map.example/"), { kind: "choose" });
+  // …and means the only event there is when there is just one, which is what
+  // keeps a bare URL behaving exactly as it did before this existed.
+  const single = codec.resolveUrlEvent([eventA], "https://map.example/");
+  assert.equal(single.kind, "event");
+  assert.equal(single.event.id, "event-a");
+});

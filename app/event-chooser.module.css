@@ -1,0 +1,38 @@
+.shell { min-height:100vh; display:flex; flex-direction:column; background:var(--paper); }
+
+.header { display:flex; align-items:center; gap:11px; padding:18px 24px; border-bottom:1px solid var(--line); background:#fff; }
+.header>span { width:38px; height:38px; display:grid; place-items:center; border-radius:11px 11px 11px 3px; background:var(--ink); color:#fff; font-weight:800; box-shadow:3px 3px 0 #f4c65c; }
+.header b,.header small { display:block; }
+.header b { font-size:calc(16px * var(--ui-font-scale,1)); letter-spacing:.08em; }
+.header small { margin-top:2px; color:var(--muted); font-size:calc(10px * var(--ui-font-scale,1)); letter-spacing:.12em; }
+
+.main { width:100%; max-width:640px; margin:0 auto; padding:28px 20px 40px; }
+.main h1 { margin:0 0 6px; font-size:calc(20px * var(--ui-font-scale,1)); letter-spacing:.02em; }
+.main>p { margin:0 0 22px; color:var(--muted); font-size:calc(12px * var(--ui-font-scale,1)); }
+
+/* Not a colour-only state: the notice carries its own words and a mark. */
+.notice { display:grid; grid-template-columns:26px 1fr; gap:10px; align-items:start; margin:0 0 22px; padding:11px 13px; border:1px solid #d5b776; border-radius:9px; background:#fff7df; color:#6e5324; }
+.notice .mark { width:25px; height:25px; display:grid; place-items:center; border-radius:7px; background:#d59b37; color:#fff; font-weight:800; }
+.notice b,.notice small { display:block; }
+.notice b { font-size:calc(11px * var(--ui-font-scale,1)); }
+.notice small { margin-top:4px; color:#8b744c; font-size:calc(10px * var(--ui-font-scale,1)); }
+
+.list { display:grid; gap:10px; margin:0; padding:0; list-style:none; }
+.list button {
+  width:100%; min-height:44px; display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center;
+  padding:15px 16px; border:1px solid var(--line); border-radius:11px; background:#fff; color:var(--ink);
+  text-align:left; cursor:pointer;
+}
+.list button:hover { border-color:#b9c2bb; }
+.list button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
+.list button:active { background:var(--surface-soft); }
+.list b,.list small { display:block; }
+.list b { font-size:calc(14px * var(--ui-font-scale,1)); }
+.list small { margin-top:4px; color:var(--muted); font-size:calc(11px * var(--ui-font-scale,1)); }
+.list .arrow { color:#7b867f; font-size:calc(18px * var(--ui-font-scale,1)); }
+
+@media (max-width:760px) {
+  .shell { --ui-font-scale:1; }
+  .header { padding:14px 16px; }
+  .main { padding:20px 16px 32px; }
+}
