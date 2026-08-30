@@ -649,7 +649,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1;
   }
 
-  async function listLiveOverrides(eventId: string, phase: OverridesPhase = "during") {
+  async function listLiveOverrides(eventId: string, phase: OverridesPhase) {
     await ensureTables();
     // After the event, a circle that opted out is simply absent from the query,
     // so its content never reaches the published document at all.
@@ -689,8 +689,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * Re-serialize the public document on every write. At the expected scale this
    * is trivial, and it turns each edge-cache miss into a single row read
    * instead of a scan — which is what keeps venue traffic inside the D1 quota.
+   *
+   * `phase` is required and has no default. A rebuild that assumes "during"
+   * re-publishes every circle that asked to be withdrawn after the event
+   * (ADR-0018), so which phase this is has to be stated by whoever is writing,
+   * not guessed here: a default made three separate call sites wrong at once.
    */
-  async function rebuildOverridesDoc(eventId: string, generatedAt: string, now: number, phase: OverridesPhase = "during") {
+  async function rebuildOverridesDoc(eventId: string, generatedAt: string, now: number, phase: OverridesPhase) {
     const rows = await listLiveOverrides(eventId, phase);
     const overrides = rows.map((row) => ({
       circleId: row.circle_id,

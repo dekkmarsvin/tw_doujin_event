@@ -753,6 +753,47 @@ test("a circle that did not opt out stays published after the event", async () =
   clock = 1_786_500_000_000;
 });
 
+test("a write by someone else after the event does not republish a circle that opted out", async () => {
+  const admin = await signIn("admin@example.com");
+  const optedOut = await signIn("rebuild-optout@example.com");
+  const neighbour = await signIn("rebuild-neighbour@example.com");
+  const takendown = await signIn("rebuild-takedown@example.com");
+  await approve(optedOut, "ff47-site", admin);
+  await approve(neighbour, "ff47-social", admin);
+  await approve(takendown, "ff47-domain", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "退出內容" } }, optedOut), "ff47-site");
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "鄰居內容" } }, neighbour), "ff47-social");
+  await handlers.putOverride(post("/api/circle/ff47-domain/overrides", { fields: { saleInfo: "待撤下" } }, takendown), "ff47-domain");
+  await handlers.setPostEventVisibility(post("/api/circle/ff47-site/visibility", { hidden: true }, optedOut), "ff47-site");
+
+  clock = Date.parse(EVENT_ENDS_AT) + 1000;
+  // The read path notices the phase and rebuilds, so the stored document starts
+  // this test correct. What follows is about keeping it that way.
+  assert.deepEqual(
+    (await (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json()).overrides.map((o) => o.circleId),
+    ["ff47-domain", "ff47-social"],
+  );
+
+  // Every rebuild has to state the phase. A save by an unrelated circle is not
+  // a decision about this one, so it must not put withdrawn content back into
+  // the document the readers download.
+  await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: { saleInfo: "鄰居改了內容" } }, neighbour), "ff47-social");
+  const afterNeighbourSave = await repository.getOverridesDoc("ff47");
+  assert.doesNotMatch(afterNeighbourSave.json, /退出內容/, "another circle's save must not republish withdrawn content");
+  assert.equal(afterNeighbourSave.phase, "after");
+
+  // Same for an admin takedown of a third circle.
+  const freshAdmin = await signIn("admin@example.com");
+  assert.equal((await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-domain", reason: "權利人要求" }, freshAdmin))).status, 200);
+  const afterTakedown = await repository.getOverridesDoc("ff47");
+  assert.doesNotMatch(afterTakedown.json, /退出內容/, "an admin takedown must not republish withdrawn content");
+  assert.equal(afterTakedown.phase, "after");
+
+  const published = await (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json();
+  assert.deepEqual(published.overrides.map((override) => override.circleId), ["ff47-social"]);
+  clock = 1_786_500_000_000;
+});
+
 test("the phase change alone rewrites the document and its etag", async () => {
   const admin = await signIn("admin@example.com");
   const owner = await signIn("phase@example.com");

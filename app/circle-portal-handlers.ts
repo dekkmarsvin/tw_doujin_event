@@ -592,7 +592,7 @@ export function createCirclePortalHandlers({
       if (uploadedKey && thumbnailStore) await thumbnailStore.delete(uploadedKey);
       return json({ error: "此帳號正在刪除，無法儲存內容。" }, 409);
     }
-    await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
+    await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     if (thumbnailStore) {
       const unusedKeys = (await thumbnailStore.list(uploadPrefix)).filter((key) => key !== nextHostedKey);
       await deleteObjectKeys(thumbnailStore, unusedKeys);
@@ -1488,7 +1488,7 @@ export function createCirclePortalHandlers({
       ? JSON.stringify({ ...(JSON.parse(previous.fields_json) as CircleOverrideFields), thumbnail: null })
       : undefined;
     const ok = await repository.takedownOverride({ eventId: config.eventId, circleId, reason, by: gate.session.email, now, fieldsJson });
-    if (ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
+    if (ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     await repository.writeAudit({
       at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "override.takendown",
       subjectType: "override", subjectId: circleId, detail: { reason, applied: ok },

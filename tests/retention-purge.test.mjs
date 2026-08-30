@@ -209,7 +209,7 @@ test("deletes published and abandoned draft thumbnail bytes before removing an e
 test("the published document loses the purged circle and gets a new revision", async () => {
   await writeOverride("ff47-due", { choice: "purge", expiresAt: NOW - DAY });
   await writeOverride("ff47-keeps", { choice: "keep", expiresAt: null });
-  const before = await repository.rebuildOverridesDoc("ff47", DATA_UPDATED_AT, NOW - HOUR);
+  const before = await repository.rebuildOverridesDoc("ff47", DATA_UPDATED_AT, NOW - HOUR, "during");
   assert.deepEqual(JSON.parse(before.json).overrides.map((override) => override.circleId).sort(), ["ff47-due", "ff47-keeps"]);
 
   await purgeExpiredRecords(database, NOW);

@@ -212,7 +212,7 @@ test("only a withdrawn claim can be resubmitted over", async () => {
 test("the published document is a valid overrides payload and grows a revision per write", async () => {
   await verifiedOwner("ff47-doc", "doc-owner");
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "新刊 300 元" }), updatedBy: "account-1", now: NOW });
-  const first = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW);
+  const first = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW, "during");
 
   const parsed = parseCircleOverridesPayload(JSON.parse(first.json));
   assert.ok(parsed, "the generated document must satisfy the reader's guard");
@@ -221,7 +221,7 @@ test("the published document is a valid overrides payload and grows a revision p
   assert.equal(parsed.overrides[0].fields.saleInfo, "新刊 300 元");
 
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "改價 250 元" }), updatedBy: "account-1", now: NOW + 1_000 });
-  const second = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 1_000);
+  const second = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 1_000, "during");
   assert.equal(second.revision, first.revision + 1, "revision must advance so the ETag changes");
 
   const stored = await repository.getOverride("ff47", "ff47-doc");
@@ -231,7 +231,7 @@ test("the published document is a valid overrides payload and grows a revision p
 
 test("a takedown removes the entry from the published document immediately", async () => {
   assert.equal(await repository.takedownOverride({ eventId: "ff47", circleId: "ff47-doc", reason: "冒名", by: "admin@example.com", now: NOW + 2_000 }), true);
-  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 2_000);
+  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 2_000, "during");
   assert.deepEqual(JSON.parse(doc.json).overrides, [], "taken-down content must not be served at all");
 
   assert.equal(await repository.takedownOverride({ eventId: "ff47", circleId: "ff47-doc", reason: "again", by: "admin@example.com", now: NOW + 3_000 }), false);
@@ -239,7 +239,7 @@ test("a takedown removes the entry from the published document immediately", asy
 
 test("a later edit republishes after a takedown", async () => {
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "重新填寫" }), updatedBy: "account-1", now: NOW + 4_000 });
-  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000);
+  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000, "during");
   assert.equal(JSON.parse(doc.json).overrides.length, 1);
 });
 
@@ -250,7 +250,7 @@ test("revoking the claim withdraws that circle's content from the published docu
     updatedBy: owner, now: NOW,
   });
   const published = async () => JSON.parse(
-    (await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 1_000)).json,
+    (await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 1_000, "during")).json,
   ).overrides.map((override) => override.circleId);
   assert.ok((await published()).includes("ff47-revoked"), "a verified owner's content is public");
 
@@ -318,7 +318,7 @@ test("a row waiting to be purged is still published", async () => {
     eventId: "ff47", circleId: "ff47-waiting", fieldsJson: JSON.stringify({ saleInfo: "會在 90 天後消失" }),
     updatedBy: "account-1", now: NOW + 4_000, retention: { choice: "purge", expiresAt: NOW + 90_000 },
   });
-  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000);
+  const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000, "during");
   const published = JSON.parse(doc.json).overrides.map((override) => override.circleId);
   assert.ok(published.includes("ff47-waiting"), "the deadline is a lifespan, not an early withdrawal (ADR-0018)");
 });
@@ -346,7 +346,7 @@ test("account deletion releases claims, removes owned overlays and shreds person
     eventId: "ff47", circleId: "ff47-delete-account", fieldsJson: JSON.stringify({ saleInfo: "personal content" }),
     updatedBy: accountId, now: NOW,
   });
-  await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW);
+  await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW, "during");
   const emailAuditDigest = "keyed-email-digest";
   await repository.writeAudit({
     at: NOW, actorAccountId: accountId, actorRole: "circle", action: "claim.created",
