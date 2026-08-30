@@ -392,6 +392,20 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       dataUpdatedAt: async () => (await catalog(env, request, eventId)).event.dataUpdatedAt,
       eventEndsAt: async () => (await catalog(env, request, eventId)).event.eventEndsAt,
       now: () => Date.now(),
+      // Published means "this deployment actually serves the event's data", so
+      // the set is read from what was deployed rather than from a second list
+      // that could drift away from it. Ill-formed ids are rejected without a
+      // lookup; anything else resolves through the same cached read the rest of
+      // the portal uses.
+      publishedEvent: async (id) => {
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return null;
+        try {
+          const { event } = await catalog(env, request, id);
+          return { dataUpdatedAt: event.dataUpdatedAt, eventEndsAt: event.eventEndsAt };
+        } catch {
+          return null;
+        }
+      },
     },
   });
 }

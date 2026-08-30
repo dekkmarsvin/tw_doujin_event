@@ -54,6 +54,16 @@ export type PortalConfig = {
   /** ISO instant after which an opted-out circle's content is withdrawn. */
   eventEndsAt: string | (() => Promise<string>);
   now: () => number;
+  /**
+   * Resolves any published event, not just `eventId`.
+   *
+   * The public overlay is read per event id from the URL, so it cannot use the
+   * control plane's single-event configuration: a second published event would
+   * otherwise get a 404 and silently lose every circle's own content. Returns
+   * null for an event this deployment does not serve. Omitted means "only
+   * `eventId` is published", which is what a single-event deployment is.
+   */
+  publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
 };
 
 export type PortalDependencies = {
@@ -1496,19 +1506,26 @@ export function createCirclePortalHandlers({
    * `max-age` is the only lever on the bill. See issue #48.
    */
   async function publicOverrides(request: Request, eventId: string) {
-    if (eventId !== config.eventId) return json({ error: "找不到這個活動的社團補充資料。" }, 404, { "cache-control": "no-store" });
+    // Every published event serves its own overlay, and each answers with its
+    // own dates: the phase is "has *this* event ended", so borrowing the
+    // control plane's event would retire one event's content on another's
+    // schedule. An unpublished event is a 404 as before.
+    const published = config.publishedEvent
+      ? await config.publishedEvent(eventId)
+      : (eventId === config.eventId ? { dataUpdatedAt: await dataUpdatedAt(), eventEndsAt: await eventEndsAt() } : null);
+    if (!published) return json({ error: "找不到這個活動的社團補充資料。" }, 404, { "cache-control": "no-store" });
     let doc = await repository.getOverridesDoc(eventId);
 
     // The document is written on edit, but the event ending is not an edit.
     // Rebuilding on a phase change keeps the steady-state read a single row
     // lookup instead of filtering the document on every request.
-    const phase = await currentPhase();
+    const phase: OverridesPhase = config.now() > Date.parse(published.eventEndsAt) ? "after" : "during";
     if (doc && doc.phase !== phase) {
-      await repository.rebuildOverridesDoc(eventId, await dataUpdatedAt(), config.now(), phase);
+      await repository.rebuildOverridesDoc(eventId, published.dataUpdatedAt, config.now(), phase);
       doc = await repository.getOverridesDoc(eventId);
     }
     const body = doc?.json ?? JSON.stringify({
-      schema: "circle-overrides/1", eventId, generatedAt: await dataUpdatedAt(), revision: 0, overrides: [],
+      schema: "circle-overrides/1", eventId, generatedAt: published.dataUpdatedAt, revision: 0, overrides: [],
     });
     const etag = `"circle-overrides-${eventId}-${phase}-${doc?.revision ?? 0}"`;
     const headers = {
