@@ -7,15 +7,19 @@ export const EVENT_DATA_PIN_SCHEMA = "event-data-pin/2";
 // name is a constant rather than a field a pin can point anywhere.
 export const EVENT_DATA_REPOSITORY = "dekkmarsvin/tw_doujin_event-data";
 
-// Every event folder carries exactly these four files plus a NOTICE the build
-// never reads. `reference-selection.json` replaced the second-layer
-// `reference-data-pin.json`: it keeps the selection semantics and drops the
-// repository and commit locators the shared repository made redundant.
-export const EVENT_FILE_NAMES = Object.freeze([
+// Existing pins carry these four files. New onboarding also pins the reviewed
+// identity grouping consumed before catalog staging. Keeping the original four
+// as the compatibility floor preserves immutable FF47 pins.
+export const REQUIRED_EVENT_FILE_NAMES = Object.freeze([
   "event.json",
   "official-booths.json",
   "map.json",
   "reference-selection.json",
+]);
+export const CIRCLE_IDENTITY_GROUPS_FILE = "circle-identity-groups.json";
+export const EVENT_FILE_NAMES = Object.freeze([
+  ...REQUIRED_EVENT_FILE_NAMES,
+  CIRCLE_IDENTITY_GROUPS_FILE,
 ]);
 
 export const REFERENCE_SELECTION_FILE = "reference-selection.json";
@@ -24,6 +28,9 @@ const COMMIT = /^[0-9a-f]{40}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/;
 const REFERENCE_PATH = /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.json$/;
+const GROUPINGLESS_LEGACY_PINS = new Set([
+  "ff47@8c645303fa6838383549fbe8433ece081c514e1e",
+]);
 
 export function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -96,8 +103,12 @@ export function parseEventDataPin(value) {
     if (seen.has(file.path)) throw new Error(`Duplicate event data pin path: ${file.path}`);
     seen.add(file.path);
   }
-  for (const name of EVENT_FILE_NAMES) {
+  for (const name of REQUIRED_EVENT_FILE_NAMES) {
     if (!eventNames.has(name)) throw new Error(`Event data pin is missing ${eventPrefix}${name}.`);
+  }
+  if (!eventNames.has(CIRCLE_IDENTITY_GROUPS_FILE)
+    && !GROUPINGLESS_LEGACY_PINS.has(`${value.eventId}@${value.commit}`)) {
+    throw new Error(`Event data pin is missing ${eventPrefix}${CIRCLE_IDENTITY_GROUPS_FILE}.`);
   }
   if (referenceCount === 0) throw new Error("Event data pin must list the references/ files the event resolves.");
   return value;

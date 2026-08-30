@@ -1,8 +1,9 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { REFERENCE_SELECTION_FILE } from "./event-data-pin-utils.mjs";
+import { CIRCLE_IDENTITY_GROUPS_FILE, REFERENCE_SELECTION_FILE } from "./event-data-pin-utils.mjs";
+import { recoverCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import {
   parseReferenceSelection,
   referenceSelectionPaths,
@@ -31,11 +32,47 @@ if (!eventId || !/^[a-z0-9][a-z0-9-]*$/.test(eventId)) {
 }
 const workspace = workspaceArgument ? path.resolve(root, workspaceArgument) : root;
 
+async function runScript(script, args, label) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(root, "scripts", script), ...args], {
+      cwd: root,
+      stdio: "inherit",
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${label} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}.`));
+    });
+  });
+}
+
 const source = fixture
   ? path.join(root, "fixtures", "events", eventId)
   : path.join(workspace, ".event-data", eventId);
 const event = await readJsonFileStrict(path.join(source, "event.json"), "event.json");
 if (event.id !== eventId) throw new Error(`Staged event identity mismatch: expected ${eventId}, got ${event.id}.`);
+
+if (!fixture) {
+  await recoverCircleIdentityRegistry(path.join(workspace, "data", "circle-identities"));
+  const groupingPath = path.join(source, CIRCLE_IDENTITY_GROUPS_FILE);
+  let hasGrouping = true;
+  try {
+    await access(groupingPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    hasGrouping = false;
+  }
+  if (!hasGrouping && eventId !== "ff47") {
+    throw new Error(`Pinned ${eventId} data is missing ${CIRCLE_IDENTITY_GROUPS_FILE}.`);
+  }
+  if (hasGrouping) {
+    await runScript(
+      "generate-circle-identities.mjs",
+      [eventId, "--workspace", workspace, "--check"],
+      "Identity grouping check",
+    );
+  }
+}
 
 const publicRoot = path.resolve(workspace, "public", "data", "events");
 if (path.dirname(publicRoot) !== path.resolve(workspace, "public", "data")) throw new Error("Refusing to replace an unexpected public data path.");
@@ -68,15 +105,11 @@ if (fixture) {
 if (fixture) {
   await cp(path.join(source, "circles.json"), path.join(destination, "circles.json"));
 } else {
-  await new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [path.join(root, "scripts", "build-official-circle-catalog.mjs"), eventId, "--workspace", workspace],
-      { cwd: root, stdio: "inherit" },
-    );
-    child.on("error", reject);
-    child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Official catalog builder exited ${code}.`)));
-  });
+  await runScript(
+    "build-official-circle-catalog.mjs",
+    [eventId, "--workspace", workspace],
+    "Official catalog builder",
+  );
 }
 
 await writeFile(path.join(workspace, ".event-data-stage.json"), `${JSON.stringify({ eventId, source: fixture ? "fixture" : "pin" })}\n`);

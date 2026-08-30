@@ -46,6 +46,9 @@ const bytesByPath = new Map([
     venueAssignments: [{ venueId: "example-venue", venueSpaceId: "example-hall", areaIds: ["all"] }],
   })],
   [`events/${eventId}/official-booths.json`, jsonBytes({ schema: "official-booths/1" })],
+  [`events/${eventId}/circle-identity-groups.json`, jsonBytes({
+    schema: "circle-identity-groups/1", eventId, groups: [{ sources: ["1:A01"] }],
+  })],
   [`events/${eventId}/map.json`, jsonBytes({ schema: "event-map/1" })],
   [`events/${eventId}/reference-selection.json`, jsonBytes(referenceSelection)],
   ["references/organizers/example-organizer.json", jsonBytes({
