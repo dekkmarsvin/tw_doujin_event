@@ -6,7 +6,7 @@
 **測試**：`tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 
-> **實作狀態（2026-08-30）**：社團控制面目前仍由 `env.EVENT_ID` 決定唯一可操作活動。通用 `/circle`、登入後選場次與逐活動 ownership 已由 [ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 定案，但 [#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 尚未實作；公開 `overrides.json` 的多活動放行則屬 [#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119)。本文在兩票落地前只描述現行行為。
+> **實作狀態（2026-08-30）**：**寫入面**（登入、認領、編輯）仍由 `env.EVENT_ID` 決定唯一可操作活動；通用 `/circle`、登入後選場次與逐活動 ownership 已由 [ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 定案，但 [#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 尚未實作。**公開讀取面**已放行多活動：每個已發布活動都服務自己的 `overrides.json`。
 
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
@@ -217,6 +217,12 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 ## 公開端點
 
 `/data/events/:eventId/overrides.json` 是唯一的公開補充資料端點，由 Pages Function 產出，帶 revision 與含活動階段的 strong ETag，使用 `public, max-age=60, must-revalidate`。閱讀端把它疊加在靜態 `circles.json` 之上；讀取失敗或 event mismatch 時只用 official base。
+
+**每個已發布活動服務自己的 overlay，且用自己的日期作答。**「已發布」的定義是**這次部署實際上有該活動的靜態資料**，而不是另一份可能與部署漂移的清單；未部署該資料的活動一律 `404`。
+
+活動階段是「**這一場**是否已結束」，因此不能沿用控制面那一場的 `eventEndsAt`：借用另一場的日期會讓選擇「活動後隱藏」的社團在錯誤的時間點被撤下——可能早幾個月，也可能晚幾個月。`etag` 逐活動區分，否則快取會把一場活動的 overlay 端給另一場。
+
+這條讀取面與寫入面是分開的：寫入仍由 `env.EVENT_ID` 決定同一時間維護哪一場（[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 之前的過渡），但讀者不會因此在第二場活動安靜地失去所有社團補充資料。
 
 ## 驗收條件
 

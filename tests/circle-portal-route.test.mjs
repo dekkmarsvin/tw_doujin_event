@@ -37,6 +37,7 @@ let humanVerified = true;
 let verifiedTokens = [];
 let sitekey = () => "test-sitekey";
 let handlers;
+let handlerOptions;
 let repository;
 let thumbnailObjects;
 
@@ -61,7 +62,7 @@ beforeEach(async () => {
   // The wipe clears the roster too, and ensureTables has already memoized its
   // seed, so restore the baseline admin explicitly.
   await repository.addAdmin("admin@example.com", "bootstrap", clock);
-  handlers = createCirclePortalHandlers({
+  handlerOptions = {
     repository,
     sendMail: async (message) => { sent.push(message); },
     lookupCircle: async (circleId) => CIRCLES[circleId] ?? null,
@@ -95,7 +96,8 @@ beforeEach(async () => {
       eventEndsAt: EVENT_ENDS_AT,
       now: () => clock,
     },
-  });
+  };
+  handlers = createCirclePortalHandlers(handlerOptions);
 });
 
 function post(path, body, cookie) {
@@ -1040,4 +1042,64 @@ test("search needs two characters and returns only verifiable links", async () =
 test("a claim for an unknown circle is refused", async () => {
   const cookie = await signIn("unknown@example.com");
   assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-nope" }, cookie))).status, 404);
+});
+
+/** A deployment serving two events, each with its own dates. */
+const SECOND_EVENT_ENDS_AT = "2027-02-14T23:59:59.999+08:00";
+function multiEventHandlers() {
+  const dates = {
+    ff47: { dataUpdatedAt: "2026-08-11T00:00:00.000+08:00", eventEndsAt: EVENT_ENDS_AT },
+    ff48: { dataUpdatedAt: "2027-02-01T00:00:00.000+08:00", eventEndsAt: SECOND_EVENT_ENDS_AT },
+  };
+  return createCirclePortalHandlers({
+    ...handlerOptions,
+    config: { ...handlerOptions.config, publishedEvent: async (id) => dates[id] ?? null },
+  });
+}
+
+test("every published event serves its own overlay, and only published ones exist", async () => {
+  const portal = multiEventHandlers();
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("two-events@example.com");
+  await approve(owner, "ff47-site", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "第一場的內容" } }, owner), "ff47-site");
+
+  const first = await portal.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  const second = await portal.publicOverrides(get("/data/events/ff48/overrides.json"), "ff48");
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+
+  // The second event answers with its own document and its own generatedAt,
+  // not a copy of the first event's.
+  const secondBody = await second.json();
+  assert.equal(secondBody.eventId, "ff48");
+  assert.deepEqual(secondBody.overrides, []);
+  assert.equal(secondBody.generatedAt, "2027-02-01T00:00:00.000+08:00");
+  assert.equal((await first.json()).overrides.length, 1);
+
+  // Distinct etags, or a cache would serve one event's overlay for the other.
+  assert.notEqual(first.headers.get("etag"), second.headers.get("etag"));
+  assert.match(first.headers.get("etag"), /ff47/);
+  assert.match(second.headers.get("etag"), /ff48/);
+
+  const unpublished = await portal.publicOverrides(get("/data/events/ff49/overrides.json"), "ff49");
+  assert.equal(unpublished.status, 404);
+});
+
+test("each event retires its own content on its own end date", async () => {
+  const portal = multiEventHandlers();
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("per-event-phase@example.com");
+  await approve(owner, "ff47-site", admin);
+  await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "第一場的內容" } }, owner), "ff47-site");
+  assert.equal((await handlers.setPostEventVisibility(post("/api/circle/ff47-site/visibility", { hidden: true }, owner), "ff47-site")).status, 200);
+
+  // Past the first event's end but well before the second's. Borrowing one
+  // event's dates for another would retire content on the wrong schedule — for
+  // the circle that opted out, months early or months late.
+  clock = Date.parse(EVENT_ENDS_AT) + 1000;
+  assert.deepEqual((await (await portal.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json()).overrides, []);
+  const second = await portal.publicOverrides(get("/data/events/ff48/overrides.json"), "ff48");
+  assert.match(second.headers.get("etag"), /during/, "the second event has not ended yet");
+  clock = 1_786_500_000_000;
 });
