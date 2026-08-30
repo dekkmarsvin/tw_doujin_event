@@ -56,7 +56,7 @@ test("informative results identify circle-authored summaries without trust wordi
   const markup = renderToStaticMarkup(React.createElement(SearchResults, {
     records: [authoredRecord], catalogStatus: "ready", catalogError: "", selectedId: null,
     favoriteIds: new Set(), favoriteGroupLabels: new Map(), plans: new Map(),
-    density: "informative", mediaCount: 1, query: "", activeFilters: [], advancedSearchActive: false,
+    density: "informative", mediaCount: 1, query: "", activeFilters: [], matchReasons: new Map(), advancedSearchActive: false,
     onSelect() {}, onToggleFavorite() {}, onResetAdvancedSearch() {}, onClearFilters() {}, onClearQuery() {},
   }));
 

@@ -1,13 +1,19 @@
 import type { MapSlotView } from "./accessible-event-map-renderer";
 import { circleSearchText, type CircleViewRecord } from "./circle-records";
-import { buildWorkTopicSuggestions, matchesAdvancedCircleSearch, type AdvancedCircleSearch } from "./circle-search";
+import { buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import type { EventDefinition } from "./event-catalog";
 import type { PlanningDocument } from "./planning-store";
 
+export type WorkspaceFilterKind = "area" | "genre" | "favorite" | "creator" | "work" | "work-exclude" | "work-type" | "adult" | "favorite-group" | "visit";
+
+/** `kind` says which control owns the chip; `id` is unique because work topics
+ * produce one chip each. `value` carries the topic the chip would remove. */
 export type WorkspaceFilterDescriptor = {
-  id: "area" | "genre" | "favorite" | "creator" | "work" | "work-type" | "adult" | "favorite-group" | "visit";
+  id: string;
+  kind: WorkspaceFilterKind;
   label: string;
+  value?: string;
 };
 
 type ProjectionInput = {
@@ -79,6 +85,11 @@ export function projectEventWorkspace(input: ProjectionInput) {
     ? dayPlan.flatMap((entry) => (recordsByCircleId.get(entry.circleId) ?? []).filter((record) => record.placement.eventId === event.id && record.day === day))
     : filtered;
   const workTopicSuggestions = buildWorkTopicSuggestions(eventRecords);
+  // Only the visible result set is explained; the reasons are read per card and
+  // recomputing them there would repeat the alias expansion on every render.
+  const matchReasonsByRecordId = new Map<string, CircleMatchReason[]>(
+    filtered.map((record) => [record.recordId, describeCircleMatch(record, { query, search: advancedSearch })] as const),
+  );
   const genreCounts = new Map<string, number>(event.genres.map((value) => [value, 0]));
   eventRecords.forEach((record) => {
     if (record.day !== day) return;
@@ -112,21 +123,26 @@ export function projectEventWorkspace(input: ProjectionInput) {
       thumbnailUrl: representative.circle.media[0]?.url,
     }];
   }));
+  const includedTopics = normalizeWorkTopics(advancedSearch.workTopics);
+  // Under `all` every listed topic has to hold, so each chip reads as one more
+  // requirement rather than one more alternative.
+  const topicPrefix = includedTopics.length > 1 && advancedSearch.workTopicMode === "all" ? "同時包含：" : "作品：";
   const filters: WorkspaceFilterDescriptor[] = [
-    ...(event.areaMode === "switchable" && area !== "ALL" ? [{ id: "area" as const, label: event.areas.find((item) => item.id === area)?.label ?? area }] : []),
-    ...(genre !== event.genres[0] ? [{ id: "genre" as const, label: genre }] : []),
-    ...(favoriteOnly ? [{ id: "favorite" as const, label: "只看收藏" }] : []),
-    ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator" as const, label: `創作者：${advancedSearch.creatorType}` }] : []),
-    ...(advancedSearch.workQuery ? [{ id: "work" as const, label: `作品：${advancedSearch.workQuery}` }] : []),
-    ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type" as const, label: advancedSearch.workType }] : []),
-    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult" as const, label: advancedSearch.adultContent === "R18" ? "只看 R18" : "只看一般" }] : []),
-    ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : groups.get(planningDisplay.favoriteGroupId) ?? "收藏群組" }] : []),
-    ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit" as const, label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus] }] : []),
+    ...(event.areaMode === "switchable" && area !== "ALL" ? [{ id: "area", kind: "area" as const, label: event.areas.find((item) => item.id === area)?.label ?? area }] : []),
+    ...(genre !== event.genres[0] ? [{ id: "genre", kind: "genre" as const, label: genre }] : []),
+    ...(favoriteOnly ? [{ id: "favorite", kind: "favorite" as const, label: "只看收藏" }] : []),
+    ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", kind: "creator" as const, label: `創作者：${advancedSearch.creatorType}` }] : []),
+    ...includedTopics.map((topic) => ({ id: `work:${topic}`, kind: "work" as const, label: `${topicPrefix}${topic}`, value: topic })),
+    ...normalizeWorkTopics(advancedSearch.excludedWorkTopics).map((topic) => ({ id: `work-exclude:${topic}`, kind: "work-exclude" as const, label: `排除：${topic}`, value: topic })),
+    ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type", kind: "work-type" as const, label: advancedSearch.workType }] : []),
+    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", kind: "adult" as const, label: advancedSearch.adultContent === "R18" ? "只看 R18" : "只看一般" }] : []),
+    ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", kind: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : groups.get(planningDisplay.favoriteGroupId) ?? "收藏群組" }] : []),
+    ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", kind: "visit" as const, label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus] }] : []),
   ];
   return {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, nextEntry, nextRecord, navigationTargetRecord,
-    visitedCount, sharedRecords, filtered, mapRecords, workTopicSuggestions, genreCounts,
+    visitedCount, sharedRecords, filtered, mapRecords, workTopicSuggestions, matchReasonsByRecordId, genreCounts,
     markers, markersByCode, slots, activeFilterDescriptors: filters,
   };
 }

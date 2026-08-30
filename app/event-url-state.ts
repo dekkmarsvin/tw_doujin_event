@@ -1,4 +1,4 @@
-import type { AdvancedCircleSearch } from "./circle-search";
+import { normalizeWorkTopics, type AdvancedCircleSearch } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import { eventUsesVenueSpaceSwitcher, venueAssignmentForArea, type EventDefinition } from "./event-catalog";
 
@@ -34,7 +34,7 @@ export function defaultEventUrlState<TDay extends string | number, TArea extends
     query: "",
     genre: event.genres[0],
     favoriteOnly: false,
-    advancedSearch: { creatorType: "ALL", workQuery: "", workType: "ALL", adultContent: "ALL" },
+    advancedSearch: { creatorType: "ALL", workTopics: [], workTopicMode: "any", excludedWorkTopics: [], workType: "ALL", adultContent: "ALL" },
     planningDisplay: { favoriteGroupId: "ALL", visitStatus: "ALL", sort: "booth", density: "informative", mediaCount: 0 },
     selection: { day, circleId: null, boothCode: null },
   };
@@ -83,7 +83,11 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
       favoriteOnly: url.searchParams.get("favorite") === "1",
       advancedSearch: {
         creatorType: url.searchParams.get("creator") ?? "ALL",
-        workQuery: url.searchParams.get("work") ?? "",
+        // Repeated rather than delimited, so a work whose title contains the
+        // delimiter cannot split itself into two conditions.
+        workTopics: normalizeWorkTopics(url.searchParams.getAll("work")),
+        workTopicMode: url.searchParams.get("workMode") === "all" ? "all" : "any",
+        excludedWorkTopics: normalizeWorkTopics(url.searchParams.getAll("workExclude")),
         workType: workType === "original" ? "原創" : workType === "derivative" ? "二創" : "ALL",
         adultContent: adultContent === "include" ? "R18" : adultContent === "general" || adultContent === "exclude" ? "GENERAL" : "ALL",
       },
@@ -103,7 +107,7 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
   return { eventMatched: true, state };
 }
 
-const OPTIONAL_PARAMETERS = ["venueSpaceId", "query", "genre", "favorite", "creator", "work", "workType", "r18", "favoriteGroup", "visit", "sort", "density", "media", "selectedCircle", "selectedBooth"];
+const OPTIONAL_PARAMETERS = ["venueSpaceId", "query", "genre", "favorite", "creator", "work", "workMode", "workExclude", "workType", "r18", "favoriteGroup", "visit", "sort", "density", "media", "selectedCircle", "selectedBooth"];
 
 export function serializeEventUrlState<TDay extends string | number, TArea extends string>(
   event: EventDefinition<TDay, TArea>,
@@ -124,7 +128,9 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   if (state.genre !== defaults.genre) url.searchParams.set("genre", state.genre);
   if (state.favoriteOnly) url.searchParams.set("favorite", "1");
   if (state.advancedSearch.creatorType !== "ALL") url.searchParams.set("creator", state.advancedSearch.creatorType);
-  if (state.advancedSearch.workQuery.trim()) url.searchParams.set("work", state.advancedSearch.workQuery.trim());
+  normalizeWorkTopics(state.advancedSearch.workTopics).forEach((topic) => url.searchParams.append("work", topic));
+  if (state.advancedSearch.workTopicMode === "all") url.searchParams.set("workMode", "all");
+  normalizeWorkTopics(state.advancedSearch.excludedWorkTopics).forEach((topic) => url.searchParams.append("workExclude", topic));
   if (state.advancedSearch.workType !== "ALL") url.searchParams.set("workType", state.advancedSearch.workType === "原創" ? "original" : "derivative");
   if (state.advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", state.advancedSearch.adultContent === "R18" ? "include" : "general");
   if (state.planningDisplay.favoriteGroupId !== "ALL") url.searchParams.set("favoriteGroup", state.planningDisplay.favoriteGroupId);

@@ -32,3 +32,19 @@
   .panel input,.panel select { min-height:44px; font-size:calc(16px * var(--ui-font-scale,1)); }
   .segments button,.panel footer button { min-height:44px; font-size:calc(10px * var(--ui-font-scale,1)); }
 }
+
+.topicRow { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:5px; align-items:start; }
+.topicRow button { min-height:36px; padding:5px 9px; border:1px solid var(--line); border-radius:7px; background:#f9faf8; color:var(--muted); font-size:calc(9px * var(--ui-font-scale,1)); font-weight:700; cursor:pointer; }
+.topicRow button:disabled { opacity:.45; cursor:default; }
+.topicRow button:not(:disabled):hover { border-color:var(--muted); color:var(--ink); }
+.chips { display:flex; flex-wrap:wrap; gap:4px; margin:0; padding:0; list-style:none; }
+.chips li { display:flex; }
+.chips button { min-height:28px; display:flex; align-items:center; gap:5px; padding:3px 7px; border:1px solid var(--line); border-radius:99px; background:#eef2ed; color:var(--ink); font-size:calc(9px * var(--ui-font-scale,1)); font-weight:700; cursor:pointer; }
+.chips svg { width:10px; height:10px; }
+.excluded button { background:#f6ecec; border-color:#e0cfcf; }
+.modeSegments { grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+@media (max-width:760px) {
+  .topicRow button { min-height:44px; }
+  .chips button { min-height:36px; }
+}

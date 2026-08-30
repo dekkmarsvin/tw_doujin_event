@@ -12,16 +12,25 @@ export const CREATOR_TYPE_OPTIONS = [
   "攝影",
 ] as const;
 
+/** `all` narrows to circles carrying every listed topic; `any` widens. The
+ * mode only reaches the URL and the UI once a second topic exists, because a
+ * single topic reads the same either way. */
+export type WorkTopicMode = "any" | "all";
+
 export type AdvancedCircleSearch = {
   creatorType: string;
-  workQuery: string;
+  workTopics: string[];
+  workTopicMode: WorkTopicMode;
+  excludedWorkTopics: string[];
   workType: "ALL" | "原創" | "二創";
   adultContent: "ALL" | "R18" | "GENERAL";
 };
 
 export const DEFAULT_ADVANCED_CIRCLE_SEARCH: AdvancedCircleSearch = {
   creatorType: "ALL",
-  workQuery: "",
+  workTopics: [],
+  workTopicMode: "any",
+  excludedWorkTopics: [],
   workType: "ALL",
   adultContent: "ALL",
 };
@@ -90,6 +99,29 @@ function workQueryNeedles(value: string) {
   return group ? [group.canonical, ...group.aliases].map(normalize) : [normalized];
 }
 
+/** The topic list is a set of conditions, not a string. Two spellings of one
+ * work would otherwise become two conditions, and under `all` that turns a
+ * reasonable query into an empty result. */
+export function normalizeWorkTopics(values: readonly string[]) {
+  const seen = new Set<string>();
+  return values.reduce<string[]>((topics, raw) => {
+    const value = raw.trim();
+    const key = normalizeAlias(value);
+    if (!value || !key || seen.has(key)) return topics;
+    seen.add(key);
+    return [...topics, value];
+  }, []);
+}
+
+function workTopicHaystack(record: CircleViewRecord) {
+  return normalize([record.circle.work, ...record.circle.referencedWorks].join("\n"));
+}
+
+function workTopicHits(haystack: string, topic: string) {
+  const needles = workQueryNeedles(topic);
+  return needles.length > 0 && needles.some((needle) => haystack.includes(needle));
+}
+
 export function circleIncludesR18(record: CircleViewRecord) {
   return record.circle.ageRatings
     .some((value) => /(^|\W)r\s*-?\s*18($|\W)/i.test(value.normalize("NFKC")));
@@ -103,9 +135,16 @@ export function matchesAdvancedCircleSearch(record: CircleViewRecord, search: Ad
   const creatorNeedle = normalize(search.creatorType);
   const creatorMatches = search.creatorType === "ALL"
     || record.circle.creatorTypes.some((type) => normalize(type).includes(creatorNeedle));
-  const workNeedles = workQueryNeedles(search.workQuery);
-  const workHaystack = normalize([record.circle.work, ...record.circle.referencedWorks].join("\n"));
-  const workNameMatches = workNeedles.length === 0 || workNeedles.some((needle) => workHaystack.includes(needle));
+  const workHaystack = workTopicHaystack(record);
+  const includedTopics = normalizeWorkTopics(search.workTopics);
+  const workNameMatches = includedTopics.length === 0
+    || (search.workTopicMode === "all"
+      ? includedTopics.every((topic) => workTopicHits(workHaystack, topic))
+      : includedTopics.some((topic) => workTopicHits(workHaystack, topic)));
+  // Exclusion wins over inclusion: a circle listed under both a wanted and an
+  // unwanted topic is one the reader asked not to see.
+  const notExcluded = !normalizeWorkTopics(search.excludedWorkTopics)
+    .some((topic) => workTopicHits(workHaystack, topic));
   const workTypeMatches = search.workType === "ALL"
     || record.circle.workTypes.some((type) => normalize(type) === normalize(search.workType));
   const includesR18 = circleIncludesR18(record);
@@ -113,12 +152,45 @@ export function matchesAdvancedCircleSearch(record: CircleViewRecord, search: Ad
   const adultMatches = search.adultContent === "ALL"
     || (search.adultContent === "R18" ? includesR18 : includesGeneral);
 
-  return creatorMatches && workNameMatches && workTypeMatches && adultMatches;
+  return creatorMatches && workNameMatches && notExcluded && workTypeMatches && adultMatches;
 }
 
 export function advancedCircleSearchCount(search: AdvancedCircleSearch) {
   return Number(search.creatorType !== "ALL")
-    + Number(Boolean(search.workQuery.trim()))
+    + normalizeWorkTopics(search.workTopics).length
+    + normalizeWorkTopics(search.excludedWorkTopics).length
     + Number(search.workType !== "ALL")
     + Number(search.adultContent !== "ALL");
+}
+
+export type CircleMatchReason = { id: string; label: string };
+
+/** Which text the keyword actually hit. A circle that surfaced because its
+ * blurb happens to mention a work reads very differently from one whose listed
+ * work is that work, and the card alone cannot tell the two apart. */
+const KEYWORD_FIELDS: ReadonlyArray<{ label: string; values: (record: CircleViewRecord) => (string | undefined)[] }> = [
+  { label: "攤位代碼", values: (record) => [record.code] },
+  { label: "社團名", values: (record) => [record.name, record.circle.pen] },
+  { label: "作品", values: (record) => [record.circle.work, ...record.circle.referencedWorks] },
+  { label: "類別", values: (record) => [record.genre, ...record.circle.creatorTypes, ...record.circle.workTypes, ...record.circle.ageRatings] },
+  { label: "標籤", values: (record) => [...record.tags, ...record.circle.specialTags] },
+  { label: "介紹", values: (record) => [record.note, record.circle.saleInfo] },
+  { label: "連結", values: (record) => record.circle.externalLinks.flatMap((link) => [link.provider, link.url]) },
+];
+
+export function describeCircleMatch(record: CircleViewRecord, input: { query: string; search: AdvancedCircleSearch }) {
+  const reasons: CircleMatchReason[] = [];
+  const needle = normalize(input.query);
+  if (needle) {
+    const fields = KEYWORD_FIELDS
+      .filter(({ values }) => values(record).some((value) => value && normalize(value).includes(needle)))
+      .map(({ label }) => label);
+    if (fields.length > 0) reasons.push({ id: "keyword", label: `關鍵字命中${fields.join("、")}` });
+  }
+  const workHaystack = workTopicHaystack(record);
+  normalizeWorkTopics(input.search.workTopics)
+    .filter((topic) => workTopicHits(workHaystack, topic))
+    .forEach((topic) => reasons.push({ id: `topic:${topic}`, label: `作品：${topic}` }));
+  if (input.search.creatorType !== "ALL") reasons.push({ id: "creator", label: `創作者：${input.search.creatorType}` });
+  return reasons;
 }
