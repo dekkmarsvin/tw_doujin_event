@@ -13,6 +13,8 @@ export type MapSlotView = {
   planned?: boolean;
   visited?: boolean;
   next?: boolean;
+  /** Set only when no circle at this booth is still attending. */
+  retired?: "cancelled" | "moved";
   thumbnailUrl?: string;
 };
 
@@ -74,13 +76,18 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     const view = slots[slot.code];
     const interactive = !!view;
     const hasMedia = !!(showMedia && view?.thumbnailUrl);
-    const className = [styles.slot, interactive ? styles.activeSlot : styles.emptySlot, hasMedia ? styles.mediaSlot : "", view?.selected ? styles.selected : "", view?.visited ? styles.visited : ""].filter(Boolean).join(" ");
+    const className = [styles.slot, interactive ? styles.activeSlot : styles.emptySlot, hasMedia ? styles.mediaSlot : "", view?.retired ? styles.retiredSlot : "", view?.selected ? styles.selected : "", view?.visited ? styles.visited : ""].filter(Boolean).join(" ");
     const style = view?.tone ? ({ "--slot-tone": `var(--${view.tone})` } as CSSProperties) : undefined;
     return <g key={slot.code} data-slot-code={slot.code} className={className} style={style} role={interactive ? "button" : undefined} tabIndex={interactive && activeKeyboardCode === slot.code ? 0 : -1} aria-label={view?.ariaLabel} onFocus={interactive ? () => setKeyboardCode(slot.code) : undefined} onClick={interactive ? () => onSelect(slot.code) : undefined} onKeyDown={interactive ? (event) => handleKeyDown(event, slot.code) : undefined}>
       <rect className={styles.slotSurface} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
       {hasMedia && <image className={styles.slotMedia} href={view.thumbnailUrl} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipPrefix}-${slot.code})`} aria-hidden="true" />}
       {hasMedia && <rect className={styles.mediaShade} x={slot.rect.x} y={slot.rect.y + slot.rect.height * .62} width={slot.rect.width} height={slot.rect.height * .38} />}
       <text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * (hasMedia ? .88 : .69)}>{slot.code.slice(1)}</text>
+      {/* A withdrawal and a move are different destinations, so they are different
+          shapes, not two shades of the same one; the label carries the wording. */}
+      {view?.retired && <path className={styles.retiredMark} d={view.retired === "cancelled"
+        ? `M ${slot.rect.x + 2} ${slot.rect.y + 2} L ${slot.rect.x + slot.rect.width - 2} ${slot.rect.y + slot.rect.height - 2} M ${slot.rect.x + slot.rect.width - 2} ${slot.rect.y + 2} L ${slot.rect.x + 2} ${slot.rect.y + slot.rect.height - 2}`
+        : `M ${slot.rect.x + 2} ${slot.rect.y + slot.rect.height / 2} H ${slot.rect.x + slot.rect.width - 2} M ${slot.rect.x + slot.rect.width - 5} ${slot.rect.y + slot.rect.height / 2 - 3} L ${slot.rect.x + slot.rect.width - 2} ${slot.rect.y + slot.rect.height / 2} L ${slot.rect.x + slot.rect.width - 5} ${slot.rect.y + slot.rect.height / 2 + 3}`} />}
       {view?.favorite && <circle className={styles.favoriteMark} cx={slot.rect.x + slot.rect.width - 2.5} cy={slot.rect.y + 2.5} r="2.2" />}
       {view?.planned && !view.next && <circle fill="#d59b37" stroke="#fff" strokeWidth=".6" cx={slot.rect.x + 2.8} cy={slot.rect.y + 2.8} r="1.8" />}
       {view?.visited && <path fill="none" stroke="#4f6559" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d={`M ${slot.rect.x + 1.5} ${slot.rect.y + slot.rect.height / 2} L ${slot.rect.x + slot.rect.width / 2 - 1} ${slot.rect.y + slot.rect.height - 2} L ${slot.rect.x + slot.rect.width - 1.5} ${slot.rect.y + 2}`} />}

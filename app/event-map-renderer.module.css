@@ -21,6 +21,9 @@
 .mediaSlot text { fill:#fff; font-size:5.5px; text-shadow:0 1px 1px #000; }
 .mediaSlot:hover .slotMedia { filter:brightness(1.08) saturate(1.05); }
 .mediaSlot.selected .slotSurface { fill:none; }
+.retiredSlot .slotSurface { fill:#f0efeb; stroke:#7d7b76; stroke-dasharray:2.5 1.5; }
+.retiredSlot text { fill:#6d6b66; }
+.retiredMark { fill:none; stroke:#4d4b47; stroke-width:1.2; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
 .favoriteMark { fill:#e86f5d; stroke:#fff; stroke-width:.8; }
 .nextMark { fill:none; stroke:#202a35; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 .rowLabel { fill:#202a35; font-family:var(--font-mono),monospace; font-size:22px; font-weight:900; text-anchor:middle; }

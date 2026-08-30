@@ -303,7 +303,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
   }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, hall, navigationMode, planning, planningDisplay, query, selectedRecordId]);
   const {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
-    selected, selectedFavorite, selectedPlan, nextRecord, navigationTargetRecord,
+    selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextRecord, navigationTargetRecord,
     visitedCount, sharedRecords, filtered, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
     activeFilterDescriptors,
   } = workspace;
@@ -530,8 +530,8 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     onUpdateFavorite: (groupId: string | null, memo: string) => selected && updatePlanning((current) => updateFavorite(current, eventId, selected.circle.id, groupId, memo)),
     onCreateGroup: (name: string) => updatePlanning((current) => createFavoriteGroup(current, name)),
   };
-  const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact onClose={() => { historyIntent.current = "push"; setSelectedRecordId(null); setShowFullDetail(false); }} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
-  const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
+  const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact onClose={() => { historyIntent.current = "push"; setSelectedRecordId(null); setShowFullDetail(false); }} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
+  const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== event.genres[0] ? styles.clearFiltersActive : ""}`;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
     <header><div><b>篩選攤位</b></div><button className={clearFiltersClassName} onClick={clearFilters}>全部清除</button></header>
