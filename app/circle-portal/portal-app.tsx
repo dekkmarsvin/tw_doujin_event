@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createClaim, decideClaim, deleteMyAccount, deleteMyOverride, disableAccount, listAdmins, listMyClaims, listPendingClaims, manageAdmin, PortalError, readMyOverride,
   previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, takedownOverride, uploadThumbnail, verifyLoginToken, withdrawClaim,
+  setPortalEventId,
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import {
@@ -16,7 +17,7 @@ import { findCircleCategory } from "../circle-categories";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
-import { ACTIVE_EVENT } from "../event-catalog";
+import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
 import { AdminMapReviewPanel, MapContributorPanel } from "./map-contribution-panel";
 import styles from "./portal.module.css";
@@ -28,6 +29,33 @@ const IDLE: Status = { kind: "idle", message: "" };
 const SIDE_PANEL_LINK_LIMIT = 6;
 
 const EMPTY_LINK: CircleExternalLink = { provider: "", kind: "social", url: "" };
+
+const PORTAL_EVENT_STORAGE_KEY = "circle-portal-event";
+
+/**
+ * Which event this browser maintains. The account is the same in every event
+ * and the claim is not, so the choice is a client-side pointer, never an
+ * authorization: the server decides what this account owns in the event the
+ * request names (ADR-0043).
+ *
+ * A link that names an event wins, so a circle can be sent straight to the
+ * right one; otherwise the last event maintained here, and only then the
+ * default. An unpublished or unknown id falls back rather than showing an
+ * event this build does not serve.
+ */
+function initialPortalEventId() {
+  const fallback = PUBLISHED_EVENTS[0]?.id ?? "";
+  if (typeof window === "undefined") return fallback;
+  const named = new URLSearchParams(window.location.search).get("event") ?? "";
+  if (getPublishedEvent(named)) return named;
+  let stored = "";
+  try {
+    stored = window.localStorage.getItem(PORTAL_EVENT_STORAGE_KEY) ?? "";
+  } catch {
+    stored = "";
+  }
+  return getPublishedEvent(stored) ? stored : fallback;
+}
 
 const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
 
@@ -65,14 +93,35 @@ export default function CirclePortalApp() {
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<Status>(IDLE);
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
+  const [eventId, setEventId] = useState(initialPortalEventId);
+  const event = getPublishedEvent(eventId) ?? PUBLISHED_EVENTS[0];
 
   const refreshClaims = useCallback(async () => {
+    // Set here as well as in the effect below: the claim list is the first
+    // event-scoped call after a sign-in, and reading it for the wrong event
+    // would show the account claims it does not hold in this one.
+    setPortalEventId(event.id);
     try {
       setClaims((await listMyClaims()).claims);
     } catch {
       setClaims([]);
     }
-  }, []);
+  }, [event.id]);
+
+  // Declared before the session effect so the scope is in place for every
+  // event-scoped call of this commit.
+  useEffect(() => {
+    setPortalEventId(event.id);
+    try {
+      window.localStorage.setItem(PORTAL_EVENT_STORAGE_KEY, event.id);
+    } catch {
+      // A browser that refuses storage still works; it just forgets the choice.
+    }
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("event") === event.id) return;
+    url.searchParams.set("event", event.id);
+    window.history.replaceState(null, "", url);
+  }, [event.id]);
 
   useEffect(() => {
     const token = takeLoginToken();
@@ -106,7 +155,7 @@ export default function CirclePortalApp() {
     <header className={styles.masthead}>
       <div>
         <h1>社團資料維護</h1>
-        <p>{ACTIVE_EVENT.name}・{ACTIVE_EVENT.dateRangeLabel}</p>
+        <p>{event.name}・{event.dateRangeLabel}</p>
       </div>
       {session && <div className={styles.identity}>
         {/* Shows which identity the server resolved, so a mismatch against
@@ -123,16 +172,37 @@ export default function CirclePortalApp() {
     {!ready ? <p className={styles.notice}>載入中…</p>
       : !session ? <SignIn />
         : <>
-          <ClaimList claims={claims} onChanged={refreshClaims} />
-          <ClaimForm onCreated={refreshClaims} />
-          {claims.filter((claim) => claim.status === "verified").map((claim) => <CircleEditor key={claim.circleId} claim={claim} />)}
-          {session.isMapContributor && <MapContributorPanel />}
-          {session.isAdmin && <AdminMapReviewPanel />}
-          <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
-          {session.isAdmin && <AdminPanel />}
+          {/* One event: no choice to make, so the portal opens straight into it. */}
+          {PUBLISHED_EVENTS.length > 1 && <EventPicker
+            eventId={event.id}
+            onChoose={(next) => { setEventId(next); setClaims([]); setStatus(IDLE); }}
+          />}
+          {/* Keyed on the event: claims, drafts and editor drafts all belong to
+              one event, and carrying them across a switch would show one
+              event's work under another's name. */}
+          <Fragment key={event.id}>
+            <ClaimList claims={claims} onChanged={refreshClaims} />
+            <ClaimForm onCreated={refreshClaims} />
+            {claims.filter((claim) => claim.status === "verified").map((claim) => <CircleEditor key={claim.circleId} event={event} claim={claim} />)}
+            {session.isMapContributor && <MapContributorPanel event={event} />}
+            {session.isAdmin && <AdminMapReviewPanel event={event} />}
+            <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
+            {session.isAdmin && <AdminPanel event={event} />}
+          </Fragment>
         </>}
 
   </div>;
+}
+
+function EventPicker({ eventId, onChoose }: { eventId: string; onChoose: (eventId: string) => void }) {
+  return <section className={styles.card}>
+    <h2>維護中的活動</h2>
+    <label htmlFor="portal-event">活動</label>
+    <select id="portal-event" value={eventId} onChange={(event) => onChoose(event.target.value)}>
+      {PUBLISHED_EVENTS.map((item) => <option key={item.id} value={item.id}>{item.name}・{item.dateRangeLabel}</option>)}
+    </select>
+    <p className={styles.editorHint}>認領與補充資料逐場活動分開。這裡選的活動決定下面看到的社團，以及可以修改的內容。</p>
+  </section>;
 }
 
 function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDeleted: () => void }) {
@@ -372,8 +442,8 @@ function deletionSummary(fields: CircleOverrideFields) {
 }
 
 /** The deadline is a pure function of the event's end, so the portal can show a
- * date the moment the circle picks the option, before anything is saved. */
-const EVENT_END_MS = Date.parse(ACTIVE_EVENT.eventEndsAt);
+ * date the moment the circle picks the option, before anything is saved. It is
+ * this event's end: a row's retention is counted from the event it belongs to. */
 const RETENTION_DATE = new Intl.DateTimeFormat("zh-Hant", { dateStyle: "long", timeZone: "Asia/Taipei" });
 
 function PublicationPreview({ records }: { records: CircleViewRecord[] }) {
@@ -411,7 +481,7 @@ function ReviewSummary({ fields, retention }: { fields: CircleOverrideFields; re
   </dl>;
 }
 
-function CircleEditor({ claim }: { claim: ClaimSummary }) {
+function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSummary }) {
   const [fields, setFields] = useState<CircleOverrideFields>({});
   const [status, setStatus] = useState<Status>(IDLE);
   const [baseRecords, setBaseRecords] = useState<CircleViewRecord[] | null>(null);
@@ -494,7 +564,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   };
 
   const thumbnail = fields.thumbnail ?? undefined;
-  const selectedCircleCategory = fields.circleCategory ? findCircleCategory(ACTIVE_EVENT.circleCategories, fields.circleCategory) : null;
+  const selectedCircleCategory = fields.circleCategory ? findCircleCategory(event.circleCategories, fields.circleCategory) : null;
   const editThumbnail = (patch: Partial<CircleOverrideThumbnail>) => {
     // Metadata edits still describe the same staged object. Only replacing the
     // URL turns it into a different (external) thumbnail and drops the key.
@@ -595,14 +665,14 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
       onChange={(event) => setFields((current) => ({ ...current, circleCategory: event.target.value }))}
     >
       <option value="">尚未選擇</option>
-      {ACTIVE_EVENT.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
+      {event.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
     </select>
     <p className={styles.editorHint}>
       請依本次主要販售內容選擇一項。
       {selectedCircleCategory?.description && <>目前類別：{selectedCircleCategory.description}。</>}
       {" "}
-      {ACTIVE_EVENT.circleCategories.sources.map((source, index) => <span key={source.id}>
-        {index > 0 && "、"}<a href={source.url} target="_blank" rel="noreferrer">原始來源{ACTIVE_EVENT.circleCategories.sources.length > 1 ? ` ${index + 1}` : ""}</a>
+      {event.circleCategories.sources.map((source, index) => <span key={source.id}>
+        {index > 0 && "、"}<a href={source.url} target="_blank" rel="noreferrer">原始來源{event.circleCategories.sources.length > 1 ? ` ${index + 1}` : ""}</a>
       </span>)}
     </p>
     <FieldModeControls
@@ -741,7 +811,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
             checked={retention === option.value}
             onChange={() => {
               setRetention(option.value);
-              setRetentionExpiresAt(circleRetentionExpiresAt(option.value, EVENT_END_MS));
+              setRetentionExpiresAt(circleRetentionExpiresAt(option.value, Date.parse(event.eventEndsAt)));
             }}
           />
           <span>{option.title}</span>
@@ -860,7 +930,7 @@ function CircleEditor({ claim }: { claim: ClaimSummary }) {
   </section>;
 }
 
-function AdminPanel() {
+function AdminPanel({ event }: { event: EventDefinition }) {
   const [pending, setPending] = useState<PendingClaim[]>([]);
   const [status, setStatus] = useState<Status>(IDLE);
   const [takedownId, setTakedownId] = useState("");
@@ -876,6 +946,7 @@ function AdminPanel() {
 
   return <section className={`${styles.card} ${styles.admin}`} id="admin">
     <h2>管理：待審認領</h2>
+    <p className={styles.editorHint}>目前活動：{event.name}。認領逐場活動分開，同名社團在不同活動是不同的認領。</p>
     {pending.length === 0 ? <p>目前沒有待審項目。</p> : <ul className={styles.claimList}>
       {pending.map((claim) => <li key={claim.id}>
         <div>

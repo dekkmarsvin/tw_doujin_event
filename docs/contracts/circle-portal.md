@@ -6,7 +6,7 @@
 **測試**：`tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 
-> **實作狀態（2026-08-30）**：**寫入面**（登入、認領、編輯）仍由 `env.EVENT_ID` 決定唯一可操作活動；通用 `/circle`、登入後選場次與逐活動 ownership 已由 [ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 定案，但 [#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 尚未實作。**公開讀取面**已放行多活動：每個已發布活動都服務自己的 `overrides.json`。
+> **實作狀態（2026-08-30）**：寫入面與公開讀取面都已放行多活動（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)、[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136)）。`/circle` 是跨活動共用入口，帳號跨活動、認領逐活動；`env.EVENT_ID` 只剩「請求沒有指名活動時的預設值」。
 
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
@@ -136,6 +136,22 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **不得以任何版面權重、措辭或官方標誌暗示已獲主辦確認。**
 
+## 活動維度
+
+`/circle` 服務這次部署的**每一個已發布活動**，不為第二場活動另建控制面，也不要求維護者改設定才能讓社團使用（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
+
+**帳號跨活動，授權逐活動。** magic link、session 與帳號刪除都不帶活動；認領、補充資料、代管縮圖與地圖草稿都帶。
+
+- **請求指名活動**：控制面每一條 event-scoped route 讀 `?event=<eventId>`。指名的活動就是這次請求唯一的授權範圍。
+- **沒有指名才用預設**：`env.EVENT_ID` 只是「請求沒帶 `event` 時用哪一場」的 migration fallback。**指名一個服務不到的活動不會退回預設**——那會把針對甲活動的寫入跑在乙活動上——而是 `404`。
+- **服務範圍的定義與公開 overlay 相同**：這次部署有沒有該活動的靜態資料。控制面與閱讀端因此永遠對「有哪些活動」給同一個答案，不另立活動 registry。
+- **新活動不需要改 `wrangler.jsonc`，也不需要為控制面另做一次部署**：活動隨自己的資料發布進同一次 build 就能被社團使用。
+- **ownership 一律用請求指名的活動判斷**：甲活動的認領對乙活動的寫入是 `403`；同一帳號可以在不同活動各自持有認領，兩者是不同的資料列，互不改寫。
+- **管理者佇列逐活動**：待審清單只列該活動的認領，回應帶 `eventId`，因此同名社團不會在兩場活動之間被混為一談。
+- **活動後顯示與保存期限依該筆資料所屬活動計算**：階段與 `retention_expires_at` 都用該活動自己的 `eventEndsAt`。
+
+控制面前端把選到的活動記在瀏覽器與 URL 上，只是一個指標，不是授權：伺服器一律以請求指名的活動作答。只有一場已發布活動時不出現選擇器，直接進入。
+
 ## 活動後退出
 
 社團可決定自己填寫的補充資料在活動結束後是否繼續公開（`POST /api/circle/:circleId/visibility`）。
@@ -223,7 +239,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 活動階段是「**這一場**是否已結束」，因此不能沿用控制面那一場的 `eventEndsAt`：借用另一場的日期會讓選擇「活動後隱藏」的社團在錯誤的時間點被撤下——可能早幾個月，也可能晚幾個月。`etag` 逐活動區分，否則快取會把一場活動的 overlay 端給另一場。
 
-這條讀取面與寫入面是分開的：寫入仍由 `env.EVENT_ID` 決定同一時間維護哪一場（[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 之前的過渡），但讀者不會因此在第二場活動安靜地失去所有社團補充資料。
+讀取面與寫入面現在指向同一組活動：兩者都以「這次部署實際上有該活動的靜態資料」為準，不各自維護一份活動清單。
 
 ## 驗收條件
 
@@ -232,6 +248,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 社團無法透過任何路徑修改自己的名稱、攤位或日期。
 - 儲存前預覽的呈現與儲存後的公開呈現一致。
 - 社團選擇活動後退出時，活動結束後公開文件裡查不到該筆內容，且快取不會提供舊版本。
+- 甲活動的認領無法對乙活動寫入；同一帳號在兩場活動各自持有的認領互不影響；服務不到的活動一律 `404`。
 - 管理者無法移除自己或最後一位管理者。
 - 縮圖主機不在允許清單時被拒絕，且錯誤訊息可讓社團理解原因。
 - 所有認領與撤下決策都可在稽核記錄中查到。
