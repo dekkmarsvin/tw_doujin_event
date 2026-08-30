@@ -89,7 +89,9 @@ npm run event:onboard -- <eventId> <40-char-data-commit>
 
 指令先取得固定 commit 下的新活動五個檔案（包含 `circle-identity-groups.json`），讀出 `reference-selection.json`，再依 selection 取得該活動使用的 `references/` 檔案，最後為兩組檔案一併計算 SHA-256。既有 FF47 pin 的四檔格式仍可讀取。分支、tag 與縮短的 commit 在送出任何請求前就被拒絕。
 
-`data:fetch` → identity 產生 → `data:stage` → `event-data:check` 全部在隔離的臨時 workspace 執行；成功後才把 allocations、evidence、event-data、public staging 與正式 pin 一起換入。下載、schema、hash、grouping、registry、staging 或最終 rename 失敗時，整組既有狀態保持不變，新活動也不會留下半成品。
+`data:fetch` → identity 產生 → `data:stage` → `event-data:check` 全部在隔離的臨時 workspace 執行；所有驗證完成後，才依序換入 allocations、evidence、event-data、public staging 與正式 pin。命令可回報的下載、schema、hash、grouping、registry、staging 或 rename 失敗會復原既有狀態。
+
+若程序被外部終止，工作樹可能暫時留下 `.previous` backup，或已產生 identity registry 但尚未換入 pin。不要手動配號或編輯 evidence；以相同 `<eventId>` 與 commit 重跑 `event:onboard`，讓配對 registry recovery 與既有 source no-op 完成剩餘步驟，再 review main PR diff。
 
 手動流程的對照格式如下；需要除錯時，可逐一下載同一個 commit 的 raw blob、計算 SHA-256，再與生成結果比較：
 
