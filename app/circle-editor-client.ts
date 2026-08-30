@@ -37,6 +37,34 @@ export class PortalError extends Error {
   }
 }
 
+let portalEventId = "";
+
+/**
+ * The event every control-plane call operates on.
+ *
+ * The account is global and the session is not per event, so the event travels
+ * on the request instead: one place to set it, and no caller can forget it and
+ * silently write into whichever event the deployment happens to default to
+ * (ADR-0043).
+ */
+export function setPortalEventId(eventId: string) {
+  portalEventId = eventId;
+}
+
+export function getPortalEventId() {
+  return portalEventId;
+}
+
+/**
+ * Exported because a few event-scoped endpoints are reached by the browser
+ * rather than by `call` — an evidence download link, a preview image — and they
+ * need the same scope as everything else.
+ */
+export function withEventScope(path: string) {
+  if (!portalEventId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}event=${encodeURIComponent(portalEventId)}`;
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   // Every mutating request declares JSON, body or not. The server requires it
   // on all of them — an HTML form cannot send that content type, which is what
@@ -46,7 +74,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const mutating = method !== "GET" && method !== "HEAD";
   const multipart = typeof FormData !== "undefined" && init?.body instanceof FormData;
 
-  const response = await fetch(path, {
+  const response = await fetch(withEventScope(path), {
     ...init,
     credentials: "same-origin",
     headers: { accept: "application/json", ...(mutating && !multipart ? { "content-type": "application/json" } : {}), ...init?.headers },
@@ -112,7 +140,7 @@ export function searchCircles(query: string) {
 }
 
 export function listMyClaims() {
-  return call<{ claims: ClaimSummary[] }>("/api/claims");
+  return call<{ eventId: string; claims: ClaimSummary[] }>("/api/claims");
 }
 
 export function createClaim(input: { circleId: string; targetUrl?: string; evidenceUrl?: string; evidenceNote?: string }) {
@@ -173,7 +201,7 @@ export function saveOverride(circleId: string, fields: CircleOverrideFields, ret
 }
 
 export function listPendingClaims() {
-  return call<{ claims: PendingClaim[] }>("/api/admin/claims");
+  return call<{ eventId: string; claims: PendingClaim[] }>("/api/admin/claims");
 }
 
 export function decideClaim(claimId: string, decision: "approve" | "reject" | "revoke") {
