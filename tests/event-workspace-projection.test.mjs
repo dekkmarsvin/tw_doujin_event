@@ -43,7 +43,7 @@ const planning = {
 
 const defaults = {
   day: 1, area: "ALL", genre: "全部類別", query: "", favoriteOnly: false,
-  advancedSearch: { creatorType: "ALL", workQuery: "", workType: "ALL", adultContent: "ALL" },
+  advancedSearch: { creatorType: "ALL", workTopics: [], workTopicMode: "any", excludedWorkTopics: [], workType: "ALL", adultContent: "ALL" },
   planningDisplay: { favoriteGroupId: "ALL", visitStatus: "ALL", sort: "booth", density: "informative", mediaCount: 0 },
   navigationMode: false, selectedRecordId: null,
 };
@@ -104,3 +104,24 @@ test("navigation projection uses only this event's itinerary and selection", () 
   assert.equal(result.selected, null, "a selected record from another event cannot leak into details");
   assert.equal(result.nextRecord.circle.id, "c-b");
 });
+
+test("each applied work topic gets its own removable chip", () => {
+  const projected = project("event-a", {
+    advancedSearch: { ...defaults.advancedSearch, workTopics: ["原神", "蔚藍檔案"], workTopicMode: "all", excludedWorkTopics: ["米哈遊"] },
+  });
+  const topics = projected.activeFilterDescriptors.filter((filter) => filter.kind === "work");
+  assert.deepEqual(topics.map((filter) => filter.value), ["原神", "蔚藍檔案"]);
+  assert.deepEqual(topics.map((filter) => filter.label), ["同時包含：原神", "同時包含：蔚藍檔案"]);
+  assert.equal(new Set(projected.activeFilterDescriptors.map((filter) => filter.id)).size, projected.activeFilterDescriptors.length);
+  assert.deepEqual(
+    projected.activeFilterDescriptors.filter((filter) => filter.kind === "work-exclude").map((filter) => filter.label),
+    ["排除：米哈遊"],
+  );
+});
+
+test("match reasons cover exactly the visible results", () => {
+  const projected = project("event-a", { query: "alpha" });
+  assert.deepEqual(projected.filtered.map((item) => item.recordId), [...projected.matchReasonsByRecordId.keys()]);
+  assert.deepEqual(projected.matchReasonsByRecordId.get("event-a-A01-0").map((reason) => reason.label), ["關鍵字命中社團名"]);
+});
+

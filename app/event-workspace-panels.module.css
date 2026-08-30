@@ -212,3 +212,6 @@
   .galleryControls { padding-inline:12px; }
   .galleryRail button { height:44px; }
 }
+
+.matchReasons { display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; }
+.matchReasons em { padding:2px 5px; border:1px solid #dfe3df; border-radius:4px; background:#f4f6f2; color:#6c756f; font-size:calc(7px * var(--ui-font-scale,1)); font-style:normal; font-weight:700; }

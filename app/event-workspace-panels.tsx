@@ -5,6 +5,7 @@
 import { useState } from "react";
 import type { MouseEvent } from "react";
 import type { CircleCatalogStatus, CircleMedia, CircleViewRecord, SourceContentType } from "./circle-records";
+import type { CircleMatchReason } from "./circle-search";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
 import styles from "./event-workspace-panels.module.css";
@@ -42,7 +43,7 @@ function sourceDateLabel(source: { contentType: SourceContentType; fetchedAt: st
   return `${source.contentType === "circle" ? "最後更新" : "匯入"} ${sourceDate(source.fetchedAt)}`;
 }
 
-export function SearchResults({ records, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
+export function SearchResults({ records, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, matchReasons, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
   records: CircleViewRecord[];
   catalogStatus: CircleCatalogStatus;
   catalogError: string;
@@ -54,6 +55,8 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
   mediaCount: 0 | 1 | 3;
   query: string;
   activeFilters: ActiveResultFilter[];
+  /** Why each visible circle is in the result set, keyed by `recordId`. */
+  matchReasons: Map<string, CircleMatchReason[]>;
   advancedSearchActive: boolean;
   onSelect: (record: CircleViewRecord) => void;
   onToggleFavorite: (record: CircleViewRecord) => void;
@@ -77,11 +80,14 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
         const circleSummary = [record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean);
         const showsCircleAuthoredContent = record.sources.some((source) => source.contentType === "circle")
           && (circleSummary.length > 0 || (mediaCount > 0 && !!thumbnail));
+        // Compact density is a scanning mode; the reasons belong to the mode
+        // where the reader is asking why a row is here.
+        const reasons = density === "informative" ? matchReasons.get(record.recordId) ?? [] : [];
         return <article key={record.recordId} className={`${selectedId === record.recordId ? styles.selectedResult : ""} ${density === "compact" ? styles.compactResult : ""}`}>
           <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
             {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
-            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{circleSummary.length > 0 && <small>{circleSummary.join(" · ")}</small>}{showsCircleAuthoredContent && <small className={styles.sourceHint}>由社團填寫</small>}</>}</span>
+            <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{circleSummary.length > 0 && <small>{circleSummary.join(" · ")}</small>}{showsCircleAuthoredContent && <small className={styles.sourceHint}>由社團填寫</small>}{reasons.length > 0 && <span className={styles.matchReasons}>{reasons.map((reason) => <em key={reason.id}>{reason.label}</em>)}</span>}</>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>

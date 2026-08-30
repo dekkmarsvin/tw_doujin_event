@@ -297,7 +297,7 @@ export default function EventMapApp() {
   const {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, nextRecord, navigationTargetRecord,
-    visitedCount, sharedRecords, filtered, workTopicSuggestions, genreCounts, markersByCode, slots,
+    visitedCount, sharedRecords, filtered, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
     activeFilterDescriptors,
   } = workspace;
 
@@ -497,23 +497,24 @@ export default function EventMapApp() {
   const fullItineraryPanel = <DayItinerary {...itineraryProps} variant="full" />;
   const planningControls = <PlanningDisplayControls value={planningDisplay} groups={planning.favoriteGroups} onApply={(next) => { historyIntent.current = "push"; setPlanningDisplay(next); }} />;
   const planningPanel = <div className={styles.planningPanel}>{planningControls}{fullItineraryPanel}</div>;
-  const resultSetKey = `${day}|${hall}|${genre}|${favoriteOnly}|${advancedSearch.creatorType}|${advancedSearch.workQuery}|${advancedSearch.workType}|${advancedSearch.adultContent}|${planningDisplay.favoriteGroupId}|${planningDisplay.visitStatus}|${planningDisplay.sort}|${planningDisplay.density}|${planningDisplay.mediaCount}|${query}`;
+  const resultSetKey = `${day}|${hall}|${genre}|${favoriteOnly}|${advancedSearch.creatorType}|${advancedSearch.workTopics.join(",")}|${advancedSearch.workTopicMode}|${advancedSearch.excludedWorkTopics.join(",")}|${advancedSearch.workType}|${advancedSearch.adultContent}|${planningDisplay.favoriteGroupId}|${planningDisplay.visitStatus}|${planningDisplay.sort}|${planningDisplay.density}|${planningDisplay.mediaCount}|${query}`;
   const activeResultFilters: ActiveResultFilter[] = activeFilterDescriptors.map((filter) => ({
     ...filter,
     onClear: () => {
       historyIntent.current = "push";
-      if (filter.id === "area") setHall(ACTIVE_URL_DEFAULTS.area);
-      if (filter.id === "genre") setGenre(ACTIVE_EVENT.genres[0]);
-      if (filter.id === "favorite") setFavoriteOnly(false);
-      if (filter.id === "creator") setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" }));
-      if (filter.id === "work") setAdvancedSearch((current) => ({ ...current, workQuery: "" }));
-      if (filter.id === "work-type") setAdvancedSearch((current) => ({ ...current, workType: "ALL" }));
-      if (filter.id === "adult") setAdvancedSearch((current) => ({ ...current, adultContent: "ALL" }));
-      if (filter.id === "favorite-group") setPlanningDisplay((current) => ({ ...current, favoriteGroupId: "ALL" }));
-      if (filter.id === "visit") setPlanningDisplay((current) => ({ ...current, visitStatus: "ALL" }));
+      if (filter.kind === "area") setHall(ACTIVE_URL_DEFAULTS.area);
+      if (filter.kind === "genre") setGenre(ACTIVE_EVENT.genres[0]);
+      if (filter.kind === "favorite") setFavoriteOnly(false);
+      if (filter.kind === "creator") setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" }));
+      if (filter.kind === "work") setAdvancedSearch((current) => ({ ...current, workTopics: current.workTopics.filter((topic) => topic !== filter.value) }));
+      if (filter.kind === "work-exclude") setAdvancedSearch((current) => ({ ...current, excludedWorkTopics: current.excludedWorkTopics.filter((topic) => topic !== filter.value) }));
+      if (filter.kind === "work-type") setAdvancedSearch((current) => ({ ...current, workType: "ALL" }));
+      if (filter.kind === "adult") setAdvancedSearch((current) => ({ ...current, adultContent: "ALL" }));
+      if (filter.kind === "favorite-group") setPlanningDisplay((current) => ({ ...current, favoriteGroupId: "ALL" }));
+      if (filter.kind === "visit") setPlanningDisplay((current) => ({ ...current, visitStatus: "ALL" }));
     },
   }));
-  const resultsPanel = <SearchResults key={resultSetKey} records={filtered} catalogStatus={catalogStatus} catalogError={catalogError} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
+  const resultsPanel = <SearchResults key={resultSetKey} records={filtered} catalogStatus={catalogStatus} catalogError={catalogError} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} matchReasons={matchReasonsByRecordId} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
   const detailActions = {
     onSelectShared: selectRecord,
     onToggleFavorite: () => selected && toggleFavoriteSafely(selected),

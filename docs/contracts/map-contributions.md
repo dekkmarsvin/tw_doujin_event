@@ -1,8 +1,8 @@
-# 地圖貢獻控制面基礎契約
+# 地圖貢獻控制面契約
 
 地圖貢獻讓經管理者授權的維護者，把**活動主辦官方說明頁面中的配置證據**整理成私人草稿。它不新增資料來源：公開快照的基礎仍只來自主辦官方頁面，社團補充則仍只由社團本人自填；工作簿、社群試算表與其他第三方資料不在來源鏈中。
 
-本契約涵蓋 [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 的角色、私人草稿、檔案與保存機制，以及 [#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73) 的投稿、審閱、核准替換與 event-data 候選匯出。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
+本契約涵蓋 [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 的角色、私人草稿、檔案與保存機制，[#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73) 的投稿、審閱、核准替換與 event-data 候選匯出，以及 [#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86) 拆出的協作能力：審閱留言串、指向單一元素的局部修改請求（[#100](https://github.com/dekkmarsvin/tw_doujin_event/issues/100)）與具名的版本衝突說明（[#101](https://github.com/dekkmarsvin/tw_doujin_event/issues/101)）。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
 
 **實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)
 **測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`
@@ -26,6 +26,17 @@
 
 提交會重新解析 versioned draft envelope，並以活動定義、官方 placement 與 map template 做伺服器驗證：代碼唯一且已知、目前 period 的 placement 全數有座標、矩形不越界也不重疊，且目前 revision 至少綁定一份聲明為活動官方說明頁面的來源檔。HTTPS 本身不能證明發布者身分，因此核准 API 另要求管理者明確確認目前 revision 的每份來源確為活動官方頁面；核准後，該 revision 的永久 file metadata 會記為 `approved_official_source`。工作中草稿可以尚未覆蓋所有攤位，但不能保存未知欄位或會讓共用 renderer 讀取失敗的 malformed shape。
 
+## 留言、局部修改請求與衝突說明
+
+留言存在獨立的 `map_draft_comments`，不混進 `map_draft_reviews`——後者維持一次狀態轉換一列的純稽核，保存期限與帳號匿名化才不必區分「稽核紀錄」與「使用者自由輸入」。每則留言釘住寫入當下的 `current_revision`，不交給 insert 自己再讀一次，否則 owner 在兩次讀取之間存檔會讓留言列與稽核列指向不同版本。
+
+- **對象是選配的。** 沒有 `targetKind` 就是對整份草稿留言；`slot` 或 `landmark` 加上 `targetRef` 則是局部修改請求。伺服器會確認草稿裡真的有這個元素，沒有就回 `400`——存下一個按了不會動的連結比拒絕更糟。
+- **只有「要求修改」可以附帶局部修改請求。** 核准與拒絕都終結草稿，貢獻者從那時起打不開編輯器，指向某個攤位的請求永遠無法被處理。
+- **管理者身分留言受 fresh-admin 閘控。** 貢獻者會把它讀成審閱意見，因此與其他管理寫入同一道再驗證邊界。管理者對**自己擁有**的草稿留言時算貢獻者，仍需有效授權。
+- 留言長度上限 2,000 字元，`targetRef` 120 字元。
+
+版本衝突不回一句籠統的失敗：`PUT`、`submit` 與審閱共用同一個 `409` 形狀，`conflict.cause` 區分 `permission`（授權已撤銷）、`status`（草稿狀態已變更）與版本落後，版本落後另外帶出目前 revision 並顯示為「草稿已更新至版本 N。」，讓貢獻者知道要重新載入哪一版，而不是反覆重試同一份內容。
+
 ## Route
 
 | Route | 權限 | 行為 |
@@ -35,13 +46,14 @@
 | `GET /api/map-contributions/drafts/:draftId` | owner | 讀取草稿、來源 metadata 與審閱軌跡 |
 | `PUT /api/map-contributions/drafts/:draftId` | owner + 有效 contributor | 以 optimistic concurrency 新增 revision |
 | `POST /api/map-contributions/drafts/:draftId/submit` | owner + 有效 contributor | 驗證幾何、官方 placement 覆蓋與來源後提交目前 revision |
+| `POST /api/map-contributions/drafts/:draftId/comments` | owner + 有效 contributor，或近期管理者 session | 對目前 revision 留言，可指定單一 slot／landmark |
 | `POST /api/map-contributions/files` | owner + 有效 contributor | 上傳官方來源檔並綁定目前 revision |
 | `GET /api/map-contributions/files/:fileId` | owner 或管理者 | 下載原始檔 |
 | `GET /api/map-contributions/files/:fileId/preview` | owner 或管理者 | 預覽圖片；PDF 回 `415` |
 | `GET /api/admin/map-contributions?days=N` | 近期管理者 session | 列出超過 N 天仍為 submitted 的草稿 |
 | `GET /api/admin/map-contributions/drafts` | 近期管理者 session | 列出已進入審閱流程的草稿 |
 | `GET /api/admin/map-contributions/drafts/:draftId` | 管理者 | 讀取審閱資料與共用 renderer 所需 layout |
-| `POST /api/admin/map-contributions/drafts/:draftId/review` | 近期管理者 session | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId |
+| `POST /api/admin/map-contributions/drafts/:draftId/review` | 近期管理者 session | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId。`targets[]` 附帶局部修改請求，只有 `changes_requested` 接受 |
 | `POST /api/admin/map-contributions/drafts/:draftId/export` | 近期管理者 session | 將核准 revision 固化為候選 JSON、SHA-256 與語意差異，並轉為 exported |
 
 所有 contributor 與管理 route 都只列出、讀取或修改目前 Pages 設定的 `eventId`；共用 D1 中其他活動留下的草稿與來源檔不會進入目前活動的控制面。

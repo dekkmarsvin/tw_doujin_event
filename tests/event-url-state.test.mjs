@@ -122,3 +122,23 @@ test("loading and popstate restoration protect deep links from rewrite", () => {
   assert.equal(codec.historyMethod("replace", false), "replaceState");
   assert.equal(codec.historyMethod("push", true), "none");
 });
+
+test("work topics are repeated parameters so a title cannot split itself", () => {
+  const parsed = codec.parseEventUrlState(eventA, "https://map.example/?event=event-a&day=7&work=%E5%8E%9F%E7%A5%9E&work=%E8%94%9A%E8%97%8D%E6%AA%94%E6%A1%88&workMode=all&workExclude=%E7%B1%B3%E5%93%88%E9%81%8A");
+  assert.deepEqual(parsed.state.advancedSearch.workTopics, ["原神", "蔚藍檔案"]);
+  assert.equal(parsed.state.advancedSearch.workTopicMode, "all");
+  assert.deepEqual(parsed.state.advancedSearch.excludedWorkTopics, ["米哈遊"]);
+
+  const serialized = codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/");
+  assert.deepEqual(serialized.searchParams.getAll("work"), ["原神", "蔚藍檔案"]);
+  assert.deepEqual(serialized.searchParams.getAll("workExclude"), ["米哈遊"]);
+  assert.deepEqual(codec.parseEventUrlState(eventA, serialized).state, parsed.state);
+});
+
+test("a single legacy work parameter still restores as one topic", () => {
+  const parsed = codec.parseEventUrlState(eventA, "https://map.example/?event=event-a&day=7&work=Book");
+  assert.deepEqual(parsed.state.advancedSearch.workTopics, ["Book"]);
+  assert.equal(parsed.state.advancedSearch.workTopicMode, "any");
+  assert.equal(codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/").searchParams.has("workMode"), false);
+});
+
