@@ -122,7 +122,10 @@ export async function acquireEventOnboardingLock(
     release: async () => {
       const activeOwner = await readOwner(lockDirectory);
       if (activeOwner.token !== owner.token) throw new Error("Event onboarding lock ownership changed before release.");
-      await rm(lockDirectory, { recursive: true, force: true });
+      const tokenDigest = createHash("sha256").update(owner.token).digest("hex").slice(0, 16);
+      const releasedDirectory = path.join(pinDirectory, `.onboard.lock.released-${tokenDigest}`);
+      await rename(lockDirectory, releasedDirectory);
+      await rm(releasedDirectory, { recursive: true, force: true });
       if (reclaimedDirectory) await rm(reclaimedDirectory, { recursive: true, force: true });
     },
   };

@@ -329,10 +329,26 @@ test("two commands racing to reclaim one stale lock produce exactly one live own
     await acquired[0].value.release();
     await assert.rejects(lstat(lockDirectory), /ENOENT/);
     assert.deepEqual(
-      (await readdir(pinDirectory)).filter((name) => name.startsWith(".onboard.lock.stale-")),
+      (await readdir(pinDirectory)).filter((name) => name.startsWith(".onboard.lock.stale-")
+        || name.startsWith(".onboard.lock.released-")),
       [],
     );
   }
+});
+
+test("an interrupted retired-lock cleanup cannot wedge the live lock path", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-retired-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  const pinDirectory = path.join(temporary, "data", "event-data-pins");
+  const interruptedCleanup = path.join(pinDirectory, ".onboard.lock.released-interrupted");
+  await mkdir(interruptedCleanup, { recursive: true });
+  const lock = await acquireEventOnboardingLock(temporary);
+  assert.equal(JSON.parse(
+    await readFile(path.join(eventOnboardingLockDirectory(temporary), "owner.json"), "utf8"),
+  ).token, lock.token);
+  await lock.release();
+  await assert.rejects(lstat(eventOnboardingLockDirectory(temporary)), /ENOENT/);
+  await lstat(interruptedCleanup);
 });
 
 test("every standalone root transaction writer acquires the shared onboarding lock", async () => {
