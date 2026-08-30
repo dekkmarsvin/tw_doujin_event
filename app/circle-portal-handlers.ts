@@ -1339,7 +1339,12 @@ export function createCirclePortalHandlers({
       ? await repository.markClaimVerified(claimId, method, now, gate.session.email)
       : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email);
 
-    if (decision !== "approve" && ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now);
+    // Revoking ownership withdraws that circle's content in the same step. The
+    // phase has to be the current one: rebuilding as "during" after the event
+    // would republish every circle that had opted out of the post-event window.
+    if (decision !== "approve" && ok) {
+      await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
+    }
     await repository.writeAudit({
       at: now, actorAccountId: gate.session.accountId, actorRole: "admin",
       action: `claim.admin_${decision}`, subjectType: "claim", subjectId: claimId,

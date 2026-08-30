@@ -132,9 +132,19 @@ const EVENT_ENDED_AT = NOW - OVERRIDE_RETENTION_PURGE_AFTER_MS - DAY;
 const DATA_UPDATED_AT = "2026-08-13T00:00:00.000Z";
 
 async function writeOverride(circleId, { choice, expiresAt }) {
+  // Publication needs an owner, so the fixture carries one: content that no
+  // account holds is withheld from the document regardless of its deadline.
+  const accountId = await repository.upsertAccount(`${circleId}@example.com`, NOW - DAY);
+  await repository.createClaim({
+    id: `claim-${circleId}`, accountId, eventId: "ff47", circleId,
+    circleNameKey: circleId, circleNameAtClaim: circleId, sourceRowAtClaim: 1,
+    status: "verified", method: "admin", targetUrl: null,
+    challengeTokenHash: null, challengeExpiresAt: null,
+    evidenceUrl: null, evidenceNote: null, now: NOW - DAY,
+  });
   await repository.putOverride({
     eventId: "ff47", circleId, fieldsJson: JSON.stringify({ saleInfo: `${circleId} 的販售資訊` }),
-    updatedBy: "account-1", now: NOW - DAY,
+    updatedBy: accountId, now: NOW - DAY,
     ...(choice ? { retention: { choice, expiresAt } } : {}),
   });
 }
