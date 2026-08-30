@@ -91,7 +91,7 @@
 | [0041](./adr/0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界，邊緣契約降級為紀錄（把 0040 的判準擴大到 backlog 與契約文件）|
 | [0042](./adr/0042-the-public-entry-is-an-event-chooser.md) | 公開入口是活動選擇器，活動依生命週期分層（取代 url-state 契約「不先顯示活動選擇器」一句）|
 | [0043](./adr/0043-the-circle-portal-is-event-agnostic.md) | 社團入口是通用的，登入後才選場次；綁定逐活動不跨活動沿用（取代 0042 後果段「控制面仍是單活動」一句）|
-| [0044](./adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目；身分只由主辦攤位證據配發，等待期做 references 與地圖 layout |
+| [0044](./adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目；身分只由主辦攤位證據配發。修正成本的分界線是發布而非配號 |
 
 ## 對外文件
 
