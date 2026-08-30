@@ -169,7 +169,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 目前寫入的 action，依主體分組：
 
 - 登入：`auth.link_requested`、`auth.session_created`、`auth.signed_out`
-- 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`
+- 認領：`claim.created`、`claim.auto_verified`、`claim.verify_conflict`、`claim.challenge_failed`、`claim.withdrawn`（社團自己撤回）、`claim.admin_approve`／`claim.admin_reject`／`claim.admin_revoke`
 - 社團自填內容：`override.updated`、`override.retention`、`override.post_event_visibility`、`override.takendown`、`override.deleted`（社團自助刪除，留下是哪個帳號做的、不留內容）、`override.purged`（到期清除，`actor_role` 為 `system`，`detail_json` 只有 `eventId`）
 - 管理者名冊：`admin.added`、`admin.removed`
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）

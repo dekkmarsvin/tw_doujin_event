@@ -180,6 +180,35 @@ const verifiedOwner = async (circleId, label) => {
   return accountId;
 };
 
+test("only a withdrawn claim can be resubmitted over", async () => {
+  const accountId = await repository.upsertAccount("resubmit@example.com", NOW);
+  const submit = (id, status, now) => repository.createClaim({
+    id, accountId, eventId: "ff47", circleId: "ff47-resubmit",
+    circleNameKey: "resubmit", circleNameAtClaim: "Resubmit", sourceRowAtClaim: 3,
+    status, method: null, targetUrl: null, challengeTokenHash: `hash-${id}`,
+    challengeExpiresAt: now + 1_000, evidenceUrl: null, evidenceNote: null, now,
+  });
+
+  const first = await submit("claim-resubmit-1", "pending", NOW);
+  assert.equal(first, "claim-resubmit-1");
+  assert.equal(await submit("claim-resubmit-2", "pending", NOW + 1_000), null,
+    "a pending claim must not be silently replaced by a second submission");
+
+  assert.equal(await repository.withdrawClaim("claim-resubmit-1", accountId), true);
+  const withdrawn = await repository.getClaim("claim-resubmit-1");
+  assert.equal(withdrawn.status, "withdrawn");
+  assert.equal(withdrawn.challenge_token_hash, null, "the old code must not stay verifiable");
+
+  // The row is reused, so the id — and every audit entry pointing at it — holds.
+  assert.equal(await submit("claim-resubmit-3", "pending", NOW + 2_000), "claim-resubmit-1");
+  const reused = await repository.getClaim("claim-resubmit-1");
+  assert.equal(reused.status, "pending");
+  assert.equal(reused.challenge_token_hash, "hash-claim-resubmit-3");
+  assert.equal(reused.created_at, NOW + 2_000, "a resubmission counts against the daily window as a fresh claim");
+
+  assert.equal(await repository.withdrawClaim("claim-resubmit-1", "someone-else"), false);
+});
+
 test("the published document is a valid overrides payload and grows a revision per write", async () => {
   await verifiedOwner("ff47-doc", "doc-owner");
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "新刊 300 元" }), updatedBy: "account-1", now: NOW });
@@ -378,7 +407,7 @@ test("a deletion tombstone blocks in-flight circle writes and strips late audit 
     circleNameKey: "late", circleNameAtClaim: "Late", sourceRowAtClaim: 2,
     status: "pending", method: null, targetUrl: null, challengeTokenHash: null,
     challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 2,
-  }), false);
+  }), null);
   assert.equal(await repository.putOverride({
     accountId, eventId: "ff47", circleId: "ff47-delete-race",
     fieldsJson: JSON.stringify({ saleInfo: "must not survive" }), updatedBy: accountId, now: NOW + 2,

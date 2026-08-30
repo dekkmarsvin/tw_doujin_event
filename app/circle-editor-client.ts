@@ -14,7 +14,7 @@ export type ClaimSummary = {
   id: string;
   circleId: string;
   circleName: string;
-  status: "pending" | "verified" | "rejected" | "revoked";
+  status: "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
   method: string | null;
   targetUrl: string | null;
   evidenceUrl: string | null;
@@ -120,6 +120,10 @@ export function createClaim(input: { circleId: string; targetUrl?: string; evide
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function withdrawClaim(claimId: string) {
+  return call<{ ok: true }>(`/api/claims/${encodeURIComponent(claimId)}`, { method: "DELETE" });
 }
 
 export function runChallenge(claimId: string) {

@@ -14,7 +14,8 @@ import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_SCHEMA_STATEMENTS } from "./identi
  */
 
 export type OverridesPhase = "during" | "after";
-export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked";
+/** `withdrawn` is the claimant's own doing; `rejected` and `revoked` are an admin's. */
+export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 
@@ -424,25 +425,63 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     evidenceUrl: string | null; evidenceNote: string | null; now: number;
   }) {
     await ensureTables();
+    // One row per (event, circle, account) is a unique index, so a resubmission
+    // after a withdrawal reuses the row rather than adding one. The guard is
+    // the point: only a claim the account itself withdrew may be overwritten,
+    // and `created_at` moves to now so a resubmission counts against the daily
+    // limit exactly like a first submission — withdrawing is not a way to buy
+    // more attempts. Everything else conflicts and reports no change.
     const result = await database.prepare(
       `INSERT INTO circle_claims (
          id, account_id, event_id, circle_id, circle_name_key, circle_name_at_claim, source_row_at_claim,
          status, method, target_url, challenge_token_hash, challenge_expires_at,
          evidence_url, evidence_note, created_at, verified_at
        ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
-         FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL`,
+         FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL
+       ON CONFLICT(event_id, circle_id, account_id) DO UPDATE SET
+         circle_name_key = excluded.circle_name_key,
+         circle_name_at_claim = excluded.circle_name_at_claim,
+         source_row_at_claim = excluded.source_row_at_claim,
+         status = excluded.status, method = excluded.method, target_url = excluded.target_url,
+         challenge_token_hash = excluded.challenge_token_hash,
+         challenge_expires_at = excluded.challenge_expires_at,
+         challenge_attempts = 0,
+         evidence_url = excluded.evidence_url, evidence_note = excluded.evidence_note,
+         created_at = excluded.created_at, verified_at = excluded.verified_at,
+         reviewed_by = NULL, reviewed_at = NULL
+       WHERE circle_claims.status = 'withdrawn'
+       RETURNING id`,
     ).bind(
       input.id, input.accountId, input.eventId, input.circleId, input.circleNameKey,
       input.circleNameAtClaim, input.sourceRowAtClaim, input.status, input.method, input.targetUrl,
       input.challengeTokenHash, input.challengeExpiresAt, input.evidenceUrl, input.evidenceNote,
       input.now, input.status === "verified" ? input.now : null,
-    ).run();
-    return result.meta.changes === 1;
+    ).first<{ id: string }>();
+    // The id of the claim now in force, which is the reused row's own id after a
+    // resubmission: the audit trail already points at it, and moving it would
+    // orphan those entries. Null when nothing was written.
+    return result?.id ?? null;
   }
 
   async function getClaim(id: string) {
     await ensureTables();
     return database.prepare(`SELECT * FROM circle_claims WHERE id = ?1`).bind(id).first<ClaimRow>();
+  }
+
+  /**
+   * Withdrawing is the claimant's own escape from a lost or expired challenge.
+   * Only a pending claim, and only the account that made it: an owner cannot
+   * drop their own verified claim this way, and nobody can touch a decision an
+   * admin already made. Clearing the hash is what makes the old code dead — the
+   * plaintext was never stored, so this is the only thing left to invalidate.
+   */
+  async function withdrawClaim(id: string, accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE circle_claims SET status = 'withdrawn', challenge_token_hash = NULL, challenge_expires_at = NULL
+       WHERE id = ?1 AND account_id = ?2 AND status = 'pending'`,
+    ).bind(id, accountId).run();
+    return result.meta.changes === 1;
   }
 
   async function listClaimsForAccount(accountId: string, eventId: string) {
@@ -1278,7 +1317,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     countLoginTokensSince, createLoginToken, consumeLoginToken,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
