@@ -56,7 +56,13 @@ const precache = [...new Set([
   ...reader,
 ])].sort();
 
-const required = ["/index.html", "/manifest.webmanifest", `/data/events/${stage.eventId}/circles.json`, `/data/events/${stage.eventId}/map.json`];
+// Every staged event has to survive going offline at the venue: a reader who
+// picked the second event and then lost signal must not find an empty shell.
+const stagedEvents = stage.events ?? [{ eventId: stage.eventId }];
+const required = ["/index.html", "/manifest.webmanifest", ...stagedEvents.flatMap(({ eventId }) => [
+  `/data/events/${eventId}/circles.json`,
+  `/data/events/${eventId}/map.json`,
+])];
 const missing = required.filter((path) => !precache.includes(path));
 if (missing.length > 0) throw new Error(`The build is missing offline-critical files: ${missing.join(", ")}`);
 if (!reader.some((path) => path.endsWith(".js"))) throw new Error("index.html references no application script to precache.");

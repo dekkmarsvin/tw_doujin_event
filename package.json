@@ -11,7 +11,7 @@
     "dev:pages": "vite --config vite.pages.config.ts",
     "build": "npm run data:stage -- --fixture && npm run build:staged",
     "build:staged": "npm run event-data:check && npm run pages:prepare && vite build --config vite.pages.config.ts && npm run pages:service-worker && npm run pages:privacy",
-    "build:production": "npm run data:fetch -- ff47 && npm run data:stage -- ff47 && npm run build:staged",
+    "build:production": "npm run data:fetch -- --published && npm run data:stage -- --published && npm run build:staged",
     "pages:service-worker": "node scripts/build-service-worker.mjs",
     "pages:privacy": "node scripts/build-privacy-page.mjs",
     "build:editor": "vinext build",

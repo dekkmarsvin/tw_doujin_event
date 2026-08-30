@@ -224,7 +224,9 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(app, /role="tabpanel" aria-labelledby=\{activeMobileTabId\}/);
   assert.match(app, /onFocusCapture=\{handleMobilePanelFocus\}/);
   assert.match(app, /setMobileSheetLevel\("full"\)/);
-  assert.match(eventCatalog, /parseEventDefinition\(injectedDefinition, injectedReferences\)/);
+  // The published set is whatever the build staged, never a list written in code.
+  assert.match(eventCatalog, /export const PUBLISHED_EVENTS: readonly EventDefinition\[\] = injectedEvents/);
+  assert.match(eventCatalog, /parseEventDefinition\(definition, references\)/);
   assert.match(eventCatalog, /EVENT_DEFINITION_SCHEMA = "event-definition\/3"/);
   assert.match(eventCatalog, /parseCircleCategoryCatalog\(\{/);
   assert.match(eventCatalog, /findReference\([\s\S]*"category-catalog\/1"/);
