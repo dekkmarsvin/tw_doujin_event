@@ -213,6 +213,30 @@ test("a final rename failure restores the previous pin and every promoted tree",
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 
+test("onboarding finalizes a committed standalone fetch backup before promotion", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-standalone-backup-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  await writeWorkspaceState(temporary, "current");
+  const eventDestination = path.join(temporary, ".event-data", eventId);
+  const standaloneBackup = `${eventDestination}.previous`;
+  await mkdir(standaloneBackup, { recursive: true });
+  await writeFile(path.join(standaloneBackup, "sentinel.txt"), "outdated");
+
+  await onboardEvent({
+    eventId,
+    commit,
+    root: temporary,
+    fetchImpl: fetchFrom(fixture().responses),
+    validate: async (_pinPath, workspace) => {
+      await writeWorkspaceState(workspace, "candidate");
+      return { replacements: onboardingWorkspaceReplacements(temporary, workspace, eventId) };
+    },
+  });
+
+  assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("candidate"));
+  await assert.rejects(lstat(standaloneBackup), /ENOENT/);
+});
+
 test("onboarding another event recovers the repository-wide transaction interrupted before pin install", async (t) => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "event-onboard-interrupted-"));
   t.after(() => rm(temporary, { recursive: true, force: true }));

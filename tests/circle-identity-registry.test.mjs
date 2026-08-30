@@ -76,6 +76,20 @@ test("rerunning reviewed sources in the same event is a no-op", () => {
   assert.equal(serializeCircleIdentityRegistry(second.evidence), serializeCircleIdentityRegistry(first.evidence));
 });
 
+test("an existing entry shared with another event is rejected instead of reused", () => {
+  const shared = registry([{
+    circleId: "c-000002",
+    currentName: "同名社團",
+    aliases: [],
+    sources: [
+      { eventId, kind: "organizer-booth", value: "1:A01" },
+      { eventId, kind: "organizer-booth", value: "1:A02" },
+      { eventId: "event-older", kind: "organizer-booth", value: "1:Z99" },
+    ],
+  }]);
+  assert.throws(() => plan({ registryValue: shared }), /contains cross-event evidence/);
+});
+
 test("traceable organizer evidence joins multi-day and multi-booth sources under one ID", () => {
   const result = plan({
     officialValue: official([

@@ -146,7 +146,10 @@ export async function replaceVerifiedTreesTransaction(
     backup: `${destination}.previous`,
     hadPrevious: false,
   }));
-  for (const state of states) state.hadPrevious = await pathExists(state.destination, fs.lstat);
+  for (const state of states) {
+    await recoverInterruptedReplacement(state.destination, fs);
+    state.hadPrevious = await pathExists(state.destination, fs.lstat);
+  }
 
   const temporaryJournal = transactionTemporaryPath(transactionFile);
   const journal = {
