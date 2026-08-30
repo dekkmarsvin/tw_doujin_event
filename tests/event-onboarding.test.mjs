@@ -9,7 +9,7 @@ import {
   prepareEventOnboarding,
   serializeEventDataPin,
 } from "../scripts/event-onboarding.mjs";
-import { EVENT_DATA_REPOSITORY, parseEventDataPin, sha256 } from "../scripts/event-data-pin-utils.mjs";
+import { EVENT_DATA_REPOSITORY, EVENT_FILE_NAMES, parseEventDataPin, sha256 } from "../scripts/event-data-pin-utils.mjs";
 
 const eventId = "event-alpha";
 const commit = "a".repeat(40);
@@ -72,6 +72,9 @@ function fixture() {
       venueAssignments: [{ venueId: "example-venue", venueSpaceId: "example-hall", areaIds: ["all"] }],
     })],
     [`events/${eventId}/official-booths.json`, jsonBytes({ schema: "official-booths/1" })],
+    [`events/${eventId}/circle-identity-groups.json`, jsonBytes({
+      schema: "circle-identity-groups/1", eventId, groups: [{ sources: ["1:A01"] }],
+    })],
     [`events/${eventId}/map.json`, jsonBytes({ schema: "event-map/1" })],
     [`events/${eventId}/reference-selection.json`, jsonBytes(referenceSelection)],
   ]);
@@ -97,6 +100,8 @@ async function writeWorkspaceState(root, value) {
     path.join(root, ".event-data", eventId, "sentinel.txt"),
     path.join(root, "public", "data", "events", "sentinel.txt"),
     path.join(root, ".event-data-stage.json"),
+    path.join(root, "data", "circle-identities", "allocations.json"),
+    path.join(root, "data", "circle-identities", "evidence.json"),
   ];
   for (const filePath of files) {
     await mkdir(path.dirname(filePath), { recursive: true });
@@ -109,6 +114,8 @@ async function readWorkspaceState(root) {
     readFile(path.join(root, ".event-data", eventId, "sentinel.txt"), "utf8"),
     readFile(path.join(root, "public", "data", "events", "sentinel.txt"), "utf8"),
     readFile(path.join(root, ".event-data-stage.json"), "utf8"),
+    readFile(path.join(root, "data", "circle-identities", "allocations.json"), "utf8"),
+    readFile(path.join(root, "data", "circle-identities", "evidence.json"), "utf8"),
   ]);
 }
 
@@ -135,10 +142,16 @@ test("onboarding hashes both trees from one commit and commits the pin only afte
   const written = parseEventDataPin(JSON.parse(await readFile(result.destination, "utf8")));
   assert.deepEqual(
     written.files.map(({ path: filePath, sha256: hash }) => [filePath, hash]),
-    [...data.eventFiles, ...[...data.referenceFiles].sort(([left], [right]) => left.localeCompare(right))]
+    [
+      ...EVENT_FILE_NAMES.map((name) => {
+        const filePath = `events/${eventId}/${name}`;
+        return [filePath, data.eventFiles.get(filePath)];
+      }),
+      ...[...data.referenceFiles].sort(([left], [right]) => left.localeCompare(right)),
+    ]
       .map(([filePath, bytes]) => [filePath, sha256(bytes)]),
   );
-  assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("candidate"));
+  assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("candidate"));
 });
 
 test("a validation failure preserves the previous pin and every fetched or staged tree", async (t) => {
@@ -155,12 +168,12 @@ test("a validation failure preserves the previous pin and every fetched or stage
     fetchImpl: fetchFrom(fixture().responses),
     validate: async (_pinPath, workspace) => {
       await writeWorkspaceState(workspace, "rejected candidate");
-      assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("previous"));
+      assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("previous"));
       throw new Error("simulated staged validation failure");
     },
   }), /simulated staged validation failure/);
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
-  assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("previous"));
+  assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 
@@ -189,7 +202,7 @@ test("a final rename failure restores the previous pin and every promoted tree",
     fileSystemOverrides: { rename: renameWithFailure },
   }), /simulated pin rename failure/);
   assert.equal(await readFile(destination, "utf8"), "previous pin\n");
-  assert.deepEqual(await readWorkspaceState(temporary), Array(3).fill("previous"));
+  assert.deepEqual(await readWorkspaceState(temporary), Array(5).fill("previous"));
   assert.deepEqual(await readdir(path.dirname(destination)), [`${eventId}.json`]);
 });
 

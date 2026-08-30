@@ -34,6 +34,10 @@ export function onboardingWorkspaceReplacements(root, workspace, eventId) {
       temporary: path.join(workspace, ".event-data-stage.json"),
       destination: path.join(root, ".event-data-stage.json"),
     },
+    {
+      temporary: path.join(workspace, "data", "circle-identities"),
+      destination: path.join(root, "data", "circle-identities"),
+    },
   ];
 }
 

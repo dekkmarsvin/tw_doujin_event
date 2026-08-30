@@ -53,19 +53,41 @@ type CircleCatalogPayload = {
 ## 身分規則
 
 - ID 是只增不減、不重排、不重用的 `c-xxxxxx` 配發序號，見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md)。
-- 同一社團可在同日、跨日或跨活動有多筆 placement，仍沿用同一 ID。**這是目前實作；跨活動沿用待 #116 依 ADR-0039 取代。**
+- 同一活動中，經主辦穩定鍵或可追溯主辦證據連結的同一社團可在同日或跨日有多筆 placement，仍使用同一 ID。不同活動不建立 identity linkage。
 - `evidence.json` 的正式活動證據為 `{ eventId, kind: "organizer-booth", value: "<day>:<booth>" }`。
 - 同名不是合併依據；一個 booth 證據對到多個 ID、官方群組內的 booth 對到不同 ID、或目前名稱與官方名稱漂移時一律 fail closed。
 - 已裁決的 migration 例外保存在 `ff47-official-migration-decisions.json`；它是稽核紀錄，不是執行期 fallback。
 - 舊 `ff47-<hash>` ID 沒有相容路徑，見 [ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。攤位 scoped ID 只由當前 records 即時解析。
 
-### ADR-0039 的目標狀態（尚未實作）
+### 新活動配號流程
 
 - `c-xxxxxx` 仍由單一全域 ledger 配發、永不重用；不同活動不會出現相同 ID。
 - 新活動的每個同活動 identity group 配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
 - 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。名稱只用於 drift 檢查，不得作為跨日合併依據；沒有 grouping 證據時必須 fail closed。
 - 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個 identity group 的所有 `<day>:<booth>` sources 只配發一個 ID，並逐一保存 source。
 - 新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
+
+data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identity group 的完整 booth sources：
+
+```json
+{
+  "schema": "circle-identity-groups/1",
+  "eventId": "event-alpha",
+  "groups": [
+    { "sources": ["1:A01", "1:A02"] },
+    {
+      "sources": ["1:B01", "2:B01"],
+      "linkage": {
+        "kind": "organizer-stable-key",
+        "value": "application:1234",
+        "reference": "https://organizer.example/applications/1234"
+      }
+    }
+  ]
+}
+```
+
+每個官方 booth source 必須恰好出現一次，同一官方群組不得拆分。合併兩個以上官方群組時，`linkage.kind` 只能是 `organizer-stable-key` 或 `manual-organizer-evidence`，並提供非空 `value` 與 `https` 主辦證據位置；名稱相同本身不符合 linkage。
 
 ## 社團 overlay
 
