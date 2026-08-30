@@ -164,7 +164,24 @@ test("revoking an owner frees the circle for a new claim", async () => {
   assert.equal(await repository.ownsCircle(rival, "ff47", "ff47-contested"), true);
 });
 
+/**
+ * Content only ever reaches a row through an owner, so a fixture that publishes
+ * without one is not a shorter version of reality — it is a different one.
+ */
+const verifiedOwner = async (circleId, label) => {
+  const accountId = await repository.upsertAccount(`${label}@example.com`, NOW);
+  await repository.createClaim({
+    id: `claim-${label}`, accountId, eventId: "ff47", circleId,
+    circleNameKey: label, circleNameAtClaim: label, sourceRowAtClaim: 1,
+    status: "verified", method: "admin", targetUrl: null,
+    challengeTokenHash: null, challengeExpiresAt: null,
+    evidenceUrl: null, evidenceNote: null, now: NOW,
+  });
+  return accountId;
+};
+
 test("the published document is a valid overrides payload and grows a revision per write", async () => {
+  await verifiedOwner("ff47-doc", "doc-owner");
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "新刊 300 元" }), updatedBy: "account-1", now: NOW });
   const first = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW);
 
@@ -195,6 +212,43 @@ test("a later edit republishes after a takedown", async () => {
   await repository.putOverride({ eventId: "ff47", circleId: "ff47-doc", fieldsJson: JSON.stringify({ saleInfo: "重新填寫" }), updatedBy: "account-1", now: NOW + 4_000 });
   const doc = await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 4_000);
   assert.equal(JSON.parse(doc.json).overrides.length, 1);
+});
+
+test("revoking the claim withdraws that circle's content from the published document", async () => {
+  const owner = await verifiedOwner("ff47-revoked", "revoked-owner");
+  await repository.putOverride({
+    eventId: "ff47", circleId: "ff47-revoked", fieldsJson: JSON.stringify({ saleInfo: "由錯誤的人填寫" }),
+    updatedBy: owner, now: NOW,
+  });
+  const published = async () => JSON.parse(
+    (await repository.rebuildOverridesDoc("ff47", "2026-08-13T00:00:00.000Z", NOW + 1_000)).json,
+  ).overrides.map((override) => override.circleId);
+  assert.ok((await published()).includes("ff47-revoked"), "a verified owner's content is public");
+
+  assert.equal(await repository.setClaimStatus("claim-revoked-owner", "revoked", NOW + 2_000, "admin@example.com"), true);
+
+  assert.ok(
+    !(await published()).includes("ff47-revoked"),
+    "revoking ownership must withdraw the content without a second takedown step",
+  );
+  assert.equal(await repository.ownsCircle(owner, "ff47", "ff47-revoked"), false, "the former owner cannot write again");
+
+  // Withdrawing the projection is not a delete: the row and its history stay so
+  // the audit trail and one level of undo survive an ownership correction.
+  const stored = await repository.getOverride("ff47", "ff47-revoked");
+  assert.equal(stored.status, "live", "the row is untouched; only the projection dropped it");
+  assert.equal(JSON.parse(stored.fields_json).saleInfo, "由錯誤的人填寫");
+
+  // The point of revoking is to let the right circle take over.
+  const rightful = await repository.upsertAccount("rightful@example.com", NOW + 3_000);
+  await repository.createClaim({
+    id: "claim-rightful", accountId: rightful, eventId: "ff47", circleId: "ff47-revoked",
+    circleNameKey: "revoked", circleNameAtClaim: "Revoked", sourceRowAtClaim: 1,
+    status: "pending", method: null, targetUrl: null, challengeTokenHash: null,
+    challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now: NOW + 3_000,
+  });
+  assert.equal(await repository.markClaimVerified("claim-rightful", "admin", NOW + 4_000, "admin@example.com"), true);
+  assert.ok((await published()).includes("ff47-revoked"), "the new owner's circle publishes through the normal path");
 });
 
 test("a content-only save leaves the circle's retention choice alone", async () => {
@@ -230,6 +284,7 @@ test("a content-only save leaves the circle's retention choice alone", async () 
 });
 
 test("a row waiting to be purged is still published", async () => {
+  await verifiedOwner("ff47-waiting", "waiting-owner");
   await repository.putOverride({
     eventId: "ff47", circleId: "ff47-waiting", fieldsJson: JSON.stringify({ saleInfo: "會在 90 天後消失" }),
     updatedBy: "account-1", now: NOW + 4_000, retention: { choice: "purge", expiresAt: NOW + 90_000 },

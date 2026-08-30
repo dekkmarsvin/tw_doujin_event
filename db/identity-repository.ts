@@ -614,10 +614,21 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     // After the event, a circle that opted out is simply absent from the query,
     // so its content never reaches the published document at all.
-    const hiddenClause = phase === "after" ? " AND post_event_hidden = 0" : "";
+    const hiddenClause = phase === "after" ? " AND o.post_event_hidden = 0" : "";
+    // Circle-owned content is published as *this circle's own* supplement, so
+    // it is only public while someone actually holds the circle. Ownership is
+    // the live predicate rather than a flag copied onto the row: revoking a
+    // claim then has one effect in one place, and no caller has to remember a
+    // second "take it down" step. The row, its previous value and the audit
+    // trail all stay put — this withdraws the projection, not the record.
     const result = await database.prepare(
-      `SELECT circle_id, fields_json, status, updated_at FROM circle_overrides
-       WHERE event_id = ?1 AND status = 'live'${hiddenClause} ORDER BY circle_id ASC`,
+      `SELECT o.circle_id, o.fields_json, o.status, o.updated_at FROM circle_overrides o
+       WHERE o.event_id = ?1 AND o.status = 'live'${hiddenClause}
+         AND EXISTS (
+           SELECT 1 FROM circle_claims c
+           WHERE c.event_id = o.event_id AND c.circle_id = o.circle_id AND c.status = 'verified'
+         )
+       ORDER BY o.circle_id ASC`,
     ).bind(eventId).all<OverrideRow>();
     return result.results;
   }
