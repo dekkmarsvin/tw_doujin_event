@@ -1635,7 +1635,7 @@ export function createCirclePortalHandlers({
     const tentativeName = typeof body?.tentativeName === "string" ? body.tentativeName.normalize("NFKC").trim() : "";
     const ownerEmail = typeof body?.ownerEmail === "string" ? normalizeEmail(body.ownerEmail) : "";
     if (!tentativeName || tentativeName.length > 120 || !isEmailShaped(ownerEmail)) {
-      return json({ error: "暫定活動名稱與有效的 Owner email 為必填。" }, 400);
+      return json({ error: "暫定活動名稱與有效的負責人 Email 為必填。" }, 400);
     }
     const ipHash = await clientIpHash(request);
     if (!await organizerInvitationAllowed(ownerEmail, gate.session.accountId, ipHash, config.now())) {
@@ -1648,7 +1648,7 @@ export function createCirclePortalHandlers({
       createdByAccountId: gate.session.accountId,
       draftJson: JSON.stringify(draft), now: config.now(),
     });
-    if (!created.ok) return json({ error: "無法建立活動入口，請重新整理後再試。" }, 409);
+    if (!created.ok) return json({ error: "無法建立活動，請重新整理後再試。" }, 409);
     await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId);
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
@@ -1681,7 +1681,7 @@ export function createCirclePortalHandlers({
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const [revisions, publication, workspace, workspaceValidation] = await Promise.all([
       repository.listOrganizerCandidateRevisions(candidateId),
       repository.getLatestOrganizerPublicationJob(candidateId),
@@ -1761,7 +1761,7 @@ export function createCirclePortalHandlers({
     const expectedVersion = body?.expectedVersion;
     const serialized = serializeOrganizerEventDraft(body?.draft);
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !serialized) {
-      return json({ error: "expectedVersion 或活動草稿格式無效。" }, 400);
+      return json({ error: "活動資料格式無效，請重新載入後再試。" }, 400);
     }
     const result = await repository.saveOrganizerCandidate({
       candidateId, actorAccountId: access.current.accountId,
@@ -1792,7 +1792,7 @@ export function createCirclePortalHandlers({
     if (!access.ok) return access.response;
     const body = await readJson(request);
     if (!isOrganizerGuidedTask(body?.guidedTask) || !isOrganizerWorkspaceSection(body?.lastSection)) {
-      return json({ error: "guidedTask 或 lastSection 格式無效。" }, 400);
+      return json({ error: "無法記住目前位置，請重新載入。" }, 400);
     }
     const saved = await repository.saveOrganizerWorkspacePreference({
       candidateId,
@@ -1812,7 +1812,7 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) {
-      return json({ error: "expectedVersion 格式無效。" }, 400);
+      return json({ error: "版本資訊無效，請重新載入。" }, 400);
     }
     const existingWorkspace = await repository.getOrganizerWorkspace(candidateId, access.current.accountId);
     if (!existingWorkspace) return json({ error: "找不到活動。" }, 404);
@@ -1829,9 +1829,9 @@ export function createCirclePortalHandlers({
       return json({ error: "草稿已被其他人更新，請重新載入。", conflict: { currentVersion: candidate.current_version } }, 409);
     }
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const issues = organizerOnboardingIssues(draft);
-    if (issues.length > 0) return json({ error: "請先完成活動與場館基礎設定。", issues }, 422);
+    if (issues.length > 0) return json({ error: "請先完成活動與場館基本設定。", issues }, 422);
     const result = await repository.completeOrganizerOnboarding({
       candidateId,
       actorAccountId: access.current.accountId,
@@ -1856,7 +1856,7 @@ export function createCirclePortalHandlers({
 
   async function validateOrganizerWorkspace(candidateId: string, draft: ReturnType<typeof parseOrganizerEventDraft>) {
     if (!draft) return { issues: [{
-      severity: "error", step: "event", code: "invalid_draft", message: "候選活動資料格式無效。",
+      severity: "error", step: "event", code: "invalid_draft", message: "活動資料格式無效，請聯絡網站管理者。",
     }] satisfies OrganizerValidationIssue[], imported: null, maps: [], contents: new Map<string, string>() };
     const [imported, maps] = await Promise.all([
       repository.getOrganizerImport(candidateId), repository.listOrganizerMapDrafts(candidateId),
@@ -1917,12 +1917,12 @@ export function createCirclePortalHandlers({
       ? body.source as Record<string, unknown> : null;
     const rows = Array.isArray(body?.rows) ? body.rows : null;
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !source || !rows) {
-      return json({ error: "expectedVersion、來源 metadata 與正規化資料列為必填。" }, 400);
+      return json({ error: "匯入資料不完整，請重新整理後再試一次。" }, 400);
     }
     // A well-formed import that is merely too long deserves its own message:
     // the organizer can act on the row cap, but not on a sentence that also
     // covers a missing expectedVersion.
-    if (rows.length > 20_000) return json({ error: "正規化資料列最多 20,000 筆。" }, 400);
+    if (rows.length > 20_000) return json({ error: "匯入資料最多 20,000 列。" }, 400);
     const fileName = typeof source.fileName === "string" ? source.fileName.normalize("NFKC").trim() : "";
     const worksheet = source.worksheet === null ? null
       : typeof source.worksheet === "string" ? source.worksheet.normalize("NFKC").trim() : undefined;
@@ -1933,13 +1933,13 @@ export function createCirclePortalHandlers({
     if (!fileName || fileName.length > 255 || worksheet === undefined || (worksheet?.length ?? 0) > 120
       || !/^[0-9a-f]{64}$/u.test(sha256) || !sourceDescription || sourceDescription.length > 500
       || !mappingJson || new TextEncoder().encode(mappingJson).byteLength > 100_000) {
-      return json({ error: "匯入來源 metadata 格式無效。" }, 400);
+      return json({ error: "匯入來源資訊格式無效。" }, 400);
     }
 
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const days = new Set(draft.event.days.map((day) => day.id));
     const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, new Set(assignment.areaIds)]));
     const normalized: Array<{
@@ -1948,7 +1948,7 @@ export function createCirclePortalHandlers({
     }> = [];
     const placements = new Set<string>();
     for (const value of rows) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "匯入資料列格式無效。" }, 400);
+      if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "匯入資料格式無效。" }, 400);
       const row = value as Record<string, unknown>;
       const sourceRow = row.sourceRow;
       const dayId = typeof row.dayId === "string" ? row.dayId.normalize("NFKC").trim() : "";
@@ -1974,7 +1974,7 @@ export function createCirclePortalHandlers({
     // hold. Refuse that before it reaches the database rather than failing on
     // an opaque storage error partway through the organizer's main task.
     if (new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024) {
-      return json({ error: "匯入資料量超過 8 MiB，請縮短欄位內容或確認匯入範圍是同一場活動。" }, 413);
+      return json({ error: "匯入資料超過 8 MB，請縮短欄位內容或確認匯入範圍是同一場活動。" }, 413);
     }
     const result = await repository.replaceOrganizerImport({
       candidateId, actorAccountId: access.current.accountId, expectedVersion: expectedVersion as number,
@@ -2046,10 +2046,10 @@ export function createCirclePortalHandlers({
     const venueSpaceId = typeof body?.venueSpaceId === "string" ? body.venueSpaceId.normalize("NFKC").trim() : "";
     const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout });
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !content) {
-      return json({ error: "expectedVersion、period、venue-space 與有效地圖為必填。" }, 400);
+      return json({ error: "活動日、場館空間與地圖內容為必填。" }, 400);
     }
     const scope = await candidateMapScope(candidateId, periodKey, venueSpaceId);
-    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "地圖 scope 或 template 不屬於此候選活動。" }, 422);
+    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "這張地圖的活動日、場館空間或地圖模板不屬於此活動。" }, 422);
     const draftId = crypto.randomUUID();
     const result = await repository.createOrganizerMapDraft({
       id: draftId, candidateId, periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
@@ -2078,12 +2078,12 @@ export function createCirclePortalHandlers({
     const expectedMapRevision = body?.expectedMapRevision;
     const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout });
     if (!Number.isSafeInteger(expectedVersion) || !Number.isSafeInteger(expectedMapRevision) || !content) {
-      return json({ error: "expectedVersion、expectedMapRevision 與有效地圖為必填。" }, 400);
+      return json({ error: "地圖版本或內容無效，請重新載入。" }, 400);
     }
     const current = await repository.getOrganizerMapDraft(candidateId, draftId);
     if (!current) return json({ error: "找不到地圖草稿。" }, 404);
     const scope = await candidateMapScope(candidateId, current.period_key, current.venue_space_id);
-    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "地圖 scope 或 template 不屬於此候選活動。" }, 422);
+    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "這張地圖的活動日、場館空間或地圖模板不屬於此活動。" }, 422);
     const result = await repository.saveOrganizerMapDraft({
       candidateId, draftId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number, expectedMapRevision: expectedMapRevision as number,
@@ -2105,7 +2105,7 @@ export function createCirclePortalHandlers({
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const { issues } = await validateOrganizerWorkspace(candidateId, draft);
     const ok = issues.every((issue) => issue.severity !== "error");
     if (ok && !await repository.markOrganizerValidated(candidateId, candidate.current_version, config.now())) {
@@ -2125,7 +2125,7 @@ export function createCirclePortalHandlers({
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const { issues, imported, maps, contents } = await validateOrganizerWorkspace(candidateId, draft);
     const mapArtifacts = maps.map((map) => {
       const stored = contents.get(map.id);
@@ -2159,12 +2159,12 @@ export function createCirclePortalHandlers({
     const action = body?.action;
     const role = body?.role === "owner" ? "owner" : "editor";
     if (!isEmailShaped(email) || (action !== "invite" && action !== "revoke")) {
-      return json({ error: "email 與 action（invite／revoke）為必填。" }, 400);
+      return json({ error: "Email 與動作（邀請／移除）為必填。" }, 400);
     }
-    if (role === "owner" && !access.admin) return json({ error: "只有全域管理者可以增減 Owner。" }, 403);
-    if (role === "editor" && access.role !== "owner") return json({ error: "只有 Owner 可以管理 Editor。" }, 403);
+    if (role === "owner" && !access.admin) return json({ error: "只有網站管理者可以增減負責人。" }, 403);
+    if (role === "editor" && access.role !== "owner") return json({ error: "只有負責人可以管理協作者。" }, 403);
     if (role === "owner" && config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
-      return json({ error: "Owner 權限異動需要重新登入。" }, 401);
+      return json({ error: "變更負責人需要重新登入。" }, 401);
     }
     const ipHash = await clientIpHash(request);
     if (action === "invite" && !await organizerInvitationAllowed(email, access.current.accountId, ipHash, config.now())) {
@@ -2179,7 +2179,7 @@ export function createCirclePortalHandlers({
         role: "editor", action, now: config.now(),
       });
     if (!result.ok) {
-      const error = result.reason === "forbidden" ? "只有 Owner 可以管理 Editor。"
+      const error = result.reason === "forbidden" ? "只有負責人可以管理協作者。"
         : result.reason === "last_owner" ? "每個活動至少需要一位 Owner。" : "協作者狀態沒有變更。";
       return json({ error }, result.reason === "forbidden" ? 403 : 409);
     }
@@ -2196,21 +2196,21 @@ export function createCirclePortalHandlers({
   async function submitOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if (access.role !== "owner") return json({ error: "只有 Owner 可以送審。" }, 403);
+    if (access.role !== "owner") return json({ error: "只有負責人可以送審。" }, 403);
     if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
       return json({ error: "送審需要重新登入。" }, 401);
     }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
-    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) return json({ error: "expectedVersion 無效。" }, 400);
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) return json({ error: "版本資訊無效，請重新載入。" }, 400);
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     // The snapshot is hashed from the same bytes validation just read, so a
     // second load cannot let the two disagree about what was approved.
     const { issues, imported, maps, contents } = await validateOrganizerWorkspace(candidateId, draft);
-    if (issues.some((issue) => issue.severity === "error")) return json({ error: "請先修正驗證錯誤。", issues }, 422);
+    if (issues.some((issue) => issue.severity === "error")) return json({ error: "請先修正待修正項目。", issues }, 422);
     const mapSnapshots = maps.map((map) => {
       const stored = contents.get(map.id);
       return {
@@ -2241,12 +2241,12 @@ export function createCirclePortalHandlers({
       candidateId, candidateVersion: expectedVersion as number, actorAccountId: access.current.accountId,
       snapshotJson, sha256: revisionHash, now: config.now(),
     });
-    if (!snapshot.ok) return json({ error: "無法固定送審 snapshot；請重新載入。", conflict: snapshot }, 409);
+    if (!snapshot.ok) return json({ error: "無法建立送審版本，請重新載入。", conflict: snapshot }, 409);
     const result = await repository.submitOrganizerCandidate({
       candidateId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number, now: config.now(),
     });
-    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有 Owner 可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
+    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有負責人可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId, actorRole: "organizer_owner",
       action: "organizer_event.submitted", subjectType: "organizer_event", subjectId: candidateId,
@@ -2264,16 +2264,16 @@ export function createCirclePortalHandlers({
     const note = typeof body?.note === "string" ? body.note.normalize("NFKC").trim().slice(0, 1000) : "";
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1
       || (decision !== "approve" && decision !== "changes_requested")) {
-      return json({ error: "expectedVersion 與 decision（approve／changes_requested）為必填。" }, 400);
+      return json({ error: "版本與審閱結果（核准／要求修改）為必填。" }, 400);
     }
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, expectedVersion as number);
-    if (!snapshot) return json({ error: "找不到此 revision 的 immutable submission snapshot。" }, 409);
+    if (!snapshot) return json({ error: "找不到這一版的送審內容。" }, 409);
     if (decision === "approve") {
       const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
       const { issues } = await validateOrganizerWorkspace(candidateId, draft);
-      if (issues.some((issue) => issue.severity === "error")) return json({ error: "候選活動仍有驗證錯誤。", issues }, 422);
+      if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
     }
     const result = await repository.reviewOrganizerCandidate({
       candidateId, expectedVersion: expectedVersion as number, decision,
@@ -2309,7 +2309,7 @@ export function createCirclePortalHandlers({
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
     if ((config.organizerPublicationMode ?? "disabled") === "disabled") {
-      return json({ error: "Organizer 發布功能尚未啟用。" }, 503);
+      return json({ error: "發布功能尚未啟用。" }, 503);
     }
     const result = await repository.retryOrganizerPublicationJob({ jobId, now: config.now() });
     if (!result.ok) {

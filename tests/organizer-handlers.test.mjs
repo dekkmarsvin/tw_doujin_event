@@ -410,7 +410,7 @@ test("import API tells the organizer which limit rejected the batch", async () =
     ownerCookie,
   ), candidateId);
   assert.equal(tooManyRows.status, 400);
-  assert.equal((await tooManyRows.json()).error, "正規化資料列最多 20,000 筆。");
+  assert.match((await tooManyRows.json()).error, /20,000/u);
 
   // 20,000 rows of maximum-length names stay under the row cap but blow past
   // the byte cap, so this is the only request that reaches the 413.

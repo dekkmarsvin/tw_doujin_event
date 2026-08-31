@@ -37,11 +37,11 @@ test("organizer ships the ADR-0047 guided station, binder readiness, and the sha
     readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(app, /引導式任務站/);
-  assert.match(app, /活動識別與來源/);
-  assert.match(app, /查看全部任務/);
+  assert.match(app, /function GuidedTaskStation/);
+  assert.match(app, /identity_source:/);
+  assert.match(app, /onClick=\{onShowAll\}/);
   assert.match(app, /已完成 \{completed\}\/3/);
-  assert.match(app, /建置狀態/);
+  assert.match(app, /function ReadinessRail/);
   assert.match(app, /readiness\.completed/);
   assert.match(app, /儲存並切換/);
   assert.match(app, />放棄</);

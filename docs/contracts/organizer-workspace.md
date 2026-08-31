@@ -19,7 +19,7 @@
 
 - 新候選活動先進入三項真實資料任務：活動識別與官方來源、活動日期、場館空間與展區。任務進度直接篩選 `validateOrganizerEventDraft()` 的 issue，不另有一套 Wizard 驗證。
 - 三項基礎設定通過後，`POST /api/organizer/events/:candidateId/workspace/complete-onboarding` 以 `expectedVersion` 再次檢查已保存草稿，成功後永久進入活動建置冊。成功回應遺失後可用任何舊版本重送，仍會冪等回傳既有 binder 狀態；後續資料錯誤只顯示為需要處理，不會退回引導。
-- 「查看全部任務」不完成 onboarding；它只暫時打開六個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
+- 「查看全部項目」不完成 onboarding；它只暫時打開六個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
 - 表單有未儲存變更時，切換活動、引導任務或建置冊區段會提供「儲存並切換／放棄／取消」；離開瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
 - 建置冊直接開放活動、場館與展區、攤位匯入、地圖、驗證與預覽、送審與發布六區。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。
@@ -53,6 +53,8 @@ draft → submitted → approved → publishing → published
 | `event` | `id`、`name`、`days[]` | `id` 只允許小寫英數與連字號；每個活動日需要 id、名稱與 `YYYY-MM-DD` 日期，id 不得重複 |
 | `venue.assignments` | `venueId`、`venueSpaceId`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複，`areaIds` 不得為空 |
 | `officialSource` | `label`、`url` | 來源說明必填；網址若填寫必須是 HTTPS |
+
+新增活動日時，表單預設第一日為作者當地的今天，之後每一日為最後一個有日期的活動日加一天；新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
 ## 攤位匯入
 

@@ -73,6 +73,23 @@ export function createEmptyOrganizerEventDraft(tentativeName: string): Organizer
   };
 }
 
+function localDate(now: Date) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** A new day continues the run: the day after the last dated day, or the
+ * author's own today when the draft has no dated day yet. */
+export function nextOrganizerEventDay(days: readonly OrganizerEventDay[], now: Date): OrganizerEventDay {
+  const taken = new Set(days.map((day) => day.id));
+  let ordinal = 1;
+  while (taken.has(String(ordinal))) ordinal += 1;
+  const last = days.filter((day) => DATE.test(day.date) && !Number.isNaN(Date.parse(`${day.date}T00:00:00Z`))).at(-1);
+  const date = last
+    ? new Date(Date.parse(`${last.date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)
+    : localDate(now);
+  return { id: String(ordinal), label: `第 ${ordinal} 日`, date };
+}
+
 export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | null {
   if (!record(value) || value.schema !== "organizer-event-draft/1"
     || !record(value.event) || !record(value.venue) || !record(value.officialSource)
@@ -116,13 +133,13 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
   const issues: OrganizerValidationIssue[] = [];
   const add = (issue: OrganizerValidationIssue) => issues.push(issue);
   if (!draft.event.name) add({ severity: "error", step: "event", code: "missing_name", target: "event.name", message: "活動名稱為必填。" });
-  if (!draft.event.id) add({ severity: "error", step: "event", code: "missing_event_id", target: "event.id", message: "eventId 為必填。" });
-  else if (!ID.test(draft.event.id)) add({ severity: "error", step: "event", code: "invalid_event_id", target: "event.id", message: "eventId 只能使用小寫英數字與連字號。" });
+  if (!draft.event.id) add({ severity: "error", step: "event", code: "missing_event_id", target: "event.id", message: "活動代碼為必填。" });
+  else if (!ID.test(draft.event.id)) add({ severity: "error", step: "event", code: "invalid_event_id", target: "event.id", message: "活動代碼只能使用小寫英數字與連字號。" });
   if (draft.event.days.length === 0) add({ severity: "error", step: "event", code: "missing_days", target: "event.days", message: "至少需要一個活動日。" });
   const dayIds = new Set<string>();
   draft.event.days.forEach((day, row) => {
     if (!ID.test(day.id) || !day.label || !DATE.test(day.date) || Number.isNaN(Date.parse(`${day.date}T00:00:00Z`))) {
-      add({ severity: "error", step: "event", code: "invalid_day", row: row + 1, target: `event.days.${row}`, message: "活動日需要有效的 id、名稱與 YYYY-MM-DD 日期。" });
+      add({ severity: "error", step: "event", code: "invalid_day", row: row + 1, target: `event.days.${row}`, message: "活動日需要代碼、名稱與日期。" });
     }
     if (dayIds.has(day.id)) add({ severity: "error", step: "event", code: "duplicate_day", row: row + 1, target: `event.days.${row}.id`, message: `活動日 ${day.id} 重複。` });
     dayIds.add(day.id);

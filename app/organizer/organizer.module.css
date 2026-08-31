@@ -114,6 +114,8 @@
 .full { grid-column: 1 / -1; }
 .page :global(label small) { color: var(--muted); font-weight: 400; }
 .inlineFields { display: grid; grid-template-columns: .55fr 1fr 1fr auto; gap: 8px; margin-top: 9px; }
+.fieldHeads { margin-top: 12px; }
+.fieldHeads small { color: var(--muted); font-size: 10px; }
 .inlineEmpty { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 14px; background: var(--paper); }
 .inlineEmpty p { margin: 0; }
 .venueCard { display: grid; grid-template-columns: 1fr 1fr 1.35fr 1.15fr auto; gap: 12px; align-items: end; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }

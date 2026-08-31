@@ -98,7 +98,7 @@ export function prepareOrganizerImport(input: {
   mapping: OrganizerImportMapping;
 }) {
   if (!Number.isSafeInteger(input.headerRow) || input.headerRow < 1 || input.headerRow >= input.rows.length) {
-    throw new Error("表頭列必須位於資料列之前。");
+    throw new Error("標題列必須在資料列前面。");
   }
   const issues: OrganizerValidationIssue[] = [];
   const rows: OrganizerNormalizedImportRow[] = [];
@@ -112,17 +112,17 @@ export function prepareOrganizerImport(input: {
     const circleName = mapped(source, input.mapping.circleName);
     const stableKey = mapped(source, input.mapping.stableKey) || null;
     const missing = [
-      [dayId, "missing_day", "day"],
-      [venueSpaceId, "missing_venue_space", "venue-space"],
-      [areaId, "missing_area", "area"],
-      [boothCode, "missing_booth", "booth code"],
-      [circleName, "missing_circle", "circle name"],
+      [dayId, "missing_day", "活動日"],
+      [venueSpaceId, "missing_venue_space", "場館空間"],
+      [areaId, "missing_area", "展區"],
+      [boothCode, "missing_booth", "攤位代碼"],
+      [circleName, "missing_circle", "社團名稱"],
     ] as const;
     let valid = true;
     for (const [value, code, label] of missing) {
       if (value) continue;
       valid = false;
-      issues.push({ severity: "error", step: "import", code, row: source.sourceRow, message: `${label} 無法由欄位或固定值取得。` });
+      issues.push({ severity: "error", step: "import", code, row: source.sourceRow, message: `找不到${label}，請確認欄位對應。` });
     }
     if (!valid) continue;
 

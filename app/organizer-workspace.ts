@@ -75,7 +75,7 @@ export function getOrganizerWorkspacePrerequisiteIssues(input: {
           step: "map",
           code: "missing_map",
           target: `${day.id}/${assignment.venueSpaceId}`,
-          message: `缺少 ${day.label} × ${assignment.venueSpaceId} 地圖。`,
+          message: `缺少 ${day.label}・${assignment.venueSpaceId} 的地圖。`,
         });
       }
     }
@@ -136,7 +136,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     blockers.push({
       section: "validate",
       code: "validation_required",
-      message: "目前 revision 尚未通過完整驗證。",
+      message: "目前這一版尚未通過檢查。",
     });
   }
   if (!reviewComplete) {
