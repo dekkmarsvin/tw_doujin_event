@@ -195,6 +195,30 @@ export function createCirclePortalHandlers({
     return session ?? null;
   }
 
+  /**
+   * Whether this deployment serves the event the request named.
+   *
+   * `publishedEvent` is the same lookup the public overlay uses — "this
+   * deployment actually has the event's data" — so the control plane and the
+   * reader agree on which events exist without a second registry. Omitted means
+   * a single-event deployment, where the configured event is the only one.
+   */
+  async function servesRequestedEvent() {
+    return config.publishedEvent ? !!(await config.publishedEvent(config.eventId)) : true;
+  }
+
+  /**
+   * Every event-scoped route answers 404 for an event this deployment does not
+   * serve, rather than reaching a catalog read that throws. It runs before the
+   * session check on purpose: which events exist is not a secret, and a claim
+   * for one event must never be answered with another event's data.
+   */
+  function eventScoped<Rest extends unknown[]>(handler: (request: Request, ...rest: Rest) => Promise<Response>) {
+    return async (request: Request, ...rest: Rest) => (await servesRequestedEvent())
+      ? handler(request, ...rest)
+      : json({ error: "找不到這個活動。" }, 404);
+  }
+
   /** The public half of the Turnstile pair, so the sign-in page can render it. */
   function authConfig() {
     return json({ turnstileSitekey: turnstileSitekey() });
@@ -373,6 +397,7 @@ export function createCirclePortalHandlers({
     if (!current) return json({ error: "尚未登入。" }, 401);
     const claims = await repository.listClaimsForAccount(current.accountId, config.eventId);
     return json({
+      eventId: config.eventId,
       claims: claims.map((claim) => ({
         id: claim.id,
         circleId: claim.circle_id,
@@ -503,12 +528,23 @@ export function createCirclePortalHandlers({
    * resubmitting issues a new code, which is why no admin has to be involved in
    * the ordinary case and why no plaintext challenge is kept anywhere.
    */
+  /**
+   * A claim id is global; the request's authority is not. Every claim-addressed
+   * route therefore checks the row's own event, not just who owns it: without
+   * it an id from event A could be acted on through event B's control plane,
+   * which is the isolation ADR-0043 exists for. Another event's claim reads as
+   * absent, the same as an id that does not exist.
+   */
+  function claimInScope<Claim extends { event_id: string }>(claim: Claim | null): claim is Claim {
+    return !!claim && claim.event_id === config.eventId;
+  }
+
   async function withdrawClaim(request: Request, claimId: string) {
     const current = await requireSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const claim = await repository.getClaim(claimId);
-    if (!claim || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
+    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
     if (claim.status !== "pending") {
       return json({ error: "只有審核中的認領可以撤回。" }, 409);
     }
@@ -530,7 +566,7 @@ export function createCirclePortalHandlers({
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const claim = await repository.getClaim(claimId);
-    if (!claim || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
+    if (!claimInScope(claim) || claim.account_id !== current.accountId) return json({ error: "找不到這筆認領。" }, 404);
     if (claim.status !== "pending") return json({ error: "這筆認領已經處理過了。" }, 409);
     if (!claim.challenge_token_hash || !claim.target_url) return json({ error: "這筆認領需要人工審核。" }, 409);
 
@@ -1390,7 +1426,10 @@ export function createCirclePortalHandlers({
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
     const claims = await repository.listClaimsByStatus(config.eventId, "pending");
+    // The reviewer is looking at one event's queue; two events can list the same
+    // circle name, so the answer says which one it came from.
     return json({
+      eventId: config.eventId,
       claims: claims.map((claim) => ({
         id: claim.id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
         evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note,
@@ -1411,7 +1450,10 @@ export function createCirclePortalHandlers({
     }
 
     const claim = await repository.getClaim(claimId);
-    if (!claim) return json({ error: "找不到這筆認領。" }, 404);
+    // A revoke rebuilds this event's public document. Deciding another event's
+    // claim from here would withdraw ownership in that event while leaving its
+    // document — and so the revoked content — standing.
+    if (!claimInScope(claim)) return json({ error: "找不到這筆認領。" }, 404);
 
     const now = config.now();
     const method: ClaimMethod = "admin";
@@ -2219,19 +2261,46 @@ export function createCirclePortalHandlers({
   }
 
   return {
+    // Account-scoped: the identity is the same in every event, so these answer
+    // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
-    listClaims, createClaim, withdrawClaim, runChallenge, searchCatalog,
-    getMyOverride, putOverride, uploadThumbnail, deleteMyOverride, previewOverride, setPostEventVisibility,
-    adminListClaims, adminDecideClaim, adminTakedown,
-    adminListAdmins, adminManageAdmins, adminDisableAccount,
-    adminManageMapContributor, adminListStaleMapDrafts,
-    listMyMapDrafts, getMapDraft, createMapDraft, updateMapDraft, submitMapDraft,
-    uploadMapDraftFile, readMapDraftFile,
-    adminListMapDrafts, adminReviewMapDraft, adminExportMapDraft, postMapDraftComment,
+    adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
+    // Candidate-scoped: an organizer candidate is addressed by candidateId and
+    // exists before any event is published, so `eventScoped` — which demands a
+    // published event this deployment serves — would refuse every one of them.
+    // Authority comes from the candidate's own grant, checked in each handler.
     adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
     submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication,
+    // Event-scoped: each answers only for the event the request named.
+    listClaims: eventScoped(listClaims),
+    createClaim: eventScoped(createClaim),
+    withdrawClaim: eventScoped(withdrawClaim),
+    runChallenge: eventScoped(runChallenge),
+    searchCatalog: eventScoped(searchCatalog),
+    getMyOverride: eventScoped(getMyOverride),
+    putOverride: eventScoped(putOverride),
+    uploadThumbnail: eventScoped(uploadThumbnail),
+    deleteMyOverride: eventScoped(deleteMyOverride),
+    previewOverride: eventScoped(previewOverride),
+    setPostEventVisibility: eventScoped(setPostEventVisibility),
+    adminListClaims: eventScoped(adminListClaims),
+    adminDecideClaim: eventScoped(adminDecideClaim),
+    adminTakedown: eventScoped(adminTakedown),
+    adminListStaleMapDrafts: eventScoped(adminListStaleMapDrafts),
+    listMyMapDrafts: eventScoped(listMyMapDrafts),
+    getMapDraft: eventScoped(getMapDraft),
+    createMapDraft: eventScoped(createMapDraft),
+    updateMapDraft: eventScoped(updateMapDraft),
+    submitMapDraft: eventScoped(submitMapDraft),
+    uploadMapDraftFile: eventScoped(uploadMapDraftFile),
+    readMapDraftFile: eventScoped(readMapDraftFile),
+    adminListMapDrafts: eventScoped(adminListMapDrafts),
+    adminReviewMapDraft: eventScoped(adminReviewMapDraft),
+    adminExportMapDraft: eventScoped(adminExportMapDraft),
+    postMapDraftComment: eventScoped(postMapDraftComment),
+    // Names its own event and validates it, so it is not scoped by the request.
     publicOverrides,
   };
 }

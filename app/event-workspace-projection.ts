@@ -1,5 +1,5 @@
 import type { MapSlotView } from "./accessible-event-map-renderer";
-import { circleSearchText, type CircleViewRecord } from "./circle-records";
+import { circleSearchText, placementStatusLabel, type CircleViewRecord } from "./circle-records";
 import { buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import type { EventDefinition } from "./event-catalog";
@@ -33,6 +33,16 @@ type ProjectionInput = {
   selectedRecordId: string | null;
 };
 
+/**
+ * Where a moved placement now points: the same circle's live booth in this
+ * event. The catalog carries no forwarding field, so a move with no active
+ * placement simply has no destination and the reader is told that much.
+ */
+function movedDestination(record: CircleViewRecord, eventRecords: CircleViewRecord[]) {
+  const live = eventRecords.filter((item) => item.circle.id === record.circle.id && item.placement.status === "active");
+  return live.find((item) => item.day === record.day) ?? live[0] ?? null;
+}
+
 export function projectEventWorkspace(input: ProjectionInput) {
   const { event, records, recordsById, recordsByCircleId, planning, day, area, genre, query, favoriteOnly, advancedSearch, planningDisplay, navigationMode, selectedRecordId } = input;
   const eventRecords = records.filter((record) => record.placement.eventId === event.id);
@@ -46,11 +56,24 @@ export function projectEventWorkspace(input: ProjectionInput) {
     .filter((item) => item.eventId === event.id && item.day === day)
     .sort((left, right) => left.routeOrder - right.routeOrder);
   const plansById = new Map(dayPlan.map((entry) => [entry.circleId, entry]));
-  const dayRecordsByCircleId = new Map(eventRecords.filter((record) => record.day === day).map((record) => [record.circle.id, record] as const));
+  // A circle that moved holds both the retired booth and its current one on the
+  // same day, so the itinerary and the next stop have to resolve to the booth a
+  // reader can still walk to.
+  const dayRecordsByCircleId = new Map<string, CircleViewRecord>();
+  eventRecords.filter((record) => record.day === day).forEach((record) => {
+    const current = dayRecordsByCircleId.get(record.circle.id);
+    if (current?.placement.status === "active" && record.placement.status !== "active") return;
+    dayRecordsByCircleId.set(record.circle.id, record);
+  });
   const selectedCandidate = recordsById.get(selectedRecordId ?? "") ?? null;
   const selected = selectedCandidate?.placement.eventId === event.id ? selectedCandidate : null;
   const selectedFavorite = selected ? favorites.find((item) => item.circleId === selected.circle.id) ?? null : null;
   const selectedPlan = selected ? plansById.get(selected.circle.id) ?? null : null;
+  // Only where the organizer's own data already carries the new booth. Nothing
+  // here guesses a destination for a placement that has none.
+  const selectedMovedDestination = selected?.placement.status === "moved"
+    ? movedDestination(selected, eventRecords)
+    : null;
   const nextEntry = dayPlan.find((entry) => entry.status === "next") ?? null;
   const nextRecord = nextEntry ? dayRecordsByCircleId.get(nextEntry.circleId) ?? null : null;
   const navigationTargetEntry = nextEntry ?? dayPlan.find((entry) => entry.status !== "visited") ?? null;
@@ -104,7 +127,16 @@ export function projectEventWorkspace(input: ProjectionInput) {
     const representative = marker.records[0];
     const planEntries = marker.records.flatMap((record) => plansById.get(record.circle.id) ?? []);
     const favorite = marker.records.some((record) => favoriteIds.has(record.circle.id));
+    // A booth handed over keeps an active placement, and that booth is still a
+    // destination; only a code where nothing is active reads as retired.
+    const retired = marker.records.every((record) => record.placement.status !== "active")
+      ? marker.records[0].placement.status as "cancelled" | "moved"
+      : undefined;
+    // Only a wholly retired booth gets slot-level wording: on a booth someone
+    // else took over, one label for two circles would say nothing usable.
+    const retiredLabels = retired ? [placementStatusLabel(retired)] : [];
     const statusLabels = [
+      ...retiredLabels,
       favorite ? "已收藏" : "",
       planEntries.some((entry) => entry.status === "next") ? "下一站" : "",
       planEntries.some((entry) => entry.status === "visited") ? "已走訪" : "",
@@ -112,7 +144,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
     ].filter(Boolean);
     return [marker.code, {
       tone: representative.tone,
-      label: marker.records.map((record) => record.name).join("、"),
+      label: [marker.records.map((record) => record.name).join("、"), ...retiredLabels].join("，"),
       ariaLabel: [marker.code, marker.records.map((record) => record.name).join("、"), ...statusLabels,
         ...new Set(marker.records.map((record) => record.genre).filter((value) => value !== event.genres[0]))].join("，"),
       selected: selected?.day === day && selected.code === marker.code,
@@ -120,6 +152,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
       planned: planEntries.length > 0,
       next: planEntries.some((entry) => entry.status === "next"),
       visited: planEntries.some((entry) => entry.status === "visited"),
+      retired,
       thumbnailUrl: representative.circle.media[0]?.url,
     }];
   }));
@@ -141,7 +174,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
   ];
   return {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
-    selected, selectedFavorite, selectedPlan, nextEntry, nextRecord, navigationTargetRecord,
+    selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextEntry, nextRecord, navigationTargetRecord,
     visitedCount, sharedRecords, filtered, mapRecords, workTopicSuggestions, matchReasonsByRecordId, genreCounts,
     markers, markersByCode, slots, activeFilterDescriptors: filters,
   };

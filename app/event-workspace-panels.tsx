@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import type { MouseEvent } from "react";
+import { placementStatusLabel } from "./circle-records";
 import type { CircleCatalogStatus, CircleMedia, CircleViewRecord, SourceContentType } from "./circle-records";
 import type { CircleMatchReason } from "./circle-search";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
@@ -89,6 +90,7 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
             <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{circleSummary.length > 0 && <small>{circleSummary.join(" · ")}</small>}{showsCircleAuthoredContent && <small className={styles.sourceHint}>由社團填寫</small>}{reasons.length > 0 && <span className={styles.matchReasons}>{reasons.map((reason) => <em key={reason.id}>{reason.label}</em>)}</span>}</>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
+            {record.placement.status !== "active" && <span className={styles.retiredState}>{placementStatusLabel(record.placement.status)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
           </button>
           <button className={`${styles.heart} ${favoriteIds.has(record.circle.id) ? styles.saved : ""}`} onClick={() => onToggleFavorite(record)} aria-label={favoriteIds.has(record.circle.id) ? `取消收藏 ${record.name}` : `收藏 ${record.name}`}><UiIcon name="heart" /></button>
@@ -126,7 +128,7 @@ export function DayItinerary({ day, entries, recordsById, variant = "compact", o
         const purchaseEditorVisible = variant === "full" || editingPurchaseId === entry.circleId;
         const purchaseSummary = [entry.purchaseMemo.trim(), entry.budget !== null ? `NT$ ${formatBudget(entry.budget)}` : ""].filter(Boolean).join(" · ");
         return <li key={entry.circleId} draggable={!purchaseEditorVisible} onDragStart={(event) => { setDraggingId(entry.circleId); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", entry.circleId); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); const circleId = draggingId ?? event.dataTransfer.getData("text/plain"); if (circleId) onMoveTo(circleId, index); setDraggingId(null); }} onDragEnd={() => setDraggingId(null)} className={`${entry.status === "next" ? styles.next : entry.status === "visited" ? styles.visited : ""} ${draggingId === entry.circleId ? styles.dragging : ""}`}>
-          <div className={styles.itineraryRow}><span className={styles.dragHandle} aria-hidden="true"><UiIcon name="drag" /></span><button className={styles.planMain} onClick={() => onSelect(record)}><span>{index + 1}</span><div><b>{record.code} · {record.name}</b><small>{entry.status === "next" ? "下一站" : entry.status === "visited" ? "已走訪" : "待前往"}</small></div></button>
+          <div className={styles.itineraryRow}><span className={styles.dragHandle} aria-hidden="true"><UiIcon name="drag" /></span><button className={styles.planMain} onClick={() => onSelect(record)}><span>{index + 1}</span><div><b>{record.code} · {record.name}</b><small>{[entry.status === "next" ? "下一站" : entry.status === "visited" ? "已走訪" : "待前往", placementStatusLabel(record.placement.status)].filter(Boolean).join(" · ")}</small></div></button>
             <div className={styles.planActions}>
               <button disabled={index === 0} onClick={() => onMove(entry.circleId, -1)} aria-label={`將 ${record.name} 往前移`}><UiIcon name="arrow-up" /></button>
               <button disabled={index === entries.length - 1} onClick={() => onMove(entry.circleId, 1)} aria-label={`將 ${record.name} 往後移`}><UiIcon name="arrow-down" /></button>
@@ -176,9 +178,11 @@ function preventLinkActivation(event: MouseEvent<HTMLAnchorElement>) {
   event.preventDefault();
 }
 
-export function CircleDetails({ record, sharedRecords, favorite, plan, groups, compact = false, readOnly = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
+export function CircleDetails({ record, sharedRecords, movedDestination = null, favorite, plan, groups, compact = false, readOnly = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
   record: CircleViewRecord | null;
   sharedRecords: CircleViewRecord[];
+  /** The circle's live booth in this event, when the organizer's data has one. */
+  movedDestination?: CircleViewRecord | null;
   favorite: FavoriteRecord | null;
   plan: VisitPlanEntry | null;
   groups: FavoriteGroup[];
@@ -202,6 +206,15 @@ export function CircleDetails({ record, sharedRecords, favorite, plan, groups, c
     <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} readOnly={readOnly} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
     <div className={styles.detailBody}>
       <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} disabled={readOnly} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button></div>
+      {record.placement.status !== "active" && <div className={styles.retiredNotice} role="status">
+        <b>{placementStatusLabel(record.placement.status)}</b>
+        <p>{record.placement.status === "cancelled"
+          ? "主辦已從這一場的攤位清單移除這個社團，這個攤位不再是目的地。"
+          : movedDestination
+            ? `這個社團已改到 DAY ${movedDestination.day} ${movedDestination.code}。`
+            : "主辦標示這個攤位已移動，但沒有公布新位置。"}</p>
+        {record.placement.status === "moved" && movedDestination && <button type="button" disabled={readOnly} onClick={() => onSelectShared(movedDestination)}>看新攤位 {movedDestination.code}</button>}
+      </div>}
       <div className={styles.title}><div><h2>{record.name}</h2>{(record.circle.circleCategory || record.circle.creatorTypes.length > 0 || record.circle.pen) && <p>{[record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.pen].filter(Boolean).join(" · ")}</p>}{record.circle.ageRatings.length > 0 && <small className={styles.rating}>分級：{record.circle.ageRatings.join("、")}</small>}</div><button className={`${styles.heart} ${favorite ? styles.saved : ""}`} disabled={readOnly} onClick={onToggleFavorite} aria-label={favorite ? "取消收藏" : "收藏社團"}><UiIcon name="heart" /></button></div>
       {favorite?.groupId && <p className={styles.sourceHint}>收藏群組：{groups.find((group) => group.id === favorite.groupId)?.name ?? "未分組"}</p>}
       {sharedRecords.length > 1 && <div className={styles.shared}><small>此攤位登記 {sharedRecords.length} 個社團</small>{sharedRecords.map((item) => <button key={item.recordId} disabled={readOnly} className={item.recordId === record.recordId ? styles.activeShared : ""} onClick={() => onSelectShared(item)}><b>{item.name}</b><span>{item.genre}</span></button>)}</div>}

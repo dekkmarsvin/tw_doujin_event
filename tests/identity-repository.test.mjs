@@ -57,6 +57,12 @@ test("additive column migrations upgrade an existing database idempotently", asy
     ["circle_overrides", ["post_event_hidden", "retention_choice", "retention_expires_at", "hosted_thumbnail_key"]],
     ["overrides_doc", ["phase"]],
     ["audit_log", ["shredded_at"]],
+    // Indexed migrated columns. `CREATE INDEX` over a column that only arrives
+    // via ALTER has to run after the migration: creating it alongside the
+    // tables fails with `no such column` on exactly the databases that were
+    // already working, and takes every request down with it.
+    ["map_drafts", ["candidate_id"]],
+    ["login_tokens", ["audience", "minted_by"]],
   ]) {
     const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
     assert.ok(definition);
@@ -72,6 +78,17 @@ test("additive column migrations upgrade an existing database idempotently", asy
     const info = await legacyDatabase.prepare(`PRAGMA table_info(${migration.table})`).all();
     assert.ok(info.results.some((column) => column.name === migration.column), `missing upgraded column ${migration.table}.${migration.column}`);
   }
+
+  // The upgraded database must also end up with every index, including those
+  // over the columns the migration just added.
+  const upgradedIndexes = await legacyDatabase.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+  ).all();
+  assert.deepEqual(
+    upgradedIndexes.results.map((row) => row.name),
+    IDENTITY_INDEXES.map((index) => index.name).sort(),
+    "an upgraded database must carry the same indexes as a fresh one",
+  );
 });
 
 test("a login token is single use and cannot be replayed", async () => {

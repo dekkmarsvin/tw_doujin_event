@@ -99,8 +99,11 @@ test("circle category controls consume event data rather than organizer constant
     readFile(new URL("../app/circle-portal/portal-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/event-map-app.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(portal, /ACTIVE_EVENT\.circleCategories\.categories\.map/);
-  assert.match(portal, /ACTIVE_EVENT\.circleCategories\.sources\.map/);
+  // The portal takes them from the event being maintained, which is the event
+  // the request names — not a module constant that assumes one event exists.
+  assert.match(portal, /\{event\.circleCategories\.categories\.map/);
+  assert.match(portal, /\{event\.circleCategories\.sources\.map/);
+  assert.doesNotMatch(portal, /ACTIVE_EVENT/);
   // The reader takes its categories from the event it was handed, not from a
   // module constant that assumes one event exists.
   assert.match(reader, /const genres: readonly string\[\] = event\.genres/);
@@ -108,6 +111,18 @@ test("circle category controls consume event data rather than organizer constant
     assert.doesNotMatch(portal, new RegExp(organizerSpecificLabel));
     assert.doesNotMatch(reader, new RegExp(organizerSpecificLabel));
   }
+});
+
+test("the portal asks which event only when this build serves more than one", async () => {
+  const portal = await readFile(new URL("../app/circle-portal/portal-app.tsx", import.meta.url), "utf8");
+  // One event is no choice at all, so the portal opens straight into it (#136).
+  assert.match(portal, /PUBLISHED_EVENTS\.length > 1 && <EventPicker/);
+  // And whichever event is being maintained travels on every request, so the
+  // server never has to guess which one the session meant.
+  assert.match(portal, /setPortalEventId\(event\.id\)/);
+  // A switch during an in-flight claim list leaves a late answer arriving for
+  // the event that is no longer on screen; it has to be dropped, not rendered.
+  assert.match(portal, /answer\.eventId !== requested/);
 });
 
 test("map reviewers can inspect the authenticated evidence bytes before approval", async () => {

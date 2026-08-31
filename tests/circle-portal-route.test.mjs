@@ -1193,3 +1193,135 @@ test("each event retires its own content on its own end date", async () => {
   assert.match(second.headers.get("etag"), /during/, "the second event has not ended yet");
   clock = 1_786_500_000_000;
 });
+
+/**
+ * #136 / ADR-0043. One account, several events: the identity is shared, the
+ * authorization is not. Production builds one handler set per request from the
+ * event the request names, so a second event is a second handler set over the
+ * same repository — exactly what these tests construct.
+ */
+const SERVED_EVENTS = ["ff47", "ff48"];
+
+function handlersForEvent(eventId, served = SERVED_EVENTS) {
+  return createCirclePortalHandlers({
+    ...handlerOptions,
+    config: {
+      ...handlerOptions.config,
+      eventId,
+      publishedEvent: async (id) => (served.includes(id)
+        ? { dataUpdatedAt: handlerOptions.config.dataUpdatedAt, eventEndsAt: EVENT_ENDS_AT }
+        : null),
+    },
+  });
+}
+
+test("a claim in one event authorizes nothing in another", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const first = handlersForEvent("ff47");
+  const second = handlersForEvent("ff48");
+
+  const created = await first.createClaim(post("/api/claims", { circleId: "ff47-site" }, owner));
+  const { id } = await created.json();
+  await first.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin));
+  assert.equal((await first.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "第一場" } }, owner), "ff47-site")).status, 200);
+
+  // Same account, same circle id, other event: the ownership chain does not
+  // cross, and nothing about the first event's content is readable through it.
+  const written = await second.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "第二場" } }, owner), "ff47-site");
+  assert.equal(written.status, 403);
+  assert.deepEqual((await (await second.listClaims(get("/api/claims", owner))).json()).claims, []);
+
+  const firstDoc = await first.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");
+  assert.equal((await firstDoc.json()).overrides.find((entry) => entry.circleId === "ff47-site").fields.saleInfo, "第一場");
+  const secondDoc = await second.publicOverrides(get("/data/events/ff48/overrides.json"), "ff48");
+  assert.deepEqual((await secondDoc.json()).overrides, []);
+});
+
+test("the same account holds its own claim in each event, and each answer says which", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const first = handlersForEvent("ff47");
+  const second = handlersForEvent("ff48");
+
+  for (const handlersForOne of [first, second]) {
+    const created = await handlersForOne.createClaim(post("/api/claims", { circleId: "ff47-site" }, owner));
+    assert.equal(created.status, 201);
+    const { id } = await created.json();
+    assert.equal((await handlersForOne.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin))).status, 200);
+  }
+
+  const mineFirst = await (await first.listClaims(get("/api/claims", owner))).json();
+  const mineSecond = await (await second.listClaims(get("/api/claims", owner))).json();
+  assert.equal(mineFirst.eventId, "ff47");
+  assert.equal(mineSecond.eventId, "ff48");
+  assert.deepEqual(mineFirst.claims.map((claim) => claim.status), ["verified"]);
+  assert.deepEqual(mineSecond.claims.map((claim) => claim.status), ["verified"]);
+  assert.notEqual(mineFirst.claims[0].id, mineSecond.claims[0].id);
+
+  assert.equal((await first.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "第一場" } }, owner), "ff47-site")).status, 200);
+  assert.equal((await second.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "第二場" } }, owner), "ff47-site")).status, 200);
+});
+
+test("the admin queue is one event's, and says which event it is", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const first = handlersForEvent("ff47");
+  const second = handlersForEvent("ff48");
+  await first.createClaim(post("/api/claims", { circleId: "ff47-site" }, owner));
+
+  const pending = await (await first.adminListClaims(get("/api/admin/claims", admin))).json();
+  assert.equal(pending.eventId, "ff47");
+  assert.deepEqual(pending.claims.map((claim) => claim.circleId), ["ff47-site"]);
+
+  const other = await (await second.adminListClaims(get("/api/admin/claims", admin))).json();
+  assert.equal(other.eventId, "ff48");
+  assert.deepEqual(other.claims, []);
+});
+
+test("an event this deployment does not serve is a 404, not another event's data", async () => {
+  const owner = await signIn("owner@example.com");
+  const unknown = handlersForEvent("ff99");
+
+  for (const [name, response] of [
+    ["listClaims", await unknown.listClaims(get("/api/claims", owner))],
+    ["createClaim", await unknown.createClaim(post("/api/claims", { circleId: "ff47-site" }, owner))],
+    ["searchCatalog", await unknown.searchCatalog(get("/api/circle/search?q=社團", owner))],
+    ["putOverride", await unknown.putOverride(post("/api/circle/ff47-site/overrides", { fields: {} }, owner), "ff47-site")],
+  ]) {
+    assert.equal(response.status, 404, `${name} must refuse an unserved event`);
+  }
+
+  // The account routes are not event-scoped: signing in and out has to keep
+  // working whatever event the client last named.
+  assert.equal((await unknown.session(get("/api/auth/session", owner))).status, 200);
+});
+
+test("a claim id from another event cannot be acted on through this one", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const first = handlersForEvent("ff47");
+  const second = handlersForEvent("ff48");
+
+  // Challengeable, so the claim carries a token and `runChallenge` would have
+  // work to do if the event check were not the first thing it did.
+  const created = await first.createClaim(post("/api/claims", {
+    circleId: "ff47-site", targetUrl: "https://circle.example/home",
+  }, owner));
+  const { id } = await created.json();
+
+  // The owner's own claim, addressed through the other event's control plane.
+  assert.equal((await second.withdrawClaim(post(`/api/claims/${id}`, {}, owner), id)).status, 404);
+  assert.equal((await second.runChallenge(post(`/api/claims/${id}/challenge`, {}, owner), id)).status, 404);
+  // And an admin decision, which would otherwise revoke ownership in one event
+  // while rebuilding the other event's public document.
+  assert.equal((await second.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin))).status, 404);
+  assert.equal((await second.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "revoke" }, admin))).status, 404);
+
+  // Untouched: still pending, and still this account's claim in its own event.
+  const mine = await (await first.listClaims(get("/api/claims", owner))).json();
+  assert.deepEqual(mine.claims.map((claim) => claim.status), ["pending"]);
+  assert.equal((await first.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin))).status, 200);
+  assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff47", "ff47-site"), true);
+  assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff48", "ff47-site"), false);
+});

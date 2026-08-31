@@ -444,7 +444,11 @@ export const IDENTITY_INDEXES = [
   index("organizer_publication_queue_idx", "organizer_publication_jobs", "status, created_at"),
 ] as const;
 
-export const IDENTITY_SCHEMA_STATEMENTS = [...IDENTITY_TABLES, ...IDENTITY_INDEXES].map(({ sql }) => sql);
+/** Deliberately not exported as one list. Tables and indexes cannot be created
+ * in a single pass: an index over a column that arrives through
+ * `IDENTITY_COLUMN_MIGRATIONS` must wait for that ALTER to run. Consumers take
+ * `IDENTITY_TABLES`, `IDENTITY_COLUMN_MIGRATIONS` and `IDENTITY_INDEXES` in
+ * that order — see `ensureTables()`. */
 
 /**
  * Columns added after a table already existed. SQLite has no `ADD COLUMN IF

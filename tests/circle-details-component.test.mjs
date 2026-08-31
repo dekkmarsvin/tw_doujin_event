@@ -7,7 +7,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { CircleDetails, SearchResults } = await environment.runner.import("/app/event-workspace-panels.tsx");
+const { CircleDetails, DayItinerary, SearchResults } = await environment.runner.import("/app/event-workspace-panels.tsx");
 after(() => vite.close());
 
 const source = {
@@ -63,4 +63,61 @@ test("informative results identify circle-authored summaries without trust wordi
   assert.match(markup, /原創 · 長篇作品/);
   assert.match(markup, /由社團填寫/);
   assert.doesNotMatch(markup, /尚未驗證|社團自述/);
+});
+
+/**
+ * #140. A cancelled or moved placement has to be readable as such wherever a
+ * reader meets it, in words rather than in colour alone, and a move points at
+ * the new booth only when the organizer's data actually carries one.
+ */
+const retired = (status, code, name) => ({
+  ...record, id: `ff47-${code}`, recordId: `ff47-${code}-0`, code, name,
+  circle: { ...circle, id: `c-${code}`, name },
+  placement: { ...record.placement, id: `ff47-${code}-0`, circleId: `c-${code}`, boothCode: code, status },
+});
+const cancelledRecord = retired("cancelled", "B02", "退出社團");
+const movedRecord = retired("moved", "B03", "移動社團");
+const destinationRecord = { ...retired("active", "C09", "移動社團"), circle: movedRecord.circle };
+
+test("a retired placement is named in the result list, not only shaded", () => {
+  const markup = renderToStaticMarkup(React.createElement(SearchResults, {
+    records: [cancelledRecord, movedRecord], catalogStatus: "ready", catalogError: "", selectedId: null,
+    favoriteIds: new Set(), favoriteGroupLabels: new Map(), plans: new Map(),
+    density: "informative", mediaCount: 0, query: "", activeFilters: [], matchReasons: new Map(), advancedSearchActive: false,
+    onSelect() {}, onToggleFavorite() {}, onResetAdvancedSearch() {}, onClearFilters() {}, onClearQuery() {},
+  }));
+
+  assert.match(markup, /已取消參展/);
+  assert.match(markup, /已移動攤位/);
+});
+
+test("circle details say a booth is no longer a destination and offer the new one", () => {
+  const cancelled = renderToStaticMarkup(React.createElement(CircleDetails, {
+    record: cancelledRecord, sharedRecords: [cancelledRecord], favorite: null, plan: null, groups: [], ...callbacks,
+  }));
+  assert.match(cancelled, /已取消參展/);
+  assert.doesNotMatch(cancelled, /看新攤位/);
+
+  const moved = renderToStaticMarkup(React.createElement(CircleDetails, {
+    record: movedRecord, sharedRecords: [movedRecord], movedDestination: destinationRecord, favorite: null, plan: null, groups: [], ...callbacks,
+  }));
+  assert.match(moved, /已移動攤位/);
+  assert.match(moved, /看新攤位 C09/);
+
+  const strandedMarkup = renderToStaticMarkup(React.createElement(CircleDetails, {
+    record: movedRecord, sharedRecords: [movedRecord], favorite: null, plan: null, groups: [], ...callbacks,
+  }));
+  assert.match(strandedMarkup, /沒有公布新位置/, "an unknown destination is stated, never guessed");
+  assert.doesNotMatch(strandedMarkup, /看新攤位/);
+});
+
+test("an itinerary entry keeps its plan state and still reads as retired", () => {
+  const markup = renderToStaticMarkup(React.createElement(DayItinerary, {
+    day: 1,
+    entries: [{ eventId: "ff47", day: 1, circleId: cancelledRecord.circle.id, status: "planned", routeOrder: 0, purchaseMemo: "", budget: null, updatedAt: "2026-08-30" }],
+    recordsById: new Map([[cancelledRecord.circle.id, cancelledRecord]]),
+    onSelect() {}, onMove() {}, onMoveTo() {}, onVisit() {}, onRemove() {}, onUpdatePurchase() {},
+  }));
+
+  assert.match(markup, /待前往 · 已取消參展/);
 });

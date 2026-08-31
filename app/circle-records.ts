@@ -40,13 +40,25 @@ export type CatalogCircle = {
   name: string;
 };
 
+/**
+ * What the organizer currently says about a booth. A retired placement stays in
+ * the catalog so a favourite or a shared link still resolves (#139); the reader
+ * surfaces below have to say so rather than draw it as a normal destination.
+ */
+export type PlacementStatus = "active" | "cancelled" | "moved";
+
+/** Wording readers see. Empty for `active`: a normal booth needs no note. */
+export function placementStatusLabel(status: PlacementStatus) {
+  return status === "cancelled" ? "已取消參展" : status === "moved" ? "已移動攤位" : "";
+}
+
 export type CatalogPlacement = {
   id: string;
   circleId: string;
   day: string | number;
   area: string;
   boothCode: string;
-  status: "active" | "cancelled" | "moved";
+  status: PlacementStatus;
   tone: Tone;
 };
 
@@ -90,7 +102,7 @@ export type PlacementRecord = {
   day: Booth["day"];
   area: Booth["hall"];
   boothCode: string;
-  status: "active" | "cancelled" | "moved";
+  status: PlacementStatus;
   tone: Tone;
 };
 

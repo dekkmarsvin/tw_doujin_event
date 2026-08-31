@@ -541,3 +541,31 @@ test("account deletion shreds the private workbook name alongside its uploader",
   // The provenance hash is not personal data and outlives the account.
   assert.equal(source.sha256, "d".repeat(64));
 });
+
+test("the last Owner survives two admins revoking the final two at once", async () => {
+  await repository.createOrganizerCandidate({
+    id: "candidate-race", tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await repository.manageOrganizerOwner({
+    candidateId: "candidate-race", actorAccountId: adminId, email: "editor@example.test",
+    action: "invite", now: NOW + 2,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+
+  const revoke = (email) => repository.manageOrganizerOwner({
+    candidateId: "candidate-race", actorAccountId: adminId, email, action: "revoke", now: NOW + 4,
+  });
+  // Both see two active Owners; a count read before the write would let both
+  // through and leave the candidate with none.
+  const [first, second] = await Promise.all([revoke("owner@example.test"), revoke("editor@example.test")]);
+  const outcomes = [first, second];
+  assert.equal(outcomes.filter((result) => result.ok).length, 1, "exactly one revoke may win");
+  assert.deepEqual(outcomes.find((result) => !result.ok), { ok: false, reason: "last_owner" });
+
+  const owners = await database.prepare(
+    "SELECT COUNT(*) AS n FROM organizer_event_grants WHERE candidate_id = 'candidate-race' AND role = 'owner' AND revoked_at IS NULL",
+  ).first();
+  assert.equal(owners.n, 1, "the candidate must never be left ownerless");
+});

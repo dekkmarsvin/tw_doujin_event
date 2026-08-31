@@ -1,5 +1,5 @@
 import { CIRCLE_OVERRIDES_SCHEMA, type CircleRetentionChoice } from "../app/circle-overrides";
-import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_SCHEMA_STATEMENTS } from "./identity-runtime-schema";
+import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -62,10 +62,20 @@ function chunked<T>(values: readonly T[], size: number): T[][] {
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
   let tablesReady: Promise<void> | null = null;
 
+  /**
+   * Three ordered steps, and the order is load-bearing. `CREATE TABLE IF NOT
+   * EXISTS` is a no-op against a database that already has the table, so a
+   * column added later exists only by way of `IDENTITY_COLUMN_MIGRATIONS` — and
+   * an index over that column has to be created after the ALTER, never in the
+   * same batch as the tables. Getting this wrong does not degrade gracefully:
+   * the batch rejects with `no such column`, `tablesReady` resets, and every
+   * repository-backed request fails on a database that was previously fine.
+   */
   async function ensureTables() {
     if (!tablesReady) {
-      tablesReady = database.batch(IDENTITY_SCHEMA_STATEMENTS.map((statement) => database.prepare(statement)))
+      tablesReady = database.batch(IDENTITY_TABLES.map(({ sql }) => database.prepare(sql)))
         .then(() => addMissingColumns())
+        .then(() => database.batch(IDENTITY_INDEXES.map(({ sql }) => database.prepare(sql))))
         .then(() => seedAdmins())
         .catch((error: unknown) => {
           tablesReady = null;
@@ -1635,15 +1645,28 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        WHERE g.candidate_id = ?1 AND g.role = 'owner' AND g.revoked_at IS NULL AND a.email = ?2`,
     ).bind(input.candidateId, input.email).first<{ account_id: string }>();
     if (target) {
-      const owners = await database.prepare(
-        "SELECT COUNT(*) AS count FROM organizer_event_grants WHERE candidate_id = ?1 AND role = 'owner' AND revoked_at IS NULL",
-      ).bind(input.candidateId).first<{ count: number }>();
-      if ((owners?.count ?? 0) <= 1) return { ok: false as const, reason: "last_owner" as const };
+      // "At least one Owner survives" is enforced by the write itself, not by a
+      // count read before it. Two admins revoking the last two Owners at once
+      // would both see a count of two and both proceed, leaving the candidate
+      // ownerless; as one statement, the loser of the race matches no row.
       const result = await database.prepare(
         `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
-         WHERE candidate_id = ?3 AND account_id = ?4 AND role = 'owner' AND revoked_at IS NULL`,
+         WHERE candidate_id = ?3 AND account_id = ?4 AND role = 'owner' AND revoked_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM organizer_event_grants other
+             WHERE other.candidate_id = ?3 AND other.role = 'owner'
+               AND other.revoked_at IS NULL AND other.account_id <> ?4
+           )`,
       ).bind(input.actorAccountId, input.now, input.candidateId, target.account_id).run();
-      return result.meta.changes === 1 ? { ok: true as const, result: "revoked" as const } : { ok: false as const, reason: "missing" as const };
+      if (result.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
+      // Nothing changed: either the grant went away under us, or it is now the
+      // only one left. Re-read to tell the Owner which, rather than guessing.
+      const remaining = await database.prepare(
+        "SELECT COUNT(*) AS count FROM organizer_event_grants WHERE candidate_id = ?1 AND role = 'owner' AND revoked_at IS NULL",
+      ).bind(input.candidateId).first<{ count: number }>();
+      return (remaining?.count ?? 0) <= 1
+        ? { ok: false as const, reason: "last_owner" as const }
+        : { ok: false as const, reason: "missing" as const };
     }
     const invitation = await database.prepare(
       `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2

@@ -5,11 +5,11 @@ import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import {
   createMapContributionDraft, exportMapContributionCandidate, listAdminMapDrafts, listMyMapDrafts,
   mapDraftConflict, mapDraftProblems, postMapDraftComment, readMapDraft, reviewMapContributionDraft, saveMapContributionDraft,
-  submitMapContributionDraft, uploadMapContributionEvidence,
+  submitMapContributionDraft, uploadMapContributionEvidence, withEventScope,
   type MapDraftComment, type MapDraftCommentTarget, type MapDraftDetail, type MapDraftFile, type MapDraftReview,
   type MapDraftStatus, type MapDraftSummary,
 } from "../circle-editor-client";
-import { ACTIVE_EVENT } from "../event-catalog";
+import type { EventDefinition } from "../event-catalog";
 import type { EventMapLayout, PublishedEventMap } from "../event-map";
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
@@ -53,13 +53,17 @@ function StatusNotice({ status, onReload }: { status: Status; onReload: (() => v
   </>;
 }
 
-function Preview({ layout }: { layout: EventMapLayout }) {
+function Preview({ event, layout }: { event: EventDefinition; layout: EventMapLayout }) {
   const slots = useMemo(() => Object.fromEntries(layout.rows.flatMap((row) => row.slots.map(({ code }) => [code, {
     label: code, ariaLabel: `攤位 ${code}`,
   }]))), [layout]);
   return <div className={styles.mapReviewPreview}>
-    <AccessibleEventMapRenderer eventName={`${ACTIVE_EVENT.name} 草稿預覽`} layout={layout} slots={slots} onSelect={() => undefined} />
+    <AccessibleEventMapRenderer eventName={`${event.name} 草稿預覽`} layout={layout} slots={slots} onSelect={() => undefined} />
   </div>;
+}
+
+function previewUrl(fileId: string) {
+  return withEventScope(`/api/map-contributions/files/${encodeURIComponent(fileId)}/preview`);
 }
 
 function Problems({ problems }: { problems: MapDraftProblem[] }) {
@@ -72,11 +76,11 @@ function Problems({ problems }: { problems: MapDraftProblem[] }) {
 function EvidenceList({ files, showReviewResult = false }: { files: MapDraftFile[]; showReviewResult?: boolean }) {
   if (!files.length) return <p>尚未上傳來源檔。</p>;
   return <ul className={styles.auditList}>{files.map((item) => {
-    const fileUrl = `/api/map-contributions/files/${encodeURIComponent(item.id)}`;
+    const fileUrl = withEventScope(`/api/map-contributions/files/${encodeURIComponent(item.id)}`);
     const canReadRaw = item.raw_deleted_at == null;
     return <li key={item.id}>
       {item.document_date}・<a href={item.source_url} rel="noreferrer" target="_blank">原始來源</a>
-      {canReadRaw && item.mime.startsWith("image/") ? <>・<a href={`${fileUrl}/preview`} rel="noreferrer" target="_blank">預覽上傳檔</a></> : null}
+      {canReadRaw && item.mime.startsWith("image/") ? <>・<a href={previewUrl(item.id)} rel="noreferrer" target="_blank">預覽上傳檔</a></> : null}
       {canReadRaw ? <>・<a href={fileUrl}>下載上傳檔</a></> : <>・原始檔已依保存期限刪除</>}
       ・版本 {item.revision}{showReviewResult ? `・${item.review_result ?? "尚未確認來源"}` : ""}・SHA-256 {item.sha256}
     </li>;
@@ -126,17 +130,17 @@ function CommentThread({ comments, layout, onFocus }: {
   </li>)}</ul>;
 }
 
-export function MapContributorPanel() {
+export function MapContributorPanel({ event }: { event: EventDefinition }) {
   const [drafts, setDrafts] = useState<MapDraftSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [layout, setLayout] = useState<EventMapLayout | null>(null);
   const [savedLayoutJson, setSavedLayoutJson] = useState("");
-  const [periodKey, setPeriodKey] = useState(String(ACTIVE_EVENT.days[0]?.id ?? ""));
-  const [venueSpaceId, setVenueSpaceId] = useState(ACTIVE_EVENT.venueAssignments[0]?.venueSpaceId ?? "");
+  const [periodKey, setPeriodKey] = useState(String(event.days[0]?.id ?? ""));
+  const [venueSpaceId, setVenueSpaceId] = useState(event.venueAssignments[0]?.venueSpaceId ?? "");
   const [status, setStatus] = useState<Status>(IDLE);
   const [problems, setProblems] = useState<MapDraftProblem[]>([]);
-  const [sourceUrl, setSourceUrl] = useState(ACTIVE_EVENT.officialData.eventUrl);
+  const [sourceUrl, setSourceUrl] = useState(event.officialData.eventUrl);
   const [documentDate, setDocumentDate] = useState("");
   const [pageNumber, setPageNumber] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -177,10 +181,10 @@ export function MapContributorPanel() {
     <p>草稿與來源檔僅供審閱。提交、核准與匯出候選都不會直接變更公開地圖；公開資料仍須進入 event-data repository 審查。</p>
     <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
     {!detail && <div className={styles.mapDraftCreate}>
-      <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{ACTIVE_EVENT.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
-      <label>場地空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{ACTIVE_EVENT.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
+      <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
+      <label>場地空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
       <button type="button" onClick={() => void run(async () => {
-        const current = await loadStaticEventMap(ACTIVE_EVENT.id, ACTIVE_EVENT.venueAssignments.length > 1
+        const current = await loadStaticEventMap(event.id, event.venueAssignments.length > 1
           ? { periodKey, venueSpaceId }
           : undefined);
         const created = await createMapContributionDraft(periodKey, venueSpaceId, current.layout);
@@ -189,8 +193,8 @@ export function MapContributorPanel() {
     </div>}
     {detail && layout && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
-      {editable && <MapLayoutEditor layout={layout} backgroundImageUrl={previewFile ? `/api/map-contributions/files/${encodeURIComponent(previewFile.id)}/preview` : undefined} focusTarget={focusTarget} onChange={setLayout} />}
-      <h3>公開地圖預覽</h3><Preview layout={layout} />
+      {editable && <MapLayoutEditor layout={layout} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={setLayout} />}
+      <h3>公開地圖預覽</h3><Preview event={event} layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>
           <button type="button" onClick={() => void run(async () => {
@@ -236,7 +240,7 @@ export function MapContributorPanel() {
   </section>;
 }
 
-export function AdminMapReviewPanel() {
+export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
   const [drafts, setDrafts] = useState<MapDraftSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -294,7 +298,7 @@ export function AdminMapReviewPanel() {
     <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "審閱資料已載入。")} />
     {detail && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
-      <Preview layout={detail.draft.content.layout} />
+      <Preview event={event} layout={detail.draft.content.layout} />
       <label>審閱說明<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <h3>審閱留言</h3>
       <CommentThread comments={detail.comments} layout={detail.draft.content.layout} onFocus={null} />

@@ -15,6 +15,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { onRequest } = await environment.runner.import("/functions/_middleware.ts");
 const client = await environment.runner.import("/app/circle-editor-client.ts");
+const { requestedEventId } = await environment.runner.import("/functions/_portal.ts");
 after(() => vite.close());
 
 const ORIGIN = "https://verify.kotoban.top";
@@ -193,4 +194,53 @@ test("the preview E2E script shapes mutations the way the gate demands", async (
   // And the reads must stay unshaped, or the script would send a content type
   // on a GET the client is tested never to send one on.
   assert.match(source, /method === "GET" \|\| method === "HEAD" \? \{\} : MUTATION_HEADERS/);
+});
+
+/**
+ * #136 / ADR-0043. The session says who; the request has to say which event.
+ * One place sets it, so no call site can forget and write into whichever event
+ * the deployment happens to default to.
+ */
+test("every control-plane call names the event it operates on", async () => {
+  try {
+    client.setPortalEventId("ff48");
+    await client.listMyClaims();
+    assert.equal(captured[0].path, "/api/claims?event=ff48");
+
+    captured = [];
+    await client.searchCircles("社團");
+    assert.match(captured[0].path, /^\/api\/circle\/search\?q=[^&]+&event=ff48$/, "a path that already has a query keeps it");
+
+    captured = [];
+    await client.saveOverride("c-000001", { saleInfo: "x" });
+    assert.equal(captured[0].path, "/api/circle/c-000001/overrides?event=ff48");
+
+    // Links the browser follows itself get the same scope as the fetches.
+    assert.equal(client.withEventScope("/api/map-contributions/files/file-a"), "/api/map-contributions/files/file-a?event=ff48");
+  } finally {
+    client.setPortalEventId("");
+  }
+});
+
+test("a client that names no event is left alone, which is the single-event deployment", async () => {
+  client.setPortalEventId("");
+  await client.listMyClaims();
+  assert.equal(captured[0].path, "/api/claims");
+});
+
+test("the server reads the event the request named, and never substitutes the default", () => {
+  const env = { EVENT_ID: "ff47" };
+  const named = (search) => requestedEventId(new Request(`${ORIGIN}/api/claims${search}`), env);
+
+  assert.equal(named("?event=ff48"), "ff48");
+  // No event named at all is the migration path: an older client, and a
+  // single-event deployment, still reach the configured one.
+  assert.equal(named(""), "ff47");
+  assert.equal(named("?q=x"), "ff47");
+  // Naming one badly is not the same as naming none. Falling back here would
+  // run a write meant for one event against another; these resolve to an id no
+  // deployment serves, which the handlers answer with a 404.
+  assert.equal(named("?event="), "");
+  assert.equal(named("?event=%20"), "");
+  assert.equal(named("?event=../ff47"), "../ff47");
 });

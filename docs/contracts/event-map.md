@@ -52,6 +52,7 @@ type AccessibleEventMapRendererProps = {
 ```
 
 - `slots[boothCode]` 已包含標籤、可讀名稱、色調，以及 selected、favorite、planned、next、visited 顯示狀態。
+- `retired` 只在該攤位號沒有任何 `active` placement 時帶 `cancelled` 或 `moved`；renderer 以形狀區分兩者（取消是叉、移動是箭頭），文字說明由 controller 投影進 `label` 與 `ariaLabel`，**不以顏色作為唯一狀態表達**。換手的攤位不算失效，仍由新主人的 placement 呈現。placement 狀態的完整語意見 [circle catalog 契約](./circle-catalog.md)。
 - **renderer 不自行讀取社團資料、規劃 store 或 URL**，也不寫入產品狀態。
 - 頁面 controller 負責把 URL、社團資料、收藏與行程投影成 renderer props，並在 `onSelect` 後同步 URL 與詳情。
 - 這個邊界讓地圖可獨立測試，也讓同一份 layout 未來能投影出 minimap 而不維護第二套座標。

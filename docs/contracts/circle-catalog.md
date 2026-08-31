@@ -113,7 +113,7 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 - `npm run build:production` 依 [`data/published-events.json`](../../data/published-events.json) 逐一下載並核對逐檔 SHA-256，再由主辦 booth evidence 生成 v3 catalog，並把**每一個已發布活動** staging 到 `dist`。該檔案是 production 唯一列出活動的地方：新增活動是加一筆 pin 與一個 id，不改 `package.json`、不改 workflow、不新增活動專屬 constant。
 - **pin 存在不等於已發布。** 未列在 `published-events.json` 的活動即使已有 pin 也不進入 build，對讀者不存在。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界。
 - 讀者端的活動選擇器與 `event` 定址由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案，[#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 尚未完成該部分；目前 bundle 已可承載多活動，但公開入口仍只進入預設活動。
-- **退出或移動的社團留在 catalog 裡**，而不是消失：它們是 `status` 為 `cancelled` 或 `moved` 的 placement，社團本身仍列在 `circles`。直接刪除會讓收藏與分享連結指向不存在的東西，讀起來像連結壞掉而不是「這個社團沒有參加」。Reader 如何呈現由 [#140](https://github.com/dekkmarsvin/tw_doujin_event/issues/140) 決定。
+- **退出或移動的社團留在 catalog 裡**，而不是消失：它們是 `status` 為 `cancelled` 或 `moved` 的 placement，社團本身仍列在 `circles`。直接刪除會讓收藏與分享連結指向不存在的東西，讀起來像連結壞掉而不是「這個社團沒有參加」。Reader 如何呈現見下方「失效 placement 的呈現」。
 - placement id：沒有新主人的攤位保留 `<day>-<code>`，換手的攤位由新主人取得該 id，離開的社團改用帶自己 ID 的形式，因此兩者都仍可被連結定址。
 - overlay 無法取得時仍顯示完整的官方名稱與攤位 base；不得把 overlay 當成目錄存在的前提。
 
@@ -127,6 +127,17 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 - 活動主辦資料標示為「活動主辦單位」；社團補充資料標示為 `由社團填寫`。來源列不顯示驗證狀態或信任措辭（[ADR-0036](../adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
 - 主要創作類別的篩選選項一律由 active event 的 `circleCategories` 投影，不保留工作簿分類或 UI 常數。
 
+### 失效 placement 的呈現
+
+`status` 不是 `active` 的 placement 在讀者端一律以文字說明，不只靠顏色或淡化（[#140](https://github.com/dekkmarsvin/tw_doujin_event/issues/140)）：
+
+- 用詞只有兩種：`cancelled` 是「已取消參展」，`moved` 是「已移動攤位」。搜尋結果、社團詳細資訊、當日行程與地圖 slot 共用同一組字。
+- **社團詳細資訊**說明這個攤位不再是目的地。`moved` 只有在同一活動內找得到該社團的 `active` placement 時才提供前往新攤位的操作；找不到就只說主辦沒有公布新位置，**不推測**新位置，也不新增轉址欄位。
+- **地圖 slot** 只有在該攤位號沒有任何 `active` placement 時才整格標為失效；換手的攤位仍是有效目的地，由新主人的 placement 呈現。
+- **收藏不因失效被刪除或改指其他社團**：收藏掛在 canonical circle ID 上，退出或換手都不改變它。
+- **既有行程**顯示該社團時，同時顯示行程狀態與失效狀態；失效不改寫行程資料本身。
+- 多 placement 的社團在當日行程與「下一站」解析到仍可前往的 `active` placement。
+
 ## 驗收條件
 
 - fixture 與 pinned production build 都通過 `event-data:check`。
@@ -134,3 +145,4 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 - base payload 不含任何工作簿時代欄位或第三方個人檔案內容。
 - overlay 不會移動、改名或拆分社團，且移除 overlay 後回到可完整使用的官方 base。
 - 同一 ID 的多個 placement 在清單、詳情、地圖、收藏與行程中維持同一社團狀態。
+- 同一 placement 的 `status` 在搜尋、詳情、地圖與行程的語意一致，且都不只以顏色表達。

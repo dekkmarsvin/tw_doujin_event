@@ -249,9 +249,24 @@ export function previewE2eAuthorized(env: PortalEnv, request: Request) {
   return different === 0;
 }
 
+/**
+ * Which event this request operates on.
+ *
+ * The account is global; the authorization is not. A request that names an
+ * event is answered for that event and no other — an ill-formed or unserved id
+ * falls through to the handlers' 404 rather than back to the configured
+ * default, because a silent fallback would run a write meant for one event
+ * against another (ADR-0043 安全邊界). Naming none is the migration path: an
+ * older client, and a single-event deployment, still get `EVENT_ID`.
+ */
+export function requestedEventId(request: Request, env: PortalEnv) {
+  const requested = new URL(request.url).searchParams.get("event");
+  return requested === null ? env.EVENT_ID : requested.trim();
+}
+
 export function portalHandlers(context: { request: Request; env: PortalEnv }): CirclePortalHandlers {
   const { request, env } = context;
-  const eventId = env.EVENT_ID;
+  const eventId = requestedEventId(request, env);
   const repository = repositoryFor(env);
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
