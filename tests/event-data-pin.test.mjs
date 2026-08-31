@@ -98,3 +98,16 @@ test("a pin must carry every legacy event file and at least one reference", () =
   const foreignEvent = { ...pin, files: [...pin.files, { path: "events/ff48/event.json", sha256: "0".repeat(64) }] };
   assert.throws(() => parseEventDataPin(foreignEvent), /must start with events\/ff47\//);
 });
+
+test("a multi-space pin replaces legacy map.json with a manifest and scoped artifacts", () => {
+  const files = pin.files
+    .filter(({ path }) => path !== "events/ff47/map.json")
+    .concat([
+      { path: "events/ff47/map-manifest.json", sha256: "1".repeat(64) },
+      { path: "events/ff47/maps/1/hall-a.json", sha256: "2".repeat(64) },
+      { path: "events/ff47/maps/1/hall-b.json", sha256: "3".repeat(64) },
+    ]);
+  assert.equal(parseEventDataPin({ ...pin, files }).files.length, files.length);
+  assert.throws(() => parseEventDataPin({ ...pin, files: files.filter(({ path }) => !path.endsWith("hall-b.json") && !path.endsWith("hall-a.json")) }), /without map artifacts/);
+  assert.throws(() => parseEventDataPin({ ...pin, files: files.filter(({ path }) => !path.endsWith("map-manifest.json")) }), /missing events\/ff47\/map.json|without events\/ff47\/map-manifest/);
+});

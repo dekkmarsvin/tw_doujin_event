@@ -7,6 +7,7 @@ import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
 import type { MapContributionFileStore } from "../app/map-contribution-files";
 import { isPublishedEventMap } from "../app/event-map";
 import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
+import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -349,36 +350,20 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       const resolvedPeriod = resolveCanonicalMapPeriod(event.days, periodKey);
       const venue = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
       if (!resolvedPeriod || !venue) return null;
-      const { period, periodKey: canonicalPeriodKey, periodAliases } = resolvedPeriod;
+      const { periodKey: canonicalPeriodKey, periodAliases } = resolvedPeriod;
       const targetPath = event.venueAssignments.length === 1
         ? "map.json"
         : `maps/${encodeURIComponent(canonicalPeriodKey)}/${encodeURIComponent(venueSpaceId)}.json`;
-      const areaIds = new Set(venue.areaIds);
-      const activePlacements = payload.placements.filter((placement) => placement.status !== "cancelled" && areaIds.has(placement.area));
       const published = await readPublishedEventMap(targetPath);
       // Empty official booth slots have no placement row but are still valid
       // geometry. The reviewed public snapshot is authoritative for those
       // codes; placements add newly announced occupied/moved booths.
-      const allowedBoothCodes = [...new Set([
-        ...activePlacements.map(({ boothCode }) => boothCode),
-        ...(published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? []),
-      ])].sort();
-      const requiredBoothCodes = [...new Set(activePlacements
-        .filter((placement) => String(placement.day) === String(period.id))
-        .map(({ boothCode }) => boothCode))].sort();
-      return {
-        eventId,
-        periodKey: canonicalPeriodKey,
-        periodAliases,
-        venueSpaceId,
-        mapTemplate: event.mapTemplate,
-        allowedBoothCodes,
-        requiredBoothCodes,
-        // Today's public contract has one event-level map only when one venue
-        // assignment makes it unambiguous. Multi-space candidates stay scoped
-        // and require a later event-data/public contract change before publish.
-        targetPath,
-      };
+      const resolved = resolvePublishedAuthoringScope({
+        event,
+        placements: payload.placements,
+        existingBoothCodes: published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? [],
+      }, canonicalPeriodKey, venueSpaceId);
+      return resolved ? { ...resolved, periodAliases } : null;
     },
     readPublishedEventMap,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
@@ -407,6 +392,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       dataUpdatedAt: async () => (await catalog(env, request, eventId)).event.dataUpdatedAt,
       eventEndsAt: async () => (await catalog(env, request, eventId)).event.eventEndsAt,
       now: () => Date.now(),
+      organizerPublicationMode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled",
       // Published means "this deployment actually serves the event's data", so
       // the set is read from what was deployed rather than from a second list
       // that could drift away from it. Ill-formed ids are rejected without a

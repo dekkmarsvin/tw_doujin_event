@@ -169,7 +169,7 @@ test("separates the public static app from the retained editor implementation", 
   const globalStyles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const pagesEntry = await readFile(new URL("../main.tsx", import.meta.url), "utf8");
   const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
-  assert.match(app, /loadStaticEventMap\(eventId\)/);
+  assert.match(app, /loadStaticEventMap\(eventId, scope\)/);
   assert.match(app, /<AccessibleEventMapRenderer eventName=\{event\.name\} layout=\{publishedMap\.layout\}/);
   assert.match(app, /showFullDetail/);
   assert.match(app, /fullDetailsPanel/);
@@ -287,7 +287,9 @@ test("separates the public static app from the retained editor implementation", 
   assert.match(renderer, /data-layer="selected-slots"/);
   assert.match(renderer, /row\.slots\.filter\(\(slot\) => !slots\[slot\.code\]\?\.selected\)\.map\(renderSlot\)/);
   assert.doesNotMatch(renderer, /<img\b/);
-  assert.match(staticClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/map\.json`/);
+  assert.match(staticClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/\$\{relativePath/);
+  assert.match(staticClient, /readMap\(eventId, "map\.json"\)/);
+  assert.match(staticClient, /parseEventMapManifest/);
   assert.doesNotMatch(staticClient, /force-cache/);
   assert.doesNotMatch(staticClient, /\/api\/|method: "PUT"/);
   assert.match(catalogClient, /`\/data\/events\/\$\{encodeURIComponent\(eventId\)\}\/circles\.json`/);

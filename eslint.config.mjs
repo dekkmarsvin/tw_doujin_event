@@ -19,6 +19,7 @@ const eslintConfig = defineConfig([
     // carry their own dist bundles, which the top-level "dist/**" pattern does
     // not reach.
     "work/**",
+    ".claude/worktrees/**",
     "next-env.d.ts",
   ]),
   eslint.configs.recommended,

@@ -44,6 +44,10 @@ export default defineConfig({
         // The circle control surface. Separate entry so the reader's bundle
         // never carries login, claim or edit code.
         circle: resolve(import.meta.dirname, "circle.html"),
+        // The invitation-only organizer control surface. It shares the
+        // session cookie with /circle, but not either entry's application
+        // bundle or navigation.
+        organizer: resolve(import.meta.dirname, "organizer.html"),
       },
     },
   },

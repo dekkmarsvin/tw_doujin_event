@@ -92,6 +92,13 @@ interface PortalEnv {
    * personal addresses and the repository is public. */
   PREVIEW_SANDBOX_RECIPIENTS?: string;
   PREVIEW_E2E_TOKEN?: string;
+  /** Organizer publication stays disabled until GitHub App installation and
+   * both repository rulesets have been independently verified. */
+  ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github";
+  GITHUB_WEBHOOK_SECRET?: string;
+  GITHUB_APP_ID?: string;
+  GITHUB_APP_PRIVATE_KEY?: string;
+  GITHUB_APP_INSTALLATION_ID?: string;
 }
 
 interface EventContext<Env, Params extends string, Data> {

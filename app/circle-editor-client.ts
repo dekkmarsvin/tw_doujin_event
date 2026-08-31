@@ -8,7 +8,7 @@ import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } fr
  * anonymous, edge-cacheable read namespace.
  */
 
-export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean };
+export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean; hasOrganizerAccess: boolean };
 
 export type ClaimSummary = {
   id: string;
@@ -108,8 +108,8 @@ export function readTurnstileSitekey() {
   return call<{ turnstileSitekey: string }>("/api/auth/config").then((body) => body.turnstileSitekey);
 }
 
-export function requestLoginLink(email: string, turnstileToken: string) {
-  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken }) });
+export function requestLoginLink(email: string, turnstileToken: string, audience: "circle" | "organizer" = "circle") {
+  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience }) });
 }
 
 export function verifyLoginToken(token: string) {

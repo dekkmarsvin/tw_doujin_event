@@ -99,8 +99,10 @@ jobs:
             static_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/" || echo 000)
             session_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/auth/session" || echo 000)
             if [ "$static_code" = "200" ] && [ "$session_code" = "401" ]; then
-              echo "Production deployment is live; static assets returned 200 and Functions returned the expected anonymous 401."
-              exit 0
+              if node scripts/smoke-published-events.mjs "$BASE_URL"; then
+                echo "Production deployment is live; static assets, Functions and every published event asset passed smoke checks."
+                exit 0
+              fi
             fi
             echo "attempt $attempt: / returned $static_code; /api/auth/session returned $session_code"
             sleep 3

@@ -184,7 +184,9 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
       <label>場地空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
       <button type="button" onClick={() => void run(async () => {
-        const current = await loadStaticEventMap(event.id);
+        const current = await loadStaticEventMap(event.id, event.venueAssignments.length > 1
+          ? { periodKey, venueSpaceId }
+          : undefined);
         const created = await createMapContributionDraft(periodKey, venueSpaceId, current.layout);
         await refreshList(); await openDraft(created.draftId);
       }, "私人草稿已建立。")}>從目前公開地圖建立私人草稿</button>

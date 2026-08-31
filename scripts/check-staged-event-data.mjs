@@ -30,12 +30,22 @@ try {
   const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
   for (const { eventId, source } of stagedEvents) {
     const directory = path.join(eventsRoot, eventId);
-    const [event, references, catalog, map] = await Promise.all([
+    const [event, references, catalog] = await Promise.all([
       readJsonFileStrict(path.join(directory, "event.json"), "staged event.json"),
       readJsonFileStrict(path.join(directory, "reference-records.json"), "staged reference-records.json"),
       readJsonFileStrict(path.join(directory, "circles.json"), "staged circles.json"),
-      readJsonFileStrict(path.join(directory, "map.json"), "staged map.json"),
     ]);
+    let map;
+    if (Array.isArray(event.venueAssignments) && event.venueAssignments.length > 1) {
+      const manifest = await readJsonFileStrict(path.join(directory, "map-manifest.json"), "staged map-manifest.json");
+      const maps = new Map(await Promise.all(manifest.maps.map(async ({ path: relativePath }) => [
+        relativePath,
+        await readJsonFileStrict(path.join(directory, ...relativePath.split("/")), `staged ${relativePath}`),
+      ])));
+      map = { manifest, maps };
+    } else {
+      map = await readJsonFileStrict(path.join(directory, "map.json"), "staged map.json");
+    }
     const validated = validateStagedEventArtifacts(event, references, catalog, map, eventId);
     console.log(`Verified staged ${eventId} ${source} data: ${validated.catalog.circles.length} circles, ${validated.catalog.placements.length} placements.`);
   }

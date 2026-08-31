@@ -11,6 +11,11 @@ import {
   type MapContributionScope, type MapDraftActorRole, type MapDraftConflict,
 } from "./map-contribution-draft";
 import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
+import {
+  createEmptyOrganizerEventDraft, parseOrganizerEventDraft, serializeOrganizerEventDraft,
+  validateOrganizerEventDraft, type OrganizerValidationIssue,
+} from "./organizer-event";
+import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -29,6 +34,8 @@ const ADMIN_FRESH_SESSION_MS = 24 * 60 * 60 * 1000;
 const LIMITS = {
   loginPerEmailPerHour: 5,
   loginPerIpPerHour: 20,
+  organizerInvitesPerActorPerHour: 10,
+  organizerInvitesPerEmailPerHour: 3,
   claimsPerAccountPerDay: 3,
   challengeAttemptsPerClaim: 10,
 };
@@ -64,6 +71,8 @@ export type PortalConfig = {
    * `eventId` is published", which is what a single-event deployment is.
    */
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
+  /** Merge remains off until the GitHub App and both repository rulesets are verified. */
+  organizerPublicationMode?: "disabled" | "fake" | "github";
 };
 
 export type PortalDependencies = {
@@ -229,6 +238,7 @@ export function createCirclePortalHandlers({
     }
 
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+    const audience = body?.audience === "organizer" ? "organizer" : "circle";
     const now = config.now();
 
     // Always the same answer: an attacker must not learn which inboxes exist.
@@ -238,7 +248,10 @@ export function createCirclePortalHandlers({
     const ipHash = await clientIpHash(request);
     const windowStart = now - 60 * 60 * 1000;
     const [byEmail, byIp] = await Promise.all([
-      repository.countLoginTokensSince("email", email, windowStart),
+      // Only links this inbox asked for. Invitations another account minted for
+      // it are capped on their own budget, so an inviter cannot exhaust this
+      // one and lock the address out of its own sign-in.
+      repository.countLoginTokensSince("email", email, windowStart, "self"),
       ipHash ? repository.countLoginTokensSince("request_ip_hash", ipHash, windowStart) : Promise.resolve(0),
     ]);
     if (byEmail >= LIMITS.loginPerEmailPerHour || byIp >= LIMITS.loginPerIpPerHour) {
@@ -252,6 +265,7 @@ export function createCirclePortalHandlers({
       now,
       expiresAt: now + LOGIN_TOKEN_TTL_MS,
       ipHash,
+      audience,
     });
 
     // Root-path query, consumed by POST from the page: mail scanners issue a GET
@@ -259,7 +273,7 @@ export function createCirclePortalHandlers({
     await sendMail({
       to: email,
       subject: "場刊 Map 登入連結",
-      text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/circle?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
+      text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/${audience === "organizer" ? "organizer" : "circle"}?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
     });
     await repository.writeAudit({
       at: now, actorRole: "system", action: "auth.link_requested", subjectType: "email",
@@ -274,14 +288,18 @@ export function createCirclePortalHandlers({
     if (!token) return json({ error: "登入連結無效。" }, 400);
 
     const now = config.now();
-    const email = await repository.consumeLoginToken(await sha256Hex(token), now);
-    if (!email) return json({ error: "登入連結已失效或已使用，請重新索取。" }, 400);
+    const login = await repository.consumeLoginTokenDetails(await sha256Hex(token), now);
+    if (!login) return json({ error: "登入連結已失效或已使用，請重新索取。" }, 400);
+    const { email, audience } = login;
 
     let accountId: string;
     try {
       accountId = await repository.upsertAccount(email, now);
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "無法建立帳號。" }, 403);
+    }
+    if (audience === "organizer") {
+      await repository.acceptOrganizerInvitations({ accountId, email, now });
     }
 
     // A fresh id on every verify, so a leaked earlier value cannot be reused.
@@ -294,6 +312,7 @@ export function createCirclePortalHandlers({
       email,
       isAdmin: await isAdmin(email),
       isMapContributor: await repository.hasActiveMapContributor(accountId),
+      hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
     }, 200, {
       "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(SESSION_TTL_MS / 1000)),
     });
@@ -306,6 +325,7 @@ export function createCirclePortalHandlers({
       email: current.email,
       isAdmin: await isAdmin(current.email),
       isMapContributor: await repository.hasActiveMapContributor(current.accountId),
+      hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
     });
   }
 
@@ -329,6 +349,16 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     if (body?.confirm !== current.email) {
       return json({ error: "請輸入目前登入的完整 email 以確認刪除帳號。" }, 400);
+    }
+    const soleOwnerCandidates = await repository.listSoleOwnerOrganizerCandidates(current.accountId);
+    if (soleOwnerCandidates.length > 0) {
+      return json({
+        error: "請先邀請另一位 Owner 接手所有活動，才能刪除帳號。",
+        candidates: soleOwnerCandidates.map((candidate) => ({
+          candidateId: candidate.id,
+          tentativeName: candidate.tentative_name,
+        })),
+      }, 409);
     }
     const now = config.now();
     let claimScopes = await repository.listClaimScopesForAccount(current.accountId);
@@ -1540,6 +1570,657 @@ export function createCirclePortalHandlers({
   }
 
   /**
+   * An invitation mints a real login token, so it has to be metered like one —
+   * otherwise an Owner, who is an invited third party rather than staff, is an
+   * unmetered sender of sign-in links to any address. Three budgets, because
+   * the abuse has three shapes: flooding one inbox, spraying many inboxes, and
+   * denying a specific person their own sign-in.
+   *
+   * The inbox budget deliberately counts only invitations, not the address's
+   * own requests. Sharing one counter would cap the spam but hand the inviter
+   * a way to spend the target's quota, which is the denial it is meant to stop.
+   *
+   * Checked before the grant is written, so a refused invitation leaves no row
+   * claiming someone was invited when no link was ever sent.
+   */
+  async function organizerInvitationAllowed(email: string, actorAccountId: string, ipHash: string | null, now: number) {
+    const windowStart = now - 60 * 60 * 1000;
+    const [byEmail, byIp, byActor] = await Promise.all([
+      repository.countLoginTokensSince("email", email, windowStart, "invited"),
+      ipHash ? repository.countLoginTokensSince("request_ip_hash", ipHash, windowStart) : Promise.resolve(0),
+      repository.countOrganizerInvitationsSince(actorAccountId, windowStart),
+    ]);
+    return byEmail < LIMITS.organizerInvitesPerEmailPerHour
+      && byIp < LIMITS.loginPerIpPerHour
+      && byActor < LIMITS.organizerInvitesPerActorPerHour;
+  }
+
+  async function sendOrganizerInvitation(email: string, now: number, ipHash: string | null, mintedBy: string) {
+    const token = randomToken();
+    await repository.createLoginToken({
+      tokenHash: await sha256Hex(token), email, now,
+      expiresAt: now + LOGIN_TOKEN_TTL_MS, ipHash, audience: "organizer", mintedBy,
+    });
+    await sendMail({
+      to: email,
+      subject: "場刊 Map Organizer 邀請",
+      text: `你已受邀管理一場活動。請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/organizer?login=${encodeURIComponent(token)}\n\n若你不認識這項邀請，請忽略此信。`,
+    });
+  }
+
+  async function organizerAccess(request: Request, candidateId: string) {
+    const current = await requireSession(request);
+    if (!current) return { ok: false as const, response: json({ error: "尚未登入。" }, 401) };
+    const admin = await isAdmin(current.email);
+    const grantRole = await repository.organizerRole(candidateId, current.accountId);
+    // An admin may also be this event's Owner. Preserve that event role so the
+    // submit and approve actions can remain distinct and self-approval can be
+    // audited, while an unassigned admin still gets global inspection access.
+    const role = grantRole ?? (admin ? "admin" as const : null);
+    if (!role) return { ok: false as const, response: json({ error: "找不到活動。" }, 404) };
+    return { ok: true as const, current, admin, role };
+  }
+
+  async function adminCreateOrganizerCandidate(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    const tentativeName = typeof body?.tentativeName === "string" ? body.tentativeName.normalize("NFKC").trim() : "";
+    const ownerEmail = typeof body?.ownerEmail === "string" ? normalizeEmail(body.ownerEmail) : "";
+    if (!tentativeName || tentativeName.length > 120 || !isEmailShaped(ownerEmail)) {
+      return json({ error: "暫定活動名稱與有效的 Owner email 為必填。" }, 400);
+    }
+    const ipHash = await clientIpHash(request);
+    if (!await organizerInvitationAllowed(ownerEmail, gate.session.accountId, ipHash, config.now())) {
+      return json({ error: "邀請寄送過於頻繁，請稍後再試。" }, 429);
+    }
+    const candidateId = crypto.randomUUID();
+    const draft = createEmptyOrganizerEventDraft(tentativeName);
+    const created = await repository.createOrganizerCandidate({
+      id: candidateId, tentativeName, ownerEmail,
+      createdByAccountId: gate.session.accountId,
+      draftJson: JSON.stringify(draft), now: config.now(),
+    });
+    if (!created.ok) return json({ error: "無法建立活動入口，請重新整理後再試。" }, 409);
+    await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
+      action: "organizer_event.created", subjectType: "organizer_event", subjectId: candidateId,
+      detail: { tentativeName }, ipHash,
+    });
+    return json({ ok: true, candidateId, version: 1 }, 201);
+  }
+
+  async function listOrganizerCandidates(request: Request) {
+    const current = await requireSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const events = await repository.listOrganizerCandidatesForAccount(current.accountId, await isAdmin(current.email));
+    return json({ events: events.map((event) => ({
+      id: event.id,
+      tentativeName: event.tentative_name,
+      eventId: event.event_id,
+      status: event.status,
+      version: event.current_version,
+      updatedAt: event.updated_at,
+      updatedByRole: event.last_updated_role,
+      role: event.role,
+    })) });
+  }
+
+  async function getOrganizerCandidate(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    const [revisions, imported, publication] = await Promise.all([
+      repository.listOrganizerCandidateRevisions(candidateId),
+      repository.getOrganizerImport(candidateId),
+      repository.getLatestOrganizerPublicationJob(candidateId),
+    ]);
+    return json({
+      event: {
+        id: candidate.id,
+        tentativeName: candidate.tentative_name,
+        eventId: candidate.event_id,
+        eventIdLocked: candidate.event_id_locked_at !== null,
+        status: candidate.status,
+        version: candidate.current_version,
+        updatedAt: candidate.updated_at,
+        updatedByRole: candidate.last_updated_role,
+        role: access.role,
+      },
+      draft,
+      revisions: revisions.map((revision) => ({
+        version: revision.version,
+        eventId: revision.event_id,
+        createdByRole: revision.created_by_role,
+        createdAt: revision.created_at,
+      })),
+      import: imported ? {
+        source: {
+          fileName: imported.source.file_name,
+          worksheet: imported.source.worksheet,
+          sha256: imported.source.sha256,
+          sourceDescription: imported.source.source_description,
+          mapping: JSON.parse(imported.source.mapping_json) as unknown,
+          createdByRole: imported.source.created_by_role,
+          createdAt: imported.source.created_at,
+        },
+        rows: imported.rows.map((row) => ({
+          sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
+          areaId: row.area_id, boothCode: row.booth_code, circleName: row.circle_name,
+          stableKey: row.stable_key, identityGroup: row.identity_group,
+        })),
+      } : null,
+      publication: publication ? {
+        id: publication.id,
+        status: publication.status,
+        step: publication.step,
+        error: publication.error,
+        updatedAt: publication.updated_at,
+      } : null,
+    });
+  }
+
+  async function updateOrganizerCandidate(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const serialized = serializeOrganizerEventDraft(body?.draft);
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !serialized) {
+      return json({ error: "expectedVersion 或活動草稿格式無效。" }, 400);
+    }
+    const result = await repository.saveOrganizerCandidate({
+      candidateId, actorAccountId: access.current.accountId,
+      expectedVersion: expectedVersion as number,
+      eventId: serialized.draft.event.id,
+      draftJson: serialized.json,
+      now: config.now(), admin: access.admin,
+    });
+    if (!result.ok) {
+      if (result.reason === "not_found" || result.reason === "forbidden") return json({ error: "找不到活動。" }, 404);
+      const message = result.reason === "event_id_locked" ? `eventId 已鎖定為 ${result.eventId}。`
+        : result.reason === "event_id_taken" ? "eventId 已被其他活動使用。"
+          : result.reason === "status" ? "目前狀態不可編輯。"
+            : "草稿已被其他人更新，請重新載入。";
+      return json({ error: message, conflict: result }, 409);
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      action: "organizer_event.updated", subjectType: "organizer_event", subjectId: candidateId,
+      detail: { version: result.version }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, candidateId, version: result.version });
+  }
+
+  async function validateOrganizerWorkspace(candidateId: string, draft: ReturnType<typeof parseOrganizerEventDraft>) {
+    const issues: OrganizerValidationIssue[] = draft ? validateOrganizerEventDraft(draft) : [{
+      severity: "error", step: "event", code: "invalid_draft", message: "候選活動資料格式無效。",
+    }];
+    if (!draft) return { issues, imported: null, maps: [], contents: new Map<string, string>() };
+    const [imported, maps] = await Promise.all([
+      repository.getOrganizerImport(candidateId), repository.listOrganizerMapDrafts(candidateId),
+    ]);
+    if (!imported || imported.rows.length === 0) {
+      issues.push({ severity: "error", step: "import", code: "missing_import", message: "請先匯入並確認至少一筆攤位資料。" });
+    }
+    // The candidate, its import and every map body are read exactly once here.
+    // Resolving scope per day × venue-space used to reload the candidate and
+    // the whole import inside the loop, so a multi-day multi-hall event — the
+    // case this workspace exists for — paid for the full booth list once per
+    // scope on validate, on preview and again on submit.
+    const importedRows = (imported?.rows ?? []).map((row) => ({
+      dayId: row.day_id, venueSpaceId: row.venue_space_id, boothCode: row.booth_code,
+    }));
+    const contents = new Map<string, string>();
+    for (const [index, detail] of (await Promise.all(
+      maps.map((map) => repository.getOrganizerMapDraft(candidateId, map.id)),
+    )).entries()) {
+      if (detail?.content_json) contents.set(maps[index].id, detail.content_json);
+    }
+    for (const day of draft.event.days) {
+      for (const assignment of draft.venue.assignments) {
+        const map = maps.find((item) => item.period_key === day.id && item.venue_space_id === assignment.venueSpaceId);
+        if (!map) {
+          issues.push({
+            severity: "error", step: "map", code: "missing_map",
+            target: `${day.id}/${assignment.venueSpaceId}`,
+            message: `缺少 ${day.label} × ${assignment.venueSpaceId} 地圖。`,
+          });
+          continue;
+        }
+        const scope = resolveCandidateAuthoringScope({ candidateId, draft, importedRows }, day.id, assignment.venueSpaceId);
+        const content = contents.get(map.id);
+        const validation = scope && content ? validateMapContributionDraft(
+          JSON.parse(content) as unknown,
+          {
+            eventId: draft.event.id ?? candidateId, periodKey: scope.periodKey, periodAliases: [scope.periodKey],
+            venueSpaceId: scope.venueSpaceId, mapTemplate: scope.mapTemplate,
+            allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
+            targetPath: `candidate://${candidateId}/${scope.periodKey}/${scope.venueSpaceId}`,
+          },
+        ) : null;
+        if (!validation?.ok) {
+          for (const problem of validation?.problems ?? [{ code: "invalid_content", message: "地圖草稿無效。" }]) {
+            issues.push({
+              severity: "error", step: "map", code: problem.code,
+              target: `${day.id}/${assignment.venueSpaceId}`, message: problem.message,
+            });
+          }
+        }
+      }
+    }
+    return { issues, imported, maps, contents };
+  }
+
+  async function putOrganizerImport(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const source = body?.source && typeof body.source === "object" && !Array.isArray(body.source)
+      ? body.source as Record<string, unknown> : null;
+    const rows = Array.isArray(body?.rows) ? body.rows : null;
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !source || !rows || rows.length > 20_000) {
+      return json({ error: "expectedVersion、來源 metadata 與最多 20,000 筆正規化資料列為必填。" }, 400);
+    }
+    const fileName = typeof source.fileName === "string" ? source.fileName.normalize("NFKC").trim() : "";
+    const worksheet = source.worksheet === null ? null
+      : typeof source.worksheet === "string" ? source.worksheet.normalize("NFKC").trim() : undefined;
+    const sha256 = typeof source.sha256 === "string" ? source.sha256.toLowerCase() : "";
+    const sourceDescription = typeof source.sourceDescription === "string" ? source.sourceDescription.normalize("NFKC").trim() : "";
+    let mappingJson = "";
+    try { mappingJson = JSON.stringify(source.mapping); } catch { mappingJson = ""; }
+    if (!fileName || fileName.length > 255 || worksheet === undefined || (worksheet?.length ?? 0) > 120
+      || !/^[0-9a-f]{64}$/u.test(sha256) || !sourceDescription || sourceDescription.length > 500
+      || !mappingJson || new TextEncoder().encode(mappingJson).byteLength > 100_000) {
+      return json({ error: "匯入來源 metadata 格式無效。" }, 400);
+    }
+
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    const days = new Set(draft.event.days.map((day) => day.id));
+    const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, new Set(assignment.areaIds)]));
+    const normalized: Array<{
+      sourceRow: number; dayId: string; venueSpaceId: string; areaId: string; boothCode: string;
+      circleName: string; stableKey: string | null; identityGroup: string | null;
+    }> = [];
+    const placements = new Set<string>();
+    for (const value of rows) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "匯入資料列格式無效。" }, 400);
+      const row = value as Record<string, unknown>;
+      const sourceRow = row.sourceRow;
+      const dayId = typeof row.dayId === "string" ? row.dayId.normalize("NFKC").trim() : "";
+      const venueSpaceId = typeof row.venueSpaceId === "string" ? row.venueSpaceId.normalize("NFKC").trim() : "";
+      const areaId = typeof row.areaId === "string" ? row.areaId.normalize("NFKC").trim() : "";
+      const boothCode = typeof row.boothCode === "string" ? row.boothCode.normalize("NFKC").trim() : "";
+      const circleName = typeof row.circleName === "string" ? row.circleName.normalize("NFKC").trim().replace(/\s+/gu, " ") : "";
+      const stableKey = row.stableKey === null ? null : typeof row.stableKey === "string" ? row.stableKey.normalize("NFKC").trim() : undefined;
+      const identityGroup = row.identityGroup === null ? null : typeof row.identityGroup === "string" ? row.identityGroup.normalize("NFKC").trim() : undefined;
+      if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 1 || !days.has(dayId)
+        || !spaces.get(venueSpaceId)?.has(areaId) || !boothCode || boothCode.length > 80
+        || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
+        || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
+        return json({ error: `來源列 ${String(sourceRow)} 與活動日、venue-space、area 或 identity mapping 不一致。` }, 422);
+      }
+      const placement = `${dayId}\u0000${venueSpaceId}\u0000${boothCode.toLocaleLowerCase("en-US")}`;
+      if (placements.has(placement)) return json({ error: `來源列 ${sourceRow} 的攤位重複。` }, 422);
+      placements.add(placement);
+      normalized.push({ sourceRow: sourceRow as number, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, identityGroup });
+    }
+    // The row count and per-field caps bound a normal import, but 20,000 rows
+    // of maximum-length names escape to far more bytes than a Worker should
+    // hold. Refuse that before it reaches the database rather than failing on
+    // an opaque storage error partway through the organizer's main task.
+    if (new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024) {
+      return json({ error: "匯入資料量過大，請分批匯入或縮短欄位內容。" }, 413);
+    }
+    const result = await repository.replaceOrganizerImport({
+      candidateId, actorAccountId: access.current.accountId, expectedVersion: expectedVersion as number,
+      source: { fileName, worksheet, sha256, sourceDescription, mappingJson }, rows: normalized,
+      now: config.now(), admin: access.admin,
+    });
+    if (!result.ok) {
+      if (result.reason === "not_found" || result.reason === "forbidden") return json({ error: "找不到活動。" }, 404);
+      return json({ error: result.reason === "status" ? "目前狀態不可匯入。" : "草稿已被其他人更新，請重新載入。", conflict: result }, 409);
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      action: "organizer_event.import_replaced", subjectType: "organizer_event", subjectId: candidateId,
+      // The source hash is what provenance needs. A private workbook's file and
+      // sheet names are the organizer's own data and would outlive the import
+      // row they describe, so they stay out of the durable audit trail.
+      detail: { version: result.version, rows: normalized.length, sha256 },
+      ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, candidateId, version: result.version, importedRows: normalized.length });
+  }
+
+  async function candidateMapScope(candidateId: string, periodKey: string, venueSpaceId: string) {
+    const [candidate, imported] = await Promise.all([
+      repository.getOrganizerCandidate(candidateId), repository.getOrganizerImport(candidateId),
+    ]);
+    if (!candidate) return null;
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return null;
+    return resolveCandidateAuthoringScope({
+      candidateId, draft,
+      importedRows: (imported?.rows ?? []).map((row) => ({
+        dayId: row.day_id, venueSpaceId: row.venue_space_id, boothCode: row.booth_code,
+      })),
+    }, periodKey, venueSpaceId);
+  }
+
+  async function listOrganizerMaps(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const maps = await repository.listOrganizerMapDrafts(candidateId);
+    return json({ maps: maps.map((map) => ({
+      id: map.id, periodKey: map.period_key, venueSpaceId: map.venue_space_id,
+      status: map.status, mapRevision: map.current_revision, updatedAt: map.updated_at,
+    })) });
+  }
+
+  async function getOrganizerMap(request: Request, candidateId: string, draftId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const map = await repository.getOrganizerMapDraft(candidateId, draftId);
+    if (!map?.content_json) return json({ error: "找不到地圖草稿。" }, 404);
+    const content = parseMapContributionDraftContent(JSON.parse(map.content_json) as unknown);
+    if (!content) return json({ error: "地圖草稿格式無效。" }, 500);
+    return json({ map: {
+      id: map.id, periodKey: map.period_key, venueSpaceId: map.venue_space_id,
+      status: map.status, mapRevision: map.current_revision, updatedAt: map.updated_at,
+      layout: content.layout,
+    } });
+  }
+
+  async function createOrganizerMap(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const periodKey = typeof body?.periodKey === "string" ? body.periodKey.normalize("NFKC").trim() : "";
+    const venueSpaceId = typeof body?.venueSpaceId === "string" ? body.venueSpaceId.normalize("NFKC").trim() : "";
+    const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout });
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !content) {
+      return json({ error: "expectedVersion、period、venue-space 與有效地圖為必填。" }, 400);
+    }
+    const scope = await candidateMapScope(candidateId, periodKey, venueSpaceId);
+    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "地圖 scope 或 template 不屬於此候選活動。" }, 422);
+    const draftId = crypto.randomUUID();
+    const result = await repository.createOrganizerMapDraft({
+      id: draftId, candidateId, periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
+      actorAccountId: access.current.accountId, expectedVersion: expectedVersion as number,
+      contentJson: JSON.stringify(content), now: config.now(), admin: access.admin,
+    });
+    if (!result.ok) {
+      const status = result.reason === "not_found" || result.reason === "forbidden" ? 404
+        : result.reason === "scope_exists" ? 409 : 409;
+      return json({ error: result.reason === "scope_exists" ? "此 day × venue-space 已有地圖草稿。" : "版本或狀態已變更。", conflict: result }, status);
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      action: "organizer_event.map_created", subjectType: "organizer_event", subjectId: candidateId,
+      detail: { version: result.version, draftId, periodKey, venueSpaceId }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, draftId, version: result.version, mapRevision: result.mapRevision }, 201);
+  }
+
+  async function updateOrganizerMap(request: Request, candidateId: string, draftId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const expectedMapRevision = body?.expectedMapRevision;
+    const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout });
+    if (!Number.isSafeInteger(expectedVersion) || !Number.isSafeInteger(expectedMapRevision) || !content) {
+      return json({ error: "expectedVersion、expectedMapRevision 與有效地圖為必填。" }, 400);
+    }
+    const current = await repository.getOrganizerMapDraft(candidateId, draftId);
+    if (!current) return json({ error: "找不到地圖草稿。" }, 404);
+    const scope = await candidateMapScope(candidateId, current.period_key, current.venue_space_id);
+    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "地圖 scope 或 template 不屬於此候選活動。" }, 422);
+    const result = await repository.saveOrganizerMapDraft({
+      candidateId, draftId, actorAccountId: access.current.accountId,
+      expectedVersion: expectedVersion as number, expectedMapRevision: expectedMapRevision as number,
+      contentJson: JSON.stringify(content), now: config.now(), admin: access.admin,
+    });
+    if (!result.ok) return json({ error: result.reason === "not_found" ? "找不到地圖草稿。" : "版本或狀態已變更。", conflict: result }, result.reason === "not_found" ? 404 : 409);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+      action: "organizer_event.map_updated", subjectType: "organizer_event", subjectId: candidateId,
+      detail: { version: result.version, draftId, mapRevision: result.mapRevision }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, version: result.version, mapRevision: result.mapRevision });
+  }
+
+  async function validateOrganizerCandidate(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    const { issues } = await validateOrganizerWorkspace(candidateId, draft);
+    return json({ ok: issues.every((issue) => issue.severity !== "error"), version: candidate.current_version, issues });
+  }
+
+  async function previewOrganizerCandidate(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    const { issues, imported, maps, contents } = await validateOrganizerWorkspace(candidateId, draft);
+    const mapArtifacts = maps.map((map) => {
+      const stored = contents.get(map.id);
+      const content = stored ? parseMapContributionDraftContent(JSON.parse(stored) as unknown) : null;
+      return content ? {
+        periodKey: map.period_key, venueSpaceId: map.venue_space_id,
+        revision: map.current_revision, layout: content.layout,
+      } : null;
+    });
+    return json({
+      version: candidate.current_version,
+      issues,
+      preview: {
+        schema: "organizer-reader-preview/1",
+        event: draft.event, venueAssignments: draft.venue.assignments, officialSource: draft.officialSource,
+        placements: (imported?.rows ?? []).map((row) => ({
+          sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
+          areaId: row.area_id, boothCode: row.booth_code, circleName: row.circle_name,
+          identityGroup: row.identity_group,
+        })),
+        maps: mapArtifacts.filter(Boolean),
+      },
+    });
+  }
+
+  async function manageOrganizerCollaborators(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
+    const action = body?.action;
+    const role = body?.role === "owner" ? "owner" : "editor";
+    if (!isEmailShaped(email) || (action !== "invite" && action !== "revoke")) {
+      return json({ error: "email 與 action（invite／revoke）為必填。" }, 400);
+    }
+    if (role === "owner" && !access.admin) return json({ error: "只有全域管理者可以增減 Owner。" }, 403);
+    if (role === "editor" && access.role !== "owner") return json({ error: "只有 Owner 可以管理 Editor。" }, 403);
+    if (role === "owner" && config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
+      return json({ error: "Owner 權限異動需要重新登入。" }, 401);
+    }
+    const ipHash = await clientIpHash(request);
+    if (action === "invite" && !await organizerInvitationAllowed(email, access.current.accountId, ipHash, config.now())) {
+      return json({ error: "邀請寄送過於頻繁，請稍後再試。" }, 429);
+    }
+    const result = role === "owner"
+      ? await repository.manageOrganizerOwner({
+        candidateId, actorAccountId: access.current.accountId, email, action, now: config.now(),
+      })
+      : await repository.manageOrganizerCollaborator({
+        candidateId, actorAccountId: access.current.accountId, email,
+        role: "editor", action, now: config.now(),
+      });
+    if (!result.ok) {
+      const error = result.reason === "forbidden" ? "只有 Owner 可以管理 Editor。"
+        : result.reason === "last_owner" ? "每個活動至少需要一位 Owner。" : "協作者狀態沒有變更。";
+      return json({ error }, result.reason === "forbidden" ? 403 : 409);
+    }
+    if (action === "invite") await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: access.admin ? "admin" : "organizer_owner",
+      action: `organizer_event.${role}_${action}`, subjectType: "organizer_event", subjectId: candidateId,
+      detail: { role, emailHash: await emailAuditSubjectId(config.hashPepper, email) }, ipHash,
+    });
+    return json({ ok: true, result: result.result });
+  }
+
+  async function submitOrganizerCandidate(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (access.role !== "owner") return json({ error: "只有 Owner 可以送審。" }, 403);
+    if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
+      return json({ error: "送審需要重新登入。" }, 401);
+    }
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) return json({ error: "expectedVersion 無效。" }, 400);
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    // The snapshot is hashed from the same bytes validation just read, so a
+    // second load cannot let the two disagree about what was approved.
+    const { issues, imported, maps, contents } = await validateOrganizerWorkspace(candidateId, draft);
+    if (issues.some((issue) => issue.severity === "error")) return json({ error: "請先修正驗證錯誤。", issues }, 422);
+    const mapSnapshots = maps.map((map) => {
+      const stored = contents.get(map.id);
+      return {
+        id: map.id, periodKey: map.period_key, venueSpaceId: map.venue_space_id,
+        mapRevision: map.current_revision,
+        content: stored ? JSON.parse(stored) as unknown : null,
+      };
+    });
+    const snapshotJson = JSON.stringify({
+      schema: "organizer-submission-snapshot/1", candidateId, candidateVersion: expectedVersion,
+      eventId: draft.event.id, draft,
+      import: imported ? {
+        source: {
+          fileName: imported.source.file_name, worksheet: imported.source.worksheet,
+          sha256: imported.source.sha256, sourceDescription: imported.source.source_description,
+          mapping: JSON.parse(imported.source.mapping_json) as unknown,
+        },
+        rows: imported.rows.map((row) => ({
+          sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
+          areaId: row.area_id, boothCode: row.booth_code, circleName: row.circle_name,
+          stableKey: row.stable_key, identityGroup: row.identity_group,
+        })),
+      } : null,
+      maps: mapSnapshots.sort((a, b) => a.periodKey.localeCompare(b.periodKey) || a.venueSpaceId.localeCompare(b.venueSpaceId)),
+    });
+    const revisionHash = await sha256Hex(snapshotJson);
+    const snapshot = await repository.storeOrganizerSubmissionSnapshot({
+      candidateId, candidateVersion: expectedVersion as number, actorAccountId: access.current.accountId,
+      snapshotJson, sha256: revisionHash, now: config.now(),
+    });
+    if (!snapshot.ok) return json({ error: "無法固定送審 snapshot；請重新載入。", conflict: snapshot }, 409);
+    const result = await repository.submitOrganizerCandidate({
+      candidateId, actorAccountId: access.current.accountId,
+      expectedVersion: expectedVersion as number, now: config.now(),
+    });
+    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有 Owner 可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId, actorRole: "organizer_owner",
+      action: "organizer_event.submitted", subjectType: "organizer_event", subjectId: candidateId,
+      detail: { version: expectedVersion, revisionHash }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, status: result.status, revisionHash });
+  }
+
+  async function adminReviewOrganizerCandidate(request: Request, candidateId: string) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const decision = body?.decision;
+    const note = typeof body?.note === "string" ? body.note.normalize("NFKC").trim().slice(0, 1000) : "";
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1
+      || (decision !== "approve" && decision !== "changes_requested")) {
+      return json({ error: "expectedVersion 與 decision（approve／changes_requested）為必填。" }, 400);
+    }
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, expectedVersion as number);
+    if (!snapshot) return json({ error: "找不到此 revision 的 immutable submission snapshot。" }, 409);
+    if (decision === "approve") {
+      const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+      const { issues } = await validateOrganizerWorkspace(candidateId, draft);
+      if (issues.some((issue) => issue.severity === "error")) return json({ error: "候選活動仍有驗證錯誤。", issues }, 422);
+    }
+    const result = await repository.reviewOrganizerCandidate({
+      candidateId, expectedVersion: expectedVersion as number, decision,
+      actorAccountId: gate.session.accountId, note, now: config.now(),
+    });
+    if (!result.ok) return json({ error: "版本或狀態已變更。", conflict: result }, 409);
+    let publicationJobId: string | null = null;
+    if (decision === "approve") {
+      const publication = await repository.createOrganizerPublicationJob({
+        candidateId, candidateVersion: expectedVersion as number, snapshotId: snapshot.id,
+        approvalHash: snapshot.sha256, now: config.now(),
+      });
+      if (!publication.ok) return json({ error: "核准已記錄，但無法建立發布工作；請由管理者重試。" }, 500);
+      publicationJobId = publication.jobId;
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
+      action: decision === "approve" ? "organizer_event.approved" : "organizer_event.changes_requested",
+      subjectType: "organizer_event", subjectId: candidateId,
+      detail: {
+        version: expectedVersion, revisionHash: snapshot.sha256, publicationJobId,
+        selfApproval: candidate.submitted_by === gate.session.accountId,
+      },
+      ipHash: await clientIpHash(request),
+    });
+    return json({
+      ok: true, status: result.status, revisionHash: snapshot.sha256, publicationJobId,
+      selfApproval: candidate.submitted_by === gate.session.accountId,
+    });
+  }
+
+  async function adminRetryOrganizerPublication(request: Request, jobId: string) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    if ((config.organizerPublicationMode ?? "disabled") === "disabled") {
+      return json({ error: "Organizer 發布功能尚未啟用。" }, 503);
+    }
+    const result = await repository.retryOrganizerPublicationJob({ jobId, now: config.now() });
+    if (!result.ok) {
+      if (result.reason === "not_found") return json({ error: "找不到發布工作。" }, 404);
+      return json({ error: "只有失敗的發布工作可以重試。", status: result.status }, 409);
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
+      action: "organizer_publication.retried", subjectType: "organizer_publication", subjectId: jobId,
+      detail: { step: result.step }, ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, jobId, status: "queued", step: result.step });
+  }
+
+  /**
    * The public overlay. The strong ETag is keyed on the stored revision so a
    * reader that already has the current document gets a bodyless 304 — but the
    * saving is bandwidth, not quota. Nothing collapses this at the edge: the
@@ -1584,6 +2265,14 @@ export function createCirclePortalHandlers({
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
+    // Candidate-scoped: an organizer candidate is addressed by candidateId and
+    // exists before any event is published, so `eventScoped` — which demands a
+    // published event this deployment serves — would refuse every one of them.
+    // Authority comes from the candidate's own grant, checked in each handler.
+    adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate, putOrganizerImport,
+    listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
+    validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
+    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication,
     // Event-scoped: each answers only for the event the request named.
     listClaims: eventScoped(listClaims),
     createClaim: eventScoped(createClaim),

@@ -45,7 +45,22 @@ const projectTestCircle = async (circleId, fields) => (CIRCLES[circleId]
   ? [{ recordId: `${circleId}-0`, name: CIRCLES[circleId].name, circle: { id: circleId, ...(fields ?? {}) } }]
   : null);
 
-const TABLES = ["login_tokens", "sessions", "accounts", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "admins"];
+const TABLES = [
+  "organizer_event_reviews",
+  "organizer_event_invitations",
+  "organizer_event_grants",
+  "organizer_event_revisions",
+  "organizer_event_candidates",
+  "login_tokens",
+  "sessions",
+  "accounts",
+  "circle_claims",
+  "circle_overrides",
+  "overrides_doc",
+  "audit_log",
+  "preview_mail_sink",
+  "admins",
+];
 
 beforeEach(async () => {
   sent = [];
@@ -214,6 +229,40 @@ test("a magic link works once and never again", async () => {
   assert.equal((await handlers.verify(post("/api/auth/verify", { token }))).status, 200);
   const replayed = await handlers.verify(post("/api/auth/verify", { token }));
   assert.equal(replayed.status, 400);
+});
+
+test("an organizer login link returns to the organizer entry and accepts its event invitation", async () => {
+  const adminId = await repository.upsertAccount("admin@example.com", clock);
+  await repository.createOrganizerCandidate({
+    id: "candidate-organizer-login",
+    tentativeName: "Organizer 候選活動",
+    ownerEmail: "owner@example.test",
+    createdByAccountId: adminId,
+    draftJson: JSON.stringify({
+      schema: "organizer-event-draft/1",
+      event: { id: null, name: "Organizer 候選活動", days: [] },
+      venue: { assignments: [] },
+      officialSource: { label: "", url: null },
+    }),
+    now: clock,
+  });
+
+  const requested = await handlers.requestLink(post("/api/auth/request-link", {
+    email: "owner@example.test",
+    turnstileToken: "solved",
+    audience: "organizer",
+  }));
+  assert.equal(requested.status, 202);
+  const link = sent.at(-1).text.match(/\/organizer\?login=([^\s]+)/);
+  assert.ok(link, "the emailed link must return to the organizer entry");
+
+  const verified = await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(link[1]) }));
+  assert.equal(verified.status, 200);
+  const session = await verified.json();
+  assert.equal(session.hasOrganizerAccess, true);
+
+  const account = await database.prepare("SELECT id FROM accounts WHERE email = 'owner@example.test'").first();
+  assert.equal(await repository.organizerRole("candidate-organizer-login", account.id), "owner");
 });
 
 test("the raw token never reaches the database", async () => {

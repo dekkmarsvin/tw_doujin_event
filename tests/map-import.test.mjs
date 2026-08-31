@@ -40,7 +40,7 @@ test("validates the staged fixture map without FF47-specific counts", async () =
       { venueId: "sample-venue", venueSpaceId: "sample-south-floor", areaIds: ["south"] },
     ],
   };
-  assert.throws(() => validateStagedEventArtifacts(multiSpaceEvent, multiSpaceReferences, catalog, snapshot, "sample"), /Per-space published map artifacts/);
+  assert.throws(() => validateStagedEventArtifacts(multiSpaceEvent, multiSpaceReferences, catalog, snapshot, "sample"), /requires scoped map artifacts/);
 });
 
 function syntheticFF47Image() {
