@@ -716,6 +716,15 @@ function ImportPanel({ detail, onChanged, setNotice }: {
     })).sort((a, b) => a.venueSpaceId.localeCompare(b.venueSpaceId, "en"));
   }, [detail.draft.venue.assignments, prepared]);
   const derivedBlocked = derived.some((space) => !space.declared || space.areas.some((area) => !area.valid));
+  // Import replaces the whole booth list, so a configured space this file never
+  // mentions ends up with no booths and no areas. That is legitimate mid-work,
+  // but the organizer should see it here rather than meet it as an error after
+  // saving.
+  const uncovered = prepared
+    ? detail.draft.venue.assignments
+      .filter((assignment) => !derived.some((space) => space.venueSpaceId === assignment.venueSpaceId))
+      .map((assignment) => assignment.venueSpaceId)
+    : [];
   const sheet = sheets.find((item) => item.name === sheetName) ?? null;
   const header = sheet?.rows[headerRow - 1]?.cells ?? [];
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
@@ -809,7 +818,8 @@ function ImportPanel({ detail, onChanged, setNotice }: {
               : <span>這個場館空間不在活動設定裡，請先到「場館與展區」新增，或修正來源檔。</span>}
           </div>)}
           {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}
-          <p>儲存時會把這些展區寫進活動設定。</p>
+          {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場館空間會變成沒有攤位。</p>}
+          <p>儲存時會把這些展區寫進活動設定，沒出現在檔案裡的場館空間則會清空。</p>
         </div>}
         {prepared.issues.map((issue, index) => <p key={`${issue.code}-${index}`} className={styles.issueError}>來源列 {issue.row}・{issue.message}</p>)}
         <table><thead><tr><th>來源列</th><th>活動日</th><th>場館空間・展區</th><th>攤位</th><th>社團</th><th>社團識別</th></tr></thead><tbody>{prepared.rows.slice(0, 100).map((row) => <tr key={`${row.sourceRow}-${row.boothCode}`}><td>{row.sourceRow}</td><td>{row.dayId}</td><td>{row.venueSpaceId} / {row.areaId}</td><td>{row.boothCode}</td><td>{row.circleName}</td><td>{row.identityGroup ?? "未合併"}</td></tr>)}</tbody></table>

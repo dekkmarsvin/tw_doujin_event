@@ -93,7 +93,14 @@ export function nextOrganizerEventDay(days: readonly OrganizerEventDay[], now: D
 /** Areas are a fact of the booth list, not something to type before the list
  * exists. The import derives them per venue space so the organizer checks a
  * result instead of guessing ids, and the import API keeps refusing any row
- * whose area was never declared — it is declared from the same rows. */
+ * whose area was never declared — it is declared from the same rows.
+ *
+ * Import is replace semantics, so this is a replacement too: a configured space
+ * the new file never mentions loses its areas rather than keeping the ones an
+ * older file left behind. Keeping them would leave the space looking covered
+ * while its booth rows are gone, and the prerequisite check — which reads an
+ * empty area list as "the import never reached this space" — would stay
+ * silent. */
 export function withOrganizerImportedAreaIds(
   draft: OrganizerEventDraft,
   rows: readonly { venueSpaceId: string; areaId: string }[],
@@ -107,10 +114,10 @@ export function withOrganizerImportedAreaIds(
   return {
     ...draft,
     venue: {
-      assignments: draft.venue.assignments.map((assignment) => {
-        const areas = bySpace.get(assignment.venueSpaceId);
-        return areas ? { ...assignment, areaIds: [...areas].sort((a, b) => a.localeCompare(b, "en")) } : assignment;
-      }),
+      assignments: draft.venue.assignments.map((assignment) => ({
+        ...assignment,
+        areaIds: [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en")),
+      })),
     },
   };
 }

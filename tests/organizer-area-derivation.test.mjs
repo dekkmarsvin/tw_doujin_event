@@ -33,12 +33,29 @@ test("a venue space without areas is not an error before any booth list exists",
   assert.deepEqual(organizerGuidedTaskIssues(draft([space("hall-a")]), "venue"), []);
 });
 
-test("the import derives one sorted area set per venue space and leaves uncovered spaces alone", () => {
+test("the import derives one sorted area set per venue space and clears the spaces it never covers", () => {
   const next = withOrganizerImportedAreaIds(
-    draft([space("hall-a"), space("hall-b", ["OLD"]), space("hall-c", ["KEPT"])]),
+    draft([space("hall-a"), space("hall-b", ["OLD"]), space("hall-c", ["STALE"])]),
     [row("hall-a", "B"), row("hall-a", "A"), row("hall-a", "B"), row("hall-b", "ALL")],
   );
-  assert.deepEqual(next.venue.assignments.map((assignment) => assignment.areaIds), [["A", "B"], ["ALL"], ["KEPT"]]);
+  assert.deepEqual(next.venue.assignments.map((assignment) => assignment.areaIds), [["A", "B"], ["ALL"], []]);
+});
+
+test("a replacement import that drops a space leaves it reportable rather than looking covered", () => {
+  const first = withOrganizerImportedAreaIds(
+    draft([space("hall-a"), space("hall-b")]),
+    [row("hall-a", "A"), row("hall-b", "ALL")],
+  );
+  assert.deepEqual(first.venue.assignments.map((assignment) => assignment.areaIds), [["A"], ["ALL"]]);
+
+  const replaced = withOrganizerImportedAreaIds(first, [row("hall-a", "A")]);
+  assert.deepEqual(replaced.venue.assignments.map((assignment) => assignment.areaIds), [["A"], []]);
+  assert.deepEqual(
+    getOrganizerWorkspacePrerequisiteIssues({ draft: replaced, importedRows: 1, maps: [] })
+      .filter((issue) => issue.code === "missing_area")
+      .map((issue) => issue.target),
+    ["hall-b"],
+  );
 });
 
 test("derivation replaces the previous set rather than accumulating stale areas", () => {
