@@ -123,6 +123,7 @@
 .derivedField strong { min-height: 38px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 0 11px; background: var(--paper); font-weight: 400; }
 .derivedField small { color: var(--muted); font-weight: 400; }
 .templatePreview { border-left: 2px solid var(--line); padding-left: 9px; color: var(--muted); font-weight: 400; }
+.schematic { display: block; width: 100%; height: auto; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); }
 .templatePreview p { margin: 0; }
 .templatePreview ul { margin: 3px 0 0; padding-left: 15px; }
 .derivedSummary { margin: 14px 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); }

@@ -63,9 +63,11 @@ import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import MapLayoutEditor from "../map-layout-editor";
 import {
   getMapTemplateMetadata,
+  getMapTemplateShape,
   hasMapTemplateRecognizer,
   listMapTemplateOptions,
   recognizeMapTemplate,
+  type MapTemplateShape,
 } from "../map-template-registry";
 import { useModalFocus } from "../use-modal-focus";
 import styles from "./organizer.module.css";
@@ -923,9 +925,42 @@ function DraftForm({
   </section>;
 }
 
+/** The schematic is drawn from the same shape validation enforces, so it can
+ * only ever show a floor the template would actually accept. Bar height is the
+ * row's slot count, which is what makes the short A row and the horizontal W
+ * row read as themselves rather than as decoration. */
+function MapTemplateSchematic({ shape }: { shape: MapTemplateShape | null }) {
+  const width = 240;
+  const height = 96;
+  if (!shape) {
+    return <svg className={styles.schematic} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="沒有固定版面，攤位排列由你描摹的配置圖決定">
+      <rect x="1" y="1" width={width - 2} height={height - 2} rx="7" fill="none" stroke="currentColor" strokeDasharray="6 5" opacity=".45" />
+      <text x={width / 2} y={height / 2 + 4} textAnchor="middle" fontSize="11" fill="currentColor" opacity=".6">版面由你描摹</text>
+    </svg>;
+  }
+  const vertical = shape.rows.filter((row) => row.orientation === "vertical");
+  const horizontal = shape.rows.filter((row) => row.orientation === "horizontal");
+  const tallest = Math.max(...shape.rows.map((row) => row.slots));
+  const floor = horizontal.length > 0 ? height - 22 : height - 8;
+  const pitch = (width - 16) / vertical.length;
+  return <svg className={styles.schematic} viewBox={`0 0 ${width} ${height}`} role="img"
+    aria-label={`${shape.rows.length} 個攤位排，共 ${shape.rows.reduce((total, row) => total + row.slots, 0)} 個攤位格`}>
+    {vertical.map((row, index) => {
+      const bar = (floor - 10) * (row.slots / tallest);
+      return <rect key={row.label} x={8 + index * pitch} y={floor - bar} width={Math.max(2, pitch - 3)} height={bar} rx="1.5"
+        fill="currentColor" opacity=".38" />;
+    })}
+    {horizontal.map((row) => <rect key={row.label} x="8" y={floor + 6} width={width - 16} height="7" rx="2"
+      fill="currentColor" opacity=".38" />)}
+    <text x="8" y={height - 3} fontSize="8" fill="currentColor" opacity=".55">{vertical[0]?.label}–{vertical[vertical.length - 1]?.label} 直排</text>
+    {horizontal.length > 0 && <text x={width - 8} y={height - 3} textAnchor="end" fontSize="8" fill="currentColor" opacity=".55">{horizontal.map((row) => row.label).join("、")} 橫排</text>}
+  </svg>;
+}
+
 function MapTemplatePreview({ template }: { template: string }) {
   const preview = mapTemplatePreview(template);
   return <div className={styles.templatePreview}>
+    <MapTemplateSchematic shape={getMapTemplateShape(template)} />
     <p>{preview.summary}</p>
     <ul><li>{preview.recognizer}</li><li>{preview.shape}</li></ul>
   </div>;
