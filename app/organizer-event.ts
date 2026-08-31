@@ -90,6 +90,44 @@ export function nextOrganizerEventDay(days: readonly OrganizerEventDay[], now: D
   return { id: String(ordinal), label: `第 ${ordinal} 日`, date };
 }
 
+/** Areas are a fact of the booth list, not something to type before the list
+ * exists. The import derives them per venue space so the organizer checks a
+ * result instead of guessing ids, and the import API keeps refusing any row
+ * whose area was never declared — it is declared from the same rows.
+ *
+ * Import is replace semantics, so this is a replacement too: a configured space
+ * the new file never mentions loses its areas rather than keeping the ones an
+ * older file left behind. Keeping them would leave the space looking covered
+ * while its booth rows are gone, and the prerequisite check — which reads an
+ * empty area list as "the import never reached this space" — would stay
+ * silent. */
+export function withOrganizerImportedAreaIds(
+  draft: OrganizerEventDraft,
+  rows: readonly { venueSpaceId: string; areaId: string }[],
+): OrganizerEventDraft {
+  const bySpace = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const areas = bySpace.get(row.venueSpaceId) ?? new Set<string>();
+    areas.add(row.areaId);
+    bySpace.set(row.venueSpaceId, areas);
+  }
+  return {
+    ...draft,
+    venue: {
+      assignments: draft.venue.assignments.map((assignment) => ({
+        ...assignment,
+        areaIds: [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en")),
+      })),
+    },
+  };
+}
+
+/** Area ids reach public URLs, so a derived value still has to be url-safe.
+ * The import preview flags the ones that are not instead of failing later. */
+export function isOrganizerAreaId(value: string) {
+  return AREA_ID.test(value);
+}
+
 export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | null {
   if (!record(value) || value.schema !== "organizer-event-draft/1"
     || !record(value.event) || !record(value.venue) || !record(value.officialSource)
@@ -148,8 +186,8 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
   const spaces = new Set<string>();
   draft.venue.assignments.forEach((assignment, row) => {
     if (!ID.test(assignment.venueId) || !ID.test(assignment.venueSpaceId) || !assignment.mapTemplate
-      || assignment.areaIds.length === 0 || assignment.areaIds.some((area) => !AREA_ID.test(area))) {
-      add({ severity: "error", step: "venue", code: "invalid_assignment", row: row + 1, target: `venue.assignments.${row}`, message: "場館、場館空間與展區資料不完整。" });
+      || assignment.areaIds.some((area) => !AREA_ID.test(area))) {
+      add({ severity: "error", step: "venue", code: "invalid_assignment", row: row + 1, target: `venue.assignments.${row}`, message: "場館、場館空間與地圖模板資料不完整。" });
     }
     if (spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: `場館空間 ${assignment.venueSpaceId} 重複。` });
     spaces.add(assignment.venueSpaceId);

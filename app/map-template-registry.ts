@@ -1,14 +1,50 @@
 import { validateEventMapLayout, type LayoutValidation } from "./event-map";
-import { validateLayout as validateFf47Layout } from "./ff47-map-template-validator";
+import {
+  FF47_TEMPLATE_SHAPE,
+  validateLayout as validateFf47Layout,
+  type MapTemplateShape,
+} from "./ff47-map-template-validator";
 import { recognizeFF47Map, type PixelSource } from "./map-recognition";
 
 const TEMPLATE_VALIDATORS: ReadonlyMap<string, (value: unknown) => LayoutValidation> = new Map([
   ["FF47", validateFf47Layout],
 ]);
 const TEMPLATE_RECOGNIZERS = new Map([["FF47", recognizeFF47Map]]);
+const TEMPLATE_SHAPES = new Map<string, MapTemplateShape>([["FF47", FF47_TEMPLATE_SHAPE]]);
 const TEMPLATE_METADATA = new Map([
   ["FF47", { rowLabel: "A–W 排", expectedRows: 23, slotLabel: "攤位格", expectedSlots: 988 }],
 ]);
+
+export type MapTemplateOption = { id: string; label: string; summary: string };
+
+/** The templates the organizer picks between. A stored value outside this list
+ * still works — the generic validator accepts it — so callers offer it as an
+ * extra option rather than silently rewriting saved data. */
+const TEMPLATE_OPTIONS: readonly MapTemplateOption[] = [
+  {
+    id: "TAIWAN_GENERIC_V1",
+    label: "通用版型",
+    summary: "上傳配置圖後手動描摹攤位，排列方式不受固定規格限制。",
+  },
+  {
+    id: "FF47",
+    label: "FF47 爭艷館版型",
+    summary: "上傳配置圖可自動辨識攤位，存檔時依這個版型檢查攤位排與數量。",
+  },
+];
+
+export function listMapTemplateOptions() {
+  return TEMPLATE_OPTIONS;
+}
+
+/** The row structure a template demands, for authoring surfaces that draw it.
+ * A template without a fixed structure returns null rather than a made-up
+ * shape: nothing about that map is decided until someone traces one. */
+export function getMapTemplateShape(template: string): MapTemplateShape | null {
+  return TEMPLATE_SHAPES.get(template) ?? null;
+}
+
+export type { MapTemplateShape } from "./ff47-map-template-validator";
 
 export type MapTemplateMetadata = {
   rowLabel: string;

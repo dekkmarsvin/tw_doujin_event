@@ -51,16 +51,23 @@ draft → submitted → approved → publishing → published
 | 區塊 | 內容 | 規則 |
 |---|---|---|
 | `event` | `id`、`name`、`days[]` | `id` 只允許小寫英數與連字號；每個活動日需要 id、名稱與 `YYYY-MM-DD` 日期，id 不得重複 |
-| `venue.assignments` | `venueId`、`venueSpaceId`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複，`areaIds` 不得為空 |
+| `venue.assignments` | `venueId`、`venueSpaceId`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複；`areaIds` 由匯入帶入，草稿層只檢查格式 |
 | `officialSource` | `label`、`url` | 來源說明必填；網址若填寫必須是 HTTPS |
 
 新增活動日時，表單預設第一日為作者當地的今天，之後每一日為最後一個有日期的活動日加一天；新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
+
+`areaIds` **不在場館表單手填**。展區是攤位名單的事實，設定場館時主辦手上還沒有那份名單，所以介面只顯示目前的值，實際值由匯入推導（見[攤位匯入](#攤位匯入)）。草稿驗證只檢查已存在的展區代碼格式；「每個場館空間至少要有一個展區」改由 prerequisite evaluator 在**有匯入資料之後**以 `import`／`missing_area` 回報，因此設定場館的當下不會出現主辦無從修正的錯誤。
+
+`mapTemplate` 的值域是 `listMapTemplateOptions()`，介面以下拉選單呈現並預覽這個選擇的後果（能否自動辨識配置圖、存檔時依什麼檢查）。草稿裡不在清單內的既有值會原樣保留為額外選項，不被靜默改寫。
 
 ## 攤位匯入
 
 - **原始檔只在瀏覽器裡解析與雜湊。** `readOrganizerWorkbook()` 讀 CSV 或 XLSX、列出工作表、保留實體列號；沒有任何 API 接受這個 File。
 - `PUT /api/organizer/events/:candidateId/imports` 只收主辦確認過的**正規化資料列**與來源 metadata（檔名、工作表、原始檔 SHA-256、來源說明、欄位 mapping）。
 - 每一列的 `dayId`、`venueSpaceId` 與 `areaId` 必須落在草稿已宣告的集合內；同一活動日 × 場館空間 × 攤位代碼不得重複（大小寫不敏感）。
+- **展區由這份檔案決定。** 預覽會列出檔案裡每個場館空間出現的展區與列數；主辦按下確認時，介面先把這些展區寫進草稿（一次正常的 `expectedVersion` 儲存），再以新版本送出匯入。API 端「未宣告的展區一律拒絕」的規則不變——被宣告的來源換成同一份檔案。
+- 展區的推導與匯入一樣是**取代**語意：草稿裡有、但這份檔案沒有提到的場館空間會被清空展區，因此 prerequisite 的 `missing_area` 會指出它，而不是讓它帶著上一份檔案留下的展區看起來仍有攤位。預覽會先提醒哪些場館空間沒出現在檔案裡。
+- 檔案裡出現草稿沒有的場館空間，或展區代碼不是英數字、底線與連字號（它會進公開網址）時，預覽直接擋下儲存並指出要修的是來源檔還是場館設定。
 - `identityGroup` 只能是 `stable:<stableKey>` 或 `null`。**名稱相同不構成同一社團**，與[社團目錄契約](./circle-catalog.md)的 linkage 規則一致。
 - 匯入是**取代**語意：一次請求就是這個候選活動的完整攤位表。新來源寫入時，前一份標記 `replaced_at`，其資料列不再是有效匯入。
 - 兩道上限，回不同的狀態碼：**超過 20,000 列**在最初的參數檢查就回 `400`；**正規化後超過 8 MiB** 回 `413`。兩者各有自己的錯誤訊息，都在寫入之前拒絕，不會留下半套匯入。
