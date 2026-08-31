@@ -21,6 +21,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/rendered-html.test.mjs` 以內容比對把關。
 - **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/rendered-html.test.mjs` 把關。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
+- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle，也不出現在公開導覽。
 - 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。
 
 ## 索取登入連結需要通過真人驗證
@@ -31,6 +32,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **驗證失敗不消耗任何額度。** 每小時每信箱 5 次、每 IP 20 次的計數在驗證通過後才遞增，機器人打不到它，也打不到 D1 與郵件供應商。
 - **驗證器不可達時視為未通過。** siteverify 逾時、非 2xx 或回應無法解析一律拒絕。登入連結可以一分鐘後再要一次；一個任何人都能驅動的寄信端點不行。
 - **sitekey 由 `GET /api/auth/config` 供給，不編進 bundle。** 因此 preview 與 production 可以持有不同金鑰而共用同一份 build。
+- 請求可帶 `audience`（`circle` 或 `organizer`，預設 `circle`）。它只決定信件內容與連結指向哪個入口，不改變驗證、額度或回應；`audience` 記在 `login_tokens` 上。
+- **Organizer 邀請是唯一由他人代為鑄造登入連結的路徑**，因此不走本節的 Turnstile，改由三道獨立預算限制，並以 `login_tokens.minted_by` 與本人自助索取分開計數。規則寫在[主辦單位工作區契約](./organizer-workspace.md#邀請制不能自助開活動)。
 - Turnstile 的 script 只在 `/circle` 載入，CSP 也只在該路徑放寬，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)與 `public/_headers`。
 
 ## 身分與擁有權

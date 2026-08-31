@@ -7,7 +7,16 @@
 **實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)
 **測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`
 
-> **實作狀態（2026-08-30）**：地圖貢獻 route 目前仍只服務 Pages 設定的單一 `eventId`。[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 將社團入口改為通用入口，但沒有決定 `map_contributor` 是否逐活動授權；[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 也明確不擴張此流程。因此下方單一活動範圍仍是現行契約，未來若要改必須另行定案，不能從社團多活動 ownership 自動類推。
+> **實作狀態（2026-08-31）**：地圖貢獻 route 目前仍只服務 Pages 設定的單一 `eventId`。[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 將社團入口改為通用入口，但沒有決定 `map_contributor` 是否逐活動授權；[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 也明確不擴張此流程。因此下方單一活動範圍仍是現行契約，未來若要改必須另行定案，不能從社團多活動 ownership 自動類推。
+
+## 與主辦單位工作區共用一張表
+
+`map_drafts` 同時保存本流程的公開貢獻草稿與[主辦單位工作區](./organizer-workspace.md)的候選活動地圖，而候選活動的 `event_id` 可能正是某個已發布活動的 id。**兩條管線只由 `candidate_id` 分開**：
+
+- 本契約涵蓋的每一句查詢與寫入都要求 `candidate_id IS NULL`。
+- 候選活動地圖的 `candidate_id` 非 NULL，只能經 `/api/organizer/**` 讀寫，且沒有公開 `targetPath`。
+
+少了這個條件，同時具備 `map_contributor` 與 organizer 身分的人可以把候選地圖送進本流程的審閱並匯出成正式地圖。這是程式邊界，由回歸測試涵蓋。
 
 ## 授權邊界
 
@@ -64,7 +73,7 @@
 
 匯出只在私人 D1 寫入不可變的候選、`targetPath`、SHA-256 與相對於目前 reviewed public snapshot 的語意差異，並提供管理者下載；它不呼叫 GitHub、不寫 event-data repository，也不改變任何匿名公開 endpoint。候選仍須經 event-data repository 的 schema、review 與 pin 流程才能發布。
 
-目前單一 venue-space 活動的 `targetPath` 是 `map.json`。多 venue-space 草稿使用 `maps/<periodKey>/<venueSpaceId>.json` 保留明確 scope；在公開 reader 與 event-data per-space artifact 契約完成前，這類候選不可直接發布成現有 event-level `map.json`。
+單一 venue-space 活動的 `targetPath` 是 `map.json`；多 venue-space 活動是 `maps/<periodKey>/<venueSpaceId>.json`，並由該活動的 `map-manifest.json` 索引。兩者的路徑由 [`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts) 與 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 決定，reader、staging、pin 與離線清單都已支援，見[活動地圖契約](./event-map.md)。
 
 ## 官方來源檔
 

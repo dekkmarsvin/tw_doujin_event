@@ -26,6 +26,7 @@
 | [搜尋、篩選與顯示設定](./contracts/search.md) | 三組條件的責任切分、詳細搜尋互動、多主題與排除、命中原因 |
 | [URL 檢視狀態](./contracts/url-state.md) | 20 個查詢參數、恢復規則、不寫入 URL 的狀態 |
 | [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
+| [主辦單位工作區](./contracts/organizer-workspace.md) | 邀請制入口、候選活動 revision、攤位匯入、逐 scope 地圖、驗證、送審與核准、發布 fail-closed 邊界 |
 | [地圖貢獻控制面](./contracts/map-contributions.md) | contributor 授權、私人 revision、官方來源檔、審閱狀態機、留言與局部修改請求、候選匯出與保存期限 |
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
 | [資料匯入](./contracts/data-import.md) | **P2，尚未對外開放**。規劃檔案交換已有底層能力；一般介面與外部服務串接尚未實作 |
@@ -84,7 +85,7 @@
 | [0034](./adr/0034-production-origin-gates-deployment.md) | Pages production origin 阻擋壞部署，自訂網域 smoke 提供非阻塞訊號 |
 | [0035](./adr/0035-new-event-onboarding-is-data-driven.md) | 新活動 onboarding 資料驅動；機械工序自動化與編輯器排原語已實作。選項 B 的定案見 0038 |
 | [0036](./adr/0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 |
-| [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併（**實施暫緩，見 0039 決策第 5 點**） |
+| [0037](./adr/0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR，不得合併（**「不得合併」已被 0046 取代；PAT 路線暫緩，見 0039 決策第 5 點**） |
 | [0038](./adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援（取代 0035 決策第 4 點）|
 | [0039](./adr/0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後（取代 0014 決策第 3 點、0032 決策第 1／5 點，限縮 0010 規則一）|
 | [0040](./adr/0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍與已記錄的威脅模型為界；資料維運指令假設單一維護者、單一序列執行 |
@@ -93,6 +94,7 @@
 | [0043](./adr/0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口；帳號跨活動、claim 與 ownership 逐活動隔離 |
 | [0044](./adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目；身分只由可追溯的主辦攤位配置配發。不可回頭的分界線是首次公開發布；authenticated Organizer import 納入第一方來源 |
 | [0045](./adr/0045-list-changes-are-declared-not-inferred.md) | 已發布名單的退出、換手、移動與重編號由人工宣告後套用，不由差異推論；已發布 ID 永不跟著攤位換手（補上 0044 決策 6 的缺口）|
+| [0046](./adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR，條件是 approval snapshot、head SHA pin、required checks、路徑 allowlist 與 lease 同時成立（取代 0037 的「控制面不得 merge」）|
 
 ## 對外文件
 

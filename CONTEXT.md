@@ -116,10 +116,16 @@ A–W。A–V 縱向，W 橫向。
 非一般攤位區（企業攤、舞台等），保存相對矩形，不自動辨識。
 
 **本機 authoring**
-受信任維護者在本機辨識、微調並匯出地圖 layout 的現行內部工具。它不出現在公開 Pages，並保留為 migration／離線備援；但它也**不是 Organizer P0 的完成狀態**，不能把 repository、Git 或 CLI 操作暴露成 Organizer 必須學會的產品流程。
+受信任維護者在本機辨識、微調並匯出地圖 layout 的工具。它不出現在公開 Pages，且自主辦單位工作區上線後**降為離線／事故備援**，不是主辦單位的正式流程。
 
 **Organizer authoring**
-Organizer 透過受驗證的 Web UI 建立活動、選擇 Venue／Floor（venue space）、設定 EventDay／Area／Space、匯入主辦社團與攤位資料、檢查、預覽及發布的 P0 產品流程。它修改 Organizer-owned data，不授權 Circle 修改 placement；最終流程不得要求 Organizer 修改程式、操作 Git／CLI 或依賴 agent。完整產品邊界見 [`PRODUCT.md`](PRODUCT.md)，實作缺口由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤。
+Organizer 透過受驗證的 Web UI 建立活動、選擇 Venue／Floor（venue space）、設定 EventDay／Area／Space、匯入主辦社團與攤位資料、檢查、預覽及發布的 P0 產品流程。它修改 Organizer-owned data，不授權 Circle 修改 placement；流程不得要求 Organizer 修改程式、操作 Git／CLI 或依賴 agent。建立到送審已實作於 `/organizer`，發布步驟尚未啟用；現況與邊界見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)，產品邊界見 [`PRODUCT.md`](PRODUCT.md)。
+
+**候選活動**（organizer candidate）
+主辦單位工作區裡尚未公開的一場活動。以 `candidateId` 定址、逐版本累積 immutable revision，狀態依序為 `draft`、`submitted`、`approved`、`published`，並可回到 `changes_requested`。候選內容不進公開快照；它與已發布活動可能共用同一個 `eventId`，因此資料庫層以 `candidate_id` 分離兩條管線。
+
+**approval snapshot**
+送審當下固定下來的候選內容（草稿、匯入來源 metadata、全部攤位列與每份地圖），以其 SHA-256 作為核准對象。核准的是這個 hash，不是「目前的草稿」；之後的修改只能建立新 revision。
 
 **地圖貢獻者**（`map_contributor`）
 由管理者授權、使用既有 magic-link 帳號整理主辦官方配置證據的人。它不是社團認領附帶的角色，也不新增工作簿或第三方資料來源。

@@ -2,11 +2,13 @@
 
 把配置圖辨識成向量 layout、人工微調、發布到本機 D1，再匯出成公開靜態快照。
 
-**本篇描述的是本機 authoring 環境。它目前仍是一個新活動畫出第一份地圖的唯一路徑。**
+**本篇描述的是本機 authoring 環境。它已降為離線／事故備援。**
 
-`/circle` 的貢獻面板雖然已在 Pages 上運作，但它建立草稿的唯一入口是「從目前公開地圖建立私人草稿」（`app/circle-portal/map-contribution-panel.tsx`）。新活動沒有公開地圖，那一步必定失敗。
+新活動的第一份地圖現在畫在[主辦單位工作區](../contracts/organizer-workspace.md)：候選活動的每一組「活動日 × 場館空間」各建立一份地圖草稿，從空白或描摹起點開始，沿用同一個 layout 編輯器與 template 辨識器。這實現了 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 3 點。
 
-[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 3 點已定：瀏覽器端的空白／描摹起點（[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)）落地後，本篇降為離線備援。**在那之前不是。** 該 PR 必須在同一個 commit 改寫本段。
+`/circle` 的貢獻面板仍只服務已公開的活動：它建立草稿的唯一入口是「從目前公開地圖建立私人草稿」（`app/circle-portal/map-contribution-panel.tsx`）。
+
+本機路徑保留給控制面不可用、或需要在沒有 D1 的情況下重建快照的場合。
 
 **讀者介面（`index.html`）不得出現檔案欄位、管理入口或寫入 route**；讀取失敗只說明公開資料錯誤，不提供管理修復入口。這條約束只約束讀者介面。`circle.html` 是自始分離的獨立 entry（`vite.pages.config.ts`），它在身分驗證後方提供檔案上傳與管理入口，那是 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 的既有機制，不是本條的例外。見 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 2 點。
 

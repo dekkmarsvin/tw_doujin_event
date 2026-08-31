@@ -4,7 +4,7 @@
 
 正式網站：<https://map.kotoban.top/>。一般閱讀不需登入；參展社團可在 <https://map.kotoban.top/circle> 登入並維護補充資料。
 
-地圖辨識與細部編輯目前仍依賴本機 authoring 工具，尚未成為 Organizer 可從 Web 完成的流程。這是現行 migration path，不是 [`PRODUCT.md`](PRODUCT.md) 的 Organizer P0 完成狀態；完整缺口由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤。
+受邀的主辦單位在 <https://map.kotoban.top/organizer> 建立活動、匯入攤位資料、畫地圖、驗證、預覽並送審，不需要修改程式、操作 Git 或執行 CLI。核准後的發布步驟尚未啟用（[ADR-0046](docs/adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)）。
 
 ## 網站使用方式
 
@@ -28,20 +28,25 @@
 
 完整邊界見[社團自助控制面契約](docs/contracts/circle-portal.md)與[地圖貢獻控制面契約](docs/contracts/map-contributions.md)。
 
-### Organizer／維護者：目前仍是本機地圖 authoring
+### 主辦單位：`/organizer`
 
-`npm run dev` 的 `/editor` 可從既有 revision、配置圖辨識結果或空白地圖開始，並以「新增一排」或個別元素編輯一般攤位、柱子、出入口與非一般攤位區。來源說明會進入快照；發布本機 revision 後仍須匯出到 event-data repository 並經 diff、schema 與 review。這是現行內部發布實作；Organizer P0 最終必須能由 Web UI 建立、匯入、驗證、預覽與發布，不操作 Git、CLI 或 agent。逐步操作見[地圖 authoring runbook](docs/runbooks/map-authoring.md)。
+- 工作區採邀請制：候選活動由全域管理者建立並指定 Owner，受邀者以 email 一次性連結登入 <https://map.kotoban.top/organizer>。Owner 可再邀請 Editor。
+- 六個步驟走完一場活動：活動基本資料 → 場館空間與展區 → CSV／XLSX 攤位匯入 → 每個「活動日 × 場館空間」一份地圖 → 驗證與 Reader 預覽 → 送審。原始試算表只在瀏覽器解析與雜湊，不上傳。
+- 送審會固定一份不可改寫的 approval snapshot，由全域管理者核准或要求修改。核准後的發布步驟目前關閉。
+- 桌機介面；地圖沿用既有的 layout 編輯器與 template 辨識器。
+
+完整邊界見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)。本機 `/editor` 保留為離線／事故備援，見[地圖 authoring runbook](docs/runbooks/map-authoring.md)。
 
 ## 功能狀態
 
 | 範圍 | 現況 |
 |---|---|
-| 公開場刊與地圖 | **已實作**：FF47 是目前唯一正式活動；公開端提供搜尋、詳細搜尋、互動地圖、分享 URL 與離線 shell。|
+| 公開場刊與地圖 | **已實作**：入口是活動選擇器，build 承載 `data/published-events.json` 列出的全部已發布活動（目前只有 FF47）；公開端提供搜尋、詳細搜尋、互動地圖、分享 URL 與離線 shell。|
 | 收藏與走訪規劃 | **已實作**：收藏群組、備註、行程、下一站、已走訪、購買項目、預算、導航模式與 JSON／CSV 匯出。資料只存於目前瀏覽器。|
 | 社團自助維護 | **已實作**：登入、認領、預覽、補充資料、代表圖、保存期限、活動後退出、自助刪除與管理者撤下。|
 | 地圖貢獻控制面 | **已實作**：角色授權、私人 revision、官方來源檔、送審、核准替換、event-data 候選匯出、錨定推算、審閱留言串、指向單一 slot 的局部修改請求與具名版本衝突提示。|
-| 本機地圖 authoring | **已實作**：可從既有 revision、辨識結果或空白畫布開始，建立整排與個別地圖元素；仍需本機 D1 與 repository review。|
-| Organizer no-code onboarding | **P0，未實作**：目前建立、匯入與發布新活動仍需本機工具及 repository workflow；[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要把它收斂成 Web UI，且不要求 Organizer 修改程式或操作 Git、CLI、agent。|
+| 主辦單位工作區 | **已實作到送審**：邀請制入口、活動與場館草稿、CSV／XLSX 匯入、逐「活動日 × 場館空間」地圖、驗證、Reader 預覽、送審與管理者核准。**發布仍關閉**，核准只留下一筆待處理的發布工作（[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)）。|
+| 本機地圖 authoring | **已實作**：可從既有 revision、辨識結果或空白畫布開始，建立整排與個別地圖元素。已降為離線／事故備援，不是主辦單位的正式流程。|
 | 規劃資料匯入、外部服務、跨裝置同步 | **P2，未對外開放**：底層已有 JSON／CSV 解析與衝突預覽，但一般介面只有安全匯出。|
 | 詳細搜尋進階語意 | **已實作**：創作者、作品、原創／二創、分級，以及多枚題材的「符合任一／全部符合」、排除題材與結果卡的命中原因。|
 
@@ -119,11 +124,18 @@ npm test && npm run lint && npx tsc --noEmit --incremental false
 - `data/event-data-pins/`：公開 data repo 的不可變 commit 與逐檔 hash
 - `data/circle-identities/`：永久社團 ID 配號、官方 booth evidence 與裁決紀錄
 - `public/fonts/`：自託管 Geist / Geist Mono 字型與授權
-- `scripts/fetch-event-data.mjs`、`stage-event-data.mjs`：驗證 pin 並建立忽略版控的單一活動 staging tree
+- `scripts/fetch-event-data.mjs`、`stage-event-data.mjs`、`published-events.mjs`：驗證 pin 並建立忽略版控的 staging tree，`--published` 涵蓋全部已發布活動
 - `scripts/build-official-circle-catalog.mjs`：由主辦攤位資料與 identity evidence 生成 official-only catalog
 - `.event-data/`、`public/data/events/`：本機／CI 產物，不進版控
 
-**本機 authoring（現行內部工具，不是 Organizer P0 最終流程）**
+**主辦單位工作區**
+
+- `organizer.html`、`app/organizer/`：主辦入口與六步驟介面
+- `app/organizer-event.ts`、`app/organizer-import.ts`、`app/organizer-workbook.ts`：草稿 schema、匯入正規化與瀏覽器端試算表讀取
+- `app/event-authoring-scope.ts`、`app/event-map-manifest.ts`：候選／已發布地圖的 scope 與多場館空間 artifact 路徑
+- `app/publication-bundle-assembler.ts`、`app/github-publication.ts`：發布路徑 allowlist 與 GitHub adapter（目前 fail closed）
+
+**本機 authoring（離線／事故備援）**
 
 - `app/map-recognition.ts`、`app/map-admin-importer.tsx`、`app/map-layout-editor.tsx`
 - `db/event-map-repository.ts`、`worker/`、`drizzle/`

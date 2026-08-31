@@ -4,7 +4,7 @@
 
 **schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（runtime tables 由 `ensureTables()` 於首次請求建立；既有資料庫用同檔案的 additive column migrations 升級。表名與數量直接以該檔為準，不在本文複製一個會漂移的計數）
 **寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**行為契約**：[社團自助控制面](./circle-portal.md)、[地圖貢獻控制面](./map-contributions.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
+**行為契約**：[社團自助控制面](./circle-portal.md)、[主辦單位工作區](./organizer-workspace.md)、[地圖貢獻控制面](./map-contributions.md)。權限、可編輯範圍、狀態機與來源邊界只寫在契約，本文不重複。
 **外部對照**：[性質相近的服務如何公開自己的資料收集](../research/data-collection-policies-in-comparable-projects.md)
 
 ## 三件要先知道的事
@@ -24,6 +24,8 @@
 | `loginPerEmailPerHour` | 5 | 同一 email 每小時可索取的登入連結 |
 | `loginPerIpPerHour` | 20 | 同一 IP 雜湊每小時可索取的登入連結 |
 | `claimsPerAccountPerDay` | 3 | 每帳號每日認領次數 |
+| `organizerInvitesPerEmailPerHour` | 3 | 同一收件匣每小時可收到的 Organizer 邀請；只計**他人寄來的**，與本人自助索取分開計數 |
+| `organizerInvitesPerActorPerHour` | 10 | 同一邀請人每小時可寄出的 Organizer 邀請 |
 | `challengeAttemptsPerClaim` | 10 | 單筆認領的驗證碼嘗試次數 |
 
 ## 保存期（現行常數）
@@ -72,6 +74,8 @@
 | `expires_at` | 建立後 15 分鐘 |
 | `consumed_at` | 兌換時間 |
 | `request_ip_hash` | **加 pepper 的 IP 雜湊**（見下） |
+| `audience` | `circle` 或 `organizer`；決定信件內容與登入連結指向哪個入口 |
+| `minted_by` | 代為鑄造這枚連結的帳號；本人自助索取時為 NULL。它讓邀請與自助請求可以分開計數 |
 
 **目的**：驗證申請者控制該信箱；`email` 與 `request_ip_hash` 同時是速率上限的計數鍵。
 **保存期**：建立後 24 小時。 **到期處置**：由排程 Worker **刪除資料列**。**不是「用完即刪」**——速率限制數的就是這張表，兌換後立刻刪會讓額度跟著歸零。該次索取的紀錄不因此消失：`auth.link_requested` 已把 IP 雜湊與 email 雜湊寫進 `audit_log`。
@@ -116,6 +120,28 @@
 
 同一社團若在多個分頁並行上傳或清理，R2 與 D1 之間沒有跨服務交易鎖，短時間內可能多留草稿，或讓其中一個分頁需要重新上傳。這不會發布未確認的物件；下一次上述生命週期動作會再次掃描。若產品要提供多分頁無衝突保證，需另以可序列化的 staged pointer 協調，不能把目前的 prefix 掃描描述成強一致上限。
 
+### `organizer_*` — 主辦單位工作區
+
+十一張表，行為與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
+
+| 表 | 內容 |
+|---|---|
+| `organizer_event_candidates` | 候選活動的暫定名稱、`event_id`、狀態、目前版本與目前草稿 JSON，以及建立／更新／送審／核准者與時間 |
+| `organizer_event_revisions` | 每一版草稿 JSON、作者與角色。immutable |
+| `organizer_event_grants` | 誰對哪個候選活動有 `owner` 或 `editor` 權限，含授權與撤銷者 |
+| `organizer_event_invitations` | 尚未接受的邀請：**明文電子郵件**、角色、邀請人，以及接受或撤銷紀錄 |
+| `organizer_event_reviews` | 送審與管理決策的狀態轉換、actor、note 與時間。immutable |
+| `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
+| `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場館空間、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
+| `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
+| `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA 與錯誤 |
+| `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
+| `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
+
+**目的**：讓受邀的主辦單位在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
+**保存期**：不設期限。 **到期處置**：帳號刪除時，這些表裡的 actor 與 email 依既有塗銷規則去識別化；匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除。
+`audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。
+
 ### `map_contributor_grants` — 地圖貢獻授權
 
 `account_id`、授權者／時間，以及撤銷或停權者／時間。有效角色是撤銷與停權時間都為 NULL 的列；管理者可再次授權同一帳號。
@@ -124,7 +150,7 @@
 
 ### `map_drafts` 與 `map_draft_revisions` — 私人地圖草稿
 
-`map_drafts` 保存活動、period、場館空間、owner、狀態、目前 revision、活動／決定時間、內部 transition token 與清除 claim。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
+`map_drafts` 保存活動、period、場館空間、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](./map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
 
 **目的**：允許平行整理與可重現審閱，不直接改寫公開快照。**保存期**：`draft` 180 天無活動後整份刪除；`changes_requested` 180 天無活動後刪除 revisions 並將 owner 去識別化；`submitted` 審閱前不自動刪除。已審內容的後續處置見下兩類。
 
@@ -174,6 +200,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 - 管理者名冊：`admin.added`、`admin.removed`
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
 - 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.reject`／`map_draft.approve`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
+- 主辦單位工作區：`organizer_event.created`、`organizer_event.updated`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`、`organizer_publication.retried`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
 兩點值得單獨記下：
@@ -203,14 +230,14 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 | 對象 | 收到什麼 | 何時 |
 |---|---|---|
-| **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（含一次性登入連結） | 每次索取登入連結 |
+| **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（含一次性登入連結） | 每次索取登入連結，以及每一封 Organizer 邀請 |
 | **Cloudflare Turnstile**（`challenges.cloudflare.com`） | 瀏覽器載入 widget；伺服器 siteverify 送 token 與**原始 IP** | 每次索取登入連結（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)） |
 | **Cloudflare**（Pages／Workers／D1／R2） | 平台本身，承載全部上述資料、代管縮圖與私人地圖來源檔 | 全時 |
 | **Cloudflare Access** | preview 的維護者身分與 CI service token | 存取 `*.tw-catalog.pages.dev` preview deployment 時；production 正式網域不使用（[ADR-0029](../adr/0029-public-production-gated-preview.md)） |
 
 認領證據抓取（`fetchEvidence()`）由 Worker 主動連向社團自己登錄的 URL，**對該主機揭露的是本站，不是使用者**。
 
-Turnstile 是**閱讀端以外唯一的第三方腳本**，且只載入在 `/circle*`——`public/_headers` 為該路徑單獨覆寫 CSP，站台其餘部分的 `script-src` 仍只有 `'self'`。
+Turnstile 是**閱讀端以外唯一的第三方腳本**，且只載入在 `/circle*` 與 `/organizer*`——`public/_headers` 為這兩個路徑各自覆寫 CSP，站台其餘部分的 `script-src` 仍只有 `'self'`。
 
 ## 閱讀端不在本表範圍
 

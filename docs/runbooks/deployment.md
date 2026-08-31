@@ -41,6 +41,14 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 另有一個**不是 secret 的變數** `TURNSTILE_SITEKEY`：它會經 `GET /api/auth/config` 送到瀏覽器，公開是它的用途。它**已經寫在 `wrangler.jsonc` 的頂層 `vars`**，不在 dashboard，部署者不需要另外設定——理由見[真人驗證](#真人驗證turnstile)。缺它時 `GET /api/auth/config` 回 503，登入頁因此拿不到 sitekey；其餘路由不受影響。
 
+### Organizer 發布（目前全部不設定）
+
+`ORGANIZER_PUBLICATION_MODE`、`GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_APP_PRIVATE_KEY`、`GITHUB_APP_INSTALLATION_ID` 是選用的。**現在一個都不要設。**
+
+未設定即為關閉：`ORGANIZER_PUBLICATION_MODE` 預設 `disabled`，管理者的發布重試回 503，`POST /api/integrations/github/webhook` 也回 503。主辦單位工作區的其餘功能——建立、匯入、地圖、驗證、預覽、送審與核准——完全不需要這些變數。
+
+依 [ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 決策第 4 點，要打開之前必須先以 API 實測兩個 repository 的 ruleset 為 active、required checks 名稱一致，且 GitHub App 不在 bypass 清單內。
+
 ### preview 的兩個信箱
 
 preview 永遠不碰 production Mailgun，但它會寄信——只寄給兩份名單上的地址，並且**依收件人**決定寄法：
@@ -442,7 +450,7 @@ npm run purge:dev
 與[本機共同 gate](./local-development.md#驗證-gate) 相同，CI 會重跑一次。另需確認：
 
 - `dist/index.html`、`dist/_headers` 存在，且沒有 Functions 或自訂 rewrite 規則攔截靜態請求。
-- `npm run build:production` 已依 pin 重建單一活動產物；`dist/data/events/ff47/map.json` 通過 FF47 layout 驗證（988 格、28 根柱子、5 個出入口）。
+- `npm run build:production` 已依 `data/published-events.json` 重建**每一個已發布活動**的產物，且每一份地圖 artifact 都通過該活動 template 的 layout 驗證（FF47：988 格、28 根柱子、5 個出入口）。
 - `dist/_worker.js` 與 `dist/server/index.js` 不存在。
 - 公開 bundle 不包含 `/api/events/`、`MapAdminImporter` 或管理發布文案。
 

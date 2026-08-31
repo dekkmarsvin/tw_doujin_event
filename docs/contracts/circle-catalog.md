@@ -69,9 +69,9 @@ type CircleCatalogPayload = {
 - 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。名稱只用於 drift 檢查，不得作為跨日合併依據；沒有 grouping 證據時必須 fail closed。
 - 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個 identity group 的所有 `<day>:<booth>` sources 只配發一個 ID，並逐一保存 source。
 - 現行 repository pipeline 把新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
-- 首次公開發布前，registry 與 pin 都是候選，可一起捨棄並由同一份 reviewed source 重建；不得把工作樹中間配號誤寫成已發布相容性承諾。公開後若主辦名單退出、換手、移動或重編號，現行 generator 會 fail closed；Organizer 可理解且不需操作 Git／CLI 的 P0 修正路徑由 [#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139) 追蹤。
+- 首次公開發布前，registry 與 pin 都是候選，可一起捨棄並由同一份 reviewed source 重建；不得把工作樹中間配號誤寫成已發布相容性承諾。公開後若主辦名單退出、換手、移動或重編號，generator 不由差異推論，而要求人工宣告後套用（[ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)）；宣告目前寫在 JSON 並以 CLI 套用，把它收進[主辦單位工作區](./organizer-workspace.md)的 UI 仍屬 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)。
 
-上述 main PR、pin 與 generator 是目前內部發布實作，不是 Organizer 產品流程的永久限制。[`PRODUCT.md`](../../PRODUCT.md) 與 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要求未來 Web UI 在不暴露 repository workflow 的前提下維持相同的 evidence、validation 與發布後相容性規則。
+上述 main PR、pin 與 generator 是目前的發布實作，不是 Organizer 產品流程的永久限制。[主辦單位工作區](./organizer-workspace.md)已接管建立到送審；發布步驟接上之後，同樣的 evidence、validation 與發布後相容性規則必須成立，且不得把 repository workflow 暴露給主辦單位（[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)）。
 
 data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identity group 的完整 booth sources：
 
@@ -112,7 +112,7 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 - `npm run build` 使用 repo 內最小 fictional fixture，確保共同 gate 不依賴網路或真實活動資料。
 - `npm run build:production` 依 [`data/published-events.json`](../../data/published-events.json) 逐一下載並核對逐檔 SHA-256，再由主辦 booth evidence 生成 v3 catalog，並把**每一個已發布活動** staging 到 `dist`。該檔案是 production 唯一列出活動的地方：新增活動是加一筆 pin 與一個 id，不改 `package.json`、不改 workflow、不新增活動專屬 constant。
 - **pin 存在不等於已發布。** 未列在 `published-events.json` 的活動即使已有 pin 也不進入 build，對讀者不存在。這條界線對應 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) 的草稿／已發布分界。
-- 讀者端的活動選擇器與 `event` 定址由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案，[#119](https://github.com/dekkmarsvin/tw_doujin_event/issues/119) 尚未完成該部分；目前 bundle 已可承載多活動，但公開入口仍只進入預設活動。
+- 讀者端的活動選擇器與 `event` 定址由 [ADR-0042](../adr/0042-the-public-entry-is-an-event-chooser.md) 定案並已實作：只有一個已發布活動時直接進入該活動，多個時先顯示選擇器，`?event=` deep link 一律直達。依生命週期分組仍是 P1（[#134](https://github.com/dekkmarsvin/tw_doujin_event/issues/134)）。
 - **退出或移動的社團留在 catalog 裡**，而不是消失：它們是 `status` 為 `cancelled` 或 `moved` 的 placement，社團本身仍列在 `circles`。直接刪除會讓收藏與分享連結指向不存在的東西，讀起來像連結壞掉而不是「這個社團沒有參加」。Reader 如何呈現見下方「失效 placement 的呈現」。
 - placement id：沒有新主人的攤位保留 `<day>-<code>`，換手的攤位由新主人取得該 id，離開的社團改用帶自己 ID 的形式，因此兩者都仍可被連結定址。
 - overlay 無法取得時仍顯示完整的官方名稱與攤位 base；不得把 overlay 當成目錄存在的前提。
