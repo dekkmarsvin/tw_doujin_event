@@ -201,12 +201,19 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [notice, setNotice] = useState<Notice>(IDLE);
   const draftSave = useRef<(() => Promise<boolean>) | null>(null);
   const navigationDialog = useRef<HTMLElement | null>(null);
+  const selectionInitialized = useRef(false);
   useModalFocus(Boolean(pendingNavigation), navigationDialog, () => setPendingNavigation(null));
 
   const reloadList = useCallback(async () => {
     const next = (await listOrganizerEvents()).events;
     setEvents(next);
-    setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
+    if (!selectionInitialized.current) {
+      selectionInitialized.current = true;
+      setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
+      return;
+    }
+    setSelectedId((current) => current === null ? null
+      : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
   }, []);
   const reloadDetail = useCallback(async (candidateId: string) => {
     const next = await readOrganizerEvent(candidateId);
@@ -752,6 +759,7 @@ function DraftForm({
 }) {
   const [draft, setDraft] = useState(detail.draft);
   const [dirty, setDirty] = useState(false);
+  const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   useEffect(() => {
     onDirtyChange(dirty);
@@ -765,18 +773,25 @@ function DraftForm({
   };
   const save = useCallback(async (after?: (version: number) => Promise<void>) => {
     setNotice({ kind: "busy", message: "儲存中…" });
+    let result: Awaited<ReturnType<typeof saveOrganizerEvent>>;
     try {
-      const result = await saveOrganizerEvent(detail.event.id, detail.event.version, draft);
-      setDirty(false);
-      setNotice({ kind: "ok", message: "已建立新的 immutable revision。" });
-      if (after) await after(result.version);
-      await onChanged();
-      return true;
+      result = await saveOrganizerEvent(detail.event.id, expectedVersion, draft);
     } catch (error) {
       setNotice({ kind: "error", message: message(error) });
       return false;
     }
-  }, [detail.event.id, detail.event.version, draft, onChanged, setNotice]);
+    setDirty(false);
+    setExpectedVersion(result.version);
+    setNotice({ kind: "ok", message: "已建立新的 immutable revision。" });
+    try {
+      await onChanged();
+      if (after) await after(result.version);
+      return true;
+    } catch (error) {
+      setNotice({ kind: "error", message: `Revision 已儲存，但後續動作未完成：${message(error)}` });
+      return false;
+    }
+  }, [detail.event.id, draft, expectedVersion, onChanged, setNotice]);
   useEffect(() => {
     onSaveReady?.(() => save());
     return () => onSaveReady?.(null);
@@ -785,7 +800,7 @@ function DraftForm({
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
-    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館、空間與展區"}</h3><p>儲存會建立正式 revision；目前預期版本為 {detail.event.version}。</p></div></div>
+    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館、空間與展區"}</h3><p>儲存會建立正式 revision；目前預期版本為 {expectedVersion}。</p></div></div>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>

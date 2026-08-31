@@ -86,3 +86,26 @@ test("validation completion follows the candidate version and submission complet
   const submitted = evaluateOrganizerWorkspaceReadiness({ ...input, status: "submitted" });
   assert.equal(submitted.completed, 6);
 });
+
+test("a stored map with formal validation errors still needs attention", () => {
+  const readiness = evaluateOrganizerWorkspaceReadiness({
+    draft: base,
+    importedRows: 1,
+    maps: [{ periodKey: "1", venueSpaceId: "hall-a" }],
+    validationIssues: [{
+      severity: "error",
+      step: "map",
+      code: "missing_booth",
+      target: "1/hall-a",
+      message: "地圖缺少必要攤位 A01。",
+    }],
+    currentVersion: 4,
+    lastValidatedVersion: null,
+    status: "draft",
+  });
+
+  assert.equal(readiness.sections.find((section) => section.id === "map").state, "needs_attention");
+  assert.equal(readiness.sections.find((section) => section.id === "validate").state, "blocked");
+  assert.equal(readiness.completed, 3);
+  assert.equal(readiness.blockers.some((blocker) => blocker.code === "missing_booth"), true);
+});

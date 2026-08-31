@@ -106,15 +106,60 @@ test("workspace progress is per candidate and resume location is per collaborato
   assert.equal((await repository.getOrganizerWorkspace("candidate-workspace", editorId)).preference.last_section, "map");
   assert.deepEqual((await repository.listOrganizerCandidateRevisions("candidate-workspace")).map((row) => row.version), [1]);
 
+  const completions = await Promise.all([
+    repository.completeOrganizerOnboarding({
+      candidateId: "candidate-workspace", actorAccountId: ownerId, expectedVersion: 1, now: NOW + 6,
+    }),
+    repository.completeOrganizerOnboarding({
+      candidateId: "candidate-workspace", actorAccountId: editorId, expectedVersion: 1, now: NOW + 7,
+    }),
+  ]);
+  assert.equal(completions.every((result) => result.ok), true);
+  assert.equal(completions.filter((result) => result.ok && !result.alreadyCompleted).length, 1);
+  assert.equal(completions.filter((result) => result.ok && result.alreadyCompleted).length, 1);
+  const completedAt = completions.find((result) => result.ok && !result.alreadyCompleted).completedAt;
   assert.deepEqual(await repository.completeOrganizerOnboarding({
-    candidateId: "candidate-workspace", actorAccountId: ownerId, expectedVersion: 1, now: NOW + 6,
-  }), { ok: true, completedAt: NOW + 6, alreadyCompleted: false });
-  assert.deepEqual(await repository.completeOrganizerOnboarding({
-    candidateId: "candidate-workspace", actorAccountId: editorId, expectedVersion: 99, now: NOW + 7,
-  }), { ok: true, completedAt: NOW + 6, alreadyCompleted: true });
+    candidateId: "candidate-workspace", actorAccountId: editorId, expectedVersion: 99, now: NOW + 8,
+  }), { ok: true, completedAt, alreadyCompleted: true });
   assert.equal((await repository.listOrganizerCandidatesForAccount(ownerId, false))[0].workspace_mode, "binder");
   assert.equal((await repository.getOrganizerCandidate("candidate-workspace")).current_version, 1);
   assert.deepEqual((await repository.listOrganizerCandidateRevisions("candidate-workspace")).map((row) => row.version), [1]);
+});
+
+test("a revoked collaborator cannot change workspace navigation or complete onboarding", async () => {
+  await repository.createOrganizerCandidate({
+    id: "candidate-revoked-workspace",
+    tentativeName: "撤銷測試活動",
+    ownerEmail: "owner@example.test",
+    createdByAccountId: adminId,
+    draftJson: JSON.stringify(initialDraft),
+    now: NOW,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-revoked-workspace", actorAccountId: ownerId,
+    email: "editor@example.test", role: "editor", action: "invite", now: NOW + 2,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+  assert.equal(await repository.saveOrganizerWorkspacePreference({
+    candidateId: "candidate-revoked-workspace", accountId: editorId,
+    guidedTask: "days", lastSection: "event", now: NOW + 4,
+  }), true);
+  await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-revoked-workspace", actorAccountId: ownerId,
+    email: "editor@example.test", role: "editor", action: "revoke", now: NOW + 5,
+  });
+
+  assert.equal(await repository.saveOrganizerWorkspacePreference({
+    candidateId: "candidate-revoked-workspace", accountId: editorId,
+    guidedTask: "venue", lastSection: "map", now: NOW + 6,
+  }), false);
+  assert.equal((await repository.getOrganizerWorkspace("candidate-revoked-workspace", editorId)).preference.last_section, "event");
+  assert.deepEqual(await repository.completeOrganizerOnboarding({
+    candidateId: "candidate-revoked-workspace", actorAccountId: editorId,
+    expectedVersion: 1, now: NOW + 7,
+  }), { ok: false, reason: "forbidden" });
+  assert.equal((await repository.getOrganizerWorkspace("candidate-revoked-workspace", ownerId)).state.onboarding_completed_at, null);
 });
 
 test("a candidate without ADR-0047 state is treated as a legacy binder", async () => {

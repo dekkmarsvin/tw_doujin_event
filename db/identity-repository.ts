@@ -1607,13 +1607,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     guidedTask: string;
     lastSection: string;
     now: number;
+    admin?: boolean;
   }) {
     await ensureTables();
     const result = await database.prepare(
       `INSERT INTO organizer_workspace_preferences (
          id, candidate_id, account_id, guided_task, last_section, updated_at
-       ) SELECT ?1, id, ?2, ?3, ?4, ?5
-         FROM organizer_event_candidates WHERE id = ?6
+       ) SELECT ?1, c.id, ?2, ?3, ?4, ?5
+         FROM organizer_event_candidates c WHERE c.id = ?6
+         ${input.admin ? "" : `AND EXISTS (
+           SELECT 1 FROM organizer_event_grants g
+           WHERE g.candidate_id = c.id AND g.account_id = ?2 AND g.revoked_at IS NULL
+         )`}
        ON CONFLICT(candidate_id, account_id) DO UPDATE SET
          guided_task = excluded.guided_task,
          last_section = excluded.last_section,
@@ -1627,8 +1632,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     actorAccountId: string;
     expectedVersion: number;
     now: number;
+    admin?: boolean;
   }) {
     await ensureTables();
+    if (!input.admin && !await organizerRole(input.candidateId, input.actorAccountId)) {
+      return { ok: false as const, reason: "forbidden" as const };
+    }
     const workspace = await getOrganizerWorkspace(input.candidateId, input.actorAccountId);
     if (!workspace) return { ok: false as const, reason: "not_found" as const };
     if (workspace.state.onboarding_completed_at !== null) {
@@ -1646,9 +1655,25 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          AND EXISTS (
            SELECT 1 FROM organizer_event_candidates c
            WHERE c.id = organizer_workspace_state.candidate_id AND c.current_version = ?4
-         )`,
+         )
+         ${input.admin ? "" : `AND EXISTS (
+           SELECT 1 FROM organizer_event_grants g
+           WHERE g.candidate_id = organizer_workspace_state.candidate_id
+             AND g.account_id = ?2 AND g.revoked_at IS NULL
+         )`}`,
     ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion).run();
     if (result.meta.changes !== 1) {
+      const latestWorkspace = await getOrganizerWorkspace(input.candidateId, input.actorAccountId);
+      if (!input.admin && !await organizerRole(input.candidateId, input.actorAccountId)) {
+        return { ok: false as const, reason: "forbidden" as const };
+      }
+      if (latestWorkspace?.state.onboarding_completed_at !== null && latestWorkspace?.state.onboarding_completed_at !== undefined) {
+        return {
+          ok: true as const,
+          completedAt: latestWorkspace.state.onboarding_completed_at,
+          alreadyCompleted: true,
+        };
+      }
       const current = await getOrganizerCandidate(input.candidateId);
       return { ok: false as const, reason: "conflict" as const, currentVersion: current?.current_version ?? input.expectedVersion };
     }

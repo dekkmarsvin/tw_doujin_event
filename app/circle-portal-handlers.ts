@@ -1682,14 +1682,14 @@ export function createCirclePortalHandlers({
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
-    const [revisions, imported, publication, workspace, maps] = await Promise.all([
+    const [revisions, publication, workspace, workspaceValidation] = await Promise.all([
       repository.listOrganizerCandidateRevisions(candidateId),
-      repository.getOrganizerImport(candidateId),
       repository.getLatestOrganizerPublicationJob(candidateId),
       repository.getOrganizerWorkspace(candidateId, access.current.accountId),
-      repository.listOrganizerMapDrafts(candidateId),
+      validateOrganizerWorkspace(candidateId, draft),
     ]);
     if (!workspace) return json({ error: "找不到活動工作區。" }, 404);
+    const { imported, maps, issues: validationIssues } = workspaceValidation;
     const guidedTask = isOrganizerGuidedTask(workspace.preference?.guided_task)
       ? workspace.preference.guided_task : "identity_source";
     const section = isOrganizerWorkspaceSection(workspace.preference?.last_section)
@@ -1698,6 +1698,7 @@ export function createCirclePortalHandlers({
       draft,
       importedRows: imported?.rows.length ?? 0,
       maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
+      validationIssues,
       currentVersion: candidate.current_version,
       lastValidatedVersion: workspace.state.last_validated_version,
       status: candidate.status,
@@ -1799,6 +1800,7 @@ export function createCirclePortalHandlers({
       guidedTask: body.guidedTask,
       lastSection: body.lastSection,
       now: config.now(),
+      admin: access.admin,
     });
     return saved ? json({ ok: true, guidedTask: body.guidedTask, lastSection: body.lastSection })
       : json({ error: "找不到活動。" }, 404);
@@ -1811,6 +1813,15 @@ export function createCirclePortalHandlers({
     const expectedVersion = body?.expectedVersion;
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) {
       return json({ error: "expectedVersion 格式無效。" }, 400);
+    }
+    const existingWorkspace = await repository.getOrganizerWorkspace(candidateId, access.current.accountId);
+    if (!existingWorkspace) return json({ error: "找不到活動。" }, 404);
+    if (existingWorkspace.state.onboarding_completed_at !== null) {
+      return json({
+        ok: true,
+        mode: "binder",
+        onboardingCompletedAt: existingWorkspace.state.onboarding_completed_at,
+      });
     }
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
@@ -1826,9 +1837,10 @@ export function createCirclePortalHandlers({
       actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number,
       now: config.now(),
+      admin: access.admin,
     });
     if (!result.ok) {
-      if (result.reason === "not_found") return json({ error: "找不到活動。" }, 404);
+      if (result.reason === "not_found" || result.reason === "forbidden") return json({ error: "找不到活動。" }, 404);
       return json({ error: "草稿已被其他人更新，請重新載入。", conflict: result }, 409);
     }
     if (!result.alreadyCompleted) {
@@ -2096,7 +2108,14 @@ export function createCirclePortalHandlers({
     if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
     const { issues } = await validateOrganizerWorkspace(candidateId, draft);
     const ok = issues.every((issue) => issue.severity !== "error");
-    if (ok) await repository.markOrganizerValidated(candidateId, candidate.current_version, config.now());
+    if (ok && !await repository.markOrganizerValidated(candidateId, candidate.current_version, config.now())) {
+      const current = await repository.getOrganizerCandidate(candidateId);
+      if (!current) return json({ error: "找不到活動。" }, 404);
+      return json({
+        error: "草稿已被其他人更新，請重新驗證。",
+        conflict: { currentVersion: current.current_version },
+      }, 409);
+    }
     return json({ ok, version: candidate.current_version, issues });
   }
 

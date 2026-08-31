@@ -54,3 +54,24 @@ test("organizer ships the ADR-0047 guided station, binder readiness, and the sha
   assert.match(css, /color-scheme:\s*light/);
   assert.doesNotMatch(css, /color-scheme:\s*dark|gradient\(/);
 });
+
+test("a successful draft save synchronizes its revision before follow-up navigation", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  const saveStart = app.indexOf("result = await saveOrganizerEvent");
+  const versionSynced = app.indexOf("setExpectedVersion(result.version)", saveStart);
+  const detailReloaded = app.indexOf("await onChanged()", versionSynced);
+  const followUp = app.indexOf("if (after) await after(result.version)", detailReloaded);
+
+  assert.ok(saveStart >= 0, "draft save call is missing");
+  assert.ok(versionSynced > saveStart, "saved revision is not synchronized locally");
+  assert.ok(detailReloaded > versionSynced, "detail reload must follow local revision synchronization");
+  assert.ok(followUp > detailReloaded, "onboarding or navigation callback must run after reload");
+});
+
+test("an explicit save-and-leave selection is not replaced by list refresh", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  assert.match(app, /const selectionInitialized = useRef\(false\)/);
+  assert.match(app, /selectionInitialized\.current\s*=\s*true/);
+  assert.match(app, /current === null \? null/);
+  assert.match(app, /onLeave=\{\(\) => \{ setDirty\(false\); setSelectedId\(null\); \}\}/);
+});

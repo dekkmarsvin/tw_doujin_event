@@ -87,11 +87,13 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
   draft: OrganizerEventDraft;
   importedRows: number;
   maps: readonly OrganizerWorkspaceMapScope[];
+  validationIssues?: readonly OrganizerValidationIssue[];
   currentVersion: number;
   lastValidatedVersion: number | null;
   status: OrganizerCandidateStatus;
 }): OrganizerWorkspaceReadiness {
-  const issues = getOrganizerWorkspacePrerequisiteIssues(input).filter((issue) => issue.severity === "error");
+  const issues = (input.validationIssues ?? getOrganizerWorkspacePrerequisiteIssues(input))
+    .filter((issue) => issue.severity === "error");
   const eventComplete = !issues.some((issue) => issue.step === "event");
   const venueComplete = !issues.some((issue) => issue.step === "venue");
   const importComplete = input.importedRows > 0;
@@ -110,7 +112,10 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     },
     {
       id: "map",
-      state: mapComplete ? "complete" : eventComplete && venueComplete && importComplete ? "available" : "blocked",
+      state: mapComplete ? "complete"
+        : eventComplete && venueComplete && importComplete
+          ? input.maps.length > 0 ? "needs_attention" : "available"
+          : "blocked",
     },
     {
       id: "validate",

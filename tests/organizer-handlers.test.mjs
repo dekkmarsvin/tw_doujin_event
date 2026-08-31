@@ -179,7 +179,51 @@ test("organizer onboarding persists real progress and completes without a candid
   const repeat = await handlers.completeOrganizerWorkspaceOnboarding(request(
     `/api/organizer/events/${candidateId}/workspace/complete-onboarding`, "POST", { expectedVersion: 99 }, ownerCookie,
   ), candidateId);
-  assert.equal(repeat.status, 409);
+  assert.equal(repeat.status, 200);
+  assert.equal((await repeat.json()).mode, "binder");
+});
+
+test("organizer detail uses formal map validation for readiness", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "地圖 readiness 測試", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const draft = {
+    schema: "organizer-event-draft/1",
+    event: { id: "map-readiness", name: "地圖 readiness 測試", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
+    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/map-readiness" },
+  };
+  assert.equal((await handlers.updateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "PATCH", { expectedVersion: 1, draft }, ownerCookie,
+  ), candidateId)).status, 200);
+  assert.equal((await handlers.putOrganizerImport(request(
+    `/api/organizer/events/${candidateId}/imports`, "PUT", {
+      expectedVersion: 2,
+      source: { fileName: "official.csv", worksheet: null, sha256: "b".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
+    }, ownerCookie,
+  ), candidateId)).status, 200);
+  assert.equal((await handlers.createOrganizerMap(request(
+    `/api/organizer/events/${candidateId}/maps`, "POST", {
+      expectedVersion: 3, periodKey: "1", venueSpaceId: "hall-a",
+      layout: {
+        version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
+        floor: { x: 0, y: 0, width: 100, height: 80 },
+        rows: [], pillars: [], accessPoints: [], landmarks: [],
+      },
+    }, ownerCookie,
+  ), candidateId)).status, 201);
+
+  const detail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  const readiness = (await detail.json()).workspace.readiness;
+  assert.equal(readiness.sections.find((section) => section.id === "map").state, "needs_attention");
+  assert.equal(readiness.blockers.some((blocker) => blocker.code === "missing_booth"), true);
 });
 
 test("owner and editor use one validated optimistic workflow while only admin approves", async () => {
@@ -240,6 +284,27 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   ), candidateId);
   assert.equal(mapCreated.status, 201);
 
+  const markOrganizerValidated = repository.markOrganizerValidated;
+  repository.markOrganizerValidated = async (id, version, at) => {
+    const candidate = await repository.getOrganizerCandidate(id);
+    await repository.saveOrganizerCandidate({
+      candidateId: id,
+      actorAccountId: candidate.created_by,
+      expectedVersion: version,
+      eventId: candidate.event_id,
+      draftJson: candidate.current_draft_json,
+      now: at,
+      admin: true,
+    });
+    return markOrganizerValidated(id, version, at);
+  };
+  const racedValidation = await handlers.validateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}/validate`, "POST", {}, editorCookie,
+  ), candidateId);
+  assert.equal(racedValidation.status, 409);
+  assert.equal((await racedValidation.json()).conflict.currentVersion, 5);
+  repository.markOrganizerValidated = markOrganizerValidated;
+
   const validated = await handlers.validateOrganizerCandidate(request(
     `/api/organizer/events/${candidateId}/validate`, "POST", {}, editorCookie,
   ), candidateId);
@@ -252,18 +317,18 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.equal(validatedWorkspace.readiness.sections.find((section) => section.id === "validate").state, "complete");
 
   const editorSubmit = await handlers.submitOrganizerCandidate(request(
-    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 4 }, editorCookie,
+    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 5 }, editorCookie,
   ), candidateId);
   assert.equal(editorSubmit.status, 403);
 
   const submitted = await handlers.submitOrganizerCandidate(request(
-    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 4 }, ownerCookie,
+    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 5 }, ownerCookie,
   ), candidateId);
   assert.equal(submitted.status, 200);
 
   const approved = await handlers.adminReviewOrganizerCandidate(request(
     `/api/admin/organizer/events/${candidateId}/review`, "POST",
-    { expectedVersion: 4, decision: "approve", note: "資料可發布" }, adminCookie,
+    { expectedVersion: 5, decision: "approve", note: "資料可發布" }, adminCookie,
   ), candidateId);
   assert.equal(approved.status, 200);
   assert.equal((await approved.json()).status, "approved");
