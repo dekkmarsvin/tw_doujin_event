@@ -67,6 +67,20 @@ export function getOrganizerWorkspacePrerequisiteIssues(input: {
       message: "請先匯入並確認至少一筆攤位資料。",
     });
   }
+  // Areas come from the imported booth list, so this is the first step that
+  // can name a space the import never covered.
+  if (input.importedRows > 0) {
+    for (const assignment of input.draft.venue.assignments) {
+      if (assignment.areaIds.length > 0) continue;
+      issues.push({
+        severity: "error",
+        step: "import",
+        code: "missing_area",
+        target: assignment.venueSpaceId,
+        message: `匯入資料沒有指到 ${assignment.venueSpaceId} 的展區。`,
+      });
+    }
+  }
   for (const day of input.draft.event.days) {
     for (const assignment of input.draft.venue.assignments) {
       if (!input.maps.some((map) => map.periodKey === day.id && map.venueSpaceId === assignment.venueSpaceId)) {

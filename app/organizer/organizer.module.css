@@ -118,7 +118,17 @@
 .fieldHeads small { color: var(--muted); font-size: 10px; }
 .inlineEmpty { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 14px; background: var(--paper); }
 .inlineEmpty p { margin: 0; }
-.venueCard { display: grid; grid-template-columns: 1fr 1fr 1.35fr 1.15fr auto; gap: 12px; align-items: end; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }
+.venueCard { display: grid; grid-template-columns: 1fr 1fr 1fr 1.7fr auto; gap: 12px; align-items: end; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }
+.derivedField { display: grid; gap: 7px; font-size: 12px; font-weight: 700; }
+.derivedField strong { min-height: 38px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 0 11px; background: var(--paper); font-weight: 400; }
+.derivedField small { color: var(--muted); font-weight: 400; }
+.templatePreview { border-left: 2px solid var(--line); padding-left: 9px; color: var(--muted); font-weight: 400; }
+.templatePreview p { margin: 0; }
+.templatePreview ul { margin: 3px 0 0; padding-left: 15px; }
+.derivedSummary { margin: 14px 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); }
+.derivedSummary h4 { margin: 0 0 8px; font-size: 12px; }
+.derivedSummary div { display: grid; grid-template-columns: 160px 1fr; gap: 10px; padding: 5px 0; }
+.derivedSummary p { margin: 8px 0 0; color: var(--muted); font-size: 10px; }
 .dangerText { border-color: transparent !important; background: transparent !important; color: var(--danger) !important; }
 .dangerText:hover:not(:disabled) { background: var(--danger-soft) !important; }
 .formActions { display: flex; align-items: center; gap: 9px; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; }

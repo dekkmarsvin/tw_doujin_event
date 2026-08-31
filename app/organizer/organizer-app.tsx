@@ -42,7 +42,13 @@ import {
   type OrganizerImportMapping,
   type OrganizerNormalizedImportRow,
 } from "../organizer-import";
-import { nextOrganizerEventDay, type OrganizerEventDraft, type OrganizerValidationIssue } from "../organizer-event";
+import {
+  isOrganizerAreaId,
+  nextOrganizerEventDay,
+  withOrganizerImportedAreaIds,
+  type OrganizerEventDraft,
+  type OrganizerValidationIssue,
+} from "../organizer-event";
 import {
   ORGANIZER_GUIDED_TASKS,
   ORGANIZER_WORKSPACE_SECTIONS,
@@ -55,7 +61,12 @@ import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import MapLayoutEditor from "../map-layout-editor";
-import { hasMapTemplateRecognizer, recognizeMapTemplate } from "../map-template-registry";
+import {
+  getMapTemplateMetadata,
+  hasMapTemplateRecognizer,
+  listMapTemplateOptions,
+  recognizeMapTemplate,
+} from "../map-template-registry";
 import { useModalFocus } from "../use-modal-focus";
 import styles from "./organizer.module.css";
 
@@ -111,6 +122,22 @@ const PUBLICATION_STEP_LABEL: Record<string, string> = {
   commit: "寫入資料",
   verify: "確認發布",
 };
+
+/** What picking this template actually does, in the two terms the organizer
+ * feels: whether an uploaded floor plan can be recognized, and what the saved
+ * map is checked against. */
+function mapTemplatePreview(template: string) {
+  const option = listMapTemplateOptions().find((item) => item.id === template);
+  const metadata = getMapTemplateMetadata(template);
+  const shape = metadata.expectedRows === null || metadata.expectedSlots === null
+    ? `${metadata.rowLabel}與${metadata.slotLabel}數量依你畫的版面。`
+    : `${metadata.rowLabel}，共 ${metadata.expectedRows} 排、${metadata.expectedSlots} 個${metadata.slotLabel}。`;
+  return {
+    summary: option?.summary ?? "沿用通用檢查；上傳配置圖後手動描摹攤位。",
+    recognizer: hasMapTemplateRecognizer(template) ? "可自動辨識配置圖" : "需手動描摹配置圖",
+    shape,
+  };
+}
 
 function message(error: unknown) {
   return error instanceof PortalError || error instanceof Error ? error.message : "操作失敗，請稍後再試。";
@@ -661,7 +688,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
   const onlyDay = detail.draft.event.days.length === 1 ? detail.draft.event.days[0] : null;
   const [day, setDay] = useState<MappingChoice>({ column: null, fixed: onlyDay?.id ?? "" });
   const [venueSpace, setVenueSpace] = useState<MappingChoice>({ column: null, fixed: onlySpace?.venueSpaceId ?? "" });
-  const [area, setArea] = useState<MappingChoice>({ column: null, fixed: onlySpace?.areaIds.length === 1 ? onlySpace.areaIds[0] : "" });
+  const [area, setArea] = useState<MappingChoice>({ column: null, fixed: "" });
   const [boothColumn, setBoothColumn] = useState<number | null>(null);
   const [circleColumn, setCircleColumn] = useState<number | null>(null);
   const [stableColumn, setStableColumn] = useState<number | null>(null);
@@ -671,6 +698,22 @@ function ImportPanel({ detail, onChanged, setNotice }: {
     metadata: Awaited<ReturnType<typeof buildOrganizerImportMetadata>>;
     mapping: OrganizerImportMapping;
   }>(null);
+  const derived = useMemo(() => {
+    const spaces = new Map<string, Map<string, number>>();
+    for (const row of prepared?.rows ?? []) {
+      const areas = spaces.get(row.venueSpaceId) ?? new Map<string, number>();
+      areas.set(row.areaId, (areas.get(row.areaId) ?? 0) + 1);
+      spaces.set(row.venueSpaceId, areas);
+    }
+    return [...spaces].map(([venueSpaceId, areas]) => ({
+      venueSpaceId,
+      declared: detail.draft.venue.assignments.some((assignment) => assignment.venueSpaceId === venueSpaceId),
+      areas: [...areas]
+        .map(([id, rows]) => ({ id, rows, valid: isOrganizerAreaId(id) }))
+        .sort((a, b) => a.id.localeCompare(b.id, "en")),
+    })).sort((a, b) => a.venueSpaceId.localeCompare(b.venueSpaceId, "en"));
+  }, [detail.draft.venue.assignments, prepared]);
+  const derivedBlocked = derived.some((space) => !space.declared || space.areas.some((area) => !area.valid));
   const sheet = sheets.find((item) => item.name === sheetName) ?? null;
   const header = sheet?.rows[headerRow - 1]?.cells ?? [];
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
@@ -736,18 +779,36 @@ function ImportPanel({ detail, onChanged, setNotice }: {
             .then((metadata) => setPrepared({ ...result, metadata, mapping }))
             .catch((error) => setNotice({ kind: "error", message: message(error) }));
         }}>預覽對應結果</button>
-        <button type="button" className={styles.ghost} disabled={!prepared || prepared.rows.length === 0 || prepared.issues.some((issue) => issue.severity === "error")} onClick={() => {
+        <button type="button" className={styles.ghost} disabled={!prepared || prepared.rows.length === 0 || derivedBlocked || prepared.issues.some((issue) => issue.severity === "error")} onClick={() => {
           if (!prepared) return;
           setNotice({ kind: "busy", message: "儲存匯入資料…" });
-          void putOrganizerImport(detail.event.id, {
-            expectedVersion: detail.event.version,
+          // The areas this file names are written to the draft first, because
+          // the import API refuses any row whose area the event never declared
+          // — and this file is where those areas come from.
+          const withAreas = withOrganizerImportedAreaIds(detail.draft, prepared.rows);
+          const declared = JSON.stringify(withAreas) === JSON.stringify(detail.draft)
+            ? Promise.resolve(detail.event.version)
+            : saveOrganizerEvent(detail.event.id, detail.event.version, withAreas).then((result) => result.version);
+          void declared.then((expectedVersion) => putOrganizerImport(detail.event.id, {
+            expectedVersion,
             source: { ...prepared.metadata, mapping: prepared.mapping }, rows: prepared.rows,
-          }).then(async () => { setNotice({ kind: "ok", message: "匯入資料已儲存；原始檔沒有上傳。" }); await onChanged(); })
+          })).then(async () => { setNotice({ kind: "ok", message: "匯入資料已儲存；原始檔沒有上傳。" }); await onChanged(); })
             .catch((error) => setNotice({ kind: "error", message: message(error) }));
         }}>確認並儲存 {prepared?.rows.length ?? 0} 列</button>
       </div>
       {prepared && <div className={styles.importPreview}>
         <div className={styles.validationSummary}><b>{prepared.rows.length} 列可匯入</b><span>{prepared.issues.length} 項待修正</span></div>
+        {derived.length > 0 && <div className={styles.derivedSummary}>
+          <h4>這份檔案裡的場館空間與展區</h4>
+          {derived.map((space) => <div key={space.venueSpaceId} className={space.declared ? undefined : styles.issueError}>
+            <strong>{space.venueSpaceId}</strong>
+            {space.declared
+              ? <span>{space.areas.map((area) => `${area.id}（${area.rows} 列）${area.valid ? "" : "・代碼不可用"}`).join("、")}</span>
+              : <span>這個場館空間不在活動設定裡，請先到「場館與展區」新增，或修正來源檔。</span>}
+          </div>)}
+          {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}
+          <p>儲存時會把這些展區寫進活動設定。</p>
+        </div>}
         {prepared.issues.map((issue, index) => <p key={`${issue.code}-${index}`} className={styles.issueError}>來源列 {issue.row}・{issue.message}</p>)}
         <table><thead><tr><th>來源列</th><th>活動日</th><th>場館空間・展區</th><th>攤位</th><th>社團</th><th>社團識別</th></tr></thead><tbody>{prepared.rows.slice(0, 100).map((row) => <tr key={`${row.sourceRow}-${row.boothCode}`}><td>{row.sourceRow}</td><td>{row.dayId}</td><td>{row.venueSpaceId} / {row.areaId}</td><td>{row.boothCode}</td><td>{row.circleName}</td><td>{row.identityGroup ?? "未合併"}</td></tr>)}</tbody></table>
         {prepared.rows.length > 100 && <p>預覽前 100 列；儲存時會包含全部確認列。</p>}
@@ -844,8 +905,11 @@ function DraftForm({
       {draft.venue.assignments.map((assignment, index) => <div className={styles.venueCard} key={index}>
         <label>場館 ID<input disabled={!editable} placeholder="taipei-expo" value={assignment.venueId} onChange={(event) => update((next) => { next.venue.assignments[index].venueId = event.target.value; return next; })} /><small>活動舉辦的建築；小寫英數字與連字號。</small></label>
         <label>場館空間 ID<input disabled={!editable} placeholder="expo-dome" value={assignment.venueSpaceId} onChange={(event) => update((next) => { next.venue.assignments[index].venueSpaceId = event.target.value; return next; })} /><small>場館內的館別或樓層，一個空間一張地圖。</small></label>
-        <label>展區 ID<input disabled={!editable} placeholder="A, B" value={assignment.areaIds.join(", ")} onChange={(event) => update((next) => { next.venue.assignments[index].areaIds = event.target.value.split(",").map((value) => value.trim()).filter(Boolean); return next; })} /><small>空間內的攤位分區，供篩選與定位；逗號分隔。</small></label>
-        <label>地圖模板<input disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })} /><small>攤位排列規格；FF47 場地填 FF47，其餘沿用預設值。</small></label>
+        <div className={styles.derivedField}><span>展區</span><strong>{assignment.areaIds.join("、") || "尚未匯入攤位"}</strong><small>由匯入的攤位資料帶入。</small></div>
+        <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
+          {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
+          {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}
+        </select><MapTemplatePreview template={assignment.mapTemplate} /></label>
         <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>
       </div>)}
       {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定場館空間與展區。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" }); return next; })}>建立第一個場館空間</button></div>}
@@ -857,6 +921,14 @@ function DraftForm({
       <span>{dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>
     </div>
   </section>;
+}
+
+function MapTemplatePreview({ template }: { template: string }) {
+  const preview = mapTemplatePreview(template);
+  return <div className={styles.templatePreview}>
+    <p>{preview.summary}</p>
+    <ul><li>{preview.recognizer}</li><li>{preview.shape}</li></ul>
+  </div>;
 }
 
 function ValidationPanel({ detail, onChanged, setNotice }: { detail: OrganizerEventDetail; onChanged: () => Promise<void>; setNotice: (notice: Notice) => void }) {
