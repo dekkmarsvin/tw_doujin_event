@@ -211,12 +211,19 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
 
   useEffect(() => {
     let cancelled = false;
-    void loadStaticEventMap(eventId)
+    queueMicrotask(() => {
+      if (!cancelled) { setMapLoading(true); setMapError(""); }
+    });
+    const venueSpaceId = venueAssignmentForArea(event, hall).venueSpaceId;
+    const scope = event.venueAssignments.length > 1
+      ? { periodKey: String(day), venueSpaceId }
+      : undefined;
+    void loadStaticEventMap(eventId, scope)
       .then((map) => { if (!cancelled) setPublishedMap(map); })
-      .catch((error) => { if (!cancelled) setMapError(error instanceof Error ? error.message : "讀取活動地圖失敗。"); })
+      .catch((error) => { if (!cancelled) { setPublishedMap(null); setMapError(error instanceof Error ? error.message : "讀取活動地圖失敗。"); } })
       .finally(() => { if (!cancelled) setMapLoading(false); });
     return () => { cancelled = true; };
-  }, [eventId]);
+  }, [day, event, eventId, hall]);
 
   useEffect(() => {
     if (!favoriteUndo) return;

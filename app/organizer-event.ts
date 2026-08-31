@@ -1,0 +1,143 @@
+export type OrganizerRole = "owner" | "editor";
+
+export type OrganizerCandidateStatus =
+  | "draft"
+  | "changes_requested"
+  | "submitted"
+  | "approved"
+  | "publishing"
+  | "published"
+  | "failed";
+
+export type OrganizerValidationIssue = {
+  severity: "error" | "warning";
+  step: "event" | "venue" | "import" | "map" | "preview";
+  code: string;
+  row?: number;
+  target?: string;
+  message: string;
+};
+
+export type OrganizerEventDay = { id: string; label: string; date: string };
+export type OrganizerVenueAssignment = {
+  venueId: string;
+  venueSpaceId: string;
+  areaIds: string[];
+  mapTemplate: string;
+};
+
+export type OrganizerEventDraft = {
+  schema: "organizer-event-draft/1";
+  event: {
+    id: string | null;
+    name: string;
+    days: OrganizerEventDay[];
+  };
+  venue: {
+    assignments: OrganizerVenueAssignment[];
+  };
+  officialSource: {
+    label: string;
+    url: string | null;
+  };
+};
+
+const ID = /^[a-z0-9][a-z0-9-]*$/u;
+const AREA_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
+const DATE = /^\d{4}-\d{2}-\d{2}$/u;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value.normalize("NFKC").trim() : "";
+}
+
+function httpsUrl(value: string | null) {
+  if (value === null) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
+export function createEmptyOrganizerEventDraft(tentativeName: string): OrganizerEventDraft {
+  return {
+    schema: "organizer-event-draft/1",
+    event: { id: null, name: text(tentativeName), days: [] },
+    venue: { assignments: [] },
+    officialSource: { label: "", url: null },
+  };
+}
+
+export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | null {
+  if (!record(value) || value.schema !== "organizer-event-draft/1"
+    || !record(value.event) || !record(value.venue) || !record(value.officialSource)
+    || !Array.isArray(value.event.days) || !Array.isArray(value.venue.assignments)) return null;
+  const eventId = value.event.id === null ? null : text(value.event.id);
+  const name = text(value.event.name);
+  const days: OrganizerEventDay[] = [];
+  for (const day of value.event.days) {
+    if (!record(day)) return null;
+    days.push({ id: text(day.id), label: text(day.label), date: text(day.date) });
+  }
+  const assignments: OrganizerVenueAssignment[] = [];
+  for (const assignment of value.venue.assignments) {
+    if (!record(assignment) || !Array.isArray(assignment.areaIds)) return null;
+    assignments.push({
+      venueId: text(assignment.venueId),
+      venueSpaceId: text(assignment.venueSpaceId),
+      areaIds: assignment.areaIds.map(text),
+      mapTemplate: text(assignment.mapTemplate) || "TAIWAN_GENERIC_V1",
+    });
+  }
+  const sourceUrl = value.officialSource.url === null || value.officialSource.url === undefined
+    ? null
+    : text(value.officialSource.url);
+  return {
+    schema: "organizer-event-draft/1",
+    event: { id: eventId, name, days },
+    venue: { assignments },
+    officialSource: { label: text(value.officialSource.label), url: sourceUrl },
+  };
+}
+
+export function serializeOrganizerEventDraft(value: unknown) {
+  const draft = parseOrganizerEventDraft(value);
+  if (!draft) return null;
+  const json = JSON.stringify(draft);
+  return new TextEncoder().encode(json).byteLength <= 1024 * 1024 ? { draft, json } : null;
+}
+
+export function validateOrganizerEventDraft(draft: OrganizerEventDraft): OrganizerValidationIssue[] {
+  const issues: OrganizerValidationIssue[] = [];
+  const add = (issue: OrganizerValidationIssue) => issues.push(issue);
+  if (!draft.event.name) add({ severity: "error", step: "event", code: "missing_name", target: "event.name", message: "活動名稱為必填。" });
+  if (!draft.event.id) add({ severity: "error", step: "event", code: "missing_event_id", target: "event.id", message: "eventId 為必填。" });
+  else if (!ID.test(draft.event.id)) add({ severity: "error", step: "event", code: "invalid_event_id", target: "event.id", message: "eventId 只能使用小寫英數字與連字號。" });
+  if (draft.event.days.length === 0) add({ severity: "error", step: "event", code: "missing_days", target: "event.days", message: "至少需要一個活動日。" });
+  const dayIds = new Set<string>();
+  draft.event.days.forEach((day, row) => {
+    if (!ID.test(day.id) || !day.label || !DATE.test(day.date) || Number.isNaN(Date.parse(`${day.date}T00:00:00Z`))) {
+      add({ severity: "error", step: "event", code: "invalid_day", row: row + 1, target: `event.days.${row}`, message: "活動日需要有效的 id、名稱與 YYYY-MM-DD 日期。" });
+    }
+    if (dayIds.has(day.id)) add({ severity: "error", step: "event", code: "duplicate_day", row: row + 1, target: `event.days.${row}.id`, message: `活動日 ${day.id} 重複。` });
+    dayIds.add(day.id);
+  });
+  if (draft.venue.assignments.length === 0) add({ severity: "error", step: "venue", code: "missing_venue", target: "venue.assignments", message: "至少需要一個場館空間。" });
+  const spaces = new Set<string>();
+  draft.venue.assignments.forEach((assignment, row) => {
+    if (!ID.test(assignment.venueId) || !ID.test(assignment.venueSpaceId) || !assignment.mapTemplate
+      || assignment.areaIds.length === 0 || assignment.areaIds.some((area) => !AREA_ID.test(area))) {
+      add({ severity: "error", step: "venue", code: "invalid_assignment", row: row + 1, target: `venue.assignments.${row}`, message: "場館、場館空間與展區資料不完整。" });
+    }
+    if (spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: `場館空間 ${assignment.venueSpaceId} 重複。` });
+    spaces.add(assignment.venueSpaceId);
+  });
+  if (!draft.officialSource.label) add({ severity: "error", step: "event", code: "missing_source", target: "officialSource.label", message: "請說明主辦資料來源。" });
+  if (!httpsUrl(draft.officialSource.url)) add({ severity: "error", step: "event", code: "invalid_source_url", target: "officialSource.url", message: "來源網址必須使用 HTTPS。" });
+  return issues;
+}

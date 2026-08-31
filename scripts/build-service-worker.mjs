@@ -59,10 +59,21 @@ const precache = [...new Set([
 // Every staged event has to survive going offline at the venue: a reader who
 // picked the second event and then lost signal must not find an empty shell.
 const stagedEvents = stage.events ?? [{ eventId: stage.eventId }];
-const required = ["/index.html", "/manifest.webmanifest", ...stagedEvents.flatMap(({ eventId }) => [
-  `/data/events/${eventId}/circles.json`,
-  `/data/events/${eventId}/map.json`,
-])];
+const requiredEventData = [];
+for (const { eventId } of stagedEvents) {
+  const base = `/data/events/${eventId}`;
+  requiredEventData.push(`${base}/circles.json`);
+  const manifestPath = `${base}/map-manifest.json`;
+  if (files.includes(manifestPath)) {
+    requiredEventData.push(manifestPath);
+    const manifest = JSON.parse(await readFile(resolve(dist, manifestPath.slice(1)), "utf8"));
+    if (!Array.isArray(manifest.maps) || manifest.maps.length === 0) throw new Error(`Invalid offline map manifest for ${eventId}.`);
+    requiredEventData.push(...manifest.maps.map(({ path }) => `${base}/${path}`));
+  } else {
+    requiredEventData.push(`${base}/map.json`);
+  }
+}
+const required = ["/index.html", "/manifest.webmanifest", ...requiredEventData];
 const missing = required.filter((path) => !precache.includes(path));
 if (missing.length > 0) throw new Error(`The build is missing offline-critical files: ${missing.join(", ")}`);
 if (!reader.some((path) => path.endsWith(".js"))) throw new Error("index.html references no application script to precache.");

@@ -4,10 +4,12 @@ import {
   EVENT_DATA_PIN_SCHEMA,
   EVENT_DATA_REPOSITORY,
   EVENT_FILE_NAMES,
+  MAP_MANIFEST_FILE,
   REFERENCE_SELECTION_FILE,
   assertEventDataLocator,
   eventFilePath,
   parseEventDataPin,
+  parsePinnedMapManifest,
   rawFileUrl,
   sha256,
 } from "./event-data-pin-utils.mjs";
@@ -81,10 +83,29 @@ export async function prepareEventOnboarding({ eventId, commit, fetchImpl = glob
   }
 
   const bytesByPath = new Map();
+  let eventValue;
   for (const name of EVENT_FILE_NAMES) {
-    const filePath = eventFilePath(eventId, name);
-    bytesByPath.set(filePath, await fetchPinned(filePath));
+    if (name === "map.json") {
+      eventValue = parseJsonBytesStrict(bytesByPath.get(eventFilePath(eventId, "event.json")), "Pinned event.json");
+      if (Array.isArray(eventValue.venueAssignments) && eventValue.venueAssignments.length > 1) {
+        const manifestPath = eventFilePath(eventId, MAP_MANIFEST_FILE);
+        const manifestBytes = await fetchPinned(manifestPath);
+        bytesByPath.set(manifestPath, manifestBytes);
+        const entries = parsePinnedMapManifest(parseJsonBytesStrict(manifestBytes, `Pinned ${MAP_MANIFEST_FILE}`), eventId);
+        for (const entry of entries) {
+          const filePath = eventFilePath(eventId, entry.path);
+          bytesByPath.set(filePath, await fetchPinned(filePath));
+        }
+      } else {
+        const mapPath = eventFilePath(eventId, "map.json");
+        bytesByPath.set(mapPath, await fetchPinned(mapPath));
+      }
+    } else {
+      const filePath = eventFilePath(eventId, name);
+      bytesByPath.set(filePath, await fetchPinned(filePath));
+    }
   }
+  eventValue ??= parseJsonBytesStrict(bytesByPath.get(eventFilePath(eventId, "event.json")), "Pinned event.json");
 
   const selection = parseReferenceSelection(parseJsonBytesStrict(
     bytesByPath.get(eventFilePath(eventId, REFERENCE_SELECTION_FILE)),
@@ -102,8 +123,7 @@ export async function prepareEventOnboarding({ eventId, commit, fetchImpl = glob
   }
 
   const verified = verifyReferenceFiles(selection, referenceBytes, eventId);
-  const event = parseJsonBytesStrict(bytesByPath.get(eventFilePath(eventId, "event.json")), "Pinned event.json");
-  selectEventReferenceRecords(selection, verified.records, event);
+  selectEventReferenceRecords(selection, verified.records, eventValue);
 
   const pin = parseEventDataPin({
     schema: EVENT_DATA_PIN_SCHEMA,

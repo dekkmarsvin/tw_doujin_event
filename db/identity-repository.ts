@@ -18,6 +18,8 @@ export type OverridesPhase = "during" | "after";
 export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
+export type OrganizerRole = "owner" | "editor";
+export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed";
 
 export type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
 
@@ -50,6 +52,12 @@ export type OverrideRow = {
   retention_expires_at?: number | null;
   hosted_thumbnail_key?: string | null;
 };
+
+function chunked<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
+  return chunks;
+}
 
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
   let tablesReady: Promise<void> | null = null;
@@ -128,7 +136,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function writeAudit(entry: {
     at: number;
     actorAccountId?: string | null;
-    actorRole: "circle" | "map_contributor" | "admin" | "system";
+    actorRole: "circle" | "map_contributor" | "organizer_owner" | "organizer_editor" | "admin" | "system";
     action: string;
     subjectType: string;
     subjectId: string;
@@ -158,27 +166,46 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).run();
   }
 
-  async function countLoginTokensSince(column: "email" | "request_ip_hash", value: string, since: number) {
+  /** `origin` splits the two budgets that share this table. "self" counts only
+   * links an inbox asked for, so an inviter cannot spend someone else's quota;
+   * "invited" counts only links minted for that inbox by someone else, which is
+   * what caps invitation spam. "any" stays the right answer per IP, where the
+   * requester is the one being metered either way. */
+  async function countLoginTokensSince(
+    column: "email" | "request_ip_hash", value: string, since: number,
+    origin: "self" | "invited" | "any" = "any",
+  ) {
     await ensureTables();
+    const filter = origin === "self" ? "AND minted_by IS NULL"
+      : origin === "invited" ? "AND minted_by IS NOT NULL" : "";
     const row = await database.prepare(
-      `SELECT COUNT(*) AS total FROM login_tokens WHERE ${column} = ?1 AND created_at >= ?2`,
+      `SELECT COUNT(*) AS total FROM login_tokens WHERE ${column} = ?1 AND created_at >= ?2 ${filter}`,
     ).bind(value, since).first<{ total: number }>();
     return row?.total ?? 0;
   }
 
-  async function createLoginToken(input: { tokenHash: string; email: string; now: number; expiresAt: number; ipHash: string | null }) {
+  async function createLoginToken(input: {
+    tokenHash: string; email: string; now: number; expiresAt: number; ipHash: string | null;
+    audience?: "circle" | "organizer";
+    /** Set only when another account minted this link by inviting the address. */
+    mintedBy?: string | null;
+  }) {
     await ensureTables();
     await database.prepare(
-      `INSERT INTO login_tokens (id, token_hash, email, created_at, expires_at, request_ip_hash)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
-    ).bind(crypto.randomUUID(), input.tokenHash, input.email, input.now, input.expiresAt, input.ipHash).run();
+      `INSERT INTO login_tokens (id, token_hash, email, created_at, expires_at, request_ip_hash, audience, minted_by)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+    ).bind(crypto.randomUUID(), input.tokenHash, input.email, input.now, input.expiresAt, input.ipHash,
+      input.audience ?? "circle", input.mintedBy ?? null).run();
   }
 
   /**
    * Single-use, enforced by the write itself. A read-then-write would let two
    * concurrent clicks on the same emailed link both succeed.
    */
-  async function consumeLoginToken(tokenHash: string, now: number): Promise<string | null> {
+  async function consumeLoginTokenDetails(tokenHash: string, now: number): Promise<{
+    email: string;
+    audience: "circle" | "organizer";
+  } | null> {
     await ensureTables();
     const result = await database.prepare(
       `UPDATE login_tokens SET consumed_at = ?1
@@ -186,15 +213,19 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(now, tokenHash).run();
     if (result.meta.changes !== 1) return null;
 
-    const row = await database.prepare(`SELECT email FROM login_tokens WHERE token_hash = ?1`)
-      .bind(tokenHash).first<{ email: string }>();
+    const row = await database.prepare(`SELECT email, audience FROM login_tokens WHERE token_hash = ?1`)
+      .bind(tokenHash).first<{ email: string; audience: string }>();
     if (!row) return null;
 
     // A consumed link retires every other outstanding link for that inbox.
     await database.prepare(
       `UPDATE login_tokens SET consumed_at = ?1 WHERE email = ?2 AND consumed_at IS NULL`,
     ).bind(now, row.email).run();
-    return row.email;
+    return { email: row.email, audience: row.audience === "organizer" ? "organizer" : "circle" };
+  }
+
+  async function consumeLoginToken(tokenHash: string, now: number): Promise<string | null> {
+    return (await consumeLoginTokenDetails(tokenHash, now))?.email ?? null;
   }
 
   async function upsertAccount(email: string, now: number): Promise<string> {
@@ -311,11 +342,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
 
     statements.push(
-      database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft')`).bind(input.accountId),
-      database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft'`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_draft_revisions WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
+      database.prepare(`DELETE FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL`).bind(input.accountId),
       database.prepare(`UPDATE map_drafts SET owner_account_id = '[shredded]' WHERE owner_account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_revisions SET created_by = NULL WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE map_draft_reviews SET actor_account_id = NULL WHERE actor_account_id = ?1`).bind(input.accountId),
@@ -326,6 +357,27 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
       database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
       database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_candidates SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_candidates SET last_updated_by = '[shredded]' WHERE last_updated_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_candidates SET submitted_by = '[shredded]' WHERE submitted_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_candidates SET approved_by = '[shredded]' WHERE approved_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_revisions SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_grants SET granted_by = '[shredded]' WHERE granted_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_invitations SET invited_by = '[shredded]' WHERE invited_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_invitations SET accepted_by = '[shredded]', email = '[shredded]' WHERE accepted_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_invitations SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_event_invitations SET email = '[shredded]' WHERE email = ?1`).bind(input.email),
+      database.prepare(`UPDATE organizer_event_reviews SET actor_account_id = '[shredded]' WHERE actor_account_id = ?1`).bind(input.accountId),
+      // The private workbook's file and sheet names identify the person who
+      // uploaded it as much as the actor column does, so they go in the same
+      // statement — a later one would no longer find the row by created_by.
+      database.prepare(`UPDATE organizer_import_sources SET created_by = '[shredded]', file_name = '[shredded]', worksheet = NULL WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_submission_snapshots SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`DELETE FROM organizer_event_grants WHERE account_id = ?1`).bind(input.accountId),
+      // Links this account minted for other inboxes outlive it; the invitee
+      // keeps their budget but the departed actor stops being named.
+      database.prepare(`UPDATE login_tokens SET minted_by = '[shredded]' WHERE minted_by = ?1`).bind(input.accountId),
       database.prepare(`DELETE FROM login_tokens WHERE email = ?1`).bind(input.email),
       database.prepare(`DELETE FROM sessions WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`DELETE FROM circle_claims WHERE account_id = ?1`).bind(input.accountId),
@@ -358,7 +410,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const results = await database.batch([
       database.prepare(
        `UPDATE accounts SET deletion_started_at = COALESCE(deletion_started_at, ?1)
-         WHERE id = ?2 AND email = ?3 AND disabled_at IS NULL`,
+         WHERE id = ?2 AND email = ?3 AND disabled_at IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM organizer_event_grants own
+             WHERE own.account_id = ?2 AND own.role = 'owner' AND own.revoked_at IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM organizer_event_grants other
+                 WHERE other.candidate_id = own.candidate_id AND other.role = 'owner'
+                   AND other.revoked_at IS NULL AND other.account_id <> ?2
+               )
+           )`,
       ).bind(input.now, input.accountId, input.email),
       database.prepare(
         `UPDATE sessions SET revoked_at = COALESCE(revoked_at, ?1)
@@ -374,8 +435,31 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            SELECT 1 FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
          )`,
       ).bind(input.accountId),
+      database.prepare(
+        `UPDATE organizer_event_grants SET revoked_by = '[account-deletion]', revoked_at = ?2
+         WHERE account_id = ?1 AND revoked_at IS NULL AND EXISTS (
+           SELECT 1 FROM accounts WHERE id = ?1 AND disabled_at IS NULL AND deletion_started_at IS NOT NULL
+         )`,
+      ).bind(input.accountId, input.now),
     ]);
     return results[0].meta.changes === 1;
+  }
+
+  async function listSoleOwnerOrganizerCandidates(accountId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT c.id, c.tentative_name
+       FROM organizer_event_candidates c
+       JOIN organizer_event_grants own ON own.candidate_id = c.id
+       WHERE own.account_id = ?1 AND own.role = 'owner' AND own.revoked_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM organizer_event_grants other
+           WHERE other.candidate_id = c.id AND other.role = 'owner'
+             AND other.revoked_at IS NULL AND other.account_id <> ?1
+         )
+       ORDER BY c.created_at`,
+    ).bind(accountId).all<{ id: string; tentative_name: string }>();
+    return result.results;
   }
 
   async function isAccountWritable(accountId: string) {
@@ -404,7 +488,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const result = await database.prepare(
       `SELECT f.object_key FROM map_draft_files f
        JOIN map_drafts d ON d.id = f.draft_id
-       WHERE d.owner_account_id = ?1 AND d.status = 'draft' AND f.object_key IS NOT NULL`,
+       WHERE d.owner_account_id = ?1 AND d.status = 'draft' AND d.candidate_id IS NULL AND f.object_key IS NOT NULL`,
     ).bind(accountId).all<{ object_key: string }>();
     return result.results.map(({ object_key }) => object_key);
   }
@@ -797,12 +881,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return results[0].meta.changes === 1 && results[1].meta.changes === 1;
   }
 
+  /** Organizer candidates borrow this table but carry a candidate_id, and their
+   * event_id is the candidate's own — which can name a published event. Every
+   * contributor-flow statement therefore restates `candidate_id IS NULL`: a
+   * candidate map must never be readable, submittable or approvable through the
+   * public map-contribution pipeline, whatever event id it happens to hold. */
   async function getMapDraft(draftId: string, eventId?: string) {
     await ensureTables();
     return database.prepare(
       `SELECT d.*, r.content_json FROM map_drafts d
        JOIN map_draft_revisions r ON r.draft_id = d.id AND r.revision = d.current_revision
-       WHERE d.id = ?1 AND (?2 IS NULL OR d.event_id = ?2)`,
+       WHERE d.id = ?1 AND d.candidate_id IS NULL AND (?2 IS NULL OR d.event_id = ?2)`,
     ).bind(draftId, eventId ?? null).first<{
       id: string; event_id: string; period_key: string; venue_space_id: string; owner_account_id: string;
       status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number;
@@ -826,7 +915,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     try {
       await database.batch(aliases.map((alias) => database.prepare(
         `UPDATE map_drafts SET period_key = ?1
-         WHERE event_id = ?2 AND venue_space_id = ?3 AND period_key = ?4`,
+         WHERE event_id = ?2 AND candidate_id IS NULL AND venue_space_id = ?3 AND period_key = ?4`,
       ).bind(input.periodKey, input.eventId, input.venueSpaceId, alias)));
       return true;
     } catch (error) {
@@ -840,7 +929,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const result = await database.prepare(
       `SELECT id, event_id, period_key, venue_space_id, status, current_revision,
               created_at, updated_at, decision_at
-       FROM map_drafts WHERE owner_account_id = ?1 AND event_id = ?2 ORDER BY updated_at DESC`,
+       FROM map_drafts WHERE owner_account_id = ?1 AND event_id = ?2 AND candidate_id IS NULL
+       ORDER BY updated_at DESC`,
     ).bind(ownerAccountId, eventId).all<{
       id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
       current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
@@ -854,7 +944,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       `SELECT d.id, d.event_id, d.period_key, d.venue_space_id, d.status, d.current_revision,
               d.created_at, d.updated_at, d.decision_at, a.email AS owner_email
        FROM map_drafts d LEFT JOIN accounts a ON a.id = d.owner_account_id
-       WHERE d.event_id = ?1 AND d.status <> 'draft' ORDER BY d.updated_at DESC`,
+       WHERE d.event_id = ?1 AND d.candidate_id IS NULL AND d.status <> 'draft'
+       ORDER BY d.updated_at DESC`,
     ).bind(eventId).all<{
       id: string; event_id: string; period_key: string; venue_space_id: string; status: MapDraftStatus;
       current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
@@ -958,7 +1049,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     return database.prepare(
       `SELECT id, current_revision, status FROM map_drafts
-       WHERE event_id = ?1 AND period_key = ?2 AND venue_space_id = ?3
+       WHERE event_id = ?1 AND candidate_id IS NULL AND period_key = ?2 AND venue_space_id = ?3
          AND status IN ('approved', 'exported') LIMIT 1`,
     ).bind(eventId, periodKey, venueSpaceId).first<{
       id: string; current_revision: number; status: "approved" | "exported";
@@ -969,7 +1060,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const result = await database.prepare(
       `SELECT id, event_id, period_key, venue_space_id, current_revision, updated_at
-       FROM map_drafts WHERE status = 'submitted' AND updated_at < ?1
+       FROM map_drafts WHERE status = 'submitted' AND updated_at < ?1 AND candidate_id IS NULL
          AND (?2 IS NULL OR event_id = ?2) ORDER BY updated_at ASC`,
     ).bind(before, eventId ?? null).all<{
       id: string; event_id: string; period_key: string; venue_space_id: string;
@@ -992,7 +1083,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE map_drafts SET current_revision = ?1, updated_at = ?2, last_activity_at = ?2
          WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
-           AND event_id = ?6
+           AND event_id = ?6 AND candidate_id IS NULL
            AND status IN ('draft', 'changes_requested')
            AND retention_action IS NULL
            AND EXISTS (
@@ -1018,7 +1109,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE map_drafts SET status = 'submitted', updated_at = ?1, last_activity_at = ?1, transition_token = ?2
          WHERE id = ?3 AND owner_account_id = ?4 AND current_revision = ?5
-           AND event_id = ?6
+           AND event_id = ?6 AND candidate_id IS NULL
            AND status IN ('draft', 'changes_requested')
            AND retention_action IS NULL
            AND EXISTS (
@@ -1059,7 +1150,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const results = await database.batch([
       database.prepare(
         `UPDATE map_drafts SET status = ?1, updated_at = ?2, last_activity_at = ?2, decision_at = ?3, transition_token = ?4
-         WHERE id = ?5 AND current_revision = ?6 AND status = ?7 AND retention_action IS NULL`,
+         WHERE id = ?5 AND current_revision = ?6 AND status = ?7 AND retention_action IS NULL
+           AND candidate_id IS NULL`,
       ).bind(input.toStatus, input.now, decisionAt, transitionToken, input.draftId, input.expectedRevision, fromStatus),
       database.prepare(
         `INSERT INTO map_draft_reviews (
@@ -1110,7 +1202,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          ON current.event_id = target.event_id
         AND current.period_key = target.period_key
         AND current.venue_space_id = target.venue_space_id
+        AND current.candidate_id IS NULL
        WHERE target.id = ?1 AND target.current_revision = ?2 AND target.status = 'submitted'
+         AND target.candidate_id IS NULL
          AND current.status IN ('approved', 'exported') LIMIT 1`,
     ).bind(input.draftId, input.expectedRevision).first<{ id: string; status: "approved" | "exported" }>();
     if (active && active.id !== input.replacementDraftId) return { ok: false as const, reason: "replacement_required" as const, activeDraftId: active.id };
@@ -1122,6 +1216,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           `UPDATE map_drafts SET status = 'approved', updated_at = ?1, last_activity_at = ?1,
                decision_at = ?1, transition_token = ?2
            WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted' AND retention_action IS NULL
+             AND candidate_id IS NULL
              AND EXISTS (SELECT 1 FROM map_draft_files WHERE draft_id = ?3 AND revision = ?4)`,
         ).bind(input.now, approvedToken, input.draftId, input.expectedRevision),
         database.prepare(
@@ -1147,9 +1242,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE map_drafts SET status = 'withdrawn', updated_at = ?1, last_activity_at = ?1,
              decision_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND status IN ('approved', 'exported')
+         WHERE id = ?3 AND status IN ('approved', 'exported') AND candidate_id IS NULL
            AND EXISTS (SELECT 1 FROM map_drafts target
              WHERE target.id = ?4 AND target.current_revision = ?5 AND target.status = 'submitted'
+               AND target.candidate_id IS NULL
                AND EXISTS (SELECT 1 FROM map_draft_files evidence
                  WHERE evidence.draft_id = target.id AND evidence.revision = target.current_revision)
                AND target.event_id = map_drafts.event_id AND target.period_key = map_drafts.period_key
@@ -1164,11 +1260,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(
         `UPDATE map_drafts SET status = 'approved', updated_at = ?1, last_activity_at = ?1,
              decision_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted'
+         WHERE id = ?3 AND current_revision = ?4 AND status = 'submitted' AND candidate_id IS NULL
            AND EXISTS (SELECT 1 FROM map_draft_files WHERE draft_id = ?3 AND revision = ?4)
            AND NOT EXISTS (SELECT 1 FROM map_drafts current
              WHERE current.event_id = map_drafts.event_id AND current.period_key = map_drafts.period_key
                AND current.venue_space_id = map_drafts.venue_space_id
+               AND current.candidate_id IS NULL
                AND current.status IN ('approved', 'exported'))`,
       ).bind(input.now, approvedToken, input.draftId, input.expectedRevision),
       database.prepare(
@@ -1220,13 +1317,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         `INSERT INTO map_draft_exports (
            id, draft_id, revision, target_path, candidate_json, diff_json, candidate_sha256, created_by, created_at
          ) SELECT ?1, id, current_revision, ?2, ?3, ?4, ?5, ?6, ?7
-           FROM map_drafts WHERE id = ?8 AND current_revision = ?9 AND status = 'approved'`,
+           FROM map_drafts WHERE id = ?8 AND current_revision = ?9 AND status = 'approved'
+             AND candidate_id IS NULL`,
       ).bind(exportId, input.targetPath, input.candidateJson, input.diffJson, input.candidateSha256,
         input.actorAccountId, input.now, input.draftId, input.expectedRevision),
       database.prepare(
         `UPDATE map_drafts SET status = 'exported', updated_at = ?1, last_activity_at = ?1,
              decision_at = ?1, transition_token = ?2
-         WHERE id = ?3 AND current_revision = ?4 AND status = 'approved'
+         WHERE id = ?3 AND current_revision = ?4 AND status = 'approved' AND candidate_id IS NULL
            AND EXISTS (SELECT 1 FROM map_draft_exports e WHERE e.id = ?5 AND e.draft_id = map_drafts.id)`,
       ).bind(input.now, transitionToken, input.draftId, input.expectedRevision, exportId),
       database.prepare(
@@ -1254,7 +1352,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        ) SELECT ?1, d.id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
          FROM map_drafts d
          WHERE d.id = ?15 AND d.owner_account_id = ?13 AND d.current_revision = ?2
-           AND d.event_id = ?16
+           AND d.event_id = ?16 AND d.candidate_id IS NULL
            AND d.status IN ('draft', 'changes_requested')
            AND d.retention_action IS NULL
            AND EXISTS (
@@ -1274,7 +1372,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return database.prepare(
       `SELECT f.*, d.owner_account_id, d.event_id, d.status FROM map_draft_files f
        JOIN map_drafts d ON d.id = f.draft_id
-       WHERE f.id = ?1 AND (?2 IS NULL OR d.event_id = ?2)`,
+       WHERE f.id = ?1 AND d.candidate_id IS NULL AND (?2 IS NULL OR d.event_id = ?2)`,
     ).bind(fileId, eventId ?? null).first<{
       id: string; draft_id: string; revision: number; object_key: string | null; source_url: string;
       document_date: string; page_number: number | null; sha256: string; mime: string; size_bytes: number;
@@ -1290,6 +1388,931 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       `UPDATE map_draft_files SET object_key = NULL, raw_deleted_at = COALESCE(raw_deleted_at, ?1)
        WHERE id = ?2 AND object_key IS NOT NULL`,
     ).bind(now, fileId).run();
+    return result.meta.changes === 1;
+  }
+
+  type OrganizerCandidateRow = {
+    id: string;
+    tentative_name: string;
+    event_id: string | null;
+    event_id_locked_at: number | null;
+    status: OrganizerCandidateStatus;
+    current_version: number;
+    current_draft_json: string;
+    created_by: string;
+    created_at: number;
+    updated_at: number;
+    last_updated_by: string;
+    last_updated_role: "admin" | OrganizerRole;
+    submitted_by: string | null;
+    submitted_at: number | null;
+    approved_by: string | null;
+    approved_at: number | null;
+    published_version: number | null;
+    published_at: number | null;
+  };
+
+  async function organizerRole(candidateId: string, accountId: string): Promise<OrganizerRole | null> {
+    await ensureTables();
+    const row = await database.prepare(
+      `SELECT role FROM organizer_event_grants
+       WHERE candidate_id = ?1 AND account_id = ?2 AND revoked_at IS NULL`,
+    ).bind(candidateId, accountId).first<{ role: string }>();
+    return row?.role === "owner" || row?.role === "editor" ? row.role : null;
+  }
+
+  async function hasOrganizerAccess(accountId: string) {
+    await ensureTables();
+    const row = await database.prepare(
+      `SELECT 1 AS allowed FROM organizer_event_grants
+       WHERE account_id = ?1 AND revoked_at IS NULL LIMIT 1`,
+    ).bind(accountId).first<{ allowed: number }>();
+    return !!row;
+  }
+
+  async function createOrganizerCandidate(input: {
+    id: string;
+    tentativeName: string;
+    ownerEmail: string;
+    createdByAccountId: string;
+    draftJson: string;
+    now: number;
+  }) {
+    await ensureTables();
+    try {
+      const results = await database.batch([
+        database.prepare(
+          `INSERT INTO organizer_event_candidates (
+             id, tentative_name, status, current_version, current_draft_json,
+             created_by, created_at, updated_at, last_updated_by, last_updated_role
+           ) VALUES (?1, ?2, 'draft', 1, ?3, ?4, ?5, ?5, ?4, 'admin')`,
+        ).bind(input.id, input.tentativeName, input.draftJson, input.createdByAccountId, input.now),
+        database.prepare(
+          `INSERT INTO organizer_event_revisions (
+             id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
+           ) VALUES (?1, ?2, 1, NULL, ?3, ?4, 'admin', ?5)`,
+        ).bind(crypto.randomUUID(), input.id, input.draftJson, input.createdByAccountId, input.now),
+        database.prepare(
+          `INSERT INTO organizer_event_invitations (
+             id, candidate_id, email, role, invited_by, created_at
+           ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5)`,
+        ).bind(crypto.randomUUID(), input.id, input.ownerEmail, input.createdByAccountId, input.now),
+      ]);
+      return results.every((result) => result.meta.changes === 1)
+        ? { ok: true as const, version: 1 }
+        : { ok: false as const, reason: "conflict" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/unique constraint/i.test(message)) return { ok: false as const, reason: "conflict" as const };
+      throw error;
+    }
+  }
+
+  async function acceptOrganizerInvitations(input: { accountId: string; email: string; now: number }) {
+    await ensureTables();
+    const pending = await database.prepare(
+      `SELECT id, candidate_id, role, invited_by FROM organizer_event_invitations
+       WHERE email = ?1 AND accepted_at IS NULL AND revoked_at IS NULL
+       ORDER BY created_at, id`,
+    ).bind(input.email).all<{ id: string; candidate_id: string; role: OrganizerRole; invited_by: string }>();
+    const accepted: Array<{ candidateId: string; role: OrganizerRole }> = [];
+    for (const invitation of pending.results) {
+      const results = await database.batch([
+        database.prepare(
+          `UPDATE organizer_event_invitations
+           SET accepted_by = ?1, accepted_at = ?2
+           WHERE id = ?3 AND accepted_at IS NULL AND revoked_at IS NULL`,
+        ).bind(input.accountId, input.now, invitation.id),
+        database.prepare(
+          `INSERT INTO organizer_event_grants (
+             id, candidate_id, account_id, role, granted_by, granted_at, revoked_by, revoked_at
+           ) SELECT ?1, candidate_id, ?2, role, invited_by, ?3, NULL, NULL
+             FROM organizer_event_invitations WHERE id = ?4 AND accepted_by = ?2
+           ON CONFLICT(candidate_id, account_id) DO UPDATE SET
+             role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at,
+             revoked_by = NULL, revoked_at = NULL`,
+        ).bind(crypto.randomUUID(), input.accountId, input.now, invitation.id),
+      ]);
+      if (results.every((result) => result.meta.changes === 1)) {
+        accepted.push({ candidateId: invitation.candidate_id, role: invitation.role });
+      }
+    }
+    return accepted;
+  }
+
+  async function listOrganizerCandidatesForAccount(accountId: string, admin: boolean) {
+    await ensureTables();
+    if (admin) {
+      const rows = await database.prepare(
+        `SELECT id, tentative_name, event_id, status, current_version, updated_at,
+                last_updated_role, 'admin' AS role
+         FROM organizer_event_candidates ORDER BY updated_at DESC, id`,
+      ).all<{
+        id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
+        current_version: number; updated_at: number; last_updated_role: string; role: "admin";
+      }>();
+      return rows.results;
+    }
+    const rows = await database.prepare(
+      `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
+              c.last_updated_role, g.role
+       FROM organizer_event_candidates c
+       JOIN organizer_event_grants g ON g.candidate_id = c.id
+       WHERE g.account_id = ?1 AND g.revoked_at IS NULL
+       ORDER BY c.updated_at DESC, c.id`,
+    ).bind(accountId).all<{
+      id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
+      current_version: number; updated_at: number; last_updated_role: string; role: OrganizerRole;
+    }>();
+    return rows.results;
+  }
+
+  async function getOrganizerCandidate(candidateId: string) {
+    await ensureTables();
+    return database.prepare("SELECT * FROM organizer_event_candidates WHERE id = ?1")
+      .bind(candidateId).first<OrganizerCandidateRow>();
+  }
+
+  /** Owners are invited third parties, not staff, so their invitations need
+   * their own budget on top of the per-inbox login-token limit. Counting the
+   * rows the actor created is enough: every invitation mints one login token. */
+  async function countOrganizerInvitationsSince(invitedBy: string, since: number) {
+    await ensureTables();
+    const row = await database.prepare(
+      "SELECT COUNT(*) AS total FROM organizer_event_invitations WHERE invited_by = ?1 AND created_at >= ?2",
+    ).bind(invitedBy, since).first<{ total: number }>();
+    return row?.total ?? 0;
+  }
+
+  async function listOrganizerCandidateRevisions(candidateId: string) {
+    await ensureTables();
+    const rows = await database.prepare(
+      `SELECT version, event_id, draft_json, created_by, created_by_role, created_at
+       FROM organizer_event_revisions WHERE candidate_id = ?1 ORDER BY version`,
+    ).bind(candidateId).all<{
+      version: number; event_id: string | null; draft_json: string;
+      created_by: string; created_by_role: string; created_at: number;
+    }>();
+    return rows.results;
+  }
+
+  async function manageOrganizerCollaborator(input: {
+    candidateId: string;
+    actorAccountId: string;
+    email: string;
+    role: OrganizerRole;
+    action: "invite" | "revoke";
+    now: number;
+  }) {
+    await ensureTables();
+    if (await organizerRole(input.candidateId, input.actorAccountId) !== "owner") {
+      return { ok: false as const, reason: "forbidden" as const };
+    }
+    if (input.action === "invite") {
+      if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
+      try {
+        const result = await database.prepare(
+          `INSERT INTO organizer_event_invitations (
+             id, candidate_id, email, role, invited_by, created_at
+           ) VALUES (?1, ?2, ?3, 'editor', ?4, ?5)`,
+        ).bind(crypto.randomUUID(), input.candidateId, input.email, input.actorAccountId, input.now).run();
+        return result.meta.changes === 1
+          ? { ok: true as const, result: "invited" as const }
+          : { ok: false as const, reason: "unchanged" as const };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/unique constraint/i.test(message)) return { ok: false as const, reason: "unchanged" as const };
+        throw error;
+      }
+    }
+    // An editor who has not signed in yet exists only as an invitation, so the
+    // revoke has to succeed on either row. Reporting the grant alone would tell
+    // the Owner nothing changed while the pending invitation was in fact
+    // withdrawn — see manageOrganizerOwner, which draws the same distinction.
+    const [grant, invitation] = await database.batch([
+      database.prepare(
+        `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
+         WHERE candidate_id = ?3 AND role = 'editor' AND revoked_at IS NULL
+           AND account_id = (SELECT id FROM accounts WHERE email = ?4)`,
+      ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
+      database.prepare(
+        `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2
+         WHERE candidate_id = ?3 AND email = ?4 AND role = 'editor'
+           AND accepted_at IS NULL AND revoked_at IS NULL`,
+      ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
+    ]);
+    return grant.meta.changes === 1 || invitation.meta.changes === 1
+      ? { ok: true as const, result: "revoked" as const }
+      : { ok: false as const, reason: "missing" as const };
+  }
+
+  async function manageOrganizerOwner(input: {
+    candidateId: string;
+    actorAccountId: string;
+    email: string;
+    action: "invite" | "revoke";
+    now: number;
+  }) {
+    await ensureTables();
+    if (!await getOrganizerCandidate(input.candidateId)) return { ok: false as const, reason: "not_found" as const };
+    if (input.action === "invite") {
+      try {
+        const result = await database.prepare(
+          `INSERT INTO organizer_event_invitations (
+             id, candidate_id, email, role, invited_by, created_at
+           ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5)`,
+        ).bind(crypto.randomUUID(), input.candidateId, input.email, input.actorAccountId, input.now).run();
+        return result.meta.changes === 1
+          ? { ok: true as const, result: "invited" as const }
+          : { ok: false as const, reason: "unchanged" as const };
+      } catch (error) {
+        if (error instanceof Error && /unique constraint/i.test(error.message)) return { ok: false as const, reason: "unchanged" as const };
+        throw error;
+      }
+    }
+    const target = await database.prepare(
+      `SELECT g.account_id FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
+       WHERE g.candidate_id = ?1 AND g.role = 'owner' AND g.revoked_at IS NULL AND a.email = ?2`,
+    ).bind(input.candidateId, input.email).first<{ account_id: string }>();
+    if (target) {
+      const owners = await database.prepare(
+        "SELECT COUNT(*) AS count FROM organizer_event_grants WHERE candidate_id = ?1 AND role = 'owner' AND revoked_at IS NULL",
+      ).bind(input.candidateId).first<{ count: number }>();
+      if ((owners?.count ?? 0) <= 1) return { ok: false as const, reason: "last_owner" as const };
+      const result = await database.prepare(
+        `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
+         WHERE candidate_id = ?3 AND account_id = ?4 AND role = 'owner' AND revoked_at IS NULL`,
+      ).bind(input.actorAccountId, input.now, input.candidateId, target.account_id).run();
+      return result.meta.changes === 1 ? { ok: true as const, result: "revoked" as const } : { ok: false as const, reason: "missing" as const };
+    }
+    const invitation = await database.prepare(
+      `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2
+       WHERE candidate_id = ?3 AND email = ?4 AND role = 'owner'
+         AND accepted_at IS NULL AND revoked_at IS NULL`,
+    ).bind(input.actorAccountId, input.now, input.candidateId, input.email).run();
+    return invitation.meta.changes === 1 ? { ok: true as const, result: "revoked" as const } : { ok: false as const, reason: "missing" as const };
+  }
+
+  async function listOrganizerMapDrafts(candidateId: string) {
+    await ensureTables();
+    const result = await database.prepare(
+      `SELECT id, event_id, candidate_id, period_key, venue_space_id, status, current_revision,
+              created_at, updated_at, decision_at
+       FROM map_drafts WHERE candidate_id = ?1 AND status <> 'withdrawn'
+       ORDER BY period_key, venue_space_id, updated_at DESC`,
+    ).bind(candidateId).all<{
+      id: string; event_id: string; candidate_id: string; period_key: string; venue_space_id: string;
+      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
+    }>();
+    return result.results;
+  }
+
+  async function getOrganizerMapDraft(candidateId: string, draftId: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT d.id, d.event_id, d.candidate_id, d.period_key, d.venue_space_id,
+              d.status, d.current_revision, d.created_at, d.updated_at, d.decision_at, r.content_json
+       FROM map_drafts d JOIN map_draft_revisions r
+         ON r.draft_id = d.id AND r.revision = d.current_revision
+       WHERE d.id = ?1 AND d.candidate_id = ?2 AND d.status <> 'withdrawn'`,
+    ).bind(draftId, candidateId).first<{
+      id: string; event_id: string; candidate_id: string; period_key: string; venue_space_id: string;
+      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number;
+      decision_at: number | null; content_json: string | null;
+    }>();
+  }
+
+  async function createOrganizerMapDraft(input: {
+    id: string;
+    candidateId: string;
+    periodKey: string;
+    venueSpaceId: string;
+    actorAccountId: string;
+    expectedVersion: number;
+    contentJson: string;
+    now: number;
+    admin?: boolean;
+  }) {
+    await ensureTables();
+    const [candidate, role] = await Promise.all([
+      getOrganizerCandidate(input.candidateId),
+      input.admin ? Promise.resolve(null) : organizerRole(input.candidateId, input.actorAccountId),
+    ]);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (!input.admin && !role) return { ok: false as const, reason: "forbidden" as const };
+    if (candidate.current_version !== input.expectedVersion) {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+        updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role };
+    }
+    if (candidate.status !== "draft" && candidate.status !== "changes_requested") {
+      return { ok: false as const, reason: "status" as const, status: candidate.status };
+    }
+    const nextVersion = input.expectedVersion + 1;
+    const actorRole = input.admin ? "admin" : role!;
+    try {
+      const results = await database.batch([
+        database.prepare(
+          `UPDATE organizer_event_candidates SET current_version = ?1, updated_at = ?2,
+             last_updated_by = ?3, last_updated_role = ?4
+           WHERE id = ?5 AND current_version = ?6 AND status IN ('draft', 'changes_requested')
+             ${input.admin ? "" : `AND EXISTS (
+               SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = organizer_event_candidates.id
+                 AND g.account_id = ?3 AND g.revoked_at IS NULL
+             )`}`,
+        ).bind(nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId, input.expectedVersion),
+        database.prepare(
+          `INSERT INTO organizer_event_revisions (
+             id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
+           ) SELECT ?1, id, current_version, event_id, current_draft_json, ?2, ?3, ?4
+             FROM organizer_event_candidates
+             WHERE id = ?5 AND current_version = ?6 AND last_updated_by = ?2 AND updated_at = ?4`,
+        ).bind(crypto.randomUUID(), input.actorAccountId, actorRole, input.now, input.candidateId, nextVersion),
+        database.prepare(
+          `INSERT INTO map_drafts (
+             id, event_id, candidate_id, period_key, venue_space_id, owner_account_id,
+             status, current_revision, created_at, updated_at, last_activity_at
+           ) SELECT ?1, COALESCE(event_id, id), id, ?2, ?3, ?4, 'draft', 1, ?5, ?5, ?5
+             FROM organizer_event_candidates
+             WHERE id = ?6 AND current_version = ?7 AND last_updated_by = ?4 AND updated_at = ?5`,
+        ).bind(input.id, input.periodKey, input.venueSpaceId, input.actorAccountId, input.now, input.candidateId, nextVersion),
+        database.prepare(
+          `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
+           SELECT ?1, id, 1, ?2, ?3, ?4 FROM map_drafts
+           WHERE id = ?5 AND candidate_id = ?6 AND current_revision = 1`,
+        ).bind(crypto.randomUUID(), input.contentJson, input.actorAccountId, input.now, input.id, input.candidateId),
+      ]);
+      return results.every((result) => result.meta.changes === 1)
+        ? { ok: true as const, version: nextVersion, mapRevision: 1 }
+        : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+          updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role };
+    } catch (error) {
+      if (error instanceof Error && /unique constraint/i.test(error.message)) {
+        return { ok: false as const, reason: "scope_exists" as const };
+      }
+      throw error;
+    }
+  }
+
+  async function saveOrganizerMapDraft(input: {
+    candidateId: string;
+    draftId: string;
+    actorAccountId: string;
+    expectedVersion: number;
+    expectedMapRevision: number;
+    contentJson: string;
+    now: number;
+    admin?: boolean;
+  }) {
+    await ensureTables();
+    const [candidate, map, role] = await Promise.all([
+      getOrganizerCandidate(input.candidateId), getOrganizerMapDraft(input.candidateId, input.draftId),
+      input.admin ? Promise.resolve(null) : organizerRole(input.candidateId, input.actorAccountId),
+    ]);
+    if (!candidate || !map) return { ok: false as const, reason: "not_found" as const };
+    if (!input.admin && !role) return { ok: false as const, reason: "forbidden" as const };
+    if (candidate.current_version !== input.expectedVersion || map.current_revision !== input.expectedMapRevision) {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+        currentMapRevision: map.current_revision, updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role };
+    }
+    if ((candidate.status !== "draft" && candidate.status !== "changes_requested")
+      || (map.status !== "draft" && map.status !== "changes_requested")) {
+      return { ok: false as const, reason: "status" as const, status: candidate.status };
+    }
+    const nextVersion = input.expectedVersion + 1;
+    const nextMapRevision = input.expectedMapRevision + 1;
+    const actorRole = input.admin ? "admin" : role!;
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE organizer_event_candidates SET current_version = ?1, updated_at = ?2,
+           last_updated_by = ?3, last_updated_role = ?4
+         WHERE id = ?5 AND current_version = ?6 AND status IN ('draft', 'changes_requested')
+           ${input.admin ? "" : `AND EXISTS (
+             SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = organizer_event_candidates.id
+               AND g.account_id = ?3 AND g.revoked_at IS NULL
+           )`}`,
+      ).bind(nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId, input.expectedVersion),
+      database.prepare(
+        `INSERT INTO organizer_event_revisions (
+           id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
+         ) SELECT ?1, id, current_version, event_id, current_draft_json, ?2, ?3, ?4
+           FROM organizer_event_candidates
+           WHERE id = ?5 AND current_version = ?6 AND last_updated_by = ?2 AND updated_at = ?4`,
+      ).bind(crypto.randomUUID(), input.actorAccountId, actorRole, input.now, input.candidateId, nextVersion),
+      database.prepare(
+        `UPDATE map_drafts SET current_revision = ?1, updated_at = ?2, last_activity_at = ?2
+         WHERE id = ?3 AND candidate_id = ?4 AND current_revision = ?5
+           AND status IN ('draft', 'changes_requested')`,
+      ).bind(nextMapRevision, input.now, input.draftId, input.candidateId, input.expectedMapRevision),
+      database.prepare(
+        `INSERT INTO map_draft_revisions (id, draft_id, revision, content_json, created_by, created_at)
+         SELECT ?1, id, ?2, ?3, ?4, ?5 FROM map_drafts
+         WHERE id = ?6 AND candidate_id = ?7 AND current_revision = ?2 AND updated_at = ?5`,
+      ).bind(crypto.randomUUID(), nextMapRevision, input.contentJson, input.actorAccountId,
+        input.now, input.draftId, input.candidateId),
+    ]);
+    return results.every((result) => result.meta.changes === 1)
+      ? { ok: true as const, version: nextVersion, mapRevision: nextMapRevision }
+      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+        currentMapRevision: map.current_revision, updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role };
+  }
+
+  async function getOrganizerImport(candidateId: string) {
+    await ensureTables();
+    const source = await database.prepare(
+      `SELECT id, candidate_id, candidate_version, file_name, worksheet, sha256,
+              source_description, mapping_json, created_by, created_by_role, created_at, replaced_at
+       FROM organizer_import_sources
+       WHERE candidate_id = ?1 AND replaced_at IS NULL`,
+    ).bind(candidateId).first<{
+      id: string; candidate_id: string; candidate_version: number; file_name: string; worksheet: string | null;
+      sha256: string; source_description: string; mapping_json: string; created_by: string;
+      created_by_role: string; created_at: number; replaced_at: number | null;
+    }>();
+    if (!source) return null;
+    const rows = await database.prepare(
+      `SELECT id, source_id, candidate_id, source_row, day_id, venue_space_id, area_id,
+              booth_code, circle_name, stable_key, identity_group
+       FROM organizer_import_rows WHERE source_id = ?1 ORDER BY source_row, id`,
+    ).bind(source.id).all<{
+      id: string; source_id: string; candidate_id: string; source_row: number; day_id: string;
+      venue_space_id: string; area_id: string; booth_code: string; circle_name: string;
+      stable_key: string | null; identity_group: string | null;
+    }>();
+    return { source, rows: rows.results };
+  }
+
+  async function replaceOrganizerImport(input: {
+    candidateId: string;
+    actorAccountId: string;
+    expectedVersion: number;
+    source: {
+      fileName: string;
+      worksheet: string | null;
+      sha256: string;
+      sourceDescription: string;
+      mappingJson: string;
+    };
+    rows: readonly {
+      sourceRow: number;
+      dayId: string;
+      venueSpaceId: string;
+      areaId: string;
+      boothCode: string;
+      circleName: string;
+      stableKey: string | null;
+      identityGroup: string | null;
+    }[];
+    now: number;
+    admin?: boolean;
+  }) {
+    await ensureTables();
+    const [candidate, grantRole] = await Promise.all([
+      getOrganizerCandidate(input.candidateId),
+      input.admin ? Promise.resolve(null) : organizerRole(input.candidateId, input.actorAccountId),
+    ]);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (!input.admin && !grantRole) return { ok: false as const, reason: "forbidden" as const };
+    if (candidate.current_version !== input.expectedVersion) {
+      return {
+        ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+        updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role,
+      };
+    }
+    if (candidate.status !== "draft" && candidate.status !== "changes_requested") {
+      return { ok: false as const, reason: "status" as const, status: candidate.status };
+    }
+    const actorRole = input.admin ? "admin" : grantRole!;
+    const nextVersion = input.expectedVersion + 1;
+    const sourceId = crypto.randomUUID();
+    const statements = [
+      database.prepare(
+        `UPDATE organizer_event_candidates SET current_version = ?1, updated_at = ?2,
+           last_updated_by = ?3, last_updated_role = ?4
+         WHERE id = ?5 AND current_version = ?6 AND status IN ('draft', 'changes_requested')
+           ${input.admin ? "" : `AND EXISTS (
+             SELECT 1 FROM organizer_event_grants g
+             WHERE g.candidate_id = organizer_event_candidates.id
+               AND g.account_id = ?3 AND g.revoked_at IS NULL
+           )`}`,
+      ).bind(nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId, input.expectedVersion),
+      database.prepare(
+        `INSERT INTO organizer_event_revisions (
+           id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
+         ) SELECT ?1, id, current_version, event_id, current_draft_json, ?2, ?3, ?4
+           FROM organizer_event_candidates
+           WHERE id = ?5 AND current_version = ?6 AND last_updated_by = ?2 AND updated_at = ?4`,
+      ).bind(crypto.randomUUID(), input.actorAccountId, actorRole, input.now, input.candidateId, nextVersion),
+      database.prepare(
+        "UPDATE organizer_import_sources SET replaced_at = ?1 WHERE candidate_id = ?2 AND replaced_at IS NULL",
+      ).bind(input.now, input.candidateId),
+      database.prepare(
+        `INSERT INTO organizer_import_sources (
+           id, candidate_id, candidate_version, file_name, worksheet, sha256, source_description,
+           mapping_json, created_by, created_by_role, created_at
+         ) SELECT ?1, id, current_version, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
+           FROM organizer_event_candidates
+           WHERE id = ?10 AND current_version = ?11 AND last_updated_by = ?7 AND updated_at = ?9`,
+      ).bind(sourceId, input.source.fileName, input.source.worksheet, input.source.sha256,
+        input.source.sourceDescription, input.source.mappingJson, input.actorAccountId, actorRole,
+        input.now, input.candidateId, nextVersion),
+      // JSON1 avoids one D1 prepared statement per booth row, but D1 binds each
+      // parameter whole, so the entire booth list as a single JSON array would
+      // outgrow the statement limit well before the API's 20,000-row cap. The
+      // rows are chunked instead: each bound value stays small while the batch
+      // remains one transaction, so a partial import still cannot land.
+      // The raw workbook never reaches this boundary; these parameters contain
+      // only the normalized fields the organizer confirmed.
+      ...chunked(input.rows, 500).map((chunk) => database.prepare(
+        `INSERT INTO organizer_import_rows (
+           id, source_id, candidate_id, source_row, day_id, venue_space_id, area_id,
+           booth_code, circle_name, stable_key, identity_group
+         ) SELECT
+           lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+             substr(lower(hex(randomblob(2))), 2) || '-' ||
+             substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' ||
+             lower(hex(randomblob(6))),
+           ?1, source.candidate_id,
+           CAST(json_extract(item.value, '$.sourceRow') AS INTEGER),
+           json_extract(item.value, '$.dayId'), json_extract(item.value, '$.venueSpaceId'),
+           json_extract(item.value, '$.areaId'), json_extract(item.value, '$.boothCode'),
+           json_extract(item.value, '$.circleName'), json_extract(item.value, '$.stableKey'),
+           json_extract(item.value, '$.identityGroup')
+         FROM organizer_import_sources source, json_each(?2) item
+         WHERE source.id = ?1 AND source.replaced_at IS NULL`,
+      ).bind(sourceId, JSON.stringify(chunk))),
+    ];
+    const results = await database.batch(statements);
+    // Replacing an import before one exists legitimately changes zero old rows;
+    // every metadata statement must establish its exact row, while the row
+    // inserts together must establish exactly the normalized row count.
+    const metadataEstablished = [0, 1, 3].every((index) => results[index].meta.changes === 1);
+    const inserted = results.slice(4).reduce((total, result) => total + result.meta.changes, 0);
+    return metadataEstablished && inserted === input.rows.length
+      ? { ok: true as const, version: nextVersion }
+      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+        updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role };
+  }
+
+  async function saveOrganizerCandidate(input: {
+    candidateId: string;
+    actorAccountId: string;
+    expectedVersion: number;
+    eventId: string | null;
+    draftJson: string;
+    now: number;
+    admin?: boolean;
+  }) {
+    await ensureTables();
+    const [candidate, grantRole] = await Promise.all([
+      getOrganizerCandidate(input.candidateId),
+      input.admin ? Promise.resolve(null) : organizerRole(input.candidateId, input.actorAccountId),
+    ]);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (!input.admin && !grantRole) return { ok: false as const, reason: "forbidden" as const };
+    if (candidate.current_version !== input.expectedVersion) {
+      return {
+        ok: false as const,
+        reason: "conflict" as const,
+        currentVersion: candidate.current_version,
+        updatedAt: candidate.updated_at,
+        updatedByRole: candidate.last_updated_role,
+      };
+    }
+    if (candidate.status !== "draft" && candidate.status !== "changes_requested") {
+      return { ok: false as const, reason: "status" as const, status: candidate.status };
+    }
+    if (candidate.event_id_locked_at !== null && candidate.event_id !== input.eventId) {
+      return { ok: false as const, reason: "event_id_locked" as const, eventId: candidate.event_id };
+    }
+    const actorRole = input.admin ? "admin" : grantRole!;
+    const nextVersion = input.expectedVersion + 1;
+    try {
+      const update = database.prepare(
+        `UPDATE organizer_event_candidates SET
+           event_id = ?1, current_version = ?2, current_draft_json = ?3,
+           updated_at = ?4, last_updated_by = ?5, last_updated_role = ?6
+         WHERE id = ?7 AND current_version = ?8
+           AND status IN ('draft', 'changes_requested')
+           AND (event_id_locked_at IS NULL OR event_id = ?1)
+           ${input.admin ? "" : `AND EXISTS (
+             SELECT 1 FROM organizer_event_grants g
+             WHERE g.candidate_id = organizer_event_candidates.id
+               AND g.account_id = ?5 AND g.revoked_at IS NULL
+           )`}`,
+      ).bind(input.eventId, nextVersion, input.draftJson, input.now, input.actorAccountId, actorRole,
+        input.candidateId, input.expectedVersion);
+      // Keep revision creation in the same D1 transaction as the optimistic
+      // update. The INSERT can only see the version installed above.
+      const results = await database.batch([
+        update,
+        database.prepare(
+          `INSERT INTO organizer_event_revisions (
+             id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
+           ) SELECT ?1, id, current_version, event_id, current_draft_json, ?2, ?3, ?4
+             FROM organizer_event_candidates
+             WHERE id = ?5 AND current_version = ?6 AND last_updated_by = ?2 AND updated_at = ?4`,
+        ).bind(crypto.randomUUID(), input.actorAccountId, actorRole, input.now, input.candidateId, nextVersion),
+      ]);
+      return results.every((result) => result.meta.changes === 1)
+        ? { ok: true as const, version: nextVersion }
+        : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version,
+          updatedAt: candidate.updated_at, updatedByRole: candidate.last_updated_role };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/organizer_event_candidates\.event_id|unique constraint/i.test(message)) {
+        return { ok: false as const, reason: "event_id_taken" as const };
+      }
+      throw error;
+    }
+  }
+
+  async function submitOrganizerCandidate(input: {
+    candidateId: string;
+    actorAccountId: string;
+    expectedVersion: number;
+    now: number;
+  }) {
+    await ensureTables();
+    const [candidate, role] = await Promise.all([
+      getOrganizerCandidate(input.candidateId), organizerRole(input.candidateId, input.actorAccountId),
+    ]);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (role !== "owner") return { ok: false as const, reason: "forbidden" as const };
+    if (candidate.current_version !== input.expectedVersion) {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    }
+    if (!candidate.event_id) return { ok: false as const, reason: "event_id_required" as const };
+    const result = await database.prepare(
+      `UPDATE organizer_event_candidates SET
+         status = 'submitted', event_id_locked_at = COALESCE(event_id_locked_at, ?1),
+         submitted_by = ?2, submitted_at = ?1, updated_at = ?1,
+         last_updated_by = ?2, last_updated_role = 'owner'
+       WHERE id = ?3 AND current_version = ?4 AND status IN ('draft', 'changes_requested')
+         AND EXISTS (
+           SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = organizer_event_candidates.id
+             AND g.account_id = ?2 AND g.role = 'owner' AND g.revoked_at IS NULL
+         )`,
+    ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion).run();
+    return result.meta.changes === 1
+      ? { ok: true as const, status: "submitted" as const }
+      : { ok: false as const, reason: "status" as const };
+  }
+
+  async function reviewOrganizerCandidate(input: {
+    candidateId: string;
+    expectedVersion: number;
+    decision: "changes_requested" | "approve";
+    actorAccountId: string;
+    note?: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const candidate = await getOrganizerCandidate(input.candidateId);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.current_version !== input.expectedVersion) {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    }
+    if (candidate.status !== "submitted") return { ok: false as const, reason: "status" as const, status: candidate.status };
+    const status = input.decision === "approve" ? "approved" : "changes_requested";
+    const transitionToken = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2,
+           last_updated_by = ?3, last_updated_role = 'admin',
+           approved_by = CASE WHEN ?1 = 'approved' THEN ?3 ELSE NULL END,
+           approved_at = CASE WHEN ?1 = 'approved' THEN ?2 ELSE NULL END
+         WHERE id = ?4 AND current_version = ?5 AND status = 'submitted'`,
+      ).bind(status, input.now, input.actorAccountId, input.candidateId, input.expectedVersion),
+      database.prepare(
+        `INSERT INTO organizer_event_reviews (
+           id, candidate_id, version, from_status, to_status, actor_account_id, note, at
+         ) SELECT ?1, id, current_version, 'submitted', ?2, ?3, ?4, ?5
+           FROM organizer_event_candidates
+           WHERE id = ?6 AND current_version = ?7 AND status = ?2
+             AND last_updated_by = ?3 AND updated_at = ?5`,
+      ).bind(transitionToken, status, input.actorAccountId, input.note ?? null, input.now,
+        input.candidateId, input.expectedVersion),
+    ]);
+    return results.every((result) => result.meta.changes === 1)
+      ? { ok: true as const, status }
+      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+  }
+
+  async function storeOrganizerSubmissionSnapshot(input: {
+    candidateId: string;
+    candidateVersion: number;
+    actorAccountId: string;
+    snapshotJson: string;
+    sha256: string;
+    now: number;
+  }) {
+    await ensureTables();
+    if (await organizerRole(input.candidateId, input.actorAccountId) !== "owner") {
+      return { ok: false as const, reason: "forbidden" as const };
+    }
+    const candidate = await getOrganizerCandidate(input.candidateId);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.current_version !== input.candidateVersion) {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    }
+    const existing = await database.prepare(
+      "SELECT id, sha256 FROM organizer_submission_snapshots WHERE candidate_id = ?1 AND candidate_version = ?2",
+    ).bind(input.candidateId, input.candidateVersion).first<{ id: string; sha256: string }>();
+    if (existing) return existing.sha256 === input.sha256
+      ? { ok: true as const, snapshotId: existing.id, sha256: existing.sha256 }
+      : { ok: false as const, reason: "snapshot_mismatch" as const };
+    const snapshotId = crypto.randomUUID();
+    const result = await database.prepare(
+      `INSERT INTO organizer_submission_snapshots (
+         id, candidate_id, candidate_version, snapshot_json, sha256, created_by, created_at
+       ) SELECT ?1, id, current_version, ?2, ?3, ?4, ?5
+         FROM organizer_event_candidates
+         WHERE id = ?6 AND current_version = ?7 AND status IN ('draft', 'changes_requested')`,
+    ).bind(snapshotId, input.snapshotJson, input.sha256, input.actorAccountId, input.now,
+      input.candidateId, input.candidateVersion).run();
+    return result.meta.changes === 1
+      ? { ok: true as const, snapshotId, sha256: input.sha256 }
+      : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+  }
+
+  async function getOrganizerSubmissionSnapshot(candidateId: string, candidateVersion: number) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT id, candidate_id, candidate_version, snapshot_json, sha256, created_by, created_at
+       FROM organizer_submission_snapshots WHERE candidate_id = ?1 AND candidate_version = ?2`,
+    ).bind(candidateId, candidateVersion).first<{
+      id: string; candidate_id: string; candidate_version: number; snapshot_json: string;
+      sha256: string; created_by: string; created_at: number;
+    }>();
+  }
+
+  async function createOrganizerPublicationJob(input: {
+    candidateId: string;
+    candidateVersion: number;
+    snapshotId: string;
+    approvalHash: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const existing = await database.prepare(
+      "SELECT id, approval_hash FROM organizer_publication_jobs WHERE candidate_id = ?1 AND candidate_version = ?2",
+    ).bind(input.candidateId, input.candidateVersion).first<{ id: string; approval_hash: string }>();
+    if (existing) return existing.approval_hash === input.approvalHash
+      ? { ok: true as const, jobId: existing.id, existing: true as const }
+      : { ok: false as const, reason: "approval_mismatch" as const };
+    const jobId = crypto.randomUUID();
+    const result = await database.prepare(
+      `INSERT INTO organizer_publication_jobs (
+         id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, created_at, updated_at
+       ) SELECT ?1, c.id, ?2, s.id, s.sha256, 'queued', 'assemble', ?3, ?3
+         FROM organizer_event_candidates c JOIN organizer_submission_snapshots s
+           ON s.candidate_id = c.id AND s.candidate_version = ?2
+         WHERE c.id = ?4 AND c.status = 'approved' AND c.current_version = ?2
+           AND s.id = ?5 AND s.sha256 = ?6`,
+    ).bind(jobId, input.candidateVersion, input.now, input.candidateId,
+      input.snapshotId, input.approvalHash).run();
+    return result.meta.changes === 1
+      ? { ok: true as const, jobId, existing: false as const }
+      : { ok: false as const, reason: "conflict" as const };
+  }
+
+  async function getOrganizerPublicationJob(jobId: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT * FROM organizer_publication_jobs WHERE id = ?1`,
+    ).bind(jobId).first<{
+      id: string; candidate_id: string; candidate_version: number; snapshot_id: string; approval_hash: string;
+      status: string; step: string; data_pr_number: number | null; data_head_sha: string | null;
+      data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
+      main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
+      created_at: number; updated_at: number;
+    }>();
+  }
+
+  async function getLatestOrganizerPublicationJob(candidateId: string) {
+    await ensureTables();
+    return database.prepare(
+      `SELECT * FROM organizer_publication_jobs WHERE candidate_id = ?1
+       ORDER BY created_at DESC LIMIT 1`,
+    ).bind(candidateId).first<{
+      id: string; candidate_id: string; candidate_version: number; snapshot_id: string; approval_hash: string;
+      status: string; step: string; data_pr_number: number | null; data_head_sha: string | null;
+      data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
+      main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
+      created_at: number; updated_at: number;
+    }>();
+  }
+
+  async function retryOrganizerPublicationJob(input: { jobId: string; now: number }) {
+    await ensureTables();
+    const job = await getOrganizerPublicationJob(input.jobId);
+    if (!job) return { ok: false as const, reason: "not_found" as const };
+    if (job.status !== "failed") return { ok: false as const, reason: "status" as const, status: job.status };
+    const results = await database.batch([
+      database.prepare(
+        `DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1
+           AND EXISTS (SELECT 1 FROM organizer_publication_jobs WHERE id = ?1 AND status = 'failed')`,
+      ).bind(input.jobId),
+      database.prepare(
+        `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, updated_at = ?1
+         WHERE id = ?2 AND status = 'failed' AND step = ?3`,
+      ).bind(input.now, input.jobId, job.step),
+    ]);
+    return results[1].meta.changes === 1
+      ? { ok: true as const, step: job.step }
+      : { ok: false as const, reason: "status" as const, status: job.status };
+  }
+
+  async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
+    await ensureTables();
+    const token = crypto.randomUUID();
+    const results = await database.batch([
+      database.prepare(
+        `INSERT INTO organizer_publication_lease (id, job_id, token, acquired_at, expires_at)
+         VALUES ('global', ?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET job_id = excluded.job_id, token = excluded.token,
+           acquired_at = excluded.acquired_at, expires_at = excluded.expires_at
+         WHERE organizer_publication_lease.expires_at <= ?3`,
+      ).bind(input.jobId, token, input.now, input.now + input.ttlMs),
+      database.prepare(
+        `UPDATE organizer_publication_jobs SET status = 'publishing', updated_at = ?1, error = NULL
+         WHERE id = ?2 AND status IN ('queued', 'failed')
+           AND EXISTS (SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?2 AND token = ?3)`,
+      ).bind(input.now, input.jobId, token),
+    ]);
+    return results[0].meta.changes === 1 && results[1].meta.changes === 1
+      ? { ok: true as const, token, expiresAt: input.now + input.ttlMs }
+      : { ok: false as const, reason: "busy" as const };
+  }
+
+  async function updateOrganizerPublicationJob(input: {
+    jobId: string;
+    leaseToken: string;
+    expectedStep: string;
+    nextStep: string;
+    status: "publishing" | "published" | "failed";
+    expectedHeadSha?: string | null;
+    error?: string | null;
+    now: number;
+  }) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE organizer_publication_jobs SET step = ?1, status = ?2, error = ?3, updated_at = ?4
+       WHERE id = ?5 AND step = ?6
+         AND (?7 IS NULL OR data_head_sha = ?7 OR main_head_sha = ?7)
+         AND EXISTS (SELECT 1 FROM organizer_publication_lease
+           WHERE id = 'global' AND job_id = ?5 AND token = ?8 AND expires_at > ?4)`,
+    ).bind(input.nextStep, input.status, input.error ?? null, input.now, input.jobId,
+      input.expectedStep, input.expectedHeadSha ?? null, input.leaseToken).run();
+    if (result.meta.changes !== 1) return false;
+    if (input.status === "published") {
+      await database.batch([
+        database.prepare("DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2")
+          .bind(input.jobId, input.leaseToken),
+        database.prepare(
+          `UPDATE organizer_event_candidates SET status = 'published', published_version = current_version,
+             published_at = ?1, updated_at = ?1, last_updated_role = 'system'
+           WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?2)
+             AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?2)`,
+        ).bind(input.now, input.jobId),
+      ]);
+    }
+    return true;
+  }
+
+  async function recordGitHubWebhookDelivery(input: {
+    deliveryId: string; event: string; payloadSha256: string; now: number;
+  }) {
+    await ensureTables();
+    try {
+      const result = await database.prepare(
+        `INSERT INTO github_webhook_deliveries (delivery_id, event, payload_sha256, received_at)
+         VALUES (?1, ?2, ?3, ?4)`,
+      ).bind(input.deliveryId, input.event, input.payloadSha256, input.now).run();
+      return result.meta.changes === 1 ? "recorded" as const : "duplicate" as const;
+    } catch (error) {
+      if (error instanceof Error && /unique constraint/i.test(error.message)) {
+        const existing = await database.prepare(
+          "SELECT payload_sha256, processed_at, result FROM github_webhook_deliveries WHERE delivery_id = ?1",
+        ).bind(input.deliveryId).first<{ payload_sha256: string; processed_at: number | null; result: string | null }>();
+        if (!existing || existing.payload_sha256 !== input.payloadSha256) return "mismatch" as const;
+        return existing.processed_at !== null && existing.result === "processed"
+          ? "duplicate" as const
+          : "recorded" as const;
+      }
+      throw error;
+    }
+  }
+
+  async function completeGitHubWebhookDelivery(input: { deliveryId: string; processed: boolean; result?: string; now: number }) {
+    await ensureTables();
+    const result = await database.prepare(
+      `UPDATE github_webhook_deliveries
+       SET processed_at = CASE WHEN ?1 = 1 THEN ?2 ELSE NULL END, result = ?3
+       WHERE delivery_id = ?4`,
+    ).bind(input.processed ? 1 : 0, input.now,
+      input.processed ? "processed" : `failed:${(input.result ?? "unknown").slice(0, 500)}`,
+      input.deliveryId).run();
     return result.meta.changes === 1;
   }
 
@@ -1311,6 +2334,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
+      "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
+      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_event_candidates",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
@@ -1319,8 +2344,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   return {
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
-    countLoginTokensSince, createLoginToken, consumeLoginToken,
+    countLoginTokensSince, createLoginToken, consumeLoginToken, consumeLoginTokenDetails,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
+    listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
     createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
@@ -1333,6 +2359,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
+    organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
+    countOrganizerInvitationsSince,
+    listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,
+    manageOrganizerCollaborator, manageOrganizerOwner,
+    listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,
+    getOrganizerImport, replaceOrganizerImport,
+    saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate,
+    storeOrganizerSubmissionSnapshot, getOrganizerSubmissionSnapshot,
+    createOrganizerPublicationJob, getOrganizerPublicationJob, getLatestOrganizerPublicationJob,
+    retryOrganizerPublicationJob, claimOrganizerPublicationLease,
+    updateOrganizerPublicationJob, recordGitHubWebhookDelivery, completeGitHubWebhookDelivery,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };
 }

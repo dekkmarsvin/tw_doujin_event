@@ -23,11 +23,13 @@ export const EVENT_FILE_NAMES = Object.freeze([
 ]);
 
 export const REFERENCE_SELECTION_FILE = "reference-selection.json";
+export const MAP_MANIFEST_FILE = "map-manifest.json";
 
 const COMMIT = /^[0-9a-f]{40}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/;
 const REFERENCE_PATH = /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.json$/;
+const MAP_ARTIFACT_PATH = /^maps\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.json$/;
 const GROUPINGLESS_LEGACY_PINS = new Set([
   "ff47@8c645303fa6838383549fbe8433ece081c514e1e",
 ]);
@@ -95,7 +97,9 @@ export function parseEventDataPin(value) {
       referenceCount += 1;
     } else if (file.path.startsWith(eventPrefix)) {
       const name = file.path.slice(eventPrefix.length);
-      if (!EVENT_FILE_NAMES.includes(name)) throw new Error(`Unexpected event data pin file: ${file.path}.`);
+      if (!EVENT_FILE_NAMES.includes(name) && name !== MAP_MANIFEST_FILE && !MAP_ARTIFACT_PATH.test(name)) {
+        throw new Error(`Unexpected event data pin file: ${file.path}.`);
+      }
       eventNames.add(name);
     } else {
       throw new Error(`Event data pin path must start with ${eventPrefix} or references/: ${file.path}.`);
@@ -104,7 +108,15 @@ export function parseEventDataPin(value) {
     seen.add(file.path);
   }
   for (const name of REQUIRED_EVENT_FILE_NAMES) {
+    if (name === "map.json" && eventNames.has(MAP_MANIFEST_FILE)) continue;
     if (!eventNames.has(name)) throw new Error(`Event data pin is missing ${eventPrefix}${name}.`);
+  }
+  const mapArtifacts = [...eventNames].filter((name) => MAP_ARTIFACT_PATH.test(name));
+  if (eventNames.has(MAP_MANIFEST_FILE) && mapArtifacts.length === 0) {
+    throw new Error(`Event data pin has ${eventPrefix}${MAP_MANIFEST_FILE} without map artifacts.`);
+  }
+  if (!eventNames.has(MAP_MANIFEST_FILE) && mapArtifacts.length > 0) {
+    throw new Error(`Event data pin has scoped map artifacts without ${eventPrefix}${MAP_MANIFEST_FILE}.`);
   }
   if (!eventNames.has(CIRCLE_IDENTITY_GROUPS_FILE)
     && !GROUPINGLESS_LEGACY_PINS.has(`${value.eventId}@${value.commit}`)) {
@@ -112,6 +124,28 @@ export function parseEventDataPin(value) {
   }
   if (referenceCount === 0) throw new Error("Event data pin must list the references/ files the event resolves.");
   return value;
+}
+
+export function parsePinnedMapManifest(value, eventId) {
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || value.schema !== "event-map-manifest/1" || value.eventId !== eventId
+    || !Array.isArray(value.maps) || value.maps.length === 0) {
+    throw new Error("Invalid event map manifest.");
+  }
+  const seen = new Set();
+  return value.maps.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)
+      || typeof entry.periodKey !== "string" || typeof entry.venueSpaceId !== "string"
+      || !/^[A-Za-z0-9_-]+$/.test(entry.periodKey) || !/^[A-Za-z0-9_-]+$/.test(entry.venueSpaceId)) {
+      throw new Error("Invalid event map manifest scope.");
+    }
+    const expected = `maps/${entry.periodKey}/${entry.venueSpaceId}.json`;
+    if (entry.path !== expected) throw new Error(`Event map manifest path must be ${expected}.`);
+    const key = `${entry.periodKey}\0${entry.venueSpaceId}`;
+    if (seen.has(key)) throw new Error("Duplicate event map manifest scope.");
+    seen.add(key);
+    return { periodKey: entry.periodKey, venueSpaceId: entry.venueSpaceId, path: expected };
+  });
 }
 
 export function rawFileUrl(pin, file) {

@@ -95,7 +95,12 @@ async function stageEvent(eventId, publicRoot) {
   const destination = path.join(publicRoot, eventId);
   await mkdir(destination, { recursive: true });
   await cp(path.join(source, "event.json"), path.join(destination, "event.json"));
-  await cp(path.join(source, "map.json"), path.join(destination, "map.json"));
+  if (event.venueAssignments.length > 1) {
+    await cp(path.join(source, "map-manifest.json"), path.join(destination, "map-manifest.json"));
+    await cp(path.join(source, "maps"), path.join(destination, "maps"), { recursive: true });
+  } else {
+    await cp(path.join(source, "map.json"), path.join(destination, "map.json"));
+  }
 
   if (fixture) {
     await cp(path.join(source, "reference-records.json"), path.join(destination, "reference-records.json"));
