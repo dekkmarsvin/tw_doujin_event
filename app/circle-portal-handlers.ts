@@ -1825,9 +1825,13 @@ export function createCirclePortalHandlers({
     const source = body?.source && typeof body.source === "object" && !Array.isArray(body.source)
       ? body.source as Record<string, unknown> : null;
     const rows = Array.isArray(body?.rows) ? body.rows : null;
-    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !source || !rows || rows.length > 20_000) {
-      return json({ error: "expectedVersion、來源 metadata 與最多 20,000 筆正規化資料列為必填。" }, 400);
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !source || !rows) {
+      return json({ error: "expectedVersion、來源 metadata 與正規化資料列為必填。" }, 400);
     }
+    // A well-formed import that is merely too long deserves its own message:
+    // the organizer can act on the row cap, but not on a sentence that also
+    // covers a missing expectedVersion.
+    if (rows.length > 20_000) return json({ error: "正規化資料列最多 20,000 筆。" }, 400);
     const fileName = typeof source.fileName === "string" ? source.fileName.normalize("NFKC").trim() : "";
     const worksheet = source.worksheet === null ? null
       : typeof source.worksheet === "string" ? source.worksheet.normalize("NFKC").trim() : undefined;
@@ -1879,7 +1883,7 @@ export function createCirclePortalHandlers({
     // hold. Refuse that before it reaches the database rather than failing on
     // an opaque storage error partway through the organizer's main task.
     if (new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024) {
-      return json({ error: "匯入資料量過大，請分批匯入或縮短欄位內容。" }, 413);
+      return json({ error: "匯入資料量超過 8 MiB，請縮短欄位內容或確認匯入範圍是同一場活動。" }, 413);
     }
     const result = await repository.replaceOrganizerImport({
       candidateId, actorAccountId: access.current.accountId, expectedVersion: expectedVersion as number,

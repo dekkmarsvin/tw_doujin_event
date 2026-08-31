@@ -237,6 +237,58 @@ test("import API persists confirmed normalized rows and rejects stale versions",
   assert.equal((await stale.json()).conflict.currentVersion, 3);
 });
 
+test("import API tells the organizer which limit rejected the batch", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "PF45", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const draft = {
+    schema: "organizer-event-draft/1",
+    event: { id: "pf45-limits", name: "PF45", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
+    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"] }] },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
+  };
+  const saved = await handlers.updateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "PATCH", { expectedVersion: 1, draft }, ownerCookie,
+  ), candidateId);
+  assert.equal(saved.status, 200);
+  const source = {
+    fileName: "official.xlsx", worksheet: "Day 1", sha256: "a".repeat(64),
+    sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } },
+  };
+  const row = (index, circleName) => ({
+    sourceRow: index + 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A",
+    boothCode: `A${index}`, circleName, stableKey: null, identityGroup: null,
+  });
+
+  const tooManyRows = await handlers.putOrganizerImport(request(
+    `/api/organizer/events/${candidateId}/imports`, "PUT",
+    { expectedVersion: 2, source, rows: Array.from({ length: 20_001 }, (_, index) => row(index, "甲社")) },
+    ownerCookie,
+  ), candidateId);
+  assert.equal(tooManyRows.status, 400);
+  assert.equal((await tooManyRows.json()).error, "正規化資料列最多 20,000 筆。");
+
+  // 20,000 rows of maximum-length names stay under the row cap but blow past
+  // the byte cap, so this is the only request that reaches the 413.
+  const longName = "社".repeat(200);
+  const tooManyBytes = await handlers.putOrganizerImport(request(
+    `/api/organizer/events/${candidateId}/imports`, "PUT",
+    { expectedVersion: 2, source, rows: Array.from({ length: 20_000 }, (_, index) => row(index, longName)) },
+    ownerCookie,
+  ), candidateId);
+  assert.equal(tooManyBytes.status, 413);
+  // Replace semantics make batching a data-losing suggestion, so the message
+  // must never offer it.
+  const message = (await tooManyBytes.json()).error;
+  assert.match(message, /縮短欄位內容/u);
+  assert.doesNotMatch(message, /分批/u);
+  assert.equal(await repository.getOrganizerImport(candidateId), null);
+});
+
 test("organizer map API keeps one candidate-scoped immutable map revision stream", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
