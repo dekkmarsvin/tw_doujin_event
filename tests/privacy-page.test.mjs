@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { buildPrivacyPage, lastUpdatedFrom, renderInline } from "../scripts/build-privacy-page.mjs";
+import { buildPrivacyPage, lastUpdatedFrom, renderInline, renderMarkdown } from "../scripts/build-privacy-page.mjs";
 
 const markdown = await readFile(new URL("../docs/policy/privacy-notice.md", import.meta.url), "utf8");
 const page = buildPrivacyPage(markdown);
@@ -99,5 +99,10 @@ test("renders the constructs the notice uses, and marks up rather than swallows 
   // a placeholder round-trip is text that survives with its markup lost.
   assert.equal(renderInline("`**not bold**`"), "<code>**not bold**</code>");
   assert.equal(renderInline("<script>"), "&lt;script&gt;");
-  assert.ok(page.includes("<table>"), "the retention tables have to render as tables");
+  const table = renderMarkdown(["| 資料 | 保留多久 |", "|---|---|", "| 登入權杖 | 24 小時 |"].join("\n"));
+  assert.equal(
+    table,
+    '<div class="scroll"><table><thead><tr><th>資料</th><th>保留多久</th></tr></thead>'
+      + "<tbody><tr><td>登入權杖</td><td>24 小時</td></tr></tbody></table></div>",
+  );
 });
