@@ -10,14 +10,14 @@
 | 主辦 official URL、分類目錄、場館與場館空間 | data repo `references/` 的 pinned revision |
 | 官方社團名與攤位配置 | data repo `events/<eventId>/official-booths.json`，來源為活動主辦單位 |
 | 同活動 identity grouping | data repo `events/<eventId>/circle-identity-groups.json` |
-| 向量地圖 | data repo `events/<eventId>/map.json`，由人工審閱的 authoring revision 匯出 |
+| 向量地圖 | data repo `events/<eventId>/map.json`（單一場館空間），或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多場館空間），由人工審閱的 authoring revision 匯出 |
 | 永久社團 ID | 本 repo `data/circle-identities/allocations.json` |
 | booth 到永久 ID 的證據 | 本 repo `data/circle-identities/evidence.json` |
 | 社團介紹、作品、連結、代表圖 | 社團本人透過 overlay 提供 |
 
 第三方工作簿與原始配置圖不在本 repo，也不參與 production catalog 生成。
 
-> **流程定位**：本篇是目前維護者操作 repository pipeline 的 migration runbook，不是 Organizer P0 的最終操作介面。[`PRODUCT.md`](../../PRODUCT.md) 與 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要求未來由 Web UI 完成建立、匯入、驗證、預覽與發布；UI 可以沿用本篇的 parser、evidence 與 validation 規則，但不得要求 Organizer 操作 Git、CLI、pin 或 agent。
+> **流程定位**：建立、匯入、驗證與預覽已移到[主辦單位工作區](../contracts/organizer-workspace.md)，不需要本篇的 CLI。本篇仍是**發布**與資料維運的操作路徑：候選核准後寫入 data 與 main repository 的步驟尚未啟用（[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)），因此目前仍由維護者依本篇執行；名單變動宣告也還在這裡。收進 UI 的部分由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤。
 
 > **現行 pipeline 的新活動前置條件**：主辦只公布錄取名單時，不產生可公開的 catalog、不配發 `c-*`、也不開放認領。`event-definition/3` 目前需要每一活動日的 `officialData.boothListUrls`，identity evidence 也只接受 `<day>:<booth>`；只有名稱與攤數的錄取名單不符合這兩個契約。等待攤位編號期間可以先完成 references、活動日與不依賴 placement 的 map layout。未來 Organizer CSV／XLSX 匯入若成為主辦配置的權威輸入，仍須在 #104 的受驗證草稿／預覽／發布流程中產生等價且可追溯的 booth evidence，不能在本 runbook 偷開特例。見 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
 
@@ -114,7 +114,7 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
 
 宣告在套用之後就完成任務，下一次更新時應從檔案移除；重複宣告已退役的攤位會被拒絕。
 
-這條路徑要求編輯 JSON 與執行 CLI，因此是 migration path 而不是 Organizer 產品流程。[#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139) 與 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 要把它收斂成 UI，屆時 UI 產生的就是同一份宣告。
+這條路徑要求編輯 JSON 與執行 CLI，因此仍是維護者工序而不是主辦單位的產品流程。把它收進 UI 由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤，屆時 UI 產生的就是同一份宣告。
 
 ### 3. 更新 pin
 
@@ -149,6 +149,8 @@ npm run event:onboard -- <eventId> <40-char-data-commit>
 }
 ```
 
+多場館空間的活動改列 `map-manifest.json` 與其指向的每一份 `maps/<periodKey>/<venueSpaceId>.json`，`map.json` 不再是必要檔。兩者**不得並存**：只有 manifest 而沒有 artifacts、或有 artifacts 而沒有 manifest，pin 解析都會失敗。
+
 不得手動 pin branch、tag 或未逐檔核對的內容。逐活動 pin 表示更新一場活動不會把其他活動的變更帶進部署；格式與 fail-closed 行為見[共享 reference 選擇契約](../contracts/reference-selection.md)。
 
 ### 4. 本機驗證 production staging
@@ -162,7 +164,7 @@ npm run build:production
 
 單一活動的 `data:fetch`／`data:stage` 用來檢查你正在處理的那一場。`build:production` 則走 `--published`：它依 [`data/published-events.json`](../../data/published-events.json) 逐一取得並 staging **每一個已發布活動**，因此驗證的是實際會部署的整組資料。
 
-`data:fetch` 把該 commit 下 pin 列出的所有檔案下載到暫存位置並核對 SHA-256，驗證 reference selection 後才把 `.event-data/<event>/` 換入；rename 失敗會復原舊 tree。活動自身檔案落在該目錄根層，`references/` 保留 repository 路徑。`data:stage` 先以 pinned grouping 對 identity registry 執行 no-op check，再驗證 selection 與 relationships，由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`reference-records.json`、`circles.json`、`map.json` staging 到忽略版控的 `public/data/events/<event>/`。
+`data:fetch` 把該 commit 下 pin 列出的所有檔案下載到暫存位置並核對 SHA-256，驗證 reference selection 後才把 `.event-data/<event>/` 換入；rename 失敗會復原舊 tree。活動自身檔案落在該目錄根層，`references/` 保留 repository 路徑。`data:stage` 先以 pinned grouping 對 identity registry 執行 no-op check，再驗證 selection 與 relationships，由官方 booth + identity evidence 生成 `circle-catalog/3`，並把該活動的 `event.json`、`reference-records.json`、`circles.json` 與地圖 artifacts（`map.json`，或 `map-manifest.json` 與其指向的每一份 `maps/**`）staging 到忽略版控的 `public/data/events/<event>/`。
 
 `data:stage` 每次都會先清空 `public/data/events/`，所以 staging 的樹永遠等於這次要服務的集合，不會是歷次執行的聯集。`event-data:check` 會斷言這件事。
 

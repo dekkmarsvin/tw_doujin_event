@@ -4,7 +4,7 @@
 
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
 **測試**：`tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`
-**活動資料**：data repo 的 `map.json`，由 pin 驗證後 staging 到 `dist/data/events/<event>/map.json`
+**活動資料**：data repo 的 `map.json`（單一場館空間）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多場館空間），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 
 一般使用者不上傳圖片、看不到管理入口。公開頁面只讀取隨 build 發布的已驗證靜態快照——決策見 [ADR-0008](../adr/0008-static-public-reading-path.md)。原始配置圖只供 authoring 階段辨識與對照，**不作為前台底圖**。
@@ -31,7 +31,12 @@
 
 FF47 的活動定義登錄三個展區：`ALL`（全區）與 `A`（A–K 區）、`B`（L–W 區）。三者全在**同一個場館空間**內，`A`／`B` 是活動分區而不是場館空間，所以 `areaMode` 是 `single`，介面**不出現展區切換，也不呈現 A–K／L–W 分區**。`areaMode: "switchable"` 只控制活動展區是否可切換，不等同多場館或多樓層；場館空間歸屬由 `venueAssignments` 獨立決定。
 
-目前公開 `map.json` 是單一 event-level layout，FF47 只有一個 venue space，因此沒有歧義。多場館空間的 EventDefinition 與 URL codec 已定義 space／area pair 的 fail-closed 語意，但公開 reader 在 per-space map artifact 契約完成前不得發布多 space event；不可把同一份 layout 假裝成多個場館空間。這項 artifact 擴充與以 `eventId + day/period + venueSpaceId` 為鍵的地圖工作接續處理。
+**地圖 artifact 依場館空間數量分成兩種形狀**，由 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 與 [`app/staged-event-data.ts`](../../app/staged-event-data.ts) 決定：
+
+- **單一場館空間**：一份 event-level `map.json`，行為與過去相同。FF47 屬於這一類。
+- **多場館空間**：`map-manifest.json`（`event-map-manifest/1`）列出每一組「活動日 × venue-space」及其 `maps/<periodKey>/<venueSpaceId>.json` 路徑。reader 依目前的 period 與 venue space 取用對應的一份。
+
+manifest 的規則是 fail closed：`eventId` 必須與活動相符，`path` 必須恰好等於由 scope 推導出的路徑，scope 不得重複，且必須**恰好覆蓋**每個活動日 × 每個場館空間一次。缺一份、多一份或路徑不符都在 staging 階段就失敗，不會產生一份假裝涵蓋多個場館空間的 layout。
 
 `Booth["hall"]` 存的也是展區代碼，不是場館。欄位名是讀取模型的歷史遺留；公開 catalog v3 使用 `placement.area`，文件一律用「展區」。
 
