@@ -95,6 +95,7 @@
 | [0044](./adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目；身分只由可追溯的主辦攤位配置配發。不可回頭的分界線是首次公開發布；authenticated Organizer import 納入第一方來源 |
 | [0045](./adr/0045-list-changes-are-declared-not-inferred.md) | 已發布名單的退出、換手、移動與重編號由人工宣告後套用，不由差異推論；已發布 ID 永不跟著攤位換手（補上 0044 決策 6 的缺口）|
 | [0046](./adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR，條件是 approval snapshot、head SHA pin、required checks、路徑 allowlist 與 lease 同時成立（取代 0037 的「控制面不得 merge」）|
+| [0047](./adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer 首次 onboarding 採引導式任務站；完成活動與場館基礎後，開放為可自由續作的活動建置冊 |
 
 ## 對外文件
 

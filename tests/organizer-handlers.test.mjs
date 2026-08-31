@@ -113,6 +113,75 @@ test("admin invitation creates an organizer event entry that only its owner can 
   assert.equal(hidden.status, 404);
 });
 
+test("organizer onboarding persists real progress and completes without a candidate revision", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "PF45 x RF14", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+
+  const listed = await handlers.listOrganizerCandidates(request("/api/organizer/events", "GET", undefined, ownerCookie));
+  assert.equal((await listed.json()).events[0].workspaceMode, "guided");
+  const initial = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  const initialBody = await initial.json();
+  assert.equal(initialBody.workspace.mode, "guided");
+  assert.deepEqual(initialBody.workspace.resume, { guidedTask: "identity_source", section: "event" });
+
+  const invalid = await handlers.completeOrganizerWorkspaceOnboarding(request(
+    `/api/organizer/events/${candidateId}/workspace/complete-onboarding`, "POST", { expectedVersion: 1 }, ownerCookie,
+  ), candidateId);
+  assert.equal(invalid.status, 422);
+  assert.deepEqual((await invalid.json()).issues.map((issue) => issue.code), [
+    "missing_event_id", "missing_source", "missing_days", "missing_venue",
+  ]);
+
+  const preference = await handlers.updateOrganizerWorkspacePreference(request(
+    `/api/organizer/events/${candidateId}/workspace`, "PATCH",
+    { guidedTask: "days", lastSection: "import" }, ownerCookie,
+  ), candidateId);
+  assert.equal(preference.status, 200);
+
+  const draft = {
+    schema: "organizer-event-draft/1",
+    event: { id: "pf45-rf14", name: "PF45 x RF14", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
+    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
+  };
+  const saved = await handlers.updateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "PATCH", { expectedVersion: 1, draft }, ownerCookie,
+  ), candidateId);
+  assert.equal(saved.status, 200);
+
+  const stale = await handlers.completeOrganizerWorkspaceOnboarding(request(
+    `/api/organizer/events/${candidateId}/workspace/complete-onboarding`, "POST", { expectedVersion: 1 }, ownerCookie,
+  ), candidateId);
+  assert.equal(stale.status, 409);
+  const completed = await handlers.completeOrganizerWorkspaceOnboarding(request(
+    `/api/organizer/events/${candidateId}/workspace/complete-onboarding`, "POST", { expectedVersion: 2 }, ownerCookie,
+  ), candidateId);
+  assert.equal(completed.status, 200);
+  assert.equal((await completed.json()).mode, "binder");
+
+  const detail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  const detailBody = await detail.json();
+  assert.equal(detailBody.workspace.mode, "binder");
+  assert.deepEqual(detailBody.workspace.resume, { guidedTask: "days", section: "import" });
+  assert.equal(detailBody.workspace.readiness.completed, 2);
+  assert.equal(detailBody.event.version, 2);
+  assert.deepEqual((await repository.listOrganizerCandidateRevisions(candidateId)).map((row) => row.version), [1, 2]);
+
+  const repeat = await handlers.completeOrganizerWorkspaceOnboarding(request(
+    `/api/organizer/events/${candidateId}/workspace/complete-onboarding`, "POST", { expectedVersion: 99 }, ownerCookie,
+  ), candidateId);
+  assert.equal(repeat.status, 409);
+});
+
 test("owner and editor use one validated optimistic workflow while only admin approves", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
@@ -175,6 +244,12 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     `/api/organizer/events/${candidateId}/validate`, "POST", {}, editorCookie,
   ), candidateId);
   assert.deepEqual((await validated.json()).issues, []);
+  const validatedDetail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, editorCookie,
+  ), candidateId);
+  const validatedWorkspace = (await validatedDetail.json()).workspace;
+  assert.equal(validatedWorkspace.readiness.completed, 5);
+  assert.equal(validatedWorkspace.readiness.sections.find((section) => section.id === "validate").state, "complete");
 
   const editorSubmit = await handlers.submitOrganizerCandidate(request(
     `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 4 }, editorCookie,

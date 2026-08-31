@@ -122,11 +122,13 @@
 
 ### `organizer_*` — 主辦單位工作區
 
-十一張表，行為與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
+十三張表，行為與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
 
 | 表 | 內容 |
 |---|---|
 | `organizer_event_candidates` | 候選活動的暫定名稱、`event_id`、狀態、目前版本與目前草稿 JSON，以及建立／更新／送審／核准者與時間 |
+| `organizer_workspace_state` | 每個候選活動不可逆的 onboarding 完成時間／完成者，以及最近通過完整驗證的 candidate version；不屬於候選內容 revision |
+| `organizer_workspace_preferences` | 每個候選活動 × 帳號的上次引導任務、上次建置冊區段與更新時間；協作者各自保存 |
 | `organizer_event_revisions` | 每一版草稿 JSON、作者與角色。immutable |
 | `organizer_event_grants` | 誰對哪個候選活動有 `owner` 或 `editor` 權限，含授權與撤銷者 |
 | `organizer_event_invitations` | 尚未接受的邀請：**明文電子郵件**、角色、邀請人，以及接受或撤銷紀錄 |
@@ -139,7 +141,7 @@
 | `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
 
 **目的**：讓受邀的主辦單位在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
-**保存期**：不設期限。 **到期處置**：帳號刪除時，這些表裡的 actor 與 email 依既有塗銷規則去識別化；匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除。
+**保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時刪除該帳號的 workspace preference，清空 onboarding 完成者，其他 actor 與 email 依既有塗銷規則去識別化；匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除。
 `audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。
 
 ### `map_contributor_grants` — 地圖貢獻授權
@@ -200,7 +202,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 - 管理者名冊：`admin.added`、`admin.removed`
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
 - 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.reject`／`map_draft.approve`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
-- 主辦單位工作區：`organizer_event.created`、`organizer_event.updated`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`、`organizer_publication.retried`
+- 主辦單位工作區：`organizer_event.created`、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`、`organizer_publication.retried`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
 兩點值得單獨記下：

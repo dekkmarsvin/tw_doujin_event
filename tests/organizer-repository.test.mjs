@@ -73,6 +73,64 @@ test("an admin creates an empty event entry and its invited owner gains only tha
   assert.equal(adminEvents[0].role, "admin");
 });
 
+test("workspace progress is per candidate and resume location is per collaborator without candidate revisions", async () => {
+  await repository.createOrganizerCandidate({
+    id: "candidate-workspace",
+    tentativeName: "PF 候選活動",
+    ownerEmail: "owner@example.test",
+    createdByAccountId: adminId,
+    draftJson: JSON.stringify(initialDraft),
+    now: NOW,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-workspace", actorAccountId: ownerId,
+    email: "editor@example.test", role: "editor", action: "invite", now: NOW + 2,
+  });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+
+  const ownerWorkspace = await repository.getOrganizerWorkspace("candidate-workspace", ownerId);
+  assert.equal(ownerWorkspace.state.onboarding_completed_at, null);
+  assert.equal(ownerWorkspace.preference, null);
+  assert.equal((await repository.listOrganizerCandidatesForAccount(ownerId, false))[0].workspace_mode, "guided");
+
+  assert.equal(await repository.saveOrganizerWorkspacePreference({
+    candidateId: "candidate-workspace", accountId: ownerId,
+    guidedTask: "days", lastSection: "import", now: NOW + 4,
+  }), true);
+  assert.equal(await repository.saveOrganizerWorkspacePreference({
+    candidateId: "candidate-workspace", accountId: editorId,
+    guidedTask: "venue", lastSection: "map", now: NOW + 5,
+  }), true);
+  assert.equal((await repository.getOrganizerWorkspace("candidate-workspace", ownerId)).preference.last_section, "import");
+  assert.equal((await repository.getOrganizerWorkspace("candidate-workspace", editorId)).preference.last_section, "map");
+  assert.deepEqual((await repository.listOrganizerCandidateRevisions("candidate-workspace")).map((row) => row.version), [1]);
+
+  assert.deepEqual(await repository.completeOrganizerOnboarding({
+    candidateId: "candidate-workspace", actorAccountId: ownerId, expectedVersion: 1, now: NOW + 6,
+  }), { ok: true, completedAt: NOW + 6, alreadyCompleted: false });
+  assert.deepEqual(await repository.completeOrganizerOnboarding({
+    candidateId: "candidate-workspace", actorAccountId: editorId, expectedVersion: 99, now: NOW + 7,
+  }), { ok: true, completedAt: NOW + 6, alreadyCompleted: true });
+  assert.equal((await repository.listOrganizerCandidatesForAccount(ownerId, false))[0].workspace_mode, "binder");
+  assert.equal((await repository.getOrganizerCandidate("candidate-workspace")).current_version, 1);
+  assert.deepEqual((await repository.listOrganizerCandidateRevisions("candidate-workspace")).map((row) => row.version), [1]);
+});
+
+test("a candidate without ADR-0047 state is treated as a legacy binder", async () => {
+  await database.prepare(
+    `INSERT INTO organizer_event_candidates (
+       id, tentative_name, status, current_version, current_draft_json,
+       created_by, created_at, updated_at, last_updated_by, last_updated_role
+     ) VALUES ('legacy-candidate', '既有活動', 'draft', 1, ?1, ?2, ?3, ?3, ?2, 'admin')`,
+  ).bind(JSON.stringify(initialDraft), adminId, NOW).run();
+  assert.equal(await repository.markOrganizerValidated("legacy-candidate", 1, NOW + 1), true);
+  const workspace = await repository.getOrganizerWorkspace("legacy-candidate", adminId);
+  assert.equal(workspace.state.onboarding_completed_at, NOW);
+  assert.equal(workspace.state.onboarding_completed_by, null);
+  assert.equal(workspace.state.last_validated_version, 1);
+});
+
 test("account deletion refuses a sole Owner and preserves candidate history after ownership transfer", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-account-deletion",

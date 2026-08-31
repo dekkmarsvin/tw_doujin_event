@@ -379,6 +379,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE organizer_event_invitations SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_invitations SET email = '[shredded]' WHERE email = ?1`).bind(input.email),
       database.prepare(`UPDATE organizer_event_reviews SET actor_account_id = '[shredded]' WHERE actor_account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_workspace_state SET onboarding_completed_by = NULL WHERE onboarding_completed_by = ?1`).bind(input.accountId),
+      database.prepare(`DELETE FROM organizer_workspace_preferences WHERE account_id = ?1`).bind(input.accountId),
       // The private workbook's file and sheet names identify the person who
       // uploaded it as much as the actor column does, so they go in the same
       // statement — a later one would no longer find the row by created_by.
@@ -1422,6 +1424,21 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     published_at: number | null;
   };
 
+  type OrganizerWorkspaceStateRow = {
+    candidate_id: string;
+    onboarding_completed_at: number | null;
+    onboarding_completed_by: string | null;
+    last_validated_version: number | null;
+    created_at: number;
+    updated_at: number;
+  };
+
+  type OrganizerWorkspacePreferenceRow = {
+    guided_task: string;
+    last_section: string;
+    updated_at: number;
+  };
+
   async function organizerRole(candidateId: string, accountId: string): Promise<OrganizerRole | null> {
     await ensureTables();
     const row = await database.prepare(
@@ -1462,6 +1479,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
            ) VALUES (?1, ?2, 1, NULL, ?3, ?4, 'admin', ?5)`,
         ).bind(crypto.randomUUID(), input.id, input.draftJson, input.createdByAccountId, input.now),
+        database.prepare(
+          `INSERT INTO organizer_workspace_state (
+             candidate_id, onboarding_completed_at, onboarding_completed_by,
+             last_validated_version, created_at, updated_at
+           ) VALUES (?1, NULL, NULL, NULL, ?2, ?2)`,
+        ).bind(input.id, input.now),
         database.prepare(
           `INSERT INTO organizer_event_invitations (
              id, candidate_id, email, role, invited_by, created_at
@@ -1514,25 +1537,34 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     if (admin) {
       const rows = await database.prepare(
-        `SELECT id, tentative_name, event_id, status, current_version, updated_at,
-                last_updated_role, 'admin' AS role
-         FROM organizer_event_candidates ORDER BY updated_at DESC, id`,
+        `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
+                c.last_updated_role, 'admin' AS role,
+                CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
+                  THEN 'binder' ELSE 'guided' END AS workspace_mode
+         FROM organizer_event_candidates c
+         LEFT JOIN organizer_workspace_state w ON w.candidate_id = c.id
+         ORDER BY c.updated_at DESC, c.id`,
       ).all<{
         id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
         current_version: number; updated_at: number; last_updated_role: string; role: "admin";
+        workspace_mode: "guided" | "binder";
       }>();
       return rows.results;
     }
     const rows = await database.prepare(
       `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
-              c.last_updated_role, g.role
+              c.last_updated_role, g.role,
+              CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
+                THEN 'binder' ELSE 'guided' END AS workspace_mode
        FROM organizer_event_candidates c
        JOIN organizer_event_grants g ON g.candidate_id = c.id
+       LEFT JOIN organizer_workspace_state w ON w.candidate_id = c.id
        WHERE g.account_id = ?1 AND g.revoked_at IS NULL
        ORDER BY c.updated_at DESC, c.id`,
     ).bind(accountId).all<{
       id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
       current_version: number; updated_at: number; last_updated_role: string; role: OrganizerRole;
+      workspace_mode: "guided" | "binder";
     }>();
     return rows.results;
   }
@@ -1541,6 +1573,110 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     return database.prepare("SELECT * FROM organizer_event_candidates WHERE id = ?1")
       .bind(candidateId).first<OrganizerCandidateRow>();
+  }
+
+  async function getOrganizerWorkspace(candidateId: string, accountId: string) {
+    await ensureTables();
+    // A row is created with every new candidate. Missing rows therefore belong
+    // to candidates that predate ADR-0047 and must retain the unrestricted
+    // workspace they already had instead of being forced through onboarding.
+    await database.prepare(
+      `INSERT OR IGNORE INTO organizer_workspace_state (
+         candidate_id, onboarding_completed_at, onboarding_completed_by,
+         last_validated_version, created_at, updated_at
+       ) SELECT id, updated_at, NULL, NULL, created_at, updated_at
+         FROM organizer_event_candidates WHERE id = ?1`,
+    ).bind(candidateId).run();
+    const [state, preference] = await Promise.all([
+      database.prepare(
+        `SELECT candidate_id, onboarding_completed_at, onboarding_completed_by,
+                last_validated_version, created_at, updated_at
+         FROM organizer_workspace_state WHERE candidate_id = ?1`,
+      ).bind(candidateId).first<OrganizerWorkspaceStateRow>(),
+      database.prepare(
+        `SELECT guided_task, last_section, updated_at
+         FROM organizer_workspace_preferences WHERE candidate_id = ?1 AND account_id = ?2`,
+      ).bind(candidateId, accountId).first<OrganizerWorkspacePreferenceRow>(),
+    ]);
+    return state ? { state, preference: preference ?? null } : null;
+  }
+
+  async function saveOrganizerWorkspacePreference(input: {
+    candidateId: string;
+    accountId: string;
+    guidedTask: string;
+    lastSection: string;
+    now: number;
+  }) {
+    await ensureTables();
+    const result = await database.prepare(
+      `INSERT INTO organizer_workspace_preferences (
+         id, candidate_id, account_id, guided_task, last_section, updated_at
+       ) SELECT ?1, id, ?2, ?3, ?4, ?5
+         FROM organizer_event_candidates WHERE id = ?6
+       ON CONFLICT(candidate_id, account_id) DO UPDATE SET
+         guided_task = excluded.guided_task,
+         last_section = excluded.last_section,
+         updated_at = excluded.updated_at`,
+    ).bind(crypto.randomUUID(), input.accountId, input.guidedTask, input.lastSection, input.now, input.candidateId).run();
+    return result.meta.changes === 1;
+  }
+
+  async function completeOrganizerOnboarding(input: {
+    candidateId: string;
+    actorAccountId: string;
+    expectedVersion: number;
+    now: number;
+  }) {
+    await ensureTables();
+    const workspace = await getOrganizerWorkspace(input.candidateId, input.actorAccountId);
+    if (!workspace) return { ok: false as const, reason: "not_found" as const };
+    if (workspace.state.onboarding_completed_at !== null) {
+      return { ok: true as const, completedAt: workspace.state.onboarding_completed_at, alreadyCompleted: true };
+    }
+    const candidate = await getOrganizerCandidate(input.candidateId);
+    if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.current_version !== input.expectedVersion) {
+      return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    }
+    const result = await database.prepare(
+      `UPDATE organizer_workspace_state
+       SET onboarding_completed_at = ?1, onboarding_completed_by = ?2, updated_at = ?1
+       WHERE candidate_id = ?3 AND onboarding_completed_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM organizer_event_candidates c
+           WHERE c.id = organizer_workspace_state.candidate_id AND c.current_version = ?4
+         )`,
+    ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion).run();
+    if (result.meta.changes !== 1) {
+      const current = await getOrganizerCandidate(input.candidateId);
+      return { ok: false as const, reason: "conflict" as const, currentVersion: current?.current_version ?? input.expectedVersion };
+    }
+    return { ok: true as const, completedAt: input.now, alreadyCompleted: false };
+  }
+
+  async function markOrganizerValidated(candidateId: string, version: number, now: number) {
+    await ensureTables();
+    // Direct API callers may validate a legacy candidate before loading its
+    // workspace detail. Materialize the same binder-compatible state used by
+    // getOrganizerWorkspace so the validation marker is never dropped.
+    await database.prepare(
+      `INSERT OR IGNORE INTO organizer_workspace_state (
+         candidate_id, onboarding_completed_at, onboarding_completed_by,
+         last_validated_version, created_at, updated_at
+       ) SELECT id, updated_at, NULL, NULL, created_at, updated_at
+         FROM organizer_event_candidates WHERE id = ?1`,
+    ).bind(candidateId).run();
+    const result = await database.prepare(
+      `UPDATE organizer_workspace_state
+       SET last_validated_version = ?1, updated_at = ?2
+       WHERE candidate_id = ?3
+         AND EXISTS (
+           SELECT 1 FROM organizer_event_candidates c
+           WHERE c.id = organizer_workspace_state.candidate_id AND c.current_version = ?1
+         )`,
+    ).bind(version, now, candidateId).run();
+    return result.meta.changes === 1;
   }
 
   /** Owners are invited third parties, not staff, so their invitations need
@@ -2358,7 +2494,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
-      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_event_candidates",
+      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
@@ -2385,6 +2521,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,
+    getOrganizerWorkspace, saveOrganizerWorkspacePreference, completeOrganizerOnboarding, markOrganizerValidated,
     manageOrganizerCollaborator, manageOrganizerOwner,
     listOrganizerMapDrafts, getOrganizerMapDraft, createOrganizerMapDraft, saveOrganizerMapDraft,
     getOrganizerImport, replaceOrganizerImport,

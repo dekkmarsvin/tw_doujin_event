@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   PortalError,
   readSession,
@@ -13,6 +13,7 @@ import {
 import {
   createOrganizerEvent,
   createOrganizerMap,
+  completeOrganizerOnboarding,
   listOrganizerEvents,
   listOrganizerMaps,
   manageOrganizerEditor,
@@ -25,6 +26,7 @@ import {
   retryOrganizerPublication,
   saveOrganizerEvent,
   saveOrganizerMap,
+  saveOrganizerWorkspacePreference,
   submitOrganizerEvent,
   validateOrganizerEvent,
   type OrganizerEventDetail,
@@ -41,17 +43,44 @@ import {
   type OrganizerNormalizedImportRow,
 } from "../organizer-import";
 import type { OrganizerEventDraft, OrganizerValidationIssue } from "../organizer-event";
+import {
+  ORGANIZER_GUIDED_TASKS,
+  ORGANIZER_WORKSPACE_SECTIONS,
+  organizerGuidedTaskIssues,
+  type OrganizerGuidedTask,
+  type OrganizerWorkspaceSection,
+} from "../organizer-workspace";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import MapLayoutEditor from "../map-layout-editor";
 import { hasMapTemplateRecognizer, recognizeMapTemplate } from "../map-template-registry";
+import { useModalFocus } from "../use-modal-focus";
 import styles from "./organizer.module.css";
 
 type Notice = { kind: "idle" | "busy" | "ok" | "error"; message: string };
+type PendingNavigation = { description: string; run: () => void };
 const IDLE: Notice = { kind: "idle", message: "" };
-const STEP_NAMES = ["活動", "場館與展區", "攤位匯入", "地圖", "驗證與預覽", "送審與發布"] as const;
+const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
+  event: "活動",
+  venue: "場館與展區",
+  import: "攤位匯入",
+  map: "地圖",
+  validate: "驗證與預覽",
+  review: "送審與發布",
+};
+const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
+  identity_source: "活動識別與來源",
+  days: "活動日期",
+  venue: "場館與展區",
+};
+const READINESS_LABEL = {
+  complete: "已完成",
+  available: "可開始",
+  needs_attention: "需要處理",
+  blocked: "等待前置資料",
+} as const;
 const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
   draft: "草稿",
   changes_requested: "要求修改",
@@ -108,7 +137,7 @@ export default function OrganizerApp() {
 
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div><span className={styles.eyebrow}>場刊 Map</span><h1>主辦單位工作區</h1></div>
+      <div><h1>主辦單位工作區</h1><p>場刊 Map 活動資料建置</p></div>
       {session && <div className={styles.identity}>
         <span>{session.email}{session.isAdmin ? "・全域管理者" : ""}</span>
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
@@ -123,7 +152,6 @@ export default function OrganizerApp() {
 
 function NarrowScreenBlocker({ onSignedOut }: { onSignedOut: () => void }) {
   return <main className={styles.centerCard}>
-    <span className={styles.blockerIcon} aria-hidden="true">↔</span>
     <h2>請改用桌機</h2>
     <p>活動資料與地圖編輯需要至少 1040px 的畫面寬度。此裝置不會載入任何編輯控制。</p>
     <button type="button" className={styles.ghost} onClick={() => void signOut().finally(onSignedOut)}>登出</button>
@@ -140,7 +168,6 @@ function OrganizerSignIn() {
   const unavailable = useCallback(() => setNotice({ kind: "error", message: "真人驗證元件載入失敗，請檢查網路後重新整理。" }), []);
 
   return <main className={styles.centerCard}>
-    <span className={styles.eyebrow}>Invitation only</span>
     <h2>Organizer 登入</h2>
     <p>使用受邀的 email 取得 15 分鐘內有效的一次性登入連結。</p>
     <form className={styles.stack} onSubmit={(event) => {
@@ -166,15 +193,28 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
-  const [step, setStep] = useState(0);
+  const [section, setSection] = useState<OrganizerWorkspaceSection>("event");
+  const [guidedTask, setGuidedTask] = useState<OrganizerGuidedTask>("identity_source");
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const [notice, setNotice] = useState<Notice>(IDLE);
+  const draftSave = useRef<(() => Promise<boolean>) | null>(null);
+  const navigationDialog = useRef<HTMLElement | null>(null);
+  useModalFocus(Boolean(pendingNavigation), navigationDialog, () => setPendingNavigation(null));
 
   const reloadList = useCallback(async () => {
     const next = (await listOrganizerEvents()).events;
     setEvents(next);
     setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
   }, []);
-  const reloadDetail = useCallback(async (candidateId: string) => setDetail(await readOrganizerEvent(candidateId)), []);
+  const reloadDetail = useCallback(async (candidateId: string) => {
+    const next = await readOrganizerEvent(candidateId);
+    setDetail(next);
+    setSection(next.workspace.resume.section);
+    setGuidedTask(next.workspace.resume.guidedTask);
+    setShowAllTasks(false);
+  }, []);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => { queueMicrotask(() => { if (selectedId) void reloadDetail(selectedId).catch((error) => setNotice({ kind: "error", message: message(error) })); else setDetail(null); }); }, [reloadDetail, selectedId]);
 
@@ -183,13 +223,68 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     if (selectedId) await reloadDetail(selectedId);
   }, [reloadDetail, reloadList, selectedId]);
 
+  const persistLocation = useCallback(async (
+    candidateId: string,
+    nextTask: OrganizerGuidedTask,
+    nextSection: OrganizerWorkspaceSection,
+  ) => {
+    await saveOrganizerWorkspacePreference(candidateId, { guidedTask: nextTask, lastSection: nextSection });
+  }, []);
+
+  const finishNavigation = (request: PendingNavigation) => {
+    setPendingNavigation(null);
+    setDirty(false);
+    draftSave.current = null;
+    request.run();
+  };
+  const requestNavigation = (description: string, run: () => void) => {
+    const request = { description, run };
+    if (dirty) setPendingNavigation(request);
+    else finishNavigation(request);
+  };
+  const saveAndNavigate = async () => {
+    if (!pendingNavigation || !draftSave.current) return;
+    const request = pendingNavigation;
+    if (await draftSave.current()) finishNavigation(request);
+  };
+
+  const chooseEvent = (candidateId: string) => {
+    requestNavigation("切換活動", () => setSelectedId(candidateId));
+  };
+
+  const chooseSection = (nextSection: OrganizerWorkspaceSection) => {
+    if (!detail) return;
+    requestNavigation("切換工作區段", () => {
+      setSection(nextSection);
+      if (detail.workspace.mode === "guided") setShowAllTasks(true);
+      void persistLocation(detail.event.id, guidedTask, nextSection)
+        .catch((error) => setNotice({ kind: "error", message: message(error) }));
+    });
+  };
+
+  const chooseGuidedTask = (nextTask: OrganizerGuidedTask) => {
+    if (!detail) return;
+    requestNavigation("切換引導任務", () => {
+      setGuidedTask(nextTask);
+      void persistLocation(detail.event.id, nextTask, section)
+        .catch((error) => setNotice({ kind: "error", message: message(error) }));
+    });
+  };
+  const advanceGuidedTask = (nextTask: OrganizerGuidedTask) => {
+    if (!detail) return;
+    setDirty(false);
+    setGuidedTask(nextTask);
+    void persistLocation(detail.event.id, nextTask, section)
+      .catch((error) => setNotice({ kind: "error", message: message(error) }));
+  };
+
   return <main className={styles.shell}>
     <aside className={styles.sidebar}>
-      <div className={styles.sidebarTitle}><span className={styles.eyebrow}>Activities</span><h2>活動入口</h2></div>
+      <div className={styles.sidebarTitle}><h2>活動入口</h2><p>切換候選活動與工作狀態</p></div>
       {session.isAdmin && <CreateEntry onCreated={async (id) => { await reloadList(); setSelectedId(id); }} />}
       <nav aria-label="活動列表" className={styles.eventList}>
-        {events.map((item) => <button type="button" key={item.id} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => { setSelectedId(item.id); setStep(0); }}>
-          <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・v{item.version}</small>
+        {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
+          <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・v{item.version}・{item.workspaceMode === "guided" ? "引導中" : "建置冊"}</small>
         </button>)}
         {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
       </nav>
@@ -197,16 +292,195 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
       {!detail ? <div className={styles.empty}><h2>選擇活動入口</h2><p>從左側開啟活動，開始準備可送審的版本。</p></div>
-        : <>
-          <div className={styles.workspaceHead}>
-            <div><span className={styles.eyebrow}>{detail.event.role}・{STATUS_LABEL[detail.event.status]}</span><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
-            <span className={styles.version}>Revision {detail.event.version}</span>
+        : <WorkspaceSurface
+          key={`${detail.event.id}:${detail.event.version}`}
+          session={session}
+          detail={detail}
+          section={section}
+          guidedTask={guidedTask}
+          showAllTasks={showAllTasks}
+          onSection={chooseSection}
+          onGuidedTask={chooseGuidedTask}
+          onGuidedTaskSaved={advanceGuidedTask}
+          onShowAll={() => requestNavigation("查看全部任務", () => setShowAllTasks(true))}
+          onReturnToGuide={() => requestNavigation("回到引導", () => setShowAllTasks(false))}
+          onLeave={() => { setDirty(false); setSelectedId(null); }}
+          onChanged={refresh}
+          onDirtyChange={setDirty}
+          onDraftSaveReady={(save) => { draftSave.current = save; }}
+          persistLocation={persistLocation}
+          setNotice={setNotice}
+        />}
+      {pendingNavigation && <div className={styles.dialogBackdrop}>
+        <section ref={navigationDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-title" aria-describedby="unsaved-description" tabIndex={-1}>
+          <h3 id="unsaved-title">尚有未儲存變更</h3>
+          <p id="unsaved-description">要先儲存目前 revision，再{pendingNavigation.description}嗎？</p>
+          <div className={styles.dialogActions}>
+            <button type="button" onClick={() => { void saveAndNavigate(); }}>儲存並切換</button>
+            <button type="button" className={styles.secondary} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
+            <button type="button" className={styles.ghost} onClick={() => setPendingNavigation(null)}>取消</button>
           </div>
-          <ol className={styles.steps}>{STEP_NAMES.map((name, index) => <li key={name}><button type="button" aria-current={index === step ? "step" : undefined} onClick={() => setStep(index)}><span>{index + 1}</span>{name}</button></li>)}</ol>
-          <StepContent key={`${detail.event.id}:${detail.event.version}:${step}`} session={session} detail={detail} step={step} onChanged={refresh} setNotice={setNotice} />
-        </>}
+        </section>
+      </div>}
     </section>
   </main>;
+}
+
+function WorkspaceSurface({
+  session, detail, section, guidedTask, showAllTasks, onSection, onGuidedTask, onGuidedTaskSaved,
+  onShowAll, onReturnToGuide, onLeave, onChanged, onDirtyChange, onDraftSaveReady, persistLocation, setNotice,
+}: {
+  session: PortalSession;
+  detail: OrganizerEventDetail;
+  section: OrganizerWorkspaceSection;
+  guidedTask: OrganizerGuidedTask;
+  showAllTasks: boolean;
+  onSection: (section: OrganizerWorkspaceSection) => void;
+  onGuidedTask: (task: OrganizerGuidedTask) => void;
+  onGuidedTaskSaved: (task: OrganizerGuidedTask) => void;
+  onShowAll: () => void;
+  onReturnToGuide: () => void;
+  onLeave: () => void;
+  onChanged: () => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+  onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
+  setNotice: (notice: Notice) => void;
+}) {
+  const guided = detail.workspace.mode === "guided" && !showAllTasks;
+  return <>
+    <div className={styles.workspaceHead}>
+      <div><p className={styles.contextLine}>{detail.event.role}・{STATUS_LABEL[detail.event.status]}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
+      <span className={styles.version}>Revision {detail.event.version}</span>
+    </div>
+    {guided ? <div className={styles.workspaceGrid}>
+      <GuidedTaskStation
+        detail={detail}
+        task={guidedTask}
+        onTask={onGuidedTask}
+        onTaskSaved={onGuidedTaskSaved}
+        onShowAll={onShowAll}
+        onLeave={onLeave}
+        onChanged={onChanged}
+        onDirtyChange={onDirtyChange}
+        onDraftSaveReady={onDraftSaveReady}
+        persistLocation={persistLocation}
+        setNotice={setNotice}
+      />
+      <ReadinessRail detail={detail} onSection={onSection} compact />
+    </div> : <>
+      {detail.workspace.mode === "guided" && <div className={styles.guideBanner}>
+        <div><strong>你正在查看全部任務</strong><p>這不會結束引導；下次登入仍會回到上次的基礎設定任務。</p></div>
+        <button type="button" className={styles.secondary} onClick={onReturnToGuide}>回到引導</button>
+      </div>}
+      <ol className={styles.steps} aria-label="活動建置冊區段">
+        {ORGANIZER_WORKSPACE_SECTIONS.map((item, index) => {
+          const state = detail.workspace.readiness.sections.find((entry) => entry.id === item)?.state ?? "available";
+          return <li key={item}><button type="button" aria-current={item === section ? "step" : undefined} onClick={() => onSection(item)}>
+            <span className={styles.stepNumber}>{index + 1}</span><span>{SECTION_LABEL[item]}<small>{READINESS_LABEL[state]}</small></span>
+          </button></li>;
+        })}
+      </ol>
+      <div className={styles.workspaceGrid}>
+        <StepContent
+          key={`${detail.event.id}:${detail.event.version}:${section}`}
+          session={session}
+          detail={detail}
+          section={section}
+          onChanged={onChanged}
+          onDirtyChange={onDirtyChange}
+          onDraftSaveReady={onDraftSaveReady}
+          setNotice={setNotice}
+        />
+        <ReadinessRail detail={detail} onSection={onSection} />
+      </div>
+    </>}
+  </>;
+}
+
+function GuidedTaskStation({
+  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onChanged, onDirtyChange, onDraftSaveReady, persistLocation, setNotice,
+}: {
+  detail: OrganizerEventDetail;
+  task: OrganizerGuidedTask;
+  onTask: (task: OrganizerGuidedTask) => void;
+  onTaskSaved: (task: OrganizerGuidedTask) => void;
+  onShowAll: () => void;
+  onLeave: () => void;
+  onChanged: () => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+  onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
+  setNotice: (notice: Notice) => void;
+}) {
+  const taskIndex = ORGANIZER_GUIDED_TASKS.indexOf(task);
+  const completed = ORGANIZER_GUIDED_TASKS.filter((item) => organizerGuidedTaskIssues(detail.draft, item).length === 0).length;
+  const nextTask = ORGANIZER_GUIDED_TASKS[taskIndex + 1] ?? null;
+  const section = task === "venue" ? "venue" : "event";
+
+  const afterPrimarySave = async (version: number) => {
+    if (nextTask) {
+      await persistLocation(detail.event.id, nextTask, section);
+      onTaskSaved(nextTask);
+      return;
+    }
+    setNotice({ kind: "busy", message: "正在確認基礎設定…" });
+    await completeOrganizerOnboarding(detail.event.id, version);
+    setNotice({ kind: "ok", message: "基礎設定完成，已開啟活動建置冊。" });
+    await onChanged();
+  };
+
+  return <section className={styles.guidedStation}>
+    <div className={styles.guidedHead}>
+      <div><h3>引導式任務站</h3><p>完成活動骨架後即可自由安排匯入、地圖與送審工作。</p></div>
+      <div className={styles.progressText}><strong>已完成 {completed}/3</strong><progress max={3} value={completed} aria-label={`已完成 ${completed} 個，共 3 個基礎任務`} /></div>
+    </div>
+    <ol className={styles.guidedSteps} aria-label="基礎設定任務">
+      {ORGANIZER_GUIDED_TASKS.map((item, index) => {
+        const done = organizerGuidedTaskIssues(detail.draft, item).length === 0;
+        return <li key={item}><button type="button" aria-current={item === task ? "step" : undefined} onClick={() => onTask(item)}>
+          <span>{index + 1}</span><span>{GUIDED_LABEL[item]}<small>{done ? "已完成" : item === task ? "目前任務" : "尚待完成"}</small></span>
+        </button></li>;
+      })}
+    </ol>
+    <DraftForm
+      detail={detail}
+      section={section}
+      guidedTask={task}
+      saveLabel={nextTask ? "儲存並繼續" : "完成基礎設定"}
+      secondarySaveLabel="儲存並離開"
+      onSaved={afterPrimarySave}
+      onSecondarySaved={async () => { await persistLocation(detail.event.id, task, section); onLeave(); }}
+      onChanged={onChanged}
+      onDirtyChange={onDirtyChange}
+      onSaveReady={onDraftSaveReady}
+      setNotice={setNotice}
+    />
+    <div className={styles.exploreRow}><button type="button" className={styles.textButton} onClick={onShowAll}>查看全部任務</button><span>你可以先查看或準備後續區段，不會失去目前進度。</span></div>
+  </section>;
+}
+
+function ReadinessRail({ detail, onSection, compact = false }: {
+  detail: OrganizerEventDetail;
+  onSection: (section: OrganizerWorkspaceSection) => void;
+  compact?: boolean;
+}) {
+  const readiness = detail.workspace.readiness;
+  const visibleBlockers = readiness.blockers.slice(0, compact ? 3 : 5);
+  return <aside className={styles.readiness} aria-label="活動建置狀態">
+    <div className={styles.readinessHead}><h3>建置狀態</h3><strong>{readiness.completed}/{readiness.total}</strong></div>
+    <p>最後儲存 {new Date(detail.event.updatedAt).toLocaleString("zh-TW")}</p>
+    <button type="button" className={styles.nextAction} onClick={() => onSection(readiness.suggestedNextSection)}>
+      下一步：{SECTION_LABEL[readiness.suggestedNextSection]}
+    </button>
+    <div className={styles.readinessList}>{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
+      <span>{SECTION_LABEL[item.id]}</span><small data-state={item.state}>{READINESS_LABEL[item.state]}</small>
+    </button>)}</div>
+    <div className={styles.blockerList}><h4>目前阻擋項</h4>{visibleBlockers.length === 0 ? <p>目前沒有阻擋項。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
+      <strong>{SECTION_LABEL[blocker.section]}</strong><span>{blocker.message}</span>
+    </button>)}</div>
+    {readiness.blockers.length > visibleBlockers.length && <p>另有 {readiness.blockers.length - visibleBlockers.length} 項，請至相關區段處理。</p>}
+  </aside>;
 }
 
 function CreateEntry({ onCreated }: { onCreated: (id: string) => Promise<void> }) {
@@ -214,7 +488,7 @@ function CreateEntry({ onCreated }: { onCreated: (id: string) => Promise<void> }
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState<Notice>(IDLE);
-  if (!open) return <button type="button" className={styles.createButton} onClick={() => setOpen(true)}>＋ 建立空白活動入口</button>;
+  if (!open) return <button type="button" className={styles.createButton} onClick={() => setOpen(true)}>建立空白活動入口</button>;
   return <form className={styles.createForm} onSubmit={(event) => {
     event.preventDefault();
     setNotice({ kind: "busy", message: "建立中…" });
@@ -229,17 +503,19 @@ function CreateEntry({ onCreated }: { onCreated: (id: string) => Promise<void> }
   </form>;
 }
 
-function StepContent({ session, detail, step, onChanged, setNotice }: {
+function StepContent({ session, detail, section, onChanged, onDirtyChange, onDraftSaveReady, setNotice }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
-  step: number;
+  section: OrganizerWorkspaceSection;
   onChanged: () => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+  onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
   setNotice: (notice: Notice) => void;
 }) {
-  if (step === 0 || step === 1) return <DraftForm detail={detail} section={step === 0 ? "event" : "venue"} onChanged={onChanged} setNotice={setNotice} />;
-  if (step === 2) return <ImportPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
-  if (step === 3) return <OrganizerMapPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
-  if (step === 4) return <ValidationPanel detail={detail} setNotice={setNotice} />;
+  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} setNotice={setNotice} />;
+  if (section === "import") return <ImportPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
+  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
+  if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} setNotice={setNotice} />;
 }
 
@@ -458,36 +734,76 @@ function ColumnSelect({ label, value, header, required = false, onChange }: {
   return <label>{label}<select required={required} value={value === null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}><option value="">尚未選擇</option>{header.map((name, index) => <option value={index} key={index}>{index + 1}. {String(name || "（空白）")}</option>)}</select></label>;
 }
 
-function DraftForm({ detail, section, onChanged, setNotice }: {
+function DraftForm({
+  detail, section, guidedTask, saveLabel = "儲存 revision", secondarySaveLabel,
+  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, setNotice,
+}: {
   detail: OrganizerEventDetail;
   section: "event" | "venue";
+  guidedTask?: OrganizerGuidedTask;
+  saveLabel?: string;
+  secondarySaveLabel?: string;
+  onSaved?: (version: number) => Promise<void>;
+  onSecondarySaved?: (version: number) => Promise<void>;
   onChanged: () => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+  onSaveReady?: (save: (() => Promise<boolean>) | null) => void;
   setNotice: (notice: Notice) => void;
 }) {
   const [draft, setDraft] = useState(detail.draft);
+  const [dirty, setDirty] = useState(false);
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
-  const update = (mutate: (current: OrganizerEventDraft) => OrganizerEventDraft) => setDraft((current) => mutate(structuredClone(current)));
-  return <section className={styles.panel}>
-    <div className={styles.panelHead}><div><h3>{section === "event" ? "活動基本資料" : "場館、空間與展區"}</h3><p>所有儲存都以 revision {detail.event.version} 為預期版本。</p></div><button type="button" disabled={!editable} onClick={() => {
-      setNotice({ kind: "busy", message: "儲存中…" });
-      void saveOrganizerEvent(detail.event.id, detail.event.version, draft)
-        .then(async () => { setNotice({ kind: "ok", message: "已建立新的 immutable revision。" }); await onChanged(); })
-        .catch((error) => setNotice({ kind: "error", message: message(error) }));
-    }}>儲存 revision</button></div>
+  useEffect(() => {
+    onDirtyChange(dirty);
+    const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => { window.removeEventListener("beforeunload", warn); onDirtyChange(false); };
+  }, [dirty, onDirtyChange]);
+  const update = (mutate: (current: OrganizerEventDraft) => OrganizerEventDraft) => {
+    setDirty(true);
+    setDraft((current) => mutate(structuredClone(current)));
+  };
+  const save = useCallback(async (after?: (version: number) => Promise<void>) => {
+    setNotice({ kind: "busy", message: "儲存中…" });
+    try {
+      const result = await saveOrganizerEvent(detail.event.id, detail.event.version, draft);
+      setDirty(false);
+      setNotice({ kind: "ok", message: "已建立新的 immutable revision。" });
+      if (after) await after(result.version);
+      await onChanged();
+      return true;
+    } catch (error) {
+      setNotice({ kind: "error", message: message(error) });
+      return false;
+    }
+  }, [detail.event.id, detail.event.version, draft, onChanged, setNotice]);
+  useEffect(() => {
+    onSaveReady?.(() => save());
+    return () => onSaveReady?.(null);
+  }, [onSaveReady, save]);
+  const taskIssues = guidedTask ? organizerGuidedTaskIssues(draft, guidedTask) : [];
+  const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
+  const showDays = section === "event" && (!guidedTask || guidedTask === "days");
+  return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
+    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館、空間與展區"}</h3><p>儲存會建立正式 revision；目前預期版本為 {detail.event.version}。</p></div></div>
     {section === "event" ? <div className={styles.formGrid}>
-      <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>
-      <label>eventId<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "小寫英數字與連字號"}</small></label>
-      <label>官方來源說明<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /></label>
-      <label>官方來源網址<input disabled={!editable} type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /></label>
-      <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.ghost} disabled={!editable} onClick={() => update((next) => { next.event.days.push({ id: String(next.event.days.length + 1), label: `第 ${next.event.days.length + 1} 日`, date: "" }); return next; })}>＋ 新增日期</button></div>
+      {showIdentity && <>
+        <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>
+        <label>eventId<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "小寫英數字與連字號"}</small></label>
+        <label>官方來源說明<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /></label>
+        <label>官方來源網址<input disabled={!editable} type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /></label>
+      </>}
+      {showDays && <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push({ id: String(next.event.days.length + 1), label: `第 ${next.event.days.length + 1} 日`, date: "" }); return next; })}>新增日期</button></div>
         {draft.event.days.map((day, index) => <div className={styles.inlineFields} key={`${index}-${day.id}`}>
           <input disabled={!editable} aria-label={`第 ${index + 1} 日 id`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} />
           <input disabled={!editable} aria-label={`第 ${index + 1} 日名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} />
           <input disabled={!editable} aria-label={`第 ${index + 1} 日日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} />
           <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.event.days.splice(index, 1); return next; })}>移除</button>
-        </div>)}</div>
+        </div>)}
+        {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push({ id: "1", label: "第 1 日", date: "" }); return next; })}>建立第一個活動日</button></div>}
+      </div>}
     </div> : <div>
-      <button type="button" className={styles.ghost} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" }); return next; })}>＋ 新增 venue-space</button>
+      <button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" }); return next; })}>新增 venue-space</button>
       {draft.venue.assignments.map((assignment, index) => <div className={styles.venueCard} key={index}>
         <label>Venue ID<input disabled={!editable} value={assignment.venueId} onChange={(event) => update((next) => { next.venue.assignments[index].venueId = event.target.value; return next; })} /></label>
         <label>Venue-space ID<input disabled={!editable} value={assignment.venueSpaceId} onChange={(event) => update((next) => { next.venue.assignments[index].venueSpaceId = event.target.value; return next; })} /></label>
@@ -495,17 +811,24 @@ function DraftForm({ detail, section, onChanged, setNotice }: {
         <label>Map template<input disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })} /></label>
         <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>
       </div>)}
+      {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定場館空間與展區。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" }); return next; })}>建立第一個場館空間</button></div>}
     </div>}
+    {taskIssues.length > 0 && <div className={styles.taskIssues} aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
+    <div className={styles.formActions}>
+      <button type="button" disabled={!editable} onClick={() => { void save(onSaved); }}>{saveLabel}</button>
+      {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
+      <span>{dirty ? "尚有未儲存變更" : "目前表單已與最近載入版本同步"}</span>
+    </div>
   </section>;
 }
 
-function ValidationPanel({ detail, setNotice }: { detail: OrganizerEventDetail; setNotice: (notice: Notice) => void }) {
+function ValidationPanel({ detail, onChanged, setNotice }: { detail: OrganizerEventDetail; onChanged: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const [issues, setIssues] = useState<OrganizerValidationIssue[] | null>(null);
   const [preview, setPreview] = useState<OrganizerReaderPreview | null>(null);
   const grouped = useMemo(() => issues ? { errors: issues.filter((issue) => issue.severity === "error"), warnings: issues.filter((issue) => issue.severity === "warning") } : null, [issues]);
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>Validation 與 Reader 預覽</h3><p>候選資料只在已登入的預覽 API 中組裝，不會進入公開 manifest。</p></div><div className={styles.row}>
-      <button type="button" onClick={() => void validateOrganizerEvent(detail.event.id).then((result) => setIssues(result.issues)).catch((error) => setNotice({ kind: "error", message: message(error) }))}>執行驗證</button>
+      <button type="button" onClick={() => void validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }).catch((error) => setNotice({ kind: "error", message: message(error) }))}>執行驗證</button>
       <button type="button" className={styles.ghost} onClick={() => void previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }).catch((error) => setNotice({ kind: "error", message: message(error) }))}>建立預覽</button>
     </div></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} errors</b><span>{grouped.warnings.length} warnings</span></div>}
@@ -521,7 +844,7 @@ function OrganizerReaderPreviewPanel({ preview }: { preview: OrganizerReaderPrev
     .filter((row) => row.dayId === selected.periodKey && row.venueSpaceId === selected.venueSpaceId)
     .map((row) => [row.boothCode, { label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}` }])) : {}, [preview, selected]);
   return <div className={styles.readerPreview}>
-    <div className={styles.panelHead}><div><span className={styles.eyebrow}>Authenticated Reader preview</span><h4>{preview.event.name}</h4></div><select aria-label="預覽地圖 scope" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{map.venueSpaceId}・rev {map.revision}</option>)}</select></div>
+    <div className={styles.panelHead}><div><p className={styles.contextLine}>已登入的 Reader 預覽</p><h4>{preview.event.name}</h4></div><select aria-label="預覽地圖 scope" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{map.venueSpaceId}・rev {map.revision}</option>)}</select></div>
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} onSelect={() => undefined} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視 preview bundle</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;

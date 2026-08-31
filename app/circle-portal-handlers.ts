@@ -13,8 +13,15 @@ import {
 import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
 import {
   createEmptyOrganizerEventDraft, parseOrganizerEventDraft, serializeOrganizerEventDraft,
-  validateOrganizerEventDraft, type OrganizerValidationIssue,
+  type OrganizerValidationIssue,
 } from "./organizer-event";
+import {
+  evaluateOrganizerWorkspaceReadiness,
+  getOrganizerWorkspacePrerequisiteIssues,
+  isOrganizerGuidedTask,
+  isOrganizerWorkspaceSection,
+  organizerOnboardingIssues,
+} from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 
 /**
@@ -1664,6 +1671,7 @@ export function createCirclePortalHandlers({
       updatedAt: event.updated_at,
       updatedByRole: event.last_updated_role,
       role: event.role,
+      workspaceMode: event.workspace_mode,
     })) });
   }
 
@@ -1674,11 +1682,26 @@ export function createCirclePortalHandlers({
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
-    const [revisions, imported, publication] = await Promise.all([
+    const [revisions, imported, publication, workspace, maps] = await Promise.all([
       repository.listOrganizerCandidateRevisions(candidateId),
       repository.getOrganizerImport(candidateId),
       repository.getLatestOrganizerPublicationJob(candidateId),
+      repository.getOrganizerWorkspace(candidateId, access.current.accountId),
+      repository.listOrganizerMapDrafts(candidateId),
     ]);
+    if (!workspace) return json({ error: "找不到活動工作區。" }, 404);
+    const guidedTask = isOrganizerGuidedTask(workspace.preference?.guided_task)
+      ? workspace.preference.guided_task : "identity_source";
+    const section = isOrganizerWorkspaceSection(workspace.preference?.last_section)
+      ? workspace.preference.last_section : "event";
+    const readiness = evaluateOrganizerWorkspaceReadiness({
+      draft,
+      importedRows: imported?.rows.length ?? 0,
+      maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
+      currentVersion: candidate.current_version,
+      lastValidatedVersion: workspace.state.last_validated_version,
+      status: candidate.status,
+    });
     return json({
       event: {
         id: candidate.id,
@@ -1721,6 +1744,12 @@ export function createCirclePortalHandlers({
         error: publication.error,
         updatedAt: publication.updated_at,
       } : null,
+      workspace: {
+        mode: workspace.state.onboarding_completed_at === null ? "guided" : "binder",
+        onboardingCompletedAt: workspace.state.onboarding_completed_at,
+        resume: { guidedTask, section },
+        readiness,
+      },
     });
   }
 
@@ -1757,17 +1786,74 @@ export function createCirclePortalHandlers({
     return json({ ok: true, candidateId, version: result.version });
   }
 
+  async function updateOrganizerWorkspacePreference(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    if (!isOrganizerGuidedTask(body?.guidedTask) || !isOrganizerWorkspaceSection(body?.lastSection)) {
+      return json({ error: "guidedTask 或 lastSection 格式無效。" }, 400);
+    }
+    const saved = await repository.saveOrganizerWorkspacePreference({
+      candidateId,
+      accountId: access.current.accountId,
+      guidedTask: body.guidedTask,
+      lastSection: body.lastSection,
+      now: config.now(),
+    });
+    return saved ? json({ ok: true, guidedTask: body.guidedTask, lastSection: body.lastSection })
+      : json({ error: "找不到活動。" }, 404);
+  }
+
+  async function completeOrganizerWorkspaceOnboarding(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) {
+      return json({ error: "expectedVersion 格式無效。" }, 400);
+    }
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    if (candidate.current_version !== expectedVersion) {
+      return json({ error: "草稿已被其他人更新，請重新載入。", conflict: { currentVersion: candidate.current_version } }, 409);
+    }
+    const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+    if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
+    const issues = organizerOnboardingIssues(draft);
+    if (issues.length > 0) return json({ error: "請先完成活動與場館基礎設定。", issues }, 422);
+    const result = await repository.completeOrganizerOnboarding({
+      candidateId,
+      actorAccountId: access.current.accountId,
+      expectedVersion: expectedVersion as number,
+      now: config.now(),
+    });
+    if (!result.ok) {
+      if (result.reason === "not_found") return json({ error: "找不到活動。" }, 404);
+      return json({ error: "草稿已被其他人更新，請重新載入。", conflict: result }, 409);
+    }
+    if (!result.alreadyCompleted) {
+      await repository.writeAudit({
+        at: config.now(), actorAccountId: access.current.accountId,
+        actorRole: access.admin ? "admin" : access.role === "owner" ? "organizer_owner" : "organizer_editor",
+        action: "organizer_event.onboarding_completed", subjectType: "organizer_event", subjectId: candidateId,
+        detail: { version: expectedVersion }, ipHash: await clientIpHash(request),
+      });
+    }
+    return json({ ok: true, mode: "binder", onboardingCompletedAt: result.completedAt });
+  }
+
   async function validateOrganizerWorkspace(candidateId: string, draft: ReturnType<typeof parseOrganizerEventDraft>) {
-    const issues: OrganizerValidationIssue[] = draft ? validateOrganizerEventDraft(draft) : [{
+    if (!draft) return { issues: [{
       severity: "error", step: "event", code: "invalid_draft", message: "候選活動資料格式無效。",
-    }];
-    if (!draft) return { issues, imported: null, maps: [], contents: new Map<string, string>() };
+    }] satisfies OrganizerValidationIssue[], imported: null, maps: [], contents: new Map<string, string>() };
     const [imported, maps] = await Promise.all([
       repository.getOrganizerImport(candidateId), repository.listOrganizerMapDrafts(candidateId),
     ]);
-    if (!imported || imported.rows.length === 0) {
-      issues.push({ severity: "error", step: "import", code: "missing_import", message: "請先匯入並確認至少一筆攤位資料。" });
-    }
+    const issues = getOrganizerWorkspacePrerequisiteIssues({
+      draft,
+      importedRows: imported?.rows.length ?? 0,
+      maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
+    });
     // The candidate, its import and every map body are read exactly once here.
     // Resolving scope per day × venue-space used to reload the candidate and
     // the whole import inside the loop, so a multi-day multi-hall event — the
@@ -1785,14 +1871,7 @@ export function createCirclePortalHandlers({
     for (const day of draft.event.days) {
       for (const assignment of draft.venue.assignments) {
         const map = maps.find((item) => item.period_key === day.id && item.venue_space_id === assignment.venueSpaceId);
-        if (!map) {
-          issues.push({
-            severity: "error", step: "map", code: "missing_map",
-            target: `${day.id}/${assignment.venueSpaceId}`,
-            message: `缺少 ${day.label} × ${assignment.venueSpaceId} 地圖。`,
-          });
-          continue;
-        }
+        if (!map) continue;
         const scope = resolveCandidateAuthoringScope({ candidateId, draft, importedRows }, day.id, assignment.venueSpaceId);
         const content = contents.get(map.id);
         const validation = scope && content ? validateMapContributionDraft(
@@ -2016,7 +2095,9 @@ export function createCirclePortalHandlers({
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "候選活動資料格式無效。" }, 500);
     const { issues } = await validateOrganizerWorkspace(candidateId, draft);
-    return json({ ok: issues.every((issue) => issue.severity !== "error"), version: candidate.current_version, issues });
+    const ok = issues.every((issue) => issue.severity !== "error");
+    if (ok) await repository.markOrganizerValidated(candidateId, candidate.current_version, config.now());
+    return json({ ok, version: candidate.current_version, issues });
   }
 
   async function previewOrganizerCandidate(request: Request, candidateId: string) {
@@ -2273,7 +2354,8 @@ export function createCirclePortalHandlers({
     // exists before any event is published, so `eventScoped` — which demands a
     // published event this deployment serves — would refuse every one of them.
     // Authority comes from the candidate's own grant, checked in each handler.
-    adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate, putOrganizerImport,
+    adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate,
+    updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
     submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication,

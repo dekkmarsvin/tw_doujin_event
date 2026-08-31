@@ -7,6 +7,11 @@ import type {
 } from "./organizer-event";
 import type { OrganizerImportMapping, OrganizerNormalizedImportRow } from "./organizer-import";
 import type { EventMapLayout } from "./event-map";
+import type {
+  OrganizerGuidedTask,
+  OrganizerWorkspaceReadiness,
+  OrganizerWorkspaceSection,
+} from "./organizer-workspace";
 
 async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -35,6 +40,7 @@ export type OrganizerEventSummary = {
   updatedAt: number;
   updatedByRole: string;
   role: OrganizerRole | "admin";
+  workspaceMode: "guided" | "binder";
 };
 
 export type OrganizerEventDetail = {
@@ -55,6 +61,12 @@ export type OrganizerEventDetail = {
     error: string | null;
     updatedAt: number;
   };
+  workspace: {
+    mode: "guided" | "binder";
+    onboardingCompletedAt: number | null;
+    resume: { guidedTask: OrganizerGuidedTask; section: OrganizerWorkspaceSection };
+    readiness: OrganizerWorkspaceReadiness;
+  };
 };
 
 export function listOrganizerEvents() {
@@ -70,6 +82,23 @@ export function saveOrganizerEvent(candidateId: string, expectedVersion: number,
     method: "PATCH",
     body: JSON.stringify({ expectedVersion, draft }),
   });
+}
+
+export function saveOrganizerWorkspacePreference(candidateId: string, input: {
+  guidedTask: OrganizerGuidedTask;
+  lastSection: OrganizerWorkspaceSection;
+}) {
+  return organizerCall<{ ok: true; guidedTask: OrganizerGuidedTask; lastSection: OrganizerWorkspaceSection }>(
+    `/api/organizer/events/${encodeURIComponent(candidateId)}/workspace`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function completeOrganizerOnboarding(candidateId: string, expectedVersion: number) {
+  return organizerCall<{ ok: true; mode: "binder"; onboardingCompletedAt: number }>(
+    `/api/organizer/events/${encodeURIComponent(candidateId)}/workspace/complete-onboarding`,
+    { method: "POST", body: JSON.stringify({ expectedVersion }) },
+  );
 }
 
 export function putOrganizerImport(candidateId: string, input: {
