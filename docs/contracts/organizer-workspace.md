@@ -50,8 +50,9 @@ draft → submitted → approved → publishing → published
 - `PUT /api/organizer/events/:candidateId/imports` 只收主辦確認過的**正規化資料列**與來源 metadata（檔名、工作表、原始檔 SHA-256、來源說明、欄位 mapping）。
 - 每一列的 `dayId`、`venueSpaceId` 與 `areaId` 必須落在草稿已宣告的集合內；同一活動日 × 場館空間 × 攤位代碼不得重複（大小寫不敏感）。
 - `identityGroup` 只能是 `stable:<stableKey>` 或 `null`。**名稱相同不構成同一社團**，與[社團目錄契約](./circle-catalog.md)的 linkage 規則一致。
-- 上限：單次 20,000 列，正規化後 8 MiB。超過時回 413 並要求分批，而不是在寫入中途失敗。
-- 匯入是**取代**語意：新的來源列取代前一份，舊來源標記 `replaced_at`。
+- 匯入是**取代**語意：一次請求就是這個候選活動的完整攤位表。新來源寫入時，前一份標記 `replaced_at`，其資料列不再是有效匯入。
+- 兩道上限，回不同的狀態碼：**超過 20,000 列**在最初的參數檢查就回 `400`，與 `expectedVersion`、來源 metadata 的格式錯誤同一關；**正規化後超過 8 MiB** 回 `413`。兩者都在寫入之前拒絕，不會留下半套匯入。
+- **分批不是這兩道上限的解法**——取代語意表示後一批會丟棄前一批。實際可行的是縮短欄位內容，或先確認匯入範圍是否真的屬於同一場活動。
 - 稽核只留版本、列數與原始檔 SHA-256。**私人 workbook 的檔名與工作表名不寫進 `audit_log`**——來源可追溯靠 hash，檔名會比它描述的匯入列活得更久。
 
 ## 地圖
