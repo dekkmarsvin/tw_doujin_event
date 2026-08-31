@@ -113,6 +113,68 @@ test("admin invitation creates an organizer event entry that only its owner can 
   assert.equal(hidden.status, 404);
 });
 
+test("an event organizer can list and immediately extend the shared venue catalog", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const createdCandidate = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "新場館測試", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await createdCandidate.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+
+  const initial = await handlers.listOrganizerVenues(request(
+    `/api/organizer/events/${candidateId}/venues`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  assert.equal(initial.status, 200);
+  assert.equal((await initial.json()).venues.length, 4);
+
+  const createdVenue = await handlers.createOrganizerVenue(request(
+    `/api/organizer/events/${candidateId}/venues`, "POST", {
+      name: "松山文創園區",
+      sourceUrl: "https://venue.example/songshan",
+      initialSpace: {
+        name: "1 號倉庫",
+        sourceUrl: "https://venue.example/songshan/1",
+        defaultAreaMode: "imported",
+      },
+    }, ownerCookie,
+  ), candidateId);
+  assert.equal(createdVenue.status, 201);
+  const createdVenueBody = await createdVenue.json();
+  assert.match(createdVenueBody.venue.id, /^venue-[0-9a-f-]{36}$/u);
+  assert.match(createdVenueBody.space.id, /^venue-space-[0-9a-f-]{36}$/u);
+  assert.equal(createdVenueBody.space.venueId, createdVenueBody.venue.id);
+
+  const createdSpace = await handlers.createOrganizerVenueSpace(request(
+    `/api/organizer/events/${candidateId}/venues/${createdVenueBody.venue.id}/spaces`, "POST", {
+      name: "4 號倉庫",
+      sourceUrl: "https://venue.example/songshan/4",
+      defaultAreaMode: "none",
+    }, ownerCookie,
+  ), candidateId, createdVenueBody.venue.id);
+  assert.equal(createdSpace.status, 201);
+  const createdSpaceBody = await createdSpace.json();
+  assert.equal(createdSpaceBody.space.defaultAreaMode, "none");
+
+  const refreshed = await handlers.listOrganizerVenues(request(
+    `/api/organizer/events/${candidateId}/venues`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  const catalog = await refreshed.json();
+  const songshan = catalog.venues.find(({ id }) => id === createdVenueBody.venue.id);
+  assert.deepEqual(songshan.spaces.map(({ name }) => name), ["1 號倉庫", "4 號倉庫"]);
+
+  const audit = await database.prepare(
+    "SELECT action FROM audit_log WHERE subject_id IN (?1, ?2) ORDER BY at, action",
+  ).bind(createdVenueBody.venue.id, createdSpaceBody.space.id).all();
+  assert.equal(audit.results.some(({ action }) => action === "organizer_venue.created"), true);
+
+  const strangerCookie = await signIn("stranger@example.test", "organizer");
+  const hidden = await handlers.listOrganizerVenues(request(
+    `/api/organizer/events/${candidateId}/venues`, "GET", undefined, strangerCookie,
+  ), candidateId);
+  assert.equal(hidden.status, 404);
+});
+
 test("organizer onboarding persists real progress and completes without a candidate revision", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(

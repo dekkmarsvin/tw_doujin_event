@@ -1,4 +1,10 @@
 import { CIRCLE_OVERRIDES_SCHEMA, type CircleRetentionChoice } from "../app/circle-overrides";
+import {
+  INITIAL_ORGANIZER_VENUE_CATALOG,
+  organizerVenueNameKey,
+  type OrganizerVenueCatalog,
+  type OrganizerVenueSpaceAreaMode,
+} from "../app/organizer-venue-catalog";
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
 
 /**
@@ -77,6 +83,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         .then(() => addMissingColumns())
         .then(() => database.batch(IDENTITY_INDEXES.map(({ sql }) => database.prepare(sql))))
         .then(() => seedAdmins())
+        .then(() => seedOrganizerVenueCatalog())
         .catch((error: unknown) => {
           tablesReady = null;
           throw error;
@@ -111,6 +118,29 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await database.batch(seeds.map((email) => database
       .prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, 'bootstrap', ?2)")
       .bind(email, now)));
+  }
+
+  async function seedOrganizerVenueCatalog() {
+    const statements: D1PreparedStatement[] = [];
+    for (const venue of INITIAL_ORGANIZER_VENUE_CATALOG) {
+      statements.push(database.prepare(
+        `INSERT INTO organizer_venues (id, name, name_key, source_url, created_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, 'system', 0)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, name_key = excluded.name_key,
+           source_url = excluded.source_url`,
+      ).bind(venue.id, venue.name, organizerVenueNameKey(venue.name), venue.sourceUrl));
+      for (const space of venue.spaces) {
+        statements.push(database.prepare(
+          `INSERT INTO organizer_venue_spaces (
+             id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
+           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'system', 0)
+           ON CONFLICT(id) DO UPDATE SET venue_id = excluded.venue_id, name = excluded.name,
+             name_key = excluded.name_key, source_url = excluded.source_url,
+             default_area_mode = excluded.default_area_mode`,
+        ).bind(space.id, venue.id, space.name, organizerVenueNameKey(space.name), space.sourceUrl, space.defaultAreaMode));
+      }
+    }
+    if (statements.length > 0) await database.batch(statements);
   }
 
   async function listAdmins() {
@@ -367,6 +397,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
       database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
       database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_venue_spaces SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET last_updated_by = '[shredded]' WHERE last_updated_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET submitted_by = '[shredded]' WHERE submitted_by = ?1`).bind(input.accountId),
@@ -1438,6 +1470,108 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     last_section: string;
     updated_at: number;
   };
+
+  async function listOrganizerVenueCatalog(): Promise<OrganizerVenueCatalog> {
+    await ensureTables();
+    const [venueResult, spaceResult] = await Promise.all([
+      database.prepare(
+        "SELECT id, name, source_url FROM organizer_venues ORDER BY created_at, name_key, id",
+      ).all<{ id: string; name: string; source_url: string | null }>(),
+      database.prepare(
+        `SELECT id, venue_id, name, source_url, default_area_mode
+         FROM organizer_venue_spaces ORDER BY created_at, name_key, id`,
+      ).all<{
+        id: string; venue_id: string; name: string; source_url: string | null;
+        default_area_mode: OrganizerVenueSpaceAreaMode;
+      }>(),
+    ]);
+    return {
+      venues: venueResult.results.map((venue) => ({
+        id: venue.id,
+        name: venue.name,
+        sourceUrl: venue.source_url,
+        spaces: spaceResult.results
+          .filter((space) => space.venue_id === venue.id)
+          .map((space) => ({
+            id: space.id,
+            venueId: space.venue_id,
+            name: space.name,
+            sourceUrl: space.source_url,
+            defaultAreaMode: space.default_area_mode,
+          })),
+      })),
+    };
+  }
+
+  async function createOrganizerVenue(input: {
+    id: string;
+    name: string;
+    sourceUrl: string | null;
+    createdByAccountId: string;
+    now: number;
+    initialSpace: {
+      id: string;
+      name: string;
+      sourceUrl: string | null;
+      defaultAreaMode: OrganizerVenueSpaceAreaMode;
+    };
+  }) {
+    await ensureTables();
+    try {
+      const results = await database.batch([
+        database.prepare(
+          `INSERT INTO organizer_venues (id, name, name_key, source_url, created_by, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+        ).bind(input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl, input.createdByAccountId, input.now),
+        database.prepare(
+          `INSERT INTO organizer_venue_spaces (
+             id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
+           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+        ).bind(
+          input.initialSpace.id, input.id, input.initialSpace.name,
+          organizerVenueNameKey(input.initialSpace.name), input.initialSpace.sourceUrl,
+          input.initialSpace.defaultAreaMode, input.createdByAccountId, input.now,
+        ),
+      ]);
+      return results.every((result) => result.meta.changes === 1)
+        ? { ok: true as const }
+        : { ok: false as const, reason: "conflict" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/unique constraint/i.test(message)) return { ok: false as const, reason: "duplicate" as const };
+      throw error;
+    }
+  }
+
+  async function createOrganizerVenueSpace(input: {
+    id: string;
+    venueId: string;
+    name: string;
+    sourceUrl: string | null;
+    defaultAreaMode: OrganizerVenueSpaceAreaMode;
+    createdByAccountId: string;
+    now: number;
+  }) {
+    await ensureTables();
+    try {
+      const result = await database.prepare(
+        `INSERT INTO organizer_venue_spaces (
+           id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
+         ) SELECT ?1, id, ?2, ?3, ?4, ?5, ?6, ?7
+           FROM organizer_venues WHERE id = ?8`,
+      ).bind(
+        input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl,
+        input.defaultAreaMode, input.createdByAccountId, input.now, input.venueId,
+      ).run();
+      return result.meta.changes === 1
+        ? { ok: true as const }
+        : { ok: false as const, reason: "not_found" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/unique constraint/i.test(message)) return { ok: false as const, reason: "duplicate" as const };
+      throw error;
+    }
+  }
 
   async function organizerRole(candidateId: string, accountId: string): Promise<OrganizerRole | null> {
     await ensureTables();
@@ -2519,10 +2653,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
-      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates",
+      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
+    await seedOrganizerVenueCatalog();
   }
 
   return {
@@ -2543,6 +2678,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
+    listOrganizerVenueCatalog, createOrganizerVenue, createOrganizerVenueSpace,
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,

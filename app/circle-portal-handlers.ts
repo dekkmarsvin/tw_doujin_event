@@ -23,6 +23,11 @@ import {
   organizerOnboardingIssues,
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
+import {
+  isOrganizerVenueSpaceAreaMode,
+  normalizeOrganizerVenueName,
+  normalizeOrganizerVenueSourceUrl,
+} from "./organizer-venue-catalog";
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
@@ -1628,6 +1633,92 @@ export function createCirclePortalHandlers({
     return { ok: true as const, current, admin, role };
   }
 
+  const organizerAuditRole = (access: {
+    admin: boolean;
+    role: "owner" | "editor" | "admin";
+  }) => access.admin ? "admin" as const
+    : access.role === "owner" ? "organizer_owner" as const
+      : "organizer_editor" as const;
+
+  async function listOrganizerVenues(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    return json(await repository.listOrganizerVenueCatalog());
+  }
+
+  async function createOrganizerVenue(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const initialSpace = body?.initialSpace && typeof body.initialSpace === "object" && !Array.isArray(body.initialSpace)
+      ? body.initialSpace as Record<string, unknown> : null;
+    const name = normalizeOrganizerVenueName(body?.name);
+    const sourceUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
+    const spaceName = normalizeOrganizerVenueName(initialSpace?.name);
+    const spaceSourceUrl = normalizeOrganizerVenueSourceUrl(initialSpace?.sourceUrl);
+    const defaultAreaMode = initialSpace?.defaultAreaMode ?? "imported";
+    if (!name || !spaceName || sourceUrl === undefined || spaceSourceUrl === undefined
+      || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
+      return json({ error: "請填寫場館名稱、使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
+    }
+    const venueId = `venue-${crypto.randomUUID()}`;
+    const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
+    const created = await repository.createOrganizerVenue({
+      id: venueId,
+      name,
+      sourceUrl,
+      createdByAccountId: access.current.accountId,
+      now: config.now(),
+      initialSpace: { id: venueSpaceId, name: spaceName, sourceUrl: spaceSourceUrl, defaultAreaMode },
+    });
+    if (!created.ok) {
+      return json({ error: created.reason === "duplicate" ? "這個場館或使用空間已經存在。" : "無法建立場館，請重新整理後再試。" }, 409);
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: organizerAuditRole(access),
+      action: "organizer_venue.created", subjectType: "organizer_venue", subjectId: venueId,
+      detail: { candidateId, venueSpaceId, defaultAreaMode }, ipHash: await clientIpHash(request),
+    });
+    return json({
+      venue: { id: venueId, name, sourceUrl },
+      space: { id: venueSpaceId, venueId, name: spaceName, sourceUrl: spaceSourceUrl, defaultAreaMode },
+    }, 201);
+  }
+
+  async function createOrganizerVenueSpace(request: Request, candidateId: string, venueId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    const name = normalizeOrganizerVenueName(body?.name);
+    const sourceUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
+    const defaultAreaMode = body?.defaultAreaMode ?? "imported";
+    if (!name || sourceUrl === undefined || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
+      return json({ error: "請填寫使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
+    }
+    const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
+    const created = await repository.createOrganizerVenueSpace({
+      id: venueSpaceId,
+      venueId,
+      name,
+      sourceUrl,
+      defaultAreaMode,
+      createdByAccountId: access.current.accountId,
+      now: config.now(),
+    });
+    if (!created.ok) {
+      const error = created.reason === "not_found" ? "找不到這個場館。" : "這個使用空間已經存在。";
+      return json({ error }, created.reason === "not_found" ? 404 : 409);
+    }
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId,
+      actorRole: organizerAuditRole(access),
+      action: "organizer_venue_space.created", subjectType: "organizer_venue_space", subjectId: venueSpaceId,
+      detail: { candidateId, venueId, defaultAreaMode }, ipHash: await clientIpHash(request),
+    });
+    return json({ space: { id: venueSpaceId, venueId, name, sourceUrl, defaultAreaMode } }, 201);
+  }
+
   async function adminCreateOrganizerCandidate(request: Request) {
     const gate = await requireFreshAdmin(request);
     if (!gate.ok) return gate.response;
@@ -2374,6 +2465,7 @@ export function createCirclePortalHandlers({
     // published event this deployment serves — would refuse every one of them.
     // Authority comes from the candidate's own grant, checked in each handler.
     adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate,
+    listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace,
     updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
