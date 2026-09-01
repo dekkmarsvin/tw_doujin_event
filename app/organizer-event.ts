@@ -146,10 +146,14 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
   const assignments: OrganizerVenueAssignment[] = [];
   for (const assignment of value.venue.assignments) {
     if (!record(assignment) || !Array.isArray(assignment.areaIds)) return null;
+    const hasAreaMode = Object.prototype.hasOwnProperty.call(assignment, "areaMode");
+    if (hasAreaMode && assignment.areaMode !== "imported" && assignment.areaMode !== "none") return null;
+    const areaIds = assignment.areaIds.map(text);
+    if (assignment.areaMode === "none" && (areaIds.length !== 1 || areaIds[0] !== "ALL")) return null;
     assignments.push({
       venueId: text(assignment.venueId),
       venueSpaceId: text(assignment.venueSpaceId),
-      areaIds: assignment.areaIds.map(text),
+      areaIds,
       mapTemplate: text(assignment.mapTemplate) || "TAIWAN_GENERIC_V1",
       ...(assignment.areaMode === "imported" || assignment.areaMode === "none"
         ? { areaMode: assignment.areaMode }
@@ -200,10 +204,13 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
     if (assignment.areaMode !== undefined && assignment.areaMode !== "imported" && assignment.areaMode !== "none") {
       add({ severity: "error", step: "venue", code: "invalid_area_mode", row: row + 1, target: `venue.assignments.${row}.areaMode`, message: "展區方式無效，請重新選擇。" });
     }
+    if (assignment.areaMode === "none" && (assignment.areaIds.length !== 1 || assignment.areaIds[0] !== "ALL")) {
+      add({ severity: "error", step: "venue", code: "invalid_no_division_areas", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "無分區的使用空間必須使用 ALL，請重新選擇展區方式。" });
+    }
     if (assignment.areaIds.some((area) => !AREA_ID.test(area))) {
       add({ severity: "error", step: "venue", code: "invalid_area", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "匯入的展區代碼格式無效。" });
     }
-    if (spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: `場館空間 ${assignment.venueSpaceId} 重複。` });
+    if (spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "同一個使用空間重複選取。" });
     spaces.add(assignment.venueSpaceId);
   });
   if (!draft.officialSource.label) add({ severity: "error", step: "event", code: "missing_source", target: "officialSource.label", message: "請說明主辦資料來源。" });

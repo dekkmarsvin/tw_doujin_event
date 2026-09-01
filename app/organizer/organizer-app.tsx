@@ -162,6 +162,25 @@ function organizerVenueSpaceLabel(catalog: OrganizerVenueCatalog, venueSpaceId: 
   return "原使用空間已不存在";
 }
 
+function organizerIssueMessage(
+  issue: { code: string; message: string; target?: string },
+  catalog: OrganizerVenueCatalog,
+  draft: OrganizerEventDraft,
+) {
+  if (issue.code === "missing_space_import" && issue.target) {
+    return `匯入資料沒有包含 ${organizerVenueSpaceLabel(catalog, issue.target)} 的攤位。`;
+  }
+  if (issue.code === "missing_map" && issue.target) {
+    const [dayId, venueSpaceId] = issue.target.split("/");
+    const day = draft.event.days.find((item) => item.id === dayId);
+    return `缺少 ${day?.label ?? "活動日"}・${organizerVenueSpaceLabel(catalog, venueSpaceId)} 的地圖。`;
+  }
+  if (issue.target && issue.code.startsWith("stale_import_")) {
+    return `${organizerVenueSpaceLabel(catalog, issue.target)}：${issue.message}`;
+  }
+  return issue.message;
+}
+
 function organizerGuidedDraftIssues(draft: OrganizerEventDraft, task: OrganizerGuidedTask, catalog: OrganizerVenueCatalog) {
   const issues = organizerGuidedTaskIssues(draft, task);
   return task === "venue"
@@ -432,6 +451,7 @@ function WorkspaceSurface({
   const [liveDraft, setLiveDraft] = useState(detail.draft);
   const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
   const [liveDirty, setLiveDirty] = useState(false);
+  const activeLiveSection = section === "venue" ? "venue" : section === "event" ? "event" : undefined;
   return <>
     <div className={styles.workspaceHead}>
       <div><p className={styles.contextLine}>{ROLE_LABEL[detail.event.role] ?? detail.event.role}・{STATUS_LABEL[detail.event.status]}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
@@ -452,7 +472,7 @@ function WorkspaceSurface({
         persistLocation={persistLocation}
         setNotice={setNotice}
       />
-      <ReadinessRail detail={detail} onSection={onSection} compact liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} />
+      <ReadinessRail detail={detail} onSection={onSection} compact liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={guidedTask === "venue" ? "venue" : "event"} />
     </div> : <>
       {detail.workspace.mode === "guided" && <div className={styles.guideBanner}>
         <div><strong>你正在查看全部項目</strong><p>下次登入仍會回到上次的基本設定步驟。</p></div>
@@ -461,8 +481,12 @@ function WorkspaceSurface({
       <ol className={styles.steps} aria-label="活動項目">
         {ORGANIZER_WORKSPACE_SECTIONS.map((item, index) => {
           const state = detail.workspace.readiness.sections.find((entry) => entry.id === item)?.state ?? "available";
+          const liveIndex = activeLiveSection ? ORGANIZER_WORKSPACE_SECTIONS.indexOf(activeLiveSection) : -1;
+          const liveLabel = liveDirty && activeLiveSection
+            ? item === activeLiveSection ? "尚未儲存" : index > liveIndex ? "需先儲存" : READINESS_LABEL[state]
+            : READINESS_LABEL[state];
           return <li key={item}><button type="button" aria-current={item === section ? "step" : undefined} onClick={() => onSection(item)}>
-            <span className={styles.stepNumber}>{index + 1}</span><span>{SECTION_LABEL[item]}<small>{READINESS_LABEL[state]}</small></span>
+            <span className={styles.stepNumber}>{index + 1}</span><span>{SECTION_LABEL[item]}<small>{liveLabel}</small></span>
           </button></li>;
         })}
       </ol>
@@ -475,9 +499,10 @@ function WorkspaceSurface({
           onChanged={onChanged}
           onDirtyChange={onDirtyChange}
           onDraftSaveReady={onDraftSaveReady}
+          onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
           setNotice={setNotice}
         />
-        <ReadinessRail detail={detail} onSection={onSection} />
+        <ReadinessRail detail={detail} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />
       </div>
     </>}
   </>;
@@ -551,38 +576,54 @@ function GuidedTaskStation({
   </section>;
 }
 
-function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenueCatalog, liveDirty = false }: {
+function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenueCatalog, liveDirty = false, liveSection }: {
   detail: OrganizerEventDetail;
   onSection: (section: OrganizerWorkspaceSection) => void;
   compact?: boolean;
   liveDraft?: OrganizerEventDraft;
   liveVenueCatalog?: OrganizerVenueCatalog;
   liveDirty?: boolean;
+  liveSection?: "event" | "venue";
 }) {
   const readiness = detail.workspace.readiness;
-  const liveVenueIssues = liveDraft && liveDirty
-    ? organizerGuidedDraftIssues(liveDraft, "venue", liveVenueCatalog ?? detail.venueCatalog)
+  const catalog = liveVenueCatalog ?? detail.venueCatalog;
+  const liveEventIssues = liveDraft && liveDirty
+    ? [...organizerGuidedDraftIssues(liveDraft, "identity_source", catalog), ...organizerGuidedDraftIssues(liveDraft, "days", catalog)]
     : [];
-  const blockers = liveDraft && liveDirty
+  const liveVenueIssues = liveDraft && liveDirty ? organizerGuidedDraftIssues(liveDraft, "venue", catalog) : [];
+  const liveIssues = [...liveEventIssues, ...liveVenueIssues];
+  const blockers = liveDraft && liveDirty && liveSection
     ? [
-      ...readiness.blockers.filter((blocker) => blocker.section !== "venue"),
-      ...(liveVenueIssues.length > 0
-        ? liveVenueIssues.map((issue) => ({ section: "venue" as const, code: issue.code, message: issue.message }))
-        : [{ section: "venue" as const, code: "unsaved_venue", message: "場館與使用空間已選好，尚未儲存。" }]),
+      ...liveIssues.map((issue) => ({ section: issue.step === "venue" ? "venue" as const : "event" as const, code: issue.code, message: issue.message, target: issue.target })),
+      ...((liveSection === "venue" ? liveVenueIssues : liveEventIssues).length > 0
+        ? []
+        : [{
+          section: liveSection,
+          code: `unsaved_${liveSection}`,
+          message: liveSection === "venue" ? "場館與使用空間已選好，尚未儲存。" : "活動基本資料已修改，尚未儲存。",
+        }]),
     ]
     : readiness.blockers;
   const visibleBlockers = blockers.slice(0, compact ? 3 : 5);
+  const currentSavedState = liveSection
+    ? readiness.sections.find((item) => item.id === liveSection)?.state
+    : undefined;
+  const completed = liveDirty && currentSavedState === "complete" ? readiness.completed - 1 : readiness.completed;
+  const nextSection = liveDirty && liveSection ? liveSection : readiness.suggestedNextSection;
+  const liveSectionIndex = liveSection ? ORGANIZER_WORKSPACE_SECTIONS.indexOf(liveSection) : -1;
   return <aside className={styles.readiness} aria-label="活動建置狀態">
-    <div className={styles.readinessHead}><h3>建置狀態</h3><strong>{readiness.completed}/{readiness.total}</strong></div>
+    <div className={styles.readinessHead}><h3>建置狀態</h3><strong>{completed}/{readiness.total}</strong></div>
     <p>最後儲存 {new Date(detail.event.updatedAt).toLocaleString("zh-TW")}</p>
-    <button type="button" className={styles.nextAction} onClick={() => onSection(readiness.suggestedNextSection)}>
-      下一步：{SECTION_LABEL[readiness.suggestedNextSection]}
+    <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
+      下一步：{SECTION_LABEL[nextSection]}
     </button>
     <div className={styles.readinessList}>{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
-      <span>{SECTION_LABEL[item.id]}</span><small data-state={item.state}>{liveDirty && item.id === "venue" ? "尚未儲存" : READINESS_LABEL[item.state]}</small>
+      <span>{SECTION_LABEL[item.id]}</span><small data-state={item.state}>{liveDirty && liveSection
+        ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
+        : READINESS_LABEL[item.state]}</small>
     </button>)}</div>
     <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>目前沒有待修正項目。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
-      <strong>{SECTION_LABEL[blocker.section]}</strong><span>{blocker.message}</span>
+      <strong>{SECTION_LABEL[blocker.section]}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>
     </button>)}</div>
     {blockers.length > visibleBlockers.length && <p>另有 {blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}
   </aside>;
@@ -608,16 +649,17 @@ function CreateEntry({ onCreated }: { onCreated: (id: string) => Promise<void> }
   </form>;
 }
 
-function StepContent({ session, detail, section, onChanged, onDirtyChange, onDraftSaveReady, setNotice }: {
+function StepContent({ session, detail, section, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange, setNotice }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   section: OrganizerWorkspaceSection;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  onDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
   setNotice: (notice: Notice) => void;
 }) {
-  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} setNotice={setNotice} />;
+  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} setNotice={setNotice} />;
   if (section === "import") return <ImportPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
   if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
   if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
@@ -771,7 +813,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
   const uncovered = prepared
     ? detail.draft.venue.assignments
       .filter((assignment) => !derived.some((space) => space.venueSpaceId === assignment.venueSpaceId))
-      .map((assignment) => assignment.venueSpaceId)
+      .map((assignment) => organizerVenueSpaceLabel(detail.venueCatalog, assignment.venueSpaceId))
     : [];
   const sheet = sheets.find((item) => item.name === sheetName) ?? null;
   const header = sheet?.rows[headerRow - 1]?.cells ?? [];
@@ -1168,7 +1210,7 @@ function ValidationPanel({ detail, onChanged, setNotice }: { detail: OrganizerEv
       <button type="button" className={styles.ghost} onClick={() => void previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }).catch((error) => setNotice({ kind: "error", message: message(error) }))}>建立預覽</button>
     </div></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
-    {issues?.map((issue, index) => <p key={`${issue.code}-${index}`} className={issue.severity === "error" ? styles.issueError : styles.issueWarning}><b>{STEP_LABEL[issue.step]}</b> {issue.message}</p>)}
+    {issues?.map((issue, index) => <p key={`${issue.code}-${index}`} className={issue.severity === "error" ? styles.issueError : styles.issueWarning}><b>{STEP_LABEL[issue.step]}</b> {organizerIssueMessage(issue, detail.venueCatalog, detail.draft)}</p>)}
     {preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}
   </section>;
 }

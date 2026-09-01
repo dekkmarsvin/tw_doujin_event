@@ -12,9 +12,9 @@ const vite = await createServer({
 });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { isOrganizerAreaId, validateOrganizerEventDraft, withOrganizerImportedAreaIds } =
+const { isOrganizerAreaId, parseOrganizerEventDraft, serializeOrganizerEventDraft, validateOrganizerEventDraft, withOrganizerImportedAreaIds } =
   await environment.runner.import("/app/organizer-event.ts");
-const { getOrganizerWorkspacePrerequisiteIssues, organizerGuidedTaskIssues } =
+const { getOrganizerWorkspacePrerequisiteIssues, organizerGuidedTaskIssues, validateOrganizerImportedRowsAgainstDraft } =
   await environment.runner.import("/app/organizer-workspace.ts");
 after(async () => { await vite.close(); });
 
@@ -102,4 +102,37 @@ test("a no-division assignment keeps ALL but still needs an imported booth row",
     maps: [],
   });
   assert.equal(covered.some((issue) => issue.code === "missing_space_import"), false);
+});
+
+test("area mode parsing rejects explicit unknown values and enforces the no-division ALL invariant", () => {
+  const legacy = draft([space("hall-a", ["A"])]);
+  assert.deepEqual(parseOrganizerEventDraft(legacy), legacy);
+  assert.equal(serializeOrganizerEventDraft(draft([{ ...space("hall-a", ["A"]), areaMode: "unknown" }])), null);
+  assert.equal(serializeOrganizerEventDraft(draft([space("whole-hall", [], "none")])), null);
+  assert.deepEqual(
+    validateOrganizerEventDraft(draft([space("whole-hall", [], "none")]))
+      .filter((issue) => issue.code === "invalid_no_division_areas")
+      .map((issue) => issue.step),
+    ["venue"],
+  );
+});
+
+test("persisted import rows are revalidated after day, space, or area-mode edits", () => {
+  const divided = draft([space("hall-a", ["A"], "imported")]);
+  const stored = [{ sourceRow: 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A" }];
+  assert.deepEqual(validateOrganizerImportedRowsAgainstDraft(divided, stored), []);
+
+  const noDivision = draft([space("hall-a", ["ALL"], "none")]);
+  assert.deepEqual(
+    validateOrganizerImportedRowsAgainstDraft(noDivision, stored).map((issue) => issue.code),
+    ["stale_import_area_mode"],
+  );
+  assert.deepEqual(
+    validateOrganizerImportedRowsAgainstDraft(draft([]), stored).map((issue) => issue.code),
+    ["stale_import_space"],
+  );
+  assert.deepEqual(
+    validateOrganizerImportedRowsAgainstDraft({ ...divided, event: { ...divided.event, days: [] } }, stored).map((issue) => issue.code),
+    ["stale_import_day"],
+  );
 });

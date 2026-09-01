@@ -13,7 +13,7 @@ import {
 import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
 import {
   createEmptyOrganizerEventDraft, parseOrganizerEventDraft, serializeOrganizerEventDraft,
-  type OrganizerValidationIssue,
+  type OrganizerEventDraft,
 } from "./organizer-event";
 import {
   evaluateOrganizerWorkspaceReadiness,
@@ -21,6 +21,7 @@ import {
   isOrganizerGuidedTask,
   isOrganizerWorkspaceSection,
   organizerOnboardingIssues,
+  validateOrganizerImportedRowsAgainstDraft,
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import {
@@ -1960,10 +1961,7 @@ export function createCirclePortalHandlers({
     return json({ ok: true, mode: "binder", onboardingCompletedAt: result.completedAt });
   }
 
-  async function validateOrganizerWorkspace(candidateId: string, draft: ReturnType<typeof parseOrganizerEventDraft>) {
-    if (!draft) return { issues: [{
-      severity: "error", step: "event", code: "invalid_draft", message: "活動資料格式無效，請聯絡網站管理者。",
-    }] satisfies OrganizerValidationIssue[], imported: null, maps: [], contents: new Map<string, string>() };
+  async function validateOrganizerWorkspace(candidateId: string, draft: OrganizerEventDraft) {
     const [imported, maps] = await Promise.all([
       repository.getOrganizerImport(candidateId), repository.listOrganizerMapDrafts(candidateId),
     ]);
@@ -1973,9 +1971,16 @@ export function createCirclePortalHandlers({
       importedVenueSpaceIds: imported?.rows.map((row) => row.venue_space_id),
       maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
     });
-    issues.push(...validateOrganizerVenueCatalogAssignments(
-      draft.venue.assignments,
-      await repository.listOrganizerVenueCatalog(),
+    const venueCatalog = await repository.listOrganizerVenueCatalog();
+    issues.push(...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, venueCatalog));
+    issues.push(...validateOrganizerImportedRowsAgainstDraft(
+      draft,
+      (imported?.rows ?? []).map((row) => ({
+        sourceRow: row.source_row,
+        dayId: row.day_id,
+        venueSpaceId: row.venue_space_id,
+        areaId: row.area_id,
+      })),
     ));
     // The candidate, its import and every map body are read exactly once here.
     // Resolving scope per day × venue-space used to reload the candidate and
@@ -2016,7 +2021,7 @@ export function createCirclePortalHandlers({
         }
       }
     }
-    return { issues, imported, maps, contents };
+    return { issues, imported, maps, contents, venueCatalog };
   }
 
   async function putOrganizerImport(request: Request, candidateId: string) {
@@ -2323,7 +2328,7 @@ export function createCirclePortalHandlers({
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     // The snapshot is hashed from the same bytes validation just read, so a
     // second load cannot let the two disagree about what was approved.
-    const { issues, imported, maps, contents } = await validateOrganizerWorkspace(candidateId, draft);
+    const { issues, imported, maps, contents, venueCatalog } = await validateOrganizerWorkspace(candidateId, draft);
     if (issues.some((issue) => issue.severity === "error")) return json({ error: "請先修正待修正項目。", issues }, 422);
     const mapSnapshots = maps.map((map) => {
       const stored = contents.get(map.id);
@@ -2336,6 +2341,21 @@ export function createCirclePortalHandlers({
     const snapshotJson = JSON.stringify({
       schema: "organizer-submission-snapshot/1", candidateId, candidateVersion: expectedVersion,
       eventId: draft.event.id, draft,
+      venueReferences: {
+        schema: "organizer-venue-reference-snapshot/1",
+        venues: venueCatalog.venues
+          .filter((venue) => draft.venue.assignments.some((assignment) => assignment.venueId === venue.id))
+          .map((venue) => ({
+            id: venue.id,
+            name: venue.name,
+            sourceUrl: venue.sourceUrl,
+            spaces: venue.spaces
+              .filter((space) => draft.venue.assignments.some((assignment) => assignment.venueSpaceId === space.id))
+              .map((space) => ({ ...space }))
+              .sort((a, b) => a.id.localeCompare(b.id, "en")),
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id, "en")),
+      },
       import: imported ? {
         source: {
           fileName: imported.source.file_name, worksheet: imported.source.worksheet,
@@ -2386,6 +2406,7 @@ export function createCirclePortalHandlers({
     if (!snapshot) return json({ error: "找不到這一版的送審內容。" }, 409);
     if (decision === "approve") {
       const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+      if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
       const { issues } = await validateOrganizerWorkspace(candidateId, draft);
       if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
     }

@@ -17,12 +17,12 @@
 
 ## 引導式任務站與活動建置冊
 
-- 新候選活動先進入三項真實資料任務：活動識別與官方來源、活動日期、場館空間與展區。任務進度直接篩選 `validateOrganizerEventDraft()` 的 issue，不另有一套 Wizard 驗證。
+- 新候選活動先進入三項真實資料任務：活動識別與官方來源、活動日期、場館與使用空間。任務進度直接篩選 `validateOrganizerEventDraft()` 的 issue，不另有一套 Wizard 驗證。
 - 三項基礎設定通過後，`POST /api/organizer/events/:candidateId/workspace/complete-onboarding` 以 `expectedVersion` 再次檢查已保存草稿，成功後永久進入活動建置冊。成功回應遺失後可用任何舊版本重送，仍會冪等回傳既有 binder 狀態；後續資料錯誤只顯示為需要處理，不會退回引導。
 - 「查看全部項目」不完成 onboarding；它只暫時打開六個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
 - 表單有未儲存變更時，切換活動、引導任務或建置冊區段會提供「儲存並切換／放棄／取消」；離開瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
-- 建置冊直接開放活動、場館與展區、攤位匯入、地圖、驗證與預覽、送審與發布六區。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。
+- 建置冊直接開放活動、場館與使用空間、攤位匯入、地圖、驗證與預覽、送審與發布六區。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
 - 六區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列；地圖要求完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則；驗證只在 `last_validated_version` 等於目前 candidate version 時完成；送審後 review 才完成。
 
 ## 邀請制，不能自助開活動
@@ -51,12 +51,14 @@ draft → submitted → approved → publishing → published
 | 區塊 | 內容 | 規則 |
 |---|---|---|
 | `event` | `id`、`name`、`days[]` | `id` 只允許小寫英數與連字號；每個活動日需要 id、名稱與 `YYYY-MM-DD` 日期，id 不得重複 |
-| `venue.assignments` | `venueId`、`venueSpaceId`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複；`areaIds` 由匯入帶入，草稿層只檢查格式 |
+| `venue.assignments` | `venueId`、`venueSpaceId`、`areaMode`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複且必須屬於所選場館；`areaMode` 為 `imported` 或 `none`；`none` 必須且只能保存 `areaIds: ["ALL"]` |
 | `officialSource` | `label`、`url` | 來源說明必填；網址若填寫必須是 HTTPS |
 
 新增活動日時，表單預設第一日為作者當地的今天，之後每一日為最後一個有日期的活動日加一天；新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
-`areaIds` **不在場館表單手填**。展區是攤位名單的事實，設定場館時主辦手上還沒有那份名單，所以介面只顯示目前的值，實際值由匯入推導（見[攤位匯入](#攤位匯入)）。草稿驗證只檢查已存在的展區代碼格式；「每個場館空間至少要有一個展區」改由 prerequisite evaluator 在**有匯入資料之後**以 `import`／`missing_area` 回報，因此設定場館的當下不會出現主辦無從修正的錯誤。
+`venueId` 與 `venueSpaceId` 是系統保存的 stable ID，介面不要求主辦輸入。主辦先從共用場館目錄選擇場館，再從該場館的使用空間下拉選擇；找不到時可以立即建立新場館與第一個使用空間，或在既有場館立即新增使用空間。每筆目錄資料都要求官方 HTTPS 來源，建立與 audit 在同一個 D1 transaction；新資料只是候選控制面的來源記錄，不會因此自動成為已發布 reference pin。
+
+`areaIds` **不在場館表單手填**。`areaMode` 是每場活動自己的選擇，場館目錄的 `defaultAreaMode` 只提供新增 assignment 時的預設。`imported` 的展區是攤位名單事實，由匯入推導；`none` 代表這場活動在該使用空間沒有分區，匯入不用對應展區欄，系統固定保存 `ALL`。有匯入資料後，prerequisite 以 `missing_space_import` 指出未被檔案涵蓋的使用空間。
 
 `mapTemplate` 的值域是 `listMapTemplateOptions()`，介面以下拉選單呈現並預覽這個選擇的後果（能否自動辨識配置圖、存檔時依什麼檢查）。草稿裡不在清單內的既有值會原樣保留為額外選項，不被靜默改寫。
 
@@ -64,9 +66,10 @@ draft → submitted → approved → publishing → published
 
 - **原始檔只在瀏覽器裡解析與雜湊。** `readOrganizerWorkbook()` 讀 CSV 或 XLSX、列出工作表、保留實體列號；沒有任何 API 接受這個 File。
 - `PUT /api/organizer/events/:candidateId/imports` 只收主辦確認過的**正規化資料列**與來源 metadata（檔名、工作表、原始檔 SHA-256、來源說明、欄位 mapping）。
-- 每一列的 `dayId`、`venueSpaceId` 與 `areaId` 必須落在草稿已宣告的集合內；同一活動日 × 場館空間 × 攤位代碼不得重複（大小寫不敏感）。
+- 每一列的 `dayId`、`venueSpaceId` 與 `areaId` 必須落在草稿已宣告的集合內；`areaMode: none` 的列會被正規化為 `ALL`，不讀來源檔的展區值；同一活動日 × 場館空間 × 攤位代碼不得重複（大小寫不敏感）。
 - **展區由這份檔案決定。** 預覽會列出檔案裡每個場館空間出現的展區與列數；主辦按下確認時，介面先把這些展區寫進草稿（一次正常的 `expectedVersion` 儲存），再以新版本送出匯入。API 端「未宣告的展區一律拒絕」的規則不變——被宣告的來源換成同一份檔案。
-- 展區的推導與匯入一樣是**取代**語意：草稿裡有、但這份檔案沒有提到的場館空間會被清空展區，因此 prerequisite 的 `missing_area` 會指出它，而不是讓它帶著上一份檔案留下的展區看起來仍有攤位。預覽會先提醒哪些場館空間沒出現在檔案裡。
+- 展區的推導與匯入一樣是**取代**語意：草稿裡有、但這份檔案沒有提到的分區空間會被清空展區；無分區空間仍固定為 `ALL`。prerequisite 的 `missing_space_import` 會指出沒有任何匯入列的使用空間。預覽會先以場館與使用空間名稱提醒哪些空間沒出現在檔案裡。
+- 保存匯入後若再移除活動日、移除使用空間、切換展區方式或改變已宣告展區，validate、preview 與 submit 都會逐列反查既有匯入資料並要求重新匯入；舊列不會以 orphan space 或過期展區進入送審 snapshot。
 - 檔案裡出現草稿沒有的場館空間，或展區代碼不是英數字、底線與連字號（它會進公開網址）時，預覽直接擋下儲存並指出要修的是來源檔還是場館設定。
 - `identityGroup` 只能是 `stable:<stableKey>` 或 `null`。**名稱相同不構成同一社團**，與[社團目錄契約](./circle-catalog.md)的 linkage 規則一致。
 - 匯入是**取代**語意：一次請求就是這個候選活動的完整攤位表。新來源寫入時，前一份標記 `replaced_at`，其資料列不再是有效匯入。
@@ -84,7 +87,7 @@ draft → submitted → approved → publishing → published
 
 - `POST …/validate` 回傳 `issues[]`，每筆帶 `severity`、`step`（`event`／`venue`／`import`／`map`／`preview`）、`code`，必要時帶 `row` 或 `target`。缺任何一份「活動日 × venue-space」地圖是 error，不是 warning。成功時只把 workspace 的 `last_validated_version` 記為目前版本；不增加 candidate version，也不建立內容 revision。任何後續內容寫入使版本前進後，這個完成狀態自然失效；若版本在 validation 與 marker 寫入之間前進，API 回 409 並要求重新驗證，不會對舊版回報成功。
 - `POST …/preview` 回傳 `organizer-reader-preview/1`：草稿、匯入的配置與每份地圖 layout，供 Reader 樣式預覽。它不寫入任何資料。
-- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。送審會固定一份 `organizer-submission-snapshot/1`（草稿、匯入來源 metadata、全部資料列與每份地圖內容），以其 SHA-256 作為 approval hash。
+- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。送審會固定一份 `organizer-submission-snapshot/1`（草稿、所選場館與使用空間的完整名稱／官方來源記錄、匯入來源 metadata、全部資料列與每份地圖內容），以其 SHA-256 作為 approval hash。這使候選 review 不會隱性讀取日後新增的 catalog 狀態；發布仍必須把 snapshot 內的來源記錄轉成 data repository 中經 review 的 reference records、selection 與 commit/hash pin，不能直接把 D1 catalog 當成公開 reference data。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
 - `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以 fresh session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。

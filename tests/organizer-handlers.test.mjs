@@ -224,6 +224,11 @@ test("candidate updates reject missing and mismatched venue catalog references",
   });
   assert.equal(mismatch.status, 422);
   assert.equal((await mismatch.json()).issues[0].code, "venue_space_mismatch");
+
+  const invalidMode = await save({ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "unknown" });
+  assert.equal(invalidMode.status, 400);
+  const invalidNoDivision = await save({ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "none" });
+  assert.equal(invalidNoDivision.status, 400);
 });
 
 test("organizer onboarding persists real progress and completes without a candidate revision", async () => {
@@ -439,6 +444,22 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 5 }, ownerCookie,
   ), candidateId);
   assert.equal(submitted.status, 200);
+  const submissionSnapshot = JSON.parse((await repository.getOrganizerSubmissionSnapshot(candidateId, 5)).snapshot_json);
+  assert.deepEqual(submissionSnapshot.venueReferences, {
+    schema: "organizer-venue-reference-snapshot/1",
+    venues: [{
+      id: VENUE_ID,
+      name: "花博公園爭艷館",
+      sourceUrl: "https://www.expopark.taipei/FieldInfo_Detail.aspx?n=205&s=1",
+      spaces: [{
+        id: VENUE_SPACE_ID,
+        venueId: VENUE_ID,
+        name: "全館",
+        sourceUrl: "https://ws.expopark.taipei/Download.ashx?u=LzAwMS9VcGxvYWQvNDAwL3JlbGZpbGUvOTAyMi8xLzQzNGEzOWM4LWZlMWYtNDIxMi05MDc3LWJhZGY0NDc2NTI5ZS5wZGY%3d&n=6Iqx5Y2a5YWs5ZyS54it6Im36aSo5bGV5Y2A5bmz6Z2i6YWN572u5ZyWLnBkZg%3d%3d",
+        defaultAreaMode: "none",
+      }],
+    }],
+  });
 
   const approved = await handlers.adminReviewOrganizerCandidate(request(
     `/api/admin/organizer/events/${candidateId}/review`, "POST",
@@ -489,6 +510,21 @@ test("import API persists confirmed normalized rows and rejects stale versions",
   ), candidateId);
   assert.equal(stale.status, 409);
   assert.equal((await stale.json()).conflict.currentVersion, 3);
+
+  const changedAreaMode = await handlers.updateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "PATCH", {
+      expectedVersion: 3,
+      draft: {
+        ...draft,
+        venue: { assignments: [{ ...draft.venue.assignments[0], areaMode: "none", areaIds: ["ALL"] }] },
+      },
+    }, ownerCookie,
+  ), candidateId);
+  assert.equal(changedAreaMode.status, 200);
+  const revalidated = await handlers.validateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}/validate`, "POST", {}, ownerCookie,
+  ), candidateId);
+  assert.equal((await revalidated.json()).issues.some((issue) => issue.code === "stale_import_area_mode"), true);
 });
 
 test("import API tells the organizer which limit rejected the batch", async () => {

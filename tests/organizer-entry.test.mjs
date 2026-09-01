@@ -37,6 +37,10 @@ test("venue authoring uses human selections, immediate creation, and no-division
   assert.match(app, /找不到空間？立即新增/);
   assert.match(app, /無分區（ALL）/);
   assert.match(app, /尚未儲存/);
+  assert.match(app, /onDraftStateChange=.*setLiveDraft/);
+  assert.match(app, /liveSection=\{activeLiveSection\}/);
+  assert.match(app, /需先儲存/);
+  assert.match(app, /organizerIssueMessage/);
   assert.doesNotMatch(app, /<label>場館 ID|<label>場館空間 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
 });
 
