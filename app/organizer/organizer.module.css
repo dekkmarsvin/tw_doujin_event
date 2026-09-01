@@ -118,7 +118,9 @@
 .fieldHeads small { color: var(--muted); font-size: 10px; }
 .inlineEmpty { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 14px; background: var(--paper); }
 .inlineEmpty p { margin: 0; }
-.venueCard { display: grid; grid-template-columns: 1fr 1fr 1fr 1.7fr auto; gap: 12px; align-items: end; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }
+.venueCard { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr 1.7fr auto; gap: 12px; align-items: end; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }
+.catalogCreator { margin: 16px 0; border: 1px solid var(--line); border-radius: 9px; padding: 16px; background: var(--paper); }
+.catalogCreator .formGrid { margin: 12px 0; }
 .derivedField { display: grid; gap: 7px; font-size: 12px; font-weight: 700; }
 .derivedField strong { min-height: 38px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 0 11px; background: var(--paper); font-weight: 400; }
 .derivedField small { color: var(--muted); font-weight: 400; }

@@ -14,6 +14,8 @@ import {
   createOrganizerEvent,
   createOrganizerMap,
   completeOrganizerOnboarding,
+  createOrganizerVenue,
+  createOrganizerVenueSpace,
   listOrganizerEvents,
   listOrganizerMaps,
   manageOrganizerEditor,
@@ -35,6 +37,13 @@ import {
   type OrganizerMapSummary,
   type OrganizerReaderPreview,
 } from "../organizer-client";
+import {
+  validateOrganizerVenueCatalogAssignments,
+  type OrganizerVenueCatalog,
+  type OrganizerVenueCatalogSpace,
+  type OrganizerVenueCatalogVenue,
+  type OrganizerVenueSpaceAreaMode,
+} from "../organizer-venue-catalog";
 import {
   buildOrganizerImportMetadata,
   prepareOrganizerImport,
@@ -77,7 +86,7 @@ type PendingNavigation = { description: string; run: () => void };
 const IDLE: Notice = { kind: "idle", message: "" };
 const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
   event: "活動",
-  venue: "場館與展區",
+  venue: "場館與使用空間",
   import: "攤位匯入",
   map: "地圖",
   validate: "檢查與預覽",
@@ -86,7 +95,7 @@ const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
 const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
   identity_source: "活動名稱與來源",
   days: "活動日期",
-  venue: "場館與展區",
+  venue: "場館與使用空間",
 };
 const READINESS_LABEL = {
   complete: "已完成",
@@ -107,7 +116,7 @@ const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
 const ROLE_LABEL: Record<string, string> = { owner: "負責人", editor: "協作者", admin: "網站管理者", system: "系統" };
 const STEP_LABEL: Record<OrganizerValidationIssue["step"], string> = {
   event: "活動",
-  venue: "場館與展區",
+  venue: "場館與使用空間",
   import: "攤位匯入",
   map: "地圖",
   preview: "預覽",
@@ -143,6 +152,21 @@ function mapTemplatePreview(template: string) {
 
 function message(error: unknown) {
   return error instanceof PortalError || error instanceof Error ? error.message : "操作失敗，請稍後再試。";
+}
+
+function organizerVenueSpaceLabel(catalog: OrganizerVenueCatalog, venueSpaceId: string) {
+  for (const venue of catalog.venues) {
+    const space = venue.spaces.find((item) => item.id === venueSpaceId);
+    if (space) return `${venue.name}・${space.name}`;
+  }
+  return "原使用空間已不存在";
+}
+
+function organizerGuidedDraftIssues(draft: OrganizerEventDraft, task: OrganizerGuidedTask, catalog: OrganizerVenueCatalog) {
+  const issues = organizerGuidedTaskIssues(draft, task);
+  return task === "venue"
+    ? [...issues, ...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, catalog)]
+    : issues;
 }
 
 function takeLoginToken() {
@@ -405,6 +429,9 @@ function WorkspaceSurface({
   setNotice: (notice: Notice) => void;
 }) {
   const guided = detail.workspace.mode === "guided" && !showAllTasks;
+  const [liveDraft, setLiveDraft] = useState(detail.draft);
+  const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
+  const [liveDirty, setLiveDirty] = useState(false);
   return <>
     <div className={styles.workspaceHead}>
       <div><p className={styles.contextLine}>{ROLE_LABEL[detail.event.role] ?? detail.event.role}・{STATUS_LABEL[detail.event.status]}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
@@ -421,10 +448,11 @@ function WorkspaceSurface({
         onChanged={onChanged}
         onDirtyChange={onDirtyChange}
         onDraftSaveReady={onDraftSaveReady}
+        onLiveDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
         persistLocation={persistLocation}
         setNotice={setNotice}
       />
-      <ReadinessRail detail={detail} onSection={onSection} compact />
+      <ReadinessRail detail={detail} onSection={onSection} compact liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} />
     </div> : <>
       {detail.workspace.mode === "guided" && <div className={styles.guideBanner}>
         <div><strong>你正在查看全部項目</strong><p>下次登入仍會回到上次的基本設定步驟。</p></div>
@@ -456,7 +484,7 @@ function WorkspaceSurface({
 }
 
 function GuidedTaskStation({
-  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onChanged, onDirtyChange, onDraftSaveReady, persistLocation, setNotice,
+  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onChanged, onDirtyChange, onDraftSaveReady, onLiveDraftStateChange, persistLocation, setNotice,
 }: {
   detail: OrganizerEventDetail;
   task: OrganizerGuidedTask;
@@ -467,11 +495,15 @@ function GuidedTaskStation({
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  onLiveDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
   persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
   setNotice: (notice: Notice) => void;
 }) {
+  const [liveDraft, setLiveDraft] = useState(detail.draft);
+  const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
+  const [liveDirty, setLiveDirty] = useState(false);
   const taskIndex = ORGANIZER_GUIDED_TASKS.indexOf(task);
-  const completed = ORGANIZER_GUIDED_TASKS.filter((item) => organizerGuidedTaskIssues(detail.draft, item).length === 0).length;
+  const completed = ORGANIZER_GUIDED_TASKS.filter((item) => organizerGuidedDraftIssues(liveDraft, item, liveVenueCatalog).length === 0).length;
   const nextTask = ORGANIZER_GUIDED_TASKS[taskIndex + 1] ?? null;
   const section = task === "venue" ? "venue" : "event";
 
@@ -494,9 +526,10 @@ function GuidedTaskStation({
     </div>
     <ol className={styles.guidedSteps} aria-label="基本設定步驟">
       {ORGANIZER_GUIDED_TASKS.map((item, index) => {
-        const done = organizerGuidedTaskIssues(detail.draft, item).length === 0;
+        const done = organizerGuidedDraftIssues(liveDraft, item, liveVenueCatalog).length === 0;
+        const state = liveDirty && item === task ? "尚未儲存" : done ? "已完成" : item === task ? "目前步驟" : "尚未完成";
         return <li key={item}><button type="button" aria-current={item === task ? "step" : undefined} onClick={() => onTask(item)}>
-          <span>{index + 1}</span><span>{GUIDED_LABEL[item]}<small>{done ? "已完成" : item === task ? "目前步驟" : "尚未完成"}</small></span>
+          <span>{index + 1}</span><span>{GUIDED_LABEL[item]}<small>{state}</small></span>
         </button></li>;
       })}
     </ol>
@@ -511,19 +544,34 @@ function GuidedTaskStation({
       onChanged={onChanged}
       onDirtyChange={onDirtyChange}
       onSaveReady={onDraftSaveReady}
+      onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); onLiveDraftStateChange(nextDraft, dirty, catalog); }}
       setNotice={setNotice}
     />
     <div className={styles.exploreRow}><button type="button" className={styles.textButton} onClick={onShowAll}>查看全部項目</button><span>可以先看後面的項目，不會影響目前進度。</span></div>
   </section>;
 }
 
-function ReadinessRail({ detail, onSection, compact = false }: {
+function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenueCatalog, liveDirty = false }: {
   detail: OrganizerEventDetail;
   onSection: (section: OrganizerWorkspaceSection) => void;
   compact?: boolean;
+  liveDraft?: OrganizerEventDraft;
+  liveVenueCatalog?: OrganizerVenueCatalog;
+  liveDirty?: boolean;
 }) {
   const readiness = detail.workspace.readiness;
-  const visibleBlockers = readiness.blockers.slice(0, compact ? 3 : 5);
+  const liveVenueIssues = liveDraft && liveDirty
+    ? organizerGuidedDraftIssues(liveDraft, "venue", liveVenueCatalog ?? detail.venueCatalog)
+    : [];
+  const blockers = liveDraft && liveDirty
+    ? [
+      ...readiness.blockers.filter((blocker) => blocker.section !== "venue"),
+      ...(liveVenueIssues.length > 0
+        ? liveVenueIssues.map((issue) => ({ section: "venue" as const, code: issue.code, message: issue.message }))
+        : [{ section: "venue" as const, code: "unsaved_venue", message: "場館與使用空間已選好，尚未儲存。" }]),
+    ]
+    : readiness.blockers;
+  const visibleBlockers = blockers.slice(0, compact ? 3 : 5);
   return <aside className={styles.readiness} aria-label="活動建置狀態">
     <div className={styles.readinessHead}><h3>建置狀態</h3><strong>{readiness.completed}/{readiness.total}</strong></div>
     <p>最後儲存 {new Date(detail.event.updatedAt).toLocaleString("zh-TW")}</p>
@@ -531,12 +579,12 @@ function ReadinessRail({ detail, onSection, compact = false }: {
       下一步：{SECTION_LABEL[readiness.suggestedNextSection]}
     </button>
     <div className={styles.readinessList}>{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
-      <span>{SECTION_LABEL[item.id]}</span><small data-state={item.state}>{READINESS_LABEL[item.state]}</small>
+      <span>{SECTION_LABEL[item.id]}</span><small data-state={item.state}>{liveDirty && item.id === "venue" ? "尚未儲存" : READINESS_LABEL[item.state]}</small>
     </button>)}</div>
     <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>目前沒有待修正項目。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
       <strong>{SECTION_LABEL[blocker.section]}</strong><span>{blocker.message}</span>
     </button>)}</div>
-    {readiness.blockers.length > visibleBlockers.length && <p>另有 {readiness.blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}
+    {blockers.length > visibleBlockers.length && <p>另有 {blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}
   </aside>;
 }
 
@@ -642,7 +690,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     <div className={styles.panelHead}><div><h3>各活動日的場館空間地圖</h3><p>每個活動日的每個場館空間各一張地圖。</p></div><span className={styles.version}>{maps.length} 張地圖</span></div>
     <div className={styles.mapToolbar}>
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
-      <label>場館空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => { setVenueSpaceId(event.target.value); setLayout(null); }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{item.venueSpaceId}</option>)}</select></label>
+      <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => { setVenueSpaceId(event.target.value); setLayout(null); }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
       <label className={styles.fileButton}>上傳配置圖描摹<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
         const file = event.target.files?.[0];
@@ -658,7 +706,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         }).catch((error) => setNotice({ kind: "error", message: message(error) }));
       }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{item.periodKey}・第 {item.mapRevision} 版</option>)}</select></label>
     </div>
-    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{map.venueSpaceId}<small>第 {map.mapRevision} 版</small></button>)}</div>
+    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}<small>第 {map.mapRevision} 版</small></button>)}</div>
     {layout ? <>
       <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={setLayout} />
       <div className={styles.row}><button type="button" disabled={!editable} onClick={() => {
@@ -728,15 +776,33 @@ function ImportPanel({ detail, onChanged, setNotice }: {
   const sheet = sheets.find((item) => item.name === sheetName) ?? null;
   const header = sheet?.rows[headerRow - 1]?.cells ?? [];
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
+  const requiresAreaMapping = detail.draft.venue.assignments.some((assignment) => assignment.areaMode !== "none");
+  const areaModeByVenueSpace = Object.fromEntries(detail.draft.venue.assignments.map((assignment) => [
+    assignment.venueSpaceId, assignment.areaMode ?? "imported",
+  ]));
+  const assignedSpaces = detail.draft.venue.assignments.map((assignment) => ({
+    id: assignment.venueSpaceId,
+    label: organizerVenueSpaceLabel(detail.venueCatalog, assignment.venueSpaceId),
+    name: detail.venueCatalog.venues.flatMap((venue) => venue.spaces).find((space) => space.id === assignment.venueSpaceId)?.name,
+  }));
+  const spaceNameCounts = new Map<string, number>();
+  assignedSpaces.forEach(({ name }) => { if (name) spaceNameCounts.set(name, (spaceNameCounts.get(name) ?? 0) + 1); });
+  const venueSpaceValues = Object.fromEntries(assignedSpaces.flatMap(({ id, label, name }) => [
+    [id, id],
+    [label, id],
+    ...(name && spaceNameCounts.get(name) === 1 ? [[name, id]] : []),
+  ]));
 
   const fieldMapping = (choice: MappingChoice, values?: Record<string, string>): OrganizerImportFieldMapping =>
     choice.column === null ? { fixed: choice.fixed } : { column: choice.column, ...(values ? { values } : {}) };
-  const select = (label: string, value: MappingChoice, setValue: (value: MappingChoice) => void, fixedHint: string) => <label>{label}
+  const select = (label: string, value: MappingChoice, setValue: (value: MappingChoice) => void, fixedHint: string, fixedOptions?: Array<{ value: string; label: string }>) => <label>{label}
     <select value={value.column === null ? "fixed" : String(value.column)} onChange={(event) => setValue(event.target.value === "fixed" ? { ...value, column: null } : { ...value, column: Number(event.target.value) })}>
       <option value="fixed">所有列相同</option>
       {header.map((name, index) => <option value={index} key={index}>{index + 1}. {String(name || "（空白）")}</option>)}
     </select>
-    {value.column === null && <input aria-label={`${label}：所有列相同的值`} placeholder={fixedHint} value={value.fixed} onChange={(event) => setValue({ ...value, fixed: event.target.value })} />}
+    {value.column === null && (fixedOptions
+      ? <select aria-label={`${label}：所有列相同的值`} value={value.fixed} onChange={(event) => setValue({ ...value, fixed: event.target.value })}><option value="">請選擇</option>{fixedOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
+      : <input aria-label={`${label}：所有列相同的值`} placeholder={fixedHint} value={value.fixed} onChange={(event) => setValue({ ...value, fixed: event.target.value })} />)}
   </label>;
 
   return <section className={styles.panel}>
@@ -760,8 +826,8 @@ function ImportPanel({ detail, onChanged, setNotice }: {
     {sheet && <>
       <div className={styles.mappingGrid}>
         {select("活動日", day, setDay, "活動日代碼")}
-        {select("場館空間", venueSpace, setVenueSpace, "場館空間 ID")}
-        {select("展區", area, setArea, "展區 ID")}
+        {select("使用空間", venueSpace, setVenueSpace, "使用空間", detail.draft.venue.assignments.map((assignment) => ({ value: assignment.venueSpaceId, label: organizerVenueSpaceLabel(detail.venueCatalog, assignment.venueSpaceId) })))}
+        {requiresAreaMapping ? select("展區", area, setArea, "展區代碼") : <div className={styles.derivedField}><span>展區</span><strong>無分區（ALL）</strong><small>不需要展區欄，系統會自動帶入。</small></div>}
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
         <ColumnSelect label="社團名稱" value={circleColumn} header={header} required onChange={setCircleColumn} />
         <ColumnSelect label="主辦內部編號（選填）" value={stableColumn} header={header} onChange={setStableColumn} />
@@ -772,7 +838,8 @@ function ImportPanel({ detail, onChanged, setNotice }: {
           const dayValues = Object.fromEntries(detail.draft.event.days.flatMap((item) => [[item.id, item.id], [item.label, item.id]]));
           const mapping: OrganizerImportMapping = {
             day: fieldMapping(day, day.column === null ? undefined : dayValues),
-            venueSpace: fieldMapping(venueSpace), area: fieldMapping(area),
+            venueSpace: fieldMapping(venueSpace, venueSpace.column === null ? undefined : venueSpaceValues),
+            ...(requiresAreaMapping ? { area: fieldMapping(area) } : {}),
             boothCode: { column: boothColumn }, circleName: { column: circleColumn },
             ...(stableColumn === null ? {} : { stableKey: { column: stableColumn } }),
           };
@@ -781,7 +848,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
           // task, so the refusal is surfaced like every other failure here.
           let result;
           try {
-            result = prepareOrganizerImport({ rows: sheet.rows, headerRow, mapping });
+            result = prepareOrganizerImport({ rows: sheet.rows, headerRow, mapping, areaModeByVenueSpace });
           } catch (error) {
             setNotice({ kind: "error", message: message(error) });
             return;
@@ -812,17 +879,17 @@ function ImportPanel({ detail, onChanged, setNotice }: {
         {derived.length > 0 && <div className={styles.derivedSummary}>
           <h4>這份檔案裡的場館空間與展區</h4>
           {derived.map((space) => <div key={space.venueSpaceId} className={space.declared ? undefined : styles.issueError}>
-            <strong>{space.venueSpaceId}</strong>
+            <strong>{organizerVenueSpaceLabel(detail.venueCatalog, space.venueSpaceId)}</strong>
             {space.declared
               ? <span>{space.areas.map((area) => `${area.id}（${area.rows} 列）${area.valid ? "" : "・代碼不可用"}`).join("、")}</span>
-              : <span>這個場館空間不在活動設定裡，請先到「場館與展區」新增，或修正來源檔。</span>}
+              : <span>這個使用空間不在活動設定裡，請先到「場館與使用空間」新增，或修正來源檔。</span>}
           </div>)}
           {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}
           {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場館空間會變成沒有攤位。</p>}
-          <p>儲存時會把這些展區寫進活動設定，沒出現在檔案裡的場館空間則會清空。</p>
+          <p>儲存時會把分區空間的展區寫進活動設定；無分區空間固定使用 ALL。沒出現在檔案裡的使用空間會標示為未匯入。</p>
         </div>}
         {prepared.issues.map((issue, index) => <p key={`${issue.code}-${index}`} className={styles.issueError}>來源列 {issue.row}・{issue.message}</p>)}
-        <table><thead><tr><th>來源列</th><th>活動日</th><th>場館空間・展區</th><th>攤位</th><th>社團</th><th>社團識別</th></tr></thead><tbody>{prepared.rows.slice(0, 100).map((row) => <tr key={`${row.sourceRow}-${row.boothCode}`}><td>{row.sourceRow}</td><td>{row.dayId}</td><td>{row.venueSpaceId} / {row.areaId}</td><td>{row.boothCode}</td><td>{row.circleName}</td><td>{row.identityGroup ?? "未合併"}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>來源列</th><th>活動日</th><th>使用空間・展區</th><th>攤位</th><th>社團</th><th>社團識別</th></tr></thead><tbody>{prepared.rows.slice(0, 100).map((row) => <tr key={`${row.sourceRow}-${row.boothCode}`}><td>{row.sourceRow}</td><td>{row.dayId}</td><td>{organizerVenueSpaceLabel(detail.venueCatalog, row.venueSpaceId)} / {row.areaId}</td><td>{row.boothCode}</td><td>{row.circleName}</td><td>{row.identityGroup ?? "未合併"}</td></tr>)}</tbody></table>
         {prepared.rows.length > 100 && <p>預覽前 100 列；儲存時會包含全部確認列。</p>}
       </div>}
     </>}
@@ -835,9 +902,54 @@ function ColumnSelect({ label, value, header, required = false, onChange }: {
   return <label>{label}<select required={required} value={value === null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}><option value="">尚未選擇</option>{header.map((name, index) => <option value={index} key={index}>{index + 1}. {String(name || "（空白）")}</option>)}</select></label>;
 }
 
+function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }: {
+  candidateId: string;
+  venue: OrganizerVenueCatalogVenue | null;
+  onCreated: (venue: OrganizerVenueCatalogVenue | null, space: OrganizerVenueCatalogSpace) => void;
+  onCancel: () => void;
+}) {
+  const [venueName, setVenueName] = useState("");
+  const [venueUrl, setVenueUrl] = useState("");
+  const [spaceName, setSpaceName] = useState("");
+  const [spaceUrl, setSpaceUrl] = useState(venue?.sourceUrl ?? "");
+  const [defaultAreaMode, setDefaultAreaMode] = useState<OrganizerVenueSpaceAreaMode>("imported");
+  const [notice, setLocalNotice] = useState<Notice>(IDLE);
+  return <form className={styles.catalogCreator} onSubmit={(event) => {
+    event.preventDefault();
+    setLocalNotice({ kind: "busy", message: "建立中…" });
+    const action = venue
+      ? createOrganizerVenueSpace(candidateId, venue.id, { name: spaceName, sourceUrl: spaceUrl, defaultAreaMode })
+        .then(({ space }) => ({ venue: null, space }))
+      : createOrganizerVenue(candidateId, {
+        name: venueName,
+        sourceUrl: venueUrl,
+        initialSpace: { name: spaceName, sourceUrl: spaceUrl, defaultAreaMode },
+      }).then(({ venue: created, space }) => ({ venue: { ...created, spaces: [space] }, space }));
+    void action.then(({ venue: created, space }) => {
+      setLocalNotice({ kind: "ok", message: "已建立並選取。" });
+      onCreated(created, space);
+    }).catch((error) => setLocalNotice({ kind: "error", message: message(error) }));
+  }}>
+    <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的使用空間` : "建立新場館"}</h4><p>系統會配置內部 ID，建立後立即出現在選單中。</p></div></div>
+    <div className={styles.formGrid}>
+      {!venue && <>
+        <label>場館名稱<input required maxLength={120} value={venueName} onChange={(event) => setVenueName(event.target.value)} /></label>
+        <label>場館官方網址<input required type="url" placeholder="https://" value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} /></label>
+      </>}
+      <label>使用空間名稱<input required maxLength={120} placeholder="例如：全館、1F 展場" value={spaceName} onChange={(event) => setSpaceName(event.target.value)} /></label>
+      <label>空間來源網址<input required type="url" placeholder="https://" value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} /></label>
+      <label>新活動的預設展區方式<select value={defaultAreaMode} onChange={(event) => setDefaultAreaMode(event.target.value as OrganizerVenueSpaceAreaMode)}>
+        <option value="imported">由攤位名單帶入展區</option><option value="none">無分區（使用 ALL）</option>
+      </select></label>
+    </div>
+    <div className={styles.row}><button type="submit" disabled={notice.kind === "busy"}>{venue ? "新增並選取" : "建立並選取"}</button><button type="button" className={styles.ghost} onClick={onCancel}>取消</button></div>
+    {notice.message && <p className={notice.kind === "error" ? styles.issueError : undefined}>{notice.message}</p>}
+  </form>;
+}
+
 function DraftForm({
   detail, section, guidedTask, saveLabel = "儲存", secondarySaveLabel,
-  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, setNotice,
+  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, onDraftStateChange, setNotice,
 }: {
   detail: OrganizerEventDetail;
   section: "event" | "venue";
@@ -849,11 +961,14 @@ function DraftForm({
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onSaveReady?: (save: (() => Promise<boolean>) | null) => void;
+  onDraftStateChange?: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
   setNotice: (notice: Notice) => void;
 }) {
   const [draft, setDraft] = useState(detail.draft);
   const [dirty, setDirty] = useState(false);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
+  const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
+  const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   useEffect(() => {
     onDirtyChange(dirty);
@@ -861,6 +976,7 @@ function DraftForm({
     window.addEventListener("beforeunload", warn);
     return () => { window.removeEventListener("beforeunload", warn); onDirtyChange(false); };
   }, [dirty, onDirtyChange]);
+  useEffect(() => { onDraftStateChange?.(draft, dirty, venueCatalog); }, [draft, dirty, onDraftStateChange, venueCatalog]);
   const update = (mutate: (current: OrganizerEventDraft) => OrganizerEventDraft) => {
     setDirty(true);
     setDraft((current) => mutate(structuredClone(current)));
@@ -890,11 +1006,11 @@ function DraftForm({
     onSaveReady?.(() => save());
     return () => onSaveReady?.(null);
   }, [onSaveReady, save]);
-  const taskIssues = guidedTask ? organizerGuidedTaskIssues(draft, guidedTask) : [];
+  const taskIssues = guidedTask ? organizerGuidedDraftIssues(draft, guidedTask, venueCatalog) : [];
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
-    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館、空間與展區"}</h3><p>儲存後會留下版本紀錄；目前是第 {expectedVersion} 版。</p></div></div>
+    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3><p>儲存後會留下版本紀錄；目前是第 {expectedVersion} 版。</p></div></div>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>
@@ -913,18 +1029,84 @@ function DraftForm({
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
       </div>}
     </div> : <div>
-      <button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" }); return next; })}>新增場館空間</button>
-      {draft.venue.assignments.map((assignment, index) => <div className={styles.venueCard} key={index}>
-        <label>場館 ID<input disabled={!editable} placeholder="taipei-expo" value={assignment.venueId} onChange={(event) => update((next) => { next.venue.assignments[index].venueId = event.target.value; return next; })} /><small>活動舉辦的建築；小寫英數字與連字號。</small></label>
-        <label>場館空間 ID<input disabled={!editable} placeholder="expo-dome" value={assignment.venueSpaceId} onChange={(event) => update((next) => { next.venue.assignments[index].venueSpaceId = event.target.value; return next; })} /><small>場館內的館別或樓層，一個空間一張地圖。</small></label>
-        <div className={styles.derivedField}><span>展區</span><strong>{assignment.areaIds.join("、") || "尚未匯入攤位"}</strong><small>由匯入的攤位資料帶入。</small></div>
-        <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
-          {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
-          {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}
-        </select><MapTemplatePreview template={assignment.mapTemplate} /></label>
-        <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>
-      </div>)}
-      {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定場館空間與展區。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" }); return next; })}>建立第一個場館空間</button></div>}
+      <div className={styles.row}>
+        <button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => {
+          const used = new Set(next.venue.assignments.map((item) => item.venueSpaceId));
+          const venue = venueCatalog.venues.find((item) => item.spaces.some((space) => !used.has(space.id))) ?? venueCatalog.venues[0];
+          const space = venue?.spaces.find((item) => !used.has(item.id)) ?? venue?.spaces[0];
+          next.venue.assignments.push({
+            venueId: venue?.id ?? "",
+            venueSpaceId: space?.id ?? "",
+            areaIds: space?.defaultAreaMode === "none" ? ["ALL"] : [],
+            mapTemplate: "TAIWAN_GENERIC_V1",
+            areaMode: space?.defaultAreaMode ?? "imported",
+          });
+          return next;
+        })}>新增使用空間</button>
+        <button type="button" className={styles.ghost} disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button>
+      </div>
+      {catalogAction && <VenueCatalogCreator
+        candidateId={detail.event.id}
+        venue={catalogAction.kind === "space" ? venueCatalog.venues.find((item) => item.id === catalogAction.venueId) ?? null : null}
+        onCancel={() => setCatalogAction(null)}
+        onCreated={(createdVenue, space) => {
+          setVenueCatalog((current) => ({
+            venues: createdVenue
+              ? [...current.venues, createdVenue]
+              : current.venues.map((venue) => venue.id === space.venueId ? { ...venue, spaces: [...venue.spaces, space] } : venue),
+          }));
+          update((next) => {
+            const assignmentIndex = catalogAction.kind === "space" ? catalogAction.assignmentIndex : next.venue.assignments.length;
+            const selected = {
+              venueId: space.venueId,
+              venueSpaceId: space.id,
+              areaIds: space.defaultAreaMode === "none" ? ["ALL"] : [],
+              mapTemplate: "TAIWAN_GENERIC_V1",
+              areaMode: space.defaultAreaMode,
+            };
+            if (assignmentIndex < next.venue.assignments.length) next.venue.assignments[assignmentIndex] = selected;
+            else next.venue.assignments.push(selected);
+            return next;
+          });
+          setCatalogAction(null);
+        }}
+      />}
+      {draft.venue.assignments.map((assignment, index) => {
+        const selectedVenue = venueCatalog.venues.find((venue) => venue.id === assignment.venueId);
+        const spaces = selectedVenue?.spaces ?? [];
+        const selectedSpace = spaces.find((space) => space.id === assignment.venueSpaceId);
+        return <div className={styles.venueCard} key={index}>
+          <label>場館<select disabled={!editable} value={assignment.venueId} onChange={(event) => update((next) => {
+            const venue = venueCatalog.venues.find((item) => item.id === event.target.value);
+            const used = new Set(next.venue.assignments.filter((_, itemIndex) => itemIndex !== index).map((item) => item.venueSpaceId));
+            const space = venue?.spaces.find((item) => !used.has(item.id)) ?? venue?.spaces[0];
+            next.venue.assignments[index] = {
+              ...next.venue.assignments[index], venueId: venue?.id ?? "", venueSpaceId: space?.id ?? "",
+              areaIds: space?.defaultAreaMode === "none" ? ["ALL"] : [], areaMode: space?.defaultAreaMode ?? "imported",
+            };
+            return next;
+          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select><small>系統會保存內部 ID，不需手動輸入。</small></label>
+          <label>使用空間<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => update((next) => {
+            const space = spaces.find((item) => item.id === event.target.value);
+            next.venue.assignments[index].venueSpaceId = space?.id ?? "";
+            next.venue.assignments[index].areaMode = space?.defaultAreaMode ?? "imported";
+            next.venue.assignments[index].areaIds = space?.defaultAreaMode === "none" ? ["ALL"] : [];
+            return next;
+          })}><option value="">請選擇使用空間</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原使用空間已不存在</option>}</select><small>場館內的館別或樓層，一個空間一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到空間？立即新增</button></label>
+          <label>展區方式<select disabled={!editable} value={assignment.areaMode ?? "imported"} onChange={(event) => update((next) => {
+            const areaMode = event.target.value as OrganizerVenueSpaceAreaMode;
+            next.venue.assignments[index].areaMode = areaMode;
+            next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
+            return next;
+          })}><option value="imported">由攤位名單帶入</option><option value="none">無分區</option></select><small>{assignment.areaMode === "none" ? "匯入時自動使用 ALL，不需展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
+          <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
+            {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
+            {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}
+          </select><MapTemplatePreview template={assignment.mapTemplate} /></label>
+          <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>
+        </div>;
+      })}
+      {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未選擇場館與使用空間。</p><button type="button" disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button></div>}
     </div>}
     {taskIssues.length > 0 && <div className={styles.taskIssues} aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
     <div className={styles.formActions}>
@@ -987,18 +1169,18 @@ function ValidationPanel({ detail, onChanged, setNotice }: { detail: OrganizerEv
     </div></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
     {issues?.map((issue, index) => <p key={`${issue.code}-${index}`} className={issue.severity === "error" ? styles.issueError : styles.issueWarning}><b>{STEP_LABEL[issue.step]}</b> {issue.message}</p>)}
-    {preview !== null && <OrganizerReaderPreviewPanel preview={preview} />}
+    {preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}
   </section>;
 }
 
-function OrganizerReaderPreviewPanel({ preview }: { preview: OrganizerReaderPreview }) {
+function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: OrganizerReaderPreview; venueCatalog: OrganizerVenueCatalog }) {
   const [mapIndex, setMapIndex] = useState(0);
   const selected = preview.maps[mapIndex] ?? null;
   const slots = useMemo(() => selected ? Object.fromEntries(preview.placements
     .filter((row) => row.dayId === selected.periodKey && row.venueSpaceId === selected.venueSpaceId)
     .map((row) => [row.boothCode, { label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}` }])) : {}, [preview, selected]);
   return <div className={styles.readerPreview}>
-    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{map.venueSpaceId}・第 {map.revision} 版</option>)}</select></div>
+    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}・第 {map.revision} 版</option>)}</select></div>
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} onSelect={() => undefined} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;

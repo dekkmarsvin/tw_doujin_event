@@ -30,6 +30,16 @@ test("organizer login uses its audience and narrow screens never mount authoring
   assert.match(client, /\/api\/organizer\/events/);
 });
 
+test("venue authoring uses human selections, immediate creation, and no-division guidance", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  assert.match(app, /場館與使用空間/);
+  assert.match(app, /建立新場館/);
+  assert.match(app, /找不到空間？立即新增/);
+  assert.match(app, /無分區（ALL）/);
+  assert.match(app, /尚未儲存/);
+  assert.doesNotMatch(app, /<label>場館 ID|<label>場館空間 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
+});
+
 test("organizer ships the ADR-0047 guided station, binder readiness, and the shared light design language", async () => {
   const [app, client, css] = await Promise.all([
     readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8"),
