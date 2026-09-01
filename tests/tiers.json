@@ -55,6 +55,7 @@
     "map-contribution-retention.test.mjs",
     "organizer-handlers.test.mjs",
     "organizer-repository.test.mjs",
+    "organizer-venue-catalog.test.mjs",
     "preview-mail-sink.test.mjs",
     "retention-purge.test.mjs"
   ],
