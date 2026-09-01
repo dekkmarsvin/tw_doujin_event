@@ -1,0 +1,40 @@
+{
+  "//": "Edges a static scan cannot see, keyed by test file. A test that walks a directory, builds its paths from template literals, or asserts on a build artifact assembled from entry files declares them here. scripts/select-tests.mjs unions these with what it scans; a trailing slash means every file beneath. Tier membership is NOT declared anywhere — it is derived from each test's own source by scripts/select-tests.mjs.",
+  "contribution-files.test.mjs": [
+    "docs/",
+    ".github/",
+    "README.md",
+    "AGENTS.md",
+    "CONTEXT.md",
+    "PRODUCT.md",
+    "DESIGN.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md"
+  ],
+  "official-booth-importer.test.mjs": [
+    "scripts/import-official-booths.mjs"
+  ],
+  "published-events.test.mjs": [
+    "scripts/stage-event-data.mjs"
+  ],
+  "rendered-html.test.mjs": [
+    "index.html",
+    "circle.html",
+    "organizer.html",
+    "main.tsx",
+    "circle-main.tsx",
+    "organizer-main.tsx",
+    "build/",
+    "scripts/prepare-pages-build.mjs",
+    "scripts/build-privacy-page.mjs",
+    "scripts/build-service-worker.mjs",
+    "scripts/stage-event-data.mjs"
+  ],
+  "service-worker.test.mjs": [
+    "index.html",
+    "main.tsx",
+    "build/",
+    "scripts/build-service-worker.mjs",
+    "scripts/prepare-pages-build.mjs"
+  ]
+}

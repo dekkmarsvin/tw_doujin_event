@@ -1,6 +1,7 @@
-// Runs one tier from tests/tiers.json, or just the tests affected by the
-// working tree. Defaults to the dot reporter: a full run is 527 cases, and the
-// spec reporter's one line per passing case is noise everywhere except CI.
+// Runs one tier, or just the tests affected by the working tree. Tier
+// membership comes from each test's own source — see scripts/select-tests.mjs.
+// Defaults to the dot reporter: a full run is hundreds of cases, and the spec
+// reporter's one line per passing case is noise everywhere except CI.
 //
 //   node scripts/run-tests.mjs module          one tier
 //   node scripts/run-tests.mjs module d1 cli   several
@@ -11,20 +12,19 @@
 // with --all). When --changed selects an artifact test, that is reported rather
 // than silently dropped: dist/ may be stale or absent.
 //
-// Every path through this file checks tests/tiers.json against tests/ first.
-// The manifest replaced a `tests/*.test.mjs` glob, so an unlisted test file
-// would otherwise run nowhere at all — least of all in CI, which is `--all`.
+// Tiers are derived from the test sources, not declared, so `--all` covers
+// every tests/*.test.mjs on disk by construction — a new test file cannot be
+// left out of the run, least of all in CI, which is `--all`.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { assertTiersInSync, changedFilesFrom, readTiers, selectTests, TIER_NAMES } from "./select-tests.mjs";
+import { changedFilesFrom, deriveTiers, selectTests, TIER_NAMES } from "./select-tests.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const args = process.argv.slice(2);
 const reporter = args.includes("--spec") ? "spec" : "dot";
 const isolation = args.includes("--isolate") ? "process" : null;
-const tiers = await readTiers();
-await assertTiersInSync(tiers);
+const tiers = await deriveTiers();
 
 function filesForTiers(names) {
   return names.flatMap((name) => (tiers[name] ?? []).map((file) => `tests/${file}`));

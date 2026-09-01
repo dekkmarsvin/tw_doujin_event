@@ -80,6 +80,8 @@ CI 跑同一組。`npm test` 先以 fixture 建立 Pages build，再執行全部
 | `npm run test:cli` | 會另外開子行程跑 `scripts/` CLI 的測試 | 否 |
 | `npm run test:artifact` | 檢查 `dist/` 產物的測試 | 是 |
 
+分層不需要維護清單：tier 歸屬由 `scripts/select-tests.mjs` 讀每支測試自己的原始碼推導——讀 `dist/` 的是 artifact、`import "miniflare"` 的是 d1、`import "node:child_process"` 的是 cli，其餘是 module。新增測試檔不必登記到任何地方，也因此不可能有測試檔落在所有 tier 之外而到處都不跑。這幾條不變式由 `tests/test-tiering.test.mjs` 把關。掃不到的相依邊（走遍目錄、template literal 組路徑、斷言 build 產物）才需要寫進 `tests/test-deps.json`。
+
 `test:changed` 由 `scripts/select-tests.mjs` 從相依關係推出要跑哪些。它只在三種情況下給出「不用跑」：
 
 - 改到 `package.json`、build 設定、`tests/` 裡的非測試檔或 workflow → 退回跑全套。

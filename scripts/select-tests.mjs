@@ -1,12 +1,12 @@
 // Selects the test files affected by a set of changed files, so an agent can
 // verify a one-module change without running all 60.
 //
-// Edges are recovered statically. Most are mechanical: 41 tests load repo code
+// Edges are recovered statically. Most are mechanical: most tests load repo code
 // through `environment.runner.import("/app/x.ts")`, the rest use plain relative
 // imports or `new URL("../x", import.meta.url)`. Anything a scan cannot resolve
-// is declared in tests/tiers.json under "deps". A test with neither a scanned
-// nor a declared edge always runs, and is reported — silence is never treated
-// as "nothing depends on this".
+// is declared in tests/test-deps.json. A test with neither a scanned nor a
+// declared edge always runs, and is reported — silence is never treated as
+// "nothing depends on this".
 //
 // The same rule applies from the other side. A changed file the model has no
 // view of — outside every scanned directory — selects the full suite; one the
@@ -34,8 +34,9 @@ const ALWAYS_FULL = [
   /^next\.config\.ts$/,
   /^drizzle\.config\.ts$/,
   /^wrangler\.jsonc$/,
-  // Anything under tests/ that is not itself a test file: the manifest, and any
-  // support file a test might load without naming it in a way a scan can see.
+  // Anything under tests/ that is not itself a test file: the declared-edge
+  // file, and any support file a test might load without naming it in a way a
+  // scan can see.
   /^tests\/(?!.*\.test\.mjs$)/,
   /^scripts\/select-tests\.mjs$/,
   /^scripts\/run-tests\.mjs$/,
@@ -164,44 +165,60 @@ function closure(entries, graph) {
   return seen;
 }
 
-export async function readTiers() {
-  return JSON.parse(await readFile(path.join(ROOT, "tests/tiers.json"), "utf8"));
+// What each tier costs, and how a test file reveals that it pays it. Ordered
+// most expensive first: a test that reads dist/ needs `npm run build` whatever
+// else it also does. Matched against import specifiers and the `new URL()` form
+// the artifact tests actually use, so a path mentioned inside an unrelated
+// string literal is not mistaken for the real thing.
+const TIER_SIGNALS = [
+  ["artifact", /new URL\(\s*[`"']\.\.\/dist/],
+  ["d1", /(?:from|import)\s*\(?\s*["']miniflare["']/],
+  ["cli", /(?:from|import)\s*\(?\s*["']node:child_process["']/],
+];
+
+export async function listTestFiles() {
+  return (await readdir(path.join(ROOT, "tests"))).filter((file) => file.endsWith(".test.mjs")).sort();
+}
+
+/** Tier membership is read out of each test's own source rather than a
+ *  hand-kept list. A new test file therefore lands in a tier the moment it
+ *  exists: there is nothing to register, and no way for a file to be absent
+ *  from every tier and so run nowhere — the failure a manifest invites. */
+export async function deriveTiers() {
+  const tiers = Object.fromEntries(TIER_NAMES.map((name) => [name, []]));
+  for (const file of await listTestFiles()) {
+    const source = await readFile(path.join(ROOT, "tests", file), "utf8");
+    const tier = TIER_SIGNALS.find(([, signal]) => signal.test(source))?.[0] ?? "module";
+    tiers[tier].push(file);
+  }
+  return tiers;
 }
 
 export function tierMembers(tiers) {
   return TIER_NAMES.flatMap((tier) => tiers[tier] ?? []);
 }
 
-/** tiers.json is the only manifest anything reads now, so a test file missing
- *  from it would never run anywhere, including CI. Every entry point — a named
- *  tier, `--all`, `--changed` — calls this before it builds a file list. */
-export async function assertTiersInSync(tiers) {
-  const listed = tierMembers(tiers);
-  const onDisk = (await readdir(path.join(ROOT, "tests"))).filter((file) => file.endsWith(".test.mjs"));
-  const missing = onDisk.filter((file) => !listed.includes(file)).sort();
-  const stale = listed.filter((file) => !onDisk.includes(file)).sort();
-  const duplicated = listed.filter((file, index) => listed.indexOf(file) !== index).sort();
-  // A deps entry keyed on a name no tier lists is a typo that would otherwise
-  // sit there declaring edges for a test that does not exist.
-  const orphanDeps = Object.keys(tiers.deps ?? {}).filter((file) => !listed.includes(file)).sort();
-  const detail = [
-    missing.length > 0 ? `absent from tests/tiers.json: ${missing.join(", ")}` : "",
-    stale.length > 0 ? `listed but not on disk: ${stale.join(", ")}` : "",
-    duplicated.length > 0 ? `listed in more than one tier: ${duplicated.join(", ")}` : "",
-    orphanDeps.length > 0 ? `deps declared for unlisted test(s): ${orphanDeps.join(", ")}` : "",
-  ].filter(Boolean).join("; ");
-  if (detail) throw new Error(`tests/tiers.json is out of sync with tests/ — ${detail}`);
-  return listed;
+/** Edges no scan can see, keyed by test file. Keys are checked against tests/
+ *  because a key naming no real test silently declares nothing. */
+export async function readDeclaredDeps() {
+  const raw = JSON.parse(await readFile(path.join(ROOT, "tests/test-deps.json"), "utf8"));
+  const declared = Object.fromEntries(Object.entries(raw).filter(([key]) => key !== "//"));
+  const onDisk = await listTestFiles();
+  const orphans = Object.keys(declared).filter((file) => !onDisk.includes(file)).sort();
+  if (orphans.length > 0) {
+    throw new Error(`tests/test-deps.json declares edges for test file(s) that do not exist: ${orphans.join(", ")}`);
+  }
+  return declared;
 }
 
 export async function buildTestMap() {
-  const tiers = await readTiers();
-  const declared = tiers.deps ?? {};
+  const tiers = await deriveTiers();
+  const declared = await readDeclaredDeps();
   const graph = await buildSourceGraph();
   const allFiles = [...graph.keys()];
   for (const directory of DATA_DIRS) allFiles.push(...(await listFiles(directory)));
 
-  const testFiles = await assertTiersInSync(tiers);
+  const testFiles = tierMembers(tiers);
   const map = new Map();
   const unresolved = [];
   for (const testFile of testFiles) {
@@ -211,7 +228,7 @@ export async function buildTestMap() {
       // A declared edge that resolves to nothing is a stale or mistyped path.
       // Dropping it silently would quietly narrow the selection, which is the
       // one direction this tool must never fail in.
-      if (!resolved) throw new Error(`tests/tiers.json: deps["${testFile}"] names "${extra}", which is not in the repo`);
+      if (!resolved) throw new Error(`tests/test-deps.json: "${testFile}" names "${extra}", which is not in the repo`);
       scanned.add(resolved);
     }
     const entries = expandDirectories(scanned, allFiles);
@@ -311,7 +328,7 @@ if (invokedDirectly) {
     console.error(`reason: ${reason}`);
     if (unresolved.length > 0) console.error(`always-run (no resolvable edge): ${unresolved.join(", ")}`);
     if (uncovered.length > 0) console.error(`no test covers: ${uncovered.join(", ")}`);
-    console.error(`selected: ${selected.length}/${tierMembers(await readTiers()).length}`);
+    console.error(`selected: ${selected.length}/${(await listTestFiles()).length}`);
   }
   console.log(selected.map((file) => `tests/${file}`).join(" "));
 }
