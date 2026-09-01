@@ -26,6 +26,30 @@ npm run preview
 
 `npm run build` 同樣使用 fictional fixture。
 
+## 啟動需要登入的 portal
+
+`/circle` 與 `/organizer` 需要 Pages Functions、session、Turnstile 與收信路徑；只跑 `npm run dev:pages` 會讓 `/api/*` 被 Vite 當成前台 fallback，因此不能用來測登入。完整的本機隔離環境使用：
+
+```bash
+npm run dev:portal
+```
+
+這條命令會 build fictional `sample` fixture，再由 Wrangler 啟動 Pages Functions。`config/local-portal.env` 只包含可公開的本機測試值：Cloudflare 官方 always-pass Turnstile 金鑰、`.test` 管理者、local D1 收信槽、loopback 縮圖來源，以及與 production 無關的 session／hash 字串。Wrangler 的 D1 與 R2 都維持 local mode，資料固定寫入 `.wrangler/local-portal`，不會碰到其他 Wrangler 本機資料；不會連到遠端 D1／R2，也不會寄出真實 email。這份設定不得用於 production。
+
+伺服器預設位於 `http://127.0.0.1:8788`。另開一個 terminal 執行完整登入 smoke：
+
+```bash
+npm run smoke:portal
+```
+
+smoke 會實走 auth config → 匿名 session → request link → local D1 mail sink → verify → authenticated session → Organizer API，完成後只清除 `.wrangler/local-portal` 內的隔離測試資料。若要在瀏覽器登入，先保持伺服器執行，再取得一次性連結：
+
+```bash
+npm run portal:login-link
+```
+
+它只接受 loopback HTTP 伺服器，並將最新的本機 Organizer 一次性連結印在 terminal；不會略過任何驗證。
+
 ## 驗證真實活動資料
 
 只有資料更新、release 或部署前需要這條路徑：
