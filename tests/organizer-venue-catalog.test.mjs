@@ -30,6 +30,15 @@ beforeEach(async () => {
   await repository.clearPreviewData();
 });
 
+const audit = (subjectId, action = "organizer_venue.created") => ({
+  at: 10,
+  actorAccountId: null,
+  actorRole: "system",
+  action,
+  subjectType: action === "organizer_venue.created" ? "organizer_venue" : "organizer_venue_space",
+  subjectId,
+});
+
 test("the shared Organizer catalog starts with four venues and six human-readable spaces", async () => {
   const catalog = await repository.listOrganizerVenueCatalog();
   assert.equal(catalog.venues.length, 4);
@@ -80,6 +89,7 @@ test("a new venue and spaces are immediately shared while duplicate human names 
       sourceUrl: "https://venue.example/1f",
       defaultAreaMode: "none",
     },
+    audit: audit("venue-new"),
   }), { ok: true });
   assert.deepEqual(await repository.createOrganizerVenueSpace({
     id: "venue-space-new-4f",
@@ -89,6 +99,7 @@ test("a new venue and spaces are immediately shared while duplicate human names 
     defaultAreaMode: "imported",
     createdByAccountId: "account-owner",
     now: 11,
+    audit: audit("venue-space-new-4f", "organizer_venue_space.created"),
   }), { ok: true });
 
   const venue = (await repository.listOrganizerVenueCatalog()).venues.find(({ id }) => id === "venue-new");
@@ -109,6 +120,7 @@ test("a new venue and spaces are immediately shared while duplicate human names 
       sourceUrl: "https://duplicate.example/all",
       defaultAreaMode: "imported",
     },
+    audit: audit("venue-duplicate"),
   }), { ok: false, reason: "duplicate" });
   assert.deepEqual(await repository.createOrganizerVenueSpace({
     id: "orphan-space",
@@ -118,10 +130,38 @@ test("a new venue and spaces are immediately shared while duplicate human names 
     defaultAreaMode: "imported",
     createdByAccountId: "account-owner",
     now: 13,
+    audit: audit("orphan-space", "organizer_venue_space.created"),
   }), { ok: false, reason: "not_found" });
 
   await repository.clearPreviewData();
   const reset = await repository.listOrganizerVenueCatalog();
   assert.equal(reset.venues.some(({ id }) => id === "venue-new"), false);
   assert.equal(reset.venues.some(({ id }) => id === "taipei-expo-park-zhengyan-hall"), true);
+});
+
+test("catalog rows roll back when their required audit insert fails", async () => {
+  await database.prepare(
+    `CREATE TRIGGER reject_catalog_audit BEFORE INSERT ON audit_log
+     WHEN NEW.action = 'organizer_venue.created'
+     BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`,
+  ).run();
+  try {
+    await assert.rejects(repository.createOrganizerVenue({
+      id: "venue-without-audit",
+      name: "不可留下的場館",
+      sourceUrl: "https://rollback.example/",
+      createdByAccountId: "account-owner",
+      now: 20,
+      initialSpace: {
+        id: "venue-space-without-audit",
+        name: "全館",
+        sourceUrl: "https://rollback.example/all",
+        defaultAreaMode: "none",
+      },
+      audit: audit("venue-without-audit"),
+    }), /audit unavailable/u);
+  } finally {
+    await database.prepare("DROP TRIGGER reject_catalog_audit").run();
+  }
+  assert.equal((await repository.listOrganizerVenueCatalog()).venues.some(({ id }) => id === "venue-without-audit"), false);
 });

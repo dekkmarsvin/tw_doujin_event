@@ -117,3 +117,39 @@ export function normalizeOrganizerVenueSourceUrl(value: unknown) {
 export function isOrganizerVenueSpaceAreaMode(value: unknown): value is OrganizerVenueSpaceAreaMode {
   return value === "imported" || value === "none";
 }
+
+export function validateOrganizerVenueCatalogAssignments(
+  assignments: readonly { venueId: string; venueSpaceId: string }[],
+  catalog: OrganizerVenueCatalog,
+) {
+  const venues = new Map(catalog.venues.map((venue) => [venue.id, venue]));
+  const spaces = new Map(catalog.venues.flatMap((venue) => venue.spaces).map((space) => [space.id, space]));
+  return assignments.flatMap((assignment, row) => {
+    const venue = venues.get(assignment.venueId);
+    if (!venue) return [{
+      severity: "error" as const,
+      step: "venue" as const,
+      code: "unknown_venue",
+      row: row + 1,
+      target: `venue.assignments.${row}.venueId`,
+      message: "選取的場館已不存在，請重新選擇或建立新場館。",
+    }];
+    const space = spaces.get(assignment.venueSpaceId);
+    if (!space) return [{
+      severity: "error" as const,
+      step: "venue" as const,
+      code: "unknown_venue_space",
+      row: row + 1,
+      target: `venue.assignments.${row}.venueSpaceId`,
+      message: "選取的使用空間已不存在，請重新選擇或新增使用空間。",
+    }];
+    return space.venueId === venue.id ? [] : [{
+      severity: "error" as const,
+      step: "venue" as const,
+      code: "venue_space_mismatch",
+      row: row + 1,
+      target: `venue.assignments.${row}.venueSpaceId`,
+      message: "選取的使用空間不屬於這個場館，請重新選擇。",
+    }];
+  });
+}

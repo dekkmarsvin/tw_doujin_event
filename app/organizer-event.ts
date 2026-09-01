@@ -24,6 +24,8 @@ export type OrganizerVenueAssignment = {
   venueSpaceId: string;
   areaIds: string[];
   mapTemplate: string;
+  /** Event-specific. The catalog only supplies a default for a new assignment. */
+  areaMode?: "imported" | "none";
 };
 
 export type OrganizerEventDraft = {
@@ -116,7 +118,9 @@ export function withOrganizerImportedAreaIds(
     venue: {
       assignments: draft.venue.assignments.map((assignment) => ({
         ...assignment,
-        areaIds: [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en")),
+        areaIds: assignment.areaMode === "none"
+          ? ["ALL"]
+          : [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en")),
       })),
     },
   };
@@ -147,6 +151,9 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
       venueSpaceId: text(assignment.venueSpaceId),
       areaIds: assignment.areaIds.map(text),
       mapTemplate: text(assignment.mapTemplate) || "TAIWAN_GENERIC_V1",
+      ...(assignment.areaMode === "imported" || assignment.areaMode === "none"
+        ? { areaMode: assignment.areaMode }
+        : {}),
     });
   }
   const sourceUrl = value.officialSource.url === null || value.officialSource.url === undefined
@@ -185,9 +192,16 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
   if (draft.venue.assignments.length === 0) add({ severity: "error", step: "venue", code: "missing_venue", target: "venue.assignments", message: "至少需要一個場館空間。" });
   const spaces = new Set<string>();
   draft.venue.assignments.forEach((assignment, row) => {
-    if (!ID.test(assignment.venueId) || !ID.test(assignment.venueSpaceId) || !assignment.mapTemplate
-      || assignment.areaIds.some((area) => !AREA_ID.test(area))) {
-      add({ severity: "error", step: "venue", code: "invalid_assignment", row: row + 1, target: `venue.assignments.${row}`, message: "場館、場館空間與地圖模板資料不完整。" });
+    if (!assignment.venueId) add({ severity: "error", step: "venue", code: "missing_venue_selection", row: row + 1, target: `venue.assignments.${row}.venueId`, message: "請選擇場館。" });
+    else if (!ID.test(assignment.venueId)) add({ severity: "error", step: "venue", code: "invalid_venue_selection", row: row + 1, target: `venue.assignments.${row}.venueId`, message: "場館選項格式無效，請重新選擇。" });
+    if (!assignment.venueSpaceId) add({ severity: "error", step: "venue", code: "missing_venue_space_selection", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "請選擇使用空間。" });
+    else if (!ID.test(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "invalid_venue_space_selection", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "使用空間選項格式無效，請重新選擇。" });
+    if (!assignment.mapTemplate) add({ severity: "error", step: "venue", code: "missing_map_template", row: row + 1, target: `venue.assignments.${row}.mapTemplate`, message: "請選擇地圖模板。" });
+    if (assignment.areaMode !== undefined && assignment.areaMode !== "imported" && assignment.areaMode !== "none") {
+      add({ severity: "error", step: "venue", code: "invalid_area_mode", row: row + 1, target: `venue.assignments.${row}.areaMode`, message: "展區方式無效，請重新選擇。" });
+    }
+    if (assignment.areaIds.some((area) => !AREA_ID.test(area))) {
+      add({ severity: "error", step: "venue", code: "invalid_area", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "匯入的展區代碼格式無效。" });
     }
     if (spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: `場館空間 ${assignment.venueSpaceId} 重複。` });
     spaces.add(assignment.venueSpaceId);

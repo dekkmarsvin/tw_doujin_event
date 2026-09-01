@@ -64,6 +64,45 @@ test("mapping reports missing values and duplicate booth placement without inven
   ]);
 });
 
+test("a no-division space needs no area mapping and is canonicalized to ALL", () => {
+  const result = imports.prepareOrganizerImport({
+    rows: [
+      { sourceRow: 1, cells: ["Booth", "Circle"] },
+      { sourceRow: 2, cells: ["A01", "甲社"] },
+    ],
+    headerRow: 1,
+    mapping: {
+      day: { fixed: "1" }, venueSpace: { fixed: "whole-hall" },
+      boothCode: { column: 0 }, circleName: { column: 1 },
+    },
+    areaModeByVenueSpace: { "whole-hall": "none" },
+  });
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.rows[0].areaId, "ALL");
+});
+
+test("mixed imports require areas only for the rows whose event space is divided", () => {
+  const result = imports.prepareOrganizerImport({
+    rows: [
+      { sourceRow: 1, cells: ["Space", "Area", "Booth", "Circle"] },
+      { sourceRow: 2, cells: ["全館", "來源中的假分區", "A01", "甲社"] },
+      { sourceRow: 3, cells: ["分館", "B", "B01", "乙社"] },
+      { sourceRow: 4, cells: ["分館", "", "B02", "丙社"] },
+    ],
+    headerRow: 1,
+    mapping: {
+      day: { fixed: "1" },
+      venueSpace: { column: 0, values: { 全館: "whole-hall", 分館: "divided-hall" } },
+      area: { column: 1 }, boothCode: { column: 2 }, circleName: { column: 3 },
+    },
+    areaModeByVenueSpace: { "whole-hall": "none", "divided-hall": "imported" },
+  });
+  assert.deepEqual(result.rows.map(({ venueSpaceId, areaId }) => [venueSpaceId, areaId]), [
+    ["whole-hall", "ALL"], ["divided-hall", "B"],
+  ]);
+  assert.deepEqual(result.issues.map(({ row, code }) => [row, code]), [[4, "missing_area"]]);
+});
+
 test("source metadata hashes bytes and never contains the raw workbook", async () => {
   const metadata = await imports.buildOrganizerImportMetadata({
     bytes: new TextEncoder().encode("private workbook bytes"),

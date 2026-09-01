@@ -27,6 +27,7 @@ import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueName,
   normalizeOrganizerVenueSourceUrl,
+  validateOrganizerVenueCatalogAssignments,
 } from "./organizer-venue-catalog";
 
 /**
@@ -1657,29 +1658,30 @@ export function createCirclePortalHandlers({
     const spaceName = normalizeOrganizerVenueName(initialSpace?.name);
     const spaceSourceUrl = normalizeOrganizerVenueSourceUrl(initialSpace?.sourceUrl);
     const defaultAreaMode = initialSpace?.defaultAreaMode ?? "imported";
-    if (!name || !spaceName || sourceUrl === undefined || spaceSourceUrl === undefined
+    if (!name || !spaceName || !sourceUrl || !spaceSourceUrl
       || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
       return json({ error: "請填寫場館名稱、使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
     }
     const venueId = `venue-${crypto.randomUUID()}`;
     const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
+    const now = config.now();
     const created = await repository.createOrganizerVenue({
       id: venueId,
       name,
       sourceUrl,
       createdByAccountId: access.current.accountId,
-      now: config.now(),
+      now,
       initialSpace: { id: venueSpaceId, name: spaceName, sourceUrl: spaceSourceUrl, defaultAreaMode },
+      audit: {
+        at: now, actorAccountId: access.current.accountId,
+        actorRole: organizerAuditRole(access),
+        action: "organizer_venue.created", subjectType: "organizer_venue", subjectId: venueId,
+        detail: { candidateId, venueSpaceId, defaultAreaMode }, ipHash: await clientIpHash(request),
+      },
     });
     if (!created.ok) {
       return json({ error: created.reason === "duplicate" ? "這個場館或使用空間已經存在。" : "無法建立場館，請重新整理後再試。" }, 409);
     }
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: organizerAuditRole(access),
-      action: "organizer_venue.created", subjectType: "organizer_venue", subjectId: venueId,
-      detail: { candidateId, venueSpaceId, defaultAreaMode }, ipHash: await clientIpHash(request),
-    });
     return json({
       venue: { id: venueId, name, sourceUrl },
       space: { id: venueSpaceId, venueId, name: spaceName, sourceUrl: spaceSourceUrl, defaultAreaMode },
@@ -1693,10 +1695,11 @@ export function createCirclePortalHandlers({
     const name = normalizeOrganizerVenueName(body?.name);
     const sourceUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
     const defaultAreaMode = body?.defaultAreaMode ?? "imported";
-    if (!name || sourceUrl === undefined || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
+    if (!name || !sourceUrl || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
       return json({ error: "請填寫使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
     }
     const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
+    const now = config.now();
     const created = await repository.createOrganizerVenueSpace({
       id: venueSpaceId,
       venueId,
@@ -1704,18 +1707,18 @@ export function createCirclePortalHandlers({
       sourceUrl,
       defaultAreaMode,
       createdByAccountId: access.current.accountId,
-      now: config.now(),
+      now,
+      audit: {
+        at: now, actorAccountId: access.current.accountId,
+        actorRole: organizerAuditRole(access),
+        action: "organizer_venue_space.created", subjectType: "organizer_venue_space", subjectId: venueSpaceId,
+        detail: { candidateId, venueId, defaultAreaMode }, ipHash: await clientIpHash(request),
+      },
     });
     if (!created.ok) {
       const error = created.reason === "not_found" ? "找不到這個場館。" : "這個使用空間已經存在。";
       return json({ error }, created.reason === "not_found" ? 404 : 409);
     }
-    await repository.writeAudit({
-      at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: organizerAuditRole(access),
-      action: "organizer_venue_space.created", subjectType: "organizer_venue_space", subjectId: venueSpaceId,
-      detail: { candidateId, venueId, defaultAreaMode }, ipHash: await clientIpHash(request),
-    });
     return json({ space: { id: venueSpaceId, venueId, name, sourceUrl, defaultAreaMode } }, 201);
   }
 
@@ -1773,10 +1776,11 @@ export function createCirclePortalHandlers({
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-    const [revisions, publication, workspace, workspaceValidation] = await Promise.all([
+    const [revisions, publication, workspace, venueCatalog, workspaceValidation] = await Promise.all([
       repository.listOrganizerCandidateRevisions(candidateId),
       repository.getLatestOrganizerPublicationJob(candidateId),
       repository.getOrganizerWorkspace(candidateId, access.current.accountId),
+      repository.listOrganizerVenueCatalog(),
       validateOrganizerWorkspace(candidateId, draft),
     ]);
     if (!workspace) return json({ error: "找不到活動工作區。" }, 404);
@@ -1807,6 +1811,7 @@ export function createCirclePortalHandlers({
         role: access.role,
       },
       draft,
+      venueCatalog,
       revisions: revisions.map((revision) => ({
         version: revision.version,
         eventId: revision.event_id,
@@ -1853,6 +1858,13 @@ export function createCirclePortalHandlers({
     const serialized = serializeOrganizerEventDraft(body?.draft);
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !serialized) {
       return json({ error: "活動資料格式無效，請重新載入後再試。" }, 400);
+    }
+    const venueIssues = validateOrganizerVenueCatalogAssignments(
+      serialized.draft.venue.assignments,
+      await repository.listOrganizerVenueCatalog(),
+    );
+    if (venueIssues.length > 0) {
+      return json({ error: venueIssues[0].message, issues: venueIssues }, 422);
     }
     const result = await repository.saveOrganizerCandidate({
       candidateId, actorAccountId: access.current.accountId,
@@ -1921,7 +1933,10 @@ export function createCirclePortalHandlers({
     }
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-    const issues = organizerOnboardingIssues(draft);
+    const issues = [
+      ...organizerOnboardingIssues(draft),
+      ...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, await repository.listOrganizerVenueCatalog()),
+    ];
     if (issues.length > 0) return json({ error: "請先完成活動與場館基本設定。", issues }, 422);
     const result = await repository.completeOrganizerOnboarding({
       candidateId,
@@ -1955,8 +1970,13 @@ export function createCirclePortalHandlers({
     const issues = getOrganizerWorkspacePrerequisiteIssues({
       draft,
       importedRows: imported?.rows.length ?? 0,
+      importedVenueSpaceIds: imported?.rows.map((row) => row.venue_space_id),
       maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
     });
+    issues.push(...validateOrganizerVenueCatalogAssignments(
+      draft.venue.assignments,
+      await repository.listOrganizerVenueCatalog(),
+    ));
     // The candidate, its import and every map body are read exactly once here.
     // Resolving scope per day × venue-space used to reload the candidate and
     // the whole import inside the loop, so a multi-day multi-hall event — the
@@ -2032,7 +2052,7 @@ export function createCirclePortalHandlers({
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const days = new Set(draft.event.days.map((day) => day.id));
-    const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, new Set(assignment.areaIds)]));
+    const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, assignment]));
     const normalized: Array<{
       sourceRow: number; dayId: string; venueSpaceId: string; areaId: string; boothCode: string;
       circleName: string; stableKey: string | null; identityGroup: string | null;
@@ -2044,13 +2064,16 @@ export function createCirclePortalHandlers({
       const sourceRow = row.sourceRow;
       const dayId = typeof row.dayId === "string" ? row.dayId.normalize("NFKC").trim() : "";
       const venueSpaceId = typeof row.venueSpaceId === "string" ? row.venueSpaceId.normalize("NFKC").trim() : "";
-      const areaId = typeof row.areaId === "string" ? row.areaId.normalize("NFKC").trim() : "";
+      const submittedAreaId = typeof row.areaId === "string" ? row.areaId.normalize("NFKC").trim() : "";
       const boothCode = typeof row.boothCode === "string" ? row.boothCode.normalize("NFKC").trim() : "";
       const circleName = typeof row.circleName === "string" ? row.circleName.normalize("NFKC").trim().replace(/\s+/gu, " ") : "";
       const stableKey = row.stableKey === null ? null : typeof row.stableKey === "string" ? row.stableKey.normalize("NFKC").trim() : undefined;
       const identityGroup = row.identityGroup === null ? null : typeof row.identityGroup === "string" ? row.identityGroup.normalize("NFKC").trim() : undefined;
+      const assignment = spaces.get(venueSpaceId);
+      const areaId = assignment?.areaMode === "none" ? "ALL" : submittedAreaId;
+      const areaAllowed = assignment?.areaMode === "none" || assignment?.areaIds.includes(areaId);
       if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 1 || !days.has(dayId)
-        || !spaces.get(venueSpaceId)?.has(areaId) || !boothCode || boothCode.length > 80
+        || !assignment || !areaAllowed || !boothCode || boothCode.length > 80
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
         || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
         return json({ error: `來源列 ${String(sourceRow)} 與活動日、venue-space、area 或 identity mapping 不一致。` }, 422);

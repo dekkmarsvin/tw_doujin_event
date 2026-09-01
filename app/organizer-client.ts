@@ -51,6 +51,7 @@ export type OrganizerEventSummary = {
 export type OrganizerEventDetail = {
   event: OrganizerEventSummary & { eventIdLocked: boolean };
   draft: OrganizerEventDraft;
+  venueCatalog: OrganizerVenueCatalog;
   revisions: Array<{ version: number; eventId: string | null; createdByRole: string; createdAt: number }>;
   import: null | {
     source: {

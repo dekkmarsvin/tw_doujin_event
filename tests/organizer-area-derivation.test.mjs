@@ -24,7 +24,7 @@ const draft = (assignments) => ({
   venue: { assignments },
   officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
 });
-const space = (venueSpaceId, areaIds = []) => ({ venueId: "expo", venueSpaceId, areaIds, mapTemplate: "TAIWAN_GENERIC_V1" });
+const space = (venueSpaceId, areaIds = [], areaMode) => ({ venueId: "expo", venueSpaceId, areaIds, mapTemplate: "TAIWAN_GENERIC_V1", ...(areaMode ? { areaMode } : {}) });
 const row = (venueSpaceId, areaId) => ({ venueSpaceId, areaId, boothCode: "A01", circleName: "甲社" });
 
 test("a venue space without areas is not an error before any booth list exists", () => {
@@ -52,7 +52,7 @@ test("a replacement import that drops a space leaves it reportable rather than l
   assert.deepEqual(replaced.venue.assignments.map((assignment) => assignment.areaIds), [["A"], []]);
   assert.deepEqual(
     getOrganizerWorkspacePrerequisiteIssues({ draft: replaced, importedRows: 1, maps: [] })
-      .filter((issue) => issue.code === "missing_area")
+      .filter((issue) => issue.code === "missing_space_import")
       .map((issue) => issue.target),
     ["hall-b"],
   );
@@ -70,17 +70,36 @@ test("area ids stay url-safe, so a derived value can still be rejected", () => {
   assert.equal(isOrganizerAreaId("A 區"), false);
   assert.equal(isOrganizerAreaId(""), false);
   const issues = validateOrganizerEventDraft(draft([space("hall-a", ["A 區"])]));
-  assert.deepEqual(issues.filter((issue) => issue.step === "venue").map((issue) => issue.code), ["invalid_assignment"]);
+  assert.deepEqual(issues.filter((issue) => issue.step === "venue").map((issue) => issue.code), ["invalid_area"]);
 });
 
 test("a space the booth list never covers becomes an error once rows are imported", () => {
   const input = { draft: draft([space("hall-a", ["A"]), space("hall-b")]), maps: [] };
   assert.deepEqual(
     getOrganizerWorkspacePrerequisiteIssues({ ...input, importedRows: 0 })
-      .filter((issue) => issue.code === "missing_area"),
+      .filter((issue) => issue.code === "missing_space_import"),
     [],
   );
   const afterImport = getOrganizerWorkspacePrerequisiteIssues({ ...input, importedRows: 12 })
-    .filter((issue) => issue.code === "missing_area");
+    .filter((issue) => issue.code === "missing_space_import");
   assert.deepEqual(afterImport.map((issue) => [issue.step, issue.target]), [["import", "hall-b"]]);
+});
+
+test("a no-division assignment keeps ALL but still needs an imported booth row", () => {
+  const noDivision = withOrganizerImportedAreaIds(draft([space("whole-hall", [], "none")]), []);
+  assert.deepEqual(noDivision.venue.assignments[0].areaIds, ["ALL"]);
+  const missing = getOrganizerWorkspacePrerequisiteIssues({
+    draft: noDivision,
+    importedRows: 1,
+    importedVenueSpaceIds: ["another-hall"],
+    maps: [],
+  });
+  assert.deepEqual(missing.filter((issue) => issue.code === "missing_space_import").map((issue) => issue.target), ["whole-hall"]);
+  const covered = getOrganizerWorkspacePrerequisiteIssues({
+    draft: noDivision,
+    importedRows: 1,
+    importedVenueSpaceIds: ["whole-hall"],
+    maps: [],
+  });
+  assert.equal(covered.some((issue) => issue.code === "missing_space_import"), false);
 });

@@ -27,6 +27,17 @@ export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "appr
 export type OrganizerRole = "owner" | "editor";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed";
 
+export type IdentityAuditEntry = {
+  at: number;
+  actorAccountId?: string | null;
+  actorRole: "circle" | "map_contributor" | "organizer_owner" | "organizer_editor" | "admin" | "system";
+  action: string;
+  subjectType: string;
+  subjectId: string;
+  detail?: unknown;
+  ipHash?: string | null;
+};
+
 export type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
 
 export type ClaimRow = {
@@ -173,18 +184,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
-  async function writeAudit(entry: {
-    at: number;
-    actorAccountId?: string | null;
-    actorRole: "circle" | "map_contributor" | "organizer_owner" | "organizer_editor" | "admin" | "system";
-    action: string;
-    subjectType: string;
-    subjectId: string;
-    detail?: unknown;
-    ipHash?: string | null;
-  }) {
-    await ensureTables();
-    await database.prepare(
+  function auditStatement(entry: IdentityAuditEntry) {
+    return database.prepare(
       `INSERT INTO audit_log (
          id, at, actor_account_id, actor_role, action, subject_type, subject_id,
          detail_json, ip_hash, shredded_at
@@ -203,7 +204,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       crypto.randomUUID(), entry.at, entry.actorAccountId ?? null, entry.actorRole,
       entry.action, entry.subjectType, entry.subjectId,
       entry.detail === undefined ? null : JSON.stringify(entry.detail), entry.ipHash ?? null,
-    ).run();
+    );
+  }
+
+  async function writeAudit(entry: IdentityAuditEntry) {
+    await ensureTables();
+    await auditStatement(entry).run();
   }
 
   /** `origin` splits the two budgets that share this table. "self" counts only
@@ -1515,6 +1521,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       sourceUrl: string | null;
       defaultAreaMode: OrganizerVenueSpaceAreaMode;
     };
+    audit: IdentityAuditEntry;
   }) {
     await ensureTables();
     try {
@@ -1532,6 +1539,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           organizerVenueNameKey(input.initialSpace.name), input.initialSpace.sourceUrl,
           input.initialSpace.defaultAreaMode, input.createdByAccountId, input.now,
         ),
+        auditStatement(input.audit),
       ]);
       return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const }
@@ -1551,21 +1559,24 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     defaultAreaMode: OrganizerVenueSpaceAreaMode;
     createdByAccountId: string;
     now: number;
+    audit: IdentityAuditEntry;
   }) {
     await ensureTables();
+    const venue = await database.prepare("SELECT id FROM organizer_venues WHERE id = ?1")
+      .bind(input.venueId).first<{ id: string }>();
+    if (!venue) return { ok: false as const, reason: "not_found" as const };
     try {
-      const result = await database.prepare(
+      const results = await database.batch([database.prepare(
         `INSERT INTO organizer_venue_spaces (
            id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
-         ) SELECT ?1, id, ?2, ?3, ?4, ?5, ?6, ?7
-           FROM organizer_venues WHERE id = ?8`,
+         ) VALUES (?1, ?8, ?2, ?3, ?4, ?5, ?6, ?7)`,
       ).bind(
         input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl,
         input.defaultAreaMode, input.createdByAccountId, input.now, input.venueId,
-      ).run();
-      return result.meta.changes === 1
+      ), auditStatement(input.audit)]);
+      return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const }
-        : { ok: false as const, reason: "not_found" as const };
+        : { ok: false as const, reason: "conflict" as const };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/unique constraint/i.test(message)) return { ok: false as const, reason: "duplicate" as const };

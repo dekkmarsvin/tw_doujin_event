@@ -56,6 +56,7 @@ export function organizerOnboardingIssues(draft: OrganizerEventDraft): Organizer
 export function getOrganizerWorkspacePrerequisiteIssues(input: {
   draft: OrganizerEventDraft;
   importedRows: number;
+  importedVenueSpaceIds?: readonly string[];
   maps: readonly OrganizerWorkspaceMapScope[];
 }): OrganizerValidationIssue[] {
   const issues = validateOrganizerEventDraft(input.draft);
@@ -70,14 +71,15 @@ export function getOrganizerWorkspacePrerequisiteIssues(input: {
   // Areas come from the imported booth list, so this is the first step that
   // can name a space the import never covered.
   if (input.importedRows > 0) {
+    const importedSpaces = input.importedVenueSpaceIds ? new Set(input.importedVenueSpaceIds) : null;
     for (const assignment of input.draft.venue.assignments) {
-      if (assignment.areaIds.length > 0) continue;
+      if (importedSpaces ? importedSpaces.has(assignment.venueSpaceId) : assignment.areaIds.length > 0) continue;
       issues.push({
         severity: "error",
         step: "import",
-        code: "missing_area",
+        code: "missing_space_import",
         target: assignment.venueSpaceId,
-        message: `匯入資料沒有指到 ${assignment.venueSpaceId} 的展區。`,
+        message: `匯入資料沒有包含 ${assignment.venueSpaceId} 的攤位。`,
       });
     }
   }

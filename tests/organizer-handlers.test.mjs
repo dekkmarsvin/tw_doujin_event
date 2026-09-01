@@ -25,6 +25,8 @@ const database = await miniflare.getD1Database("DB");
 after(async () => { await miniflare.dispose(); await vite.close(); });
 
 const ORIGIN = "https://verify.kotoban.top";
+const VENUE_ID = "taipei-expo-park-zhengyan-hall";
+const VENUE_SPACE_ID = "zhengyan-exhibition-area";
 let now = 1_788_100_000_000;
 let repository;
 let handlers;
@@ -128,6 +130,14 @@ test("an event organizer can list and immediately extend the shared venue catalo
   assert.equal(initial.status, 200);
   assert.equal((await initial.json()).venues.length, 4);
 
+  const missingSource = await handlers.createOrganizerVenue(request(
+    `/api/organizer/events/${candidateId}/venues`, "POST", {
+      name: "沒有來源的場館", sourceUrl: null,
+      initialSpace: { name: "全館", sourceUrl: null, defaultAreaMode: "none" },
+    }, ownerCookie,
+  ), candidateId);
+  assert.equal(missingSource.status, 400);
+
   const createdVenue = await handlers.createOrganizerVenue(request(
     `/api/organizer/events/${candidateId}/venues`, "POST", {
       name: "松山文創園區",
@@ -156,6 +166,13 @@ test("an event organizer can list and immediately extend the shared venue catalo
   const createdSpaceBody = await createdSpace.json();
   assert.equal(createdSpaceBody.space.defaultAreaMode, "none");
 
+  const missingSpaceSource = await handlers.createOrganizerVenueSpace(request(
+    `/api/organizer/events/${candidateId}/venues/${createdVenueBody.venue.id}/spaces`, "POST", {
+      name: "沒有來源的空間", sourceUrl: "", defaultAreaMode: "none",
+    }, ownerCookie,
+  ), candidateId, createdVenueBody.venue.id);
+  assert.equal(missingSpaceSource.status, 400);
+
   const refreshed = await handlers.listOrganizerVenues(request(
     `/api/organizer/events/${candidateId}/venues`, "GET", undefined, ownerCookie,
   ), candidateId);
@@ -173,6 +190,40 @@ test("an event organizer can list and immediately extend the shared venue catalo
     `/api/organizer/events/${candidateId}/venues`, "GET", undefined, strangerCookie,
   ), candidateId);
   assert.equal(hidden.status, 404);
+});
+
+test("candidate updates reject missing and mismatched venue catalog references", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "Reference 驗證", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const base = {
+    schema: "organizer-event-draft/1",
+    event: { id: "reference-validation", name: "Reference 驗證", days: [] },
+    venue: { assignments: [] },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/reference" },
+  };
+  const save = (assignment) => handlers.updateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "PATCH",
+    { expectedVersion: 1, draft: { ...base, venue: { assignments: [assignment] } } }, ownerCookie,
+  ), candidateId);
+
+  const unknownVenue = await save({ venueId: "missing-venue", venueSpaceId: VENUE_SPACE_ID, areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" });
+  assert.equal(unknownVenue.status, 422);
+  assert.equal((await unknownVenue.json()).issues[0].code, "unknown_venue");
+  const unknownSpace = await save({ venueId: VENUE_ID, venueSpaceId: "missing-space", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" });
+  assert.equal(unknownSpace.status, 422);
+  assert.equal((await unknownSpace.json()).issues[0].code, "unknown_venue_space");
+  const mismatch = await save({
+    venueId: "taipei-nangang-exhibition-center-hall-1",
+    venueSpaceId: "taipei-nangang-exhibition-center-hall-2-1f",
+    areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1",
+  });
+  assert.equal(mismatch.status, 422);
+  assert.equal((await mismatch.json()).issues[0].code, "venue_space_mismatch");
 });
 
 test("organizer onboarding persists real progress and completes without a candidate revision", async () => {
@@ -210,7 +261,7 @@ test("organizer onboarding persists real progress and completes without a candid
   const draft = {
     schema: "organizer-event-draft/1",
     event: { id: "pf45-rf14", name: "PF45 x RF14", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
-    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
     officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
   };
   const saved = await handlers.updateOrganizerCandidate(request(
@@ -256,7 +307,7 @@ test("organizer detail uses formal map validation for readiness", async () => {
   const draft = {
     schema: "organizer-event-draft/1",
     event: { id: "map-readiness", name: "地圖 readiness 測試", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
-    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
     officialSource: { label: "主辦提供", url: "https://organizer.example/map-readiness" },
   };
   assert.equal((await handlers.updateOrganizerCandidate(request(
@@ -266,12 +317,12 @@ test("organizer detail uses formal map validation for readiness", async () => {
     `/api/organizer/events/${candidateId}/imports`, "PUT", {
       expectedVersion: 2,
       source: { fileName: "official.csv", worksheet: null, sha256: "b".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
-      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
     }, ownerCookie,
   ), candidateId)).status, 200);
   assert.equal((await handlers.createOrganizerMap(request(
     `/api/organizer/events/${candidateId}/maps`, "POST", {
-      expectedVersion: 3, periodKey: "1", venueSpaceId: "hall-a",
+      expectedVersion: 3, periodKey: "1", venueSpaceId: VENUE_SPACE_ID,
       layout: {
         version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
         floor: { x: 0, y: 0, width: 100, height: 80 },
@@ -314,7 +365,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
       ],
     },
     venue: {
-      assignments: [{ venueId: "taipei-flower-expo", venueSpaceId: "zhengyan", areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1" }],
+      assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "none" }],
     },
     officialSource: { label: "主辦提供名單", url: "https://organizer.example/pf45" },
   };
@@ -329,13 +380,14 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     `/api/organizer/events/${candidateId}/imports`, "PUT", {
       expectedVersion: 2,
       source: { fileName: "official.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
-      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: "zhengyan", areaId: "ALL", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "來源中的假分區", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
     }, editorCookie,
   ), candidateId);
   assert.equal(imported.status, 200);
+  assert.equal((await repository.getOrganizerImport(candidateId)).rows[0].area_id, "ALL");
   const mapCreated = await handlers.createOrganizerMap(request(
     `/api/organizer/events/${candidateId}/maps`, "POST", {
-      expectedVersion: 3, periodKey: "1", venueSpaceId: "zhengyan",
+      expectedVersion: 3, periodKey: "1", venueSpaceId: VENUE_SPACE_ID,
       layout: {
         version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
         floor: { x: 0, y: 0, width: 100, height: 80 },
@@ -407,7 +459,7 @@ test("import API persists confirmed normalized rows and rejects stale versions",
   const draft = {
     schema: "organizer-event-draft/1",
     event: { id: "pf45-rf14", name: "PF45 x RF14", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
-    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"] }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"] }] },
     officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
   };
   const saved = await handlers.updateOrganizerCandidate(request(
@@ -421,7 +473,7 @@ test("import API persists confirmed normalized rows and rejects stale versions",
       sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } },
     },
     rows: [{
-      sourceRow: 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A",
+      sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A",
       boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null,
     }],
   };
@@ -450,7 +502,7 @@ test("import API tells the organizer which limit rejected the batch", async () =
   const draft = {
     schema: "organizer-event-draft/1",
     event: { id: "pf45-limits", name: "PF45", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
-    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"] }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"] }] },
     officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
   };
   const saved = await handlers.updateOrganizerCandidate(request(
@@ -462,7 +514,7 @@ test("import API tells the organizer which limit rejected the batch", async () =
     sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } },
   };
   const row = (index, circleName) => ({
-    sourceRow: index + 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A",
+    sourceRow: index + 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A",
     boothCode: `A${index}`, circleName, stableKey: null, identityGroup: null,
   });
 
@@ -502,7 +554,7 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   const draft = {
     schema: "organizer-event-draft/1",
     event: { id: "pf45", name: "PF45", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
-    venue: { assignments: [{ venueId: "expo", venueSpaceId: "hall-a", areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
     officialSource: { label: "主辦", url: "https://organizer.example/pf45" },
   };
   await handlers.updateOrganizerCandidate(request(
@@ -514,7 +566,7 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   };
   const mapCreated = await handlers.createOrganizerMap(request(
     `/api/organizer/events/${candidateId}/maps`, "POST",
-    { expectedVersion: 2, periodKey: "1", venueSpaceId: "hall-a", layout }, ownerCookie,
+    { expectedVersion: 2, periodKey: "1", venueSpaceId: VENUE_SPACE_ID, layout }, ownerCookie,
   ), candidateId);
   assert.equal(mapCreated.status, 201);
   const { draftId } = await mapCreated.json();
@@ -522,7 +574,7 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   const listed = await handlers.listOrganizerMaps(request(
     `/api/organizer/events/${candidateId}/maps`, "GET", undefined, ownerCookie,
   ), candidateId);
-  assert.deepEqual((await listed.json()).maps.map((item) => [item.periodKey, item.venueSpaceId, item.mapRevision]), [["1", "hall-a", 1]]);
+  assert.deepEqual((await listed.json()).maps.map((item) => [item.periodKey, item.venueSpaceId, item.mapRevision]), [["1", VENUE_SPACE_ID, 1]]);
 
   layout.landmarks.push({ id: "stage", kind: "stage", label: "舞台", rect: { x: 4, y: 4, width: 10, height: 10 } });
   const saved = await handlers.updateOrganizerMap(request(

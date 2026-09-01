@@ -9,7 +9,7 @@ export type OrganizerImportFieldMapping =
 export type OrganizerImportMapping = {
   day: OrganizerImportFieldMapping;
   venueSpace: OrganizerImportFieldMapping;
-  area: OrganizerImportFieldMapping;
+  area?: OrganizerImportFieldMapping;
   boothCode: OrganizerImportFieldMapping;
   circleName: OrganizerImportFieldMapping;
   stableKey?: OrganizerImportFieldMapping;
@@ -96,6 +96,7 @@ export function prepareOrganizerImport(input: {
   rows: readonly OrganizerImportTableRow[];
   headerRow: number;
   mapping: OrganizerImportMapping;
+  areaModeByVenueSpace?: Readonly<Record<string, "imported" | "none">>;
 }) {
   if (!Number.isSafeInteger(input.headerRow) || input.headerRow < 1 || input.headerRow >= input.rows.length) {
     throw new Error("標題列必須在資料列前面。");
@@ -107,7 +108,9 @@ export function prepareOrganizerImport(input: {
   for (const source of input.rows.slice(input.headerRow)) {
     const dayId = mapped(source, input.mapping.day);
     const venueSpaceId = mapped(source, input.mapping.venueSpace);
-    const areaId = mapped(source, input.mapping.area);
+    const areaId = input.areaModeByVenueSpace?.[venueSpaceId] === "none"
+      ? "ALL"
+      : mapped(source, input.mapping.area);
     const boothCode = mapped(source, input.mapping.boothCode);
     const circleName = mapped(source, input.mapping.circleName);
     const stableKey = mapped(source, input.mapping.stableKey) || null;
