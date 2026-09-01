@@ -7,7 +7,7 @@ const mono = Geist_Mono({ variable: "--font-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "場刊 Map｜同人展逛攤地圖",
-  description: "搜尋 FF47 三日攤位、收藏社團並規劃你的逛攤路線。",
+  description: "搜尋同人展攤位、收藏社團並規劃你的逛攤路線。",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
