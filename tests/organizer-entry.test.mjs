@@ -30,6 +30,20 @@ test("organizer login uses its audience and narrow screens never mount authoring
   assert.match(client, /\/api\/organizer\/events/);
 });
 
+test("venue authoring uses human selections, immediate creation, and no-division guidance", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  assert.match(app, /場館與使用空間/);
+  assert.match(app, /建立新場館/);
+  assert.match(app, /找不到空間？立即新增/);
+  assert.match(app, /無分區（ALL）/);
+  assert.match(app, /尚未儲存/);
+  assert.match(app, /onDraftStateChange=.*setLiveDraft/);
+  assert.match(app, /liveSection=\{activeLiveSection\}/);
+  assert.match(app, /需先儲存/);
+  assert.match(app, /organizerIssueMessage/);
+  assert.doesNotMatch(app, /<label>場館 ID|<label>場館空間 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
+});
+
 test("organizer ships the ADR-0047 guided station, binder readiness, and the shared light design language", async () => {
   const [app, client, css] = await Promise.all([
     readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8"),
@@ -66,6 +80,25 @@ test("a successful draft save synchronizes its revision before follow-up navigat
   assert.ok(versionSynced > saveStart, "saved revision is not synchronized locally");
   assert.ok(detailReloaded > versionSynced, "detail reload must follow local revision synchronization");
   assert.ok(followUp > detailReloaded, "onboarding or navigation callback must run after reload");
+});
+
+test("organizer save counters stay internal when no revision diff is available", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
+  assert.match(app, /setNotice\(\{ kind: "ok", message: "已儲存。" \}\)/);
+});
+
+test("organizer reuses the event source for imports and labels every activity-day field", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(app, /<label>來源說明<input/);
+  assert.match(app, /sourceDescription: detail\.draft\.officialSource\.label/);
+  assert.match(app, /<label>代碼<input/);
+  assert.match(app, /<label>名稱<input/);
+  assert.match(app, /<label>日期<input/);
+  assert.match(app, />自由編輯<\/text>/);
+  assert.doesNotMatch(app, /描摹/);
 });
 
 test("an explicit save-and-leave selection is not replaced by list refresh", async () => {

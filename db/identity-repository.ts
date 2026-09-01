@@ -1,4 +1,10 @@
 import { CIRCLE_OVERRIDES_SCHEMA, type CircleRetentionChoice } from "../app/circle-overrides";
+import {
+  INITIAL_ORGANIZER_VENUE_CATALOG,
+  organizerVenueNameKey,
+  type OrganizerVenueCatalog,
+  type OrganizerVenueSpaceAreaMode,
+} from "../app/organizer-venue-catalog";
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
 
 /**
@@ -20,6 +26,17 @@ export type ClaimMethod = "email_domain" | "link_token" | "admin";
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 export type OrganizerRole = "owner" | "editor";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed";
+
+export type IdentityAuditEntry = {
+  at: number;
+  actorAccountId?: string | null;
+  actorRole: "circle" | "map_contributor" | "organizer_owner" | "organizer_editor" | "admin" | "system";
+  action: string;
+  subjectType: string;
+  subjectId: string;
+  detail?: unknown;
+  ipHash?: string | null;
+};
 
 export type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
 
@@ -77,6 +94,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         .then(() => addMissingColumns())
         .then(() => database.batch(IDENTITY_INDEXES.map(({ sql }) => database.prepare(sql))))
         .then(() => seedAdmins())
+        .then(() => seedOrganizerVenueCatalog())
         .catch((error: unknown) => {
           tablesReady = null;
           throw error;
@@ -113,6 +131,29 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(email, now)));
   }
 
+  async function seedOrganizerVenueCatalog() {
+    const statements: D1PreparedStatement[] = [];
+    for (const venue of INITIAL_ORGANIZER_VENUE_CATALOG) {
+      statements.push(database.prepare(
+        `INSERT INTO organizer_venues (id, name, name_key, source_url, created_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, 'system', 0)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, name_key = excluded.name_key,
+           source_url = excluded.source_url`,
+      ).bind(venue.id, venue.name, organizerVenueNameKey(venue.name), venue.sourceUrl));
+      for (const space of venue.spaces) {
+        statements.push(database.prepare(
+          `INSERT INTO organizer_venue_spaces (
+             id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
+           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'system', 0)
+           ON CONFLICT(id) DO UPDATE SET venue_id = excluded.venue_id, name = excluded.name,
+             name_key = excluded.name_key, source_url = excluded.source_url,
+             default_area_mode = excluded.default_area_mode`,
+        ).bind(space.id, venue.id, space.name, organizerVenueNameKey(space.name), space.sourceUrl, space.defaultAreaMode));
+      }
+    }
+    if (statements.length > 0) await database.batch(statements);
+  }
+
   async function listAdmins() {
     await ensureTables();
     const result = await database.prepare("SELECT email, added_by, added_at FROM admins ORDER BY added_at ASC")
@@ -143,18 +184,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
-  async function writeAudit(entry: {
-    at: number;
-    actorAccountId?: string | null;
-    actorRole: "circle" | "map_contributor" | "organizer_owner" | "organizer_editor" | "admin" | "system";
-    action: string;
-    subjectType: string;
-    subjectId: string;
-    detail?: unknown;
-    ipHash?: string | null;
-  }) {
-    await ensureTables();
-    await database.prepare(
+  function auditStatement(entry: IdentityAuditEntry) {
+    return database.prepare(
       `INSERT INTO audit_log (
          id, at, actor_account_id, actor_role, action, subject_type, subject_id,
          detail_json, ip_hash, shredded_at
@@ -173,7 +204,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       crypto.randomUUID(), entry.at, entry.actorAccountId ?? null, entry.actorRole,
       entry.action, entry.subjectType, entry.subjectId,
       entry.detail === undefined ? null : JSON.stringify(entry.detail), entry.ipHash ?? null,
-    ).run();
+    );
+  }
+
+  async function writeAudit(entry: IdentityAuditEntry) {
+    await ensureTables();
+    await auditStatement(entry).run();
   }
 
   /** `origin` splits the two budgets that share this table. "self" counts only
@@ -367,6 +403,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE map_contributor_grants SET revoked_by = '[shredded]' WHERE revoked_by = ?1`).bind(input.email),
       database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
       database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_venue_spaces SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET last_updated_by = '[shredded]' WHERE last_updated_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET submitted_by = '[shredded]' WHERE submitted_by = ?1`).bind(input.accountId),
@@ -1438,6 +1476,113 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     last_section: string;
     updated_at: number;
   };
+
+  async function listOrganizerVenueCatalog(): Promise<OrganizerVenueCatalog> {
+    await ensureTables();
+    const [venueResult, spaceResult] = await Promise.all([
+      database.prepare(
+        "SELECT id, name, source_url FROM organizer_venues ORDER BY created_at, name_key, id",
+      ).all<{ id: string; name: string; source_url: string | null }>(),
+      database.prepare(
+        `SELECT id, venue_id, name, source_url, default_area_mode
+         FROM organizer_venue_spaces ORDER BY created_at, name_key, id`,
+      ).all<{
+        id: string; venue_id: string; name: string; source_url: string | null;
+        default_area_mode: OrganizerVenueSpaceAreaMode;
+      }>(),
+    ]);
+    return {
+      venues: venueResult.results.map((venue) => ({
+        id: venue.id,
+        name: venue.name,
+        sourceUrl: venue.source_url,
+        spaces: spaceResult.results
+          .filter((space) => space.venue_id === venue.id)
+          .map((space) => ({
+            id: space.id,
+            venueId: space.venue_id,
+            name: space.name,
+            sourceUrl: space.source_url,
+            defaultAreaMode: space.default_area_mode,
+          })),
+      })),
+    };
+  }
+
+  async function createOrganizerVenue(input: {
+    id: string;
+    name: string;
+    sourceUrl: string | null;
+    createdByAccountId: string;
+    now: number;
+    initialSpace: {
+      id: string;
+      name: string;
+      sourceUrl: string | null;
+      defaultAreaMode: OrganizerVenueSpaceAreaMode;
+    };
+    audit: IdentityAuditEntry;
+  }) {
+    await ensureTables();
+    try {
+      const results = await database.batch([
+        database.prepare(
+          `INSERT INTO organizer_venues (id, name, name_key, source_url, created_by, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+        ).bind(input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl, input.createdByAccountId, input.now),
+        database.prepare(
+          `INSERT INTO organizer_venue_spaces (
+             id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
+           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+        ).bind(
+          input.initialSpace.id, input.id, input.initialSpace.name,
+          organizerVenueNameKey(input.initialSpace.name), input.initialSpace.sourceUrl,
+          input.initialSpace.defaultAreaMode, input.createdByAccountId, input.now,
+        ),
+        auditStatement(input.audit),
+      ]);
+      return results.every((result) => result.meta.changes === 1)
+        ? { ok: true as const }
+        : { ok: false as const, reason: "conflict" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/unique constraint/i.test(message)) return { ok: false as const, reason: "duplicate" as const };
+      throw error;
+    }
+  }
+
+  async function createOrganizerVenueSpace(input: {
+    id: string;
+    venueId: string;
+    name: string;
+    sourceUrl: string | null;
+    defaultAreaMode: OrganizerVenueSpaceAreaMode;
+    createdByAccountId: string;
+    now: number;
+    audit: IdentityAuditEntry;
+  }) {
+    await ensureTables();
+    const venue = await database.prepare("SELECT id FROM organizer_venues WHERE id = ?1")
+      .bind(input.venueId).first<{ id: string }>();
+    if (!venue) return { ok: false as const, reason: "not_found" as const };
+    try {
+      const results = await database.batch([database.prepare(
+        `INSERT INTO organizer_venue_spaces (
+           id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
+         ) VALUES (?1, ?8, ?2, ?3, ?4, ?5, ?6, ?7)`,
+      ).bind(
+        input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl,
+        input.defaultAreaMode, input.createdByAccountId, input.now, input.venueId,
+      ), auditStatement(input.audit)]);
+      return results.every((result) => result.meta.changes === 1)
+        ? { ok: true as const }
+        : { ok: false as const, reason: "conflict" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/unique constraint/i.test(message)) return { ok: false as const, reason: "duplicate" as const };
+      throw error;
+    }
+  }
 
   async function organizerRole(candidateId: string, accountId: string): Promise<OrganizerRole | null> {
     await ensureTables();
@@ -2519,10 +2664,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
-      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates",
+      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
+    await seedOrganizerVenueCatalog();
   }
 
   return {
@@ -2543,6 +2689,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
+    listOrganizerVenueCatalog, createOrganizerVenue, createOrganizerVenueSpace,
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,

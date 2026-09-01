@@ -24,7 +24,7 @@ const TEMPLATE_OPTIONS: readonly MapTemplateOption[] = [
   {
     id: "TAIWAN_GENERIC_V1",
     label: "通用版型",
-    summary: "上傳配置圖後手動描摹攤位，排列方式不受固定規格限制。",
+    summary: "上傳配置圖後手動編輯攤位，排列方式不受固定規格限制。",
   },
   {
     id: "FF47",

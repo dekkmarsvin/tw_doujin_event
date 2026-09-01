@@ -12,6 +12,11 @@ import type {
   OrganizerWorkspaceReadiness,
   OrganizerWorkspaceSection,
 } from "./organizer-workspace";
+import type {
+  OrganizerVenueCatalog,
+  OrganizerVenueCatalogSpace,
+  OrganizerVenueSpaceAreaMode,
+} from "./organizer-venue-catalog";
 
 async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -46,6 +51,7 @@ export type OrganizerEventSummary = {
 export type OrganizerEventDetail = {
   event: OrganizerEventSummary & { eventIdLocked: boolean };
   draft: OrganizerEventDraft;
+  venueCatalog: OrganizerVenueCatalog;
   revisions: Array<{ version: number; eventId: string | null; createdByRole: string; createdAt: number }>;
   import: null | {
     source: {
@@ -82,6 +88,37 @@ export function saveOrganizerEvent(candidateId: string, expectedVersion: number,
     method: "PATCH",
     body: JSON.stringify({ expectedVersion, draft }),
   });
+}
+
+export function listOrganizerVenues(candidateId: string) {
+  return organizerCall<OrganizerVenueCatalog>(
+    `/api/organizer/events/${encodeURIComponent(candidateId)}/venues`,
+  );
+}
+
+export function createOrganizerVenue(candidateId: string, input: {
+  name: string;
+  sourceUrl: string | null;
+  initialSpace: { name: string; sourceUrl: string | null; defaultAreaMode: OrganizerVenueSpaceAreaMode };
+}) {
+  return organizerCall<{
+    venue: { id: string; name: string; sourceUrl: string | null };
+    space: OrganizerVenueCatalogSpace;
+  }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/venues`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function createOrganizerVenueSpace(candidateId: string, venueId: string, input: {
+  name: string;
+  sourceUrl: string | null;
+  defaultAreaMode: OrganizerVenueSpaceAreaMode;
+}) {
+  return organizerCall<{ space: OrganizerVenueCatalogSpace }>(
+    `/api/organizer/events/${encodeURIComponent(candidateId)}/venues/${encodeURIComponent(venueId)}/spaces`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 export function saveOrganizerWorkspacePreference(candidateId: string, input: {
