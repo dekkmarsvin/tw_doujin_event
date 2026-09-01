@@ -80,7 +80,13 @@ CI 跑同一組。`npm test` 先以 fixture 建立 Pages build，再執行全部
 | `npm run test:cli` | 會另外開子行程跑 `scripts/` CLI 的測試 | 否 |
 | `npm run test:artifact` | 檢查 `dist/` 產物的測試 | 是 |
 
-`test:changed` 由 `scripts/select-tests.mjs` 從相依關係推出要跑哪些；改到 `package.json`、build 設定或它解析不出來的路徑時，它會退回跑全套。**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
+`test:changed` 由 `scripts/select-tests.mjs` 從相依關係推出要跑哪些。它只在三種情況下給出「不用跑」：
+
+- 改到 `package.json`、build 設定、`tests/` 裡的非測試檔或 workflow → 退回跑全套。
+- 改到它的相依模型看不到的路徑（掃描目錄以外）→ 退回跑全套。
+- 改到模型涵蓋、但確實沒有任何測試碰到的檔案 → 印出「no test covers …」點名該檔。那是覆蓋率缺口，不是通過。
+
+`dist/` 產物測試會被列為「也受影響」但不在 `test:changed` 裡跑，因為當下的 `dist/` 可能是舊的；它會提示你另外跑 `npm run test:artifact`。**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 
 ## 額外檢查
 

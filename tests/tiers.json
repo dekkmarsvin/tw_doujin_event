@@ -9,6 +9,7 @@
     "circle-records.test.mjs",
     "circle-search.test.mjs",
     "cloudflare-usage.test.mjs",
+    "contribution-files.test.mjs",
     "event-authoring-scope.test.mjs",
     "event-chooser-component.test.mjs",
     "event-data-fetcher.test.mjs",
@@ -60,7 +61,6 @@
   "cli": [
     "circle-identity-registry.test.mjs",
     "cloudflare-usage-cli.test.mjs",
-    "contribution-files.test.mjs",
     "official-booth-importer.test.mjs",
     "published-events.test.mjs"
   ],
@@ -79,8 +79,7 @@
       "PRODUCT.md",
       "DESIGN.md",
       "CONTRIBUTING.md",
-      "CODE_OF_CONDUCT.md",
-      "scripts/check-doc-map.mjs"
+      "CODE_OF_CONDUCT.md"
     ],
     "rendered-html.test.mjs": [
       "index.html",

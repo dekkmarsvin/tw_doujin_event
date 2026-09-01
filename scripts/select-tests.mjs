@@ -7,12 +7,18 @@
 // is declared in tests/tiers.json under "deps". A test with neither a scanned
 // nor a declared edge always runs, and is reported — silence is never treated
 // as "nothing depends on this".
+//
+// The same rule applies from the other side. A changed file the model has no
+// view of — outside every scanned directory — selects the full suite; one the
+// model does cover but that no test reaches is reported as uncovered, not
+// passed off as a clean run.
 import { readdir, readFile, stat } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+export const TIER_NAMES = ["module", "d1", "cli", "artifact"];
 const SOURCE_DIRS = ["app", "db", "functions", "scripts", "worker", "workers", "build"];
 const DATA_DIRS = ["fixtures", "data", "docs", "monitoring", "public", ".github"];
 const RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".mjs", ".js", ".jsx", ".json", ".css"];
@@ -28,11 +34,18 @@ const ALWAYS_FULL = [
   /^next\.config\.ts$/,
   /^drizzle\.config\.ts$/,
   /^wrangler\.jsonc$/,
-  /^tests\/tiers\.json$/,
-  /^tests\/helpers\//,
+  // Anything under tests/ that is not itself a test file: the manifest, and any
+  // support file a test might load without naming it in a way a scan can see.
+  /^tests\/(?!.*\.test\.mjs$)/,
   /^scripts\/select-tests\.mjs$/,
+  /^scripts\/run-tests\.mjs$/,
   /^\.github\/workflows\//,
 ];
+
+// Paths the selector can reason about: it either walks their imports or lists
+// them as data. A changed file outside all of them has no modelled edges, so
+// its absence from every dependency set proves nothing — see selectTests.
+const MODELLED_DIRS = [...SOURCE_DIRS, ...DATA_DIRS];
 
 const posix = (value) => value.split(path.sep).join("/");
 
@@ -151,35 +164,55 @@ function closure(entries, graph) {
   return seen;
 }
 
+export async function readTiers() {
+  return JSON.parse(await readFile(path.join(ROOT, "tests/tiers.json"), "utf8"));
+}
+
+export function tierMembers(tiers) {
+  return TIER_NAMES.flatMap((tier) => tiers[tier] ?? []);
+}
+
+/** tiers.json is the only manifest anything reads now, so a test file missing
+ *  from it would never run anywhere, including CI. Every entry point — a named
+ *  tier, `--all`, `--changed` — calls this before it builds a file list. */
+export async function assertTiersInSync(tiers) {
+  const listed = tierMembers(tiers);
+  const onDisk = (await readdir(path.join(ROOT, "tests"))).filter((file) => file.endsWith(".test.mjs"));
+  const missing = onDisk.filter((file) => !listed.includes(file)).sort();
+  const stale = listed.filter((file) => !onDisk.includes(file)).sort();
+  const duplicated = listed.filter((file, index) => listed.indexOf(file) !== index).sort();
+  // A deps entry keyed on a name no tier lists is a typo that would otherwise
+  // sit there declaring edges for a test that does not exist.
+  const orphanDeps = Object.keys(tiers.deps ?? {}).filter((file) => !listed.includes(file)).sort();
+  const detail = [
+    missing.length > 0 ? `absent from tests/tiers.json: ${missing.join(", ")}` : "",
+    stale.length > 0 ? `listed but not on disk: ${stale.join(", ")}` : "",
+    duplicated.length > 0 ? `listed in more than one tier: ${duplicated.join(", ")}` : "",
+    orphanDeps.length > 0 ? `deps declared for unlisted test(s): ${orphanDeps.join(", ")}` : "",
+  ].filter(Boolean).join("; ");
+  if (detail) throw new Error(`tests/tiers.json is out of sync with tests/ — ${detail}`);
+  return listed;
+}
+
 export async function buildTestMap() {
-  const tiers = JSON.parse(await readFile(path.join(ROOT, "tests/tiers.json"), "utf8"));
+  const tiers = await readTiers();
   const declared = tiers.deps ?? {};
   const graph = await buildSourceGraph();
   const allFiles = [...graph.keys()];
   for (const directory of DATA_DIRS) allFiles.push(...(await listFiles(directory)));
 
-  const testFiles = ["module", "d1", "cli", "artifact"].flatMap((tier) => tiers[tier] ?? []);
-
-  // tiers.json is the only manifest `npm test` reads, so a file missing from it
-  // would never run anywhere, including CI. Refuse to run rather than skip.
-  const onDisk = (await readdir(path.join(ROOT, "tests"))).filter((file) => file.endsWith(".test.mjs")).sort();
-  const listed = [...testFiles].sort();
-  const missing = onDisk.filter((file) => !listed.includes(file));
-  const stale = listed.filter((file) => !onDisk.includes(file));
-  if (missing.length > 0 || stale.length > 0) {
-    const detail = [
-      missing.length > 0 ? `absent from tests/tiers.json: ${missing.join(", ")}` : "",
-      stale.length > 0 ? `listed but not on disk: ${stale.join(", ")}` : "",
-    ].filter(Boolean).join("; ");
-    throw new Error(`tests/tiers.json is out of sync with tests/ — ${detail}`);
-  }
+  const testFiles = await assertTiersInSync(tiers);
   const map = new Map();
   const unresolved = [];
   for (const testFile of testFiles) {
     const scanned = await scanTestEdges(`tests/${testFile}`);
     for (const extra of declared[testFile] ?? []) {
       const resolved = await resolveRepoPath(extra);
-      if (resolved) scanned.add(resolved);
+      // A declared edge that resolves to nothing is a stale or mistyped path.
+      // Dropping it silently would quietly narrow the selection, which is the
+      // one direction this tool must never fail in.
+      if (!resolved) throw new Error(`tests/tiers.json: deps["${testFile}"] names "${extra}", which is not in the repo`);
+      scanned.add(resolved);
     }
     const entries = expandDirectories(scanned, allFiles);
     if (entries.size === 0) unresolved.push(testFile);
@@ -194,24 +227,51 @@ export async function selectTests(changedFiles) {
 
   const forcedBy = changed.find((file) => ALWAYS_FULL.some((pattern) => pattern.test(file)));
   if (forcedBy) {
-    return { selected: testFiles, reason: `full suite: ${forcedBy} invalidates the selection`, unresolved };
+    return { selected: testFiles, reason: `full suite: ${forcedBy} invalidates the selection`, unresolved, uncovered: [] };
+  }
+
+  // Every path a dependency set could possibly name. A changed file inside a
+  // modelled directory but outside this set is genuinely untested; one outside
+  // the modelled directories is simply invisible to the scan, and those two
+  // cases must not be answered the same way.
+  const modelled = new Set();
+  for (const dependencies of map.values()) for (const file of dependencies) modelled.add(file);
+
+  const invisible = changed.filter((file) => {
+    if (modelled.has(file)) return false;
+    if (file.startsWith("tests/")) return false;
+    return !MODELLED_DIRS.some((directory) => file.startsWith(`${directory}/`));
+  });
+  if (invisible.length > 0) {
+    return {
+      selected: testFiles,
+      reason: `full suite: ${invisible[0]} is outside the dependency model`,
+      unresolved,
+      uncovered: [],
+    };
   }
 
   const selected = new Set(unresolved);
+  const uncovered = [];
   for (const file of changed) {
     if (file.startsWith("tests/") && file.endsWith(".test.mjs")) {
       const name = file.slice("tests/".length);
       if (map.has(name)) selected.add(name);
       continue;
     }
+    let covered = false;
     for (const [testFile, dependencies] of map) {
-      if (dependencies.has(file)) selected.add(testFile);
+      if (!dependencies.has(file)) continue;
+      selected.add(testFile);
+      covered = true;
     }
+    if (!covered) uncovered.push(file);
   }
   return {
     selected: testFiles.filter((file) => selected.has(file)),
     reason: `${changed.length} changed file(s)`,
     unresolved,
+    uncovered,
   };
 }
 
@@ -245,12 +305,13 @@ if (invokedDirectly) {
     ? changedFilesFrom(baseIndex === -1 ? "main" : args[baseIndex + 1])
     : args.slice(filesIndex + 1).filter((argument) => !argument.startsWith("--"));
 
-  const { selected, reason, unresolved } = await selectTests(changed);
+  const { selected, reason, unresolved, uncovered } = await selectTests(changed);
   if (args.includes("--explain")) {
     console.error(`changed: ${changed.length} file(s)`);
     console.error(`reason: ${reason}`);
     if (unresolved.length > 0) console.error(`always-run (no resolvable edge): ${unresolved.join(", ")}`);
-    console.error(`selected: ${selected.length}/${(await buildTestMap()).testFiles.length}`);
+    if (uncovered.length > 0) console.error(`no test covers: ${uncovered.join(", ")}`);
+    console.error(`selected: ${selected.length}/${tierMembers(await readTiers()).length}`);
   }
   console.log(selected.map((file) => `tests/${file}`).join(" "));
 }

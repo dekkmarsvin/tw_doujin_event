@@ -10,19 +10,21 @@
 // The artifact tier reads dist/, so it is skipped unless asked for by name (or
 // with --all). When --changed selects an artifact test, that is reported rather
 // than silently dropped: dist/ may be stale or absent.
-import { readFile } from "node:fs/promises";
+//
+// Every path through this file checks tests/tiers.json against tests/ first.
+// The manifest replaced a `tests/*.test.mjs` glob, so an unlisted test file
+// would otherwise run nowhere at all — least of all in CI, which is `--all`.
 import { spawnSync } from "node:child_process";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { changedFilesFrom, selectTests } from "./select-tests.mjs";
+import { assertTiersInSync, changedFilesFrom, readTiers, selectTests, TIER_NAMES } from "./select-tests.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const TIER_NAMES = ["module", "d1", "cli", "artifact"];
 
 const args = process.argv.slice(2);
 const reporter = args.includes("--spec") ? "spec" : "dot";
 const isolation = args.includes("--isolate") ? "process" : null;
-const tiers = JSON.parse(await readFile(path.join(ROOT, "tests/tiers.json"), "utf8"));
+const tiers = await readTiers();
+await assertTiersInSync(tiers);
 
 function filesForTiers(names) {
   return names.flatMap((name) => (tiers[name] ?? []).map((file) => `tests/${file}`));
@@ -35,7 +37,7 @@ if (args.includes("--all")) {
   files = filesForTiers(TIER_NAMES);
   label = "all tiers";
 } else if (args.includes("--changed")) {
-  const { selected, reason, unresolved } = await selectTests(changedFilesFrom());
+  const { selected, reason, unresolved, uncovered } = await selectTests(changedFilesFrom());
   const artifactTests = new Set((tiers.artifact ?? []).map((file) => `tests/${file}`));
   const all = selected.map((file) => `tests/${file}`);
   files = all.filter((file) => !artifactTests.has(file));
@@ -46,6 +48,10 @@ if (args.includes("--all")) {
   }
   if (deferred.length > 0) {
     console.error(`note: ${deferred.join(", ")} also affected; run \`npm run test:artifact\` to cover dist/.`);
+  }
+  // An empty run is a real answer here, but only ever an explained one.
+  if (uncovered.length > 0) {
+    console.error(`note: no test covers ${uncovered.join(", ")} — that is a coverage gap, not a pass.`);
   }
 } else {
   const named = args.filter((argument) => TIER_NAMES.includes(argument));
