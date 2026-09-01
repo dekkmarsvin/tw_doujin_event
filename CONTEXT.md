@@ -136,7 +136,7 @@ Organizer 透過受驗證的 Web UI 建立活動、選擇 Venue／Floor（venue 
 ## 工程
 
 **gate**
-交付前必須全數通過的檢查：`npm test`、`npm run lint`、`npx tsc --noEmit`。CI 跑同一組。
+交付前必須全數通過的一組檢查，CI 跑同一組。指令見[本機開發與驗證](docs/runbooks/local-development.md)。
 
 **產物邊界**（artifact boundary）
 公開 build 中什麼必須存在、什麼絕不能存在的規則。由測試把關，不靠人工檢查。

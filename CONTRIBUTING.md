@@ -13,15 +13,7 @@ npm install
 npm run dev:pages
 ```
 
-提交前必須通過共同 gate：
-
-```bash
-npm test
-npm run lint
-npx tsc --noEmit --incremental false
-```
-
-`npm test` 已包含 production build、資料一致性檢查與 Node tests。完整啟動方式及本機 authoring 的額外需求見[本機開發與驗證](docs/runbooks/local-development.md)。
+提交前必須通過共同 gate。指令、各層測試與本機 authoring 的額外需求見[本機開發與驗證](docs/runbooks/local-development.md)。
 
 ## 先確認改動邊界
 

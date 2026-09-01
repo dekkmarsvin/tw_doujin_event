@@ -3,7 +3,7 @@
 - 狀態：已實作（2026-08-14）；「規劃資料 schema 3 遷移」「D1 對照表遷移」「對照表永久保存」三項後果已由 [ADR-0013](./0013-drop-the-legacy-circle-id-compatibility-path.md) 取代
 - **部分被取代**：規則一的「跨活動延續同一 ID」已由 [ADR-0039](./0039-one-data-repo-for-events-and-references.md)（2026-08-28）暫緩。`c-xxxxxx` namespace 仍全域唯一；新活動為本活動 reviewed source 配發新 ID，不從其他活動的名稱或 evidence 沿用。規則二（不從可變欄位推導）與規則三（配發一次、永久保存）不變
 - 取代：[ADR-0003：社團身分以試算表主資料列為準](./0003-circle-identity-from-workbook-row.md)
-- 相關契約：[社團目錄契約](../contracts/circle-catalog.md#社團身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)、[社團自助控制面契約](../contracts/circle-portal.md)
+- 相關契約：[社團目錄契約](../contracts/circle-catalog.md#身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)、[社團自助控制面契約](../contracts/circle-portal.md)
 
 ## 脈絡
 

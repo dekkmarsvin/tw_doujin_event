@@ -45,7 +45,7 @@
 
 - **[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 在解除的那一刻從「未來的 blocker」變成擋在門口的那一個。** [ADR-0011](./0011-ff47-is-not-a-public-launch.md) 的閘控涵蓋社團端且不留 Bypass，所以閘控一旦移除，`/circle` 與 `/api/auth/*` 同時對外可達——任何人都能索取登入連結並送出 email，本站就開始收集真實個人資料。隱私告知與保存政策**不能晚於**解除。
 - **若 [#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 屆時尚未完成，需要一個新決策**：只對社團端保留閘控。這等於部分回復 ADR-0011「不保留任何 Bypass 路徑」的姿態，方向相反（放行閱讀端而非放行社團端），**本 ADR 不預先授予它**——要做就另寫 ADR，說明為什麼這次的例外不會重蹈原本 Bypass 清單難以維護的問題。
-- **CI 的 Access service token 依賴會改變。** 目前 smoke test 帶 `CF-Access-Client-Id`／`Secret` 通過閘控（見[部署 runbook](../runbooks/deployment.md#ci-用-service-token-通過-access)）。閘控移除後這組 header 變成無作用而非必要，`/` 應直接回 200；斷言與錯誤訊息要跟著改，否則 CI 會用一個不再存在的失敗模式解釋成功。
+- **CI 的 Access service token 依賴會改變。** 目前 smoke test 帶 `CF-Access-Client-Id`／`Secret` 通過閘控（見[部署 runbook](../runbooks/first-time-setup.md#ci-用-service-token-通過-preview-access)）。閘控移除後這組 header 變成無作用而非必要，`/` 應直接回 200；斷言與錯誤訊息要跟著改，否則 CI 會用一個不再存在的失敗模式解釋成功。
 - **公開之後才會有真實流量，Pages Functions 的每日配額才開始是實際約束。** 閱讀端純靜態不計費，但 `/data/events/:eventId/overrides.json` 是 Function，免費方案每日 100,000 次；以其 `max-age=60, must-revalidate` 的 revalidation 頻率估算，約當每天一萬名活躍讀者。解除前應確認快取行為，不要在開放當天才發現。
 
 ### 沒有改變的

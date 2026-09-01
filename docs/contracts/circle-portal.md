@@ -14,7 +14,7 @@
 
 正式入口是 <https://map.kotoban.top/circle>，不在 Cloudflare Access 內；任何人都能到達登入表單，但 Turnstile、email 一次性連結、session、認領證據與管理者角色仍逐層限制實際操作。隱私告知、保存期限與刪除機制已隨公開入口上線。
 
-Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，繼續由 Cloudflare Access 保護。CI 使用 Service Auth token 穿過 Access 後，才執行隔離 preview D1 上的完整流程；人工測試則使用維護者身分登入 Access。production 公開、preview 閘控的決策見 [ADR-0029](../adr/0029-public-production-gated-preview.md)，驗證方式見[部署 runbook](../runbooks/deployment.md#cloudflare-accessproduction-公開preview-閘控)。
+Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，繼續由 Cloudflare Access 保護。CI 使用 Service Auth token 穿過 Access 後，才執行隔離 preview D1 上的完整流程；人工測試則使用維護者身分登入 Access。production 公開、preview 閘控的決策見 [ADR-0029](../adr/0029-public-production-gated-preview.md)，驗證方式見[部署 runbook](../runbooks/first-time-setup.md#cloudflare-accessproduction-公開preview-閘控)。
 
 ## 入口分離
 
@@ -87,7 +87,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ### 連結順序有語意
 
-連結清單的順序**就是顯示順序**。地圖側欄只顯示前六個，其餘留在完整詳細資訊（見[社團目錄契約](./circle-catalog.md#資訊密度契約)），因此編輯器必須讓作者**看得到並改得動**這個順序，並說明第六個之後的界線在哪。
+連結清單的順序**就是顯示順序**。地圖側欄只顯示前六個，其餘留在完整詳細資訊（見[社團目錄契約](./circle-catalog.md#呈現契約)），因此編輯器必須讓作者**看得到並改得動**這個順序，並說明第六個之後的界線在哪。
 
 側欄是參觀者決定「要不要去這攤」的地方；把排序交給作者，等於把那個決定的依據交給最清楚的人。
 
@@ -176,15 +176,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 **實作**：[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`workers/retention-purge/`](../../workers/retention-purge)
 **測試**：`tests/retention-purge.test.mjs`
 
-| 資料 | 保存期限 | 已實作 |
-|---|---|---|
-| `login_tokens` | 建立後 24 小時 | 是 |
-| `sessions` | 到期或撤銷後 7 天 | 是 |
-| `preview_mail_sink` | 7 天 | 是 |
-| `audit_log.ip_hash` | 90 天後清空；action 與時間不刪 | 是 |
-| `accounts`、`circle_claims` | 不設期限；帳號自助刪除時連帶刪除 | 是 |
-| `audit_log`（IP 以外）、`admins` | 不設期限 | 不適用 |
-| `circle_overrides` | 由社團自選（保留／活動後清除，90 天） | 是 |
+各表的保存期限見[資料 inventory](./data-inventory.md#保存期現行常數)，`db/retention-purge.ts` 的 `RETENTION_WINDOWS` 是權威。
 
 - **清除跑在獨立的排程 Worker 上**，每天一次，不掛在任何使用者請求的路徑上（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。Cron Trigger 是 Workers 的功能，Pages 沒有；而機會性清除會讓保存期限變成流量的函數。部署方式見[部署 runbook](../runbooks/deployment.md#排程清除-worker)。
 - **`login_tokens` 依 `created_at` 清除，門檻必須大於一小時。** 那張表同時是每小時速率限制的計數來源（每信箱 5 次、每 IP 20 次），依「已使用」清除會把限制打穿。`purgeExpiredRecords` 對過短的視窗直接拋錯，不是靜靜照做。

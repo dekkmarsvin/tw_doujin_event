@@ -2,7 +2,7 @@
 
 - 狀態：已定案（2026-08-18）
 - 部分取代：[ADR-0010：社團身分改用配發的流水號](./0010-circle-identity-is-an-allocated-serial.md) 的「對照表要進版本控制並永久保存」一項
-- 相關契約：[社團目錄契約](./../contracts/circle-catalog.md#社團身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)、[URL 檢視狀態契約](../contracts/url-state.md)
+- 相關契約：[社團目錄契約](./../contracts/circle-catalog.md#身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)、[URL 檢視狀態契約](../contracts/url-state.md)
 
 ## 脈絡
 
