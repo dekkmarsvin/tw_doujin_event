@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { File } from "node:buffer";
-import test, { after, beforeEach } from "node:test";
+import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -62,6 +62,15 @@ const TABLES = [
   "admins",
 ];
 
+// The schema is built once. `ensureTables` memoizes on the repository closure,
+// so rebuilding the repository per test threw that memo away and re-ran every
+// CREATE TABLE, every ALTER, and every CREATE INDEX — 1935ms a test instead of
+// 141ms. Only `tablesReady` lives in that closure, so one instance is safe.
+before(async () => {
+  repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.com"] });
+  await repository.ensureTables();
+});
+
 beforeEach(async () => {
   sent = [];
   evidenceBody = null;
@@ -69,10 +78,9 @@ beforeEach(async () => {
   verifiedTokens = [];
   sitekey = () => "test-sitekey";
   thumbnailObjects = { put: [], deleted: [], keys: new Set() };
-  repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.com"] });
   // Isolation matters here: claim ownership and the login rate-limit window are
   // both persistent, so a shared database would make tests order-dependent.
-  await repository.ensureTables();
+  // Wiping the rows is what provides it; the schema above is stateless.
   await database.batch(TABLES.map((table) => database.prepare(`DELETE FROM ${table}`)));
   // The wipe clears the roster too, and ensureTables has already memoized its
   // seed, so restore the baseline admin explicitly.

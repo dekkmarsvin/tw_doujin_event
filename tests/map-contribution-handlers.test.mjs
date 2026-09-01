@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { File } from "node:buffer";
 import { deflateSync } from "node:zlib";
-import test, { after, beforeEach } from "node:test";
+import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -45,6 +45,14 @@ function validContent() {
   };
 }
 
+// Built once: `ensureTables` memoizes on the repository closure, so a fresh
+// repository per test re-ran the whole schema. Per-test isolation comes from
+// clearPreviewData() below, not from rebuilding the tables.
+before(async () => {
+  repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
+  await repository.ensureTables();
+});
+
 beforeEach(async () => {
   clock = NOW;
   sent = [];
@@ -56,8 +64,6 @@ beforeEach(async () => {
     // real element to name without the draft failing official coverage.
     allowedBoothCodes: ["A07"], requiredBoothCodes: [], targetPath: "map.json",
   };
-  repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
-  await repository.ensureTables();
   await repository.clearPreviewData();
   await repository.addAdmin("admin@example.test", "bootstrap", NOW);
   handlers = createCirclePortalHandlers({
@@ -357,11 +363,15 @@ test("failed metadata binding rolls back the private object", async () => {
   assert.equal(objects.size, 0);
 });
 
-test("a D1 exception after upload also rolls back the private object", async () => {
+test("a D1 exception after upload also rolls back the private object", async (t) => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");
   await grant("mapper@example.test", adminCookie);
   const { body: draft } = await newDraft(mapperCookie);
+  // The repository outlives this test, so the stub has to be undone here rather
+  // than by the next test rebuilding one.
+  const addMapDraftFile = repository.addMapDraftFile;
+  t.after(() => { repository.addMapDraftFile = addMapDraftFile; });
   repository.addMapDraftFile = async () => { throw new Error("D1 unavailable"); };
   await assert.rejects(() => handlers.uploadMapDraftFile(uploadRequest(draft.draftId, mapperCookie)), /D1 unavailable/);
   assert.equal(objects.size, 0);
