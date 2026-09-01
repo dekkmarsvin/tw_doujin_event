@@ -10,8 +10,8 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { confirmedDraftSlots, formatSlotCode, generateRowSlots, inferRowFromAnchors, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
-const { alignBoxesToEdge, applySelectionBoxes, boundingBox, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
+const { confirmedDraftSlots, formatSlotCode, generateRowSlots, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
@@ -381,6 +381,35 @@ test("an inferred row is only placed booth by booth, on a template with no recog
   assert.equal(validateEventMapLayout(layout).ok, true);
   assert.deepEqual(confirmedDraftSlots({ slots: generated.row.slots, keep: generated.row.slots.map(() => false) }), [],
     "a draft nobody confirmed contributes nothing, so it can never reach a submission");
+});
+
+test("a manual pointer drag becomes an exact canvas-bounded booth rectangle", () => {
+  const bounds = { width: 200, height: 120 };
+  assert.deepEqual(rectFromDrag({ x: 90, y: 70 }, { x: 30, y: 20 }, bounds), { x: 30, y: 20, width: 60, height: 50 });
+  assert.deepEqual(rectFromDrag({ x: -20, y: 10 }, { x: 250, y: 150 }, bounds), { x: 0, y: 10, width: 200, height: 110 });
+});
+
+test("disconnected and facing segments append to one logical row", () => {
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 300, 300);
+  const first = generateRowSlots({
+    label: "B", start: { x: 60, y: 40 }, end: { x: 60, y: 140 }, slotCount: 3,
+    slotWidth: 20, slotHeight: 16, codePrefix: "B", startNumber: 1, numberPadding: 2,
+  }, layout).row;
+  const facing = generateRowSlots({
+    label: "B", start: { x: 100, y: 40 }, end: { x: 100, y: 140 }, slotCount: 3,
+    slotWidth: 20, slotHeight: 16, codePrefix: "B", startNumber: 4, numberPadding: 2,
+  }, layout).row;
+  assert.deepEqual(appendRowSegment(layout, first), { ok: true, rowIndex: 0, itemStart: 0, errors: [] });
+  assert.deepEqual(appendRowSegment(layout, facing), { ok: true, rowIndex: 0, itemStart: 3, errors: [] });
+  assert.equal(layout.rows.length, 1, "the public layout still has one unique B row");
+  assert.deepEqual(layout.rows[0].slots.map(({ code }) => code), ["B01", "B02", "B03", "B04", "B05", "B06"]);
+  assert.deepEqual(layout.rows[0].slots.map(({ rect }) => rect.x), [50, 50, 50, 90, 90, 90], "one logical row may occupy facing columns");
+  assert.equal(validateEventMapLayout(layout).ok, true);
+
+  const before = structuredClone(layout);
+  const duplicate = { ...facing, slots: [{ ...facing.slots[0], code: "B03" }] };
+  assert.deepEqual(appendRowSegment(layout, duplicate), { ok: false, rowIndex: -1, itemStart: -1, errors: ["攤位代碼 B03 重複。"] });
+  assert.deepEqual(layout, before, "a rejected segment cannot partially mutate the row");
 });
 
 test("interpolation invents booths, so confirmation starts empty rather than pre-ticked", () => {

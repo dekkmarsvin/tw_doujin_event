@@ -21,6 +21,8 @@
 .canvasViewport { min-width:0; height:clamp(440px,58vh,680px); overflow:auto; padding:12px; overscroll-behavior:contain; scrollbar-color:#8a958e #dfe3df; scrollbar-width:thin; }
 .zoomSurface { min-width:100%; border:1px solid #bdc4be; border-radius:8px; background:#fff; overflow:hidden; }
 .canvas svg { display:block; width:100%; height:100%; background:#fff; touch-action:auto; user-select:none; }
+.canvas svg.drawing { touch-action:none; }
+.canvas svg.drawing,.canvas svg.drawing .editable { cursor:crosshair; }
 .canvas svg:focus-visible { outline:3px solid #9fb4aa; outline-offset:2px; }
 .paper { fill:#f8f7f2; pointer-events:none; }
 .sourceImage { opacity:.3; pointer-events:none; }
@@ -48,6 +50,7 @@
 .resizeNwSe { cursor:nwse-resize; }
 .resizeNeSw { cursor:nesw-resize; }
 .band { fill:#e86f5d14; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:6 4; vector-effect:non-scaling-stroke; pointer-events:none; }
+.manualDraft { fill:#3f7a5e1f; stroke:#3f7a5e; stroke-width:2; stroke-dasharray:7 4; vector-effect:non-scaling-stroke; pointer-events:none; }
 .snapGuide { fill:none; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke; pointer-events:none; }
 .inspector { min-width:0; padding:15px; border-left:1px solid #d4dad5; background:#fff; }
 .canvasSize { margin-top:0; margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
@@ -81,6 +84,7 @@
 .rowFormActions button:disabled { color:#a1aaa4; cursor:not-allowed; }
 .rowFormActions .rowConfirm { border-color:#8fa899; background:#eef4f0; color:#26503c; }
 .rowFormActions .rowConfirm:hover { background:#e2ede6; }
+.drawActive { border-color:#3f7a5e!important; background:#e2ede6!important; color:#26503c!important; }
 .draftSlot rect,.draftSlotKept rect { vector-effect:non-scaling-stroke; pointer-events:none; }
 .draftSlot text,.draftSlotKept text { font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
 .draftSlot rect { fill:#ffffff40; stroke:#8f9c95; stroke-width:1; stroke-dasharray:4 4; }

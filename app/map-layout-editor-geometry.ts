@@ -84,6 +84,26 @@ export function inferRowFromAnchors(anchors: readonly RowAnchor[]): RowInference
 
 export type RowDraft = { slots: BoothSlot[]; keep: boolean[] };
 
+/** Turns a pointer drag into a canvas-bounded rectangle. Pointer capture keeps
+ * reporting coordinates after the pointer leaves the SVG, so both endpoints
+ * are clamped before the rectangle is built. */
+export function rectFromDrag(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  bounds: Pick<MapRect, "width" | "height">,
+): MapRect {
+  const startX = Math.max(0, Math.min(bounds.width, start.x));
+  const startY = Math.max(0, Math.min(bounds.height, start.y));
+  const endX = Math.max(0, Math.min(bounds.width, end.x));
+  const endY = Math.max(0, Math.min(bounds.height, end.y));
+  return {
+    x: Math.min(startX, endX),
+    y: Math.min(startY, endY),
+    width: Math.abs(endX - startX),
+    height: Math.abs(endY - startY),
+  };
+}
+
 /** The booths an inferred draft still carries after the contributor went
  * through it. An inferred row is never written into the layout as a whole:
  * only what survives this filter is committed, so a booth nobody looked at

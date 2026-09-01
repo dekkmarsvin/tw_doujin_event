@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
-import { confirmedDraftSlots, generateRowSlots, inferRowFromAnchors, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type SnapGuide } from "./map-layout-editor-geometry";
-import { alignBoxesToEdge, applySelectionBoxes, boundingBox, boxFor, findRowConflicts, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection, type SlotClipboard } from "./map-layout-editor-selection";
+import { confirmedDraftSlots, generateRowSlots, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type SnapGuide } from "./map-layout-editor-geometry";
+import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, boxFor, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection, type SlotClipboard } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
@@ -26,8 +26,9 @@ type ResizeDragState = GestureState & { mode: "resize"; corner: ResizeCorner; or
 /** A rubber band selects rather than edits, so it carries no boxes and never
  * reaches `commit`. `base` is the selection to merge into when Shift is held. */
 type BandDragState = { mode: "band"; pointerId: number; startX: number; startY: number; additive: boolean; base: Selection[] };
+type SlotDrawDragState = { mode: "draw-slot"; pointerId: number; startX: number; startY: number };
 
-type DragState = MoveDragState | ResizeDragState | BandDragState;
+type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState;
 
 /** A review comment can point at one booth or landmark. `nonce` is what makes
  * the same target requestable twice: after the contributor clicks elsewhere,
@@ -56,6 +57,8 @@ type RowFormState = {
   startNumber: string;
   numberPadding: string;
 };
+
+type SlotDrawFormState = { rowLabel: string; code: string; orientation: MapOrientation };
 
 function blankRowForm(layout: EventMapLayout): RowFormState {
   return {
@@ -87,6 +90,26 @@ function rowDefinitionFrom(form: RowFormState): RowDefinition {
     startNumber: Number(form.startNumber),
     numberPadding: Number(form.numberPadding),
   };
+}
+
+function nextSlotCode(code: string, taken: ReadonlySet<string>) {
+  const match = /^(.*?)(\d+)$/.exec(code.trim());
+  const prefix = match?.[1] || `${code.trim() || "NEW"}-`;
+  const width = match?.[2].length ?? 1;
+  let number = match ? Number(match[2]) + 1 : 1;
+  let candidate = `${prefix}${String(number).padStart(width, "0")}`;
+  while (taken.has(candidate)) {
+    number += 1;
+    candidate = `${prefix}${String(number).padStart(width, "0")}`;
+  }
+  return candidate;
+}
+
+function initialSlotCode(layout: EventMapLayout, rowLabel: string) {
+  const row = layout.rows.find(({ label }) => label === rowLabel);
+  const taken = new Set(layout.rows.flatMap(({ slots }) => slots.map(({ code }) => code)));
+  if (row?.slots.length) return nextSlotCode(row.slots.at(-1)!.code, taken);
+  return nextSlotCode(`${rowLabel || "NEW"}00`, taken);
 }
 
 const MIN_EDITOR_ZOOM = 1;
@@ -164,6 +187,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const [layoutUnitsPerPixel, setLayoutUnitsPerPixel] = useState(layout.width / 800);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const [rowForm, setRowForm] = useState<RowFormState | null>(null);
+  const [slotDrawForm, setSlotDrawForm] = useState<SlotDrawFormState | null>(null);
+  const [slotDraftRect, setSlotDraftRect] = useState<MapRect | null>(null);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
   const [clipboard, setClipboard] = useState<SlotClipboard | null>(null);
@@ -206,6 +231,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     setSelections([]);
     setAnchors((current) => current && []);
     setDraftRow(null);
+    setSlotDraftRect(null);
   };
 
   const undo = () => {
@@ -293,6 +319,55 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     };
   };
 
+  const placeManualSlot = (rect: MapRect) => {
+    const form = slotDrawForm;
+    if (!form) return;
+    const minimum = 3 * layoutUnitsPerPixel;
+    if (rect.width < minimum || rect.height < minimum) {
+      setRowErrors(["請拖曳出攤位外框；寬與高都必須大於 3 px。"]);
+      return;
+    }
+    const label = form.rowLabel.trim();
+    const code = form.code.trim();
+    const existing = layout.rows.find(({ label: rowLabel }) => rowLabel === label);
+    const segment: BoothRow = {
+      label,
+      orientation: existing?.orientation ?? form.orientation,
+      confidence: 1,
+      slots: [{ code, rect }],
+    };
+    const draft = cloneLayout(layout);
+    const placement = appendRowSegment(draft, segment);
+    if (!placement.ok) {
+      setRowErrors(placement.errors);
+      return;
+    }
+    setHistory((current) => pushLayoutHistory(current, draft, null));
+    onChange(draft);
+    setRowErrors([]);
+    setSelections([{ kind: "slot", rowIndex: placement.rowIndex, itemIndex: placement.itemStart }]);
+    const taken = new Set(draft.rows.flatMap((row) => row.slots.map((slot) => slot.code)));
+    setSlotDrawForm({ ...form, rowLabel: label, code: nextSlotCode(code, taken), orientation: segment.orientation });
+  };
+
+  const startSlotDraw = (event: PointerEvent<SVGElement>, svg: SVGSVGElement) => {
+    const form = slotDrawForm;
+    if (!form) return;
+    if (!form.rowLabel.trim() || !form.code.trim()) {
+      setRowErrors([!form.rowLabel.trim() ? "請先填寫所屬排標籤。" : "請先填寫攤位代碼。"]);
+      return;
+    }
+    const point = pointIn(svg, event);
+    event.preventDefault();
+    event.stopPropagation();
+    svg.setPointerCapture(event.pointerId);
+    svg.focus({ preventScroll: true });
+    setSelections([]);
+    setRowErrors([]);
+    setSlotDraftRect({ x: point.x, y: point.y, width: 0, height: 0 });
+    drag.current = { mode: "draw-slot", pointerId: event.pointerId, startX: point.x, startY: point.y };
+  };
+
   /** Shift adds to or removes from the set; pressing a member of an existing
    * multi-selection drags the whole group, which is what makes a batch move
    * possible at all; anything else selects only what was pressed. A Shift-click
@@ -300,6 +375,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const startDrag = (event: PointerEvent<SVGElement>, target: Selection) => {
     const svg = svgRef.current;
     if (!svg) return;
+    if (slotDrawForm) {
+      startSlotDraw(event, svg);
+      return;
+    }
     const next = event.shiftKey ? toggleSelection(selections, target)
       : selections.some((item) => selectionKey(item) === selectionKey(target)) ? selections
         : [target];
@@ -333,12 +412,17 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const handleResizePointerDown = (event: PointerEvent<SVGGElement>) => {
     const svg = event.currentTarget.ownerSVGElement;
     const corner = event.currentTarget.dataset.resizeCorner as ResizeCorner | undefined;
-    if (svg && corner) startResize(event, svg, corner);
+    if (svg && slotDrawForm) startSlotDraw(event, svg);
+    else if (svg && corner) startResize(event, svg, corner);
   };
 
   /** Pressing blank paper starts a rubber band. Shift keeps what is already
    * selected, so a band can extend a set built by clicking. */
   const startBand = (event: PointerEvent<SVGSVGElement>) => {
+    if (slotDrawForm) {
+      startSlotDraw(event, event.currentTarget);
+      return;
+    }
     if (event.target !== event.currentTarget) return;
     const point = pointIn(event.currentTarget, event);
     if (rowForm && anchors) {
@@ -358,6 +442,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     const point = pointIn(event.currentTarget, event);
     if (active.mode === "band") {
       setBand({ x: Math.min(active.startX, point.x), y: Math.min(active.startY, point.y), width: Math.abs(point.x - active.startX), height: Math.abs(point.y - active.startY) });
+      return;
+    }
+    if (active.mode === "draw-slot") {
+      setSlotDraftRect(rectFromDrag({ x: active.startX, y: active.startY }, point, layout));
       return;
     }
     const dx = point.x - active.startX;
@@ -400,6 +488,14 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
       const kept = active.additive ? active.base : [];
       setSelections(band && (band.width >= 1 || band.height >= 1) ? mergeSelections(kept, selectionsWithinBox(layout, band)) : kept);
       setBand(null);
+    }
+    if (active.mode === "draw-slot") {
+      setSlotDraftRect(null);
+      if (event.type !== "pointercancel") {
+        const point = pointIn(event.currentTarget, event);
+        const rect = rectFromDrag({ x: active.startX, y: active.startY }, point, layout);
+        placeManualSlot(rect);
+      }
     }
     // Without sealing, dragging the same element twice with one pointer would
     // reuse the key and collapse both gestures into a single undo step.
@@ -464,6 +560,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   };
 
   const addLandmark = (kind: MapLandmarkKind, label: string) => {
+    setSlotDrawForm(null);
+    setSlotDraftRect(null);
     const index = layout.landmarks.length;
     let suffix = index + 1;
     while (layout.landmarks.some((item) => item.id === `landmark-${suffix}`)) suffix += 1;
@@ -482,36 +580,20 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     return `${prefix}-${suffix}`;
   };
 
-  /** Adds a single booth to the row that is currently selected, falling back to
-   * the last row. Rows themselves are created by `createRow`; without that, a
-   * layout could never grow past one row because row labels must be unique. */
-  const addSlot = () => {
-    const rowIndex = selection?.kind === "slot" ? selection.rowIndex : Math.max(0, layout.rows.length - 1);
-    const existingCodes = layout.rows.flatMap((row) => row.slots.map(({ code }) => code));
-    const code = uniqueId("NEW", existingCodes);
-    commit((draft) => {
-      if (draft.rows.length === 0) draft.rows.push({ label: "NEW", orientation: "horizontal", confidence: 1, slots: [] });
-      draft.rows[rowIndex].slots.push({
-        code,
-        rect: { x: draft.width * .45, y: draft.height * .45, width: draft.width * .06, height: draft.height * .04 },
-      });
-    });
-    setSelections([{ kind: "slot", rowIndex, itemIndex: layout.rows[rowIndex]?.slots.length ?? 0 }]);
-  };
-
   /** Places a finished row and selects it, whether it was described by hand or
-   * inferred from anchors and then confirmed booth by booth. Both paths meet
-   * the same uniqueness rules before anything is written. */
+   * inferred from anchors. Reusing a label appends another segment to that
+   * logical row, which is how a gangway or facing column stays one A/B row. */
   const placeRow = (row: BoothRow) => {
-    const conflicts = findRowConflicts(row, layout);
-    if (conflicts.length) { setRowErrors(conflicts); return; }
-    const rowIndex = layout.rows.length;
-    commit((draft) => draft.rows.push(row));
+    const draft = cloneLayout(layout);
+    const placement = appendRowSegment(draft, row);
+    if (!placement.ok) { setRowErrors(placement.errors); return; }
+    setHistory((current) => pushLayoutHistory(current, draft, null));
+    onChange(draft);
     setRowErrors([]);
     setRowForm(null);
     setAnchors(null);
     setDraftRow(null);
-    setSelections(row.slots.map((slot, itemIndex) => ({ kind: "slot", rowIndex, itemIndex })));
+    setSelections(row.slots.map((slot, offset) => ({ kind: "slot", rowIndex: placement.rowIndex, itemIndex: placement.itemStart + offset })));
   };
 
   const createRow = () => {
@@ -557,6 +639,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   };
 
   const addPillar = () => {
+    setSlotDrawForm(null);
+    setSlotDraftRect(null);
     const itemIndex = layout.pillars.length;
     const id = uniqueId("pillar", layout.pillars.map(({ id: value }) => value));
     commit((draft) => draft.pillars.push({
@@ -566,6 +650,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   };
 
   const addAccess = (kind: "entrance" | "exit") => {
+    setSlotDrawForm(null);
+    setSlotDraftRect(null);
     const itemIndex = layout.accessPoints.length;
     const id = uniqueId(kind, layout.accessPoints.map(({ id: value }) => value));
     commit((draft) => draft.accessPoints.push({
@@ -678,7 +764,24 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     setRowErrors([]);
     setAnchors(null);
     setDraftRow(null);
+    setSlotDrawForm(null);
+    setSlotDraftRect(null);
     setRowForm((current) => current ? null : blankRowForm(layout));
+  };
+
+  const toggleSlotDrawForm = () => {
+    setRowErrors([]);
+    setRowForm(null);
+    setAnchors(null);
+    setDraftRow(null);
+    setSlotDraftRect(null);
+    setSlotDrawForm((current) => {
+      if (current) return null;
+      const rowLabel = selection?.kind === "slot"
+        ? layout.rows[selection.rowIndex]?.label ?? ""
+        : layout.rows.at(-1)?.label ?? "";
+      return { rowLabel, code: initialSlotCode(layout, rowLabel), orientation: "vertical" };
+    });
   };
 
   const rowField = (label: string, value: string, onValue: (value: string) => void, placeholder?: string) =>
@@ -689,6 +792,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     : "vertical";
 
   const anchorInference = anchors ? inferRowFromAnchors(anchors) : null;
+  const rowFormExisting = rowForm ? layout.rows.find(({ label }) => label === rowForm.label.trim()) : undefined;
+  const slotDrawExisting = slotDrawForm ? layout.rows.find(({ label }) => label === slotDrawForm.rowLabel.trim()) : undefined;
 
   const rowCodePreview = (() => {
     if (!rowForm) return "";
@@ -702,13 +807,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={toggleRowForm} aria-expanded={!!rowForm}>新增一排</button><button onClick={addSlot}>新增攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${zoom * 100}%`, aspectRatio: `${layout.width} / ${layout.height}` }}>
-        <svg ref={svgRef} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
+        <svg ref={svgRef} className={slotDrawForm ? styles.drawing : undefined} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
           <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />
@@ -726,6 +831,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
               awaiting a decision would hide exactly what the decision is about. */}
           {draftRow?.slots.map((slot, index) => <g key={slot.code} className={draftRow.keep[index] ? styles.draftSlotKept : styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
           {anchors?.map((anchor) => <g key={`${anchor.index}:${anchor.x}:${anchor.y}`} className={styles.anchor} aria-hidden="true"><circle cx={anchor.x} cy={anchor.y} r={7 * layoutUnitsPerPixel} /><text x={anchor.x} y={anchor.y - 12 * layoutUnitsPerPixel}>{anchor.index}</text></g>)}
+          {slotDraftRect && <rect className={styles.manualDraft} {...slotDraftRect} aria-hidden="true" />}
           {band && <rect className={styles.band} {...band} aria-hidden="true" />}
           {handleBounds && ([
             ["nw", handleBounds.x, handleBounds.y],
@@ -743,11 +849,21 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
           {numberField("畫布高", layout.height, (value) => resizeCanvas({ height: value }, "field:canvas:height"))}
         </div>
         <label className={styles.elementPicker}><span>精確選取地圖元素</span><select aria-label="選取地圖元素" value={activeKey} onChange={(event) => selectElement(event.target.value)}><option value="">請選擇攤位或設施</option>{elementOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
-        {rowForm && <div className={styles.rowPanel}>
-          <b>新增一排</b>
-          <p>起點與終點是這一排第一格與最後一格的中心；格數決定中間如何等分。排標籤可以是任意文字。方向由端點自動判定，建立後仍可在排清單更改。</p>
+        {slotDrawForm && <div className={styles.rowPanel}>
+          <b>手動畫攤位</b>
+          <p>在原圖上按住並拖曳攤位外框。建立後會留在描摹模式並自動遞增代碼；使用既有排標籤會直接加入該排。</p>
           {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
-          {rowField("新排標籤", rowForm.label, (value) => changeRowForm({ ...rowForm, label: value }), "例：A、子、商")}
+          <label className={styles.wide}><span>所屬排標籤</span><input list="map-layout-row-labels" value={slotDrawForm.rowLabel} placeholder="例：A、B、商" onChange={(event) => { const rowLabel = event.target.value; setSlotDrawForm({ ...slotDrawForm, rowLabel, code: initialSlotCode(layout, rowLabel) }); setRowErrors([]); }} /><datalist id="map-layout-row-labels">{layout.rows.map((row) => <option key={row.label} value={row.label} />)}</datalist></label>
+          {rowField("攤位代碼", slotDrawForm.code, (code) => { setSlotDrawForm({ ...slotDrawForm, code }); setRowErrors([]); }, "例：A01")}
+          {!slotDrawExisting && <label className={styles.wide}><span>新排方向</span><select value={slotDrawForm.orientation} onChange={(event) => setSlotDrawForm({ ...slotDrawForm, orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label>}
+          <p>{slotDrawExisting ? `會加入既有 ${slotDrawExisting.label} 排（目前 ${slotDrawExisting.slots.length} 格）` : "第一次拖曳會同時建立這一排。"}</p>
+          <div className={styles.rowFormActions}><button type="button" onClick={toggleSlotDrawForm}>結束描摹</button></div>
+        </div>}
+        {rowForm && <div className={styles.rowPanel}>
+          <b>新增排／排段</b>
+          <p>起點與終點是這一段第一格與最後一格的中心；格數決定中間如何等分。同一排可分段或分欄重複加入，方向由端點自動判定。</p>
+          {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
+          {rowField("排標籤", rowForm.label, (value) => changeRowForm({ ...rowForm, label: value }), "例：A、子、商")}
           <div className={styles.fields}>
             {rowField("起點 X", rowForm.startX, (value) => changeRowForm({ ...rowForm, startX: value }))}
             {rowField("起點 Y", rowForm.startY, (value) => changeRowForm({ ...rowForm, startY: value }))}
@@ -760,11 +876,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
             {rowField("補零位數", rowForm.numberPadding, (value) => changeRowForm({ ...rowForm, numberPadding: value }))}
           </div>
           {rowField("代碼前綴", rowForm.codePrefix, (value) => changeRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
-          <p>方向：{rowFormOrientation === "horizontal" ? "橫排" : "直排"}（依端點判定）<br />預覽：{rowCodePreview}</p>
-          <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); setAnchors(null); setDraftRow(null); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>建立這一排</button></div>
+          <p>方向：{rowFormOrientation === "horizontal" ? "橫排" : "直排"}（依端點判定）<br />預覽：{rowCodePreview}<br />{rowFormExisting ? `將加入既有 ${rowFormExisting.label} 排（目前 ${rowFormExisting.slots.length} 格）` : "將建立新排"}</p>
+          <div className={styles.rowFormActions}><button type="button" onClick={() => { setRowForm(null); setRowErrors([]); setAnchors(null); setDraftRow(null); }}>取消</button><button type="button" className={styles.rowConfirm} onClick={createRow}>{rowFormExisting ? "加入這個排段" : "建立這一排"}</button></div>
           <div className={styles.anchorPanel}>
             <b>錨點推算</b>
-            <p>在原圖上點選三格以上的中心並填入該格在這一排的編號，工具會推算整排；每一格都要逐格確認後才會加入地圖。</p>
+            <p>在同一個等距直線排段上點選三格以上的中心並填入編號。這只推算中心，不會辨識圖片外框；外框使用上方的每格寬高，斷點或另一欄請另建排段。</p>
             {!anchors && <div className={styles.rowFormActions}><button type="button" onClick={() => { setAnchors([]); setDraftRow(null); setRowErrors([]); }}>開始標記錨點</button></div>}
             {anchors && <>
               {!anchors.length && <p>在畫布空白處點選即可標記。</p>}

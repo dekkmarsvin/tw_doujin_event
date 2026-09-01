@@ -214,9 +214,10 @@ export function removeSelectionsFrom(draft: EventMapLayout, selections: readonly
   descending(itemIndicesOf(selections, "landmark")).forEach((itemIndex) => draft.landmarks.splice(itemIndex, 1));
 }
 
-/** The two uniqueness rules a row has to satisfy before it can join a layout:
- * one label per row, one code per booth across the whole map. Row creation and
- * offset paste both go through here so neither can drift from the other. */
+/** The two uniqueness rules a separately created row has to satisfy before it
+ * can join a layout: one label per row, one code per booth across the whole
+ * map. Offset paste still creates a new logical row and goes through here;
+ * intentional segments of an existing row use `appendRowSegment` below. */
 export function findRowConflicts(row: BoothRow, layout: RowsOnly): string[] {
   const errors: string[] = [];
   if (layout.rows.some((existing) => existing.label === row.label)) errors.push(`排標籤 ${row.label} 已經存在。`);
@@ -228,6 +229,32 @@ export function findRowConflicts(row: BoothRow, layout: RowsOnly): string[] {
   });
   if (collision) errors.push(`攤位代碼 ${collision.code} 重複。`);
   return errors;
+}
+
+export type RowSegmentPlacement =
+  | { ok: true; rowIndex: number; itemStart: number; errors: [] }
+  | { ok: false; rowIndex: -1; itemStart: -1; errors: string[] };
+
+/** Adds another straight or hand-drawn segment to a logical row. A row such as
+ * K51 B can occupy two columns, and A can stop at a gangway and continue below
+ * it, while the published layout still carries one unique B or A row label. */
+export function appendRowSegment(layout: EventMapLayout, segment: BoothRow): RowSegmentPlacement {
+  const seenCodes = new Set(layout.rows.flatMap((row) => row.slots.map(({ code }) => code)));
+  const collision = segment.slots.find(({ code }) => {
+    if (seenCodes.has(code)) return true;
+    seenCodes.add(code);
+    return false;
+  });
+  if (collision) return { ok: false, rowIndex: -1, itemStart: -1, errors: [`攤位代碼 ${collision.code} 重複。`] };
+
+  const rowIndex = layout.rows.findIndex(({ label }) => label === segment.label);
+  if (rowIndex >= 0) {
+    const itemStart = layout.rows[rowIndex].slots.length;
+    layout.rows[rowIndex].slots.push(...segment.slots);
+    return { ok: true, rowIndex, itemStart, errors: [] };
+  }
+  layout.rows.push(segment);
+  return { ok: true, rowIndex: layout.rows.length - 1, itemStart: 0, errors: [] };
 }
 
 function uniqueValue(candidate: string, taken: ReadonlySet<string>) {
