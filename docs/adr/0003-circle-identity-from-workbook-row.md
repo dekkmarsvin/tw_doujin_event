@@ -2,7 +2,7 @@
 
 - 狀態：**已被 [ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 取代**（2026-08-14 實作完成）。本文只保留歷史脈絡。
 - 原狀態：已定案（2026-08-09 實作完成）
-- 相關契約：[社團目錄契約](../contracts/circle-catalog.md#社團身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)
+- 相關契約：[社團目錄契約](../contracts/circle-catalog.md#身分規則)、[收藏與走訪規劃契約](../contracts/planning.md#儲存與版本)
 
 ## 脈絡
 

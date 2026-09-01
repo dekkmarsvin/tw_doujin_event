@@ -64,84 +64,23 @@ npm install
 npm run dev:pages
 ```
 
-交付前的共同 gate：
-
-```bash
-npm test && npm run lint && npx tsc --noEmit --incremental false
-```
-
-完整說明見[本機開發與驗證](docs/runbooks/local-development.md)。
+交付前要跑共同 gate，開發途中可以只跑受影響的測試——兩者都見[本機開發與驗證](docs/runbooks/local-development.md)。
 
 要回報問題或送出改動，請先閱讀[貢獻指南](CONTRIBUTING.md)與[行為準則](CODE_OF_CONDUCT.md)。
 
 ## 文件
 
-| 想知道 | 去哪裡 |
-|---|---|
-| 產品要解決什麼、給誰用、邊界在哪 | [PRODUCT.md](PRODUCT.md) |
-| 介面的視覺與版面規則 | [DESIGN.md](DESIGN.md) |
-| 這個詞在本專案是什麼意思 | [CONTEXT.md](CONTEXT.md) |
-| 各模組現在的行為與驗收條件 | [docs/contracts/](docs/contracts) |
-| 怎麼更新資料、發布地圖、部署 | [docs/runbooks/](docs/runbooks) |
-| 怎麼回報問題與貢獻程式碼 | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| 為什麼當初這樣決定 | [docs/adr/](docs/adr) |
-
-完整索引見 [docs/README.md](docs/README.md)。
-
-## 常用流程
-
-| 要做的事 | 文件 |
-|---|---|
-| 主辦活動資料有變動，要更新場刊 | [社團資料更新](docs/runbooks/catalog-data-update.md) |
-| 要重新產生地圖快照 | [地圖 authoring](docs/runbooks/map-authoring.md) |
-| 首次部署、改密鑰、回滾 | [部署](docs/runbooks/deployment.md) |
+完整索引見 [docs/README.md](docs/README.md)：它有一張「我想知道…／去哪裡」的路由表，涵蓋產品、設計、契約、流程、決策紀錄與對外文件。
 
 > 社團 ID 的配發、候選重建與首次公開發布後相容性規則，以[社團目錄契約](docs/contracts/circle-catalog.md)、[ADR-0010](docs/adr/0010-circle-identity-is-an-allocated-serial.md)與[ADR-0044](docs/adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)為準。
 
 ## 專案結構
 
-**閱讀端**
+哪個檔案由哪份契約管，見[契約索引](docs/contracts/INDEX.md)（由 `scripts/check-doc-map.mjs` 產生）。
 
-- `app/event-map-app.tsx`：搜尋、地圖、詳情與行程工作區
-- `app/event-url-state.ts`、`app/event-workspace-projection.ts`：多活動 URL round-trip 與桌機／手機／地圖共用的衍生狀態
-- `app/accessible-event-map-renderer.tsx`：可用鍵盤操作的 SVG 地圖 renderer
-- `app/circle-records.ts`：社團與配置的型別、索引與讀取模型投影
-- `app/circle-search.ts`、`app/advanced-circle-search.tsx`：探索搜尋與詳細搜尋
-- `app/planning-store.ts`：版本化本機收藏與行程狀態
-- `app/static-*-client.ts`：靜態快照讀取與格式驗證
-- `app/service-worker-source.js`、`scripts/build-service-worker.mjs`：離線 shell 與 build 時產生的 precache 清單
-
-**社團控制面**
-
-- `circle.html`、`app/circle-portal/`：社團入口與介面
-- `app/circle-portal-handlers.ts`、`db/identity-repository.ts`：與框架無關的 route 與 D1 查詢層
-- `app/circle-overrides.ts`：補充資料的型別、驗證與長度上限，寫入端與閱讀端共用
-- `functions/`：Pages Functions（身分、認領、編輯、管理，以及公開的 `overrides.json`）
-
-**資料與產物**
-
-- `fixtures/events/`：不含真實活動資料的共同 build／test fixtures
-- `data/event-data-pins/`：公開 data repo 的不可變 commit 與逐檔 hash
-- `data/circle-identities/`：永久社團 ID 配號、官方 booth evidence 與裁決紀錄
-- `public/fonts/`：自託管 Geist / Geist Mono 字型與授權
-- `scripts/fetch-event-data.mjs`、`stage-event-data.mjs`、`published-events.mjs`：驗證 pin 並建立忽略版控的 staging tree，`--published` 涵蓋全部已發布活動
-- `scripts/build-official-circle-catalog.mjs`：由主辦攤位資料與 identity evidence 生成 official-only catalog
-- `.event-data/`、`public/data/events/`：本機／CI 產物，不進版控
-
-**主辦單位工作區**
-
-- `organizer.html`、`app/organizer/`：主辦入口與六步驟介面
-- `app/organizer-event.ts`、`app/organizer-import.ts`、`app/organizer-workbook.ts`：草稿 schema、匯入正規化與瀏覽器端試算表讀取
-- `app/event-authoring-scope.ts`、`app/event-map-manifest.ts`：候選／已發布地圖的 scope 與多場館空間 artifact 路徑
-- `app/publication-bundle-assembler.ts`、`app/github-publication.ts`：發布路徑 allowlist 與 GitHub adapter（目前 fail closed）
-
-**本機 authoring（離線／事故備援）**
-
-- `app/map-recognition.ts`、`app/map-admin-importer.tsx`、`app/map-layout-editor.tsx`
-- `db/event-map-repository.ts`、`worker/`、`drizzle/`
-
-**設定**
-
-- `vite.pages.config.ts`、`wrangler.jsonc`：Pages 純靜態 build 與部署設定
-- `public/_headers`：CSP、權限政策與快取規則
-- `.github/workflows/deploy-pages.yml`：驗證、preview 與 production 自動部署
+- `app/`：閱讀端、社團控制面與主辦工作區的介面與領域模組
+- `functions/`：Cloudflare Pages Functions（身分、認領、編輯、管理與公開端點）
+- `db/`：D1 schema、repository 與保存期限清除
+- `scripts/`：build 步驟、資料 pipeline、authoring 與維運 CLI
+- `fixtures/`、`data/`：共同 build／test fixtures，以及 data pin 與社團 ID 配號等版控狀態
+- `workers/retention-purge/`：獨立部署的排程清除 Worker

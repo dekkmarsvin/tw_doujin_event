@@ -1,53 +1,23 @@
-# Domain Docs
+# 領域文件
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+代理人探索這個 repo 時，怎麼取用領域文件。
 
-**Layout: single-context.** One `CONTEXT.md` and one `docs/adr/` at the repo root.
+## 開始之前
 
-## Before exploring, read these
+- **`CONTEXT.md`**（repo 根目錄）— 詞彙表。這個 repo 有幾組詞很容易混淆（「登入」有兩種方向、社團與攤位不是一對一、場館／場館空間／展區是三件事、「地圖」有三層意思），先讀過再動手。
+- **`docs/adr/INDEX.md`** — 找到你要動的區域那一列，只讀它指到的 ADR。不要掃整個 `docs/adr/`。
+- **`docs/contracts/INDEX.md`** — 從你要改的檔案反查是哪一份契約在管它。契約描述現況且可驗收；實作與契約不一致時，兩者之一是錯的。
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+## 用詞彙表的講法
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
+輸出裡提到領域概念時（issue 標題、重構提案、假設、測試名稱），用 `CONTEXT.md` 定義的那個詞，不要漂移到它刻意避開的同義詞。
 
-## File structure
+概念不在詞彙表裡是個訊號：要嘛你在發明這個專案不使用的語彙（重新考慮），要嘛真的有缺口（記下來）。
 
-Single-context repo (most repos):
+## ADR 衝突要講出來
 
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
+輸出與既有 ADR 相牴觸時明說，不要默默覆蓋：
 
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
+> _與 ADR-0043（Circle portal 是通用入口）衝突，但值得重開，因為…_
 
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
-
-## Use the glossary's vocabulary
-
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+`INDEX.md` 標為**部分被取代**的 ADR 要連同取代它的那份一起讀——只讀被取代的那份會實作到已經推翻的決定。標為**已取代**的只剩歷史脈絡，不要據此實作。

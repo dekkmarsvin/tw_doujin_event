@@ -1,0 +1,75 @@
+# 契約索引
+
+從**要改的檔案**反查是哪一份契約在管它。契約描述現況且可驗收；實作與契約不一致時，兩者之一是錯的。
+
+這份索引由 `scripts/check-doc-map.mjs` 從各契約開頭的 `**實作**` 與 `**測試**` 產生，不要手動編輯。新增契約或改動實作清單後重跑它。
+
+## 依檔案
+
+| 檔案 | 契約 | 測試 |
+|---|---|---|
+| `app/accessible-event-map-renderer.tsx` | [活動地圖](./event-map.md) | `tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs` |
+| `app/advanced-circle-search.tsx` | [搜尋、篩選與顯示設定](./search.md) | `tests/circle-search.test.mjs` |
+| `app/catalog-publication.ts` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `app/circle-overrides.ts` | [社團目錄](./circle-catalog.md)、[社團自助控制面](./circle-portal.md) | `tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs` |
+| `app/circle-portal` | [社團自助控制面](./circle-portal.md) | `tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs` |
+| `app/circle-portal-handlers.ts` | [社團自助控制面](./circle-portal.md)、[資料 inventory](./data-inventory.md)、[地圖貢獻控制面](./map-contributions.md)、[主辦單位工作區](./organizer-workspace.md) | `tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`、`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`、`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/circle-records.ts` | [社團目錄](./circle-catalog.md) | — |
+| `app/circle-search.ts` | [搜尋、篩選與顯示設定](./search.md) | `tests/circle-search.test.mjs` |
+| `app/display-filter-controls.tsx` | [搜尋、篩選與顯示設定](./search.md) | `tests/circle-search.test.mjs` |
+| `app/event-authoring-scope.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/event-entry.tsx` | [URL 檢視狀態](./url-state.md) | `tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs` |
+| `app/event-map.ts` | [活動地圖](./event-map.md) | `tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs` |
+| `app/event-url-state.ts` | [URL 檢視狀態](./url-state.md) | `tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs` |
+| `app/event-workspace-projection.ts` | [URL 檢視狀態](./url-state.md) | `tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs` |
+| `app/github-publication.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/map-contribution-files.ts` | [地圖貢獻控制面](./map-contributions.md) | `tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs` |
+| `app/map-view-state.ts` | [活動地圖](./event-map.md)、[URL 檢視狀態](./url-state.md) | `tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/event-workspace-projection.test.mjs` |
+| `app/map-viewport.ts` | [活動地圖](./event-map.md) | `tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs` |
+| `app/organizer` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/organizer-client.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/organizer-event.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/organizer-import.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/organizer-workbook.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/organizer-workspace.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/planning-store.ts` | [資料匯入契約（P2，尚未對外開放）](./data-import.md)、[收藏與走訪規劃](./planning.md) | `tests/planning-transfer.test.mjs`、`tests/planning-store.test.mjs` |
+| `app/planning-tools.tsx` | [收藏與走訪規劃](./planning.md) | `tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs` |
+| `app/planning-transfer.ts` | [資料匯入契約（P2，尚未對外開放）](./data-import.md)、[收藏與走訪規劃](./planning.md) | `tests/planning-transfer.test.mjs`、`tests/planning-store.test.mjs` |
+| `app/portal-crypto.ts` | [社團自助控制面](./circle-portal.md) | `tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs` |
+| `app/publication-bundle-assembler.ts` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `app/service-worker-source.js` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `app/static-circle-catalog-client.ts` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `app/static-circle-overrides-client.ts` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `app/static-event-map-client.ts` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `app/use-circle-catalog.ts` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `app/use-planning.ts` | [收藏與走訪規劃](./planning.md) | `tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs` |
+| `app/work-topic-aliases.ts` | [搜尋、篩選與顯示設定](./search.md) | `tests/circle-search.test.mjs` |
+| `db/identity-repository.ts` | [社團自助控制面](./circle-portal.md)、[資料 inventory](./data-inventory.md)、[地圖貢獻控制面](./map-contributions.md)、[主辦單位工作區](./organizer-workspace.md) | `tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`、`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`、`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `db/identity-runtime-schema.ts` | [資料 inventory](./data-inventory.md) | — |
+| `db/retention-purge.ts` | [地圖貢獻控制面](./map-contributions.md) | `tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs` |
+| `functions` | [社團自助控制面](./circle-portal.md)、[資料 inventory](./data-inventory.md) | `tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs` |
+| `functions/api/admin/organizer` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `functions/api/map-contributions` | [地圖貢獻控制面](./map-contributions.md) | `tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs` |
+| `functions/api/organizer` | [主辦單位工作區](./organizer-workspace.md) | `tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs` |
+| `scripts/build-service-worker.mjs` | [資料傳輸與離線](./delivery-and-offline.md) | `tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs` |
+| `scripts/event-data-fetcher.mjs` | [共享 reference 選擇](./reference-selection.md) | `tests/reference-selection.test.mjs`、`tests/event-data-fetcher.test.mjs`、`tests/event-workspace-generator.test.mjs` |
+| `scripts/event-workspace-generator.mjs` | [共享 reference 選擇](./reference-selection.md) | `tests/reference-selection.test.mjs`、`tests/event-data-fetcher.test.mjs`、`tests/event-workspace-generator.test.mjs` |
+| `scripts/reference-selection-utils.mjs` | [共享 reference 選擇](./reference-selection.md) | `tests/reference-selection.test.mjs`、`tests/event-data-fetcher.test.mjs`、`tests/event-workspace-generator.test.mjs` |
+| `scripts/stage-event-data.mjs` | [共享 reference 選擇](./reference-selection.md) | `tests/reference-selection.test.mjs`、`tests/event-data-fetcher.test.mjs`、`tests/event-workspace-generator.test.mjs` |
+
+## 依契約
+
+| 契約 | 涵蓋 |
+|---|---|
+| [社團目錄契約](./circle-catalog.md) | 社團身分、活動配置與社團自填內容的權威邊界。 |
+| [社團自助控制面契約](./circle-portal.md) | 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。 |
+| [資料匯入契約（P2，尚未對外開放）](./data-import.md) | 範圍是兩件事：**使用者規劃資料的可攜交換**（CSV／JSON），以及**外部服務內容的匯入**（pixiv 等）。兩者共用同一套預覽與確認流程，但資料權威不同。 |
+| [資料 inventory](./data-inventory.md) | 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 與 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 決定。 |
+| [資料傳輸與離線契約](./delivery-and-offline.md) | 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。 |
+| [活動地圖契約](./event-map.md) | 公開閱讀端的向量地圖：資料不變量、renderer 邊界、互動與縮放規則。 |
+| [地圖貢獻控制面契約](./map-contributions.md) | 地圖貢獻讓經管理者授權的維護者，把**活動主辦官方說明頁面中的配置證據**整理成私人草稿。它不新增資料來源：公開快照的基礎仍只來自主辦官方頁面，社團補充則仍只由社團本人自填；工作簿、社群試算表與其他第三方資料不在來源鏈中。 |
+| [主辦單位工作區契約](./organizer-workspace.md) | 主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開場刊仍只來自 data repository 的 reviewed snapshot 與 pin。 |
+| [收藏與走訪規劃契約](./planning.md) | 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。 |
+| [共享 reference 選擇契約](./reference-selection.md) | 跨活動共用的主辦、主辦分類目錄、場館與場館空間維護在公開的 [`dekkmarsvin/tw_doujin_event-data`](https://github.com/dekkmarsvin/tw_doujin_event-data) 的 `references/`。公開事實只接受活動主辦或場館官方說明頁；社團自行填寫的內容仍屬活動 overlay。 |
+| [搜尋、篩選與顯示設定契約](./search.md) | 三組條件的責任切分。它們常被誤放在同一個面板裡，因此邊界必須明寫：**搜尋改變結果集合，規劃篩選投影使用者資料，顯示設定只改變呈現。** |
+| [URL 檢視狀態契約](./url-state.md) | URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。 |

@@ -96,7 +96,7 @@ npm test
 
 ### 7. Review 後發布
 
-檢查快照的 diff、revision、來源檔名與地標，跑完[共同 gate](./local-development.md#驗證-gate)，以 pull request 檢查 preview，合併到 `main` 讓 GitHub Actions 發布 production。
+檢查快照的 diff、revision、來源檔名與地標，跑完[共同 gate](./local-development.md#共同-gate)，以 pull request 檢查 preview，合併到 `main` 讓 GitHub Actions 發布 production。
 
 **靜態快照是公開資料的唯一真相。** 未經 review 的本機 D1 或圖片不會因 Pages 部署而公開。
 

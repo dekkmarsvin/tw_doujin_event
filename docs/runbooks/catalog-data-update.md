@@ -186,11 +186,7 @@ pin 存在不等於已發布。活動要對讀者出現，必須把它的 id 加
 
 ### 5. 跑共同 gate
 
-```bash
-npm test
-npm run lint
-npx tsc --noEmit --incremental false
-```
+見[本機開發與驗證](./local-development.md#共同-gate)。
 
 `npm test` 固定使用 fictional fixture，不需要網路；`build:production` 是真實資料的額外發行 gate。Review 時同時檢查 data repo commit、pin hash、identity registry 差異與生成摘要。
 

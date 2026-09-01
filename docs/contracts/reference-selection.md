@@ -1,5 +1,8 @@
 # 共享 reference 選擇契約
 
+**實作**：[`scripts/reference-selection-utils.mjs`](../../scripts/reference-selection-utils.mjs)、[`scripts/stage-event-data.mjs`](../../scripts/stage-event-data.mjs)、[`scripts/event-data-fetcher.mjs`](../../scripts/event-data-fetcher.mjs)、[`scripts/event-workspace-generator.mjs`](../../scripts/event-workspace-generator.mjs)
+**測試**：`tests/reference-selection.test.mjs`、`tests/event-data-fetcher.test.mjs`、`tests/event-workspace-generator.test.mjs`
+
 跨活動共用的主辦、主辦分類目錄、場館與場館空間維護在公開的 [`dekkmarsvin/tw_doujin_event-data`](https://github.com/dekkmarsvin/tw_doujin_event-data) 的 `references/`。公開事實只接受活動主辦或場館官方說明頁；社團自行填寫的內容仍屬活動 overlay。
 
 活動資料與 references 住在同一個 repository，因此定位資訊只有一份：`data/event-data-pins/<event>.json` 的完整 40 字元 commit 與逐檔 SHA-256，同時涵蓋 `events/<eventId>/` 與該活動使用的 `references/`。

@@ -15,14 +15,14 @@ Comike WebCatalog 是同類產品中最成熟、使用者最熟悉的實作。�
 
 | 模式 | 現行位置 |
 |---|---|
-| 同一份社團資料，三種資訊密度（列表／詳情／地圖側欄） | [社團目錄契約](../contracts/circle-catalog.md#資訊密度契約) |
+| 同一份社團資料，三種資訊密度（列表／詳情／地圖側欄） | [社團目錄契約](../contracts/circle-catalog.md#呈現契約) |
 | 日期、區域、選取與關鍵字保存在 URL，可分享可恢復 | [URL 檢視狀態契約](../contracts/url-state.md) |
 | 收藏是複合記錄（分類 + 備註 + 生命週期），不是布林值 | [收藏與走訪規劃契約](../contracts/planning.md) |
-| 外部內容標示提供者、內容類型與原始連結 | [社團目錄契約](../contracts/circle-catalog.md#來源標示契約) |
+| 外部內容標示提供者、內容類型與原始連結 | [社團目錄契約](../contracts/circle-catalog.md#權威順序) |
 | 探索搜尋與地圖定位搜尋分成兩條路徑 | [搜尋契約](../contracts/search.md) |
 | 顯示密度與媒體數由使用者選擇，不由產品固定 | [搜尋契約](../contracts/search.md#四顯示設定) |
 | 匯入必須先匹配本地 ID 並預覽，不靜默寫入 | [資料匯入契約](../contracts/data-import.md) |
-| 缺欄位直接省略，不用空白卡片補位 | [社團目錄契約](../contracts/circle-catalog.md#資訊密度契約) |
+| 缺欄位直接省略，不用空白卡片補位 | [社團目錄契約](../contracts/circle-catalog.md#呈現契約) |
 
 **明確不採納**：
 

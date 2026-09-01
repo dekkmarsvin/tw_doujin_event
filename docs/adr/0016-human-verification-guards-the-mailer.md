@@ -3,7 +3,7 @@
 - 狀態：已定案（2026-08-18）；「全站入口維持 Access」部分已由 [ADR-0029](./0029-public-production-gated-preview.md) 取代，寄信入口的 Turnstile 決策不變
 - 延續：[ADR-0011](./0011-ff47-is-not-a-public-launch.md)、[ADR-0015](./0015-access-lifts-when-no-third-party-bytes-remain.md)
 - 相關契約：[社團自助控制面](../contracts/circle-portal.md#索取登入連結需要通過真人驗證)、[資料傳輸與離線](../contracts/delivery-and-offline.md#快取標頭)
-- 相關流程：[部署](../runbooks/deployment.md#真人驗證turnstile)
+- 相關流程：[部署](../runbooks/first-time-setup.md#真人驗證turnstile)
 
 ## 脈絡
 
@@ -43,7 +43,7 @@
 
 ### 必須知道的落差
 
-- **「元件真的能在瀏覽器裡渲染」沒有自動化覆蓋。** preview 的 E2E 以 dummy 金鑰直接送 token，看不到 CSP 違規，也看不到 script 載入失敗。這件事只能以瀏覽器人工確認一次，步驟寫在[部署 runbook](../runbooks/deployment.md#這件事只能用瀏覽器驗)。這是本決策確實留下的驗證缺口。
+- **「元件真的能在瀏覽器裡渲染」沒有自動化覆蓋。** preview 的 E2E 以 dummy 金鑰直接送 token，看不到 CSP 違規，也看不到 script 載入失敗。這件事只能以瀏覽器人工確認一次，步驟寫在[部署 runbook](../runbooks/first-time-setup.md#這件事只能用瀏覽器驗)。這是本決策確實留下的驗證缺口。
 - **[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30) 的隱私告知多一段要寫。** 登入頁會讓使用者的瀏覽器直接對 `challenges.cloudflare.com` 發出請求。實質上不新增任何一方能看到的資訊（站台本來就在 Cloudflare 上），但告知文件描述的是行為，不是實質增量，所以仍要列出。
 - **多了一道使用者要通過的關卡。** Managed 模式多數情況下零互動，但它不是零成本，尤其對使用輔助技術或隱私瀏覽器的人。社團端目前沒有真實使用者可以回饋這件事（ADR-0011），所以這個代價只能先記著。
 

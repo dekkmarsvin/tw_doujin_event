@@ -1,46 +1,98 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const read = (relative) => readFile(path.join(ROOT, relative), "utf8");
+const exists = (relative) => stat(path.join(ROOT, relative)).then(() => true, () => false);
 
-test("human contributors can find the gate, documentation authority and data-source boundary", async () => {
-  const [readme, contributing, conduct, context, catalogContract] = await Promise.all([
-    read("README.md"), read("CONTRIBUTING.md"), read("CODE_OF_CONDUCT.md"), read("CONTEXT.md"), read("docs/contracts/circle-catalog.md"),
-  ]);
-  assert.match(readme, /CONTRIBUTING\.md/);
-  for (const command of ["npm test", "npm run lint", "npx tsc --noEmit --incremental false"]) assert.match(contributing, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(contributing, /主辦官網[\s\S]*社團本人/);
-  assert.match(contributing, /docs\/README\.md#維護規則/);
-  assert.match(contributing, /完整 commit SHA[\s\S]*SHA-256/);
-  assert.match(conduct, /maintain@kotoban\.top/);
-  assert.match(context, /主辦官方說明頁面[\s\S]*社團本人自填[\s\S]*不再有工作簿/);
-  assert.match(catalogContract, /reviewed base[\s\S]*社團本人[\s\S]*overlay[\s\S]*不具輸入、fallback 或補充地位/);
-});
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".next", ".vinext", ".wrangler", ".event-data", ".scratch"]);
+
+async function markdownFiles(directory = "") {
+  const entries = await readdir(path.join(ROOT, directory), { withFileTypes: true });
+  const found = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") && entry.name !== ".github") continue;
+    if (SKIP_DIRS.has(entry.name)) continue;
+    const relative = directory ? `${directory}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) found.push(...(await markdownFiles(relative)));
+    else if (entry.name.endsWith(".md")) found.push(relative);
+  }
+  return found;
+}
 
 test("every issue form enters the canonical triage flow", async () => {
   const forms = await Promise.all(["bug.yml", "feature.yml", "documentation.yml"]
     .map((name) => read(`.github/ISSUE_TEMPLATE/${name}`)));
   for (const form of forms) assert.match(form, /labels: \[[^\]]*"needs-triage"[^\]]*\]/);
-
-  const contributing = await read("CONTRIBUTING.md");
-  for (const label of ["needs-triage", "needs-info", "ready-for-agent", "ready-for-human", "wontfix"]) {
-    assert.match(contributing, new RegExp("`" + label + "`"));
-  }
   assert.match(await read(".github/ISSUE_TEMPLATE/config.yml"), /blank_issues_enabled: false/);
 });
 
-test("accepted reference-data and map-contribution policies stay indexed and explicit", async () => {
-  const [index, referenceAdr, contributionAdr] = await Promise.all([
-    read("docs/README.md"),
-    read("docs/adr/0032-shared-reference-data-is-public-and-pinned.md"),
-    read("docs/adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md"),
-  ]);
-  assert.match(index, /0032-shared-reference-data-is-public-and-pinned/);
-  assert.match(index, /0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts/);
-  assert.match(referenceAdr, /tw_doujin_event-reference-data[\s\S]*完整 commit SHA[\s\S]*SHA-256/);
-  assert.match(referenceAdr, /工作簿、社群試算表或其他第三方內容/);
-  assert.match(contributionAdr, /管理者授予或撤銷[\s\S]*optimistic concurrency/);
-  assert.match(contributionAdr, /20 MiB[\s\S]*PDF 最多 20 頁/);
-  assert.match(contributionAdr, /180 天[\s\S]*30 天[\s\S]*90 天/);
+/** GitHub's heading anchor: lowercase, punctuation dropped, spaces to hyphens. */
+const slug = (heading) => heading
+  .replace(/^#+\s*/, "")
+  .toLowerCase()
+  .trim()
+  .replace(/[`*_[\]()]/g, "")
+  .replace(/\s+/g, "-")
+  .replace(/[^\p{Letter}\p{Number}-]/gu, "");
+
+async function headingSlugs(relative) {
+  const source = await read(relative);
+  return new Set(source.split(/\r?\n/).filter((line) => /^#{1,6}\s/.test(line)).map(slug));
+}
+
+// Documentation is split across contracts, runbooks, ADRs and two indexes, so a
+// move that leaves a link behind is the failure mode that actually happens.
+// Anchors matter as much as paths: moving a section between files leaves the
+// path valid and the anchor dangling.
+test("every relative link between documents resolves, anchors included", async () => {
+  const broken = [];
+  const slugCache = new Map();
+  for (const file of await markdownFiles()) {
+    const source = await read(file);
+    const directory = path.posix.dirname(file);
+    for (const [, target, anchor] of source.matchAll(/\]\(([^)#\s]*)(?:#([^)\s]*))?\)/g)) {
+      if (/^(https?:|mailto:)/.test(target)) continue;
+      const resolved = target === ""
+        ? file
+        : path.posix.normalize(path.posix.join(directory === "." ? "" : directory, target));
+      if (!(await exists(resolved))) {
+        broken.push(`${file} -> ${target}`);
+        continue;
+      }
+      if (!anchor || !resolved.endsWith(".md")) continue;
+      if (!slugCache.has(resolved)) slugCache.set(resolved, await headingSlugs(resolved));
+      if (!slugCache.get(resolved).has(anchor.toLowerCase())) {
+        broken.push(`${file} -> ${target}#${anchor} (no such heading)`);
+      }
+    }
+  }
+  assert.deepEqual(broken, [], `broken document links:\n${broken.join("\n")}`);
+});
+
+test("the ADR index accounts for every ADR", async () => {
+  const files = (await readdir(path.join(ROOT, "docs/adr")))
+    .filter((name) => /^\d{4}-.*\.md$/.test(name)).sort();
+  const index = await read("docs/adr/INDEX.md");
+  const missing = files.filter((name) => !index.includes(name));
+  assert.deepEqual(missing, [], `ADRs absent from docs/adr/INDEX.md: ${missing.join(", ")}`);
+
+  // Every ADR carries exactly one of the three statuses the index defines.
+  const rows = index.split(/\r?\n/).filter((line) => /^\| \[\d{4}\]/.test(line));
+  assert.equal(rows.length, files.length);
+  for (const row of rows) {
+    assert.match(row, /生效|部分被取代|已取代/, `row states no status: ${row}`);
+  }
+});
+
+test("every contract declares the code it governs, and that code exists", async () => {
+  // scripts/check-doc-map.mjs owns this rule and generates the reverse index
+  // from it; running it in --check mode keeps the rule in one place, and also
+  // fails when the generated index has drifted from its inputs.
+  const result = spawnSync(process.execPath, ["scripts/check-doc-map.mjs", "--check"], { cwd: ROOT, encoding: "utf8" });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });

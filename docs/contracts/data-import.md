@@ -1,5 +1,8 @@
 # 資料匯入契約（P2，尚未對外開放）
 
+**實作**：[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-store.ts`](../../app/planning-store.ts)
+**測試**：`tests/planning-transfer.test.mjs`
+
 > **現行一般介面只有復原用途的安全匯出，沒有匯入入口。** `app/planning-transfer.ts` 已有 JSON／CSV 的解析、預覽、衝突合併與安全驗證，並有測試覆蓋；這些是尚未接上 UI 的底層能力，不代表匯入功能已經上線。外部服務內容匯入仍未實作。維持這個分期的決策見 [ADR-0005](../adr/0005-import-stays-p2-export-only.md)。本文保存完整邊界，供日後開放入口與外部來源時驗收。
 
 範圍是兩件事：**使用者規劃資料的可攜交換**（CSV／JSON），以及**外部服務內容的匯入**（pixiv 等）。兩者共用同一套預覽與確認流程，但資料權威不同。
