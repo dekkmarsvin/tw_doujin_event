@@ -51,6 +51,8 @@ npm run dev
 
 ## 共同 gate
 
+交付前必須全數通過：
+
 ```bash
 npm ci
 npm test
@@ -58,13 +60,27 @@ npm run lint
 npx tsc --noEmit --incremental false
 ```
 
-`npm test` 先以 fixture 建立 Pages build，再執行 Node 測試，確認：
+CI 跑同一組。`npm test` 先以 fixture 建立 Pages build，再執行全部 Node 測試，確認：
 
 - staged event、catalog v3 與 map 身分一致；
-- 公開產物不含 Worker server bundle或 authoring route；
+- 公開產物不含 Worker server bundle 或 authoring route；
 - 閱讀端與 portal bundle 維持分離；
 - Service Worker precache 指向當次 staged event；
 - official base、社團 overlay、URL、地圖與 planning 契約一致。
+
+### 開發途中只跑相關的測試
+
+全套要跑幾分鐘，而且大部分時間花在需要 Miniflare D1 的那一層。改東西的當下不必每次跑完：
+
+| 命令 | 跑什麼 | 需要 build |
+|---|---|---|
+| `npm run test:changed` | 只跑受這次改動影響的測試 | 否 |
+| `npm run test:module` | 純模組測試（多數） | 否 |
+| `npm run test:d1` | 需要 Miniflare D1 的 route 與 repository 測試 | 否 |
+| `npm run test:cli` | 會另外開子行程跑 `scripts/` CLI 的測試 | 否 |
+| `npm run test:artifact` | 檢查 `dist/` 產物的測試 | 是 |
+
+`test:changed` 由 `scripts/select-tests.mjs` 從相依關係推出要跑哪些；改到 `package.json`、build 設定或它解析不出來的路徑時，它會退回跑全套。**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 
 ## 額外檢查
 
