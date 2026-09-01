@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test, { after, beforeEach } from "node:test";
+import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -51,10 +51,16 @@ async function signIn(email, audience = "circle") {
   return cookieFrom(await handlers.verify(request("/api/auth/verify", "POST", { token: decodeURIComponent(token) })));
 }
 
-beforeEach(async () => {
-  sent = [];
+// Built once: `ensureTables` memoizes on the repository closure, so a fresh
+// repository per test re-ran the whole schema. Per-test isolation comes from
+// clearPreviewData() below, not from rebuilding the tables.
+before(async () => {
   repository = createIdentityRepository(database, { bootstrapAdmins: ["admin@example.test"] });
   await repository.ensureTables();
+});
+
+beforeEach(async () => {
+  sent = [];
   await repository.clearPreviewData();
   await repository.addAdmin("admin@example.test", "bootstrap", now);
   handlers = createCirclePortalHandlers({
@@ -344,7 +350,7 @@ test("organizer detail uses formal map validation for readiness", async () => {
   assert.equal(readiness.blockers.some((blocker) => blocker.code === "missing_booth"), true);
 });
 
-test("owner and editor use one validated optimistic workflow while only admin approves", async () => {
+test("owner and editor use one validated optimistic workflow while only admin approves", async (t) => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
     "/api/admin/organizer/events", "POST",
@@ -403,7 +409,11 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   ), candidateId);
   assert.equal(mapCreated.status, 201);
 
+  // The repository outlives this test, so the stub is restored by a hook as
+  // well as inline: an assertion failing before the inline restore would
+  // otherwise leak it into every later test.
   const markOrganizerValidated = repository.markOrganizerValidated;
+  t.after(() => { repository.markOrganizerValidated = markOrganizerValidated; });
   repository.markOrganizerValidated = async (id, version, at) => {
     const candidate = await repository.getOrganizerCandidate(id);
     await repository.saveOrganizerCandidate({
