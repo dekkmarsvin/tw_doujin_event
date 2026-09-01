@@ -51,6 +51,8 @@ npm run dev
 
 ## 共同 gate
 
+交付前必須全數通過：
+
 ```bash
 npm ci
 npm test
@@ -58,13 +60,35 @@ npm run lint
 npx tsc --noEmit --incremental false
 ```
 
-`npm test` 先以 fixture 建立 Pages build，再執行 Node 測試，確認：
+CI 跑同一組。`npm test` 先以 fixture 建立 Pages build，再執行全部 Node 測試，確認：
 
 - staged event、catalog v3 與 map 身分一致；
-- 公開產物不含 Worker server bundle或 authoring route；
+- 公開產物不含 Worker server bundle 或 authoring route；
 - 閱讀端與 portal bundle 維持分離；
 - Service Worker precache 指向當次 staged event；
 - official base、社團 overlay、URL、地圖與 planning 契約一致。
+
+### 開發途中只跑相關的測試
+
+全套要跑幾分鐘，而且大部分時間花在需要 Miniflare D1 的那一層。改東西的當下不必每次跑完：
+
+| 命令 | 跑什麼 | 需要 build |
+|---|---|---|
+| `npm run test:changed` | 只跑受這次改動影響的測試 | 否 |
+| `npm run test:module` | 純模組測試（多數） | 否 |
+| `npm run test:d1` | 需要 Miniflare D1 的 route 與 repository 測試 | 否 |
+| `npm run test:cli` | 會另外開子行程跑 `scripts/` CLI 的測試 | 否 |
+| `npm run test:artifact` | 檢查 `dist/` 產物的測試 | 是 |
+
+分層不需要維護清單：tier 歸屬由 `scripts/select-tests.mjs` 讀每支測試自己的原始碼推導——讀 `dist/` 的是 artifact、`import "miniflare"` 的是 d1、`import "node:child_process"` 的是 cli，其餘是 module。新增測試檔不必登記到任何地方，也因此不可能有測試檔落在所有 tier 之外而到處都不跑。這幾條不變式由 `tests/test-tiering.test.mjs` 把關。掃不到的相依邊（走遍目錄、template literal 組路徑、斷言 build 產物）才需要寫進 `tests/test-deps.json`。
+
+`test:changed` 由 `scripts/select-tests.mjs` 從相依關係推出要跑哪些。它只在三種情況下給出「不用跑」：
+
+- 改到 `package.json`、build 設定、`tests/` 裡的非測試檔或 workflow → 退回跑全套。
+- 改到它的相依模型看不到的路徑（掃描目錄以外）→ 退回跑全套。
+- 改到模型涵蓋、但確實沒有任何測試碰到的檔案 → 印出「no test covers …」點名該檔。那是覆蓋率缺口，不是通過。
+
+`dist/` 產物測試會被列為「也受影響」但不在 `test:changed` 裡跑，因為當下的 `dist/` 可能是舊的；它會提示你另外跑 `npm run test:artifact`。**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 
 ## 額外檢查
 
