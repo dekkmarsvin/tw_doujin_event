@@ -82,6 +82,25 @@ test("a successful draft save synchronizes its revision before follow-up navigat
   assert.ok(followUp > detailReloaded, "onboarding or navigation callback must run after reload");
 });
 
+test("organizer save counters stay internal when no revision diff is available", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
+  assert.match(app, /setNotice\(\{ kind: "ok", message: "已儲存。" \}\)/);
+});
+
+test("organizer reuses the event source for imports and labels every activity-day field", async () => {
+  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(app, /<label>來源說明<input/);
+  assert.match(app, /sourceDescription: detail\.draft\.officialSource\.label/);
+  assert.match(app, /<label>代碼<input/);
+  assert.match(app, /<label>名稱<input/);
+  assert.match(app, /<label>日期<input/);
+  assert.match(app, />自由編輯<\/text>/);
+  assert.doesNotMatch(app, /描摹/);
+});
+
 test("an explicit save-and-leave selection is not replaced by list refresh", async () => {
   const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
   assert.match(app, /const selectionInitialized = useRef\(false\)/);

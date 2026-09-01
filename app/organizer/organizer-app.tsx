@@ -144,8 +144,8 @@ function mapTemplatePreview(template: string) {
     ? `${metadata.rowLabel}與${metadata.slotLabel}數量依你畫的版面。`
     : `${metadata.rowLabel}，共 ${metadata.expectedRows} 排、${metadata.expectedSlots} 個${metadata.slotLabel}。`;
   return {
-    summary: option?.summary ?? "沿用通用檢查；上傳配置圖後手動描摹攤位。",
-    recognizer: hasMapTemplateRecognizer(template) ? "可自動辨識配置圖" : "需手動描摹配置圖",
+    summary: option?.summary ?? "沿用通用檢查；上傳配置圖後手動編輯攤位。",
+    recognizer: hasMapTemplateRecognizer(template) ? "可自動辨識配置圖" : "需手動編輯配置圖",
     shape,
   };
 }
@@ -384,7 +384,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       {session.isAdmin && <CreateEntry onCreated={async (id) => { await reloadList(); setSelectedId(id); }} />}
       <nav aria-label="活動列表" className={styles.eventList}>
         {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
-          <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・第 {item.version} 版・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
+          <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
         </button>)}
         {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
       </nav>
@@ -455,7 +455,6 @@ function WorkspaceSurface({
   return <>
     <div className={styles.workspaceHead}>
       <div><p className={styles.contextLine}>{ROLE_LABEL[detail.event.role] ?? detail.event.role}・{STATUS_LABEL[detail.event.status]}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
-      <span className={styles.version}>第 {detail.event.version} 版</span>
     </div>
     {guided ? <div className={styles.workspaceGrid}>
       <GuidedTaskStation
@@ -734,11 +733,11 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
       <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => { setVenueSpaceId(event.target.value); setLayout(null); }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
-      <label className={styles.fileButton}>上傳配置圖描摹<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
+      <label className={styles.fileButton}>上傳配置圖並編輯<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
         const file = event.target.files?.[0];
         if (!file) return;
         setNotice({ kind: "busy", message: "正在讀取配置圖…" });
-        void runFile(file).then(() => setNotice({ kind: "ok", message: hasMapTemplateRecognizer(assignment?.mapTemplate ?? "") ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立描摹底圖。" })).catch((error) => setNotice({ kind: "error", message: message(error) }));
+        void runFile(file).then(() => setNotice({ kind: "ok", message: hasMapTemplateRecognizer(assignment?.mapTemplate ?? "") ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。" })).catch((error) => setNotice({ kind: "error", message: message(error) }));
       }} /></label>
       <label>從同場館空間複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
@@ -746,9 +745,9 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
           setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setBackground("");
         }).catch((error) => setNotice({ kind: "error", message: message(error) }));
-      }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{item.periodKey}・第 {item.mapRevision} 版</option>)}</select></label>
+      }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{item.periodKey}</option>)}</select></label>
     </div>
-    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}<small>第 {map.mapRevision} 版</small></button>)}</div>
+    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
     {layout ? <>
       <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={setLayout} />
       <div className={styles.row}><button type="button" disabled={!editable} onClick={() => {
@@ -758,7 +757,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
           : createOrganizerMap(detail.event.id, { expectedVersion: detail.event.version, periodKey, venueSpaceId, layout });
         void action.then(async () => { setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" }); setLayout(null); setSelected(null); await onChanged(); await reload(); })
           .catch((error) => setNotice({ kind: "error", message: message(error) }));
-      }}>{selected ? `儲存為第 ${selected.mapRevision + 1} 版` : "建立這個活動日與空間的地圖"}</button><button type="button" className={styles.ghost} onClick={() => { setLayout(null); setSelected(null); setBackground(""); }}>關閉編輯器</button></div>
+      }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button><button type="button" className={styles.ghost} onClick={() => { setLayout(null); setSelected(null); setBackground(""); }}>關閉編輯器</button></div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
   </section>;
 }
@@ -775,7 +774,6 @@ function ImportPanel({ detail, onChanged, setNotice }: {
   const [sheets, setSheets] = useState<OrganizerWorkbookSheet[]>([]);
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState(1);
-  const [sourceDescription, setSourceDescription] = useState(detail.draft.officialSource.label);
   const onlySpace = detail.draft.venue.assignments.length === 1 ? detail.draft.venue.assignments[0] : null;
   const onlyDay = detail.draft.event.days.length === 1 ? detail.draft.event.days[0] : null;
   const [day, setDay] = useState<MappingChoice>({ column: null, fixed: onlyDay?.id ?? "" });
@@ -863,7 +861,6 @@ function ImportPanel({ detail, onChanged, setNotice }: {
       }} /></label>
       <label>工作表<select disabled={sheets.length < 2} value={sheetName} onChange={(event) => { setSheetName(event.target.value); setPrepared(null); }}><option value="">尚未選擇</option>{sheets.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
       <label>標題列<input type="number" min={1} max={sheet?.rows.length ?? 1} value={headerRow} onChange={(event) => { setHeaderRow(Number(event.target.value)); setPrepared(null); }} /><small>欄位名稱在第幾列。</small></label>
-      <label>來源說明<input value={sourceDescription} onChange={(event) => setSourceDescription(event.target.value)} /></label>
     </div>
     {sheet && <>
       <div className={styles.mappingGrid}>
@@ -895,7 +892,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
             setNotice({ kind: "error", message: message(error) });
             return;
           }
-          void buildOrganizerImportMetadata({ bytes, fileName, worksheet: sheetName === "CSV" ? null : sheetName, sourceDescription })
+          void buildOrganizerImportMetadata({ bytes, fileName, worksheet: sheetName === "CSV" ? null : sheetName, sourceDescription: detail.draft.officialSource.label })
             .then((metadata) => setPrepared({ ...result, metadata, mapping }))
             .catch((error) => setNotice({ kind: "error", message: message(error) }));
         }}>預覽對應結果</button>
@@ -1034,7 +1031,7 @@ function DraftForm({
     }
     setDirty(false);
     setExpectedVersion(result.version);
-    setNotice({ kind: "ok", message: "已儲存，並留下這次的版本紀錄。" });
+    setNotice({ kind: "ok", message: "已儲存。" });
     try {
       await onChanged();
       if (after) await after(result.version);
@@ -1052,7 +1049,7 @@ function DraftForm({
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
-    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3><p>儲存後會留下版本紀錄；目前是第 {expectedVersion} 版。</p></div></div>
+    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3></div></div>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>
@@ -1061,11 +1058,10 @@ function DraftForm({
         <label>官方來源網址<input disabled={!editable} type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /></label>
       </>}
       {showDays && <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>新增日期</button></div>
-        {draft.event.days.length > 0 && <div className={`${styles.inlineFields} ${styles.fieldHeads}`}><small>代碼</small><small>名稱</small><small>日期</small><span /></div>}
         {draft.event.days.map((day, index) => <div className={styles.inlineFields} key={`${index}-${day.id}`}>
-          <input disabled={!editable} aria-label={`第 ${index + 1} 日代碼`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} />
-          <input disabled={!editable} aria-label={`第 ${index + 1} 日名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} />
-          <input disabled={!editable} aria-label={`第 ${index + 1} 日日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} />
+          <label>代碼<input disabled={!editable} aria-label={`第 ${index + 1} 日代碼`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} /></label>
+          <label>名稱<input disabled={!editable} aria-label={`第 ${index + 1} 日名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} /></label>
+          <label>日期<input disabled={!editable} aria-label={`第 ${index + 1} 日日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} /></label>
           <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.event.days.splice(index, 1); return next; })}>移除</button>
         </div>)}
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
@@ -1167,9 +1163,9 @@ function MapTemplateSchematic({ shape }: { shape: MapTemplateShape | null }) {
   const width = 240;
   const height = 96;
   if (!shape) {
-    return <svg className={styles.schematic} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="沒有固定版面，攤位排列由你描摹的配置圖決定">
+    return <svg className={styles.schematic} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="沒有固定版面，可自由編輯攤位排列">
       <rect x="1" y="1" width={width - 2} height={height - 2} rx="7" fill="none" stroke="currentColor" strokeDasharray="6 5" opacity=".45" />
-      <text x={width / 2} y={height / 2 + 4} textAnchor="middle" fontSize="11" fill="currentColor" opacity=".6">版面由你描摹</text>
+      <text x={width / 2} y={height / 2 + 4} textAnchor="middle" fontSize="11" fill="currentColor" opacity=".6">自由編輯</text>
     </svg>;
   }
   const vertical = shape.rows.filter((row) => row.orientation === "vertical");
@@ -1222,7 +1218,7 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     .filter((row) => row.dayId === selected.periodKey && row.venueSpaceId === selected.venueSpaceId)
     .map((row) => [row.boothCode, { label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}` }])) : {}, [preview, selected]);
   return <div className={styles.readerPreview}>
-    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}・第 {map.revision} 版</option>)}</select></div>
+    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}</option>)}</select></div>
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} onSelect={() => undefined} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;
@@ -1243,13 +1239,12 @@ function ReviewPanel({ session, detail, onChanged, setNotice }: {
     void promise.then(async () => { setNotice({ kind: "ok", message: success }); await onChanged(); }).catch((error) => setNotice({ kind: "error", message: message(error) }));
   };
   return <section className={styles.panel}>
-    <h3>送審、發布狀態與版本</h3>
+    <h3>送審與發布狀態</h3>
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
     {owner && <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), "協作者邀請已寄出。"); }}><input type="email" required placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit">邀請協作者</button><button type="button" className={styles.dangerText} disabled={!editorEmail} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form></div>}
     {session.isAdmin && <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), "負責人邀請已寄出。"); }}><input type="email" required placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit">新增負責人</button><button type="button" className={styles.dangerText} disabled={!ownerEmail} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form></div>}
-    {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <div className={styles.subpanel}><h4>送審</h4><p>送審後，活動代碼就不能再更改。</p><button type="button" onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出第 {detail.event.version} 版審閱</button></div>}
-    {session.isAdmin && detail.event.status === "submitted" && <div className={styles.subpanel}><h4>網站管理者審閱</h4><p className={styles.warning}>若這一版是你自己送審的，系統會另外記錄自我核准。</p><textarea placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "已核准；發布功能尚未開放。")}>核准這一版</button></div></div>}
+    {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <div className={styles.subpanel}><h4>送審</h4><p>送審後，活動代碼就不能再更改。</p><button type="button" onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出審閱</button></div>}
+    {session.isAdmin && detail.event.status === "submitted" && <div className={styles.subpanel}><h4>網站管理者審閱</h4><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "已核准；發布功能尚未開放。")}>核准送審內容</button></div></div>}
     {detail.publication && <div className={styles.subpanel}><h4>發布狀態</h4><div className={styles.statusBoard}><span>狀態</span><strong>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? detail.publication.status}</strong><span>目前步驟</span><strong>{PUBLICATION_STEP_LABEL[detail.publication.step] ?? detail.publication.step}</strong></div>{detail.publication.error && <p className={styles.warning}>{detail.publication.error}</p>}{session.isAdmin && detail.publication.status === "failed" && <button type="button" onClick={() => act(retryOrganizerPublication(detail.publication!.id), "已重新排入發布。")}>重試發布</button>}</div>}
-    <div className={styles.subpanel}><h4>版本紀錄</h4><ol className={styles.history}>{detail.revisions.map((revision) => <li key={revision.version}><b>第 {revision.version} 版</b><span>{ROLE_LABEL[revision.createdByRole] ?? revision.createdByRole}</span><time>{new Date(revision.createdAt).toLocaleString("zh-TW")}</time></li>)}</ol></div>
   </section>;
 }
