@@ -109,3 +109,27 @@ test("a stored map with formal validation errors still needs attention", () => {
   assert.equal(readiness.completed, 3);
   assert.equal(readiness.blockers.some((blocker) => blocker.code === "missing_booth"), true);
 });
+
+test("a stale persisted import reopens import and blocks maps even when rows and maps still exist", () => {
+  const readiness = evaluateOrganizerWorkspaceReadiness({
+    draft: base,
+    importedRows: 20_000,
+    maps: [{ periodKey: "1", venueSpaceId: "hall-a" }],
+    validationIssues: [{
+      severity: "error",
+      step: "import",
+      code: "stale_import_area_mode",
+      target: "hall-a",
+      message: "使用空間已改為無分區，既有匯入資料需要重新匯入以套用 ALL。",
+    }],
+    currentVersion: 5,
+    lastValidatedVersion: 5,
+    status: "draft",
+  });
+
+  assert.equal(readiness.sections.find((section) => section.id === "import").state, "needs_attention");
+  assert.equal(readiness.sections.find((section) => section.id === "map").state, "blocked");
+  assert.equal(readiness.sections.find((section) => section.id === "validate").state, "blocked");
+  assert.equal(readiness.suggestedNextSection, "import");
+  assert.equal(readiness.completed, 2);
+});

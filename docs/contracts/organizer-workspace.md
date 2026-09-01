@@ -23,7 +23,7 @@
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
 - 表單有未儲存變更時，切換活動、引導任務或建置冊區段會提供「儲存並切換／放棄／取消」；離開瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
 - 建置冊直接開放活動、場館與使用空間、攤位匯入、地圖、驗證與預覽、送審與發布六區。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
-- 六區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列；地圖要求完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則；驗證只在 `last_validated_version` 等於目前 candidate version 時完成；送審後 review 才完成。
+- 六區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列且沒有 import error；地圖要求匯入已完成、完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則；驗證只在沒有 error 且 `last_validated_version` 等於目前 candidate version 時完成；送審後 review 才完成。
 
 ## 邀請制，不能自助開活動
 
@@ -69,7 +69,7 @@ draft → submitted → approved → publishing → published
 - 每一列的 `dayId`、`venueSpaceId` 與 `areaId` 必須落在草稿已宣告的集合內；`areaMode: none` 的列會被正規化為 `ALL`，不讀來源檔的展區值；同一活動日 × 場館空間 × 攤位代碼不得重複（大小寫不敏感）。
 - **展區由這份檔案決定。** 預覽會列出檔案裡每個場館空間出現的展區與列數；主辦按下確認時，介面先把這些展區寫進草稿（一次正常的 `expectedVersion` 儲存），再以新版本送出匯入。API 端「未宣告的展區一律拒絕」的規則不變——被宣告的來源換成同一份檔案。
 - 展區的推導與匯入一樣是**取代**語意：草稿裡有、但這份檔案沒有提到的分區空間會被清空展區；無分區空間仍固定為 `ALL`。prerequisite 的 `missing_space_import` 會指出沒有任何匯入列的使用空間。預覽會先以場館與使用空間名稱提醒哪些空間沒出現在檔案裡。
-- 保存匯入後若再移除活動日、移除使用空間、切換展區方式或改變已宣告展區，validate、preview 與 submit 都會逐列反查既有匯入資料並要求重新匯入；舊列不會以 orphan space 或過期展區進入送審 snapshot。
+- 保存匯入後若再移除活動日、移除使用空間、切換展區方式或改變已宣告展區，validate、preview 與 submit 都會逐列反查既有匯入資料並要求重新匯入；舊列不會以 orphan space 或過期展區進入送審 snapshot。相同原因的列會聚合成一個帶影響列數與代表來源列的 issue，回應最多列出 100 組再加一筆省略摘要，避免 20,000 列名單放大成 20,000 個 blocker。
 - 檔案裡出現草稿沒有的場館空間，或展區代碼不是英數字、底線與連字號（它會進公開網址）時，預覽直接擋下儲存並指出要修的是來源檔還是場館設定。
 - `identityGroup` 只能是 `stable:<stableKey>` 或 `null`。**名稱相同不構成同一社團**，與[社團目錄契約](./circle-catalog.md)的 linkage 規則一致。
 - 匯入是**取代**語意：一次請求就是這個候選活動的完整攤位表。新來源寫入時，前一份標記 `replaced_at`，其資料列不再是有效匯入。

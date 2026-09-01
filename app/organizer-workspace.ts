@@ -62,24 +62,58 @@ export function validateOrganizerImportedRowsAgainstDraft(
 ): OrganizerValidationIssue[] {
   const days = new Set(draft.event.days.map((day) => day.id));
   const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, assignment]));
-  const issues: OrganizerValidationIssue[] = [];
+  const groups = new Map<string, { issue: OrganizerValidationIssue; count: number }>();
+  let omitted = 0;
+  const add = (key: string, issue: OrganizerValidationIssue) => {
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+      return;
+    }
+    // A candidate accepts at most 20,000 rows. Bound the response independently
+    // so adversarially varied stale identifiers cannot turn one validation into
+    // tens of thousands of blockers or a multi-megabyte JSON response.
+    if (groups.size >= 100) {
+      omitted += 1;
+      return;
+    }
+    groups.set(key, { issue, count: 1 });
+  };
   for (const row of rows) {
     const issueBase = { severity: "error" as const, step: "import" as const, row: row.sourceRow, target: row.venueSpaceId };
     if (!days.has(row.dayId)) {
-      issues.push({ ...issueBase, code: "stale_import_day", message: "這筆匯入資料的活動日已不在活動設定中，請重新匯入。" });
+      add(`day\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
+        ...issueBase, code: "stale_import_day", message: "既有匯入資料的活動日已不在活動設定中，請重新匯入。",
+      });
     }
     const assignment = spaces.get(row.venueSpaceId);
     if (!assignment) {
-      issues.push({ ...issueBase, code: "stale_import_space", message: "這筆匯入資料的使用空間已不在活動設定中，請重新匯入。" });
+      add(`space\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
+        ...issueBase, code: "stale_import_space", message: "既有匯入資料的使用空間已不在活動設定中，請重新匯入。",
+      });
       continue;
     }
     if (assignment.areaMode === "none") {
       if (row.areaId !== "ALL") {
-        issues.push({ ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，既有匯入資料需要重新匯入以套用 ALL。" });
+        add(`area-mode\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
+          ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，既有匯入資料需要重新匯入以套用 ALL。",
+        });
       }
     } else if (!assignment.areaIds.includes(row.areaId)) {
-      issues.push({ ...issueBase, code: "stale_import_area", message: "這筆匯入資料的展區已不在目前的活動設定中，請重新匯入。" });
+      add(`area\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
+        ...issueBase, code: "stale_import_area", message: "既有匯入資料的展區已不在目前的活動設定中，請重新匯入。",
+      });
     }
+  }
+  const issues = [...groups.values()].map(({ issue, count }) => ({
+    ...issue,
+    message: count > 1 ? `${issue.message}（影響 ${count} 列；代表來源列 ${issue.row ?? "未知"}。）` : issue.message,
+  }));
+  if (omitted > 0) {
+    issues.push({
+      severity: "error", step: "import", code: "stale_import_more",
+      message: `另有 ${omitted} 項匯入資料不一致未逐項列出；請重新匯入完整名單。`,
+    });
   }
   return issues;
 }
@@ -143,11 +177,12 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     .filter((issue) => issue.severity === "error");
   const eventComplete = !issues.some((issue) => issue.step === "event");
   const venueComplete = !issues.some((issue) => issue.step === "venue");
-  const importComplete = input.importedRows > 0;
-  const mapComplete = eventComplete && venueComplete
+  const importHasErrors = issues.some((issue) => issue.step === "import");
+  const importComplete = input.importedRows > 0 && !importHasErrors;
+  const mapComplete = eventComplete && venueComplete && importComplete
     && input.draft.event.days.length > 0 && input.draft.venue.assignments.length > 0
     && !issues.some((issue) => issue.step === "map");
-  const validationComplete = input.lastValidatedVersion === input.currentVersion;
+  const validationComplete = issues.length === 0 && input.lastValidatedVersion === input.currentVersion;
   const reviewComplete = input.status !== "draft" && input.status !== "changes_requested";
 
   const sections: OrganizerWorkspaceReadiness["sections"] = [
@@ -155,7 +190,9 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     { id: "venue", state: venueComplete ? "complete" : "needs_attention" },
     {
       id: "import",
-      state: importComplete ? "complete" : eventComplete && venueComplete ? "available" : "blocked",
+      state: importComplete ? "complete"
+        : input.importedRows > 0 ? "needs_attention"
+          : eventComplete && venueComplete ? "available" : "blocked",
     },
     {
       id: "map",

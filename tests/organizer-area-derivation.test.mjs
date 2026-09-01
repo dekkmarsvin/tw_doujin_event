@@ -136,3 +136,22 @@ test("persisted import rows are revalidated after day, space, or area-mode edits
     ["stale_import_day"],
   );
 });
+
+test("20,000 stale import rows aggregate by cause and the issue response stays bounded", () => {
+  const noDivision = draft([space("hall-a", ["ALL"], "none")]);
+  const sameCause = Array.from({ length: 20_000 }, (_, index) => ({
+    sourceRow: index + 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A",
+  }));
+  const aggregated = validateOrganizerImportedRowsAgainstDraft(noDivision, sameCause);
+  assert.equal(aggregated.length, 1);
+  assert.equal(aggregated[0].code, "stale_import_area_mode");
+  assert.match(aggregated[0].message, /影響 20000 列/u);
+
+  const varied = Array.from({ length: 20_000 }, (_, index) => ({
+    sourceRow: index + 2, dayId: "1", venueSpaceId: `removed-${index}`, areaId: "A",
+  }));
+  const bounded = validateOrganizerImportedRowsAgainstDraft(draft([]), varied);
+  assert.equal(bounded.length, 101);
+  assert.equal(bounded.at(-1).code, "stale_import_more");
+  assert.match(bounded.at(-1).message, /19900 項/u);
+});
