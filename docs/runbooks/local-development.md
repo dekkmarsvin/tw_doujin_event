@@ -51,7 +51,7 @@ npm run dev
 
 ## 共同 gate
 
-交付前必須全數通過：
+[gate](../../CONTEXT.md) 在本機是這四道指令：
 
 ```bash
 npm ci
@@ -60,7 +60,7 @@ npm run lint
 npx tsc --noEmit --incremental false
 ```
 
-CI 跑同一組。`npm test` 先以 fixture 建立 Pages build，再執行全部 Node 測試，確認：
+`npm test` 先以 fixture 建立 Pages build，再執行全部 Node 測試，確認：
 
 - staged event、catalog v3 與 map 身分一致；
 - 公開產物不含 Worker server bundle 或 authoring route；
