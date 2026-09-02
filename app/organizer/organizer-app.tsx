@@ -694,6 +694,13 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const [venueSpaceId, setVenueSpaceId] = useState(detail.draft.venue.assignments[0]?.venueSpaceId ?? "");
   const [layout, setLayout] = useState<EventMapLayout | null>(null);
   const [background, setBackground] = useState("");
+  // The editor reports every committed edit, so one flag is enough to know
+  // whether closing would throw work away. Undoing back to the opened state
+  // still counts as edited, which errs towards asking.
+  const [edited, setEdited] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const closeDialog = useRef<HTMLElement | null>(null);
+  useModalFocus(confirmingClose, closeDialog, () => setConfirmingClose(false));
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   const assignment = detail.draft.venue.assignments.find((item) => item.venueSpaceId === venueSpaceId);
   const reload = useCallback(async () => setMaps((await listOrganizerMaps(detail.event.id)).maps), [detail.event.id]);
@@ -702,11 +709,11 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const open = async (map: OrganizerMapSummary) => {
     const next = (await readOrganizerMap(detail.event.id, map.id)).map;
     setSelected(next); setPeriodKey(next.periodKey); setVenueSpaceId(next.venueSpaceId);
-    setLayout(next.layout); setBackground("");
+    setLayout(next.layout); setBackground(""); setEdited(false);
   };
   const startBlank = () => {
     if (!assignment) return;
-    setSelected(null); setBackground("");
+    setSelected(null); setBackground(""); setEdited(false);
     setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000));
   };
   const runFile = async (file: File) => {
@@ -724,7 +731,23 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     const next = hasMapTemplateRecognizer(assignment.mapTemplate)
       ? recognizeMapTemplate(assignment.mapTemplate, context.getImageData(0, 0, canvas.width, canvas.height)).layout
       : createBlankEventMapLayout(assignment.mapTemplate, canvas.width, canvas.height);
-    setSelected(null); setBackground(source); setLayout(next);
+    setSelected(null); setBackground(source); setLayout(next); setEdited(false);
+  };
+
+  const closeEditor = () => {
+    setConfirmingClose(false); setEdited(false);
+    setLayout(null); setSelected(null); setBackground("");
+  };
+
+  const saveMap = () => {
+    if (!layout) return Promise.resolve();
+    setConfirmingClose(false);
+    setNotice({ kind: "busy", message: "儲存地圖…" });
+    const action = selected
+      ? saveOrganizerMap(detail.event.id, selected.id, { expectedVersion: detail.event.version, expectedMapRevision: selected.mapRevision, layout })
+      : createOrganizerMap(detail.event.id, { expectedVersion: detail.event.version, periodKey, venueSpaceId, layout });
+    return action.then(async () => { setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" }); closeEditor(); await onChanged(); await reload(); })
+      .catch((error) => setNotice({ kind: "error", message: message(error) }));
   };
 
   return <section className={`${styles.panel} ${styles.mapPanel}`}>
@@ -743,22 +766,26 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         const map = maps.find((item) => item.id === event.target.value);
         if (!map) return;
         void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
-          setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setBackground("");
+          setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setBackground(""); setEdited(false);
         }).catch((error) => setNotice({ kind: "error", message: message(error) }));
       }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{item.periodKey}</option>)}</select></label>
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
     {layout ? <>
-      <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={setLayout} />
-      <div className={styles.row}><button type="button" disabled={!editable} onClick={() => {
-        setNotice({ kind: "busy", message: "儲存地圖…" });
-        const action = selected
-          ? saveOrganizerMap(detail.event.id, selected.id, { expectedVersion: detail.event.version, expectedMapRevision: selected.mapRevision, layout })
-          : createOrganizerMap(detail.event.id, { expectedVersion: detail.event.version, periodKey, venueSpaceId, layout });
-        void action.then(async () => { setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" }); setLayout(null); setSelected(null); await onChanged(); await reload(); })
-          .catch((error) => setNotice({ kind: "error", message: message(error) }));
-      }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button><button type="button" className={styles.ghost} onClick={() => { setLayout(null); setSelected(null); setBackground(""); }}>關閉編輯器</button></div>
+      <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={(next) => { setLayout(next); setEdited(true); }} />
+      <div className={styles.row}><button type="button" disabled={!editable} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button><button type="button" className={styles.ghost} onClick={() => edited ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button></div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
+    {confirmingClose && <div className={styles.dialogBackdrop}>
+      <section ref={closeDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-map-title" aria-describedby="unsaved-map-description" tabIndex={-1}>
+        <h3 id="unsaved-map-title">尚有未儲存變更</h3>
+        <p id="unsaved-map-description">要先儲存地圖，再關閉編輯器嗎？</p>
+        <div className={styles.dialogActions}>
+          <button type="button" disabled={!editable} onClick={() => { void saveMap(); }}>儲存並關閉</button>
+          <button type="button" className={styles.secondary} onClick={closeEditor}>放棄</button>
+          <button type="button" className={styles.ghost} onClick={() => setConfirmingClose(false)}>取消</button>
+        </div>
+      </section>
+    </div>}
   </section>;
 }
 
