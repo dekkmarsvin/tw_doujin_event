@@ -363,6 +363,51 @@ export function resizeRectFromCorner(rect: MapRect, corner: ResizeCorner, dx: nu
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
+/** The same corner grab, but keeping the rectangle's shape. Used when a whole
+ * selection is resized at once, where the free version is close to unusable:
+ * width and height are each scaled by the group's own extent on that axis, so
+ * the two-column block of booths a plan produces — a bounding box maybe eight
+ * times taller than it is wide — turns one diagonal drag into two wildly
+ * different multipliers, and the booths lurch between tall and flat as it
+ * moves. Worse, each axis then stops on its own, at the canvas edge going out
+ * and at the minimum going in, so the shape keeps changing after one side has
+ * already stopped.
+ *
+ * One factor for both axes fixes all of that. The drag is projected onto the
+ * rectangle's own diagonal, which makes a drag that follows the diagonal behave
+ * exactly like the free version and anything off it contribute its share, and
+ * the factor — never the axes separately — is what the canvas and the minimum
+ * clamp. The corner opposite the one being dragged stays put. */
+export function resizeRectUniformly(rect: MapRect, corner: ResizeCorner, dx: number, dy: number, bounds: Pick<MapRect, "width" | "height">, minimumSize = 24): MapRect {
+  const growsRight = corner === "ne" || corner === "se";
+  const growsDown = corner === "se" || corner === "sw";
+  const reach = rect.width * rect.width + rect.height * rect.height;
+  if (reach <= 0) return { ...rect };
+  const growth = (growsRight ? dx : -dx) * rect.width + (growsDown ? dy : -dy) * rect.height;
+
+  // How far the factor may go before the anchored corner drags the far side off
+  // the canvas, and how far in before the shorter side reaches the minimum. A
+  // side already below the minimum keeps what it measures rather than growing.
+  const room = (extent: number, ahead: number) => extent > 0 ? ahead / extent : Infinity;
+  const ceiling = Math.min(
+    room(rect.width, growsRight ? bounds.width - rect.x : rect.x + rect.width),
+    room(rect.height, growsDown ? bounds.height - rect.y : rect.y + rect.height),
+  );
+  const floor = Math.max(
+    rect.width > 0 ? Math.min(minimumSize, rect.width) / rect.width : 0,
+    rect.height > 0 ? Math.min(minimumSize, rect.height) / rect.height : 0,
+  );
+  const scale = clamp(1 + growth / reach, Math.min(floor, ceiling), ceiling);
+
+  const width = rect.width * scale;
+  const height = rect.height * scale;
+  return {
+    x: growsRight ? rect.x : rect.x + rect.width - width,
+    y: growsDown ? rect.y : rect.y + rect.height - height,
+    width, height,
+  };
+}
+
 function hasRequiredOverlap(start: number, length: number, targetStart: number, targetLength: number, ratio: number) {
   const overlap = Math.max(0, Math.min(start + length, targetStart + targetLength) - Math.max(start, targetStart));
   return overlap >= Math.min(length, targetLength) * ratio;

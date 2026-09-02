@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
-import { clamp, confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
+import { clamp, confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
@@ -603,7 +603,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     const lone = active.selections.length === 1 ? active.selections[0] : null;
     let nextGuides: SnapGuide[] = [];
     if (active.mode === "resize") {
-      const resized = resizeRectFromCorner(active.originBounds, active.corner, dx, dy, layout);
+      // A group keeps its shape: scaling its width and height by their own
+      // extents makes a tall thin block of booths lurch, so a batch takes one
+      // factor for both axes. A single rectangle still resizes freely, which is
+      // what changing one booth's width without its height needs.
+      const resized = lone
+        ? resizeRectFromCorner(active.originBounds, active.corner, dx, dy, layout)
+        : resizeRectUniformly(active.originBounds, active.corner, dx, dy, layout);
       commit((draft) => {
         const snapped = lone && lone.kind !== "access" && !event.altKey
           ? snapRectToAdjacentRects(resized, snapTargetsFor(draft, lone), { bounds: draft, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel })
