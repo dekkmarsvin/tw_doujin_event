@@ -17,6 +17,10 @@ export type AlignEdge = "left" | "right" | "top" | "bottom";
 type Bounds = Pick<MapRect, "width" | "height">;
 type RowsOnly = Pick<EventMapLayout, "rows">;
 
+/** A box kept alongside the slot it came from, so a grid can be built by
+ * shuffling boxes around and still written back in the caller's order. */
+type BoxCell = { index: number; box: MapRect };
+
 export function selectionKey(selection: Selection) {
   if (selection.kind === "floor") return "floor";
   return `${selection.kind}:${selection.kind === "slot" ? `${selection.rowIndex}:` : ""}${selection.itemIndex}`;
@@ -118,13 +122,22 @@ export function translateBoxesWithin(boxes: readonly MapRect[], dx: number, dy: 
   return boxes.map((item) => ({ ...item, x: item.x + shiftX, y: item.y + shiftY }));
 }
 
-/** Do two boxes overlap on the axis the packing is not travelling along? Only
- * a box in the way can stop another one, and touching edges are not in the way:
- * two columns standing flush side by side must not block each other. */
-function blocksAcross(box: MapRect, other: MapRect, vertical: boolean) {
-  return vertical
-    ? box.x < other.x + other.width && other.x < box.x + box.width
-    : box.y < other.y + other.height && other.y < box.y + box.height;
+/** Are the two boxes in the same lane, across the axis the packing travels
+ * along? Half of the smaller box is the clearance that decides it: booths in
+ * one column sit almost exactly over each other and are stacked one behind the
+ * other, while the column beside them shares an edge at most and stands clear.
+ *
+ * Any overlap at all used to make a lane, which is a plan traced by hand read
+ * far too literally: two columns drawn a hair too wide, or evened out to a
+ * common size a hair wider than the gap between them, were read as one column
+ * and packed into a single stretched stack of alternating booths. A box with no
+ * size of its own, an access point, still shares the lane of anything it sits
+ * inside. */
+function sharesLane(box: MapRect, other: MapRect, vertical: boolean) {
+  const start = (item: MapRect) => vertical ? item.x : item.y;
+  const size = (item: MapRect) => vertical ? item.width : item.height;
+  const overlap = Math.min(start(box) + size(box), start(other) + size(other)) - Math.max(start(box), start(other));
+  return overlap > Math.min(size(box), size(other)) / 2;
 }
 
 /** Slides every box towards the named edge of the group's own bounding box
@@ -137,9 +150,10 @@ function blocksAcross(box: MapRect, other: MapRect, vertical: boolean) {
  * This is what a plan traced by hand needs. Booths come off it with uneven gaps
  * and, where the tracing drifted, overlapping their neighbours; letting them
  * fall against each other closes both at once. Two columns selected together
- * fall into a grid: each column packs against the group's edge on its own, and
- * because they no longer overlap, packing sideways afterwards brings the second
- * column flush against the first instead of on top of it.
+ * fall into a grid: each column packs against the group's edge on its own —
+ * they are separate lanes, so neither stops the other — and packing sideways
+ * afterwards brings the second column flush against the first instead of on top
+ * of it.
  *
  * Boxes settle in the order they already reach the edge, so booths keep their
  * sequence and their codes keep matching the plan. A group that was overlapping
@@ -167,7 +181,7 @@ export function alignBoxesToEdge(boxes: readonly MapRect[], edge: AlignEdge, bou
     const item = boxes[index];
     let face = wall;
     settled.forEach((other) => {
-      if (!blocksAcross(item, other, vertical)) return;
+      if (!sharesLane(item, other, vertical)) return;
       const back = forward ? startOf(other) + sizeOf(other) : startOf(other);
       face = forward ? Math.max(face, back) : Math.min(face, back);
     });
@@ -210,18 +224,54 @@ export function resizeBoxesToCommonSize(boxes: readonly MapRect[], bounds: Bound
     : { ...box });
 }
 
+/** The columns a block was drawn as, read off the boxes themselves. Taken from
+ * left to right, a booth that no longer shares a lane with the booth beside it
+ * starts the next column; measuring against that neighbour rather than against
+ * the column's first booth keeps a column that drifted sideways as it was
+ * traced in one piece. Each column comes back ordered down the page, which is
+ * the order the booths were numbered in. */
+function columnsOfBoxes(cells: readonly BoxCell[]): BoxCell[][] {
+  const centreX = (cell: BoxCell) => cell.box.x + cell.box.width / 2;
+  const centreY = (cell: BoxCell) => cell.box.y + cell.box.height / 2;
+  const columns: BoxCell[][] = [];
+  let previous: BoxCell | undefined;
+  [...cells].sort((a, b) => centreX(a) - centreX(b) || a.index - b.index).forEach((cell) => {
+    if (!previous || !sharesLane(cell.box, previous.box, true)) columns.push([]);
+    columns[columns.length - 1].push(cell);
+    previous = cell;
+  });
+  return columns.map((column) => column.sort((a, b) => centreY(a) - centreY(b) || a.index - b.index));
+}
+
 /** Tidies a hand-traced block into a grid in one move: every booth is given the
- * group's most common size, then the group is packed upwards and packed left.
+ * group's most common size, and the columns the booths were drawn as are then
+ * laid out flush from the top left corner of the group, each booth one cell
+ * down from the booth before it in its column.
  *
- * The order is what makes it a grid rather than a heap. Packing upwards first
- * settles each column against the top on its own, and equal-sized booths in
- * equal-length columns land on exactly the same rows; only then does packing
- * left have rows to work with, so each column slides flush against the one
- * before it instead of over it. Sizing first is what makes those rows line up
- * at all — columns of different booth heights would settle on different rows. */
+ * Which column a booth belongs to is decided up front, from where it was drawn,
+ * rather than left to fall out of packing the group upwards and then leftwards.
+ * Packing reads two booths as one column whenever they overlap sideways at all,
+ * so two columns traced a hair too wide — or merely evened out to a common size
+ * that is a hair wider than the gap between them — collapsed into a single
+ * stack of alternating booths. Half a booth of clearance is the honest question
+ * to ask instead: booths that share a lane are stacked, booths beside it start
+ * the next column.
+ *
+ * Booths keep their sequence within a column and the columns keep their order
+ * across the page, so the codes still match the plan. Access points carry no
+ * size and have no cell in a grid of booths: they stay where they are, and the
+ * corner the grid starts from is the booths' own, so an entrance marked off to
+ * one side does not drag the whole block over to it. */
 export function autoArrangeBoxes(boxes: readonly MapRect[], bounds: Bounds): MapRect[] {
-  const sized = resizeBoxesToCommonSize(boxes, bounds);
-  return alignBoxesToEdge(alignBoxesToEdge(sized, "top", bounds), "left", bounds);
+  const arranged = resizeBoxesToCommonSize(boxes, bounds);
+  const size = commonBoxSize(arranged);
+  if (!size) return arranged;
+  const cells = arranged.map((box, index) => ({ index, box })).filter(({ box }) => box.width > 0 && box.height > 0);
+  const area = boundingBox(cells.map(({ box }) => box));
+  columnsOfBoxes(cells).forEach((column, columnIndex) => column.forEach((cell, rowIndex) => {
+    arranged[cell.index] = clampBoxWithin({ x: area.x + columnIndex * size.width, y: area.y + rowIndex * size.height, ...size }, bounds);
+  }));
+  return arranged;
 }
 
 /** Maps every box from one bounding box into another, which is how a corner
