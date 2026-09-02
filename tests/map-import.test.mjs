@@ -10,7 +10,7 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { confirmedDraftSlots, formatSlotCode, generateRowSlots, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { confirmedDraftSlots, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
@@ -429,6 +429,186 @@ test("a manual pointer drag becomes an exact canvas-bounded booth rectangle", ()
   const bounds = { width: 200, height: 120 };
   assert.deepEqual(rectFromDrag({ x: 90, y: 70 }, { x: 30, y: 20 }, bounds), { x: 30, y: 20, width: 60, height: 50 });
   assert.deepEqual(rectFromDrag({ x: -20, y: 10 }, { x: 250, y: 150 }, bounds), { x: 0, y: 10, width: 200, height: 110 });
+});
+
+/** The plans this primitive was drawn against are not in the repository. What
+ * they contribute is the shape of the problem — one row label split by gangways,
+ * two parallel columns under that same label, the same hall carrying a different
+ * booth count on its second day, and facing sides numbered towards each other —
+ * and synthetic rectangles reproduce every one of those exactly. */
+const drawnRow = (label, frame, slotCount, options = {}) => {
+  const orientation = options.orientation ?? rowOrientationFromRect(frame);
+  return generateRowSlotsFromRect({
+    label,
+    frame,
+    slotCount,
+    orientation,
+    numberingStart: options.numberingStart ?? (orientation === "vertical" ? "top" : "left"),
+    codePrefix: options.codePrefix ?? label,
+    startNumber: options.startNumber ?? 1,
+    numberPadding: options.numberPadding ?? 2,
+  }, options.bounds ?? { width: 1600, height: 1000 });
+};
+
+/** The rule `map-contribution-draft.ts` applies to every pair of booths before a
+ * draft may be saved: a shared edge is fine, any true intersection is not. */
+const intersects = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+test("a drawn rectangle is the outline of a segment, not a pair of centres", () => {
+  const result = drawnRow("B", { x: 100, y: 50, width: 40, height: 900 }, 10);
+  assert.equal(result.ok, true);
+  assert.equal(result.row.orientation, "vertical");
+  assert.equal(result.row.slots.length, 10);
+  assert.deepEqual(result.row.slots.map(({ code }) => code).slice(0, 3), ["B01", "B02", "B03"]);
+  // Booth size is a consequence of the drawing: the run is cut into ten, and the
+  // other axis is the width of the rectangle. Neither was typed in.
+  assert.deepEqual(result.row.slots[0].rect, { x: 100, y: 50, width: 40, height: 90 });
+  assert.deepEqual(result.row.slots.at(-1).rect, { x: 100, y: 860, width: 40, height: 90 });
+  assert.equal(result.row.slots.reduce((total, { rect }) => total + rect.height, 0), 900);
+
+  const across = drawnRow("W", { x: 20, y: 400, width: 600, height: 30 }, 4);
+  assert.equal(across.row.orientation, "horizontal");
+  assert.deepEqual(across.row.slots.map(({ rect }) => rect), [
+    { x: 20, y: 400, width: 150, height: 30 },
+    { x: 170, y: 400, width: 150, height: 30 },
+    { x: 320, y: 400, width: 150, height: 30 },
+    { x: 470, y: 400, width: 150, height: 30 },
+  ]);
+});
+
+test("consecutive booths in a drawn segment touch exactly, at every count and length", () => {
+  // A gap or an overlap here is not cosmetic: the draft validator rejects any
+  // pair of booths that truly intersects, and a plan read at a glance shows a
+  // row of booths with nothing between them.
+  for (const length of [900, 97, 33.7, 1000 / 3, 0.1]) {
+    for (let count = 1; count <= 60; count += 1) {
+      const spans = seamlessSpans(0.1, length, count);
+      assert.equal(spans.length, count);
+      spans.slice(1).forEach((span, index) => {
+        const previous = spans[index];
+        const end = previous.start + previous.size;
+        assert.ok(end <= span.start, `count ${count} over ${length}: booth ${index} ends at ${end}, past ${span.start}`);
+        assert.ok(span.start - end <= Math.abs(span.start) * Number.EPSILON * 4, `count ${count} over ${length}: a gap opened before booth ${index + 1}`);
+      });
+      const last = spans.at(-1);
+      assert.ok(Math.abs(last.start + last.size - (0.1 + length)) <= Math.abs(length) * Number.EPSILON * 4, `count ${count} over ${length}: the run does not end where it was drawn`);
+    }
+  }
+
+  const row = drawnRow("A", { x: 40, y: 30.5, width: 55, height: 97 }, 13).row;
+  const pairs = row.slots.flatMap((slot, index) => row.slots.slice(index + 1).map((other) => [slot, other]));
+  assert.equal(pairs.some(([a, b]) => intersects(a.rect, b.rect)), false, "no two booths of a drawn segment may intersect");
+});
+
+test("numbering starts from whichever end of a segment the plan numbers from", () => {
+  const frame = { x: 100, y: 50, width: 40, height: 400 };
+  const downwards = drawnRow("A", frame, 4, { numberingStart: "top" }).row;
+  const upwards = drawnRow("A", frame, 4, { numberingStart: "bottom" }).row;
+  assert.deepEqual(downwards.slots.map(({ code }) => code), ["A01", "A02", "A03", "A04"]);
+  assert.deepEqual(upwards.slots.map(({ code }) => code), ["A04", "A03", "A02", "A01"]);
+  // Only the order the codes are handed out in changes; the booths do not move.
+  assert.deepEqual(upwards.slots.map(({ rect }) => rect), downwards.slots.map(({ rect }) => rect));
+
+  const wide = { x: 20, y: 400, width: 600, height: 30 };
+  assert.deepEqual(drawnRow("W", wide, 3, { numberingStart: "left" }).row.slots.map(({ code }) => code), ["W01", "W02", "W03"]);
+  assert.deepEqual(drawnRow("W", wide, 3, { numberingStart: "right" }).row.slots.map(({ code }) => code), ["W03", "W02", "W01"]);
+
+  // A direction the axis cannot express is refused rather than reinterpreted.
+  assert.deepEqual(drawnRow("A", frame, 4, { numberingStart: "left" }).errors, ["直排的編號起點必須是上或下。"]);
+  assert.deepEqual(drawnRow("W", wide, 3, { numberingStart: "top" }).errors, ["橫排的編號起點必須是左或右。"]);
+});
+
+test("a gangway splits a row into segments the label still holds together", () => {
+  // One vertical column of booths, cut twice by walkways: three drawings, one A.
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 1600, 1000);
+  const segments = [
+    drawnRow("A", { x: 60, y: 40, width: 45, height: 240 }, 12, { startNumber: 1 }),
+    drawnRow("A", { x: 60, y: 320, width: 45, height: 400 }, 20, { startNumber: 13 }),
+    drawnRow("A", { x: 60, y: 760, width: 45, height: 240 }, 12, { startNumber: 33 }),
+  ];
+  assert.deepEqual(segments.map(({ ok }) => ok), [true, true, true]);
+  segments.forEach(({ row }) => assert.equal(appendRowSegment(layout, row).ok, true));
+  assert.equal(layout.rows.length, 1, "the published layout still carries one A row");
+  assert.equal(layout.rows[0].slots.length, 44);
+  assert.deepEqual([layout.rows[0].slots[0].code, layout.rows[0].slots[11].code, layout.rows[0].slots[12].code, layout.rows[0].slots.at(-1).code], ["A01", "A12", "A13", "A44"]);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  // The gangways are the space the drawings left between them, not booths.
+  assert.equal(layout.rows[0].slots.some(({ rect }) => rect.y >= 280 && rect.y < 320), false);
+});
+
+test("two parallel columns under one label are two drawings, not one fitted line", () => {
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 1600, 1000);
+  const left = drawnRow("B", { x: 200, y: 100, width: 45, height: 520 }, 26, { startNumber: 1 });
+  const right = drawnRow("B", { x: 245, y: 100, width: 45, height: 520 }, 26, { startNumber: 27 });
+  assert.equal(appendRowSegment(layout, left.row).ok, true);
+  assert.equal(appendRowSegment(layout, right.row).ok, true);
+  assert.equal(layout.rows.length, 1);
+  assert.deepEqual([layout.rows[0].slots[0].code, layout.rows[0].slots[25].code, layout.rows[0].slots[26].code, layout.rows[0].slots.at(-1).code], ["B01", "B26", "B27", "B52"]);
+  assert.deepEqual([...new Set(layout.rows[0].slots.map(({ rect }) => rect.x))], [200, 245], "the two columns stay side by side");
+  assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("the same hall on another day is drawn with its own counts", () => {
+  // Second-day columns of the same venue hold 24 booths where the first day held
+  // 26, so nothing may treat a hall as a fixed number of booths.
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 1600, 1000);
+  const left = drawnRow("B", { x: 200, y: 100, width: 45, height: 520 }, 24, { startNumber: 1 });
+  const right = drawnRow("B", { x: 245, y: 100, width: 45, height: 520 }, 24, { startNumber: 25 });
+  assert.equal(appendRowSegment(layout, left.row).ok, true);
+  assert.equal(appendRowSegment(layout, right.row).ok, true);
+  assert.equal(layout.rows[0].slots.length, 48);
+  assert.deepEqual([layout.rows[0].slots[0].code, layout.rows[0].slots.at(-1).code], ["B01", "B48"]);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("the facing sides of one aisle run towards each other under one label", () => {
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 1600, 1000);
+  const upper = drawnRow("Q", { x: 100, y: 300, width: 480, height: 30 }, 12, { startNumber: 1, numberingStart: "left" });
+  const lower = drawnRow("Q", { x: 100, y: 330, width: 480, height: 30 }, 12, { startNumber: 13, numberingStart: "right" });
+  assert.equal(appendRowSegment(layout, upper.row).ok, true);
+  assert.equal(appendRowSegment(layout, lower.row).ok, true);
+  assert.equal(layout.rows.length, 1);
+  assert.equal(layout.rows[0].orientation, "horizontal");
+  // The upper side counts up to the right, the lower side up to the left, which
+  // is what puts Q01 and Q24 at the same end of the aisle.
+  assert.equal(upper.row.slots[0].rect.x, 100);
+  assert.equal(lower.row.slots.at(-1).code, "Q13");
+  assert.equal(lower.row.slots[0].code, "Q24");
+  assert.equal(lower.row.slots[0].rect.x, 100);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("anchors describe the one segment a drawing cannot, and misdescribe the rest", () => {
+  // A row tilted a few degrees on a scanned plan: booths advance on both axes at
+  // once. A drawn rectangle is axis-aligned, so every booth it cuts shares one
+  // column, and the tilt cannot be expressed — this is the case anchors keep.
+  const tilted = inferRowFromAnchors([{ index: 1, x: 100, y: 100 }, { index: 5, x: 140, y: 260 }, { index: 12, x: 210, y: 540 }]);
+  assert.equal(tilted.ok, true);
+  assert.ok(tilted.inference.residual < 0.001, "a straight tilted row fits with no residual");
+  assert.notEqual(tilted.inference.start.x, tilted.inference.end.x, "the fitted line moves on both axes");
+  const drawn = drawnRow("T", { x: 100, y: 100, width: 45, height: 440 }, 12).row;
+  assert.equal(new Set(drawn.slots.map(({ rect }) => rect.x)).size, 1, "a drawing cannot follow a tilt");
+
+  // Anchors taken from two parallel columns fit a line that lies in neither, so
+  // the tool stays scoped to one straight, evenly spaced segment.
+  const acrossColumns = inferRowFromAnchors([{ index: 1, x: 200, y: 100 }, { index: 26, x: 200, y: 600 }, { index: 40, x: 245, y: 380 }]);
+  assert.equal(acrossColumns.ok, true);
+  assert.ok(acrossColumns.inference.residual > 10, `booths marked in two columns cannot lie on one line, got ${acrossColumns.inference.residual}`);
+});
+
+test("a drawn segment refuses what it cannot cut", () => {
+  const frame = { x: 10, y: 10, width: 40, height: 200 };
+  assert.deepEqual(drawnRow("  ", frame, 4).errors, ["排標籤不可留空。"]);
+  assert.equal(drawnRow("A", frame, 0).ok, false);
+  assert.equal(drawnRow("A", frame, 2.5).ok, false);
+  assert.equal(drawnRow("A", frame, 4, { startNumber: -1 }).ok, false);
+  assert.equal(drawnRow("A", { x: 10, y: 10, width: 0, height: 200 }, 4).ok, false);
+  assert.equal(drawnRow("A", { x: 10, y: 10, width: Number.NaN, height: 200 }, 4).ok, false);
+  // A rectangle that reaches past the sheet is cut down to the sheet, the way a
+  // pointer drag already is, rather than putting booths outside the canvas.
+  const clipped = drawnRow("A", { x: 1500, y: 900, width: 400, height: 400 }, 4, { bounds: { width: 1600, height: 1000 } });
+  assert.equal(clipped.ok, true);
+  assert.ok(clipped.row.slots.every(({ rect }) => rect.x + rect.width <= 1600 && rect.y + rect.height <= 1000));
 });
 
 test("disconnected and facing segments append to one logical row", () => {

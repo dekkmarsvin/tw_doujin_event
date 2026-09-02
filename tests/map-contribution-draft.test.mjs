@@ -9,6 +9,7 @@ const {
   MAP_CONTRIBUTION_DRAFT_SCHEMA, buildMapCandidate, parseMapContributionDraftContent,
   resolveCanonicalMapPeriod, validateMapContributionDraft,
 } = await environment.runner.import("/app/map-contribution-draft.ts");
+const { generateRowSlotsFromRect } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 after(async () => { await vite.close(); });
 
 const layout = {
@@ -91,6 +92,22 @@ test("submission reports unknown, missing and overlapping booth rectangles toget
   assert.deepEqual(result.problems.map(({ code }) => code).sort(), ["missing_booth", "overlap", "unknown_booth"]);
   assert.deepEqual(result.problems.find(({ code }) => code === "unknown_booth").boothCodes, ["X99"]);
   assert.deepEqual(result.problems.find(({ code }) => code === "missing_booth").boothCodes, ["S02"]);
+});
+
+test("booths cut from one drawn rectangle touch without counting as overlapping", () => {
+  // The editor divides a drawn segment at shared edges, so every booth in it
+  // begins exactly where the one before it ended. A count that does not divide
+  // the drawing evenly is the case that would drift if the sizes were added up.
+  const generated = generateRowSlotsFromRect({
+    label: "S", frame: { x: 20, y: 20, width: 60, height: 60 }, orientation: "vertical",
+    slotCount: 7, numberingStart: "top", codePrefix: "S", startNumber: 1, numberPadding: 2,
+  }, { width: 200, height: 100 });
+  assert.equal(generated.ok, true);
+  const drawn = { ...structuredClone(layout), rows: [generated.row] };
+  const codes = generated.row.slots.map(({ code }) => code);
+  const result = validateMapContributionDraft(content(drawn), { ...scope, allowedBoothCodes: codes, requiredBoothCodes: codes });
+  assert.deepEqual(result.problems, []);
+  assert.equal(result.ok, true);
 });
 
 /* A venue plan shows every booth on the floor, unsold ones included, and no
