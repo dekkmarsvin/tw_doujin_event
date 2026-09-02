@@ -11,7 +11,7 @@ const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayou
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
-const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
+const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
@@ -828,40 +828,44 @@ test("a multi-selection moves as one group and stops at the canvas without losin
   assert.equal(validateEventMapLayout(layout).ok, true);
 });
 
-test("aligning a multi-selection also spreads it evenly across the area it already covers", () => {
+test("aligning packs a group against the edge, closing its gaps without overlapping", () => {
   const layout = multiSelectLayout();
   layout.rows[0].slots[1].rect.x = 50;
   const selections = [0, 1, 2].map((itemIndex) => ({ kind: "slot", rowIndex: 0, itemIndex }));
   const resolved = resolveSelectionBoxes(layout, selections);
   applySelectionBoxes(layout, resolved.selections, alignBoxesToEdge(resolved.boxes, "top", layout));
-  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.y), [10, 10, 10], "top pins every booth to the top of the area");
-  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.x), [10, 40, 70],
-    "the outer booths hold 10 and 70, and the crooked middle one is pulled back onto the even 10 wide gap");
-  applySelectionBoxes(layout, resolved.selections, alignBoxesToEdge(resolveSelectionBoxes(layout, selections).boxes, "right", layout));
-  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.x), [70, 70, 70], "right pins them into one column");
   assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.y), [10, 10, 10],
-    "a column with no height left to spread across stacks without moving");
-  assert.equal(validateEventMapLayout(layout).ok, true, "alignment never pushes an element past an edge");
+    "side by side booths block nothing, so packing upwards is a plain top alignment");
+  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.x), [10, 50, 70], "nothing moves on the other axis");
+  applySelectionBoxes(layout, resolved.selections, alignBoxesToEdge(resolveSelectionBoxes(layout, selections).boxes, "left", layout));
+  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.rect.x), [10, 30, 50],
+    "now they are on one line they stop against each other, flush and in order, instead of stacking up");
+  assert.equal(validateEventMapLayout(layout).ok, true, "packing never pushes an element past an edge");
 });
 
-test("aligning spreads booths in the order they already sit, not the order they were selected", () => {
-  const boxes = [
+test("aligning settles boxes in the order they reach the edge, whichever edge it is", () => {
+  const bounds = { width: 200, height: 120 };
+  const scattered = [
     { x: 90, y: 10, width: 10, height: 10 },
     { x: 10, y: 10, width: 10, height: 10 },
-    { x: 30, y: 10, width: 10, height: 10 },
+    { x: 40, y: 10, width: 10, height: 10 },
   ];
-  const spread = alignBoxesToEdge(boxes, "top", { width: 200, height: 120 });
-  assert.deepEqual(spread.map((box) => box.x), [90, 10, 50],
-    "the last booth along the row keeps the far end and the middle one lands halfway");
+  assert.deepEqual(alignBoxesToEdge(scattered, "left", bounds).map((box) => box.x), [30, 10, 20],
+    "the leftmost booth keeps the wall and the others land behind it in the order they already ran");
+  assert.deepEqual(alignBoxesToEdge(scattered, "right", bounds).map((box) => box.x), [90, 70, 80],
+    "packing the other way starts from the far edge of the same area");
 });
 
-test("aligning an oversized group overlaps it evenly instead of spilling past the area", () => {
-  const boxes = [
-    { x: 0, y: 0, width: 40, height: 10 },
-    { x: 20, y: 0, width: 40, height: 10 },
+test("aligning separates booths that were traced on top of each other", () => {
+  const stacked = [
+    { x: 10, y: 10, width: 20, height: 20 },
+    { x: 10, y: 20, width: 20, height: 20 },
+    { x: 10, y: 26, width: 20, height: 20 },
   ];
-  const spread = alignBoxesToEdge(boxes, "top", { width: 200, height: 120 });
-  assert.deepEqual(spread.map((box) => box.x), [0, 20], "the outer edges stay where the group already was");
+  const packed = alignBoxesToEdge(stacked, "top", { width: 200, height: 120 });
+  assert.deepEqual(packed.map((box) => box.y), [10, 30, 50], "each one settles on the bottom edge of the one before it");
+  assert.equal(packed.some((box, index) => index > 0 && box.y < packed[index - 1].y + packed[index - 1].height), false,
+    "no booth is left overlapping the one above it");
 });
 
 test("the common size is the one most boxes already have, with the larger winning a tie", () => {
@@ -914,6 +918,27 @@ test("removing a multi-selection splices from the highest index down so the rest
   assert.deepEqual(layout.rows[0].slots.map((slot) => slot.code), ["A02"], "the surviving booth is the untouched middle one");
   assert.deepEqual(layout.pillars.map((pillar) => pillar.id), ["pillar-2"]);
   assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("auto arrange turns two hand-traced columns into one tight grid", () => {
+  // The left column has uneven gaps, the right one overlaps itself and ends on
+  // a booth that was drawn too big — what tracing a plan by hand produces.
+  const boxes = [
+    { x: 10, y: 10, width: 20, height: 10 },
+    { x: 10, y: 22, width: 20, height: 10 },
+    { x: 10, y: 36, width: 20, height: 10 },
+    { x: 40, y: 14, width: 20, height: 10 },
+    { x: 40, y: 20, width: 20, height: 10 },
+    { x: 40, y: 32, width: 24, height: 12 },
+  ];
+  assert.deepEqual(autoArrangeBoxes(boxes, { width: 200, height: 120 }), [
+    { x: 10, y: 10, width: 20, height: 10 },
+    { x: 10, y: 20, width: 20, height: 10 },
+    { x: 10, y: 30, width: 20, height: 10 },
+    { x: 30, y: 10, width: 20, height: 10 },
+    { x: 30, y: 20, width: 20, height: 10 },
+    { x: 30, y: 30, width: 20, height: 10 },
+  ], "every booth ends the same size, on one of three shared rows, in two columns standing flush together");
 });
 
 test("a copy lands flush beside the booths it came from, on whichever side has room", () => {
