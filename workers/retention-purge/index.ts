@@ -8,8 +8,7 @@
  * expired credentials, the things most worth deleting, would simply stay
  * (ADR-0022).
  *
- * Not to be confused with `worker/index.ts`, which serves the map-authoring
- * editor. This one has no fetch handler and answers no requests.
+ * This Worker has no fetch handler and answers no requests.
  */
 import { purgeExpiredRecords, RETENTION_WINDOWS } from "../../db/retention-purge";
 

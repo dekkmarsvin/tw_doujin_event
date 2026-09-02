@@ -5,11 +5,11 @@ import type { PlanningDisplayFilters } from "./display-filter-controls";
 import type { EventDefinition } from "./event-catalog";
 import type { PlanningDocument } from "./planning-store";
 
-export type WorkspaceFilterKind = "area" | "genre" | "favorite" | "creator" | "work" | "work-exclude" | "work-type" | "adult" | "favorite-group" | "visit";
+type WorkspaceFilterKind = "area" | "genre" | "favorite" | "creator" | "work" | "work-exclude" | "work-type" | "adult" | "favorite-group" | "visit";
 
 /** `kind` says which control owns the chip; `id` is unique because work topics
  * produce one chip each. `value` carries the topic the chip would remove. */
-export type WorkspaceFilterDescriptor = {
+type WorkspaceFilterDescriptor = {
   id: string;
   kind: WorkspaceFilterKind;
   label: string;

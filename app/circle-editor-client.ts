@@ -51,10 +51,6 @@ export function setPortalEventId(eventId: string) {
   portalEventId = eventId;
 }
 
-export function getPortalEventId() {
-  return portalEventId;
-}
-
 /**
  * Exported because a few event-scoped endpoints are reached by the browser
  * rather than by `call` — an evidence download link, a preview image — and they

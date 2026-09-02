@@ -27,7 +27,7 @@ export type RowDefinition = {
  * adjacent or given in order: marking the 1st, 5th and 12th booth is enough. */
 export type RowAnchor = { index: number; x: number; y: number };
 
-export type RowInference = {
+type RowInference = {
   start: { x: number; y: number };
   end: { x: number; y: number };
   slotCount: number;
@@ -37,7 +37,7 @@ export type RowInference = {
   residual: number;
 };
 
-export type RowInferenceResult =
+type RowInferenceResult =
   | { ok: true; inference: RowInference; errors: [] }
   | { ok: false; inference: null; errors: string[] };
 
@@ -112,7 +112,7 @@ export function confirmedDraftSlots(draft: RowDraft): BoothSlot[] {
   return draft.slots.filter((slot, index) => draft.keep[index]);
 }
 
-export type RowGenerationResult =
+type RowGenerationResult =
   | { ok: true; row: BoothRow; errors: [] }
   | { ok: false; row: null; errors: string[] };
 
@@ -161,6 +161,10 @@ export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect
   if (duplicate) return { ok: false, row: null, errors: [`這一排會產生重複的攤位代碼 ${duplicate.code}。`] };
 
   return { ok: true, row: { label, orientation: rowOrientationFromEndpoints(definition.start, definition.end), confidence: 1, slots }, errors: [] };
+}
+
+export function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 function clampToBound(value: number, size: number, bound: number) {

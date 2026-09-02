@@ -1,5 +1,5 @@
 import { resolveMapLandmarkKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapRect } from "./event-map";
-import { rowOrientationFromEndpoints } from "./map-layout-editor-geometry";
+import { clamp, rowOrientationFromEndpoints } from "./map-layout-editor-geometry";
 
 export type Selection =
   | { kind: "floor" }
@@ -10,8 +10,8 @@ export type Selection =
 
 /** Everything except an access point is a rectangle, so moving, corner resizing
  * and the coordinate fields all take one path. */
-export type RectSelection = Exclude<Selection, { kind: "access" }>;
-export type SlotSelection = Extract<Selection, { kind: "slot" }>;
+type RectSelection = Exclude<Selection, { kind: "access" }>;
+type SlotSelection = Extract<Selection, { kind: "slot" }>;
 export type AlignEdge = "left" | "right" | "top" | "bottom";
 
 type Bounds = Pick<MapRect, "width" | "height">;
@@ -31,7 +31,7 @@ export function selectionSetKey(selections: readonly Selection[]) {
   return keys.length === 1 ? keys[0] : `set:${keys.join(",")}`;
 }
 
-export function sameSelection(a: Selection, b: Selection) {
+function sameSelection(a: Selection, b: Selection) {
   return selectionKey(a) === selectionKey(b);
 }
 
@@ -81,8 +81,8 @@ export function applySelectionBoxes(draft: EventMapLayout, selections: readonly 
     if (selection.kind === "access") {
       const point = draft.accessPoints[selection.itemIndex];
       if (!point) return;
-      point.x = clampValue(box.x, 0, draft.width);
-      point.y = clampValue(box.y, 0, draft.height);
+      point.x = clamp(box.x, 0, draft.width);
+      point.y = clamp(box.y, 0, draft.height);
       return;
     }
     const rect = rectFor(draft, selection);
@@ -101,14 +101,10 @@ export function boundingBox(boxes: readonly MapRect[]): MapRect {
   };
 }
 
-function clampValue(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
-
 function clampBoxWithin(box: MapRect, bounds: Bounds): MapRect {
   const width = Math.min(box.width, bounds.width);
   const height = Math.min(box.height, bounds.height);
-  return { x: clampValue(box.x, 0, Math.max(0, bounds.width - width)), y: clampValue(box.y, 0, Math.max(0, bounds.height - height)), width, height };
+  return { x: clamp(box.x, 0, Math.max(0, bounds.width - width)), y: clamp(box.y, 0, Math.max(0, bounds.height - height)), width, height };
 }
 
 /** Moves the whole group by one shared delta, shortened so the group's outer
@@ -117,8 +113,8 @@ function clampBoxWithin(box: MapRect, bounds: Bounds): MapRect {
 export function translateBoxesWithin(boxes: readonly MapRect[], dx: number, dy: number, bounds: Bounds): MapRect[] {
   if (!boxes.length) return [];
   const box = boundingBox(boxes);
-  const shiftX = clampValue(dx, -box.x, Math.max(0, bounds.width - (box.x + box.width)));
-  const shiftY = clampValue(dy, -box.y, Math.max(0, bounds.height - (box.y + box.height)));
+  const shiftX = clamp(dx, -box.x, Math.max(0, bounds.width - (box.x + box.width)));
+  const shiftY = clamp(dy, -box.y, Math.max(0, bounds.height - (box.y + box.height)));
   return boxes.map((item) => ({ ...item, x: item.x + shiftX, y: item.y + shiftY }));
 }
 
@@ -186,7 +182,7 @@ export function slotSelections(selections: readonly Selection[]): SlotSelection[
   return selections.filter((item): item is SlotSelection => item.kind === "slot");
 }
 
-export function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "landmark"): number[] {
+function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "landmark"): number[] {
   return selections.filter((item): item is Extract<Selection, { itemIndex: number }> => item.kind === kind).map(({ itemIndex }) => itemIndex);
 }
 
@@ -231,7 +227,7 @@ export function findRowConflicts(row: BoothRow, layout: RowsOnly): string[] {
   return errors;
 }
 
-export type RowSegmentPlacement =
+type RowSegmentPlacement =
   | { ok: true; rowIndex: number; itemStart: number; errors: [] }
   | { ok: false; rowIndex: -1; itemStart: -1; errors: string[] };
 
@@ -265,7 +261,7 @@ function uniqueValue(candidate: string, taken: ReadonlySet<string>) {
 }
 
 export type SlotClipboard = { label: string; slots: readonly BoothSlot[] };
-export type RowPasteResult = { ok: true; row: BoothRow; errors: [] } | { ok: false; row: null; errors: string[] };
+type RowPasteResult = { ok: true; row: BoothRow; errors: [] } | { ok: false; row: null; errors: string[] };
 
 /** Copies a row — or any group of booths — to a new row shifted by an offset,
  * which is how a facing row is laid out. Codes carry the pasted row's label

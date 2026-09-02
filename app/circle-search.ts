@@ -15,7 +15,7 @@ export const CREATOR_TYPE_OPTIONS = [
 /** `all` narrows to circles carrying every listed topic; `any` widens. The
  * mode only reaches the URL and the UI once a second topic exists, because a
  * single topic reads the same either way. */
-export type WorkTopicMode = "any" | "all";
+type WorkTopicMode = "any" | "all";
 
 export type AdvancedCircleSearch = {
   creatorType: string;

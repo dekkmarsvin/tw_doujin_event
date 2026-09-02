@@ -69,7 +69,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0035](./0035-new-event-onboarding-is-data-driven.md) | 新活動 onboarding 以資料驅動 | **部分被取代** — 決策 4 由 0038 推翻；選項 D 已否決 |
 | [0036](./0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 | 生效 |
 | [0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR | **部分被取代且暫緩** — 「不得合併」由 0046 取代；PAT 路線由 0039 決策 5 暫緩。文中的 repo 表已封存，照字面執行會保護錯的對象。憑證範圍與外洩分析仍有效 |
-| [0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援 | 生效 |
+| [0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援 | **部分被取代** — 決策第 3 點（本機備援保留）由 0049 取代；其餘各點仍有效 |
 | [0039](./0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo | 生效 |
 | [0040](./0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍為界 | 生效 |
 | [0041](./0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界 | 生效 |
@@ -80,3 +80,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | 生效 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
 | [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
+| [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |

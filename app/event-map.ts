@@ -38,7 +38,7 @@ export function mapAccessArrowTransform(point: Pick<MapAccessPoint, "direction" 
 
 export type MapLandmarkKind = "enterprise" | "stage" | "other";
 
-export type MapLandmark = {
+type MapLandmark = {
   id: string;
   kind?: MapLandmarkKind;
   rect: MapRect;

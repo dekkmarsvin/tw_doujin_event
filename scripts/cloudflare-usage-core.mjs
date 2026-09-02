@@ -1,5 +1,5 @@
-export const HISTORY_SCHEMA = "cloudflare-usage-history/1";
-export const LIMITS_SCHEMA = "cloudflare-usage-limits/1";
+const HISTORY_SCHEMA = "cloudflare-usage-history/1";
+const LIMITS_SCHEMA = "cloudflare-usage-limits/1";
 
 const finite = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 export const isIsoDay = (value) => {

@@ -124,6 +124,6 @@ ADR-0046 §3 的 head SHA pin、PR ownership、required checks 與 publication l
 - 送審與核准是兩次獨立動作，各自要求 fresh session；核准自己送出的 revision 會在稽核留下 `selfApproval`。
 - 匯入 API 拒絕未宣告的活動日、場館空間或展區，並在錯誤訊息指出來源列號。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准後的候選停在 `approved`，且 webhook 回 503。
-- 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/rendered-html.test.mjs` 把關。
+- 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。

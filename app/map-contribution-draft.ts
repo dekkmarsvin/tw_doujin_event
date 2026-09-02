@@ -3,7 +3,7 @@ import { validateMapTemplateLayout } from "./map-template-registry";
 
 export const MAP_CONTRIBUTION_DRAFT_SCHEMA = "map-contribution-draft/1" as const;
 
-export type MapContributionDraftContent = {
+type MapContributionDraftContent = {
   schema: typeof MAP_CONTRIBUTION_DRAFT_SCHEMA;
   layout: EventMapLayout;
 };
@@ -79,7 +79,7 @@ export function parseMapDraftConflict(value: unknown): MapDraftConflict | null {
   return { cause, revision: revision as number, updatedAt: updatedAt as number, updatedByRole };
 }
 
-export type MapDraftValidation =
+type MapDraftValidation =
   | { ok: true; content: MapContributionDraftContent; problems: MapDraftProblem[] }
   | { ok: false; content: MapContributionDraftContent | null; problems: MapDraftProblem[] };
 
@@ -232,7 +232,7 @@ function changedKeys<T>(previous: readonly T[], next: readonly T[], key: (value:
   return [...new Set([...before.keys(), ...after.keys()])].filter((id) => !same(before.get(id), after.get(id))).sort();
 }
 
-export function buildMapCandidateDiff(previous: PublishedEventMap | null, candidate: PublishedEventMap): MapCandidateDiff {
+function buildMapCandidateDiff(previous: PublishedEventMap | null, candidate: PublishedEventMap): MapCandidateDiff {
   const beforeSlots = new Map((previous ? slotEntries(previous.layout) : []).map((slot) => [slot.code, slot.rect]));
   const afterSlots = new Map(slotEntries(candidate.layout).map((slot) => [slot.code, slot.rect]));
   const beforeCodes = new Set(beforeSlots.keys());

@@ -1,6 +1,6 @@
-export type PublicationFileInput = { path: string; content: string | unknown };
+type PublicationFileInput = { path: string; content: string | unknown };
 
-export type PublicationBundleInput = {
+type PublicationBundleInput = {
   candidateId: string;
   eventId: string;
   candidateVersion: number;
@@ -9,8 +9,8 @@ export type PublicationBundleInput = {
   mainFiles: readonly PublicationFileInput[];
 };
 
-export type PublicationBundleFile = { path: string; text: string; sha256: string };
-export type PublicationBundle = {
+type PublicationBundleFile = { path: string; text: string; sha256: string };
+type PublicationBundle = {
   schema: "organizer-publication-bundle/1";
   candidateId: string;
   eventId: string;
@@ -39,7 +39,7 @@ function serialized(content: unknown) {
   return typeof content === "string" ? content : `${JSON.stringify(content, null, 2)}\n`;
 }
 
-export function publicationPathAllowed(repository: "data" | "main", eventId: string, path: string) {
+function publicationPathAllowed(repository: "data" | "main", eventId: string, path: string) {
   if (!EVENT_ID.test(eventId) || !path || path.startsWith("/") || path.includes("\\") || path.split("/").includes("..")
     || path === ".github" || path.startsWith(".github/")) return false;
   if (repository === "data") {

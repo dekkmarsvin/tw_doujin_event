@@ -3,7 +3,7 @@
 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。
 
 **實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)
-**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/pages-build-preparation.test.mjs`、`tests/rendered-html.test.mjs`
+**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`
 **設定**：[`public/_headers`](../../public/_headers)
 
 ## Payload 邊界

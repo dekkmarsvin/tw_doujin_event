@@ -35,7 +35,7 @@
 - 送審會固定一份不可改寫的 approval snapshot，由全域管理者核准或要求修改。核准後的發布步驟目前關閉。
 - 桌機介面；地圖沿用既有的 layout 編輯器與 template 辨識器。
 
-完整邊界見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)。本機 `/editor` 保留為離線／事故備援，見[地圖 authoring runbook](docs/runbooks/map-authoring.md)。
+完整邊界見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)。地圖 authoring 的流程見[地圖 authoring runbook](docs/runbooks/map-authoring.md)。
 
 ## 功能狀態
 

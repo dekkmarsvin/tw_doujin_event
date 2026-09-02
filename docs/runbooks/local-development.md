@@ -67,11 +67,7 @@ npm run build:production
 
 ## Authoring 環境
 
-```bash
-npm run dev
-```
-
-地圖辨識、細部編輯器與本機 D1 不屬於公開 Pages build。流程見[地圖 authoring](./map-authoring.md)。
+地圖 authoring 在主辦單位工作區 `/organizer`，走 `npm run dev:portal` 起的本機隔離環境。獨立的本機 `/editor` 已依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除。流程見[地圖 authoring](./map-authoring.md)。
 
 ## 共同 gate
 
@@ -98,21 +94,14 @@ npx tsc --noEmit --incremental false
 
 | 命令 | 跑什麼 | 需要 build |
 |---|---|---|
-| `npm run test:changed` | 只跑受這次改動影響的測試 | 否 |
 | `npm run test:module` | 純模組測試（多數） | 否 |
 | `npm run test:d1` | 需要 Miniflare D1 的 route 與 repository 測試 | 否 |
 | `npm run test:cli` | 會另外開子行程跑 `scripts/` CLI 的測試 | 否 |
 | `npm run test:artifact` | 檢查 `dist/` 產物的測試 | 是 |
 
-分層不需要維護清單：tier 歸屬由 `scripts/select-tests.mjs` 讀每支測試自己的原始碼推導——讀 `dist/` 的是 artifact、`import "miniflare"` 的是 d1、`import "node:child_process"` 的是 cli，其餘是 module。新增測試檔不必登記到任何地方，也因此不可能有測試檔落在所有 tier 之外而到處都不跑。這幾條不變式由 `tests/test-tiering.test.mjs` 把關。掃不到的相依邊（走遍目錄、template literal 組路徑、斷言 build 產物）才需要寫進 `tests/test-deps.json`。
+分層不需要維護清單：tier 歸屬由 `scripts/run-tests.mjs` 讀每支測試自己的原始碼推導——讀 `dist/` 的是 artifact、`import "miniflare"` 的是 d1、`import "node:child_process"` 的是 cli，其餘是 module。新增測試檔不必登記到任何地方，也因此不可能有測試檔落在所有 tier 之外而到處都不跑。
 
-`test:changed` 由 `scripts/select-tests.mjs` 從相依關係推出要跑哪些。它只在三種情況下給出「不用跑」：
-
-- 改到 `package.json`、build 設定、`tests/` 裡的非測試檔或 workflow → 退回跑全套。
-- 改到它的相依模型看不到的路徑（掃描目錄以外）→ 退回跑全套。
-- 改到模型涵蓋、但確實沒有任何測試碰到的檔案 → 印出「no test covers …」點名該檔。那是覆蓋率缺口，不是通過。
-
-`dist/` 產物測試會被列為「也受影響」但不在 `test:changed` 裡跑，因為當下的 `dist/` 可能是舊的；它會提示你另外跑 `npm run test:artifact`。**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
+**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 
 ## 額外檢查
 
@@ -120,7 +109,6 @@ npx tsc --noEmit --incremental false
 |---|---|
 | `npm run build:production` | 更新 pin、release 或部署前；需要 GitHub 網路 |
 | `npm run purge:dev` | 手動觸發 retention purge |
-| `npm run map:snapshot -- <event-id> <data-repo-map.json>` | 從本機 authoring D1 匯出地圖到 data repo |
 
 ## 瀏覽器實測
 

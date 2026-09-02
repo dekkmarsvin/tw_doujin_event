@@ -46,7 +46,7 @@ export const EMPTY_PLANNING_DOCUMENT: PlanningDocument = {
   visitPlans: [],
 };
 
-export type PlanningLoadSnapshot = {
+type PlanningLoadSnapshot = {
   document: PlanningDocument;
   writable: boolean;
   raw: string | null;

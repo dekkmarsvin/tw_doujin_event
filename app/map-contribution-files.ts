@@ -1,12 +1,12 @@
 import { sha256Hex } from "./hosted-thumbnails";
 
 export const MAP_CONTRIBUTION_MAX_BYTES = 20 * 1024 * 1024;
-export const MAP_CONTRIBUTION_MAX_PDF_PAGES = 20;
-export const MAP_CONTRIBUTION_MAX_IMAGE_PIXELS = 16_000_000;
-export const MAP_CONTRIBUTION_MAX_DECOMPRESSED_IMAGE_BYTES = 32 * 1024 * 1024;
-export const MAP_CONTRIBUTION_MAX_IMAGE_DIMENSION = 8_192;
+const MAP_CONTRIBUTION_MAX_PDF_PAGES = 20;
+const MAP_CONTRIBUTION_MAX_IMAGE_PIXELS = 16_000_000;
+const MAP_CONTRIBUTION_MAX_DECOMPRESSED_IMAGE_BYTES = 32 * 1024 * 1024;
+const MAP_CONTRIBUTION_MAX_IMAGE_DIMENSION = 8_192;
 
-export type PreparedMapContributionFile = {
+type PreparedMapContributionFile = {
   bytes: ArrayBuffer;
   contentType: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
   extension: "jpg" | "png" | "webp" | "pdf";

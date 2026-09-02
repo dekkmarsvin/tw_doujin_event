@@ -6,7 +6,7 @@ import { loadStaticCircleCatalog } from "./static-circle-catalog-client";
 import { loadStaticCircleOverrides } from "./static-circle-overrides-client";
 
 /** Production-shaped HTTP adapter; tests inject the same two-port interface. */
-export const browserCatalogPublication = createCatalogPublication({
+const browserCatalogPublication = createCatalogPublication({
   loadBase: loadStaticCircleCatalog,
   loadOverlay: loadStaticCircleOverrides,
 });

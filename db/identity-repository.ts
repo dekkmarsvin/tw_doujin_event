@@ -10,10 +10,10 @@ import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from ".
 /**
  * Identity, claims and circle-authored overrides.
  *
- * Deliberately raw prepared statements rather than the query builder used by
- * `event-map-repository.ts`: the security-load-bearing operations here are
- * conditional writes checked through `meta.changes` (single-use tokens, one
- * verified owner per circle), and those read far more clearly as SQL.
+ * Deliberately raw prepared statements: the security-load-bearing operations
+ * here are conditional writes checked through `meta.changes` (single-use
+ * tokens, one verified owner per circle), and those read far more clearly as
+ * SQL.
  *
  * Runtime schema authority lives in `db/identity-runtime-schema.ts`. Pages has
  * no migration step, so the repository consumes its generated SQL on first use.
@@ -21,13 +21,13 @@ import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from ".
 
 export type OverridesPhase = "during" | "after";
 /** `withdrawn` is the claimant's own doing; `rejected` and `revoked` are an admin's. */
-export type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
+type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 export type OrganizerRole = "owner" | "editor";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed";
 
-export type IdentityAuditEntry = {
+type IdentityAuditEntry = {
   at: number;
   actorAccountId?: string | null;
   actorRole: "circle" | "map_contributor" | "organizer_owner" | "organizer_editor" | "admin" | "system";
@@ -38,9 +38,9 @@ export type IdentityAuditEntry = {
   ipHash?: string | null;
 };
 
-export type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
+type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
 
-export type ClaimRow = {
+type ClaimRow = {
   id: string;
   account_id: string;
   event_id: string;
@@ -58,7 +58,7 @@ export type ClaimRow = {
   verified_at: number | null;
 };
 
-export type OverrideRow = {
+type OverrideRow = {
   circle_id: string;
   fields_json: string;
   status: string;

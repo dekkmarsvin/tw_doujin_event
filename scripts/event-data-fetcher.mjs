@@ -18,7 +18,7 @@ import { parseJsonBytesStrict } from "./strict-json-file.mjs";
  * bare name; `references/` keeps its repository path so a selection path
  * resolves against disk verbatim.
  */
-export function workspaceRelativePath(pin, filePath) {
+function workspaceRelativePath(pin, filePath) {
   return isReferencePath(filePath) ? filePath : filePath.slice(`events/${pin.eventId}/`.length);
 }
 

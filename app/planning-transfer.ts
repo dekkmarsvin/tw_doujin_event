@@ -9,11 +9,10 @@ import {
   type VisitPlanEntry,
 } from "./planning-store";
 
-export const CSV_SCHEMA_VERSION = "circle-plan-csv/1";
-export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
-export const MAX_IMPORT_ROWS = 20_000;
+const CSV_SCHEMA_VERSION = "circle-plan-csv/1";
+const MAX_IMPORT_ROWS = 20_000;
 
-export type ImportPreview = {
+type ImportPreview = {
   document: PlanningDocument;
   errors: string[];
   unmatchedCircleIds: string[];
@@ -168,10 +167,6 @@ export function parsePlanningCsv(text: string, current?: PlanningDocument): Impo
   });
   const document = parsePlanningDocument({ schemaVersion: PLANNING_SCHEMA_VERSION, favoriteGroups: [...groupByLabel.values()], favorites, visitPlans });
   return preview(document, "csv", errors, current);
-}
-
-export function parsePlanningFile(name: string, text: string, current?: PlanningDocument): ImportPreview {
-  return name.toLocaleLowerCase().endsWith(".csv") ? parsePlanningCsv(text, current) : parsePlanningJson(text, current);
 }
 
 export function mergePlanningImport(current: PlanningDocument, incoming: PlanningDocument, conflict: "keep" | "incoming" | "replace") {

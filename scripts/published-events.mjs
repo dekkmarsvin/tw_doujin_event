@@ -2,7 +2,7 @@ import path from "node:path";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
 
 export const PUBLISHED_EVENTS_SCHEMA = "published-events/1";
-export const PUBLISHED_EVENTS_FILE = path.join("data", "published-events.json");
+const PUBLISHED_EVENTS_FILE = path.join("data", "published-events.json");
 
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/;
 

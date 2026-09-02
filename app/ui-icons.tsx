@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export type UiIconName =
+type UiIconName =
   | "arrow-down"
   | "arrow-up"
   | "chevron-left"
