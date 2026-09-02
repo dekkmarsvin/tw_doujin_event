@@ -239,27 +239,83 @@ export function generateRowSlotsFromRect(definition: RowFrameDefinition, bounds:
   if ([drawn.x, drawn.y, drawn.width, drawn.height].some((value) => !Number.isFinite(value))) errors.push("框選範圍必須是有效數字。");
   if (errors.length) return { ok: false, row: null, errors };
 
-  // A pointer drag is clamped to the sheet already, but a rectangle that
-  // survived a canvas resize, or arrived from a field, need not be.
-  const left = clamp(drawn.x, 0, bounds.width);
-  const top = clamp(drawn.y, 0, bounds.height);
-  const frame = {
-    x: left,
-    y: top,
-    width: clamp(drawn.x + drawn.width, 0, bounds.width) - left,
-    height: clamp(drawn.y + drawn.height, 0, bounds.height) - top,
-  };
-  if (!(frame.width > 0) || !(frame.height > 0)) return { ok: false, row: null, errors: ["框選範圍的寬與高都必須大於 0。"] };
+  const rects = segmentSlotRects(definition.frame, definition.orientation, definition.slotCount, bounds);
+  if (!rects.length) return { ok: false, row: null, errors: ["框選範圍的寬與高都必須大於 0。"] };
 
-  const spans = seamlessSpans(vertical ? frame.y : frame.x, vertical ? frame.height : frame.width, definition.slotCount);
   const reversed = definition.numberingStart === "bottom" || definition.numberingStart === "right";
-  const slots: BoothSlot[] = spans.map((span, index) => ({
+  const slots: BoothSlot[] = rects.map((rect, index) => ({
     code: formatSlotCode(definition.codePrefix, definition.startNumber + (reversed ? definition.slotCount - 1 - index : index), definition.numberPadding),
-    rect: vertical
-      ? { x: frame.x, y: span.start, width: frame.width, height: span.size }
-      : { x: span.start, y: frame.y, width: span.size, height: frame.height },
+    rect,
   }));
   return { ok: true, row: { label, orientation: definition.orientation, confidence: 1, slots }, errors: [] };
+}
+
+/** The booth rectangles a frame divides into, in the order they run along the
+ * row — first at the top of a vertical segment, at the left of a horizontal one.
+ * Which booth carries which code is the caller's business, so the same division
+ * serves both drawing a new segment and re-cutting one that is already placed.
+ * An empty result means the frame has no area to divide. */
+export function segmentSlotRects(frame: MapRect, orientation: MapOrientation, count: number, bounds: Pick<MapRect, "width" | "height">): MapRect[] {
+  if (!Number.isInteger(count) || count < 1) return [];
+  if ([frame.x, frame.y, frame.width, frame.height].some((value) => !Number.isFinite(value))) return [];
+  // A pointer drag is clamped to the sheet already, but a rectangle that
+  // survived a canvas resize, or arrived from a field, need not be.
+  const left = clamp(frame.x, 0, bounds.width);
+  const top = clamp(frame.y, 0, bounds.height);
+  const clipped = {
+    x: left,
+    y: top,
+    width: clamp(frame.x + frame.width, 0, bounds.width) - left,
+    height: clamp(frame.y + frame.height, 0, bounds.height) - top,
+  };
+  if (!(clipped.width > 0) || !(clipped.height > 0)) return [];
+  const vertical = orientation === "vertical";
+  return seamlessSpans(vertical ? clipped.y : clipped.x, vertical ? clipped.height : clipped.width, count).map((span) => vertical
+    ? { x: clipped.x, y: span.start, width: clipped.width, height: span.size }
+    : { x: span.start, y: clipped.y, width: span.size, height: clipped.height });
+}
+
+/** Two booths belong to the same run when one begins where the other ends and
+ * they line up across that axis — which is exactly what dividing one frame
+ * leaves behind. The tolerance is a fraction of the booth, so a run survives the
+ * rounding of a canvas rescale without letting neighbouring rows join it. */
+function touchesAlong(a: MapRect, b: MapRect, orientation: MapOrientation) {
+  const vertical = orientation === "vertical";
+  const measure = (rect: MapRect) => vertical
+    ? { start: rect.y, size: rect.height, across: rect.x, thickness: rect.width }
+    : { start: rect.x, size: rect.width, across: rect.y, thickness: rect.height };
+  const first = measure(a);
+  const second = measure(b);
+  const tolerance = Math.max(.05, Math.min(first.size, second.size) * .02);
+  const gap = second.start >= first.start
+    ? second.start - (first.start + first.size)
+    : first.start - (second.start + second.size);
+  return Math.abs(gap) <= tolerance
+    && Math.abs(first.across - second.across) <= tolerance
+    && Math.abs(first.thickness - second.thickness) <= tolerance;
+}
+
+/** The run of booths around `index`: the neighbours in the array that sit flush
+ * against it, and their neighbours in turn, in the order they run along the row.
+ *
+ * Segments are not stored — a row keeps one flat list of booths — so this is how
+ * a booth that was drawn as part of a segment is recognized as part of it later.
+ * That is what lets a whole segment be re-framed after it was placed, instead of
+ * correcting it booth by booth or deleting it and drawing it again. */
+export function contiguousSegment(rects: readonly MapRect[], index: number): { items: number[]; orientation: MapOrientation } {
+  const anchor = rects[index];
+  if (!anchor) return { items: [], orientation: "vertical" };
+  // Whichever axis a neighbour actually touches on is the one the run follows; a
+  // lone booth has no neighbour to ask, and is called vertical like every other
+  // row with no extent.
+  const orientation: MapOrientation = [index - 1, index + 1].some((position) => rects[position] && touchesAlong(anchor, rects[position], "horizontal"))
+    ? "horizontal"
+    : "vertical";
+  const items = [index];
+  for (let position = index - 1; position >= 0 && touchesAlong(rects[position], rects[items[0]], orientation); position -= 1) items.unshift(position);
+  for (let position = index + 1; position < rects.length && touchesAlong(rects[items[items.length - 1]], rects[position], orientation); position += 1) items.push(position);
+  const along = (position: number) => orientation === "vertical" ? rects[position].y : rects[position].x;
+  return { items: items.sort((a, b) => along(a) - along(b) || a - b), orientation };
 }
 
 export function clamp(value: number, minimum: number, maximum: number) {

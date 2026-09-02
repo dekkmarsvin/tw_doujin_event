@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { mapAccessArrowTransform, type EventMapLayout } from "./event-map";
+import { mapAccessArrowTransform, rowLabelAnchor, type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 
 export type MapSlotView = {
@@ -106,12 +106,9 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id}><rect className={styles.landmark} {...landmark.rect} />{landmark.label && <text className={styles.landmarkLabel} x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label}</text>}</g>)}</g>
     <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
-      {row.slots.length > 0 && (() => {
-        const minX = Math.min(...row.slots.map((slot) => slot.rect.x));
-        const maxX = Math.max(...row.slots.map((slot) => slot.rect.x + slot.rect.width));
-        const minY = Math.min(...row.slots.map((slot) => slot.rect.y));
-        const maxY = Math.max(...row.slots.map((slot) => slot.rect.y + slot.rect.height));
-        return <text className={styles.rowLabel} x={(minX + maxX) / 2} y={row.orientation === "horizontal" ? maxY + 30 : minY - 13}>{row.label}</text>;
+      {(() => {
+        const anchor = rowLabelAnchor(row);
+        return anchor && <text className={styles.rowLabel} {...anchor}>{row.label}</text>;
       })()}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>
     <g aria-label="場內柱子">{layout.pillars.map((pillar) => <rect key={pillar.id} className={styles.pillar} x={pillar.x} y={pillar.y} width={pillar.width} height={pillar.height} rx="1" />)}</g>

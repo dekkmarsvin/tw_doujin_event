@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, KeyboardEvent } from "react";
-import { mapAccessArrowTransform, type EventMapLayout } from "./event-map";
+import { mapAccessArrowTransform, rowLabelAnchor, type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 
 export type MapSlotView = {
@@ -53,12 +53,9 @@ export default function EventMapRenderer({ layout, slots, onSelect }: Props) {
             <title>{view?.label ?? `${slot.code} 未配置社團`}</title>
           </g>;
         })}
-        {row.slots.length > 0 && (() => {
-          const minX = Math.min(...row.slots.map((slot) => slot.rect.x));
-          const maxX = Math.max(...row.slots.map((slot) => slot.rect.x + slot.rect.width));
-          const minY = Math.min(...row.slots.map((slot) => slot.rect.y));
-          const maxY = Math.max(...row.slots.map((slot) => slot.rect.y + slot.rect.height));
-          return <text className={styles.rowLabel} x={(minX + maxX) / 2} y={row.orientation === "horizontal" ? maxY + 30 : minY - 13}>{row.label}</text>;
+        {(() => {
+          const anchor = rowLabelAnchor(row);
+          return anchor && <text className={styles.rowLabel} {...anchor}>{row.label}</text>;
         })()}
       </g>)}
     </g>

@@ -8,9 +8,9 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { recognizeFF47Map } = await environment.runner.import("/app/map-recognition.ts");
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
-const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
+const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { confirmedDraftSlots, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
@@ -594,6 +594,87 @@ test("anchors describe the one segment a drawing cannot, and misdescribe the res
   const acrossColumns = inferRowFromAnchors([{ index: 1, x: 200, y: 100 }, { index: 26, x: 200, y: 600 }, { index: 40, x: 245, y: 380 }]);
   assert.equal(acrossColumns.ok, true);
   assert.ok(acrossColumns.inference.residual > 10, `booths marked in two columns cannot lie on one line, got ${acrossColumns.inference.residual}`);
+});
+
+test("a placed segment can be re-cut from a new frame without renaming a booth", () => {
+  // Correcting a segment that was drawn slightly wrong must not mean deleting
+  // the row and drawing it again: the same booths are cut from the new frame.
+  const placed = drawnRow("A", { x: 60, y: 40, width: 45, height: 240 }, 12).row;
+  const rects = segmentSlotRects({ x: 50, y: 30, width: 60, height: 300 }, "vertical", placed.slots.length, { width: 1600, height: 1000 });
+  assert.equal(rects.length, 12);
+  assert.deepEqual(rects[0], { x: 50, y: 30, width: 60, height: 25 });
+  assert.equal(rects.at(-1).y + rects.at(-1).height, 330);
+  assert.deepEqual(rects.slice(1).map((rect, index) => rect.y - (rects[index].y + rects[index].height)), Array(11).fill(0));
+
+  // The same booths cut along the other axis: turning a segment keeps its
+  // codes, because which booth is which was decided when it was drawn.
+  const turned = segmentSlotRects({ x: 50, y: 30, width: 600, height: 40 }, "horizontal", 12, { width: 1600, height: 1000 });
+  assert.equal(turned.length, 12);
+  assert.deepEqual(turned[0], { x: 50, y: 30, width: 50, height: 40 });
+  assert.deepEqual(segmentSlotRects({ x: 0, y: 0, width: 0, height: 10 }, "vertical", 4, { width: 100, height: 100 }), []);
+  assert.deepEqual(segmentSlotRects({ x: 0, y: 0, width: 10, height: 10 }, "vertical", 0, { width: 100, height: 100 }), []);
+});
+
+test("the run of booths around one booth is what a drawn segment left behind", () => {
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 1600, 1000);
+  // Three segments of one A row, split by two gangways, exactly as they would be
+  // drawn: only the booths of the segment pressed may be re-cut with it.
+  [
+    drawnRow("A", { x: 60, y: 40, width: 45, height: 240 }, 12, { startNumber: 1 }),
+    drawnRow("A", { x: 60, y: 320, width: 45, height: 400 }, 20, { startNumber: 13 }),
+    drawnRow("A", { x: 60, y: 760, width: 45, height: 240 }, 12, { startNumber: 33 }),
+  ].forEach(({ row }) => appendRowSegment(layout, row));
+  const rects = layout.rows[0].slots.map(({ rect }) => rect);
+  assert.equal(rects.length, 44);
+
+  const middle = contiguousSegment(rects, 20);
+  assert.equal(middle.orientation, "vertical");
+  assert.deepEqual([middle.items[0], middle.items.at(-1), middle.items.length], [12, 31, 20], "the gangways bound the run at both ends");
+  assert.deepEqual(contiguousSegment(rects, 0).items.length, 12);
+  assert.deepEqual(contiguousSegment(rects, 43).items, Array.from({ length: 12 }, (unused, index) => 32 + index));
+
+  // A run is reported in the order the booths run down the plan, which is the
+  // order a re-cut lays them back out — not the order they are numbered in. A
+  // segment numbered from the bottom therefore counts down along its own run.
+  const reversed = drawnRow("Z", { x: 400, y: 40, width: 45, height: 200 }, 4, { numberingStart: "bottom" }).row;
+  const order = contiguousSegment(reversed.slots.map(({ rect }) => rect), 0);
+  assert.deepEqual(order.items, [0, 1, 2, 3]);
+  assert.deepEqual(order.items.map((item) => reversed.slots[item].code), ["Z04", "Z03", "Z02", "Z01"]);
+  assert.deepEqual(order.items.map((item) => reversed.slots[item].rect.y), [40, 90, 140, 190]);
+
+  // A horizontal run is recognized on its own axis, and a booth standing alone
+  // is a run of one rather than an error.
+  const across = drawnRow("W", { x: 100, y: 300, width: 480, height: 30 }, 6).row;
+  assert.deepEqual(contiguousSegment(across.slots.map(({ rect }) => rect), 3), { items: [0, 1, 2, 3, 4, 5], orientation: "horizontal" });
+  assert.deepEqual(contiguousSegment([{ x: 0, y: 0, width: 10, height: 10 }], 0), { items: [0], orientation: "vertical" });
+  assert.deepEqual(contiguousSegment([], 0), { items: [], orientation: "vertical" });
+});
+
+test("two segments of a row that touch are one run, and separate columns are not", () => {
+  // Flush segments are indistinguishable from one segment on the plan, so they
+  // re-cut together; a parallel column never joins the run beside it.
+  const layout = createBlankEventMapLayout("TAIWAN_GENERIC_V1", 1600, 1000);
+  [
+    drawnRow("B", { x: 200, y: 100, width: 45, height: 260 }, 13, { startNumber: 1 }),
+    drawnRow("B", { x: 200, y: 360, width: 45, height: 260 }, 13, { startNumber: 14 }),
+    drawnRow("B", { x: 245, y: 100, width: 45, height: 520 }, 26, { startNumber: 27 }),
+  ].forEach(({ row }) => appendRowSegment(layout, row));
+  const rects = layout.rows[0].slots.map(({ rect }) => rect);
+  assert.equal(contiguousSegment(rects, 0).items.length, 26, "flush segments of one column read as one run");
+  assert.deepEqual(contiguousSegment(rects, 30).items[0], 26, "the second column keeps to itself");
+  assert.equal(contiguousSegment(rects, 30).items.length, 26);
+});
+
+test("a row label sits where both renderers and the editor agree it does", () => {
+  const vertical = drawnRow("A", { x: 100, y: 200, width: 40, height: 400 }, 8).row;
+  assert.deepEqual(rowLabelAnchor(vertical), { x: 120, y: 187 }, "a vertical row is labelled above its first booth");
+  const horizontal = drawnRow("W", { x: 100, y: 300, width: 480, height: 30 }, 6).row;
+  assert.deepEqual(rowLabelAnchor(horizontal), { x: 340, y: 360 }, "a horizontal row is labelled below itself");
+  // A row split into segments is labelled across everything it holds, not per
+  // segment, which is what keeps one A over the whole column.
+  const split = { orientation: "vertical", slots: [...vertical.slots, ...drawnRow("A", { x: 100, y: 700, width: 40, height: 200 }, 4, { startNumber: 9 }).row.slots] };
+  assert.deepEqual(rowLabelAnchor(split), { x: 120, y: 187 });
+  assert.equal(rowLabelAnchor({ orientation: "vertical", slots: [] }), null);
 });
 
 test("a drawn segment refuses what it cannot cut", () => {
