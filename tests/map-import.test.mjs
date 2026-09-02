@@ -911,6 +911,31 @@ test("aligning separates booths that were traced on top of each other", () => {
     "no booth is left overlapping the one above it");
 });
 
+test("aligning packs columns that were traced overlapping as the separate columns they are", () => {
+  // Half a booth of clearance apart is a column of its own: the right column
+  // overlaps the left by a unit, which used to chain all ten booths into one
+  // stretched stack instead of two.
+  const columns = [
+    ...[0, 1, 2].map((index) => ({ x: 10, y: 10 + index * 10.4, width: 21, height: 10 })),
+    ...[0, 1, 2].map((index) => ({ x: 30, y: 9 + index * 10.4, width: 20, height: 10 })),
+  ];
+  assert.deepEqual(alignBoxesToEdge(columns, "top", { width: 200, height: 120 }).map((box) => [box.x, box.y]),
+    [[10, 9], [10, 19], [10, 29], [30, 9], [30, 19], [30, 29]],
+    "each column closes its own gaps against the top and keeps the x it was drawn at");
+  assert.deepEqual(alignBoxesToEdge(columns, "left", { width: 200, height: 120 }).map((box) => box.x),
+    [10, 10, 10, 31, 31, 31], "booths on a shared row are one lane, so the right column still lands flush");
+});
+
+test("a booth nudged sideways off the one above it is still in its column", () => {
+  const drifted = [
+    { x: 10, y: 10, width: 20, height: 20 },
+    { x: 10, y: 20, width: 20, height: 20 },
+    { x: 12, y: 26, width: 20, height: 20 },
+  ];
+  assert.deepEqual(alignBoxesToEdge(drifted, "top", { width: 200, height: 120 }).map((box) => box.y), [10, 30, 50],
+    "two units of drift is nothing like half a booth, so the three stay stacked and separated");
+});
+
 test("the common size is the one most boxes already have, with the larger winning a tie", () => {
   assert.deepEqual(commonBoxSize([
     { x: 0, y: 0, width: 20, height: 10 },
@@ -982,6 +1007,51 @@ test("auto arrange turns two hand-traced columns into one tight grid", () => {
     { x: 30, y: 20, width: 20, height: 10 },
     { x: 30, y: 30, width: 20, height: 10 },
   ], "every booth ends the same size, on one of three shared rows, in two columns standing flush together");
+});
+
+test("auto arrange keeps two columns apart even when they were traced overlapping", () => {
+  // Two columns of three, the right one drawn a shade over the left, which is
+  // all it used to take for the whole block to collapse into one stack of
+  // alternating booths.
+  const boxes = [
+    ...[0, 1, 2].map((index) => ({ x: 10, y: 10 + index * 10.4, width: 21, height: 10 })),
+    ...[0, 1, 2].map((index) => ({ x: 30, y: 9 + index * 10.4, width: 20, height: 10 })),
+  ];
+  assert.deepEqual(autoArrangeBoxes(boxes, { width: 200, height: 120 }), [
+    { x: 10, y: 9, width: 21, height: 10 },
+    { x: 10, y: 19, width: 21, height: 10 },
+    { x: 10, y: 29, width: 21, height: 10 },
+    { x: 31, y: 9, width: 21, height: 10 },
+    { x: 31, y: 19, width: 21, height: 10 },
+    { x: 31, y: 29, width: 21, height: 10 },
+  ], "each column keeps its own booths and the two stand flush side by side");
+});
+
+test("auto arrange reads a block of horizontal rows as one booth per column", () => {
+  const boxes = [
+    { x: 10, y: 10, width: 20, height: 10 }, { x: 31, y: 11, width: 20, height: 10 }, { x: 49, y: 10, width: 20, height: 10 },
+    { x: 10, y: 21, width: 20, height: 10 }, { x: 30, y: 22, width: 20, height: 10 }, { x: 51, y: 21, width: 20, height: 10 },
+  ];
+  assert.deepEqual(autoArrangeBoxes(boxes, { width: 200, height: 120 }).map((box) => [box.x, box.y]),
+    [[10, 10], [30, 10], [50, 10], [10, 20], [30, 20], [50, 20]],
+    "three columns of two, so a hand-traced pair of rows lines up as a grid too");
+});
+
+test("auto arrange keeps a column that drifted sideways as it was traced in one piece", () => {
+  const boxes = [
+    { x: 10, y: 10, width: 20, height: 10 }, { x: 14, y: 19, width: 20, height: 10 }, { x: 18, y: 31, width: 20, height: 10 },
+  ];
+  assert.deepEqual(autoArrangeBoxes(boxes, { width: 200, height: 120 }).map((box) => [box.x, box.y]), [[10, 10], [10, 20], [10, 30]],
+    "each booth is measured against the one beside it, so the drift never starts a second column");
+});
+
+test("auto arrange leaves an access point where it is and starts the grid at the booths", () => {
+  const boxes = [{ x: 40, y: 10, width: 20, height: 10 }, { x: 40, y: 22, width: 20, height: 10 }, { x: 5, y: 60, width: 0, height: 0 }];
+  assert.deepEqual(autoArrangeBoxes(boxes, { width: 200, height: 120 }), [
+    { x: 40, y: 10, width: 20, height: 10 },
+    { x: 40, y: 20, width: 20, height: 10 },
+    { x: 5, y: 60, width: 0, height: 0 },
+  ], "the entrance has no cell in the grid and does not pull the booths over to it");
 });
 
 test("a copy lands flush beside the booths it came from, on whichever side has room", () => {
