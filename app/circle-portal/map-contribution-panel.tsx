@@ -9,7 +9,7 @@ import {
   type MapDraftComment, type MapDraftCommentTarget, type MapDraftDetail, type MapDraftFile, type MapDraftReview,
   type MapDraftStatus, type MapDraftSummary,
 } from "../circle-editor-client";
-import type { EventDefinition } from "../event-catalog";
+import { eventUsesScopedMaps, type EventDefinition } from "../event-catalog";
 import type { EventMapLayout, PublishedEventMap } from "../event-map";
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
@@ -184,7 +184,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
       <label>場地空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
       <button type="button" onClick={() => void run(async () => {
-        const current = await loadStaticEventMap(event.id, event.venueAssignments.length > 1
+        const current = await loadStaticEventMap(event.id, eventUsesScopedMaps(event)
           ? { periodKey, venueSpaceId }
           : undefined);
         const created = await createMapContributionDraft(periodKey, venueSpaceId, current.layout);

@@ -1,5 +1,5 @@
 import { isCircleCatalogPayload } from "./circle-records";
-import { parseEventDefinition } from "./event-catalog";
+import { eventUsesScopedMaps, parseEventDefinition } from "./event-catalog";
 import { isPublishedEventMap } from "./event-map";
 import { validateMapTemplateLayout } from "./map-template-registry";
 import { parseEventMapManifest } from "./event-map-manifest";
@@ -27,15 +27,22 @@ export function validateStagedEventArtifacts(eventValue: unknown, referenceValue
     if (!validation.ok) throw new Error(`Staged map ${scope} failed ${event.mapTemplate} validation: ${validation.errors.join("; ")}`);
     return value;
   };
-  if (event.venueAssignments.length === 1) {
+  const scoped = mapValue && typeof mapValue === "object" && "manifest" in mapValue && "maps" in mapValue
+    && (mapValue as ScopedMapArtifacts).maps instanceof Map
+    ? mapValue as ScopedMapArtifacts
+    : null;
+  /* One hall on one day has nothing to scope. One hall across several days may
+   * be re-laid out overnight, so it *may* ship a manifest -- but every event
+   * published before scoped maps existed still ships a single map.json and has
+   * to keep loading, so there the manifest is optional and its absence means
+   * the one layout covers every day. More than one hall keeps the original
+   * rule, and with it the original fail-closed guarantee: manifest or nothing. */
+  if (!scoped) {
+    if (event.venueAssignments.length > 1) throw new Error("Multi-space staged event requires scoped map artifacts.");
     const map = validateMap(mapValue, "map.json");
     return { event, catalog: catalogValue, map };
   }
-  if (!mapValue || typeof mapValue !== "object" || !("manifest" in mapValue) || !("maps" in mapValue)
-    || !((mapValue as ScopedMapArtifacts).maps instanceof Map)) {
-    throw new Error("Multi-space staged event requires scoped map artifacts.");
-  }
-  const scoped = mapValue as ScopedMapArtifacts;
+  if (!eventUsesScopedMaps(event)) throw new Error("A single-day single-space staged event must publish one map.json.");
   const manifest = parseEventMapManifest(scoped.manifest, eventId);
   const expected = new Set(event.days.flatMap((day) => event.venueAssignments.map((assignment) => `${String(day.id)}\0${assignment.venueSpaceId}`)));
   const actual = new Set(manifest.maps.map((entry) => `${entry.periodKey}\0${entry.venueSpaceId}`));

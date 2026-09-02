@@ -43,6 +43,48 @@ test("validates the staged fixture map without FF47-specific counts", async () =
   assert.throws(() => validateStagedEventArtifacts(multiSpaceEvent, multiSpaceReferences, catalog, snapshot, "sample"), /requires scoped map artifacts/);
 });
 
+/* A hall can be re-laid out overnight, so the unit of a map is a day in a hall,
+ * not a hall. The sample event is one hall across two days: it may ship a
+ * manifest naming a layout per day, and it must keep working without one, since
+ * every event published before scoped maps existed carries a flat map.json. */
+test("scopes maps per day inside a single hall, and still reads the flat map.json without a manifest", async () => {
+  const load = async (name) => JSON.parse(await readFile(new URL(`../fixtures/events/sample/${name}`, import.meta.url), "utf8"));
+  const [event, references, catalog, snapshot] = await Promise.all(
+    ["event.json", "reference-records.json", "circles.json", "map.json"].map(load),
+  );
+  assert.deepEqual(event.days.map(({ id }) => id), [1, 2]);
+  assert.equal(event.venueAssignments.length, 1);
+
+  const dayMap = (day) => ({ ...structuredClone(snapshot), revision: day });
+  const entry = (day) => ({ periodKey: String(day), venueSpaceId: "sample-hall", path: `maps/${day}/sample-hall.json` });
+  const scoped = (days) => ({
+    manifest: { schema: "event-map-manifest/1", eventId: "sample", maps: days.map(entry) },
+    maps: new Map(days.map((day) => [entry(day).path, dayMap(day)])),
+  });
+
+  const validated = validateStagedEventArtifacts(event, references, catalog, scoped([1, 2]), "sample");
+  assert.deepEqual(validated.maps.map(({ revision }) => revision), [1, 2]);
+  assert.equal(validated.manifest.maps.length, 2);
+  // The reader takes `map` when it asks for no scope, so it must be a real one.
+  assert.equal(validated.map, validated.maps[0]);
+
+  // Coverage stays fail-closed once a manifest exists: a day without a layout is
+  // a missing floor, not an event that reuses day one's.
+  assert.throws(() => validateStagedEventArtifacts(event, references, catalog, scoped([1]), "sample"), /every event day and venue-space/);
+
+  // No manifest is the pre-scoped shape, and it still resolves to one layout.
+  assert.equal(validateStagedEventArtifacts(event, references, catalog, snapshot, "sample").map, snapshot);
+
+  // One day in one hall has nothing to scope, so a manifest there is a mistake
+  // worth naming rather than a second way to say the same thing.
+  const singleDayEvent = {
+    ...event,
+    days: [event.days[0]],
+    officialData: { ...event.officialData, boothListUrls: { 1: event.officialData.boothListUrls[1] } },
+  };
+  assert.throws(() => validateStagedEventArtifacts(singleDayEvent, references, catalog, scoped([1]), "sample"), /must publish one map\.json/);
+});
+
 function syntheticFF47Image() {
   const width = 1200;
   const height = 848;

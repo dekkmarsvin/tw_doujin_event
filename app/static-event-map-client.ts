@@ -22,6 +22,11 @@ export async function loadStaticEventMap(eventId: string, scope?: { periodKey: s
   const manifestResponse = await fetch(eventDataEndpoint(eventId, "map-manifest.json"), {
     headers: { accept: "application/json" },
   });
+  // An event whose halls never change between days publishes one map.json and
+  // no manifest, so a missing index is that event, not a broken deployment.
+  // Every other failure still surfaces: a 500 or a parse error must not be read
+  // as "this event has one layout" and silently serve the wrong day's floor.
+  if (manifestResponse.status === 404) return readMap(eventId, "map.json");
   if (!manifestResponse.ok) throw new Error(`讀取活動地圖索引失敗（${manifestResponse.status}）。`);
   const manifest = parseEventMapManifest(await manifestResponse.json(), eventId);
   const entry = manifest.maps.find((map) => map.periodKey === scope.periodKey && map.venueSpaceId === scope.venueSpaceId);

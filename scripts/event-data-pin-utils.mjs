@@ -25,6 +25,19 @@ export const EVENT_FILE_NAMES = Object.freeze([
 export const REFERENCE_SELECTION_FILE = "reference-selection.json";
 export const MAP_MANIFEST_FILE = "map-manifest.json";
 
+/**
+ * The Node-side twin of `eventUsesScopedMaps` in `app/event-catalog.ts`. A map
+ * artifact covers one day in one hall, so anything beyond a single such pair
+ * may need its own layout -- two days in one hall included, because a hall can
+ * be re-laid out overnight. It says a manifest is *allowed*, not that one
+ * exists: whether an event actually ships one is decided by the file being
+ * there, which is what the pin rules below already key off.
+ */
+export function eventUsesScopedMaps(event) {
+  return Array.isArray(event?.days) && Array.isArray(event?.venueAssignments)
+    && event.days.length * event.venueAssignments.length > 1;
+}
+
 const COMMIT = /^[0-9a-f]{40}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const EVENT_ID = /^[a-z0-9][a-z0-9-]*$/;

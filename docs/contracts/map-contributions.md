@@ -73,7 +73,7 @@
 
 匯出只在私人 D1 寫入不可變的候選、`targetPath`、SHA-256 與相對於目前 reviewed public snapshot 的語意差異，並提供管理者下載；它不呼叫 GitHub、不寫 event-data repository，也不改變任何匿名公開 endpoint。候選仍須經 event-data repository 的 schema、review 與 pin 流程才能發布。
 
-單一 venue-space 活動的 `targetPath` 是 `map.json`；多 venue-space 活動是 `maps/<periodKey>/<venueSpaceId>.json`，並由該活動的 `map-manifest.json` 索引。兩者的路徑由 [`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts) 與 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 決定，reader、staging、pin 與離線清單都已支援，見[活動地圖契約](./event-map.md)。
+只有一組「活動日 × venue-space」的活動，`targetPath` 是 `map.json`；有多組的（含**單一場館空間但多個活動日**，例如兩天各自重排的場地）是 `maps/<periodKey>/<venueSpaceId>.json`，並由該活動的 `map-manifest.json` 索引。兩者的路徑由 [`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts) 與 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 決定，reader、staging、pin 與離線清單都已支援，見[活動地圖契約](./event-map.md)。
 
 ## 官方來源檔
 

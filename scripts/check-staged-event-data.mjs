@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { readJsonFileStrict } from "./strict-json-file.mjs";
+import { MAP_MANIFEST_FILE } from "./event-data-pin-utils.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const arguments_ = process.argv.slice(2);
@@ -36,8 +37,13 @@ try {
       readJsonFileStrict(path.join(directory, "circles.json"), "staged circles.json"),
     ]);
     let map;
-    if (Array.isArray(event.venueAssignments) && event.venueAssignments.length > 1) {
-      const manifest = await readJsonFileStrict(path.join(directory, "map-manifest.json"), "staged map-manifest.json");
+    // Whether this event scopes its maps per day is settled by the manifest
+    // being staged, not by the hall count; `validateStagedEventArtifacts` then
+    // decides whether that shape is legal for this event and, when a manifest
+    // is present, that it covers every day and hall exactly once.
+    const stagedManifest = await readdir(directory).then((names) => names.includes(MAP_MANIFEST_FILE));
+    if (stagedManifest) {
+      const manifest = await readJsonFileStrict(path.join(directory, MAP_MANIFEST_FILE), `staged ${MAP_MANIFEST_FILE}`);
       const maps = new Map(await Promise.all(manifest.maps.map(async ({ path: relativePath }) => [
         relativePath,
         await readJsonFileStrict(path.join(directory, ...relativePath.split("/")), `staged ${relativePath}`),

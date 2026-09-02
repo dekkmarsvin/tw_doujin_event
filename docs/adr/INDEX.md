@@ -79,3 +79,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
 | [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | 生效 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
+| [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
