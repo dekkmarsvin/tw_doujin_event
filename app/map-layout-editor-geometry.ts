@@ -123,21 +123,40 @@ export function rowOrientationFromEndpoints(start: { x: number; y: number }, end
   return Math.abs(end.x - start.x) > Math.abs(end.y - start.y) ? "horizontal" : "vertical";
 }
 
+/** The long axis of a drawn rectangle, by the same rule endpoints use, so a tall
+ * frame proposes a vertical row and a wide one a horizontal row. */
+export function rowOrientationFromRect(rect: MapRect): MapOrientation {
+  return rowOrientationFromEndpoints({ x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y + rect.height });
+}
+
 export function formatSlotCode(prefix: string, value: number, padding: number) {
   return `${prefix}${String(value).padStart(Math.max(0, padding), "0")}`;
 }
 
-/** Evenly distributes `slotCount` booth rectangles between the two endpoints.
- * Each rectangle is centred on its step, so a row reads the same whether it was
- * traced left-to-right or right-to-left. */
-export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect, "width" | "height">): RowGenerationResult {
+/** The checks every way of describing a row shares: what it is called, how many
+ * booths it holds and how they are numbered. Geometry is left to the caller,
+ * because a pair of endpoints and a drawn rectangle describe it differently. */
+function rowNamingErrors(definition: Pick<RowDefinition, "label" | "slotCount" | "startNumber" | "numberPadding">) {
   const errors: string[] = [];
-  const label = definition.label.trim();
-  if (!label) errors.push("排標籤不可留空。");
+  if (!definition.label.trim()) errors.push("排標籤不可留空。");
   if (!Number.isInteger(definition.slotCount) || definition.slotCount < 1) errors.push("格數必須是大於 0 的整數。");
-  if (!(definition.slotWidth > 0) || !(definition.slotHeight > 0)) errors.push("每格寬高必須大於 0。");
   if (!Number.isInteger(definition.startNumber) || definition.startNumber < 0) errors.push("起始編號必須是 0 或正整數。");
   if (!Number.isInteger(definition.numberPadding) || definition.numberPadding < 0) errors.push("補零位數必須是 0 或正整數。");
+  return errors;
+}
+
+/** Evenly distributes `slotCount` booth rectangles between the two endpoints.
+ * Each rectangle is centred on its step, so a row reads the same whether it was
+ * traced left-to-right or right-to-left.
+ *
+ * Centre pitch and booth size are two separate inputs here, which is why this is
+ * no longer the ordinary way to add a row: values that do not match leave gaps
+ * or overlaps. It stays for the rows one rectangle cannot describe — a slanted
+ * row, or one whose booths are deliberately spaced apart. */
+export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect, "width" | "height">): RowGenerationResult {
+  const errors = rowNamingErrors(definition);
+  const label = definition.label.trim();
+  if (!(definition.slotWidth > 0) || !(definition.slotHeight > 0)) errors.push("每格寬高必須大於 0。");
   for (const value of [definition.start.x, definition.start.y, definition.end.x, definition.end.y]) {
     if (!Number.isFinite(value)) { errors.push("起點與終點座標必須是有效數字。"); break; }
   }
@@ -161,6 +180,86 @@ export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect
   if (duplicate) return { ok: false, row: null, errors: [`這一排會產生重複的攤位代碼 ${duplicate.code}。`] };
 
   return { ok: true, row: { label, orientation: rowOrientationFromEndpoints(definition.start, definition.end), confidence: 1, slots }, errors: [] };
+}
+
+/** Which end of the drawn segment carries the lowest booth number. A vertical
+ * segment is numbered from its top or its bottom, a horizontal one from its left
+ * or its right, which is enough for the two facing sides of one aisle to run in
+ * opposite directions while sharing a row label. */
+export type RowNumberingStart = "top" | "bottom" | "left" | "right";
+
+/** A segment described the way it is drawn: one rectangle around the whole run
+ * of booths, cut into `slotCount` equal pieces. The rectangle is the outline
+ * rather than a pair of centres, so booth size follows from the drawing instead
+ * of being a second number that has to be made to agree with it. */
+export type RowFrameDefinition = {
+  label: string;
+  frame: MapRect;
+  orientation: MapOrientation;
+  slotCount: number;
+  numberingStart: RowNumberingStart;
+  codePrefix: string;
+  startNumber: number;
+  numberPadding: number;
+};
+
+/** Cuts a run of length `total` into `count` pieces that touch exactly: every
+ * piece begins where the previous one ended. Each cut is measured from the start
+ * of the run rather than by adding up the pieces, so a long row cannot drift.
+ *
+ * A booth is stored as a start and a size, and `a + (b - a)` can round just past
+ * `b`. One unit in the last place is enough for the overlap check in
+ * `map-contribution-draft.ts` — which counts a shared edge as fine and any true
+ * intersection as a problem — to reject the row, so the size is stepped down
+ * until the next booth cannot begin inside this one. */
+export function seamlessSpans(start: number, total: number, count: number): { start: number; size: number }[] {
+  const edges = Array.from({ length: count + 1 }, (unused, index) => start + total * index / count);
+  return edges.slice(0, count).map((edge, index) => {
+    let size = edges[index + 1] - edge;
+    for (let guard = 0; guard < 4 && edge + size > edges[index + 1]; guard += 1) size -= Math.abs(size) * Number.EPSILON;
+    return { start: edge, size: Math.max(0, size) };
+  });
+}
+
+/** Turns one drawn rectangle into a segment of booths. This is the ordinary way
+ * a row is added: the contributor traces the run on the plan and says how many
+ * booths are in it, and neither coordinates nor booth size is typed in.
+ *
+ * Numbering runs from `numberingStart` towards the other end, which changes the
+ * order the codes are handed out in and nothing else — the rectangles are the
+ * same either way, and nothing is added to the stored layout to record it. */
+export function generateRowSlotsFromRect(definition: RowFrameDefinition, bounds: Pick<MapRect, "width" | "height">): RowGenerationResult {
+  const errors = rowNamingErrors(definition);
+  const label = definition.label.trim();
+  const vertical = definition.orientation === "vertical";
+  if (!(vertical ? ["top", "bottom"] : ["left", "right"]).includes(definition.numberingStart)) {
+    errors.push(vertical ? "直排的編號起點必須是上或下。" : "橫排的編號起點必須是左或右。");
+  }
+  const drawn = definition.frame;
+  if ([drawn.x, drawn.y, drawn.width, drawn.height].some((value) => !Number.isFinite(value))) errors.push("框選範圍必須是有效數字。");
+  if (errors.length) return { ok: false, row: null, errors };
+
+  // A pointer drag is clamped to the sheet already, but a rectangle that
+  // survived a canvas resize, or arrived from a field, need not be.
+  const left = clamp(drawn.x, 0, bounds.width);
+  const top = clamp(drawn.y, 0, bounds.height);
+  const frame = {
+    x: left,
+    y: top,
+    width: clamp(drawn.x + drawn.width, 0, bounds.width) - left,
+    height: clamp(drawn.y + drawn.height, 0, bounds.height) - top,
+  };
+  if (!(frame.width > 0) || !(frame.height > 0)) return { ok: false, row: null, errors: ["框選範圍的寬與高都必須大於 0。"] };
+
+  const spans = seamlessSpans(vertical ? frame.y : frame.x, vertical ? frame.height : frame.width, definition.slotCount);
+  const reversed = definition.numberingStart === "bottom" || definition.numberingStart === "right";
+  const slots: BoothSlot[] = spans.map((span, index) => ({
+    code: formatSlotCode(definition.codePrefix, definition.startNumber + (reversed ? definition.slotCount - 1 - index : index), definition.numberPadding),
+    rect: vertical
+      ? { x: frame.x, y: span.start, width: frame.width, height: span.size }
+      : { x: span.start, y: frame.y, width: span.size, height: frame.height },
+  }));
+  return { ok: true, row: { label, orientation: definition.orientation, confidence: 1, slots }, errors: [] };
 }
 
 export function clamp(value: number, minimum: number, maximum: number) {

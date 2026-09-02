@@ -98,6 +98,10 @@
 .draftSlot text { fill:#8f9c95; }
 .draftSlotKept rect { fill:#e9f0eccc; stroke:#3f7a5e; stroke-width:2; }
 .draftSlotKept text { fill:#2c5a45; font-weight:900; }
+.framePreview rect { fill:#e9f0ec99; stroke:#3f7a5e; stroke-width:1.5; vector-effect:non-scaling-stroke; pointer-events:none; }
+.framePreview text { fill:#2c5a45; font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+.advanced { margin-top:13px; padding-top:11px; border-top:1px solid #e2e5e1; }
+.advanced summary { cursor:pointer; margin-bottom:9px; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; }
 .anchor circle { fill:#fff; stroke:#3f7a5e; stroke-width:2.5; vector-effect:non-scaling-stroke; pointer-events:none; }
 .anchor text { fill:#2c5a45; font-family:var(--font-mono),ui-monospace,monospace; font-size:9px; font-weight:900; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
 .anchorPanel { margin-top:13px; padding-top:11px; border-top:1px solid #e2e5e1; }
