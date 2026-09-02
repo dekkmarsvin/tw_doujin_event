@@ -10,7 +10,7 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
@@ -187,6 +187,49 @@ test("a corner grab never enlarges a rectangle already smaller than the handle m
   assert.deepEqual(resizeRectFromCorner(slot, "se", 0, 0, bounds), slot, "an idle grab leaves the booth untouched");
   assert.deepEqual(resizeRectFromCorner(slot, "se", -999, -999, bounds), { x: 40, y: 40, width: 24, height: 18 },
     "the height floor is the booth's own 18, never the default that would inflate it");
+});
+
+test("a batch resize keeps the group's shape, from every corner", () => {
+  const rect = { x: 20, y: 30, width: 40, height: 20 };
+  const bounds = { width: 1000, height: 1000 };
+  // A drag straight down the diagonal is the one case the free resize and this
+  // one agree on: 40x20 grown by 20x10 is the same rectangle either way.
+  assert.deepEqual(resizeRectUniformly(rect, "se", 20, 10, bounds), { x: 20, y: 30, width: 60, height: 30 });
+  assert.deepEqual(resizeRectFromCorner(rect, "se", 20, 10, bounds, 12), { x: 20, y: 30, width: 60, height: 30 });
+  assert.deepEqual(resizeRectUniformly(rect, "nw", -20, -10, bounds), { x: 0, y: 20, width: 60, height: 30 },
+    "the opposite corner stays put whichever corner is dragged");
+  assert.deepEqual(resizeRectUniformly(rect, "ne", 20, -10, bounds), { x: 20, y: 20, width: 60, height: 30 });
+  assert.deepEqual(resizeRectUniformly(rect, "sw", -20, 10, bounds), { x: 0, y: 30, width: 60, height: 30 });
+  assert.deepEqual(resizeRectUniformly(rect, "se", 0, 0, bounds), rect, "an idle grab leaves the group untouched");
+});
+
+test("a batch resize answers a drag off the diagonal with one factor rather than two", () => {
+  // The shape a plan's booths make: eight times taller than it is wide. Pulling
+  // sideways used to shrink the width by half while the height barely moved.
+  const block = { x: 200, y: 300, width: 185, height: 1555 };
+  const bounds = { width: 2142, height: 2892 };
+  const pulled = resizeRectUniformly(block, "se", -100, -100, bounds);
+  assert.equal((pulled.width / pulled.height).toFixed(6), (block.width / block.height).toFixed(6),
+    "the group is the same shape it was, so every booth inside it is too");
+  assert.equal(Math.round(pulled.width), 172);
+  assert.equal(Math.round(pulled.height), 1445);
+});
+
+test("a batch resize stops on both axes at once, at the canvas and at the minimum", () => {
+  const block = { x: 200, y: 300, width: 185, height: 1555 };
+  const bounds = { width: 2142, height: 2892 };
+  const shape = (rect) => (rect.width / rect.height).toFixed(6);
+  const stretched = resizeRectUniformly(block, "se", 4000, 4000, bounds);
+  assert.equal(stretched.y + stretched.height, 2892, "growing stops where the taller side reaches the canvas");
+  assert.equal(shape(stretched), shape(block), "and the width stops with it rather than carrying on alone");
+  const squeezed = resizeRectUniformly(block, "se", -4000, -4000, bounds);
+  assert.equal(Math.round(squeezed.width), 24, "shrinking stops where the shorter side reaches the minimum");
+  assert.equal(shape(squeezed), shape(block));
+});
+
+test("a batch resize leaves a group with no extent alone rather than dividing by it", () => {
+  const point = { x: 50, y: 50, width: 0, height: 0 };
+  assert.deepEqual(resizeRectUniformly(point, "se", 30, 30, { width: 200, height: 200 }), point);
 });
 
 test("snaps enterprise rectangles to the nearest overlapping adjacent edge", () => {
