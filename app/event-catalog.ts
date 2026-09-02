@@ -301,6 +301,18 @@ export function eventUsesVenueSpaceSwitcher(event: EventDefinition) {
   return event.venueAssignments.length > 1;
 }
 
+/**
+ * A map artifact covers one day in one venue space, so an event needs scoped
+ * maps as soon as it has more than one such pair -- two days in a single hall
+ * counts, because a hall can be re-laid out overnight. This is deliberately not
+ * `eventUsesVenueSpaceSwitcher`: that one answers whether the reader shows a
+ * venue-space picker, which stays false for a single hall no matter how many
+ * days it runs.
+ */
+export function eventUsesScopedMaps(event: Pick<EventDefinition, "days" | "venueAssignments">) {
+  return event.days.length * event.venueAssignments.length > 1;
+}
+
 export function venueAssignmentForArea(event: EventDefinition, areaId: string) {
   return event.venueAssignments.find(({ areaIds }) => areaIds.includes(areaId)) ?? event.venueAssignments[0];
 }

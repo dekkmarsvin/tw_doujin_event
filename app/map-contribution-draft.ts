@@ -17,6 +17,14 @@ export type MapContributionScope = {
   mapTemplate: string;
   allowedBoothCodes: readonly string[];
   requiredBoothCodes: readonly string[];
+  /** Whether a booth on the floor that no circle occupies is expected here. A
+   * venue plan always has some -- the unsold ones -- so the honest question is
+   * whether anything else in this scope already accounts for them. For a
+   * published event the reviewed snapshot does, and a code outside both it and
+   * the placements is a typo worth refusing. A candidate event has no snapshot
+   * yet: its very first map is traced from the official plan, unsold booths
+   * included, so refusing them would make the plan untraceable. */
+  allowsUnallocatedBooths: boolean;
   targetPath: string;
 };
 
@@ -42,6 +50,10 @@ export function resolveCanonicalMapPeriod<T extends { id: string | number }>(
 
 export type MapDraftProblem = {
   code: "invalid_content" | "invalid_layout" | "template_mismatch" | "unknown_booth" | "missing_booth" | "missing_evidence" | "overlap";
+  /** An error refuses the draft; a warning is reported and lets it through.
+   * Absent means error, so a problem added later blocks until someone decides
+   * it should not. */
+  severity?: "error" | "warning";
   message: string;
   boothCodes?: string[];
 };
@@ -68,7 +80,7 @@ export function parseMapDraftConflict(value: unknown): MapDraftConflict | null {
 }
 
 export type MapDraftValidation =
-  | { ok: true; content: MapContributionDraftContent; problems: [] }
+  | { ok: true; content: MapContributionDraftContent; problems: MapDraftProblem[] }
   | { ok: false; content: MapContributionDraftContent | null; problems: MapDraftProblem[] };
 
 const MAX_LAYOUT_DIMENSION = 100_000;
@@ -172,7 +184,14 @@ export function validateMapContributionDraft(
   const allowed = new Set(scope.allowedBoothCodes);
   const unknown = [...codes].filter((code) => !allowed.has(code)).sort();
   const missing = [...new Set(scope.requiredBoothCodes)].filter((code) => !codes.has(code)).sort();
-  if (unknown.length) problems.push({ code: "unknown_booth", message: `含有 ${unknown.length} 個主辦攤位資料未出現的代碼。`, boothCodes: unknown });
+  if (unknown.length) {
+    problems.push({
+      code: "unknown_booth",
+      severity: scope.allowsUnallocatedBooths ? "warning" : "error",
+      message: `含有 ${unknown.length} 個主辦攤位資料未出現的代碼。`,
+      boothCodes: unknown,
+    });
+  }
   if (missing.length) problems.push({ code: "missing_booth", message: `缺少本 period 的 ${missing.length} 個主辦攤位代碼。`, boothCodes: missing });
 
   const overlaps = base.ok ? overlapProblems(content.layout) : [];
@@ -183,7 +202,10 @@ export function validateMapContributionDraft(
       boothCodes: [...new Set(overlaps.flat())].sort(),
     });
   }
-  return problems.length ? { ok: false, content, problems } : { ok: true, content, problems: [] };
+  // Warnings still travel with a passing result: the point of downgrading one
+  // is that a human reads it, not that it disappears.
+  const refused = problems.some(({ severity }) => severity !== "warning");
+  return refused ? { ok: false, content, problems } : { ok: true, content, problems };
 }
 
 export type MapCandidateDiff = {

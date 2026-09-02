@@ -8,6 +8,7 @@ import {
   REFERENCE_SELECTION_FILE,
   assertEventDataLocator,
   eventFilePath,
+  eventUsesScopedMaps,
   parseEventDataPin,
   parsePinnedMapManifest,
   rawFileUrl,
@@ -45,6 +46,16 @@ export function onboardingWorkspaceReplacements(root, workspace, eventId) {
 
 async function fetchBytes(url, label, fetchImpl) {
   const response = await fetchImpl(url, { redirect: "error" });
+  if (!response.ok) throw new Error(`Failed to fetch ${label}: HTTP ${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/** A pin is built by discovering what the commit holds, and only a 404 says the
+ * file is not there. Every other status stays an error, so a rate limit or an
+ * outage cannot quietly produce a pin that omits an event's scoped maps. */
+async function fetchOptionalBytes(url, label, fetchImpl) {
+  const response = await fetchImpl(url, { redirect: "error" });
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Failed to fetch ${label}: HTTP ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
 }
@@ -87,9 +98,14 @@ export async function prepareEventOnboarding({ eventId, commit, fetchImpl = glob
   for (const name of EVENT_FILE_NAMES) {
     if (name === "map.json") {
       eventValue = parseJsonBytesStrict(bytesByPath.get(eventFilePath(eventId, "event.json")), "Pinned event.json");
-      if (Array.isArray(eventValue.venueAssignments) && eventValue.venueAssignments.length > 1) {
-        const manifestPath = eventFilePath(eventId, MAP_MANIFEST_FILE);
-        const manifestBytes = await fetchPinned(manifestPath);
+      // Two days in one hall can each have their own layout, so the hall count
+      // cannot decide this. Probe for the manifest wherever one is possible and
+      // fall back to the flat map.json when the commit does not carry one.
+      const manifestPath = eventFilePath(eventId, MAP_MANIFEST_FILE);
+      const manifestBytes = eventUsesScopedMaps(eventValue)
+        ? await fetchOptionalBytes(rawFileUrl(locator, { path: manifestPath }), manifestPath, fetchImpl)
+        : null;
+      if (manifestBytes) {
         bytesByPath.set(manifestPath, manifestBytes);
         const entries = parsePinnedMapManifest(parseJsonBytesStrict(manifestBytes, `Pinned ${MAP_MANIFEST_FILE}`), eventId);
         for (const entry of entries) {

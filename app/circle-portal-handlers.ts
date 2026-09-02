@@ -2008,16 +2008,21 @@ export function createCirclePortalHandlers({
             eventId: draft.event.id ?? candidateId, periodKey: scope.periodKey, periodAliases: [scope.periodKey],
             venueSpaceId: scope.venueSpaceId, mapTemplate: scope.mapTemplate,
             allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
+            allowsUnallocatedBooths: scope.allowsUnallocatedBooths,
             targetPath: `candidate://${candidateId}/${scope.periodKey}/${scope.venueSpaceId}`,
           },
         ) : null;
-        if (!validation?.ok) {
-          for (const problem of validation?.problems ?? [{ code: "invalid_content", message: "地圖草稿無效。" }]) {
-            issues.push({
-              severity: "error", step: "map", code: problem.code,
-              target: `${day.id}/${assignment.venueSpaceId}`, message: problem.message,
-            });
-          }
+        // A passing draft can still carry warnings -- unallocated booths, most
+        // of the time -- and they are reported at their own severity so the map
+        // section stays open while the author still sees what was noticed.
+        const problems = validation
+          ? validation.problems
+          : [{ code: "invalid_content" as const, message: "地圖草稿無效。", severity: undefined }];
+        for (const problem of problems) {
+          issues.push({
+            severity: problem.severity === "warning" ? "warning" : "error", step: "map", code: problem.code,
+            target: `${day.id}/${assignment.venueSpaceId}`, message: problem.message,
+          });
         }
       }
     }

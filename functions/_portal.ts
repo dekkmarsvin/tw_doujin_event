@@ -351,16 +351,20 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       const venue = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
       if (!resolvedPeriod || !venue) return null;
       const { periodKey: canonicalPeriodKey, periodAliases } = resolvedPeriod;
-      const targetPath = event.venueAssignments.length === 1
-        ? "map.json"
-        : `maps/${encodeURIComponent(canonicalPeriodKey)}/${encodeURIComponent(venueSpaceId)}.json`;
-      const published = await readPublishedEventMap(targetPath);
+      // The resolver owns the artifact path, so the snapshot is read through it
+      // rather than through a second copy of the rule here -- a local copy is
+      // how a per-day event ends up reading another day's floor. Resolving
+      // twice is the price of that: the path has to be known before the
+      // snapshot can be read, and the snapshot before the codes are complete.
+      const input = { event, placements: payload.placements };
+      const located = resolvePublishedAuthoringScope(input, canonicalPeriodKey, venueSpaceId);
+      if (!located) return null;
+      const published = await readPublishedEventMap(located.targetPath);
       // Empty official booth slots have no placement row but are still valid
       // geometry. The reviewed public snapshot is authoritative for those
       // codes; placements add newly announced occupied/moved booths.
       const resolved = resolvePublishedAuthoringScope({
-        event,
-        placements: payload.placements,
+        ...input,
         existingBoothCodes: published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? [],
       }, canonicalPeriodKey, venueSpaceId);
       return resolved ? { ...resolved, periodAliases } : null;

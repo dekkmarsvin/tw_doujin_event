@@ -25,7 +25,8 @@ test("candidate scope resolves one day and venue-space with only its imported bo
   assert.deepEqual(resolved, {
     kind: "candidate", candidateId: "candidate-pf", eventId: "pf45", periodKey: "1",
     venueSpaceId: "hall-a", mapTemplate: "TAIWAN_GENERIC_V1",
-    allowedBoothCodes: ["A01"], requiredBoothCodes: ["A01"], targetPath: null,
+    allowedBoothCodes: ["A01"], requiredBoothCodes: ["A01"],
+    allowsUnallocatedBooths: true, targetPath: null,
   });
 });
 
@@ -62,6 +63,39 @@ test("published scope resolves the same multi-space path contract used by Reader
   assert.deepEqual(resolved, {
     kind: "published", eventId: "pf45", periodKey: "1", venueSpaceId: "hall-b",
     mapTemplate: "GENERIC", allowedBoothCodes: ["B00", "B01", "B02"],
+    allowsUnallocatedBooths: false,
     requiredBoothCodes: ["B01"], targetPath: "maps/1/hall-b.json",
   });
+});
+
+/* A hall re-laid out overnight needs one artifact per day, so the artifact path
+ * follows day x hall rather than hall alone. An event with nothing to scope
+ * keeps the flat map.json that predates scoped maps. */
+test("published scope scopes the artifact path per day even inside a single hall", () => {
+  const singleHall = {
+    id: "k51", mapTemplate: "GENERIC",
+    days: [{ id: 1 }, { id: 2 }],
+    venueAssignments: [{ venueSpaceId: "kaohsiung-10f", areaIds: ["A"] }],
+  };
+  const placements = [
+    { day: 1, area: "A", boothCode: "B01", status: "active" },
+    { day: 2, area: "A", boothCode: "B02", status: "active" },
+  ];
+  assert.equal(scope.resolvePublishedAuthoringScope({ event: singleHall, placements }, "1", "kaohsiung-10f").targetPath,
+    "maps/1/kaohsiung-10f.json");
+  assert.equal(scope.resolvePublishedAuthoringScope({ event: singleHall, placements }, "2", "kaohsiung-10f").targetPath,
+    "maps/2/kaohsiung-10f.json");
+
+  const oneDay = { ...singleHall, days: [{ id: 1 }] };
+  assert.equal(scope.resolvePublishedAuthoringScope({ event: oneDay, placements }, "1", "kaohsiung-10f").targetPath,
+    "map.json");
+
+  // A day id only has to be a non-empty string, so it can hold characters no
+  // path may carry. An artifact with no representable path is an unresolvable
+  // scope, not an exception thrown out of a request handler.
+  const unsafeDay = { ...singleHall, days: [{ id: "第一天" }, { id: 2 }] };
+  assert.equal(scope.resolvePublishedAuthoringScope({ event: unsafeDay, placements }, "第一天", "kaohsiung-10f"), null);
+  // The same event resolves fine on the day whose id is representable.
+  assert.equal(scope.resolvePublishedAuthoringScope({ event: unsafeDay, placements }, "2", "kaohsiung-10f").targetPath,
+    "maps/2/kaohsiung-10f.json");
 });

@@ -37,6 +37,7 @@ const scope = {
   mapTemplate: "SAMPLE",
   allowedBoothCodes: ["S01", "S02", "S03"],
   requiredBoothCodes: ["S01", "S02"],
+  allowsUnallocatedBooths: false,
   targetPath: "map.json",
 };
 
@@ -90,6 +91,40 @@ test("submission reports unknown, missing and overlapping booth rectangles toget
   assert.deepEqual(result.problems.map(({ code }) => code).sort(), ["missing_booth", "overlap", "unknown_booth"]);
   assert.deepEqual(result.problems.find(({ code }) => code === "unknown_booth").boothCodes, ["X99"]);
   assert.deepEqual(result.problems.find(({ code }) => code === "missing_booth").boothCodes, ["S02"]);
+});
+
+/* A venue plan shows every booth on the floor, unsold ones included, and no
+ * import row can name those. A published event has a reviewed snapshot to vouch
+ * for them, so an unrecognised code there is a typo; the first map of a
+ * candidate event has no snapshot, so refusing it would make the plan
+ * untraceable. Same check, different answer, and the draft still says so. */
+test("an unrecognised booth code blocks a published map but only warns on a candidate's first one", () => {
+  const traced = structuredClone(layout);
+  traced.rows[0].slots = [
+    { code: "S01", rect: { x: 20, y: 35, width: 50, height: 30 } },
+    { code: "S02", rect: { x: 75, y: 35, width: 50, height: 30 } },
+    { code: "S09", rect: { x: 130, y: 35, width: 50, height: 30 } },
+  ];
+
+  const published = validateMapContributionDraft(content(traced), scope);
+  assert.equal(published.ok, false);
+  const blocked = published.problems.find(({ code }) => code === "unknown_booth");
+  assert.equal(blocked.severity, "error");
+  assert.deepEqual(blocked.boothCodes, ["S09"]);
+
+  const candidate = validateMapContributionDraft(content(traced), { ...scope, allowsUnallocatedBooths: true });
+  assert.equal(candidate.ok, true);
+  // Passing is not the same as silent: the warning still travels with the result.
+  assert.deepEqual(candidate.problems.map(({ code, severity }) => [code, severity]), [["unknown_booth", "warning"]]);
+  assert.deepEqual(candidate.problems[0].boothCodes, ["S09"]);
+
+  // A warning does not carry the other checks with it: a booth the organizer
+  // announced is still missing, whatever the scope thinks of extra ones.
+  const short = structuredClone(traced);
+  short.rows[0].slots = short.rows[0].slots.filter(({ code }) => code !== "S02");
+  const stillRefused = validateMapContributionDraft(content(short), { ...scope, allowsUnallocatedBooths: true });
+  assert.equal(stillRefused.ok, false);
+  assert.deepEqual(stillRefused.problems.map(({ code }) => code).sort(), ["missing_booth", "unknown_booth"]);
 });
 
 test("candidate export is deterministic, scoped and summarizes reviewable geometry changes", () => {

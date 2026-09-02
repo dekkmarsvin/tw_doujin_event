@@ -2,7 +2,7 @@ import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { CIRCLE_IDENTITY_GROUPS_FILE, REFERENCE_SELECTION_FILE } from "./event-data-pin-utils.mjs";
+import { CIRCLE_IDENTITY_GROUPS_FILE, MAP_MANIFEST_FILE, REFERENCE_SELECTION_FILE } from "./event-data-pin-utils.mjs";
 import { recoverCircleIdentityRegistry } from "./circle-identity-registry.mjs";
 import { readPublishedEvents } from "./published-events.mjs";
 import {
@@ -67,15 +67,19 @@ async function readStagedEvent(eventId) {
   return { source, event };
 }
 
-async function checkIdentityGrouping(eventId, source) {
-  const groupingPath = path.join(source, CIRCLE_IDENTITY_GROUPS_FILE);
-  let hasGrouping = true;
+/** Absent is an answer here; unreadable is not, and must not be read as absent. */
+async function exists(target) {
   try {
-    await access(groupingPath);
+    await access(target);
+    return true;
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
-    hasGrouping = false;
+    return false;
   }
+}
+
+async function checkIdentityGrouping(eventId, source) {
+  const hasGrouping = await exists(path.join(source, CIRCLE_IDENTITY_GROUPS_FILE));
   if (!hasGrouping && eventId !== "ff47") {
     throw new Error(`Pinned ${eventId} data is missing ${CIRCLE_IDENTITY_GROUPS_FILE}.`);
   }
@@ -95,8 +99,12 @@ async function stageEvent(eventId, publicRoot) {
   const destination = path.join(publicRoot, eventId);
   await mkdir(destination, { recursive: true });
   await cp(path.join(source, "event.json"), path.join(destination, "event.json"));
-  if (event.venueAssignments.length > 1) {
-    await cp(path.join(source, "map-manifest.json"), path.join(destination, "map-manifest.json"));
+  // The manifest being on disk is what decides, not the hall count: two days in
+  // one hall may each have their own layout, while an event whose halls never
+  // change between days still ships the single map.json readers fall back to.
+  const manifestSource = path.join(source, MAP_MANIFEST_FILE);
+  if (await exists(manifestSource)) {
+    await cp(manifestSource, path.join(destination, MAP_MANIFEST_FILE));
     await cp(path.join(source, "maps"), path.join(destination, "maps"), { recursive: true });
   } else {
     await cp(path.join(source, "map.json"), path.join(destination, "map.json"));
