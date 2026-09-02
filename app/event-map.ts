@@ -45,6 +45,20 @@ type MapLandmark = {
   label: string;
 };
 
+/** Where a row's label goes: centred across the booths it holds, above a
+ * vertical row and below a horizontal one. Both public renderers and the editor
+ * read the position from here, so the label a contributor lines a row up against
+ * while drawing is the one readers end up seeing. A row with no booths has
+ * nowhere to put it. */
+export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number } | null {
+  if (!row.slots.length) return null;
+  const minX = Math.min(...row.slots.map(({ rect }) => rect.x));
+  const maxX = Math.max(...row.slots.map(({ rect }) => rect.x + rect.width));
+  const minY = Math.min(...row.slots.map(({ rect }) => rect.y));
+  const maxY = Math.max(...row.slots.map(({ rect }) => rect.y + rect.height));
+  return { x: (minX + maxX) / 2, y: row.orientation === "horizontal" ? maxY + 30 : minY - 13 };
+}
+
 export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "label">): MapLandmarkKind {
   if (landmark.kind) return landmark.kind;
   if (landmark.label === "企業攤") return "enterprise";

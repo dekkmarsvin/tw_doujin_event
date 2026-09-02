@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { mapAccessArrowTransform, resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
-import { clamp, confirmedDraftSlots, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
+import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { clamp, confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, boxFor, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection, type SlotClipboard } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
@@ -33,6 +33,12 @@ type SlotDrawDragState = { mode: "draw-slot"; pointerId: number; startX: number;
 type RowFrameDrawState = { mode: "draw-row"; pointerId: number; startX: number; startY: number };
 type RowFrameResizeState = { mode: "resize-row-frame"; pointerId: number; corner: ResizeCorner; origin: MapRect; startX: number; startY: number };
 
+/** The segment the row panel is currently working on: which booths it holds, in
+ * the order they run along the row, and the rectangle they were cut from. A row
+ * stores one flat list of booths and no segments, so this only lives as long as
+ * the panel does — it is what the corner handles reshape. */
+type ActiveSegment = { rowIndex: number; items: number[]; frame: MapRect; orientation: MapOrientation };
+
 type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState | RowFrameDrawState | RowFrameResizeState;
 
 /** A review comment can point at one booth or landmark. `nonce` is what makes
@@ -59,7 +65,7 @@ type RowFormState = {
   startY: string;
   endX: string;
   endY: string;
-  slotCount: string;
+  endNumber: string;
   slotWidth: string;
   slotHeight: string;
   codePrefix: string;
@@ -78,6 +84,14 @@ function defaultNumberingStart(orientation: MapOrientation): RowNumberingStart {
   return NUMBERING_STARTS[orientation][0].value;
 }
 
+/** How many booths the segment holds, read off the two numbers the plan itself
+ * prints. A plan says a column runs 01–26; asking for 26 booths starting at 1
+ * makes the contributor do that subtraction, and a segment continuing at 27 is
+ * where it goes wrong most often. */
+function rowSlotCount(form: Pick<RowFormState, "startNumber" | "endNumber">) {
+  return Number(form.endNumber) - Number(form.startNumber) + 1;
+}
+
 type SlotDrawFormState = { rowLabel: string; code: string; orientation: MapOrientation };
 
 function blankRowForm(layout: EventMapLayout): RowFormState {
@@ -87,7 +101,7 @@ function blankRowForm(layout: EventMapLayout): RowFormState {
     startY: String(Math.round(layout.height * .5)),
     endX: String(Math.round(layout.width * .8)),
     endY: String(Math.round(layout.height * .5)),
-    slotCount: "10",
+    endNumber: "10",
     slotWidth: String(Math.max(1, Math.round(layout.width * .04))),
     slotHeight: String(Math.max(1, Math.round(layout.height * .03))),
     codePrefix: "",
@@ -103,7 +117,7 @@ function rowDefinitionFrom(form: RowFormState): RowDefinition {
     label: form.label,
     start: { x: Number(form.startX), y: Number(form.startY) },
     end: { x: Number(form.endX), y: Number(form.endY) },
-    slotCount: Number(form.slotCount),
+    slotCount: rowSlotCount(form),
     slotWidth: Number(form.slotWidth),
     slotHeight: Number(form.slotHeight),
     // An empty prefix means the row label doubles as the code prefix, which is
@@ -119,7 +133,7 @@ function rowFrameDefinitionFrom(form: RowFormState, frame: MapRect): RowFrameDef
     label: form.label,
     frame,
     orientation: form.orientation,
-    slotCount: Number(form.slotCount),
+    slotCount: rowSlotCount(form),
     numberingStart: form.numberingStart,
     codePrefix: form.codePrefix.trim() || form.label.trim(),
     startNumber: Number(form.startNumber),
@@ -223,6 +237,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   // The rectangle drawn around a segment, held outside the layout until it is
   // confirmed, so drawing and redrawing costs nothing and undoes nothing.
   const [rowFrame, setRowFrame] = useState<MapRect | null>(null);
+  const [activeSegment, setActiveSegment] = useState<ActiveSegment | null>(null);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
   const [clipboard, setClipboard] = useState<SlotClipboard | null>(null);
@@ -267,6 +282,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     setDraftRow(null);
     setSlotDraftRect(null);
     setRowFrame(null);
+    setActiveSegment(null);
   };
 
   const undo = () => {
@@ -403,16 +419,21 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     drag.current = { mode: "draw-slot", pointerId: event.pointerId, startX: point.x, startY: point.y };
   };
 
-  /** A press anywhere on the canvas while the row panel is open starts a new
-   * frame, including a press on booths that are already there: the next segment
-   * of a row is usually drawn right beside the one before it. */
+  /** A press on blank paper while the row panel is open draws the next segment.
+   * The label is asked for first because releasing the pointer places booths:
+   * there is no second press to catch a missing one. */
   const startRowFrameDraw = (event: PointerEvent<SVGElement>, svg: SVGSVGElement) => {
+    if (!rowForm?.label.trim()) {
+      setRowErrors(["請先填寫排標籤。"]);
+      return;
+    }
     const point = pointIn(svg, event);
     event.preventDefault();
     event.stopPropagation();
     svg.setPointerCapture(event.pointerId);
     svg.focus({ preventScroll: true });
     setSelections([]);
+    setActiveSegment(null);
     setRowErrors([]);
     setSnapGuides([]);
     setRowFrame({ x: point.x, y: point.y, width: 0, height: 0 });
@@ -430,9 +451,38 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     drag.current = { mode: "resize-row-frame", pointerId: event.pointerId, corner, origin: frame, startX: point.x, startY: point.y };
   };
 
-  /** Every booth already on the plan, as something the frame can snap to. The
-   * segment being drawn is not in the layout yet, so nothing has to be excluded. */
-  const placedSlotTargets = () => layout.rows.flatMap((row) => row.slots.map((slot) => ({ id: slot.code, rect: slot.rect })));
+  /** Booths the frame can snap to: everything already on the plan except the
+   * segment being reshaped, which would otherwise snap to itself. */
+  const snapTargetsOutside = (segment: ActiveSegment | null) => layout.rows.flatMap((row, rowIndex) => row.slots
+    .filter((slot, itemIndex) => !segment || segment.rowIndex !== rowIndex || !segment.items.includes(itemIndex))
+    .map((slot) => ({ id: slot.code, rect: slot.rect })));
+
+  /** Takes the run of booths around one booth as the segment to reshape, so a
+   * row placed earlier can be re-framed as a whole instead of booth by booth.
+   * The booths are selected too: the frame is what the handles grab, and the
+   * highlight is what says which booths it will re-cut. */
+  const activateSegment = (rowIndex: number, itemIndex: number) => {
+    const row = layout.rows[rowIndex];
+    if (!row) return;
+    const { items, orientation } = contiguousSegment(row.slots.map(({ rect }) => rect), itemIndex);
+    if (!items.length) return;
+    setActiveSegment({ rowIndex, items, orientation, frame: boundingBox(items.map((item) => row.slots[item].rect)) });
+    setSelections(items.map((item) => ({ kind: "slot", rowIndex, itemIndex: item })));
+    setRowErrors([]);
+  };
+
+  /** Divides the frame again and moves the segment's booths onto the new
+   * pieces. Codes stay where they are: reshaping a segment says where its booths
+   * sit, never what they are called. */
+  const recutSegment = (segment: ActiveSegment, frame: MapRect, orientation: MapOrientation, coalesceKey: string | null) => {
+    const rects = segmentSlotRects(frame, orientation, segment.items.length, layout);
+    if (!rects.length) return;
+    commit((draft) => segment.items.forEach((item, position) => {
+      const slot = draft.rows[segment.rowIndex]?.slots[item];
+      if (slot) slot.rect = rects[position];
+    }), coalesceKey);
+    setActiveSegment({ ...segment, frame, orientation });
+  };
 
   /** Shift adds to or removes from the set; pressing a member of an existing
    * multi-selection drags the whole group, which is what makes a batch move
@@ -445,8 +495,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
       startSlotDraw(event, svg);
       return;
     }
+    // Pressing a booth while the row panel is open picks up the segment it
+    // belongs to; blank paper is where a new one is drawn.
     if (rowForm && !anchors) {
-      startRowFrameDraw(event, svg);
+      event.preventDefault();
+      event.stopPropagation();
+      if (target.kind === "slot") activateSegment(target.rowIndex, target.itemIndex);
+      else startRowFrameDraw(event, svg);
       return;
     }
     const next = event.shiftKey ? toggleSelection(selections, target)
@@ -483,9 +538,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     const svg = event.currentTarget.ownerSVGElement;
     const corner = event.currentTarget.dataset.resizeCorner as ResizeCorner | undefined;
     if (!svg) return;
-    // While a segment is being drawn the handles frame it rather than a
-    // selection, so a corner adjusts the frame instead of editing the layout.
-    if (rowFrame && corner) startRowFrameResize(event, svg, corner, rowFrame);
+    // With the row panel open the handles frame the segment being worked on
+    // rather than a selection, so a corner re-cuts it instead of stretching
+    // each booth on its own.
+    if (activeSegment && corner) startRowFrameResize(event, svg, corner, activeSegment.frame);
     else if (slotDrawForm) startSlotDraw(event, svg);
     else if (rowForm && !anchors) startRowFrameDraw(event, svg);
     else if (corner) startResize(event, svg, corner);
@@ -532,12 +588,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
       return;
     }
     if (active.mode === "resize-row-frame") {
+      if (!activeSegment) return;
       const resized = resizeRectFromCorner(active.origin, active.corner, point.x - active.startX, point.y - active.startY, layout);
-      // Snapping to the booths already placed is what lines a second segment up
-      // with the one beside it; Alt suspends it, as everywhere else.
-      const snapped = event.altKey ? null : snapRectToAdjacentRects(resized, placedSlotTargets(), { bounds: layout, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
-      setRowFrame(snapped?.rect ?? resized);
+      // Snapping to the booths already placed is what lines a segment up with
+      // the one beside it; Alt suspends it, as everywhere else.
+      const snapped = event.altKey ? null : snapRectToAdjacentRects(resized, snapTargetsOutside(activeSegment), { bounds: layout, mode: active.corner, threshold: SNAP_THRESHOLD_PX * layoutUnitsPerPixel });
       setSnapGuides(snapped?.guides ?? []);
+      recutSegment(activeSegment, snapped?.rect ?? resized, activeSegment.orientation, `drag:${event.pointerId}:segment:${activeSegment.rowIndex}:${activeSegment.items[0]}`);
       return;
     }
     const dx = point.x - active.startX;
@@ -592,21 +649,9 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     if (active.mode === "draw-row") {
       const rect = event.type === "pointercancel" ? null : rectFromDrag({ x: active.startX, y: active.startY }, pointIn(event.currentTarget, event), layout);
       const minimum = 3 * layoutUnitsPerPixel;
-      if (!rect || rect.width < minimum || rect.height < minimum) {
-        setRowFrame(null);
-        if (rect) setRowErrors(["請拖曳出排段外框；寬與高都必須大於 3 px。"]);
-      } else {
-        setRowFrame(rect);
-        // Every new frame proposes its own long axis. The numbering end follows
-        // only when that axis changed, so drawing the next segment of a row
-        // numbered from the bottom does not quietly turn it back around.
-        const orientation = rowOrientationFromRect(rect);
-        setRowForm((current) => current && {
-          ...current,
-          orientation,
-          numberingStart: current.orientation === orientation ? current.numberingStart : defaultNumberingStart(orientation),
-        });
-      }
+      setRowFrame(null);
+      if (rect && (rect.width < minimum || rect.height < minimum)) setRowErrors(["請拖曳出排段外框；寬與高都必須大於 3 px。"]);
+      else if (rect) placeDrawnSegment(rect);
     }
     // Without sealing, dragging the same element twice with one pointer would
     // reuse the key and collapse both gestures into a single undo step.
@@ -698,12 +743,12 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const commitRow = (row: BoothRow) => {
     const draft = cloneLayout(layout);
     const placement = appendRowSegment(draft, row);
-    if (!placement.ok) { setRowErrors(placement.errors); return false; }
+    if (!placement.ok) { setRowErrors(placement.errors); return null; }
     setHistory((current) => pushLayoutHistory(current, draft, null));
     onChange(draft);
     setRowErrors([]);
     setSelections(row.slots.map((slot, offset) => ({ kind: "slot", rowIndex: placement.rowIndex, itemIndex: placement.itemStart + offset })));
-    return true;
+    return { rowIndex: placement.rowIndex, itemStart: placement.itemStart };
   };
 
   /** The advanced paths finish with the panel: describing a row by coordinates
@@ -714,19 +759,48 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     setAnchors(null);
     setDraftRow(null);
     setRowFrame(null);
+    setActiveSegment(null);
   };
 
-  /** Cuts the drawn rectangle into booths and keeps going: the label, prefix,
-   * padding, orientation and direction stay, and the start number moves on by
-   * the count just placed, because the next segment of a row normally continues
-   * its numbering. Only the number and the count are left to correct. */
-  const createRowFromFrame = () => {
-    if (!rowForm || !rowFrame) return;
-    const result = generateRowSlotsFromRect(rowFrameDefinitionFrom(rowForm, rowFrame), layout);
+  /** Releasing the pointer places the segment. There is no confirm step: the
+   * drawing already said everything the booths need, and what would be reviewed
+   * is on the canvas either way. Anything wrong about it is one undo, or a
+   * corner handle, away.
+   *
+   * The panel then carries on: label, prefix, padding and direction stay, and
+   * both numbers move on by the count just placed, because the next segment of a
+   * row normally continues its numbering where this one stopped. */
+  const placeDrawnSegment = (frame: MapRect) => {
+    if (!rowForm) return;
+    const orientation = rowOrientationFromRect(frame);
+    // Every drawing proposes its own long axis. The numbering end follows only
+    // when that axis changed, so drawing the next segment of a row numbered from
+    // the bottom does not quietly turn it back around.
+    const numberingStart = rowForm.orientation === orientation ? rowForm.numberingStart : defaultNumberingStart(orientation);
+    const count = rowSlotCount(rowForm);
+    if (!Number.isInteger(count) || count < 1) { setRowErrors(["結束編號必須大於或等於起始編號。"]); return; }
+    const result = generateRowSlotsFromRect({ ...rowFrameDefinitionFrom(rowForm, frame), orientation, numberingStart }, layout);
     if (!result.ok) { setRowErrors(result.errors); return; }
-    if (!commitRow(result.row)) return;
-    setRowForm({ ...rowForm, startNumber: String(Number(rowForm.startNumber) + Number(rowForm.slotCount)) });
-    setRowFrame(null);
+    const placement = commitRow(result.row);
+    if (!placement) return;
+    setRowForm({
+      ...rowForm,
+      orientation,
+      numberingStart,
+      startNumber: String(Number(rowForm.startNumber) + count),
+      endNumber: String(Number(rowForm.endNumber) + count),
+    });
+    setActiveSegment({
+      rowIndex: placement.rowIndex,
+      // Codes run backwards along the frame when the row is numbered from the
+      // far end, so the positions are taken from the geometry, not the codes.
+      items: result.row.slots
+        .map((slot, offset) => ({ item: placement.itemStart + offset, along: orientation === "vertical" ? slot.rect.y : slot.rect.x }))
+        .sort((a, b) => a.along - b.along)
+        .map(({ item }) => item),
+      frame,
+      orientation,
+    });
   };
 
   const createRow = () => {
@@ -820,7 +894,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   // Handles frame the whole selection, so one corner resizes the group.
   // While the row panel is open the handles belong to the frame being drawn, so
   // there is only ever one set of corners on the canvas.
-  const handleBounds = rowForm ? rowFrame ?? undefined : selections.length > 1 ? boundingBox(selectionBoxes) : selectedRect;
+  const handleBounds = rowForm ? activeSegment?.frame : selections.length > 1 ? boundingBox(selectionBoxes) : selectedRect;
   const canUndo = canUndoLayoutHistory(history);
   const canRedo = canRedoLayoutHistory(history);
   const elementOptions: { key: string; label: string; selection: Selection }[] = [
@@ -902,14 +976,34 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     setSlotDrawForm(null);
     setSlotDraftRect(null);
     setRowFrame(null);
+    setActiveSegment(null);
     setSelections([]);
     setRowForm((current) => current ? null : blankRowForm(layout));
   };
 
   /** Switching axis invalidates the end the numbering starts from, so it falls
-   * back to that axis's first end rather than to a value the form cannot show. */
-  const changeRowOrientation = (form: RowFormState, orientation: MapOrientation) =>
+   * back to that axis's first end rather than to a value the form cannot show.
+   * A segment that is already placed turns with it: booths keep their codes and
+   * are cut from the same frame along the other axis. */
+  const changeRowOrientation = (form: RowFormState, orientation: MapOrientation) => {
     changeRowForm({ ...form, orientation, numberingStart: defaultNumberingStart(orientation) });
+    if (activeSegment) recutSegment(activeSegment, activeSegment.frame, orientation, null);
+  };
+
+  /** Turning the numbering around moves the codes, not the booths: the segment
+   * runs the other way while every rectangle stays where the plan shows it. */
+  const changeRowNumbering = (form: RowFormState, numberingStart: RowNumberingStart) => {
+    changeRowForm({ ...form, numberingStart });
+    if (!activeSegment) return;
+    const row = layout.rows[activeSegment.rowIndex];
+    if (!row) return;
+    const codes = activeSegment.items.map((item) => row.slots[item]?.code);
+    commit((draft) => activeSegment.items.forEach((item, position) => {
+      const slot = draft.rows[activeSegment.rowIndex]?.slots[item];
+      const code = codes[activeSegment.items.length - 1 - position];
+      if (slot && code) slot.code = code;
+    }));
+  };
 
   const toggleSlotDrawForm = () => {
     setRowErrors([]);
@@ -918,6 +1012,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     setDraftRow(null);
     setSlotDraftRect(null);
     setRowFrame(null);
+    setActiveSegment(null);
     setSlotDrawForm((current) => {
       if (current) return null;
       const rowLabel = selection?.kind === "slot"
@@ -952,7 +1047,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
 
   // Recomputed on every render from the frame and the form, so changing the
   // count or the direction redraws the division without a step of its own.
-  const framePreview = rowForm && rowFrame ? generateRowSlotsFromRect(rowFrameDefinitionFrom(rowForm, rowFrame), layout) : null;
+  const framePreview = rowForm && rowFrame ? generateRowSlotsFromRect({ ...rowFrameDefinitionFrom(rowForm, rowFrame), orientation: rowOrientationFromRect(rowFrame) }, layout) : null;
+  const rowCodeRange = rowForm && rowSlotCount(rowForm) >= 1
+    ? `${formatSlotCode(rowForm.codePrefix.trim() || rowForm.label.trim(), Number(rowForm.startNumber), Number(rowForm.numberPadding))}–${formatSlotCode(rowForm.codePrefix.trim() || rowForm.label.trim(), Number(rowForm.endNumber), Number(rowForm.numberPadding))}`
+    : "";
 
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
@@ -971,6 +1069,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
               fills the sheet would otherwise swallow every click on blank paper. */}
           <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
           {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${selectedKeys.has(`landmark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
+          {layout.rows.map((row) => {
+            const anchor = rowLabelAnchor(row);
+            return anchor && <text key={`label:${row.label}`} className={styles.rowLabel} {...anchor} aria-hidden="true">{row.label}</text>;
+          })}
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
           {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "entrance" ? styles.entrance : styles.exit} ${selectedKeys.has(`access:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path transform={mapAccessArrowTransform(point)} d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
@@ -1013,19 +1115,19 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
         </div>}
         {rowForm && <div className={styles.rowPanel}>
           <b>新增排／排段</b>
-          <p>在原圖上按住並拖曳，框住一個排段。</p>
+          <p>在原圖上按住並拖曳，框住一個排段，放開就建立。點一格攤位可改抓它整段，拖四角重新分割。</p>
           {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
           {rowField("排標籤", rowForm.label, (value) => changeRowForm({ ...rowForm, label: value }), "例：A、子、商")}
           {rowField("代碼前綴", rowForm.codePrefix, (value) => changeRowForm({ ...rowForm, codePrefix: value }), "留空則沿用排標籤")}
           <div className={styles.fields}>
             {rowField("起始編號", rowForm.startNumber, (value) => changeRowForm({ ...rowForm, startNumber: value }))}
-            {rowField("格數", rowForm.slotCount, (value) => changeRowForm({ ...rowForm, slotCount: value }))}
+            {rowField("結束編號", rowForm.endNumber, (value) => changeRowForm({ ...rowForm, endNumber: value }))}
             {rowField("補零位數", rowForm.numberPadding, (value) => changeRowForm({ ...rowForm, numberPadding: value }))}
           </div>
           <label className={styles.wide}><span>方向</span><select value={rowForm.orientation} onChange={(event) => changeRowOrientation(rowForm, event.target.value as MapOrientation)}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label>
-          <label className={styles.wide}><span>編號起點</span><select value={rowForm.numberingStart} onChange={(event) => changeRowForm({ ...rowForm, numberingStart: event.target.value as RowNumberingStart })}>{NUMBERING_STARTS[rowForm.orientation].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-          <p>{framePreview?.ok ? `預覽：${summariseCodes(framePreview.row.slots)}` : "尚未框選"}<br />{rowFormExisting ? `將加入既有 ${rowFormExisting.label} 排（目前 ${rowFormExisting.slots.length} 格）` : "將建立新排"}</p>
-          <div className={styles.rowFormActions}><button type="button" onClick={toggleRowForm}>結束新增</button><button type="button" className={styles.rowConfirm} disabled={!framePreview?.ok} onClick={createRowFromFrame}>{rowFormExisting ? "加入這個排段" : "建立這一排"}</button></div>
+          <label className={styles.wide}><span>編號起點</span><select value={rowForm.numberingStart} onChange={(event) => changeRowNumbering(rowForm, event.target.value as RowNumberingStart)}>{NUMBERING_STARTS[rowForm.orientation].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <p>{rowSlotCount(rowForm) >= 1 ? `下一段：${rowCodeRange}（${rowSlotCount(rowForm)} 格）` : "結束編號必須大於或等於起始編號。"}<br />{rowFormExisting ? `將加入既有 ${rowFormExisting.label} 排（目前 ${rowFormExisting.slots.length} 格）` : "將建立新排"}</p>
+          <div className={styles.rowFormActions}><button type="button" onClick={toggleRowForm}>結束新增</button></div>
           <details className={styles.advanced}>
           <summary>進階設定</summary>
           <p>用第一格與最後一格的中心座標建立，適合斜排或刻意留間距的排段。</p>
