@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
-import { clamp, confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
+import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
@@ -79,10 +79,6 @@ const NUMBERING_STARTS: Record<MapOrientation, { value: RowNumberingStart; label
   vertical: [{ value: "top", label: "上 → 下" }, { value: "bottom", label: "下 → 上" }],
   horizontal: [{ value: "left", label: "左 → 右" }, { value: "right", label: "右 → 左" }],
 };
-
-function defaultNumberingStart(orientation: MapOrientation): RowNumberingStart {
-  return NUMBERING_STARTS[orientation][0].value;
-}
 
 /** How many booths the segment holds, read off the two numbers the plan itself
  * prints. A plan says a column runs 01–26; asking for 26 booths starting at 1
@@ -791,11 +787,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
    * row normally continues its numbering where this one stopped. */
   const placeDrawnSegment = (frame: MapRect) => {
     if (!rowForm) return;
-    const orientation = rowOrientationFromRect(frame);
-    // Every drawing proposes its own long axis. The numbering end follows only
-    // when that axis changed, so drawing the next segment of a row numbered from
-    // the bottom does not quietly turn it back around.
-    const numberingStart = rowForm.orientation === orientation ? rowForm.numberingStart : defaultNumberingStart(orientation);
+    const { orientation, numberingStart } = frameNumbering(rowForm, frame);
     const count = rowSlotCount(rowForm);
     if (!Number.isInteger(count) || count < 1) { setRowErrors(["結束編號必須大於或等於起始編號。"]); return; }
     const result = generateRowSlotsFromRect({ ...rowFrameDefinitionFrom(rowForm, frame), orientation, numberingStart }, layout);
@@ -1066,7 +1058,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
 
   // Recomputed on every render from the frame and the form, so changing the
   // count or the direction redraws the division without a step of its own.
-  const framePreview = rowForm && rowFrame ? generateRowSlotsFromRect({ ...rowFrameDefinitionFrom(rowForm, rowFrame), orientation: rowOrientationFromRect(rowFrame) }, layout) : null;
+  const framePreview = rowForm && rowFrame ? generateRowSlotsFromRect({ ...rowFrameDefinitionFrom(rowForm, rowFrame), ...frameNumbering(rowForm, rowFrame) }, layout) : null;
   const rowCodeRange = rowForm && rowSlotCount(rowForm) >= 1
     ? `${formatSlotCode(rowForm.codePrefix.trim() || rowForm.label.trim(), Number(rowForm.startNumber), Number(rowForm.numberPadding))}–${formatSlotCode(rowForm.codePrefix.trim() || rowForm.label.trim(), Number(rowForm.endNumber), Number(rowForm.numberPadding))}`
     : "";
