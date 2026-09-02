@@ -716,6 +716,12 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     setSelected(null); setBackground(""); setEdited(false);
     setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000));
   };
+  /** The configuration plan a map is traced from is never saved with the map,
+   * so re-opening a saved map to carry on working means putting the plan back
+   * behind it. With a map already open that is all this does: it lays the image
+   * under the booths that are already there. Building a layout from the image —
+   * by recognition or as a blank sheet its size — belongs to the empty editor,
+   * where there is no work to lose. */
   const runFile = async (file: File) => {
     if (!assignment) throw new Error("請先選擇場館空間。");
     if (file.size > 4 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -723,15 +729,21 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     }
     const source = await imageDataUrl(file);
     const image = await loadOrganizerMapImage(source);
+    if (layout) {
+      setBackground(source);
+      return "已放上參考圖，地圖內容不變。";
+    }
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("瀏覽器無法建立圖片分析畫布。");
     context.drawImage(image, 0, 0);
-    const next = hasMapTemplateRecognizer(assignment.mapTemplate)
+    const recognizes = hasMapTemplateRecognizer(assignment.mapTemplate);
+    const next = recognizes
       ? recognizeMapTemplate(assignment.mapTemplate, context.getImageData(0, 0, canvas.width, canvas.height)).layout
       : createBlankEventMapLayout(assignment.mapTemplate, canvas.width, canvas.height);
     setSelected(null); setBackground(source); setLayout(next); setEdited(false);
+    return recognizes ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。";
   };
 
   const closeEditor = () => {
@@ -756,11 +768,14 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
       <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => { setVenueSpaceId(event.target.value); setLayout(null); }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
-      <label className={styles.fileButton}>上傳配置圖並編輯<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
+      <label className={styles.fileButton}>{layout ? "上傳參考圖" : "上傳配置圖並編輯"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
         const file = event.target.files?.[0];
+        // Cleared so picking the same plan again still counts as a change,
+        // which is what putting one map's plan behind the next one takes.
+        event.target.value = "";
         if (!file) return;
         setNotice({ kind: "busy", message: "正在讀取配置圖…" });
-        void runFile(file).then(() => setNotice({ kind: "ok", message: hasMapTemplateRecognizer(assignment?.mapTemplate ?? "") ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。" })).catch((error) => setNotice({ kind: "error", message: message(error) }));
+        void runFile(file).then((done) => setNotice({ kind: "ok", message: done })).catch((error) => setNotice({ kind: "error", message: message(error) }));
       }} /></label>
       <label>從同場館空間複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
