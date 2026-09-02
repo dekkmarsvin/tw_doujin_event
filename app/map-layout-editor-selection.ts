@@ -118,47 +118,63 @@ export function translateBoxesWithin(boxes: readonly MapRect[], dx: number, dy: 
   return boxes.map((item) => ({ ...item, x: item.x + shiftX, y: item.y + shiftY }));
 }
 
-/** Straightens a group in one move: every box is pushed onto the named edge of
- * the group's own bounding box, and the boxes are then spread out along the
- * other axis so the space between them is the same everywhere. The area they
- * are spread across is the one they already occupy — its top-left and
- * bottom-right corners — so the outermost boxes stay exactly where they are and
- * the group can never grow past a canvas edge it was already inside. The clamp
- * covers the boxes that arrived out of bounds.
+/** Do two boxes overlap on the axis the packing is not travelling along? Only
+ * a box in the way can stop another one, and touching edges are not in the way:
+ * two columns standing flush side by side must not block each other. */
+function blocksAcross(box: MapRect, other: MapRect, vertical: boolean) {
+  return vertical
+    ? box.x < other.x + other.width && other.x < box.x + box.width
+    : box.y < other.y + other.height && other.y < box.y + box.height;
+}
+
+/** Slides every box towards the named edge of the group's own bounding box
+ * until it either reaches that edge or lands against a box already settled
+ * there, like tipping the group up and letting it fall. Nothing is resized and
+ * nothing moves on the other axis, so a column stays in its column and a row in
+ * its row; what changes is that the gaps close and, above all, that two booths
+ * can never end up on top of each other.
  *
- * A row traced by hand off a plan comes out with uneven gaps; this is what
- * turns it into the evenly pitched row the plan actually describes. Left and
- * right spread the group downwards, top and bottom spread it across, which is
- * the axis a row runs along once its booths share an edge.
+ * This is what a plan traced by hand needs. Booths come off it with uneven gaps
+ * and, where the tracing drifted, overlapping their neighbours; letting them
+ * fall against each other closes both at once. Two columns selected together
+ * fall into a grid: each column packs against the group's edge on its own, and
+ * because they no longer overlap, packing sideways afterwards brings the second
+ * column flush against the first instead of on top of it.
  *
- * The spread order follows where the boxes already sit along that axis, not the
- * order they were selected in, so booths keep their sequence and their codes
- * keep matching the plan. Boxes that together are wider than the area they
- * occupy end up overlapping by an equal amount rather than spilling out. */
+ * Boxes settle in the order they already reach the edge, so booths keep their
+ * sequence and their codes keep matching the plan. A group that was overlapping
+ * takes more room once it is packed than the bounding box it came from, so the
+ * far end of the stack can pass the far edge of that box; only the canvas stops
+ * it. */
 export function alignBoxesToEdge(boxes: readonly MapRect[], edge: AlignEdge, bounds: Bounds): MapRect[] {
   if (!boxes.length) return [];
   const area = boundingBox(boxes);
-  // Left and right pin the horizontal edge, which leaves the vertical axis free
-  // to spread along; top and bottom are the same the other way round.
-  const spreadDown = edge === "left" || edge === "right";
-  const sizeAlongSpread = (box: MapRect) => spreadDown ? box.height : box.width;
-  const startOf = (box: MapRect) => spreadDown ? box.y : box.x;
-  const order = boxes.map((box, index) => index)
-    .sort((a, b) => startOf(boxes[a]) - startOf(boxes[b]) || a - b);
-  const span = spreadDown ? area.height : area.width;
-  const filled = boxes.reduce((total, box) => total + sizeAlongSpread(box), 0);
-  const gap = order.length > 1 ? (span - filled) / (order.length - 1) : 0;
+  const vertical = edge === "top" || edge === "bottom";
+  // Top and left travel towards the smaller coordinate, so a box settles at the
+  // far side of whatever stops it; bottom and right are the mirror image.
+  const forward = edge === "top" || edge === "left";
+  const startOf = (box: MapRect) => vertical ? box.y : box.x;
+  const sizeOf = (box: MapRect) => vertical ? box.height : box.width;
+  const leadOf = (box: MapRect) => forward ? startOf(box) : -(startOf(box) + sizeOf(box));
+  const order = boxes.map((box, index) => index).sort((a, b) => leadOf(boxes[a]) - leadOf(boxes[b]) || a - b);
+  const wall = forward
+    ? (vertical ? area.y : area.x)
+    : (vertical ? area.y + area.height : area.x + area.width);
 
   const placed: MapRect[] = [];
-  let cursor = spreadDown ? area.y : area.x;
+  const settled: MapRect[] = [];
   order.forEach((index) => {
     const item = boxes[index];
-    placed[index] = clampBoxWithin({
-      ...item,
-      x: spreadDown ? (edge === "left" ? area.x : area.x + area.width - item.width) : cursor,
-      y: spreadDown ? cursor : (edge === "top" ? area.y : area.y + area.height - item.height),
-    }, bounds);
-    cursor += sizeAlongSpread(item) + gap;
+    let face = wall;
+    settled.forEach((other) => {
+      if (!blocksAcross(item, other, vertical)) return;
+      const back = forward ? startOf(other) + sizeOf(other) : startOf(other);
+      face = forward ? Math.max(face, back) : Math.min(face, back);
+    });
+    const start = forward ? face : face - sizeOf(item);
+    const next = clampBoxWithin({ ...item, x: vertical ? item.x : start, y: vertical ? start : item.y }, bounds);
+    placed[index] = next;
+    settled.push(next);
   });
   return placed;
 }
@@ -192,6 +208,20 @@ export function resizeBoxesToCommonSize(boxes: readonly MapRect[], bounds: Bound
   return boxes.map((box) => box.width > 0 && box.height > 0
     ? clampBoxWithin({ x: box.x + (box.width - size.width) / 2, y: box.y + (box.height - size.height) / 2, ...size }, bounds)
     : { ...box });
+}
+
+/** Tidies a hand-traced block into a grid in one move: every booth is given the
+ * group's most common size, then the group is packed upwards and packed left.
+ *
+ * The order is what makes it a grid rather than a heap. Packing upwards first
+ * settles each column against the top on its own, and equal-sized booths in
+ * equal-length columns land on exactly the same rows; only then does packing
+ * left have rows to work with, so each column slides flush against the one
+ * before it instead of over it. Sizing first is what makes those rows line up
+ * at all — columns of different booth heights would settle on different rows. */
+export function autoArrangeBoxes(boxes: readonly MapRect[], bounds: Bounds): MapRect[] {
+  const sized = resizeBoxesToCommonSize(boxes, bounds);
+  return alignBoxesToEdge(alignBoxesToEdge(sized, "top", bounds), "left", bounds);
 }
 
 /** Maps every box from one bounding box into another, which is how a corner

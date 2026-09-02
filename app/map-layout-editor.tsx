@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
-import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
+import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
@@ -675,11 +675,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `align:${selectionSetKey(selections)}:${edge}`);
   };
 
-  const matchSelectionSize = () => {
+  const autoArrangeSelection = () => {
     const resolved = resolveSelectionBoxes(layout, selections);
     if (resolved.boxes.length < 2) return;
-    const boxes = resizeBoxesToCommonSize(resolved.boxes, layout);
-    commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `size:${selectionSetKey(selections)}`);
+    const boxes = autoArrangeBoxes(resolved.boxes, layout);
+    commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `arrange:${selectionSetKey(selections)}`);
   };
 
   /** One press copies: the selected booths become another row flush alongside
@@ -1194,11 +1194,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
         {selections.length > 1 && <>
           <div className={styles.selectionTitle}><small>已選取</small><b>{selections.length} 個元素</b></div>
           <div className={styles.batchTools}>
+            <button type="button" className={styles.batchWide} onClick={autoArrangeSelection}>自動對齊</button>
             <button type="button" onClick={() => alignSelection("left")}>靠左對齊</button>
             <button type="button" onClick={() => alignSelection("right")}>靠右對齊</button>
             <button type="button" onClick={() => alignSelection("top")}>靠上對齊</button>
             <button type="button" onClick={() => alignSelection("bottom")}>靠下對齊</button>
-            <button type="button" className={styles.batchWide} onClick={matchSelectionSize}>統一大小</button>
           </div>
           <button className={styles.remove} onClick={removeSelection}>移除選取的元素</button>
         </>}
