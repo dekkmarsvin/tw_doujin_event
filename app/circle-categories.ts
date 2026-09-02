@@ -1,7 +1,7 @@
-export const CIRCLE_CATEGORY_CATALOG_SCHEMA = "circle-category-catalog/1" as const;
-export const ALL_CIRCLE_CATEGORIES = "全部類別" as const;
+const CIRCLE_CATEGORY_CATALOG_SCHEMA = "circle-category-catalog/1" as const;
+const ALL_CIRCLE_CATEGORIES = "全部類別" as const;
 
-export type CircleCategoryDefinition = {
+type CircleCategoryDefinition = {
   id: string;
   label: string;
   description: string;

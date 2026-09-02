@@ -1,39 +1,39 @@
 # 地圖 authoring
 
-把配置圖辨識成向量 layout、人工微調、發布到本機 D1，再匯出成公開靜態快照。
+把配置圖辨識成向量 layout、人工微調，成為候選活動的地圖草稿，經審閱後匯出為公開靜態快照。
 
-**本篇描述的是本機 authoring 環境。它已降為離線／事故備援。**
+**地圖畫在[主辦單位工作區](../contracts/organizer-workspace.md)。** 候選活動的每一組「活動日 × 場館空間」各建立一份地圖草稿，從空白或描摹起點開始。這實現了 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 3 點。
 
-新活動的第一份地圖現在畫在[主辦單位工作區](../contracts/organizer-workspace.md)：候選活動的每一組「活動日 × 場館空間」各建立一份地圖草稿，從空白或描摹起點開始，沿用同一個 layout 編輯器與 template 辨識器。這實現了 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 3 點。
+本機曾經有一套獨立的 `/editor` authoring 環境，寫入本機 D1 再以 `map:snapshot` 匯出。它已依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除：實際共用的只有 `MapLayoutEditor` 一個 component，其餘是一整套為它獨存的 build 與持久化堆疊，而那條備援路徑從未被驗證過。控制面不可用時的復原路徑改為直接編輯 data repository 中的靜態快照。
 
 `/circle` 的貢獻面板仍只服務已公開的活動：它建立草稿的唯一入口是「從目前公開地圖建立私人草稿」（`app/circle-portal/map-contribution-panel.tsx`）。
 
-本機路徑保留給控制面不可用、或需要在沒有 D1 的情況下重建快照的場合。
-
-**讀者介面（`index.html`）不得出現檔案欄位、管理入口或寫入 route**；讀取失敗只說明公開資料錯誤，不提供管理修復入口。這條約束只約束讀者介面。`circle.html` 是自始分離的獨立 entry（`vite.pages.config.ts`），它在身分驗證後方提供檔案上傳與管理入口，那是 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 的既有機制，不是本條的例外。見 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 2 點。
+**讀者介面（`index.html`）不得出現檔案欄位、管理入口或寫入 route**；讀取失敗只說明公開資料錯誤，不提供管理修復入口。這條約束只約束讀者介面。`circle.html` 與 `organizer.html` 是自始分離的獨立 entry（`vite.pages.config.ts`），它們在身分驗證後方提供檔案上傳與管理入口，那是 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 的既有機制，不是本條的例外。見 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 2 點。
 
 > 2026-08-28 修訂。本段原文為「**這是受信任維護者的本機工作，不是產品功能。** 公開 Pages 介面不得出現檔案欄位、管理入口或寫入 route」。該無條件措辭自 #72／#73 落地起即與現況不符——`/circle` 早已有檔案上傳與管理入口——並且會擋住 ADR-0035 選項 B。依 ADR-0038 限縮為只約束讀者介面。
 
 地圖的資料不變量與前台契約見[活動地圖契約](../contracts/event-map.md)。
 
-**實作**：[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/editor/`](../../app/editor)、[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-admin-importer.tsx`](../../app/map-admin-importer.tsx)、[`db/event-map-repository.ts`](../../db/event-map-repository.ts)、[`app/event-map-route-handlers.ts`](../../app/event-map-route-handlers.ts)
-**測試**：`tests/map-import.test.mjs`、`tests/event-map-route.test.mjs`
+**實作**：[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/map-template-registry.ts`](../../app/map-template-registry.ts)、[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-layout-editor-geometry.ts`](../../app/map-layout-editor-geometry.ts)、[`app/map-layout-editor-selection.ts`](../../app/map-layout-editor-selection.ts)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/organizer/`](../../app/organizer)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)
+**測試**：`tests/map-import.test.mjs`、`tests/map-template-shape.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/event-authoring-scope.test.mjs`
 
 ## 流程
 
-### 1. 啟動 authoring 環境
+### 1. 開啟工作區
 
 ```bash
-npm run data:fetch -- ff47
-npm run data:stage -- ff47
-npm run dev
+npm run dev:portal
 ```
 
-authoring build 會讀取目前 staged event definition，據此選擇 recognizer 與畫面標籤。開啟 `/editor`，從該活動 data repo 或受信任的本機來源選擇原始配置圖。原圖不複製到程式 repo。
+以 Organizer 身分登入 `/organizer`，開啟候選活動的「地圖」區。地圖區需要攤位匯入已完成，因為候選地圖的 `allowedBoothCodes` 與 `requiredBoothCodes` 都由該 scope 實際匯入的攤位代碼推導（[`resolveCandidateAuthoringScope()`](../../app/event-authoring-scope.ts)）。
+
+每一組「活動日 × 場館空間」各一份地圖草稿；缺任何一份在驗證時是 error，不是 warning。
 
 ### 2. 辨識
 
-`recognizeMapTemplate(event.mapTemplate, imageData)` 依活動定義分派辨識 adapter，回傳 `MapRecognitionReport`。FF47 adapter 負責：
+從該活動 data repo 或受信任的本機來源選擇原始配置圖。原圖不複製到程式 repo。
+
+`recognizeMapTemplate(event.mapTemplate, imageData)` 依活動定義分派辨識 adapter，回傳 `MapRecognitionReport`。**辨識完全在瀏覽器內執行**（canvas `getImageData` 取像素），沒有伺服器端相依。FF47 adapter 負責：
 
 - 從格線辨識 A–V 縱向排與 W 橫向排。
 - 依 FF47 編號規則產生 slot：A 為 01–22；B–V 為 01–44；W 為 01–42。
@@ -41,7 +41,7 @@ authoring build 會讀取目前 staged event definition，據此選擇 recognize
 - 從紅色箭頭辨識出入口；上側為出口、下側為入口。
 - 回傳信心、警告與完整向量 layout。
 
-**企業攤與舞台不自動辨識**，必須在發布前手動新增。
+**企業攤與舞台不自動辨識**，必須在送審前手動新增。沒有辨識器的新版型從空白起點開始，改用下方的錨點推算與手動描繪。
 
 ### 3. 預覽對照
 
@@ -79,47 +79,29 @@ authoring build 會讀取目前 staged event definition，據此選擇 recognize
   - 重新辨識圖片、改用空白地圖或按「還原本次編輯」是整份替換 layout，不是編輯步驟，歷史會從新的 layout 重新開始。
 - 720px 以下貼底並改為單欄預覽，主要發布動作固定在工作面板底部。此規則不增加任何公開 Pages route。
 
-### 5. 發布到本機 D1
+### 5. 保存為候選 revision
 
-只有該活動 template 的完整性條件通過、**來源說明非空**，且**信心門檻通過**才可發布。FF47 為 A 至 W、988 格、28 根柱子與 5 個出入口；人工繪製的 layout 只套用通用 layout 驗證，信心固定為 `1`。按「發布活動地圖」後 route 驗證並 UPSERT，回傳 revision。
+地圖草稿以 `PUT /api/organizer/events/:candidateId/maps/:draftId` 保存，成為候選活動的一份 revision。每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則。
+
+**候選活動的地圖可以含沒有社團的攤位格。** 配置圖畫的是整個場地，包含沒賣掉的攤位，而那些格子沒有任何匯入列可以指認；因此候選活動的 `unknown_booth` 是 warning 而非 error（`allowsUnallocatedBooths`）。`missing_booth`、`overlap` 與幾何錯誤不受影響。
 
 人工繪製沒有 template 完整性規則可擋，**逐格與官方攤位清單的核對是人工責任**。
 
-### 6. 匯出公開快照
+### 6. 驗證、送審與核准
 
-```bash
-npm run map:snapshot -- ff47 ../tw_doujin_event-data/events/ff47/map.json
-```
+依[主辦單位工作區契約](../contracts/organizer-workspace.md)：`POST …/validate` → `POST …/preview` → `POST …/submit`（僅 Owner，需 fresh session），再由全域管理者以 `POST /api/admin/organizer/events/:candidateId/review` 核准。
 
-```bash
-npm test
-```
+送審會固定一份 `organizer-submission-snapshot/1`，包含每份地圖內容，並以其 SHA-256 作為 approval hash。
 
-`map:snapshot` 會建立 authoring build，再將指定活動的已發布 revision 寫到明確指定的 data repo 路徑。程式會拒絕寫回已退役的 `public/data/events/`。在 data repo review、提交並推送後，再依[社團與活動資料更新](./catalog-data-update.md)更新 pin。
+### 7. 發布
 
-### 7. Review 後發布
+核准建立一筆 `queued` 發布工作。**發布尚未啟用**，三處各自 fail closed，見該契約的[發布邊界](../contracts/organizer-workspace.md#發布邊界)。
 
-檢查快照的 diff、revision、來源檔名與地標，跑完[共同 gate](./local-development.md#共同-gate)，以 pull request 檢查 preview，合併到 `main` 讓 GitHub Actions 發布 production。
+在發布啟用前，公開快照仍由人工在 data repository 中 review、提交並推送，再依[社團與活動資料更新](./catalog-data-update.md)更新 pin。
 
-**靜態快照是公開資料的唯一真相。** 未經 review 的本機 D1 或圖片不會因 Pages 部署而公開。
-
-## 持久化 seam
-
-本機 authoring 的持久化由純 repository、純 route handlers 與環境 wrapper 構成。**這一段持久化不在 Pages deployment 內**，且依 ADR-0038 決策第 2 點維持如此——瀏覽器內的 authoring 不使用它，改走 `/circle` 的私人草稿與版本化候選匯出路徑。
-
-- `createEventMapRepository(database)` 只接收注入的 `D1Database`，負責資料表就緒、驗證、查詢與 revision UPSERT。
-- `createEventMapHandlers(repository)` 只依賴 `getEventMap` / `publishEventMap`，負責參數與 payload 驗證及 HTTP 回應。Cloudflare route wrapper 才讀取環境 binding。
-
-| Route | 行為 |
-|---|---|
-| `GET /api/events/:eventId/map` | 取得已發布 layout；不存在時 404 |
-| `PUT /api/events/:eventId/map` | 驗證完整 layout 後以 event ID UPSERT |
-
-- D1 `event_maps.event_id` 是唯一鍵；每次覆寫增加 revision，保存來源檔名、辨識信心與更新時間。
-- **公開前台不呼叫這兩個 route。**
-- 隔離 Miniflare D1 測試必須證明：一次 PUT 可由稍後 GET 讀回、第二次 PUT 會增加 revision、無效 event ID 與低信心內容不寫入。
+**靜態快照是公開資料的唯一真相。** 未經 review 的候選內容不會因 Pages 部署而公開。
 
 ## 現行限制與後續範圍
 
-- **`PUT` route 沒有身分驗證。** 它只在本機 authoring 環境可達，不部署到 Pages，也不得因地圖貢獻控制面存在而重新公開。**ADR-0038 對選項 B 定案後這句仍然有效**：B 把 authoring **介面**搬上 Pages，持久化改走 `/circle` 既有的管理者授權、私人草稿、審閱與版本化候選匯出機制，不部署這個 route。見[地圖貢獻控制面契約](../contracts/map-contributions.md)。
 - 對非一般攤位文字做 OCR。第一階段只保存可可靠辨識的相對矩形。
+- 發布工作尚未前進，見上方第 7 點。

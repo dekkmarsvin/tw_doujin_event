@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- FF47 media URLs are source-controlled remote assets, not build-time application images. */
-
 import { useState } from "react";
 import type { MouseEvent } from "react";
 import { placementStatusLabel } from "./circle-records";

@@ -10,7 +10,6 @@ import {
   type CircleCatalogPayload,
 } from "./circle-records";
 
-export const STATIC_BASE_CACHE_POLICY = "public, max-age=300, must-revalidate";
 export const DYNAMIC_OVERLAY_CACHE_POLICY = "public, max-age=60, must-revalidate";
 
 export type PublicationResource<T> = {
@@ -19,7 +18,7 @@ export type PublicationResource<T> = {
   etag: string | null;
 };
 
-export type CatalogPublicationAdapter = {
+type CatalogPublicationAdapter = {
   loadBase: (eventId: string) => Promise<PublicationResource<CircleCatalogPayload>>;
   loadOverlay: (eventId: string) => Promise<PublicationResource<CircleOverridesPayload>>;
 };
@@ -67,4 +66,3 @@ export function createCatalogPublication(adapter: CatalogPublicationAdapter) {
   };
 }
 
-export type CatalogPublication = ReturnType<typeof createCatalogPublication>;

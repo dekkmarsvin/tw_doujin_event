@@ -15,7 +15,7 @@ const TEMPLATE_METADATA = new Map([
   ["FF47", { rowLabel: "A–W 排", expectedRows: 23, slotLabel: "攤位格", expectedSlots: 988 }],
 ]);
 
-export type MapTemplateOption = { id: string; label: string; summary: string };
+type MapTemplateOption = { id: string; label: string; summary: string };
 
 /** The templates the organizer picks between. A stored value outside this list
  * still works — the generic validator accepts it — so callers offer it as an
@@ -46,7 +46,7 @@ export function getMapTemplateShape(template: string): MapTemplateShape | null {
 
 export type { MapTemplateShape } from "./ff47-map-template-validator";
 
-export type MapTemplateMetadata = {
+type MapTemplateMetadata = {
   rowLabel: string;
   expectedRows: number | null;
   slotLabel: string;

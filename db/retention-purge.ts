@@ -44,9 +44,9 @@ export const RETENTION_WINDOWS = {
   mapDecisionRaw: 30 * DAY_MS,
 } as const;
 
-export type RetentionWindows = typeof RETENTION_WINDOWS;
+type RetentionWindows = typeof RETENTION_WINDOWS;
 
-export type PurgeSummary = {
+type PurgeSummary = {
   at: number;
   deleted: {
     login_tokens: number; sessions: number; preview_mail_sink: number; circle_overrides: number;
@@ -61,7 +61,7 @@ export type PurgeSummary = {
 /** Statements per `batch()` when recording a purge. */
 const AUDIT_BATCH_SIZE = 100;
 export const MAP_RETENTION_BATCH_SIZE = 5;
-export const MAP_RETENTION_RAW_OBJECT_BATCH_SIZE = 450;
+const MAP_RETENTION_RAW_OBJECT_BATCH_SIZE = 450;
 const MAP_RETENTION_D1_BIND_BATCH_SIZE = 90;
 
 const PURGE_TABLES = [

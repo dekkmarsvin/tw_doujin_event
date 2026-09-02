@@ -79,7 +79,7 @@ export const OVERRIDE_LIMITS = {
  * These are the values written onto the row, not a rule applied at read time:
  * every row carries its own deadline so it can be queried, not derived.
  */
-export const OVERRIDE_RETENTION_CHOICES = ["keep", "purge"] as const;
+const OVERRIDE_RETENTION_CHOICES = ["keep", "purge"] as const;
 
 export type CircleRetentionChoice = (typeof OVERRIDE_RETENTION_CHOICES)[number];
 
@@ -111,7 +111,7 @@ const TEXT_FIELDS = ["pen", "saleInfo"] as const;
 export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, "circleCategory", ...LIST_FIELDS, "links", "thumbnail"] as const satisfies readonly (keyof CircleOverrideFields)[];
 
 export type CircleOverrideFieldKey = (typeof CIRCLE_OVERRIDE_FIELD_KEYS)[number];
-export type CircleOverrideFieldMode = "inherit" | "replace" | "clear";
+type CircleOverrideFieldMode = "inherit" | "replace" | "clear";
 
 export function circleOverrideFieldMode(fields: CircleOverrideFields, key: CircleOverrideFieldKey): CircleOverrideFieldMode {
   if (!Object.prototype.hasOwnProperty.call(fields, key)) return "inherit";
@@ -262,10 +262,6 @@ export function parseCircleOverridesPayload(value: unknown): CircleOverridesPayl
     // string guard and can never be projected as the active event.
     overrides: payload.overrides.filter((override) => isCircleOverride(override, event?.circleCategories ?? null)),
   };
-}
-
-export function isCircleOverridesPayload(value: unknown): value is CircleOverridesPayload {
-  return parseCircleOverridesPayload(value) !== null;
 }
 
 export function indexCircleOverrides(payload?: CircleOverridesPayload) {

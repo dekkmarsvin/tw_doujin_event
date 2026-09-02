@@ -1,12 +1,12 @@
-export type MapPoint = { x: number; y: number };
-export type MapSize = { width: number; height: number };
+type MapPoint = { x: number; y: number };
+type MapSize = { width: number; height: number };
 export type MapView = { zoom: number; offset: MapPoint };
 export type MapPinchOrigin = { distance: number; zoom: number; mapX: number; mapY: number; center: MapPoint; inset?: MapPoint; boundaryCenter?: MapPoint };
-export type MapPinchView = MapView & { boundaryCenter?: MapPoint };
-export type MapWheelMode = "pan" | "zoom";
+type MapPinchView = MapView & { boundaryCenter?: MapPoint };
+type MapWheelMode = "pan" | "zoom";
 
-export const MAP_MAX_ZOOM = 6;
-export const MAP_MEDIA_ZOOM_THRESHOLD = 1.45;
+const MAP_MAX_ZOOM = 6;
+const MAP_MEDIA_ZOOM_THRESHOLD = 1.45;
 
 export function clampMapZoom(value: number, minimum = .35, maximum = MAP_MAX_ZOOM) {
   return Math.max(Math.min(minimum, maximum), Math.min(maximum, value));

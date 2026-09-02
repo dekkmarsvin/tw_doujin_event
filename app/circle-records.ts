@@ -3,9 +3,9 @@ import { indexCircleOverrides } from "./circle-overrides";
 import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
 import type { Booth, Tone } from "./booth";
 
-export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/3" as const;
+const CIRCLE_CATALOG_SCHEMA = "circle-catalog/3" as const;
 
-export type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
+type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
 export type SourceContentType = "official" | "circle" | "catalog" | "social" | "media";
 
 export type SourceLink = {
@@ -35,7 +35,7 @@ export type CircleExternalLink = {
 };
 
 /** Organizer-confirmed identity included in an event's thin base catalog. */
-export type CatalogCircle = {
+type CatalogCircle = {
   id: string;
   name: string;
 };
@@ -45,14 +45,14 @@ export type CatalogCircle = {
  * the catalog so a favourite or a shared link still resolves (#139); the reader
  * surfaces below have to say so rather than draw it as a normal destination.
  */
-export type PlacementStatus = "active" | "cancelled" | "moved";
+type PlacementStatus = "active" | "cancelled" | "moved";
 
 /** Wording readers see. Empty for `active`: a normal booth needs no note. */
 export function placementStatusLabel(status: PlacementStatus) {
   return status === "cancelled" ? "已取消參展" : status === "moved" ? "已移動攤位" : "";
 }
 
-export type CatalogPlacement = {
+type CatalogPlacement = {
   id: string;
   circleId: string;
   day: string | number;
@@ -72,7 +72,7 @@ export type CircleCatalogPayload = {
 };
 
 /** A circle's reusable identity and catalog metadata, independent of a booth. */
-export type CircleRecord = {
+type CircleRecord = {
   id: string;
   sourceRow?: number;
   name: string;
@@ -95,7 +95,7 @@ export type CircleRecord = {
 };
 
 /** An event-specific placement. A circle may have more than one placement. */
-export type PlacementRecord = {
+type PlacementRecord = {
   id: string;
   eventId: string;
   circleId: string;
@@ -114,7 +114,7 @@ export type CircleViewRecord = Booth & {
   placement: PlacementRecord;
 };
 
-export type CircleCatalog = {
+type CircleCatalog = {
   generatedAt: string;
   circles: CircleRecord[];
   circlesById: Map<string, CircleRecord>;
@@ -179,7 +179,7 @@ function circleFromBase(base: CatalogCircle, event: EventDefinition, generatedAt
  * the published catalog builder and the portal's client-side live preview.
  * Missing keys inherit; empty values and arrays remain deliberate tombstones.
  */
-export function projectCircleDraft(base: CircleRecord, fields: CircleOverride["fields"], updatedAt: string): CircleRecord {
+function projectCircleDraft(base: CircleRecord, fields: CircleOverride["fields"], updatedAt: string): CircleRecord {
   const creatorTypes = fields.creatorTypes ?? base.creatorTypes;
   const workTypes = fields.workTypes ?? base.workTypes;
   const referencedWorks = fields.referencedWorks ?? base.referencedWorks;
@@ -344,7 +344,7 @@ export function isCircleCatalogPayload(value: unknown): value is CircleCatalogPa
     && placements.every((placement) => circles.some((circle) => (circle as CatalogCircle).id === (placement as CatalogPlacement).circleId));
 }
 
-export const EMPTY_CIRCLE_CATALOG: CircleCatalog = {
+const EMPTY_CIRCLE_CATALOG: CircleCatalog = {
   generatedAt: "",
   circles: [],
   circlesById: new Map(),
@@ -357,7 +357,7 @@ export const EMPTY_CIRCLE_CATALOG: CircleCatalog = {
 
 export type CircleCatalogStatus = "loading" | "ready" | "error";
 
-export type CatalogState = {
+type CatalogState = {
   eventId: string;
   catalog: CircleCatalog;
   status: CircleCatalogStatus;

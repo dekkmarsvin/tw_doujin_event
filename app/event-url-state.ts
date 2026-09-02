@@ -8,7 +8,7 @@ export type PendingCircleSelection<TDay extends string | number> = {
   boothCode: string | null;
 };
 
-export type EventUrlState<TDay extends string | number, TArea extends string> = {
+type EventUrlState<TDay extends string | number, TArea extends string> = {
   eventId: string;
   day: TDay;
   area: TArea;
@@ -171,7 +171,7 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   return url;
 }
 
-export type UrlHistoryIntent = "replace" | "push";
+type UrlHistoryIntent = "replace" | "push";
 
 export function shouldWriteEventUrl(input: { urlReady: boolean; catalogStatus: "loading" | "ready" | "error"; restoringFromPopstate: boolean }) {
   return input.urlReady && input.catalogStatus !== "loading" && !input.restoringFromPopstate;

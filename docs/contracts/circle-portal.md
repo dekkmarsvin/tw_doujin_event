@@ -18,8 +18,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 入口分離
 
-- **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/rendered-html.test.mjs` 以內容比對把關。
-- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/rendered-html.test.mjs` 把關。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
+- **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。
+- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/public-artifact.test.mjs` 把關。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
 - [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle，也不出現在公開導覽。
 - 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。

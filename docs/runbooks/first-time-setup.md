@@ -29,7 +29,7 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 identity、社團控制面與地圖貢獻共 16 張 runtime table，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。地圖貢獻新增 `map_contributor_grants`、`map_drafts`、`map_draft_revisions`、`map_draft_reviews`、`map_draft_comments`、`map_draft_files`、`map_draft_exports`；preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
 
-identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。`drizzle/` 下唯一的 migration 只涵蓋 `event_maps`，而那張表同樣由 `db/event-map-repository.ts` 的 `ensureTable()` 於執行期建立。**本專案沒有任何一條路徑會執行 migration**；`drizzle.config.ts` 與 `db/schema.ts` 只服務本機地圖 authoring，不是 identity schema 的第二份 representation，也不參與部署。
+identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。**本專案沒有任何一條路徑會執行 migration**，也沒有任何 ORM 或 migration 檔案——僅存的一份（只涵蓋 `event_maps`）已隨本機 authoring 堆疊依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除。
 
 #### preview 必須用另一個資料庫
 

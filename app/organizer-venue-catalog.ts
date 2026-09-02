@@ -20,7 +20,7 @@ export type OrganizerVenueCatalog = {
   venues: OrganizerVenueCatalogVenue[];
 };
 
-export type OrganizerVenueCatalogSeed = Omit<OrganizerVenueCatalogVenue, "spaces"> & {
+type OrganizerVenueCatalogSeed = Omit<OrganizerVenueCatalogVenue, "spaces"> & {
   spaces: Array<Omit<OrganizerVenueCatalogSpace, "venueId">>;
 };
 

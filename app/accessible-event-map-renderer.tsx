@@ -18,7 +18,7 @@ export type MapSlotView = {
   thumbnailUrl?: string;
 };
 
-export type AccessibleEventMapRendererProps = {
+type AccessibleEventMapRendererProps = {
   eventName: string;
   layout: EventMapLayout;
   slots: Record<string, MapSlotView>;

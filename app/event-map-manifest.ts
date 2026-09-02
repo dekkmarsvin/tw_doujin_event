@@ -1,12 +1,12 @@
-export const EVENT_MAP_MANIFEST_SCHEMA = "event-map-manifest/1" as const;
+const EVENT_MAP_MANIFEST_SCHEMA = "event-map-manifest/1" as const;
 
-export type EventMapManifestEntry = {
+type EventMapManifestEntry = {
   periodKey: string;
   venueSpaceId: string;
   path: string;
 };
 
-export type EventMapManifest = {
+type EventMapManifest = {
   schema: typeof EVENT_MAP_MANIFEST_SCHEMA;
   eventId: string;
   maps: EventMapManifestEntry[];

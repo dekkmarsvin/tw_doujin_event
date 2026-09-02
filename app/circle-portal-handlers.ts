@@ -33,8 +33,8 @@ import {
 
 /**
  * Circle portal routes as plain Request → Response, with the repository, mailer
- * and catalog lookup injected. Same shape as `event-map-route-handlers.ts`, so
- * the whole surface is testable against Miniflare without a Pages runtime.
+ * and catalog lookup injected, so the whole surface is testable against
+ * Miniflare without a Pages runtime.
  */
 
 export const SESSION_COOKIE = "__Host-ff47_session";
@@ -65,7 +65,7 @@ export type CircleLookup = {
   links: { provider: string; url: string }[];
 };
 
-export type PortalConfig = {
+type PortalConfig = {
   eventId: string;
   origin: string;
   sessionSecret: string;
@@ -89,7 +89,7 @@ export type PortalConfig = {
   organizerPublicationMode?: "disabled" | "fake" | "github";
 };
 
-export type PortalDependencies = {
+type PortalDependencies = {
   repository: IdentityRepository;
   sendMail: (message: { to: string; subject: string; text: string }) => Promise<void>;
   lookupCircle: (circleId: string) => Promise<CircleLookup | null>;
@@ -202,11 +202,6 @@ export function createCirclePortalHandlers({
     if (!await hmacVerify(config.sessionSecret, sessionId, signature)) return null;
     const session = await repository.getSession(sessionId, config.now(), allowDeleting);
     return session ? { ...session, sessionId } : null;
-  }
-
-  async function requireSession(request: Request) {
-    const session = await currentSession(request);
-    return session ?? null;
   }
 
   /**
@@ -333,7 +328,7 @@ export function createCirclePortalHandlers({
   }
 
   async function session(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     return json({
       email: current.email,
@@ -407,7 +402,7 @@ export function createCirclePortalHandlers({
   }
 
   async function listClaims(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     const claims = await repository.listClaimsForAccount(current.accountId, config.eventId);
     return json({
@@ -434,7 +429,7 @@ export function createCirclePortalHandlers({
    * while circles still claim themselves — and saves each of them 1.8 MB.
    */
   async function searchCatalog(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const query = (new URL(request.url).searchParams.get("q") ?? "").trim();
@@ -453,7 +448,7 @@ export function createCirclePortalHandlers({
   }
 
   async function createClaim(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const body = await readJson(request);
@@ -554,7 +549,7 @@ export function createCirclePortalHandlers({
   }
 
   async function withdrawClaim(request: Request, claimId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const claim = await repository.getClaim(claimId);
@@ -576,7 +571,7 @@ export function createCirclePortalHandlers({
   }
 
   async function runChallenge(request: Request, claimId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
     const claim = await repository.getClaim(claimId);
@@ -618,7 +613,7 @@ export function createCirclePortalHandlers({
   }
 
   async function putOverride(request: Request, circleId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
@@ -698,7 +693,7 @@ export function createCirclePortalHandlers({
   }
 
   async function uploadThumbnail(request: Request, circleId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
@@ -752,7 +747,7 @@ export function createCirclePortalHandlers({
    * after a transfer.
    */
   async function deleteMyOverride(request: Request, circleId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
@@ -794,7 +789,7 @@ export function createCirclePortalHandlers({
    * portal still never downloads the catalog.
    */
   async function previewOverride(request: Request, circleId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
@@ -814,7 +809,7 @@ export function createCirclePortalHandlers({
   }
 
   async function getMyOverride(request: Request, circleId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
@@ -841,7 +836,7 @@ export function createCirclePortalHandlers({
    * wrote here is withdrawn.
    */
   async function setPostEventVisibility(request: Request, circleId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
       return json({ error: "你尚未通過這個社團的認領。" }, 403);
@@ -863,7 +858,7 @@ export function createCirclePortalHandlers({
   }
 
   async function requireFreshAdmin(request: Request): Promise<AdminGate> {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return { ok: false, response: json({ error: "尚未登入。" }, 401) };
     if (!await isAdmin(current.email)) return { ok: false, response: json({ error: "沒有權限。" }, 403) };
     if (config.now() - current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
@@ -927,14 +922,14 @@ export function createCirclePortalHandlers({
   }
 
   async function listMyMapDrafts(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.hasActiveMapContributor(current.accountId)) return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
     return json({ drafts: await repository.listMapDraftsForOwner(current.accountId, config.eventId) });
   }
 
   async function getMapDraft(request: Request, draftId: string, admin = false) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (admin && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
     const draft = await repository.getMapDraft(draftId, config.eventId);
@@ -953,7 +948,7 @@ export function createCirclePortalHandlers({
   }
 
   async function createMapDraft(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!await repository.hasActiveMapContributor(current.accountId)) {
       return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
@@ -1037,7 +1032,7 @@ export function createCirclePortalHandlers({
   }
 
   async function updateMapDraft(request: Request, draftId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     const body = await readJson(request);
     const expectedRevision = body?.expectedRevision;
@@ -1060,7 +1055,7 @@ export function createCirclePortalHandlers({
   }
 
   async function submitMapDraft(request: Request, draftId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     const body = await readJson(request);
     const expectedRevision = body?.expectedRevision;
@@ -1107,7 +1102,7 @@ export function createCirclePortalHandlers({
   }
 
   async function uploadMapDraftFile(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!mapContributionStore) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
     let form: FormData;
@@ -1155,7 +1150,7 @@ export function createCirclePortalHandlers({
   }
 
   async function readMapDraftFile(request: Request, fileId: string, preview = false) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     if (!mapContributionStore) return json({ error: "暫時無法使用地圖草稿檔案，請稍後再試。" }, 503);
     const metadata = await repository.getMapDraftFile(fileId, config.eventId);
@@ -1219,7 +1214,7 @@ export function createCirclePortalHandlers({
   }
 
   async function postMapDraftComment(request: Request, draftId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     const admin = await isAdmin(current.email);
     const draft = await repository.getMapDraft(draftId, config.eventId);
@@ -1623,7 +1618,7 @@ export function createCirclePortalHandlers({
   }
 
   async function organizerAccess(request: Request, candidateId: string) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return { ok: false as const, response: json({ error: "尚未登入。" }, 401) };
     const admin = await isAdmin(current.email);
     const grantRole = await repository.organizerRole(candidateId, current.accountId);
@@ -1754,7 +1749,7 @@ export function createCirclePortalHandlers({
   }
 
   async function listOrganizerCandidates(request: Request) {
-    const current = await requireSession(request);
+    const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
     const events = await repository.listOrganizerCandidatesForAccount(current.accountId, await isAdmin(current.email));
     return json({ events: events.map((event) => ({

@@ -10,9 +10,9 @@ export type OrganizerGuidedTask = typeof ORGANIZER_GUIDED_TASKS[number];
 
 export const ORGANIZER_WORKSPACE_SECTIONS = ["event", "venue", "import", "map", "validate", "review"] as const;
 export type OrganizerWorkspaceSection = typeof ORGANIZER_WORKSPACE_SECTIONS[number];
-export type OrganizerWorkspaceSectionState = "complete" | "available" | "needs_attention" | "blocked";
+type OrganizerWorkspaceSectionState = "complete" | "available" | "needs_attention" | "blocked";
 
-export type OrganizerWorkspaceMapScope = { periodKey: string; venueSpaceId: string };
+type OrganizerWorkspaceMapScope = { periodKey: string; venueSpaceId: string };
 
 export type OrganizerWorkspaceReadiness = {
   completed: number;

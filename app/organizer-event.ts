@@ -18,8 +18,8 @@ export type OrganizerValidationIssue = {
   message: string;
 };
 
-export type OrganizerEventDay = { id: string; label: string; date: string };
-export type OrganizerVenueAssignment = {
+type OrganizerEventDay = { id: string; label: string; date: string };
+type OrganizerVenueAssignment = {
   venueId: string;
   venueSpaceId: string;
   areaIds: string[];

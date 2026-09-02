@@ -178,7 +178,7 @@ function parseTransitions(value, eventId, officialIndex) {
   });
 }
 
-export function parseCircleIdentityGrouping(value, eventId, official) {
+function parseCircleIdentityGrouping(value, eventId, official) {
   if (!EVENT_ID.test(eventId ?? "") || !isRecord(value) || !GROUPING_SCHEMAS.has(value.schema)
     || value.eventId !== eventId || !Array.isArray(value.groups) || value.groups.length === 0) {
     throw new Error("Circle identity grouping has an unsupported schema or event identity.");

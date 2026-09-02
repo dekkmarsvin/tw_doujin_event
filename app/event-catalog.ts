@@ -10,11 +10,11 @@ export const EVENT_DEFINITION_SCHEMA = "event-definition/3" as const;
 
 export type EventDayDefinition<TDay extends string | number = string | number> = { id: TDay; label: string; dateLabel: string };
 export type EventAreaDefinition<TArea extends string = string> = { id: TArea; label: string; shortLabel: string };
-export type OfficialDataDefinition = { adapter: string; eventUrl: string; boothListUrls: Readonly<Record<string, string>> };
+type OfficialDataDefinition = { adapter: string; eventUrl: string; boothListUrls: Readonly<Record<string, string>> };
 export type OrganizerRole = "lead" | "co-organizer" | "partner";
-export type OrganizerAssignment = { organizerId: string; role: OrganizerRole; name: string; officialUrl: string };
-export type CategoryCatalogReference = { organizerId: string; id: string; revision: string };
-export type VenueAssignment<TArea extends string = string> = {
+type OrganizerAssignment = { organizerId: string; role: OrganizerRole; name: string; officialUrl: string };
+type CategoryCatalogReference = { organizerId: string; id: string; revision: string };
+type VenueAssignment<TArea extends string = string> = {
   venueId: string;
   venueName: string;
   venueOfficialUrl: string;
@@ -261,7 +261,7 @@ export const PUBLISHED_EVENTS: readonly EventDefinition[] = injectedEvents
 
 const PUBLISHED_IDS = new Set(PUBLISHED_EVENTS.map((event) => event.id));
 // Fixtures stay resolvable so tests and the dev server can name them, but they
-// are never published: `isPublishedEvent` is what any public surface asks.
+// are never published: `getPublishedEvent` is what any public surface asks.
 const fixtureDefinitions = [
   parseEventDefinition(sampleDefinition, sampleReferences),
   parseEventDefinition(sampleTwoDefinition, sampleTwoReferences),
@@ -275,10 +275,6 @@ export const EVENT_REGISTRY: ReadonlyMap<string, EventDefinition> = new Map(EVEN
 
 export function getEventDefinition(eventId: string) {
   return EVENT_REGISTRY.get(eventId) ?? null;
-}
-
-export function isPublishedEvent(eventId: string) {
-  return PUBLISHED_IDS.has(eventId);
 }
 
 /** Resolves only to something a reader may reach; unpublished ids give null. */

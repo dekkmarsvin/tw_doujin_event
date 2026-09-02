@@ -12,7 +12,7 @@ import { validateLayout } from "./ff47-map-template-validator";
 
 export type PixelSource = { data: Uint8ClampedArray; width: number; height: number };
 
-export const LANDMARK_RECOGNITION_WARNING = "企業攤與舞台目前不會自動辨識；若配置圖含有這些區域，請在發布前手動新增。";
+const LANDMARK_RECOGNITION_WARNING = "企業攤與舞台目前不會自動辨識；若配置圖含有這些區域，請在發布前手動新增。";
 
 type Line = { start: number; end: number; center: number; score: number };
 type Triple = { left: Line; middle: Line; right: Line };

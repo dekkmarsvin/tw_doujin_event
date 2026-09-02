@@ -1,7 +1,7 @@
 import { isHttpsUrl, type CircleOverrideThumbnail } from "./circle-overrides";
 
 export const HOSTED_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
-export const R2_DELETE_BATCH_SIZE = 1000;
+const R2_DELETE_BATCH_SIZE = 1000;
 
 const FORMATS = [
   { mime: "image/jpeg", extension: "jpg", matches: (bytes: Uint8Array) => bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff },
@@ -28,7 +28,7 @@ export async function deleteObjectKeys(
   }
 }
 
-export function detectHostedThumbnailFormat(bytes: Uint8Array) {
+function detectHostedThumbnailFormat(bytes: Uint8Array) {
   return FORMATS.find((format) => format.matches(bytes)) ?? null;
 }
 

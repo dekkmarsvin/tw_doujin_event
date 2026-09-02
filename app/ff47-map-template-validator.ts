@@ -1,6 +1,6 @@
 import { validateEventMapLayout, type EventMapLayout, type LayoutValidation, type MapOrientation } from "./event-map";
 
-export type MapTemplateRowShape = { label: string; orientation: MapOrientation; slots: number };
+type MapTemplateRowShape = { label: string; orientation: MapOrientation; slots: number };
 export type MapTemplateShape = {
   rows: readonly MapTemplateRowShape[];
   pillars: number;

@@ -29,9 +29,9 @@
 
 Pages project 的 production 與 preview 都必須使用 **Fail open**（Dashboard → Workers & Pages → `tw-catalog` → Settings → Runtime → Fail open / closed）。Cloudflare 沒有提供降低每日額度或模擬 Error 1027 的安全測試介面，因此不刻意耗盡正式帳號額度；CI 每次部署後會透過 Pages project API 校正並驗證兩個環境的 `fail_open: true`。這項決策見 [ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)。
 
-`app/editor/`、`app/api/`、`worker/` 與 `drizzle/` 保留在 source tree 供本機地圖 authoring 使用；`vite.pages.config.ts` 不會把它們納入公開 bundle。
+公開 build 有三個 entry：`index.html`（閱讀端，可離線）、`circle.html`（社團控制面，`noindex`）與 `organizer.html`（主辦單位工作區，`noindex`）。控制面的程式碼不得出現在閱讀端 bundle，`tests/service-worker.test.mjs` 會確認 precache 不含控制面 chunk。
 
-公開 build 有兩個 entry：`index.html`（閱讀端，可離線）與 `circle.html`（社團控制面，`noindex`）。社團入口的程式碼不得出現在閱讀端 bundle，`tests/rendered-html.test.mjs` 會以內容比對把關。
+本機 authoring 的第二套 build 已依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除；`vite.pages.config.ts` 是唯一的 build 設定。
 
 ## Secrets
 
@@ -141,7 +141,7 @@ Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 prev
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
 - Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
-- Pages 要求使用 repository root 的標準 `wrangler.jsonc`；本機 vinext authoring 以 `vite.config.ts` 明確覆寫自己的 Worker 與 D1 binding。
+- Pages 要求使用 repository root 的標準 `wrangler.jsonc`，它是本 repo 唯一的 Wrangler 設定。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；preview 的 Mailgun 用 sandbox 那一組，永遠不是 production 的。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
 - `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。

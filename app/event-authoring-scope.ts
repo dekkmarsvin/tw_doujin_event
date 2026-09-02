@@ -4,7 +4,7 @@ import { eventMapArtifactPath } from "./event-map-manifest";
 
 type ImportedPlacement = { dayId: string; venueSpaceId: string; boothCode: string };
 
-export type CandidateAuthoringScope = {
+type CandidateAuthoringScope = {
   kind: "candidate";
   candidateId: string;
   eventId: string | null;
@@ -20,13 +20,12 @@ export type CandidateAuthoringScope = {
   targetPath: null;
 };
 
-export type PublishedAuthoringScope = Omit<CandidateAuthoringScope, "kind" | "candidateId" | "targetPath"> & {
+type PublishedAuthoringScope = Omit<CandidateAuthoringScope, "kind" | "candidateId" | "targetPath"> & {
   kind: "published";
   eventId: string;
   targetPath: string;
 };
 
-export type EventAuthoringScope = CandidateAuthoringScope | PublishedAuthoringScope;
 
 /** The resolver is the single seam between D1 candidates and static published
  * events. Candidate maps cannot accidentally acquire a public target path. */
