@@ -10,7 +10,7 @@ const { recognizeFF47Map } = await environment.runner.import("/app/map-recogniti
 const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayout } = await environment.runner.import("/app/map-template-registry.ts");
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
-const { confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
@@ -559,6 +559,31 @@ test("numbering starts from whichever end of a segment the plan numbers from", (
   // A direction the axis cannot express is refused rather than reinterpreted.
   assert.deepEqual(drawnRow("A", frame, 4, { numberingStart: "left" }).errors, ["直排的編號起點必須是上或下。"]);
   assert.deepEqual(drawnRow("W", wide, 3, { numberingStart: "top" }).errors, ["橫排的編號起點必須是左或右。"]);
+});
+
+test("a drawing across the other axis brings its numbering end with it", () => {
+  // The panel holds one axis at a time, and the next drawing need not agree with
+  // it. Reading the pair together is what lets the preview drawn under the
+  // pointer be the segment that is placed when it is released: asking for a
+  // vertical row's numbering end on a wide frame describes nothing, so the
+  // division would not be drawn at all.
+  const wide = { x: 10, y: 10, width: 600, height: 40 };
+  const tall = { x: 10, y: 10, width: 40, height: 600 };
+  assert.deepEqual(frameNumbering({ orientation: "vertical", numberingStart: "top" }, wide), { orientation: "horizontal", numberingStart: "left" });
+  assert.deepEqual(frameNumbering({ orientation: "horizontal", numberingStart: "right" }, tall), { orientation: "vertical", numberingStart: "top" });
+  // An end the drawing's own axis can express is kept, so segment after segment
+  // of one row stays numbered the way the plan numbers it.
+  assert.deepEqual(frameNumbering({ orientation: "vertical", numberingStart: "bottom" }, tall), { orientation: "vertical", numberingStart: "bottom" });
+  assert.deepEqual(frameNumbering({ orientation: "horizontal", numberingStart: "right" }, wide), { orientation: "horizontal", numberingStart: "right" });
+  assert.deepEqual([defaultNumberingStart("vertical"), defaultNumberingStart("horizontal")], ["top", "left"]);
+
+  // What the pairing is for: every frame it returns divides into booths.
+  for (const frame of [wide, tall]) {
+    for (const held of [{ orientation: "vertical", numberingStart: "top" }, { orientation: "horizontal", numberingStart: "right" }]) {
+      const { orientation, numberingStart } = frameNumbering(held, frame);
+      assert.equal(drawnRow("A", frame, 6, { orientation, numberingStart }).ok, true, `a ${held.orientation}/${held.numberingStart} panel drawing ${frame.width}x${frame.height}`);
+    }
+  }
 });
 
 test("a gangway splits a row into segments the label still holds together", () => {

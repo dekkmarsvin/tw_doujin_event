@@ -188,6 +188,30 @@ export function generateRowSlots(definition: RowDefinition, bounds: Pick<MapRect
  * opposite directions while sharing a row label. */
 export type RowNumberingStart = "top" | "bottom" | "left" | "right";
 
+/** Which end a segment along this axis is numbered from unless the contributor
+ * says otherwise: the top of a column, the left of a run. */
+export function defaultNumberingStart(orientation: MapOrientation): RowNumberingStart {
+  return orientation === "vertical" ? "top" : "left";
+}
+
+/** The axis a drawn rectangle runs along, and which end of it carries the lowest
+ * number. Every drawing proposes its own long axis; the numbering end follows
+ * only when that axis changed, so drawing the next segment of a row numbered
+ * from the bottom does not quietly turn it back around.
+ *
+ * The division previewed while the pointer is down and the one placed when it is
+ * released both read this. A drawing across the axis the panel happens to hold
+ * would otherwise ask for a numbering end that axis cannot express, and preview
+ * nothing at all until the booths appeared.
+ */
+export function frameNumbering(
+  current: { orientation: MapOrientation; numberingStart: RowNumberingStart },
+  frame: MapRect,
+): { orientation: MapOrientation; numberingStart: RowNumberingStart } {
+  const orientation = rowOrientationFromRect(frame);
+  return { orientation, numberingStart: current.orientation === orientation ? current.numberingStart : defaultNumberingStart(orientation) };
+}
+
 /** A segment described the way it is drawn: one rectangle around the whole run
  * of booths, cut into `slotCount` equal pieces. The rectangle is the outline
  * rather than a pair of centres, so booth size follows from the drawing instead
