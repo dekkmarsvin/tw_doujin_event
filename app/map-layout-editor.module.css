@@ -80,6 +80,7 @@
 .batchTools button { flex:1 1 44%; min-height:34px; border:1px solid #d4dad5; border-radius:7px; background:#fff; color:#344039; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
 .batchTools button:hover { border-color:#79857d; background:#f2f4f1; }
 .batchTools button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
+.batchTools .batchWide { flex-basis:100%; }
 .hint { margin:13px 0 0; color:#89928c; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }
 @media (max-width:820px) { .editor>header { align-items:flex-start; flex-direction:column; }.addTools { justify-content:flex-start; }.workspace { grid-template-columns:1fr; }.canvasToolbar { align-items:flex-start; flex-direction:column; }.canvasToolbar>div { width:100%; flex-wrap:wrap; }.canvasToolbar button span { display:none; }.canvasViewport { height:420px; }.inspector { min-height:220px; border-top:1px solid #d4dad5; border-left:0; } }
 .rowPanel { margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }

@@ -118,17 +118,80 @@ export function translateBoxesWithin(boxes: readonly MapRect[], dx: number, dy: 
   return boxes.map((item) => ({ ...item, x: item.x + shiftX, y: item.y + shiftY }));
 }
 
-/** Aligns every box to the named edge of the group's own bounding box, so an
- * alignment can never push an element past a canvas edge the group was already
- * inside. The clamp covers the boxes that arrived out of bounds. */
+/** Straightens a group in one move: every box is pushed onto the named edge of
+ * the group's own bounding box, and the boxes are then spread out along the
+ * other axis so the space between them is the same everywhere. The area they
+ * are spread across is the one they already occupy — its top-left and
+ * bottom-right corners — so the outermost boxes stay exactly where they are and
+ * the group can never grow past a canvas edge it was already inside. The clamp
+ * covers the boxes that arrived out of bounds.
+ *
+ * A row traced by hand off a plan comes out with uneven gaps; this is what
+ * turns it into the evenly pitched row the plan actually describes. Left and
+ * right spread the group downwards, top and bottom spread it across, which is
+ * the axis a row runs along once its booths share an edge.
+ *
+ * The spread order follows where the boxes already sit along that axis, not the
+ * order they were selected in, so booths keep their sequence and their codes
+ * keep matching the plan. Boxes that together are wider than the area they
+ * occupy end up overlapping by an equal amount rather than spilling out. */
 export function alignBoxesToEdge(boxes: readonly MapRect[], edge: AlignEdge, bounds: Bounds): MapRect[] {
   if (!boxes.length) return [];
-  const box = boundingBox(boxes);
-  return boxes.map((item) => clampBoxWithin({
-    ...item,
-    x: edge === "left" ? box.x : edge === "right" ? box.x + box.width - item.width : item.x,
-    y: edge === "top" ? box.y : edge === "bottom" ? box.y + box.height - item.height : item.y,
-  }, bounds));
+  const area = boundingBox(boxes);
+  // Left and right pin the horizontal edge, which leaves the vertical axis free
+  // to spread along; top and bottom are the same the other way round.
+  const spreadDown = edge === "left" || edge === "right";
+  const sizeAlongSpread = (box: MapRect) => spreadDown ? box.height : box.width;
+  const startOf = (box: MapRect) => spreadDown ? box.y : box.x;
+  const order = boxes.map((box, index) => index)
+    .sort((a, b) => startOf(boxes[a]) - startOf(boxes[b]) || a - b);
+  const span = spreadDown ? area.height : area.width;
+  const filled = boxes.reduce((total, box) => total + sizeAlongSpread(box), 0);
+  const gap = order.length > 1 ? (span - filled) / (order.length - 1) : 0;
+
+  const placed: MapRect[] = [];
+  let cursor = spreadDown ? area.y : area.x;
+  order.forEach((index) => {
+    const item = boxes[index];
+    placed[index] = clampBoxWithin({
+      ...item,
+      x: spreadDown ? (edge === "left" ? area.x : area.x + area.width - item.width) : cursor,
+      y: spreadDown ? cursor : (edge === "top" ? area.y : area.y + area.height - item.height),
+    }, bounds);
+    cursor += sizeAlongSpread(item) + gap;
+  });
+  return placed;
+}
+
+/** The size the most boxes in the group already have. A group traced off a plan
+ * is nearly all one booth size with a handful of strays, so the majority size is
+ * the one worth keeping; where two sizes are equally common the larger wins,
+ * because a booth that is too big is visible on the map while one that is too
+ * small hides under its neighbour. Access points carry no size and are left out
+ * of the count. Returns nothing when the group holds no sized box at all. */
+export function commonBoxSize(boxes: readonly MapRect[]): Bounds | undefined {
+  const tally = new Map<string, { size: Bounds; count: number }>();
+  boxes.forEach((box) => {
+    if (box.width <= 0 || box.height <= 0) return;
+    const key = `${box.width}x${box.height}`;
+    const entry = tally.get(key) ?? { size: { width: box.width, height: box.height }, count: 0 };
+    entry.count += 1;
+    tally.set(key, entry);
+  });
+  const ranked = [...tally.values()].sort((a, b) => b.count - a.count
+    || b.size.width * b.size.height - a.size.width * a.size.height);
+  return ranked[0]?.size;
+}
+
+/** Gives every box in the group the group's most common size. Each box keeps
+ * its centre, so a booth grows or shrinks in place instead of sliding off the
+ * line its row runs along. Access points have no size to match and stay put. */
+export function resizeBoxesToCommonSize(boxes: readonly MapRect[], bounds: Bounds): MapRect[] {
+  const size = commonBoxSize(boxes);
+  if (!size) return boxes.map((box) => ({ ...box }));
+  return boxes.map((box) => box.width > 0 && box.height > 0
+    ? clampBoxWithin({ x: box.x + (box.width - size.width) / 2, y: box.y + (box.height - size.height) / 2, ...size }, bounds)
+    : { ...box });
 }
 
 /** Maps every box from one bounding box into another, which is how a corner
@@ -258,6 +321,24 @@ function uniqueValue(candidate: string, taken: ReadonlySet<string>) {
   let suffix = 2;
   while (taken.has(`${candidate}-${suffix}`)) suffix += 1;
   return `${candidate}-${suffix}`;
+}
+
+/** Where a copy of a group of booths lands when nobody says: flush alongside
+ * the group, across the direction the group runs. A column is copied sideways
+ * and a row downwards, which is the facing row a plan asks for; landing flush
+ * rather than on top means the copy is visible and separately clickable the
+ * moment it appears, and it is selected, so nudging it into its real place is a
+ * drag rather than a pair of numbers to work out. Copying towards the far side
+ * of the canvas instead when there is no room ahead keeps the copy off the
+ * original even at the last row on the sheet. */
+export function facingRowOffset(boxes: readonly MapRect[], bounds: Bounds): { offsetX: number; offsetY: number } {
+  if (!boxes.length) return { offsetX: 0, offsetY: 0 };
+  const area = boundingBox(boxes);
+  const sideways = area.height >= area.width;
+  const step = sideways ? area.width : area.height;
+  const ahead = sideways ? bounds.width - (area.x + area.width) : bounds.height - (area.y + area.height);
+  const shift = ahead >= step ? step : -step;
+  return sideways ? { offsetX: shift, offsetY: 0 } : { offsetX: 0, offsetY: shift };
 }
 
 export type SlotClipboard = { label: string; slots: readonly BoothSlot[] };

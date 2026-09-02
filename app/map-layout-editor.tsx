@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, formatSlotCode, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, rowOrientationFromEndpoints, rowOrientationFromRect, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
-import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, boxFor, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection, type SlotClipboard } from "./map-layout-editor-selection";
+import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
@@ -240,8 +240,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const [activeSegment, setActiveSegment] = useState<ActiveSegment | null>(null);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
-  const [clipboard, setClipboard] = useState<SlotClipboard | null>(null);
-  const [pasteForm, setPasteForm] = useState({ offsetX: "0", offsetY: "0", label: "" });
+  const [copyLabel, setCopyLabel] = useState("");
   const drag = useRef<DragState | null>(null);
   const editorRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -676,29 +675,43 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `align:${selectionSetKey(selections)}:${edge}`);
   };
 
+  const matchSelectionSize = () => {
+    const resolved = resolveSelectionBoxes(layout, selections);
+    if (resolved.boxes.length < 2) return;
+    const boxes = resizeBoxesToCommonSize(resolved.boxes, layout);
+    commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `size:${selectionSetKey(selections)}`);
+  };
+
+  /** One press copies: the selected booths become another row flush alongside
+   * the ones they were copied from, and the copy lands selected, so it is put
+   * in its real place by dragging it there. Holding the booths in a clipboard
+   * first, then asking for a position as two numbers, made the contributor work
+   * out coordinates for something they were about to drag anyway. */
   const copySelectedSlots = () => {
     const picked = slotSelections(selections);
     const slots = picked.map(({ rowIndex, itemIndex }) => layout.rows[rowIndex]?.slots[itemIndex]).filter((slot): slot is BoothSlot => !!slot);
     if (!slots.length) return;
-    setClipboard({ label: layout.rows[picked[0].rowIndex]?.label ?? "", slots: slots.map((slot) => ({ code: slot.code, rect: { ...slot.rect } })) });
-    setPasteForm({ offsetX: "0", offsetY: String(Math.round(layout.height * .06)), label: "" });
-    setRowErrors([]);
-  };
-
-  /** The pasted row lands selected, so the offset can be corrected by dragging
-   * the result rather than by undoing and retyping the numbers. */
-  const pasteClipboard = () => {
-    if (!clipboard) return;
-    const result = pasteRowAtOffset(clipboard, layout, { offsetX: Number(pasteForm.offsetX), offsetY: Number(pasteForm.offsetY), label: pasteForm.label });
+    const copied = { label: layout.rows[picked[0].rowIndex]?.label ?? "", slots: slots.map((slot) => ({ code: slot.code, rect: { ...slot.rect } })) };
+    const offset = facingRowOffset(copied.slots.map(({ rect }) => rect), layout);
+    const result = pasteRowAtOffset(copied, layout, { ...offset, label: copyLabel });
     if (!result.ok) { setRowErrors(result.errors); return; }
     const rowIndex = layout.rows.length;
     commit((draft) => draft.rows.push(result.row));
     setRowErrors([]);
+    setCopyLabel("");
     setSelections(result.row.slots.map((slot, itemIndex) => ({ kind: "slot", rowIndex, itemIndex })));
   };
 
   const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
     if (!selections.length) return;
+    // Delete belongs on the canvas, where the selection already is: the panel's
+    // remove button is a whole pointer trip away from the booth just drawn.
+    // Backspace does the same, and is stopped from walking the browser back.
+    if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      removeSelection();
+      return;
+    }
     const direction = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const)[event.key];
     if (!direction) return;
     event.preventDefault();
@@ -1171,18 +1184,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
             <button type="button" onClick={() => removeRow(rowIndex)} aria-label={`移除 ${row.label} 排`}>移除整排</button>
           </li>)}</ul>
         </div>}
-        {!rowForm && (!!copyableSlots || clipboard) && <div className={styles.rowPanel}>
+        {!rowForm && !!copyableSlots && <div className={styles.rowPanel}>
           <b>複製整排</b>
           {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
-          <div className={styles.rowFormActions}><button type="button" disabled={!copyableSlots} onClick={copySelectedSlots}>複製選取的 {copyableSlots} 格</button></div>
-          {clipboard && <>
-            <div className={styles.fields}>
-              {rowField("位移 X", pasteForm.offsetX, (value) => setPasteForm({ ...pasteForm, offsetX: value }))}
-              {rowField("位移 Y", pasteForm.offsetY, (value) => setPasteForm({ ...pasteForm, offsetY: value }))}
-            </div>
-            {rowField("新排標籤", pasteForm.label, (value) => setPasteForm({ ...pasteForm, label: value }), "留空則沿用原標籤")}
-            <div className={styles.rowFormActions}><button type="button" onClick={() => { setClipboard(null); setRowErrors([]); }}>清除</button><button type="button" className={styles.rowConfirm} onClick={pasteClipboard}>貼上 {clipboard.slots.length} 格</button></div>
-          </>}
+          {rowField("新排標籤", copyLabel, setCopyLabel, "留空則沿用原標籤")}
+          <div className={styles.rowFormActions}><button type="button" className={styles.rowConfirm} onClick={copySelectedSlots}>複製選取的 {copyableSlots} 格</button></div>
         </div>}
         {!selections.length && <div className={styles.empty}><b>選取地圖元素</b></div>}
         {selections.length > 1 && <>
@@ -1192,6 +1198,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
             <button type="button" onClick={() => alignSelection("right")}>靠右對齊</button>
             <button type="button" onClick={() => alignSelection("top")}>靠上對齊</button>
             <button type="button" onClick={() => alignSelection("bottom")}>靠下對齊</button>
+            <button type="button" className={styles.batchWide} onClick={matchSelectionSize}>統一大小</button>
           </div>
           <button className={styles.remove} onClick={removeSelection}>移除選取的元素</button>
         </>}
@@ -1208,7 +1215,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
             {selectedRect && numberField("高", selectedRect.height, (value) => updateRect({ height: value }, `field:${activeKey}:height`))}
           </div>
           {selection.kind !== "floor" && <button className={styles.remove} onClick={removeSelection}>移除此元素</button>}
-          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selection.kind === "access" ? "拖曳會直接更新預覽。" : "拖曳物件可移動，拖曳四角可調整大小。"}</p>
+          <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : selection.kind === "access" ? "拖曳會直接更新預覽。" : "拖曳物件可移動，拖曳四角可調整大小。"}{selection.kind !== "floor" && " 按 Delete 可移除選取的元素。"}</p>
         </>}
       </aside>
     </div>
