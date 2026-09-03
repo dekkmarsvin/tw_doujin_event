@@ -34,7 +34,7 @@ npm run preview
 npm run dev:portal
 ```
 
-這條命令會 build fictional `sample` fixture，再由 Wrangler 啟動 Pages Functions。`config/local-portal.env` 只包含可公開的本機測試值：Cloudflare 官方 always-pass Turnstile 金鑰、`.test` 管理者、local D1 收信槽、loopback 縮圖來源，以及與 production 無關的 session／hash 字串。Wrangler 的 D1 與 R2 都維持 local mode，資料固定寫入 `.wrangler/local-portal`，不會碰到其他 Wrangler 本機資料；不會連到遠端 D1／R2，也不會寄出真實 email。這份設定不得用於 production。
+這條命令會 build fictional `sample` fixture，再由 Wrangler 啟動 Pages Functions。`config/local-portal.env` 只包含可公開的本機測試值：Cloudflare 官方 always-pass Turnstile 金鑰、兩個 `.test` 收信地址、local D1 收信槽、loopback 縮圖來源，以及與 production 無關的 session／hash 字串。Wrangler 的 D1 與 R2 都維持 local mode，資料固定寫入 `.wrangler/local-portal`，不會碰到其他 Wrangler 本機資料；不會連到遠端 D1／R2，也不會寄出真實 email。這份設定不得用於 production。
 
 伺服器預設位於 `http://127.0.0.1:8788`。另開一個 terminal 執行完整登入 smoke：
 
@@ -48,7 +48,13 @@ smoke 會實走 auth config → 匿名 session → request link → local D1 mai
 npm run portal:login-link
 ```
 
-它只接受 loopback HTTP 伺服器，並將最新的本機 Organizer 一次性連結印在 terminal；不會略過任何驗證。
+它只接受 loopback HTTP 伺服器，並將最新的一次性連結印在 terminal；不會略過任何驗證。預設是管理者的 `/organizer` 連結。
+
+本機有兩個可收信的 `.test` 地址：`local-admin@example.test` 是管理者，`local-circle@example.test` 不是。需要社團與管理者同時登入的流程——認領審核、主辦邀請——用第二個地址取連結，在另一個瀏覽器 profile 或無痕視窗開啟：
+
+```bash
+npm run portal:login-link -- --email=local-circle@example.test --audience=circle
+```
 
 ## 驗證真實活動資料
 
