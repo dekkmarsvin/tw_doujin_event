@@ -1333,3 +1333,48 @@ test("a claim id from another event cannot be acted on through this one", async 
   assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff47", "ff47-site"), true);
   assert.equal(await repository.ownsCircle((await repository.getClaim(id)).account_id, "ff48", "ff47-site"), false);
 });
+
+test("an environment with a fixed recipient list says so instead of minting a link nobody gets", async () => {
+  // Preview and local set this; production does not, which is why the tests
+  // above still see one answer for every address.
+  const scoped = createCirclePortalHandlers({
+    ...handlerOptions,
+    mailRecipientAllowed: (email) => email.endsWith(".test"),
+  });
+
+  const refused = await scoped.requestLink(post("/api/auth/request-link", { email: "someone@example.com", turnstileToken: "solved" }));
+  assert.equal(refused.status, 400);
+  assert.equal(sent.length, 0);
+  // Nothing was written, so the address keeps its full hourly budget.
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM login_tokens").first()).total, 0);
+
+  const allowed = await scoped.requestLink(post("/api/auth/request-link", { email: "preview-admin@example.test", turnstileToken: "solved" }));
+  assert.equal(allowed.status, 202);
+  assert.equal(sent.length, 1);
+});
+
+test("a login link the mailer could not send stops counting against the address", async () => {
+  let failing = true;
+  const flaky = createCirclePortalHandlers({
+    ...handlerOptions,
+    sendMail: async (message) => {
+      if (failing) throw new Error("mailer is down");
+      sent.push(message);
+    },
+  });
+
+  await assert.rejects(
+    flaky.requestLink(post("/api/auth/request-link", { email: "owner@example.test", turnstileToken: "solved" })),
+    /mailer is down/,
+  );
+  // The mint is undone: the row is what the hourly limit counts, so leaving it
+  // would lock the address out of signing in once the mailer recovers.
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM login_tokens").first()).total, 0);
+  // A failed send is not a requested link either.
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action = 'auth.link_requested'").first()).total, 0);
+
+  failing = false;
+  const retried = await flaky.requestLink(post("/api/auth/request-link", { email: "owner@example.test", turnstileToken: "solved" }));
+  assert.equal(retried.status, 202);
+  assert.equal(sent.length, 1);
+});

@@ -329,6 +329,12 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       }
       await sendMailgun(env, message);
     },
+    // Only the environments with a fixed recipient list answer this. Production
+    // has none, so it stays undefined and no handler gains a way to report that
+    // an address is unknown to it.
+    mailRecipientAllowed: env.PREVIEW_MAIL_SINK === "d1"
+      ? (email: string) => previewMailRouteFor(env, email) !== null
+      : undefined,
     lookupCircle: async (circleId) => (await catalogIndex(env, request, eventId)).get(circleId) ?? null,
     searchCircles: async (query, limit) => {
       const needle = query.normalize("NFKC").toLocaleLowerCase("zh-Hant");

@@ -92,6 +92,17 @@ type PortalConfig = {
 type PortalDependencies = {
   repository: IdentityRepository;
   sendMail: (message: { to: string; subject: string; text: string }) => Promise<void>;
+  /**
+   * Whether this environment can deliver to an address at all, asked before
+   * anything is written. Only the preview and local portals set it: they keep a
+   * fixed recipient list, so an address off it is a rejected input, not a
+   * server fault, and the caller deserves to be told which it was.
+   *
+   * Production leaves it undefined. Its mailer accepts any address, so there is
+   * nothing to answer and `requestLink` keeps returning the same 202 whatever
+   * the address — a gate here would turn that into an inbox oracle.
+   */
+  mailRecipientAllowed?: (email: string) => boolean;
   lookupCircle: (circleId: string) => Promise<CircleLookup | null>;
   searchCircles: (query: string, limit: number) => Promise<CircleLookup[]>;
   /** Returns page text, or null when the host cannot be read from a Worker. */
@@ -171,7 +182,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({
-  repository, sendMail, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
+  repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
   projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap, config,
 }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
@@ -254,6 +265,15 @@ export function createCirclePortalHandlers({
     const accepted = json({ ok: true }, 202);
     if (!isEmailShaped(email)) return accepted;
 
+    // Preview and local keep a fixed recipient list. Saying so costs nothing
+    // here — the list is this environment's own configuration, not a fact about
+    // who has an account — and without it the mailer's refusal surfaces as a
+    // 500 that reads like the server broke. Production supplies no predicate,
+    // so this is unreachable there and the 202 above stays the only answer.
+    if (mailRecipientAllowed && !mailRecipientAllowed(email)) {
+      return json({ error: "這個測試環境不會寄信到這個地址。" }, 400);
+    }
+
     const ipHash = await clientIpHash(request);
     const windowStart = now - 60 * 60 * 1000;
     const [byEmail, byIp] = await Promise.all([
@@ -279,11 +299,19 @@ export function createCirclePortalHandlers({
 
     // Root-path query, consumed by POST from the page: mail scanners issue a GET
     // on every link they see, and a GET-consumes design burns the token first.
-    await sendMail({
-      to: email,
-      subject: "場刊 Map 登入連結",
-      text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/${audience === "organizer" ? "organizer" : "circle"}?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
-    });
+    try {
+      await sendMail({
+        to: email,
+        subject: "場刊 Map 登入連結",
+        text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/${audience === "organizer" ? "organizer" : "circle"}?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
+      });
+    } catch (error) {
+      // The row exists but nobody can ever hold the link, and it counts against
+      // this address's own hourly budget. Left in place, a mailer outage locks
+      // the address out of signing in once the mailer recovers.
+      await repository.deleteLoginToken(await sha256Hex(token));
+      throw error;
+    }
     await repository.writeAudit({
       at: now, actorRole: "system", action: "auth.link_requested", subjectType: "email",
       subjectId: await emailAuditSubjectId(config.hashPepper, email), ipHash,
@@ -1727,6 +1755,12 @@ export function createCirclePortalHandlers({
     if (!tentativeName || tentativeName.length > 120 || !isEmailShaped(ownerEmail)) {
       return json({ error: "暫定活動名稱與有效的負責人 Email 為必填。" }, 400);
     }
+    // Asked before the candidate exists. The invitation is the only way the
+    // owner reaches this workspace, so an address this environment cannot write
+    // to produces a candidate nobody can open.
+    if (mailRecipientAllowed && !mailRecipientAllowed(ownerEmail)) {
+      return json({ error: "這個測試環境不會寄信到這個地址。" }, 400);
+    }
     const ipHash = await clientIpHash(request);
     if (!await organizerInvitationAllowed(ownerEmail, gate.session.accountId, ipHash, config.now())) {
       return json({ error: "邀請寄送過於頻繁，請稍後再試。" }, 429);
@@ -1739,13 +1773,29 @@ export function createCirclePortalHandlers({
       draftJson: JSON.stringify(draft), now: config.now(),
     });
     if (!created.ok) return json({ error: "無法建立活動，請重新整理後再試。" }, 409);
-    await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId);
+    // The candidate exists from here on, so its audit row is written before
+    // anything that can still fail. Recording creation only after the mail went
+    // out left a candidate nobody could trace back to whoever made it.
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
       action: "organizer_event.created", subjectType: "organizer_event", subjectId: candidateId,
       detail: { tentativeName }, ipHash,
     });
-    return json({ ok: true, candidateId, version: 1 }, 201);
+    // A failed invitation does not undo the activity. Reporting the whole call
+    // as failed made the admin retry and create a second candidate under the
+    // same name, because nothing stops two candidates sharing one.
+    let invitationSent = true;
+    try {
+      await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId);
+    } catch {
+      invitationSent = false;
+      await repository.writeAudit({
+        at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
+        action: "organizer_event.invitation_failed", subjectType: "organizer_event", subjectId: candidateId,
+        detail: { tentativeName }, ipHash,
+      });
+    }
+    return json({ ok: true, candidateId, version: 1, invitationSent }, 201);
   }
 
   async function listOrganizerCandidates(request: Request) {

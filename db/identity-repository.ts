@@ -244,6 +244,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.audience ?? "circle", input.mintedBy ?? null).run();
   }
 
+  /** Undoes a mint whose mail never went out, so it stops counting as one. */
+  async function deleteLoginToken(tokenHash: string) {
+    await ensureTables();
+    await database.prepare("DELETE FROM login_tokens WHERE token_hash = ?1").bind(tokenHash).run();
+  }
+
   /**
    * Single-use, enforced by the write itself. A read-then-write would let two
    * concurrent clicks on the same emailed link both succeed.
@@ -2674,7 +2680,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   return {
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
-    countLoginTokensSince, createLoginToken, consumeLoginToken, consumeLoginTokenDetails,
+    countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
