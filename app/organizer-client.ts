@@ -227,7 +227,7 @@ export function manageOrganizerOwner(candidateId: string, email: string, action:
 }
 
 export function createOrganizerEvent(tentativeName: string, ownerEmail: string) {
-  return organizerCall<{ ok: true; candidateId: string; version: number }>("/api/admin/organizer/events", {
+  return organizerCall<{ ok: true; candidateId: string; version: number; invitationSent: boolean }>("/api/admin/organizer/events", {
     method: "POST",
     body: JSON.stringify({ tentativeName, ownerEmail }),
   });

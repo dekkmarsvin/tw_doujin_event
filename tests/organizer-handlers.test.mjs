@@ -30,6 +30,7 @@ const VENUE_SPACE_ID = "zhengyan-exhibition-area";
 let now = 1_788_100_000_000;
 let repository;
 let handlers;
+let handlerOptions;
 let sent;
 
 function request(path, method = "GET", body, cookie) {
@@ -63,7 +64,7 @@ beforeEach(async () => {
   sent = [];
   await repository.clearPreviewData();
   await repository.addAdmin("admin@example.test", "bootstrap", now);
-  handlers = createCirclePortalHandlers({
+  handlerOptions = {
     repository,
     sendMail: async (message) => { sent.push(message); },
     lookupCircle: async () => null,
@@ -82,7 +83,8 @@ beforeEach(async () => {
       eventEndsAt: "2026-12-31T23:59:59.999+08:00",
       now: () => now,
     },
-  });
+  };
+  handlers = createCirclePortalHandlers(handlerOptions);
 });
 
 test("admin invitation creates an organizer event entry that only its owner can open", async () => {
@@ -700,4 +702,56 @@ test("an invitation flood cannot lock the target out of their own sign-in", asyn
     "/api/auth/request-link", "POST", { email: target, turnstileToken: "solved" },
   ));
   assert.equal(exhausted.status, 429, "the target's own budget still applies to itself");
+});
+
+test("an owner address this environment cannot mail is refused before the activity exists", async () => {
+  const scoped = createCirclePortalHandlers({
+    ...handlerOptions,
+    mailRecipientAllowed: (email) => email.endsWith(".test"),
+  });
+  const adminCookie = await signIn("admin@example.test");
+  const sentBefore = sent.length;
+
+  const refused = await scoped.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events",
+    "POST",
+    { tentativeName: "test", ownerEmail: "someone@example.com" },
+    adminCookie,
+  ));
+
+  assert.equal(refused.status, 400);
+  // The invitation is the only way an owner reaches this workspace, so an
+  // address that cannot receive one must not leave an activity behind.
+  assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM organizer_event_candidates").first()).total, 0);
+  assert.equal(sent.length, sentBefore);
+});
+
+test("an activity survives an invitation the mailer could not send, and says the mail did not go out", async () => {
+  const flaky = createCirclePortalHandlers({
+    ...handlerOptions,
+    sendMail: async () => { throw new Error("mailer is down"); },
+  });
+  const adminCookie = await signIn("admin@example.test");
+
+  const created = await flaky.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events",
+    "POST",
+    { tentativeName: "test", ownerEmail: "owner@example.test" },
+    adminCookie,
+  ));
+
+  // Reporting the whole call as failed made the admin retry and create a second
+  // activity under the same name — nothing stops two candidates sharing one.
+  assert.equal(created.status, 201);
+  const body = await created.json();
+  assert.equal(body.invitationSent, false);
+  const candidate = await database.prepare("SELECT tentative_name FROM organizer_event_candidates WHERE id = ?1")
+    .bind(body.candidateId).first();
+  assert.equal(candidate.tentative_name, "test");
+
+  // Creation is recorded because it happened, and the failure is recorded next
+  // to it, so the activity can still be traced back to whoever made it.
+  const actions = (await database.prepare("SELECT action FROM audit_log WHERE subject_id = ?1 ORDER BY at")
+    .bind(body.candidateId).all()).results.map((row) => row.action);
+  assert.deepEqual(actions, ["organizer_event.created", "organizer_event.invitation_failed"]);
 });

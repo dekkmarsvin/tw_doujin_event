@@ -381,7 +381,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   return <main className={styles.shell}>
     <aside className={styles.sidebar}>
       <div className={styles.sidebarTitle}><h2>活動列表</h2><p>切換活動與查看狀態</p></div>
-      {session.isAdmin && <CreateEntry onCreated={async (id) => { await reloadList(); setSelectedId(id); }} />}
+      {session.isAdmin && <CreateEntry
+        onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
+        onInvitationFailed={(email) => setNotice({ kind: "error", message: `活動已建立，但邀請信沒有寄到 ${email}。` })}
+      />}
       <nav aria-label="活動列表" className={styles.eventList}>
         {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
           <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
@@ -628,7 +631,10 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
   </aside>;
 }
 
-function CreateEntry({ onCreated }: { onCreated: (id: string) => Promise<void> }) {
+function CreateEntry({ onCreated, onInvitationFailed }: {
+  onCreated: (id: string) => Promise<void>;
+  onInvitationFailed: (email: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -637,8 +643,12 @@ function CreateEntry({ onCreated }: { onCreated: (id: string) => Promise<void> }
   return <form className={styles.createForm} onSubmit={(event) => {
     event.preventDefault();
     setNotice({ kind: "busy", message: "建立中…" });
-    void createOrganizerEvent(name, email).then(async ({ candidateId }) => {
-      setName(""); setEmail(""); setOpen(false); await onCreated(candidateId);
+    void createOrganizerEvent(name, email).then(async ({ candidateId, invitationSent }) => {
+      setName(""); setEmail(""); setOpen(false);
+      await onCreated(candidateId);
+      // The activity is created either way. Saying only that it worked would
+      // leave the owner waiting for mail that never arrives.
+      if (!invitationSent) onInvitationFailed(email);
     }).catch((error) => setNotice({ kind: "error", message: message(error) }));
   }}>
     <label>暫定名稱<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
