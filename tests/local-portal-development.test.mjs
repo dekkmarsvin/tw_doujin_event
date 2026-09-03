@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { localPortalWranglerArgs, readLocalPortalEnvironment } from "../scripts/local-portal-environment.mjs";
 
@@ -34,7 +36,13 @@ test("one command runs the real portal auth boundary with isolated local-only re
   assert.equal(env.EVENT_ID, "sample");
   assert.equal(env.ADMIN_EMAILS, "local-admin@example.test");
   assert.equal(env.PREVIEW_MAIL_SINK, "d1");
-  assert.equal(env.PREVIEW_TEST_RECIPIENTS, "local-admin@example.test");
+  const recipients = env.PREVIEW_TEST_RECIPIENTS.split(/[,;\s]+/).filter(Boolean);
+  for (const address of recipients) assert.match(address, /^[^,\s]+\.test$/);
+  assert.ok(recipients.includes(env.ADMIN_EMAILS), "the admin must be able to receive its own login link");
+  assert.ok(
+    recipients.some((address) => address !== env.ADMIN_EMAILS),
+    "a second .test address must exist so a circle and an admin can be signed in at once",
+  );
   assert.equal(env.TURNSTILE_SITEKEY, "1x00000000000000000000AA");
   assert.equal(env.TURNSTILE_SECRET, "1x0000000000000000000000000000000AA");
   assert.equal(env.THUMBNAIL_PUBLIC_ORIGIN, "http://127.0.0.1:8788/__local-thumbnail");
@@ -55,4 +63,29 @@ test("one command runs the real portal auth boundary with isolated local-only re
   assert.match(runbook, /\.wrangler\/local-portal/);
   assert.match(runbook, /不會寄出真實 email/);
   assert.match(runbook, /不得用於 production/);
+});
+
+test("the local portal refuses a mail list that would leave the boundary or lock the admin out", async () => {
+  const base = await readFile(new URL("../config/local-portal.env", import.meta.url), "utf8");
+  const directory = await mkdtemp(join(tmpdir(), "local-portal-env-"));
+  const write = async (name, recipients) => {
+    const path = join(directory, name);
+    await writeFile(path, base.replace(/^PREVIEW_TEST_RECIPIENTS=.*$/m, `PREVIEW_TEST_RECIPIENTS=${recipients}`));
+    return path;
+  };
+
+  // A real mailbox on the list would make the local portal able to send mail
+  // somebody actually reads, which is the one thing this environment promises
+  // it cannot do.
+  await assert.rejects(
+    readLocalPortalEnvironment(await write("real-inbox.env", "local-admin@example.test,someone@example.com")),
+    /reserved \.test addresses/,
+  );
+
+  // Dropping the admin leaves an environment that boots and then cannot sign
+  // anybody in, which is worse than refusing to start.
+  await assert.rejects(
+    readLocalPortalEnvironment(await write("no-admin.env", "local-circle@example.test")),
+    /receive its own login link/,
+  );
 });

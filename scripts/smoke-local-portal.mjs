@@ -17,6 +17,26 @@ const smoke = process.argv.includes("--smoke");
 assert.ok(adminEmail?.endsWith(".test"), "local portal admin must use a reserved .test address");
 assert.ok(previewToken, "local portal mail token is missing");
 
+function argument(name, fallback) {
+  const prefix = `--${name}=`;
+  return process.argv.find((entry) => entry.startsWith(prefix))?.slice(prefix.length) ?? fallback;
+}
+
+// Which mailbox to hand a link to. The local sink can only answer for addresses
+// it is allowed to capture, so an address off the list is refused here with the
+// list in hand rather than by a 500 from the mailer.
+const recipients = config.PREVIEW_TEST_RECIPIENTS.split(/[,;\s]+/).filter(Boolean);
+const loginEmail = argument("email", adminEmail).normalize("NFKC").trim().toLowerCase();
+const loginAudience = argument("audience", "organizer");
+assert.ok(
+  recipients.includes(loginEmail),
+  `${loginEmail} is not a local mail sink recipient. Available: ${recipients.join(", ")}`,
+);
+assert.ok(
+  loginAudience === "organizer" || loginAudience === "circle",
+  "--audience must be organizer or circle",
+);
+
 function url(path) {
   return new URL(path.replace(/^\//, ""), baseUrl).toString();
 }
@@ -42,9 +62,9 @@ async function request(path, { method = "GET", body, cookie, preview = false, ex
   return { response, payload };
 }
 
-async function capturedLoginLink() {
+async function capturedLoginLink(email) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const response = await fetch(url(`/api/preview/mail?email=${encodeURIComponent(adminEmail)}`), {
+    const response = await fetch(url(`/api/preview/mail?email=${encodeURIComponent(email)}`), {
       headers: { accept: "application/json", "x-preview-e2e-token": previewToken },
     });
     if (response.ok) {
@@ -61,18 +81,18 @@ async function clearLocalData() {
   await request("/api/preview/mail", { method: "DELETE", preview: true });
 }
 
-async function issueLoginLink() {
+async function issueLoginLink(email = adminEmail, audience = "organizer") {
   await request("/api/auth/request-link", {
     method: "POST",
-    body: { email: adminEmail, turnstileToken: "local-dummy-token", audience: "organizer" },
+    body: { email, turnstileToken: "local-dummy-token", audience },
     expected: 202,
   });
-  return capturedLoginLink();
+  return capturedLoginLink(email);
 }
 
 if (!smoke) {
-  const loginLink = await issueLoginLink();
-  console.log("Open this one-time local Organizer link in the browser:");
+  const loginLink = await issueLoginLink(loginEmail, loginAudience);
+  console.log(`Open this one-time local link for ${loginEmail} in the browser:`);
   console.log(loginLink);
 } else {
   await clearLocalData();
