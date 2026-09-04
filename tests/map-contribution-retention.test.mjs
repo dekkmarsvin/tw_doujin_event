@@ -262,3 +262,24 @@ test("retention stays within the Workers Free D1 invocation budget", async () =>
   assert.equal((await database.prepare("SELECT COUNT(*) AS total FROM map_drafts WHERE id LIKE 'bulk-%'").first()).total, 11 - MAP_RETENTION_BATCH_SIZE);
   assert.ok(counted.calls() <= 50, `expected at most 50 D1 calls, saw ${counted.calls()}`);
 });
+
+/**
+ * A candidate map's layout plan has no metadata row: the draft's own ids are
+ * its address in the bucket. That is what makes it deletable here without a
+ * lookup, and what would make it easy to forget — so the deletion is pinned
+ * against the same key the upload writes.
+ */
+test("purging a candidate map takes the layout plan it was traced from with it", async () => {
+  const inactive = NOW - RETENTION_WINDOWS.mapDraftInactivity - DAY;
+  await draft("candidate-map", inactive);
+  await database.prepare("UPDATE map_drafts SET candidate_id = 'candidate-a' WHERE id = 'candidate-map'").run();
+  await assert.rejects(() => purgeExpiredRecords(database, NOW, RETENTION_WINDOWS), /Private map evidence bucket/,
+    "a plan that cannot be proven gone must not let the row go first");
+
+  const deleted = [];
+  await purgeExpiredRecords(database, NOW, RETENTION_WINDOWS, undefined, {
+    delete: async (keys) => deleted.push(...(Array.isArray(keys) ? keys : [keys])),
+  });
+  assert.deepEqual(deleted, ["organizer-map-backgrounds/candidate-a/candidate-map"]);
+  assert.equal(await repository.getMapDraft("candidate-map"), null);
+});

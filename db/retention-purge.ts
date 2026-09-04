@@ -16,6 +16,7 @@
  */
 
 import { deleteObjectKeys } from "../app/hosted-thumbnails";
+import { organizerMapBackgroundObjectKey } from "../app/map-contribution-files";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -153,11 +154,11 @@ async function purgeMapDraftData(
   const editableCutoff = now - windows.mapDraftInactivity;
   const decisionCutoff = now - windows.mapDecisionRaw;
   const claimed = () => database.prepare(
-    `SELECT id, status, retention_action FROM map_drafts
+    `SELECT id, candidate_id, status, retention_action FROM map_drafts
      WHERE retention_action IS NOT NULL
      ORDER BY last_activity_at ASC, id ASC LIMIT ?1`,
   ).bind(MAP_RETENTION_BATCH_SIZE).all<{
-    id: string; status: string; retention_action: "delete" | "anonymize" | "raw";
+    id: string; candidate_id: string | null; status: string; retention_action: "delete" | "anonymize" | "raw";
   }>();
   // Claim before touching R2. Contributor writes and review transitions all
   // require retention_action IS NULL, so bytes and revisions cannot change
@@ -204,6 +205,18 @@ async function purgeMapDraftData(
     due = await claimed();
   }
   if (due.results.length === 0) return { drafts: 0, revisions: 0, rawObjects: 0, anonymized: 0 };
+
+  // A candidate map's layout plan is addressed by the draft's own ids, so there
+  // is no metadata row to read before deleting it — and none that can go
+  // missing and leave the bytes behind. Deleting is idempotent, so a claim that
+  // spans several runs may pass through here more than once.
+  const backgroundKeys = due.results
+    .filter((draft) => draft.candidate_id)
+    .map((draft) => organizerMapBackgroundObjectKey({ candidateId: draft.candidate_id!, draftId: draft.id }));
+  if (backgroundKeys.length > 0) {
+    if (!objects) throw new Error("Private map evidence bucket is required before map draft retention can delete metadata.");
+    await deleteObjectKeys(objects, backgroundKeys);
+  }
 
   const raw = await database.prepare(
     `SELECT f.id, f.object_key FROM map_draft_files f

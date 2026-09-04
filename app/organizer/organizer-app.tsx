@@ -24,12 +24,14 @@ import {
   putOrganizerImport,
   readOrganizerEvent,
   readOrganizerMap,
+  readOrganizerMapBackground,
   reviewOrganizerEvent,
   retryOrganizerPublication,
   saveOrganizerEvent,
   saveOrganizerMap,
   saveOrganizerWorkspacePreference,
   submitOrganizerEvent,
+  uploadOrganizerMapBackground,
   validateOrganizerEvent,
   type OrganizerEventDetail,
   type OrganizerEventSummary,
@@ -69,6 +71,7 @@ import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
+import { MAP_IMAGE_MAX_BYTES } from "../map-contribution-files";
 import MapLayoutEditor from "../map-layout-editor";
 import { UiIcon } from "../ui-icons";
 import {
@@ -695,7 +698,40 @@ function StepContent({ session, detail, section, onChanged, onDirtyChange, onDra
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} setNotice={setNotice} />;
 }
 
-function imageDataUrl(file: File) {
+const MAP_PLAN_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+function layoutHasContent(layout: EventMapLayout | null) {
+  return !!layout && (layout.rows.length > 0 || layout.pillars.length > 0
+    || layout.accessPoints.length > 0 || layout.landmarks.length > 0);
+}
+
+/** One dialog for every action that would take what is on the canvas away. The
+ * close dialog below stays separate because it offers a third answer — saving
+ * first — and these do not: there is nothing to save on the way to discarding. */
+function MapConfirmDialog({ confirm, onConfirm, onCancel }: {
+  confirm: { title: string; description: string; confirmLabel: string };
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialog = useRef<HTMLElement | null>(null);
+  useModalFocus(true, dialog, onCancel);
+  return <div className={styles.dialogBackdrop}>
+    <section ref={dialog} className={styles.navigationDialog} role="dialog" aria-modal="true"
+      aria-labelledby="map-confirm-title" aria-describedby="map-confirm-description" tabIndex={-1}>
+      <h3 id="map-confirm-title">{confirm.title}</h3>
+      <p id="map-confirm-description">{confirm.description}</p>
+      <div className={styles.dialogActions}>
+        <button type="button" onClick={onConfirm}>{confirm.confirmLabel}</button>
+        <button type="button" className={styles.ghost} onClick={onCancel}>取消</button>
+      </div>
+    </section>
+  </div>;
+}
+
+/** The plan is drawn from a data URL rather than an object URL because the
+ * organizer page's `img-src` admits `data:` and not `blob:`. Reading a stored
+ * plan therefore ends here too, not at `URL.createObjectURL`. */
+function imageDataUrl(file: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -724,11 +760,17 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const [venueSpaceId, setVenueSpaceId] = useState(detail.draft.venue.assignments[0]?.venueSpaceId ?? "");
   const [layout, setLayout] = useState<EventMapLayout | null>(null);
   const [background, setBackground] = useState("");
+  // A plan picked before the map exists has nowhere to be stored yet, so it
+  // waits here and goes up with the first save.
+  const [pendingBackground, setPendingBackground] = useState<File | null>(null);
   // The editor reports every committed edit, so one flag is enough to know
   // whether closing would throw work away. Undoing back to the opened state
   // still counts as edited, which errs towards asking.
   const [edited, setEdited] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [confirm, setConfirm] = useState<
+    { title: string; description: string; confirmLabel: string; run: () => void } | null
+  >(null);
   // The editor stays open across saves, so the version the next save must send
   // comes from the last response rather than from a remount with fresh props.
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
@@ -739,48 +781,92 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const reload = useCallback(async () => setMaps((await listOrganizerMaps(detail.event.id)).maps), [detail.event.id]);
   useEffect(() => { queueMicrotask(() => { void reload().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reload, setNotice]);
 
+  // A map that was never saved is entirely unsaved, edits or not: one built
+  // from a plan and not touched since is still only on this screen.
+  const unsaved = edited || (!!layout && !selected);
+
+  /** Every way of putting something else on the canvas asks first when there is
+   * something on it that is not stored anywhere. Nothing to lose goes straight
+   * through — a saved map reopened and not touched is already on the server. */
+  const discarding = (run: () => void) => {
+    if (!unsaved) { run(); return; }
+    setConfirm({
+      title: "尚有未儲存變更",
+      description: "這張地圖有還沒儲存的變更，換過去就會丟掉。",
+      confirmLabel: "放棄變更",
+      run,
+    });
+  };
+
   const open = async (map: OrganizerMapSummary) => {
     const next = (await readOrganizerMap(detail.event.id, map.id)).map;
     setSelected(next); setPeriodKey(next.periodKey); setVenueSpaceId(next.venueSpaceId);
-    setLayout(next.layout); setBackground(""); setEdited(false);
+    // Cleared before the read, not after: a failed read must not leave the map
+    // that was open a moment ago showing its plan behind this one.
+    setLayout(next.layout); setPendingBackground(null); setEdited(false); setBackground("");
+    const plan = await readOrganizerMapBackground(detail.event.id, map.id);
+    if (plan) setBackground(await imageDataUrl(plan));
   };
   const startBlank = () => {
     if (!assignment) return;
-    setSelected(null); setBackground(""); setEdited(false);
-    setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000));
+    const blank = () => {
+      setSelected(null); setPendingBackground(null); setEdited(false); setBackground("");
+      setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000));
+    };
+    if (!layoutHasContent(layout) && !background) { blank(); return; }
+    setConfirm({
+      title: "空白畫布會清掉畫面上的內容",
+      description: selected
+        ? "畫面上的地圖與配置圖會清掉，已儲存的那份地圖還在。"
+        : "畫面上的地圖與配置圖會清掉，這張地圖還沒有儲存過。",
+      confirmLabel: "清空重來",
+      run: blank,
+    });
   };
-  /** The configuration plan a map is traced from is never saved with the map,
-   * so re-opening a saved map to carry on working means putting the plan back
-   * behind it. With a map already open that is all this does: it lays the image
-   * under the booths that are already there. Building a layout from the image —
-   * by recognition or as a blank sheet its size — belongs to the empty editor,
+  /** The plan a map is traced from is stored with the map, so re-opening a
+   * saved map brings it back on its own. With a map already open this only
+   * changes the plan behind it; building a layout from the image — by
+   * recognition or as a blank sheet its size — belongs to the empty editor,
    * where there is no work to lose. */
   const runFile = async (file: File) => {
     if (!assignment) throw new Error("請先選擇場館空間。");
-    if (file.size > 4 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      throw new Error("配置圖需為 JPG、PNG 或 WebP，且不可超過 4MB。");
+    if (file.size > MAP_IMAGE_MAX_BYTES || !MAP_PLAN_TYPES.includes(file.type)) {
+      throw new Error("配置圖需為 JPG、PNG 或 WebP，且不可超過 10MB。");
     }
     const source = await imageDataUrl(file);
     const image = await loadOrganizerMapImage(source);
-    if (layout) {
-      setBackground(source);
-      return "已放上參考圖，地圖內容不變。";
+    // A map built from the image is a new map, so the upload that follows can
+    // only wait for the first save even if another map was open a moment ago.
+    const target = layout ? selected : null;
+    let traced = "";
+    if (!layout) {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("瀏覽器無法建立圖片分析畫布。");
+      context.drawImage(image, 0, 0);
+      const recognizes = hasMapTemplateRecognizer(assignment.mapTemplate);
+      const next = recognizes
+        ? recognizeMapTemplate(assignment.mapTemplate, context.getImageData(0, 0, canvas.width, canvas.height)).layout
+        : createBlankEventMapLayout(assignment.mapTemplate, canvas.width, canvas.height);
+      setSelected(null); setLayout(next); setEdited(false);
+      traced = recognizes ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。";
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) throw new Error("瀏覽器無法建立圖片分析畫布。");
-    context.drawImage(image, 0, 0);
-    const recognizes = hasMapTemplateRecognizer(assignment.mapTemplate);
-    const next = recognizes
-      ? recognizeMapTemplate(assignment.mapTemplate, context.getImageData(0, 0, canvas.width, canvas.height)).layout
-      : createBlankEventMapLayout(assignment.mapTemplate, canvas.width, canvas.height);
-    setSelected(null); setBackground(source); setLayout(next); setEdited(false);
-    return recognizes ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。";
+    // The plan is only put on the canvas once it is somewhere it will survive:
+    // stored now for a map that exists, and waiting for the first save for one
+    // that does not. A failed upload therefore changes nothing on screen.
+    if (target) {
+      await uploadOrganizerMapBackground(detail.event.id, target.id, file);
+      setBackground(source);
+      return `${traced}配置圖已儲存。`;
+    }
+    setBackground(source);
+    setPendingBackground(file);
+    return `${traced}儲存地圖時會一起存下配置圖。`;
   };
 
   const closeEditor = () => {
-    setConfirmingClose(false); setEdited(false);
+    setConfirmingClose(false); setEdited(false); setPendingBackground(null);
     setLayout(null); setSelected(null); setBackground("");
   };
 
@@ -804,6 +890,17 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         setExpectedVersion(created.version);
         saved = (await readOrganizerMap(detail.event.id, created.draftId)).map;
       }
+      // The plan the map is being traced from goes up with it. Saying which of
+      // the two failed matters: the layout is already stored by this point, so
+      // pressing save again is about the plan and nothing else.
+      if (pendingBackground) {
+        try {
+          await uploadOrganizerMapBackground(detail.event.id, saved.id, pendingBackground);
+          setPendingBackground(null);
+        } catch (error) {
+          throw new Error(`地圖已儲存，但配置圖沒有存上：${message(error)}`);
+        }
+      }
       if (close) closeEditor();
       else { setSelected(saved); setEdited(false); }
       setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" });
@@ -818,26 +915,41 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     <div className={styles.panelHead}><div><h3>各活動日的場館空間地圖</h3><p>每個活動日的每個場館空間各一張地圖。</p></div><span className={styles.version}>{maps.length} 張地圖</span></div>
     <div className={styles.mapToolbar}>
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
-      <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => { setVenueSpaceId(event.target.value); setLayout(null); }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
+      <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
+        const next = event.target.value;
+        discarding(() => { setVenueSpaceId(next); setLayout(null); setPendingBackground(null); setBackground(""); });
+      }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
-      <label className={styles.fileButton}>{layout ? "上傳參考圖" : "上傳配置圖並編輯"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
+      <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
         const file = event.target.files?.[0];
         // Cleared so picking the same plan again still counts as a change,
         // which is what putting one map's plan behind the next one takes.
         event.target.value = "";
         if (!file) return;
-        setNotice({ kind: "busy", message: "正在讀取配置圖…" });
-        void runFile(file).then((done) => setNotice({ kind: "ok", message: done })).catch((error) => setNotice({ kind: "error", message: message(error) }));
+        const load = () => {
+          setNotice({ kind: "busy", message: "正在讀取配置圖…" });
+          void runFile(file).then((done) => setNotice({ kind: "ok", message: done })).catch((error) => setNotice({ kind: "error", message: message(error) }));
+        };
+        if (!background) { load(); return; }
+        setConfirm({
+          title: "已經有配置圖",
+          description: "換成剛選的這張，原本那張就不會留著。",
+          confirmLabel: "換成新的",
+          run: load,
+        });
       }} /></label>
       <label>從同場館空間複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
         if (!map) return;
-        void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
-          setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setBackground(""); setEdited(false);
-        }).catch((error) => setNotice({ kind: "error", message: message(error) }));
+        discarding(() => {
+          void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
+            setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout));
+            setPendingBackground(null); setBackground(""); setEdited(false);
+          }).catch((error) => setNotice({ kind: "error", message: message(error) }));
+        });
       }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{item.periodKey}</option>)}</select></label>
     </div>
-    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
+    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => setNotice({ kind: "error", message: message(error) })); })}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
     {layout ? <>
       <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={(next) => { setLayout(next); setEdited(true); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
@@ -847,7 +959,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
           always savable -- there is no revision to compare it against. */}
       <div className={styles.mapActions}>
         <button type="button" disabled={!editable || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
-        <button type="button" className={styles.ghost} onClick={() => edited ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
+        <button type="button" className={styles.ghost} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
         {selected && <span>{edited ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>}
       </div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
@@ -862,6 +974,8 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         </div>
       </section>
     </div>}
+    {confirm && <MapConfirmDialog confirm={confirm} onCancel={() => setConfirm(null)}
+      onConfirm={() => { setConfirm(null); confirm.run(); }} />}
   </section>;
 }
 
