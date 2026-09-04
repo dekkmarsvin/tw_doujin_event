@@ -138,7 +138,8 @@
 .dangerText { border-color: transparent !important; background: transparent !important; color: var(--danger) !important; }
 .dangerText:hover:not(:disabled) { background: var(--danger-soft) !important; }
 .formActions { display: flex; align-items: center; gap: 9px; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; }
-.formActions span { margin-left: auto; color: var(--muted); font-size: 10px; }
+.mapActions { display: flex; align-items: center; gap: 10px; }
+.formActions span, .mapActions span { margin-left: auto; color: var(--muted); font-size: 10px; }
 .taskIssues { margin-top: 18px; border: 1px solid #edc5bf; border-radius: 9px; padding: 8px 12px; background: var(--danger-soft); }
 .taskIssues p { margin: 4px 0; color: var(--danger); }
 

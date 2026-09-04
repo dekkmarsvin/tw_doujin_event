@@ -840,7 +840,16 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
     {layout ? <>
       <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={(next) => { setLayout(next); setEdited(true); }} />
-      <div className={styles.row}><button type="button" disabled={!editable} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button><button type="button" className={styles.ghost} onClick={() => edited ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button></div>
+      {/* Nothing to save is a disabled button, the same answer the draft form
+          gives. It is not only tidiness: every save moves the candidate on a
+          version and writes a revision, so a save with no edits leaves a step
+          in the history that records nothing. A map that does not exist yet is
+          always savable -- there is no revision to compare it against. */}
+      <div className={styles.mapActions}>
+        <button type="button" disabled={!editable || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
+        <button type="button" className={styles.ghost} onClick={() => edited ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
+        {selected && <span>{edited ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>}
+      </div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>
       <section ref={closeDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-map-title" aria-describedby="unsaved-map-description" tabIndex={-1}>
