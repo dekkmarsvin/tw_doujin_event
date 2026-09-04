@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
@@ -157,6 +157,10 @@ function initialSlotCode(layout: EventMapLayout, rowLabel: string) {
   return nextSlotCode(`${rowLabel || "NEW"}00`, taken);
 }
 
+/* 100% is the whole map inside the viewport, not the map stretched to the
+ * viewport's width. Reading it as a width made the height fall out of the
+ * layout's proportions, so a map that was not as wide as the viewport is
+ * always overflowed downwards and the smallest possible view still scrolled. */
 const MIN_EDITOR_ZOOM = 1;
 const MAX_EDITOR_ZOOM = 4;
 const EDITOR_ZOOM_STEP = .5;
@@ -241,6 +245,36 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const editorRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+
+  /* The space a map has to fit into. Measured rather than assumed because the
+   * fitted scale below is what "100%" means, and a layout effect so the first
+   * paint already has it. */
+  const [viewportBox, setViewportBox] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const measure = () => {
+      const style = getComputedStyle(viewport);
+      const horizontal = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const vertical = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const width = Math.max(0, viewport.clientWidth - horizontal);
+      const height = Math.max(0, viewport.clientHeight - vertical);
+      // Same numbers, same object: a scrollbar appearing resizes this box, and
+      // rescaling the map is what makes it appear or go away.
+      setViewportBox((current) => current.width === width && current.height === height ? current : { width, height });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  /** Screen pixels per layout unit: the scale that puts the whole map inside
+   * the viewport, times the chosen zoom. Zero until the viewport is measured. */
+  const fitScale = viewportBox.width > 0 && viewportBox.height > 0
+    ? Math.min(viewportBox.width / layout.width, viewportBox.height / layout.height)
+    : 0;
+  const renderScale = fitScale * zoom;
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -916,16 +950,28 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     ...layout.landmarks.map((landmark, itemIndex) => ({ key: `landmark:${itemIndex}`, label: `區域 ${landmark.label || landmark.id}`, selection: { kind: "landmark", itemIndex } as Selection })),
   ];
 
+  /* The map is padded, and centred while it still fits, so its top-left corner
+   * is not the scroll origin: half of whatever the scroll area has over the map
+   * is that offset. Both directions of the conversion need it. */
+  const mapOriginIn = (viewport: HTMLDivElement, scale: number) => ({
+    x: (viewport.scrollWidth - layout.width * scale) / 2,
+    y: (viewport.scrollHeight - layout.height * scale) / 2,
+  });
+
+  /** Scrolls so that a point of the map sits in the middle of the viewport. */
+  const centerMapPoint = (viewport: HTMLDivElement, point: { x: number; y: number }, scale: number) => {
+    const origin = mapOriginIn(viewport, scale);
+    viewport.scrollTo({
+      left: origin.x + point.x * scale - viewport.clientWidth / 2,
+      top: origin.y + point.y * scale - viewport.clientHeight / 2,
+    });
+  };
+
   const focusSelection = (nextSelection: Selection) => {
     const viewport = viewportRef.current;
     const position = boxFor(layout, nextSelection);
-    if (!viewport || !position) return;
-    const centerX = position.x + position.width / 2;
-    const centerY = position.y + position.height / 2;
-    viewport.scrollTo({
-      left: centerX / layout.width * viewport.scrollWidth - viewport.clientWidth / 2,
-      top: centerY / layout.height * viewport.scrollHeight - viewport.clientHeight / 2,
-    });
+    if (!viewport || !position || renderScale <= 0) return;
+    centerMapPoint(viewport, { x: position.x + position.width / 2, y: position.y + position.height / 2 }, renderScale);
   };
 
   // Scrolls to what the request named. Keyed on the nonce alone: re-running on
@@ -938,16 +984,18 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
 
   const changeZoom = (nextZoom: number) => {
     const viewport = viewportRef.current;
-    const centerX = viewport ? (viewport.scrollLeft + viewport.clientWidth / 2) / Math.max(viewport.scrollWidth, 1) : .5;
-    const centerY = viewport ? (viewport.scrollTop + viewport.clientHeight / 2) / Math.max(viewport.scrollHeight, 1) : .5;
-    setZoom(clamp(nextZoom, MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM));
+    const zoomed = clamp(nextZoom, MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM);
+    // What the middle of the view is looking at, in map units, so the same
+    // place is still in the middle at the new scale.
+    const origin = viewport && renderScale > 0 ? mapOriginIn(viewport, renderScale) : null;
+    const anchor = viewport && origin ? {
+      x: (viewport.scrollLeft + viewport.clientWidth / 2 - origin.x) / renderScale,
+      y: (viewport.scrollTop + viewport.clientHeight / 2 - origin.y) / renderScale,
+    } : null;
+    setZoom(zoomed);
     requestAnimationFrame(() => {
       const updated = viewportRef.current;
-      if (!updated) return;
-      updated.scrollTo({
-        left: centerX * updated.scrollWidth - updated.clientWidth / 2,
-        top: centerY * updated.scrollHeight - updated.clientHeight / 2,
-      });
+      if (updated && anchor) centerMapPoint(updated, anchor, fitScale * zoomed);
     });
   };
 
@@ -1071,7 +1119,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
-        <div className={styles.zoomSurface} style={{ width: `${zoom * 100}%`, aspectRatio: `${layout.width} / ${layout.height}` }}>
+        <div className={styles.zoomSurface} style={{ width: `${layout.width * renderScale}px`, height: `${layout.height * renderScale}px` }}>
         <svg ref={svgRef} className={slotDrawForm || (rowForm && !anchors) ? styles.drawing : undefined} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
