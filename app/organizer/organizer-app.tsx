@@ -166,6 +166,13 @@ function organizerVenueSpaceLabel(catalog: OrganizerVenueCatalog, venueSpaceId: 
   return "原使用空間已不存在";
 }
 
+/** Maps are addressed by the day's stable id, which is what the workspace
+ * stores and what a map summary comes back with. It is not what the day is
+ * called, so nothing showing a map to a person may print it. */
+function organizerDayLabel(days: readonly { id: string; label: string }[], periodKey: string) {
+  return days.find((day) => day.id === periodKey)?.label ?? "原活動日已不存在";
+}
+
 function organizerIssueMessage(
   issue: { code: string; message: string; target?: string },
   catalog: OrganizerVenueCatalog,
@@ -947,9 +954,9 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
             setPendingBackground(null); setBackground(""); setEdited(false);
           }).catch((error) => setNotice({ kind: "error", message: message(error) }));
         });
-      }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{item.periodKey}</option>)}</select></label>
+      }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{organizerDayLabel(detail.draft.event.days, item.periodKey)}</option>)}</select></label>
     </div>
-    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => setNotice({ kind: "error", message: message(error) })); })}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
+    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => setNotice({ kind: "error", message: message(error) })); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>
       <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={(next) => { setLayout(next); setEdited(true); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
@@ -1435,7 +1442,7 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     .filter((row) => row.dayId === selected.periodKey && row.venueSpaceId === selected.venueSpaceId)
     .map((row) => [row.boothCode, { label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}` }])) : {}, [preview, selected]);
   return <div className={styles.readerPreview}>
-    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{map.periodKey}・{organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}</option>)}</select></div>
+    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{organizerDayLabel(preview.event.days, map.periodKey)}{preview.venueAssignments.length > 1 ? `・${organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}` : ""}</option>)}</select></div>
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} onSelect={() => undefined} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;
