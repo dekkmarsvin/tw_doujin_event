@@ -53,8 +53,13 @@
 .error { border-color: #edc5bf; background: var(--danger-soft); color: var(--danger); }
 
 .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: calc(100vh - 78px); }
+.shellNarrow { grid-template-columns: 52px minmax(0, 1fr); }
 .sidebar { border-right: 1px solid var(--line); padding: 22px 14px; background: var(--surface); }
+.shellNarrow .sidebar { padding: 22px 10px; }
+.sidebarHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .sidebarTitle { padding: 0 6px 16px; }
+.sidebarToggle { display: grid; flex: 0 0 auto; width: 32px; height: 32px; place-items: center; padding: 0 !important; }
+.sidebarToggle svg { width: 16px; height: 16px; }
 .sidebar h2 { font-size: 14px; }
 .createButton { width: 100%; margin-bottom: 16px; }
 .createForm { display: grid; gap: 10px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); }
@@ -133,7 +138,8 @@
 .dangerText { border-color: transparent !important; background: transparent !important; color: var(--danger) !important; }
 .dangerText:hover:not(:disabled) { background: var(--danger-soft) !important; }
 .formActions { display: flex; align-items: center; gap: 9px; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; }
-.formActions span { margin-left: auto; color: var(--muted); font-size: 10px; }
+.mapActions { display: flex; align-items: center; gap: 10px; }
+.formActions span, .mapActions span { margin-left: auto; color: var(--muted); font-size: 10px; }
 .taskIssues { margin-top: 18px; border: 1px solid #edc5bf; border-radius: 9px; padding: 8px 12px; background: var(--danger-soft); }
 .taskIssues p { margin: 4px 0; color: var(--danger); }
 

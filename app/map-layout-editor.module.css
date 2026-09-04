@@ -7,8 +7,13 @@
 .addTools button:hover { border-color:#79857d; background:#f2f4f1; }
 .addTools button:active { background:#e4e8e3; }
 .addTools button:focus-visible,.remove:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
-.workspace { display:grid; grid-template-columns:minmax(0,1fr) 230px; min-height:520px; }
-.canvas { display:grid; min-width:0; grid-template-rows:auto minmax(0,1fr); background-color:#e7e8e1; background-image:linear-gradient(#d7dad2 1px,transparent 1px),linear-gradient(90deg,#d7dad2 1px,transparent 1px); background-size:22px 22px; }
+/* A definite height, not a minimum: both columns then scroll inside
+   themselves. With a minimum the taller column (the inspector, which
+   grows with the row list) set the row height, and the canvas kept its
+   own fixed height inside that taller row -- the map scrolled while the
+   space it could have used sat empty below it. */
+.workspace { display:grid; grid-template-columns:minmax(0,1fr) 230px; height:clamp(480px,68vh,860px); }
+.canvas { display:grid; min-width:0; min-height:0; grid-template-rows:auto minmax(0,1fr); background-color:#e7e8e1; background-image:linear-gradient(#d7dad2 1px,transparent 1px),linear-gradient(90deg,#d7dad2 1px,transparent 1px); background-size:22px 22px; }
 .canvasToolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid #cbd0ca; background:#f8f9f7; }
 .canvasToolbar span { color:#657069; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; letter-spacing:.06em; }
 .canvasToolbar>div { display:flex; align-items:center; gap:5px; }
@@ -22,8 +27,11 @@
 .canvasToolbar button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
 .canvasToolbar button:disabled { color:#a1aaa4; cursor:not-allowed; }
 .canvasToolbar output { min-width:44px; color:#202a35; text-align:center; font:800 calc(9px * var(--ui-font-scale,1)) var(--font-mono),ui-monospace,monospace; font-variant-numeric:tabular-nums; }
-.canvasViewport { min-width:0; height:clamp(440px,58vh,680px); overflow:auto; padding:12px; overscroll-behavior:contain; scrollbar-color:#8a958e #dfe3df; scrollbar-width:thin; }
-.zoomSurface { min-width:100%; border:1px solid #bdc4be; border-radius:8px; background:#fff; overflow:hidden; }
+.canvasViewport { min-width:0; min-height:0; overflow:auto; padding:12px; overscroll-behavior:contain; scrollbar-color:#8a958e #dfe3df; scrollbar-width:thin; }
+/* Sized in pixels from the fitted scale, so 100% is the whole map inside
+   the viewport. `margin:0 auto` centres it while it fits and collapses to
+   zero once it is wider, which keeps the left edge reachable. */
+.zoomSurface { margin:0 auto; border:1px solid #bdc4be; border-radius:8px; background:#fff; overflow:hidden; }
 /* Scoped to the viewport, not to .canvas: the toolbar is inside .canvas too,
    and these rules stretched every button icon to fill its button and painted
    an opaque white block behind it. */
@@ -59,7 +67,7 @@
 .band { fill:#e86f5d14; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:6 4; vector-effect:non-scaling-stroke; pointer-events:none; }
 .manualDraft { fill:#3f7a5e1f; stroke:#3f7a5e; stroke-width:2; stroke-dasharray:7 4; vector-effect:non-scaling-stroke; pointer-events:none; }
 .snapGuide { fill:none; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke; pointer-events:none; }
-.inspector { min-width:0; padding:15px; border-left:1px solid #d4dad5; background:#fff; }
+.inspector { min-width:0; min-height:0; overflow-y:auto; padding:15px; border-left:1px solid #d4dad5; background:#fff; }
 .canvasSize { margin-top:0; margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker { margin-bottom:15px!important; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker select { width:100%; }
@@ -82,7 +90,7 @@
 .batchTools button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
 .batchTools .batchWide { flex-basis:100%; }
 .hint { margin:13px 0 0; color:#89928c; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }
-@media (max-width:820px) { .editor>header { align-items:flex-start; flex-direction:column; }.addTools { justify-content:flex-start; }.workspace { grid-template-columns:1fr; }.canvasToolbar { align-items:flex-start; flex-direction:column; }.canvasToolbar>div { width:100%; flex-wrap:wrap; }.canvasToolbar button span { display:none; }.canvasViewport { height:420px; }.inspector { min-height:220px; border-top:1px solid #d4dad5; border-left:0; } }
+@media (max-width:820px) { .editor>header { align-items:flex-start; flex-direction:column; }.addTools { justify-content:flex-start; }.workspace { grid-template-columns:1fr; height:auto; }.canvasToolbar { align-items:flex-start; flex-direction:column; }.canvasToolbar>div { width:100%; flex-wrap:wrap; }.canvasToolbar button span { display:none; }.canvasViewport { height:420px; }.inspector { min-height:220px; overflow-y:visible; border-top:1px solid #d4dad5; border-left:0; } }
 .rowPanel { margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .rowPanel>b { display:block; margin-bottom:9px; font-size:calc(11px * var(--ui-font-scale,1)); }
 .rowPanel p { margin:0 0 9px; color:#748078; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }

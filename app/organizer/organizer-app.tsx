@@ -70,6 +70,7 @@ import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import MapLayoutEditor from "../map-layout-editor";
+import { UiIcon } from "../ui-icons";
 import {
   getMapTemplateMetadata,
   getMapTemplateShape,
@@ -289,6 +290,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [section, setSection] = useState<OrganizerWorkspaceSection>("event");
   const [guidedTask, setGuidedTask] = useState<OrganizerGuidedTask>("identity_source");
   const [showAllTasks, setShowAllTasks] = useState(false);
+  // Collapsed, the list gives its width to the workspace. Wide editing surfaces
+  // -- the map above all -- are what that width is for.
+  const [eventListOpen, setEventListOpen] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const [notice, setNotice] = useState<Notice>(IDLE);
@@ -378,25 +382,37 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       .catch((error) => setNotice({ kind: "error", message: message(error) }));
   };
 
-  return <main className={styles.shell}>
+  return <main className={eventListOpen ? styles.shell : `${styles.shell} ${styles.shellNarrow}`}>
     <aside className={styles.sidebar}>
-      <div className={styles.sidebarTitle}><h2>活動列表</h2><p>切換活動與查看狀態</p></div>
-      {session.isAdmin && <CreateEntry
-        onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
-        onInvitationFailed={(email) => setNotice({ kind: "error", message: `活動已建立，但邀請信沒有寄到 ${email}。` })}
-      />}
-      <nav aria-label="活動列表" className={styles.eventList}>
-        {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
-          <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
-        </button>)}
-        {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
-      </nav>
+      <div className={styles.sidebarHead}>
+        {eventListOpen && <div className={styles.sidebarTitle}><h2>活動列表</h2><p>切換活動與查看狀態</p></div>}
+        <button
+          type="button"
+          className={`${styles.ghost} ${styles.sidebarToggle}`}
+          aria-expanded={eventListOpen}
+          aria-controls="organizer-event-list"
+          aria-label={eventListOpen ? "收合活動列表" : "展開活動列表"}
+          onClick={() => setEventListOpen(!eventListOpen)}
+        ><UiIcon name={eventListOpen ? "chevron-left" : "chevron-right"} /></button>
+      </div>
+      <div id="organizer-event-list" hidden={!eventListOpen}>
+        {session.isAdmin && <CreateEntry
+          onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
+          onInvitationFailed={(email) => setNotice({ kind: "error", message: `活動已建立，但邀請信沒有寄到 ${email}。` })}
+        />}
+        <nav aria-label="活動列表" className={styles.eventList}>
+          {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
+            <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
+          </button>)}
+          {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
+        </nav>
+      </div>
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
       {!detail ? <div className={styles.empty}><h2>選擇活動</h2><p>從左側開啟活動，開始準備送審資料。</p></div>
         : <WorkspaceSurface
-          key={`${detail.event.id}:${detail.event.version}`}
+          key={detail.event.id}
           session={session}
           detail={detail}
           section={section}
@@ -493,8 +509,12 @@ function WorkspaceSurface({
         })}
       </ol>
       <div className={styles.workspaceGrid}>
+        {/* Saving reloads the candidate, and the new version in the key is what
+            re-seeds each panel from it. The map is the exception: its save
+            keeps the editor open, so it holds the layout across the bump and
+            reads the new version straight from its props. */}
         <StepContent
-          key={`${detail.event.id}:${detail.event.version}:${section}`}
+          key={`${detail.event.id}:${section}${section === "map" ? "" : `:${detail.event.version}`}`}
           session={session}
           detail={detail}
           section={section}
@@ -709,6 +729,9 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   // still counts as edited, which errs towards asking.
   const [edited, setEdited] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  // The editor stays open across saves, so the version the next save must send
+  // comes from the last response rather than from a remount with fresh props.
+  const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const closeDialog = useRef<HTMLElement | null>(null);
   useModalFocus(confirmingClose, closeDialog, () => setConfirmingClose(false));
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
@@ -761,15 +784,34 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     setLayout(null); setSelected(null); setBackground("");
   };
 
-  const saveMap = () => {
-    if (!layout) return Promise.resolve();
+  /** Saving leaves the editor open, because a map takes several sittings and
+   * closing it is a separate decision. What that costs is bookkeeping: the
+   * candidate and the map both move on a version, and the next save has to send
+   * the new ones. A first save also stops being a creation — from then on the
+   * same editor is updating the map it just made, not making another. */
+  const saveMap = async (close = false) => {
+    if (!layout) return;
     setConfirmingClose(false);
     setNotice({ kind: "busy", message: "儲存地圖…" });
-    const action = selected
-      ? saveOrganizerMap(detail.event.id, selected.id, { expectedVersion: detail.event.version, expectedMapRevision: selected.mapRevision, layout })
-      : createOrganizerMap(detail.event.id, { expectedVersion: detail.event.version, periodKey, venueSpaceId, layout });
-    return action.then(async () => { setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" }); closeEditor(); await onChanged(); await reload(); })
-      .catch((error) => setNotice({ kind: "error", message: message(error) }));
+    try {
+      let saved: OrganizerMapDetail;
+      if (selected) {
+        const result = await saveOrganizerMap(detail.event.id, selected.id, { expectedVersion, expectedMapRevision: selected.mapRevision, layout });
+        setExpectedVersion(result.version);
+        saved = { ...selected, mapRevision: result.mapRevision, layout };
+      } else {
+        const created = await createOrganizerMap(detail.event.id, { expectedVersion, periodKey, venueSpaceId, layout });
+        setExpectedVersion(created.version);
+        saved = (await readOrganizerMap(detail.event.id, created.draftId)).map;
+      }
+      if (close) closeEditor();
+      else { setSelected(saved); setEdited(false); }
+      setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" });
+      await onChanged();
+      await reload();
+    } catch (error) {
+      setNotice({ kind: "error", message: message(error) });
+    }
   };
 
   return <section className={`${styles.panel} ${styles.mapPanel}`}>
@@ -798,14 +840,23 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => void open(map).catch((error) => setNotice({ kind: "error", message: message(error) }))}>{map.periodKey}・{organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}</button>)}</div>
     {layout ? <>
       <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={(next) => { setLayout(next); setEdited(true); }} />
-      <div className={styles.row}><button type="button" disabled={!editable} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button><button type="button" className={styles.ghost} onClick={() => edited ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button></div>
+      {/* Nothing to save is a disabled button, the same answer the draft form
+          gives. It is not only tidiness: every save moves the candidate on a
+          version and writes a revision, so a save with no edits leaves a step
+          in the history that records nothing. A map that does not exist yet is
+          always savable -- there is no revision to compare it against. */}
+      <div className={styles.mapActions}>
+        <button type="button" disabled={!editable || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
+        <button type="button" className={styles.ghost} onClick={() => edited ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
+        {selected && <span>{edited ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>}
+      </div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>
       <section ref={closeDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-map-title" aria-describedby="unsaved-map-description" tabIndex={-1}>
         <h3 id="unsaved-map-title">尚有未儲存變更</h3>
         <p id="unsaved-map-description">要先儲存地圖，再關閉編輯器嗎？</p>
         <div className={styles.dialogActions}>
-          <button type="button" disabled={!editable} onClick={() => { void saveMap(); }}>儲存並關閉</button>
+          <button type="button" disabled={!editable} onClick={() => { void saveMap(true); }}>儲存並關閉</button>
           <button type="button" className={styles.secondary} onClick={closeEditor}>放棄</button>
           <button type="button" className={styles.ghost} onClick={() => setConfirmingClose(false)}>取消</button>
         </div>

@@ -14,6 +14,7 @@
 - 登入沿用[社團自助控制面](./circle-portal.md)的 email 一次性連結與 session cookie；`POST /api/auth/request-link` 以 `audience: "organizer"` 決定信件與登入連結指向 `/organizer`。Turnstile、速率上限與 session 規則只寫在該契約，本文不重複。
 - **帳號本身沒有 Organizer 權限。** 能看到工作區的條件是持有任一候選活動的 grant，或是全域管理者。
 - 工作區是桌機介面。視窗過窄時顯示「請改用桌機」，不提供縮小版的地圖編輯。
+- 左側活動列表可以收合，收合後把寬度讓給工作區。收合狀態不保存，重新登入回到展開。
 
 ## 引導式任務站與活動建置冊
 
@@ -80,6 +81,8 @@ draft → submitted → approved → publishing → published
 ## 地圖
 
 - 每一個「活動日 × venue-space」各一份地圖草稿，沿用既有的 `MapLayoutEditor` 與 template 辨識器。
+- **「儲存地圖變更」只儲存，不關閉編輯器。** 一張地圖要畫很多輪，關閉是另一個決定，由「關閉編輯器」負責。儲存後編輯器沿用同一份 layout 繼續編輯，並改為更新剛才存下的那份地圖：第一次儲存之後的每一次儲存都是更新，不會再建立第二份。有未儲存變更時關閉才會出現「儲存並關閉／放棄／取消」。已保存的地圖沒有新變更時儲存鍵停用，旁邊沿用草稿表單同一組「尚有未儲存變更／目前沒有未儲存的變更」；還沒建立的地圖一律可以儲存。停用不只是版面整潔：每次儲存都讓 candidate 前進一個版本並寫入一份 revision，沒有變更的儲存會在歷史留下一步空紀錄。
+- **編輯畫布的 100% 是整張地圖看得完**，不是把地圖拉滿畫布寬度；倍率由畫布實際可用空間與地圖比例算出，最高 400%。畫布高度來自編輯器版面而非固定值，右側屬性欄自行捲動，不把地圖擠成需要捲動才看得完。這條同樣適用於[地圖貢獻控制面](./map-contributions.md)嵌入的同一個編輯器。
 - 候選地圖的 scope 由 [`resolveCandidateAuthoringScope()`](../../app/event-authoring-scope.ts) 從草稿與匯入列推導：`allowedBoothCodes` 與 `requiredBoothCodes` 都是該 scope 實際匯入的攤位代碼。
 - **候選活動的地圖可以含沒有社團的攤位格。** 配置圖畫的是整個場地，包含沒賣掉的攤位，而那些格子沒有任何匯入列可以指認。已發布活動有 reviewed snapshot 透過 `existingBoothCodes` 認領這些格子，所以在那裡出現的陌生代碼是打錯字，仍然是 error；候選活動的第一份地圖沒有 snapshot 可依靠，因此 `unknown_booth` 降為 warning，代碼照樣列出來給人看。這是 `allowsUnallocatedBooths` 這個 scope 欄位唯一的用途。`missing_booth`、`overlap` 與幾何錯誤不受影響。
 - **候選地圖沒有公開檔案位址**（`targetPath: null`）。已發布活動的 authoring scope 才有 `targetPath`，只有一組「活動日 × 場館空間」時是 `map.json`，多組時是 `maps/<periodKey>/<venueSpaceId>.json`。
