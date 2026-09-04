@@ -4,7 +4,8 @@ import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/iden
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
 import { deleteObjectKeys, hostedThumbnailFields, prepareHostedThumbnail, type HostedThumbnailStore } from "./hosted-thumbnails";
 import {
-  mapContributionObjectKey, prepareMapContributionFile, type MapContributionFileStore,
+  mapContributionObjectKey, organizerMapBackgroundObjectKey, prepareMapContributionFile, prepareMapImageFile,
+  type MapContributionFileStore, type PreparedMapImage,
 } from "./map-contribution-files";
 import {
   buildMapCandidate, parseMapContributionDraftContent, validateMapContributionDraft,
@@ -2268,6 +2269,69 @@ export function createCirclePortalHandlers({
     return json({ ok: true, version: result.version, mapRevision: result.mapRevision });
   }
 
+  const MAP_BACKGROUND_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+  /** The layout plan a candidate map is traced from. One file per map, replaced
+   * in place, and deliberately outside the revision stream: the plan is an
+   * authoring aid rather than reviewable content, so putting one behind the
+   * booths must not move the candidate on a version or write a map revision
+   * that says nothing about the layout. */
+  async function putOrganizerMapBackground(request: Request, candidateId: string, draftId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!mapContributionStore) return json({ error: "暫時無法使用配置圖，請稍後再試。" }, 503);
+    const [candidate, map] = await Promise.all([
+      repository.getOrganizerCandidate(candidateId),
+      repository.getOrganizerMapDraft(candidateId, draftId),
+    ]);
+    if (!candidate || !map) return json({ error: "找不到地圖草稿。" }, 404);
+    if (candidate.status !== "draft" && candidate.status !== "changes_requested") {
+      return json({ error: "這個活動目前不能編輯。" }, 409);
+    }
+    let form: FormData;
+    try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
+    const file = form.get("file");
+    if (!(file instanceof File)) return json({ error: "請選擇配置圖。" }, 400);
+    let prepared: PreparedMapImage;
+    try { prepared = await prepareMapImageFile(file); }
+    catch (error) { return json({ error: error instanceof Error ? error.message : "配置圖格式無效。" }, 400); }
+    await mapContributionStore.put(
+      organizerMapBackgroundObjectKey({ candidateId, draftId }), prepared.bytes, prepared.contentType,
+    );
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access),
+      action: "organizer_event.map_background_updated", subjectType: "organizer_event", subjectId: candidateId,
+      detail: {
+        draftId, sha256: prepared.sha256, sizeBytes: prepared.sizeBytes,
+        width: prepared.width, height: prepared.height,
+      },
+      ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, width: prepared.width, height: prepared.height });
+  }
+
+  async function getOrganizerMapBackground(request: Request, candidateId: string, draftId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!mapContributionStore) return json({ error: "暫時無法使用配置圖，請稍後再試。" }, 503);
+    const map = await repository.getOrganizerMapDraft(candidateId, draftId);
+    if (!map) return json({ error: "找不到地圖草稿。" }, 404);
+    const object = await mapContributionStore.get(organizerMapBackgroundObjectKey({ candidateId, draftId }));
+    // The bucket answers with whatever was written. Only the three types the
+    // upload accepts are served back, so a stray object cannot pick the content
+    // type of a private response.
+    const contentType = object?.contentType ?? "";
+    if (!object || !MAP_BACKGROUND_TYPES.includes(contentType)) return json({ error: "找不到配置圖。" }, 404);
+    return new Response(object.body, {
+      headers: {
+        "content-type": contentType,
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "default-src 'none'; sandbox",
+      },
+    });
+  }
+
   async function validateOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -2562,6 +2626,7 @@ export function createCirclePortalHandlers({
     listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace,
     updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
+    putOrganizerMapBackground, getOrganizerMapBackground,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
     submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication,
     // Event-scoped: each answers only for the event the request named.

@@ -1,6 +1,9 @@
 import { sha256Hex } from "./hosted-thumbnails";
 
 export const MAP_CONTRIBUTION_MAX_BYTES = 20 * 1024 * 1024;
+/** An organizer's own layout plan is one traced image, not a document set, so
+ * it gets its own smaller ceiling than the contribution evidence above. */
+export const MAP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const MAP_CONTRIBUTION_MAX_PDF_PAGES = 20;
 const MAP_CONTRIBUTION_MAX_IMAGE_PIXELS = 16_000_000;
 const MAP_CONTRIBUTION_MAX_DECOMPRESSED_IMAGE_BYTES = 32 * 1024 * 1024;
@@ -181,6 +184,57 @@ function pdfPageCount(bytes: Uint8Array) {
   return pages >= 1 && pages <= MAP_CONTRIBUTION_MAX_PDF_PAGES ? pages : null;
 }
 
+/** The container checks both entry points share. Sniffing follows the declared
+ * type rather than guessing at one: a file that claims to be a PNG and does not
+ * parse as one is rejected, never re-labelled. */
+async function mapImageDimensions(type: string, view: Uint8Array) {
+  if (type === "image/png") {
+    const dimensions = await pngDimensions(view);
+    if (!dimensions) throw new Error("只接受容器完整、非交錯且宣告像素資料不超過 32 MiB 的 PNG。");
+    return { ...dimensions, extension: "png" as const };
+  }
+  if (type === "image/jpeg") {
+    const dimensions = jpegDimensions(view);
+    if (!dimensions) throw new Error("只接受結構完整的 baseline JPEG（不接受 progressive JPEG）。");
+    return { ...dimensions, extension: "jpg" as const };
+  }
+  if (type === "image/webp") {
+    const dimensions = webpDimensions(view);
+    if (!dimensions) throw new Error("只接受結構完整的靜態 WebP（不接受動畫 WebP）。");
+    return { ...dimensions, extension: "webp" as const };
+  }
+  return null;
+}
+
+export type PreparedMapImage = {
+  bytes: ArrayBuffer;
+  contentType: "image/jpeg" | "image/png" | "image/webp";
+  extension: "jpg" | "png" | "webp";
+  sha256: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+};
+
+/** A layout plan traced behind a map. It carries no source declaration because
+ * the organizer authoring it is the source; what it shares with contribution
+ * evidence is the container and pixel-bomb profile, which lives above. */
+export async function prepareMapImageFile(file: File): Promise<PreparedMapImage> {
+  if (file.size <= 0 || file.size > MAP_IMAGE_MAX_BYTES) throw new Error("配置圖必須介於 1 byte 與 10 MB 之間。");
+  const bytes = await file.arrayBuffer();
+  const image = await mapImageDimensions(file.type, new Uint8Array(bytes));
+  if (!image) throw new Error("配置圖只接受 JPEG、PNG 或 WebP。");
+  return {
+    bytes,
+    contentType: file.type as PreparedMapImage["contentType"],
+    extension: image.extension,
+    sha256: await sha256Hex(bytes),
+    sizeBytes: file.size,
+    width: image.width,
+    height: image.height,
+  };
+}
+
 export async function prepareMapContributionFile(input: {
   file: File;
   sourceUrl: string;
@@ -198,18 +252,9 @@ export async function prepareMapContributionFile(input: {
   let height: number | null = null;
   let pageCount: number | null = null;
 
-  if (input.file.type === "image/png") {
-    const dimensions = await pngDimensions(view);
-    if (!dimensions) throw new Error("只接受容器完整、非交錯且宣告像素資料不超過 32 MiB 的 PNG。");
-    ({ width, height } = dimensions); extension = "png";
-  } else if (input.file.type === "image/jpeg") {
-    const dimensions = jpegDimensions(view);
-    if (!dimensions) throw new Error("只接受結構完整的 baseline JPEG（不接受 progressive JPEG）。");
-    ({ width, height } = dimensions); extension = "jpg";
-  } else if (input.file.type === "image/webp") {
-    const dimensions = webpDimensions(view);
-    if (!dimensions) throw new Error("只接受結構完整的靜態 WebP（不接受動畫 WebP）。");
-    ({ width, height } = dimensions); extension = "webp";
+  const image = await mapImageDimensions(input.file.type, view);
+  if (image) {
+    ({ width, height } = image); extension = image.extension;
   } else if (input.file.type === "application/pdf") {
     pageCount = pdfPageCount(view);
     if (!pageCount) throw new Error(`只接受 classic xref、未加密且不含 object stream 的 PDF，頁數須為 1–${MAP_CONTRIBUTION_MAX_PDF_PAGES} 頁。`);
@@ -242,4 +287,15 @@ export function mapContributionObjectKey(input: { eventId: string; draftId: stri
     if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) throw new Error(`${label} is invalid.`);
   }
   return `map-contributions/${input.eventId}/${input.draftId}/${input.fileId}.${input.extension}`;
+}
+
+/** One key per candidate map, so uploading again overwrites the plan that map
+ * is traced from rather than accumulating a second one. Nothing in D1 points at
+ * it: the draft's own ids are the address, which is also what lets retention
+ * delete the bytes without a metadata row to read first. */
+export function organizerMapBackgroundObjectKey(input: { candidateId: string; draftId: string }) {
+  for (const [label, value] of Object.entries(input)) {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) throw new Error(`${label} is invalid.`);
+  }
+  return `organizer-map-backgrounds/${input.candidateId}/${input.draftId}`;
 }

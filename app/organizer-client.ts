@@ -25,7 +25,9 @@ async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "same-origin",
     headers: {
       accept: "application/json",
-      ...(method !== "GET" && method !== "HEAD" ? { "content-type": "application/json" } : {}),
+      // A FormData body carries its own multipart boundary, which only the
+      // browser can spell. Declaring JSON over it would make the body unreadable.
+      ...(method !== "GET" && method !== "HEAD" && !(init?.body instanceof FormData) ? { "content-type": "application/json" } : {}),
       ...init?.headers,
     },
   });
@@ -189,6 +191,31 @@ export function saveOrganizerMap(candidateId: string, draftId: string, input: {
   return organizerCall<{ ok: true; version: number; mapRevision: number }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps/${encodeURIComponent(draftId)}`, {
     method: "PATCH", body: JSON.stringify(input),
   });
+}
+
+function organizerMapBackgroundPath(candidateId: string, draftId: string) {
+  return `/api/organizer/events/${encodeURIComponent(candidateId)}/maps/${encodeURIComponent(draftId)}/background`;
+}
+
+export function uploadOrganizerMapBackground(candidateId: string, draftId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return organizerCall<{ ok: true; width: number; height: number }>(
+    organizerMapBackgroundPath(candidateId, draftId), { method: "PUT", body: form },
+  );
+}
+
+/** The stored plan, or nothing when this map was never traced from one. Absence
+ * is an ordinary answer here rather than a failure, so it comes back as null
+ * instead of a thrown error. */
+export async function readOrganizerMapBackground(candidateId: string, draftId: string) {
+  const response = await fetch(organizerMapBackgroundPath(candidateId, draftId), { credentials: "same-origin" });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+    throw new PortalError(typeof body.error === "string" ? body.error : "無法讀取配置圖。", response.status, body);
+  }
+  return response.blob();
 }
 
 export function validateOrganizerEvent(candidateId: string) {

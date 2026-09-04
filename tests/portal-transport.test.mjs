@@ -60,18 +60,28 @@ test("a mutating request must declare json, which no html form can send", async 
   assert.equal(withCharset.status, 200);
 });
 
-test("multipart is admitted only for the two same-origin private upload routes", async () => {
-  for (const path of ["/api/circle/ff47-demo/thumbnail", "/api/map-contributions/files"]) {
-    const accepted = await onRequest(context(request("POST", path, {
+test("multipart is admitted only for the same-origin private upload routes", async () => {
+  for (const [method, path] of [
+    ["POST", "/api/circle/ff47-demo/thumbnail"],
+    ["POST", "/api/map-contributions/files"],
+    ["PUT", "/api/organizer/events/candidate-a/maps/draft-a/background"],
+  ]) {
+    const accepted = await onRequest(context(request(method, path, {
       "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
     })));
-    assert.equal(accepted.status, 200, `${path} must pass the shared gate`);
+    assert.equal(accepted.status, 200, `${method} ${path} must pass the shared gate`);
   }
 
   const wrongRoute = await onRequest(context(request("POST", "/api/claims", {
     "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
   })));
   assert.equal(wrongRoute.status, 415);
+  // The allowance is per method as well as per path: nothing else about a map
+  // draft may arrive as a form.
+  const wrongMethod = await onRequest(context(request("POST", "/api/organizer/events/candidate-a/maps/draft-a/background", {
+    "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
+  })));
+  assert.equal(wrongMethod.status, 415);
   const foreign = await onRequest(context(request("POST", "/api/circle/ff47-demo/thumbnail", {
     "content-type": "multipart/form-data; boundary=test", origin: "https://evil.example",
   })));

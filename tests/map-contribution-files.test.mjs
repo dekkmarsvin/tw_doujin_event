@@ -222,3 +222,34 @@ test("private object keys are scoped and reject traversal", () => {
   assert.equal(files.mapContributionObjectKey({ eventId: "ff47", draftId: "draft-a", fileId: "file-a", extension: "png" }), "map-contributions/ff47/draft-a/file-a.png");
   assert.throws(() => files.mapContributionObjectKey({ eventId: "../ff47", draftId: "draft-a", fileId: "file-a", extension: "png" }), /invalid/);
 });
+
+test("a layout plan is read with the same container checks and no source metadata", async () => {
+  for (const fixture of [
+    { type: "image/png", bytes: png(), width: 320, height: 240, extension: "png" },
+    { type: "image/jpeg", bytes: jpeg(), width: 1, height: 1, extension: "jpg" },
+    { type: "image/webp", bytes: webp(), width: 1, height: 1, extension: "webp" },
+  ]) {
+    const prepared = await files.prepareMapImageFile(new File([fixture.bytes], "plan.bin", { type: fixture.type }));
+    assert.equal(prepared.width, fixture.width);
+    assert.equal(prepared.height, fixture.height);
+    assert.equal(prepared.extension, fixture.extension);
+    assert.equal(prepared.contentType, fixture.type);
+    assert.match(prepared.sha256, /^[a-f0-9]{64}$/);
+  }
+  await assert.rejects(() => files.prepareMapImageFile(new File([png(1, 1, { interlace: 1 })], "plan.png", { type: "image/png" })), /非交錯/);
+  await assert.rejects(() => files.prepareMapImageFile(new File([png()], "plan.jpg", { type: "image/jpeg" })), /baseline JPEG/);
+  // A document is evidence for a contribution, never a canvas to trace over.
+  await assert.rejects(() => files.prepareMapImageFile(new File([pdf()], "plan.pdf", { type: "application/pdf" })), /JPEG、PNG 或 WebP/);
+  await assert.rejects(() => files.prepareMapImageFile(new File([], "empty.png", { type: "image/png" })), /1 byte/);
+  await assert.rejects(() => files.prepareMapImageFile(
+    new File([new Uint8Array(files.MAP_IMAGE_MAX_BYTES + 1)], "huge.png", { type: "image/png" }),
+  ), /10 MB/);
+});
+
+test("a candidate map's plan is addressed by the draft's own ids", () => {
+  assert.equal(
+    files.organizerMapBackgroundObjectKey({ candidateId: "candidate-a", draftId: "draft-a" }),
+    "organizer-map-backgrounds/candidate-a/draft-a",
+  );
+  assert.throws(() => files.organizerMapBackgroundObjectKey({ candidateId: "../candidate-a", draftId: "draft-a" }), /invalid/);
+});

@@ -32,6 +32,7 @@ let repository;
 let handlers;
 let handlerOptions;
 let sent;
+let objects;
 
 function request(path, method = "GET", body, cookie) {
   return new Request(`${ORIGIN}${path}`, {
@@ -62,11 +63,20 @@ before(async () => {
 
 beforeEach(async () => {
   sent = [];
+  objects = new Map();
   await repository.clearPreviewData();
   await repository.addAdmin("admin@example.test", "bootstrap", now);
   handlerOptions = {
     repository,
     sendMail: async (message) => { sent.push(message); },
+    mapContributionStore: {
+      put: async (key, value, contentType) => { objects.set(key, { bytes: Buffer.from(value), contentType }); },
+      get: async (key) => {
+        const object = objects.get(key);
+        return object ? { body: object.bytes, contentType: object.contentType } : null;
+      },
+      delete: async (keys) => { for (const key of [keys].flat()) objects.delete(key); },
+    },
     lookupCircle: async () => null,
     searchCircles: async () => [],
     fetchEvidence: async () => null,
@@ -754,4 +764,97 @@ test("an activity survives an invitation the mailer could not send, and says the
   const actions = (await database.prepare("SELECT action FROM audit_log WHERE subject_id = ?1 ORDER BY at")
     .bind(body.candidateId).all()).results.map((row) => row.action);
   assert.deepEqual(actions, ["organizer_event.created", "organizer_event.invitation_failed"]);
+});
+
+/**
+ * The plan a candidate map is traced from. It is stored beside the map instead
+ * of being re-picked every session, so what this pins is the shape of that
+ * store: one object per map, addressed by the draft's own ids, replaced rather
+ * than accumulated, and readable only by the people who may edit the map.
+ */
+test("a candidate map's layout plan is stored once per map, replaced in place, and stays private", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "PF45", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  await handlers.updateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "PATCH", { expectedVersion: 1, draft: {
+      schema: "organizer-event-draft/1",
+      event: { id: "pf45", name: "PF45", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
+      venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+      officialSource: { label: "主辦", url: "https://organizer.example/pf45" },
+    } }, ownerCookie,
+  ), candidateId);
+  const mapCreated = await handlers.createOrganizerMap(request(
+    `/api/organizer/events/${candidateId}/maps`, "POST",
+    { expectedVersion: 2, periodKey: "1", venueSpaceId: VENUE_SPACE_ID, layout: {
+      version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
+      floor: { x: 0, y: 0, width: 100, height: 80 }, rows: [], pillars: [], accessPoints: [], landmarks: [],
+    } }, ownerCookie,
+  ), candidateId);
+  const { draftId } = await mapCreated.json();
+  const path = `/api/organizer/events/${candidateId}/maps/${draftId}/background`;
+  const plan = (name = "plan.png") => new File(
+    [Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64")],
+    name, { type: "image/png" },
+  );
+  const upload = (file, cookie) => {
+    const form = new FormData();
+    form.append("file", file);
+    return new Request(`${ORIGIN}${path}`, { method: "PUT", headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, body: form });
+  };
+
+  const anonymous = await handlers.getOrganizerMapBackground(request(path, "GET"), candidateId, draftId);
+  assert.equal(anonymous.status, 401);
+  const missing = await handlers.getOrganizerMapBackground(request(path, "GET", undefined, ownerCookie), candidateId, draftId);
+  assert.equal(missing.status, 404, "a map traced from nothing has no plan to read");
+
+  const stored = await handlers.putOrganizerMapBackground(upload(plan(), ownerCookie), candidateId, draftId);
+  assert.equal(stored.status, 200);
+  assert.deepEqual(await stored.json(), { ok: true, width: 1, height: 1 });
+  assert.deepEqual([...objects.keys()], [`organizer-map-backgrounds/${candidateId}/${draftId}`]);
+
+  const read = await handlers.getOrganizerMapBackground(request(path, "GET", undefined, ownerCookie), candidateId, draftId);
+  assert.equal(read.status, 200);
+  assert.equal(read.headers.get("content-type"), "image/png");
+  assert.equal(read.headers.get("cache-control"), "private, no-store");
+  assert.equal(read.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(Buffer.from(await read.arrayBuffer()).length, 70);
+
+  // Uploading again is how a plan is corrected, so the second one takes the
+  // first one's place instead of leaving two plans behind one map.
+  const replaced = objects.get(`organizer-map-backgrounds/${candidateId}/${draftId}`).bytes;
+  const other = new File([Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==", "base64")], "plan.webp", { type: "image/webp" });
+  const second = await handlers.putOrganizerMapBackground(upload(other, ownerCookie), candidateId, draftId);
+  assert.equal(second.status, 200);
+  assert.equal(objects.size, 1);
+  assert.notDeepEqual(objects.get(`organizer-map-backgrounds/${candidateId}/${draftId}`).bytes, replaced);
+  const reread = await handlers.getOrganizerMapBackground(request(path, "GET", undefined, ownerCookie), candidateId, draftId);
+  assert.equal(reread.headers.get("content-type"), "image/webp");
+
+  const stranger = await signIn("stranger@example.test", "organizer");
+  assert.equal((await handlers.getOrganizerMapBackground(request(path, "GET", undefined, stranger), candidateId, draftId)).status, 404);
+  assert.equal((await handlers.putOrganizerMapBackground(upload(plan(), stranger), candidateId, draftId)).status, 404);
+  assert.equal((await handlers.putOrganizerMapBackground(
+    upload(plan(), ownerCookie), candidateId, "11111111-1111-4111-8111-111111111111",
+  )).status, 404);
+
+  const document = new File([Buffer.from("%PDF-1.7\n")], "plan.pdf", { type: "application/pdf" });
+  const rejected = await handlers.putOrganizerMapBackground(upload(document, ownerCookie), candidateId, draftId);
+  assert.equal(rejected.status, 400);
+  assert.match((await rejected.json()).error, /JPEG、PNG 或 WebP/);
+
+  const audit = await database.prepare(
+    "SELECT action FROM audit_log WHERE action = 'organizer_event.map_background_updated' AND subject_id = ?1",
+  ).bind(candidateId).all();
+  assert.equal(audit.results.length, 2);
+
+  // Without the private bucket the plan cannot be stored at all, and saying so
+  // is the only honest answer: a 404 would read as "this map has no plan".
+  const unbound = createCirclePortalHandlers({ ...handlerOptions, mapContributionStore: undefined });
+  assert.equal((await unbound.putOrganizerMapBackground(upload(plan(), ownerCookie), candidateId, draftId)).status, 503);
+  assert.equal((await unbound.getOrganizerMapBackground(request(path, "GET", undefined, ownerCookie), candidateId, draftId)).status, 503);
 });
