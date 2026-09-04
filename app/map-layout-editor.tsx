@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsFor, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
+import { overlappingSlotCodes } from "./map-contribution-draft";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
 import styles from "./map-layout-editor.module.css";
@@ -921,6 +922,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   };
 
   const selectedKeys = new Set(selections.map(selectionKey));
+  // Submission refuses overlapping booths by count alone, which leaves the
+  // maintainer hunting for them. Same check, drawn where they are moved.
+  const overlaps = useMemo(() => overlappingSlotCodes(layout), [layout]);
+  const overlapping = useMemo(() => new Set(overlaps), [overlaps]);
   const selectionBoxes = resolveSelectionBoxes(layout, selections).boxes;
   const copyableSlots = slotSelections(selections).length;
   const rectSelection = selection && selection.kind !== "access" ? selection : undefined;
@@ -972,6 +977,13 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     const position = boxFor(layout, nextSelection);
     if (!viewport || !position || renderScale <= 0) return;
     centerMapPoint(viewport, { x: position.x + position.width / 2, y: position.y + position.height / 2 }, renderScale);
+  };
+
+  const focusSlotCode = (code: string) => {
+    const match = findFocusSelection(layout, { kind: "slot", ref: code, nonce: 0 });
+    if (!match) return;
+    setSelections([match]);
+    focusSelection(match);
   };
 
   // Scrolls to what the request named. Keyed on the nonce alone: re-running on
@@ -1114,7 +1126,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const numberField = (label: string, value: number, onValue: (value: number) => void) => <label><span>{label}</span><input type="number" step="0.1" value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
   return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p></div><div className={styles.addTools}><button onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p>
+      {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
@@ -1132,7 +1145,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
             const anchor = rowLabelAnchor(row);
             return anchor && <text key={`label:${row.label}`} className={styles.rowLabel} {...anchor} aria-hidden="true">{row.label}</text>;
           })}
-          {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
+          {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${overlapping.has(slot.code) ? styles.overlapping : ""} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
           {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "entrance" ? styles.entrance : styles.exit} ${selectedKeys.has(`access:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path transform={mapAccessArrowTransform(point)} d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
           {snapGuides.map((guide) => guide.axis === "x"
