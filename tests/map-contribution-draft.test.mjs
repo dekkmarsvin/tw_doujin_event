@@ -6,7 +6,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const {
-  MAP_CONTRIBUTION_DRAFT_SCHEMA, buildMapCandidate, parseMapContributionDraftContent,
+  MAP_CONTRIBUTION_DRAFT_SCHEMA, buildMapCandidate, overlappingSlotCodes, parseMapContributionDraftContent,
   resolveCanonicalMapPeriod, validateMapContributionDraft,
 } = await environment.runner.import("/app/map-contribution-draft.ts");
 const { generateRowSlotsFromRect } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
@@ -92,6 +92,17 @@ test("submission reports unknown, missing and overlapping booth rectangles toget
   assert.deepEqual(result.problems.map(({ code }) => code).sort(), ["missing_booth", "overlap", "unknown_booth"]);
   assert.deepEqual(result.problems.find(({ code }) => code === "unknown_booth").boothCodes, ["X99"]);
   assert.deepEqual(result.problems.find(({ code }) => code === "missing_booth").boothCodes, ["S02"]);
+});
+
+test("the editor is told which booths overlap, not only how many pairs do", () => {
+  const invalid = structuredClone(layout);
+  invalid.rows[0].slots = [
+    { code: "S01", rect: { x: 20, y: 35, width: 50, height: 30 } },
+    { code: "S02", rect: { x: 40, y: 40, width: 50, height: 30 } },
+    { code: "S03", rect: { x: 130, y: 35, width: 50, height: 30 } },
+  ];
+  assert.deepEqual(overlappingSlotCodes(invalid), ["S01", "S02"]);
+  assert.deepEqual(overlappingSlotCodes(layout), []);
 });
 
 test("booths cut from one drawn rectangle touch without counting as overlapping", () => {

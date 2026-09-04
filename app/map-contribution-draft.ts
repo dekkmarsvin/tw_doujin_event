@@ -160,6 +160,13 @@ function overlapProblems(layout: EventMapLayout) {
   return pairs;
 }
 
+/** Booth codes whose rectangle intersects another booth's, using the same
+ * sweep and the same 50-pair cap submission reports. The editor outlines them
+ * so the overlaps a refusal counts can be found and moved. */
+export function overlappingSlotCodes(layout: EventMapLayout) {
+  return [...new Set(overlapProblems(layout).flat())].sort();
+}
+
 export function validateMapContributionDraft(
   value: unknown,
   scope: MapContributionScope,

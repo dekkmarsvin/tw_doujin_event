@@ -2,6 +2,10 @@
 .editor>header { display:flex; justify-content:space-between; gap:18px; align-items:center; padding:13px 14px; border-bottom:1px solid #d4dad5; background:#fff; }
 .editor h3 { margin:0; font-size:calc(13px * var(--ui-font-scale,1)); }
 .editor header p { margin:4px 0 0; color:#748078; font-size:calc(9px * var(--ui-font-scale,1)); line-height:1.5; }
+.overlapNotice { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin:6px 0 0!important; color:#ad453d!important; font-weight:800; }
+.overlapNotice button { min-height:24px; padding:2px 7px; border:1px solid #e2a79f; border-radius:6px; background:#fdf2f0; color:#9b352a; font:inherit; cursor:pointer; }
+.overlapNotice button:hover { border-color:#c0685c; background:#fbe6e2; }
+.overlapNotice button:focus-visible { outline:3px solid #f1cfc9; outline-offset:2px; }
 .addTools { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px; }
 .addTools button { min-height:32px; padding:6px 9px; border:1px solid #d4dad5; border-radius:7px; background:#fff; color:#344039; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
 .addTools button:hover { border-color:#79857d; background:#f2f4f1; }
@@ -47,6 +51,8 @@
 .editable :is(rect,circle) { vector-effect:non-scaling-stroke; }
 .slot { fill:#eff1edcc; stroke:#7f8982; stroke-width:1; }
 .editable text { fill:#344039; font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
+.overlapping rect.slot { fill:#f6d9d3cc; stroke:#c0563f; stroke-width:2; stroke-dasharray:4 3; }
+.overlapping text { fill:#9b352a; }
 .landmark { fill:#e7e1d3cc; stroke:#7c725e; stroke-width:2; }
 .landmark+text { font-size:11px; }
 .pillar { fill:#202a35; stroke:#fff; stroke-width:1; }
