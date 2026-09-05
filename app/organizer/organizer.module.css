@@ -164,10 +164,37 @@
 .placeholder { min-height: 170px; margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; display: grid; place-items: center; padding: 18px; background: var(--paper); color: var(--muted); font-size: 12px; text-align: center; }
 .importGrid, .mappingGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 20px 0; }
 .mappingGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); padding-top: 18px; }
-.importPreview { margin-top: 18px; overflow: auto; }
-.importPreview table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.importPreview th, .importPreview td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; white-space: nowrap; }
-.importPreview th { color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+/* A bordered fieldset keeps `display: block`: a legend inside a grid formatting
+   context renders inconsistently across engines, so the grid goes on an inner
+   wrapper instead. */
+.mappingField { display: block; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); font-size: 12px; font-weight: 700; }
+.mappingField > legend { padding: 0 5px; color: var(--ink); font-size: 12px; font-weight: 700; }
+.mappingField > div { display: grid; gap: 8px; }
+.mappingField .subLabel { display: grid; gap: 4px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.derivedField.mappingField { display: grid; }
+.derivedField.mappingField strong { background: var(--surface); }
+.sample { margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 16px; background: var(--paper); }
+.sample h4 { margin: 0 0 4px; font-size: 12px; }
+.sample > p { margin: 0 0 12px; font-size: 11px; }
+.sampleTable { overflow-x: auto; }
+.sampleActions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.sampleActions p { margin: 0; font-size: 10px; }
+.importPreview, .sampleTable { margin-top: 18px; overflow: auto; }
+.sampleTable { margin-top: 0; }
+.importPreview table, .sampleTable table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.importPreview th, .importPreview td, .sampleTable th, .sampleTable td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; white-space: nowrap; }
+.importPreview th, .sampleTable th { color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+/* Table cells are 11px, so their controls undercut the 38px flow-control height
+   in docs/design/components.md; that rule is about primary form fields. */
+.importPreview td :global(input), .importPreview td :global(select) { max-width: 200px; min-height: 30px; padding: 0 7px; font-size: 11px; }
+.rowGroup td { border-bottom: 0; padding-top: 16px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: normal; }
+.rowGroup td span { display: block; margin-top: 3px; font-weight: 400; }
+.issueRow td { background: var(--danger-soft); border-bottom-color: #edc5bf; }
+.issueCell :global(input), .issueCell :global(select) { border-color: #d59a90 !important; }
+.duplicateNote td { padding-top: 0; color: var(--danger); background: var(--danger-soft); border-bottom-color: #edc5bf; white-space: normal; }
+.excludedRow td { opacity: .6; }
+.rowAction { width: 1%; white-space: nowrap; }
+.rowAction button { padding: 4px 9px !important; font-size: 10px; }
 .mapPanel { padding: 18px; }
 .mapToolbar { display: grid; grid-template-columns: 1fr 1fr auto auto 1.2fr; gap: 10px; align-items: end; margin: 18px 0; }
 .fileButton { border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; background: var(--surface); color: var(--ink); cursor: pointer; }
@@ -198,6 +225,7 @@
   .venueCard { grid-template-columns: 1fr 1fr; }
   .venueCard .dangerText { justify-self: start; }
   .mapToolbar { grid-template-columns: 1fr 1fr; }
+  .mappingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 1039px) {
