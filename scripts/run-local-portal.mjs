@@ -1,9 +1,19 @@
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { localPortalWranglerArgs, readLocalPortalEnvironment } from "./local-portal-environment.mjs";
 
 const values = await readLocalPortalEnvironment();
-const wrangler = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
+// Resolved rather than pointed at: a git worktree has no `node_modules` of its
+// own and takes the checkout's, so a path relative to this file finds nothing.
+// The executable comes from the manifest because wrangler's `exports` does not
+// publish its own bin path.
+const manifest = createRequire(import.meta.url).resolve("wrangler/package.json");
+const wrangler = fileURLToPath(new URL(
+  JSON.parse(await readFile(manifest, "utf8")).bin.wrangler,
+  pathToFileURL(manifest),
+));
 const child = spawn(process.execPath, [wrangler, ...localPortalWranglerArgs(values)], {
   cwd: fileURLToPath(new URL("..", import.meta.url)),
   stdio: "inherit",
