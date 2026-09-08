@@ -946,18 +946,53 @@ function AdminPanel({ event }: { event: EventDefinition }) {
   const [takedownId, setTakedownId] = useState("");
   const [reason, setReason] = useState("");
 
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const requestVersion = useRef({ version: 0 });
+
   const refresh = useCallback(() => {
+    const version = ++requestVersion.current.version;
+    setLoading(true);
     void listPendingClaims()
-      .then((result) => setPending(result.claims))
-      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+      .then((result) => {
+        if (version !== requestVersion.current.version) return;
+        setPending(result.claims);
+        setLoaded(true);
+        setLoadError("");
+      })
+      .catch((error: unknown) => {
+        if (version === requestVersion.current.version) setLoadError(errorMessage(error));
+      })
+      .finally(() => {
+        if (version === requestVersion.current.version) setLoading(false);
+      });
   }, []);
 
-  useEffect(refresh, [refresh]);
+  useEffect(() => {
+    const requests = requestVersion.current;
+    const initialRefresh = window.setTimeout(refresh, 0);
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const timer = window.setInterval(refreshVisible, 30_000);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      ++requests.version;
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [refresh]);
 
   return <section className={`${styles.card} ${styles.admin}`} id="admin">
     <h2>管理：待審認領</h2>
     <p className={styles.editorHint}>目前活動：{event.name}。認領逐場活動分開，同名社團在不同活動是不同的認領。</p>
-    {pending.length === 0 ? <p>目前沒有待審項目。</p> : <ul className={styles.claimList}>
+    <button type="button" onClick={refresh} disabled={loading}>{loading ? "更新中…" : "重新整理待審認領"}</button>
+    {loadError && <p role="alert">{loadError}</p>}
+    {pending.length === 0 ? loaded && !loadError && <p>目前沒有待審項目。</p> : <ul className={styles.claimList}>
       {pending.map((claim) => <li key={claim.id}>
         <div>
           <b>{claim.circleName}</b>

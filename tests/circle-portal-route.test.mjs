@@ -1046,6 +1046,24 @@ test("self-service deletion and the scheduled purge leave the same nothing behin
   clock = 1_786_500_000_000;
 });
 
+test("an existing admin session sees new claims and completed decisions on refresh", async () => {
+  const admin = await signIn("admin@example.com");
+  const readQueue = () => handlers.adminListClaims(get("/api/admin/claims", admin));
+  assert.deepEqual((await (await readQueue()).json()).claims, []);
+
+  const owner = await signIn("new-claim@example.com");
+  const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, owner));
+  assert.equal(created.status, 201);
+  const claim = await created.json();
+  assert.equal(claim.status, "pending");
+  const refreshed = await readQueue();
+  assert.equal(refreshed.headers.get("cache-control"), "no-store");
+  assert.deepEqual((await refreshed.json()).claims.map((item) => item.id), [claim.id]);
+
+  assert.equal((await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: claim.id, decision: "approve" }, admin))).status, 200);
+  assert.deepEqual((await (await readQueue()).json()).claims, []);
+});
+
 test("only a listed admin reaches the review queue", async () => {
   const ordinary = await signIn("ordinary@example.com");
   assert.equal((await handlers.adminListClaims(get("/api/admin/claims", ordinary))).status, 403);
