@@ -1107,9 +1107,22 @@ test("the generic public route rejects an event that does not match handler conf
 test("admin actions require a recently created session", async () => {
   const admin = await signIn("admin@example.com");
   clock += 25 * 60 * 60 * 1000;
-  const response = await handlers.adminListClaims(get("/api/admin/claims", admin));
-  assert.equal(response.status, 401, "a stale admin session must re-authenticate before deciding");
-  clock -= 25 * 60 * 60 * 1000;
+  try {
+    const owner = await signIn("later-claim@example.com");
+    const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, owner));
+    assert.equal(created.status, 201);
+    const claim = await created.json();
+    const refreshed = await handlers.adminListClaims(get("/api/admin/claims", admin));
+    assert.equal(refreshed.status, 200, "an older valid session can still refresh the queue");
+    assert.deepEqual((await refreshed.json()).claims.map((item) => item.id), [claim.id]);
+    const response = await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: claim.id, decision: "approve" }, admin));
+    assert.equal(response.status, 401, "a stale admin session must re-authenticate before deciding");
+    assert.equal((await repository.getClaim(claim.id)).status, "pending");
+    assert.equal((await handlers.adminListClaims(get("/api/admin/claims"))).status, 401);
+    assert.equal((await handlers.adminListClaims(get("/api/admin/claims", owner))).status, 403);
+  } finally {
+    clock -= 25 * 60 * 60 * 1000;
+  }
 });
 
 test("a takedown removes the content and a second takedown reports nothing to do", async () => {

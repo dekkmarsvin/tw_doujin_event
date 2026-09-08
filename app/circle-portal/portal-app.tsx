@@ -13,7 +13,6 @@ import {
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail,
 } from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem, THUMBNAIL_NOT_AN_IMAGE } from "../circle-override-messages";
-import { findCircleCategory } from "../circle-categories";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
@@ -779,7 +778,6 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   };
 
   const thumbnail = fields.thumbnail ?? undefined;
-  const selectedCircleCategory = fields.circleCategory ? findCircleCategory(event.circleCategories, fields.circleCategory) : null;
   const editThumbnail = (patch: Partial<CircleOverrideThumbnail>) => {
     // Metadata edits still describe the same staged object. Only replacing the
     // URL turns it into a different (external) thumbnail and drops the key.
@@ -903,14 +901,6 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       <option value="">尚未選擇</option>
       {event.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
     </select>
-    <p className={styles.editorHint}>
-      請依本次主要販售內容選擇一項。
-      {selectedCircleCategory?.description && <>目前類別：{selectedCircleCategory.description}。</>}
-      {" "}
-      {event.circleCategories.sources.map((source, index) => <span key={source.id}>
-        {index > 0 && "、"}<a href={source.url} target="_blank" rel="noreferrer">原始來源{event.circleCategories.sources.length > 1 ? ` ${index + 1}` : ""}</a>
-      </span>)}
-    </p>
     <FieldModeControls
       mode={modeFor("circleCategory")} label="社團主題"
       inheritStatus="目前未選擇" inheritAction="恢復未選擇"

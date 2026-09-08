@@ -901,14 +901,20 @@ export function createCirclePortalHandlers({
     return json({ ok: true, hidden: body.hidden });
   }
 
-  async function requireFreshAdmin(request: Request): Promise<AdminGate> {
+  async function requireAdmin(request: Request): Promise<AdminGate> {
     const current = await currentSession(request);
     if (!current) return { ok: false, response: json({ error: "尚未登入。" }, 401) };
     if (!await isAdmin(current.email)) return { ok: false, response: json({ error: "沒有權限。" }, 403) };
-    if (config.now() - current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
+    return { ok: true, session: current };
+  }
+
+  async function requireFreshAdmin(request: Request): Promise<AdminGate> {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate;
+    if (config.now() - gate.session.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
       return { ok: false, response: json({ error: "管理操作需要重新登入。" }, 401) };
     }
-    return { ok: true, session: current };
+    return gate;
   }
 
   async function adminManageMapContributor(request: Request) {
@@ -1476,7 +1482,9 @@ export function createCirclePortalHandlers({
   }
 
   async function adminListClaims(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    // Reading the live queue must work for the full valid session. Only a
+    // decision requires step-up; polling cannot renew sessionCreatedAt.
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const claims = await repository.listClaimsByStatus(config.eventId, "pending");
     // The reviewer is looking at one event's queue; two events can list the same
