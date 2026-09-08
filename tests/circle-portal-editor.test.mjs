@@ -177,7 +177,7 @@ test("the step-up lock is stated once, above the forms it turns off", async () =
   // of it per card.
   for (const [name, panel] of [["portal-app.tsx", app], ["map-contribution-panel.tsx", mapPanel]]) {
     assert.equal(panel.split("<AdminStepUpBanner />").length - 1, 1, `${name} states the lock once`);
-    assert.match(panel, /styles\.admin\}`} id="(admin|map-review)">\r?\n    <AdminStepUpBanner \/>/, `${name} states it first`);
+    assert.match(panel, /styles\.admin\}`} id="(admin|map-review)">\r?\n {4}<AdminStepUpBanner \/>/, `${name} states it first`);
   }
 
   // Nothing routes a step-up refusal into a form's own line, and every gated
