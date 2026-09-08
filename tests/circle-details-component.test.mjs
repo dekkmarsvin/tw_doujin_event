@@ -43,6 +43,26 @@ test("read-only publication preview keeps all content but removes keyboard activ
   assert.equal([...markup.matchAll(/<a\b/g)].length, [...markup.matchAll(/<a\b[^>]*aria-disabled="true"[^>]*tabindex="-1"/g)].length);
 });
 
+test("a picture with no stated source shows the credit alone, or nothing", () => {
+  // Only the gallery footer: the 資料來源 list below it carries its own
+  // 原始來源 link for the organizer row, which this rule does not touch.
+  const gallery = (media) => renderToStaticMarkup(React.createElement(CircleDetails, {
+    record: { ...record, circle: { ...circle, media: [media] } },
+    sharedRecords: [], favorite: null, plan: null, groups: [], ...callbacks,
+  })).split("galleryFooter")[1].split("detailBody")[0];
+
+  // Provenance is optional on an upload (ADR-0053), and an empty link is not a
+  // link: with nothing to point at the row keeps the credit and drops the
+  // anchor; with no credit either it says nothing (ADR-0036).
+  const credited = gallery({ id: "m", url: "https://image.example/a.png", sourceUrl: "", provider: "委託：某繪師", alt: "代表圖" });
+  assert.match(credited, /委託：某繪師/);
+  assert.doesNotMatch(credited, /原始來源/);
+
+  const bare = gallery({ id: "m", url: "https://image.example/a.png", sourceUrl: "", provider: "", alt: "代表圖" });
+  assert.doesNotMatch(bare, /原始來源/);
+  assert.match(gallery(circle.media[0]), /原始來源/);
+});
+
 test("informative results identify circle-authored summaries without trust wording", () => {
   const circleSource = {
     provider: "由社團填寫", contentType: "circle", label: "", url: "",

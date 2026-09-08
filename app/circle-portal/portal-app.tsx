@@ -136,11 +136,6 @@ function isMultiChoiceField(key: CircleOverrideListFieldKey): key is MultiChoice
   return (MULTI_CHOICE_FIELD_KEYS as readonly string[]).includes(key);
 }
 
-/** 只寫在會被讀成單選的欄位上。創作者類型本來就是複選，不需要解釋。 */
-const MULTI_CHOICE_HINT: Partial<Record<MultiChoiceFieldKey, string>> = {
-  ageRatings: "同時販售全年齡與 R18 就兩個都勾。這裡描述的是販售內容，不是一個社團只能有一種分級。",
-};
-
 function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "沿用場刊", inheritAction = "沿用場刊" }: {
   mode: keyof typeof FIELD_MODE_LABEL;
   label: string;
@@ -713,7 +708,6 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     const id = `${key}-${claim.circleId}`;
     if (isMultiChoiceField(key)) return <fieldset className={styles.choiceGroup}>
       <legend>{label}</legend>
-      {MULTI_CHOICE_HINT[key] && <p className={styles.editorHint}>{MULTI_CHOICE_HINT[key]}</p>}
       <div>{optionsFor(key).map((option) => <label key={option}>
         <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
         <span>{option}</span>
@@ -812,9 +806,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         id: `thumb-url-${claim.circleId}`,
         message: thumbnailLoad?.url === thumbnail.url ? THUMBNAIL_NOT_AN_IMAGE : "代表圖還在確認能不能載入，請稍候。",
       } : null,
-    thumbnail && !thumbnail.sourceUrl.trim() ? { id: `thumb-source-${claim.circleId}`, message: "代表圖需要填寫出處頁面。" } : null,
     thumbnail?.sourceUrl?.trim() && linkUrlProblem(thumbnail.sourceUrl) ? { id: `thumb-source-${claim.circleId}`, message: linkUrlProblem(thumbnail.sourceUrl) } : null,
-    thumbnail && !thumbnail.provider.trim() ? { id: `thumb-provider-${claim.circleId}`, message: "代表圖需要填寫來源標示。" } : null,
     JSON.stringify(fields).length > OVERRIDE_LIMITS.serializedFields
       ? { id: `editor-fields-${claim.circleId}`, message: `全部欄位合計超過 ${OVERRIDE_LIMITS.serializedFields} 字元，請縮短內容或連結。` } : null,
   ].filter((problem): problem is { id: string; message: string } => problem !== null);
@@ -973,7 +965,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     <h3 className={styles.editorSection}>代表圖</h3>
     <FieldModeControls mode={modeFor("thumbnail")} label="代表圖" onInherit={() => inheritField("thumbnail")} onClear={() => clearField("thumbnail")} />
 
-    <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片（JPEG、PNG、WebP，最多 2 MiB）</label>
+    <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片（JPEG、PNG、WebP，最多 5 MiB）</label>
     <input
       id={`thumb-file-${claim.circleId}`} type="file" accept="image/jpeg,image/png,image/webp"
       disabled={status.kind === "busy"}
@@ -981,16 +973,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         const input = event.currentTarget;
         const file = event.target.files?.[0];
         if (!file) return;
-        // The upload needs a source page, but asking for it by silently failing
-        // a picker that sits above it reads as "nothing happened". Say it here,
-        // next to the control that was used.
+        // Whatever credit is already filled in travels with the bytes; neither
+        // field gates the upload (ADR-0053).
         const sourceUrl = thumbnail?.sourceUrl?.trim() ?? "";
-        const provider = thumbnail?.provider?.trim() || "社團本人";
-        if (!sourceUrl || linkUrlProblem(sourceUrl)) {
-          setUploadNotice({ kind: "error", message: "請先填寫下面的「圖片出處頁面」，再選擇檔案。" });
-          input.value = "";
-          return;
-        }
+        const provider = thumbnail?.provider?.trim() ?? "";
         setUploadNotice({ kind: "busy", message: "上傳中…" });
         setStatus({ kind: "busy", message: "上傳代表圖中…" });
         void uploadThumbnail(claim.circleId, file, sourceUrl, provider)
@@ -1029,7 +1015,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok && <p className={styles.error}>{THUMBNAIL_NOT_AN_IMAGE}</p>}
     </div>}
 
-    <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面</label>
+    <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面（選填）</label>
     <input
       id={`thumb-source-${claim.circleId}`} value={thumbnail?.sourceUrl ?? ""} inputMode="url" placeholder="https://"
       aria-invalid={thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) ? true : undefined}
@@ -1037,7 +1023,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     />
     {thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) && <p className={styles.error}>{linkUrlProblem(thumbnail.sourceUrl)}</p>}
 
-    <label htmlFor={`thumb-provider-${claim.circleId}`}>來源標示</label>
+    <label htmlFor={`thumb-provider-${claim.circleId}`}>來源標示（選填，例如轉載或委託繪師）</label>
     <input
       id={`thumb-provider-${claim.circleId}`} value={thumbnail?.provider ?? ""} maxLength={OVERRIDE_LIMITS.listItemLength}
       placeholder="例如：Pixiv" onChange={(event) => editThumbnail({ provider: event.target.value })}

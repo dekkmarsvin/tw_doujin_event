@@ -1,6 +1,6 @@
 import { isHttpsUrl, type CircleOverrideThumbnail } from "./circle-overrides";
 
-export const HOSTED_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
+export const HOSTED_THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024;
 const R2_DELETE_BATCH_SIZE = 1000;
 
 const FORMATS = [
@@ -38,19 +38,26 @@ export async function sha256Hex(value: ArrayBuffer) {
     .join("");
 }
 
+/**
+ * A circle uploading its own artwork is the source; there is no other page to
+ * point at, so the two provenance fields are optional here (ADR-0053). They are
+ * still validated when filled — a credit for someone else's work is worth
+ * keeping accurate.
+ */
 export async function prepareHostedThumbnail(input: {
   eventId: string;
   circleId: string;
   file: File;
-  sourceUrl: string;
-  provider: string;
+  sourceUrl?: string;
+  provider?: string;
 }) {
   if (input.file.size === 0 || input.file.size > HOSTED_THUMBNAIL_MAX_BYTES) {
-    throw new Error("代表圖必須大於 0 bytes，且不可超過 2 MiB。");
+    throw new Error("代表圖必須大於 0 bytes，且不可超過 5 MiB。");
   }
-  if (!isHttpsUrl(input.sourceUrl)) throw new Error("圖片出處頁面必須是 https 網址。");
-  const provider = input.provider.normalize("NFKC").trim();
-  if (!provider || provider.length > 60) throw new Error("來源標示必須為 1 到 60 字。");
+  const sourceUrl = (input.sourceUrl ?? "").trim();
+  if (sourceUrl && !isHttpsUrl(sourceUrl)) throw new Error("圖片出處頁面若要填寫，必須是 https 網址。");
+  const provider = (input.provider ?? "").normalize("NFKC").trim();
+  if (provider.length > 60) throw new Error("來源標示最多 60 字。");
 
   const value = await input.file.arrayBuffer();
   const format = detectHostedThumbnailFormat(new Uint8Array(value));
@@ -59,7 +66,7 @@ export async function prepareHostedThumbnail(input: {
   }
   const hash = await sha256Hex(value);
   const key = `events/${encodeURIComponent(input.eventId)}/circles/${encodeURIComponent(input.circleId)}/${hash}.${format.extension}`;
-  return { key, value, contentType: format.mime, sourceUrl: input.sourceUrl, provider };
+  return { key, value, contentType: format.mime, sourceUrl, provider };
 }
 
 export function hostedThumbnailFields(store: HostedThumbnailStore, prepared: Awaited<ReturnType<typeof prepareHostedThumbnail>>): CircleOverrideThumbnail {

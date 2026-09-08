@@ -746,15 +746,19 @@ export function createCirclePortalHandlers({
       return json({ error: "上傳格式無效。" }, 400);
     }
     const file = form.get("file");
+    // Only the bytes are required: the circle that uploads its own artwork is
+    // the source, and the two credit fields are optional (ADR-0053).
     const sourceUrl = form.get("sourceUrl");
     const provider = form.get("provider");
-    if (!(file instanceof File) || typeof sourceUrl !== "string" || typeof provider !== "string") {
-      return json({ error: "請選擇圖片，並填寫出處頁面與來源標示。" }, 400);
-    }
+    if (!(file instanceof File)) return json({ error: "請選擇圖片。" }, 400);
 
     let prepared: Awaited<ReturnType<typeof prepareHostedThumbnail>>;
     try {
-      prepared = await prepareHostedThumbnail({ eventId: config.eventId, circleId, file, sourceUrl, provider });
+      prepared = await prepareHostedThumbnail({
+        eventId: config.eventId, circleId, file,
+        sourceUrl: typeof sourceUrl === "string" ? sourceUrl : "",
+        provider: typeof provider === "string" ? provider : "",
+      });
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "代表圖格式無效。" }, 400);
     }

@@ -167,7 +167,12 @@ function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onA
         <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" disabled={readOnly} key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
         <button type="button" disabled={readOnly} onClick={() => move(1)} aria-label="下一張圖片"><UiIcon name="chevron-right" /></button>
       </div>}
-      <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>原始來源</span><UiIcon name="external" /></a>
+      {/* Provenance is optional on a circle's own upload (ADR-0053). With no
+          link there is nothing to point at, so the row shows the credit alone —
+          and nothing at all when there is no credit either (ADR-0036). */}
+      {activeMedia.sourceUrl
+        ? <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>原始來源</span><UiIcon name="external" /></a>
+        : activeMedia.provider ? <div className={styles.mediaSource}><span>{activeMedia.provider}</span></div> : null}
     </div>}
   </div>;
 }
