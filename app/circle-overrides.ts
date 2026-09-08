@@ -98,10 +98,10 @@ export function circleRetentionExpiresAt(choice: CircleRetentionChoice, eventEnd
 
 export const CIRCLE_OVERRIDE_LIST_FIELDS = [
   { key: "referencedWorks", label: "作品／題材" },
-  { key: "creatorTypes", label: "創作者類型" },
-  { key: "workTypes", label: "作品類型" },
+  { key: "creatorTypes", label: "創作內容" },
+  { key: "workTypes", label: "作品取向" },
   { key: "ageRatings", label: "年齡分級" },
-  { key: "specialTags", label: "作品標籤" },
+  { key: "specialTags", label: "內容標籤" },
 ] as const;
 
 /**
@@ -230,11 +230,11 @@ export function circleOverrideFieldsProblem(
   if ("saleInfo" in fields && !isBoundedString(fields.saleInfo, OVERRIDE_LIMITS.saleInfo)) return `販售資訊最多 ${OVERRIDE_LIMITS.saleInfo} 字。`;
   if ("circleCategory" in fields && !(categories
     ? isCircleCategoryLabel(categories, fields.circleCategory)
-    : isBoundedString(fields.circleCategory, OVERRIDE_LIMITS.listItemLength))) return "社團主題類別不在這場活動的類別清單裡。";
+    : isBoundedString(fields.circleCategory, OVERRIDE_LIMITS.listItemLength))) return "社團主題不在這場活動的類別清單裡。";
   const listField = CIRCLE_OVERRIDE_LIST_FIELDS.find(({ key }) => key in fields && !isBoundedList(fields[key]));
   if (listField) return `${listField.label}最多 ${OVERRIDE_LIMITS.listItems} 項，每項最多 ${OVERRIDE_LIMITS.listItemLength} 字。`;
   if ("links" in fields && !(Array.isArray(fields.links) && fields.links.length <= OVERRIDE_LIMITS.links && fields.links.every(isLink))) {
-    return `外部連結最多 ${OVERRIDE_LIMITS.links} 個，每個都要有平台名稱與 https:// 網址。`;
+    return `連結最多 ${OVERRIDE_LIMITS.links} 個，每個都要有平台名稱與 https:// 網址。`;
   }
   if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) {
     return "代表圖需要 https:// 的圖片網址；出處頁面若要填寫也必須是 https。";

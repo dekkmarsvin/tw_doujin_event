@@ -16,12 +16,12 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 | `area` | 活動 | 展區，永遠寫出。讀取時接受 legacy 別名 `hall` |
 | `venueSpaceId` | 活動 | 場館空間 stable ID；只有活動分配多個場館空間時寫出 |
 | `query` | 探索搜尋 | 一般關鍵字 |
-| `genre` | 探索搜尋 | 社團主題類別；值為目前活動分類目錄中的顯示名稱 |
-| `creator` | 詳細搜尋 | 創作者類型 |
+| `genre` | 探索搜尋 | 社團主題；值為目前活動分類目錄中的顯示名稱 |
+| `creator` | 詳細搜尋 | 創作內容 |
 | `work` | 詳細搜尋 | 作品名稱／題材。**可重複**，一枚題材一個參數 |
 | `workMode` | 詳細搜尋 | 多枚題材的組合方式；只有 `all` 會寫出，`any` 是預設 |
 | `workExclude` | 詳細搜尋 | 排除的作品名稱／題材。**可重複** |
-| `workType` | 詳細搜尋 | 作品類型；`male`、`female` 或 `general`。退役的 `original`／`derivative` 視為未設定 |
+| `workType` | 詳細搜尋 | 作品取向；`male`、`female` 或 `general`。退役的 `original`／`derivative` 視為未設定 |
 | `r18` | 詳細搜尋 | 分級；`general` 只匹配明確一般分級 |
 | `favorite` | 規劃篩選 | `1` 代表只看收藏 |
 | `favoriteGroup` | 規劃篩選 | 收藏群組 ID |

@@ -48,6 +48,26 @@ test("the detail panel drops the gallery column instead of leaving it empty", as
   assert.match(css, /\.fullDetails:not\(\.detailsWithMedia\)>\.detailBody \{/);
 });
 
+test("the detail panel splits on the space it is in, not the window", async () => {
+  // The portal's preview column is ~400px wide at every viewport size, so the
+  // 660px two-column minimum pushed the body column outside the clipped frame
+  // as soon as a circle uploaded a picture. The viewport media query cannot see
+  // that; the container query can.
+  const css = await source("event-workspace-panels.module.css");
+  assert.match(css, /@container [(]max-width:700px[)] [{][\s\S]*?[.]fullDetails,[.]fullDetails[.]detailsWithMedia [{] height:auto; display:block; [}]/);
+
+  const portal = await readFile(new URL("../app/circle-portal/portal.module.css", import.meta.url), "utf8");
+  assert.match(portal, /\.previewFrame \{[^}]*container-type: inline-size;/);
+});
+
+test("a tall picture stays inside the side panel's picture band", async () => {
+  // A grid item's automatic minimum size is its min-content height, so a
+  // portrait upload out-voted the gallery's own height and spilled over the
+  // 16:8 band — cropped, in the density where the picture is smallest.
+  const css = await source("event-workspace-panels.module.css");
+  assert.match(css, /[.]galleryOpen img,[.]galleryFrame>img [{] width:100%; height:100%; min-height:0;/);
+});
+
 test("a booth without a thumbnail is drawn as a plain slot at every zoom", async () => {
   const renderer = await source("accessible-event-map-renderer.tsx");
 

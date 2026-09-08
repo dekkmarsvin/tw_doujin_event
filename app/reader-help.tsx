@@ -47,7 +47,7 @@ export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLa
         <button type="button" onClick={() => { setOpen(false); buttonRef.current?.focus(); }} aria-label="關閉使用說明"><UiIcon name="close" /></button>
       </header>
       <ol className={styles.steps}>
-        <li><strong>找社團與作品</strong><span>輸入社團、攤位或作品；「詳細搜尋」可再依創作者、作品類型與分級篩選。按 Ctrl/Command + K 可直接聚焦搜尋欄。</span></li>
+        <li><strong>找社團與作品</strong><span>輸入社團、攤位或作品；「詳細搜尋」可再依創作內容、作品取向與分級篩選。按 Ctrl/Command + K 可直接聚焦搜尋欄。</span></li>
         <li><strong>查看攤位</strong><span>拖曳、縮放或重設地圖位置。鍵盤使用者可進入地圖後以方向鍵移動，按 Enter 或空白鍵開啟攤位。</span></li>
         <li><strong>收藏與安排行程</strong><span>收藏、加入行程與設為下一站是三個獨立動作。行程建立後可使用「導航模式」只看當日預定攤位並標記已走訪。</span></li>
         <li><strong>備份本機資料</strong><span>收藏、備註、群組、購買項目與預算只存在此瀏覽器。「資料管理」可匯出 JSON 或 CSV；目前網頁尚未提供匯入。</span></li>
