@@ -1,4 +1,5 @@
-import { circleRetentionExpiresAt, isCircleOverrideFields, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
+import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
+import { getEventDefinition } from "./event-catalog";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -636,6 +637,11 @@ export function createCirclePortalHandlers({
     return json(verified ? { verified: true } : { verified: false, error: "此社團已有通過的認領。" }, verified ? 200 : 409);
   }
 
+  /** `null` for an event this build does not know: the bounded string rule then applies. */
+  function eventCategories() {
+    return getEventDefinition(config.eventId)?.circleCategories ?? null;
+  }
+
   function extractChallenge(body: string) {
     const eventPrefix = config.eventId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return body.match(new RegExp(`${eventPrefix}-[23456789BCDFGHJKLMNPQRSTVWXYZ]{10}`))?.[0] ?? null;
@@ -650,7 +656,11 @@ export function createCirclePortalHandlers({
 
     const body = await readJson(request);
     const fields = body?.fields;
-    if (!isCircleOverrideFields(fields)) return json({ error: "資料格式不符或超出長度限制。" }, 400);
+    // Validated against the event this request is for, not the build's first
+    // published event: the portal serves every published event (ADR-0043), and
+    // a category catalog is per-event.
+    const fieldsProblem = circleOverrideFieldsProblem(fields, eventCategories());
+    if (fieldsProblem) return json({ error: fieldsProblem }, 400);
 
     // Chosen while writing, in the same submission as the content (ADR-0018).
     // Absent means "did not answer this time", which leaves any earlier choice
@@ -826,7 +836,8 @@ export function createCirclePortalHandlers({
 
     const body = await readJson(request);
     const fields = body?.fields ?? {};
-    if (!isCircleOverrideFields(fields)) return json({ error: "資料格式不符或超出長度限制。" }, 400);
+    const fieldsProblem = circleOverrideFieldsProblem(fields, eventCategories());
+    if (fieldsProblem) return json({ error: fieldsProblem }, 400);
 
     const projectedAt = new Date(config.now()).toISOString();
     const [records, baseRecords] = await Promise.all([

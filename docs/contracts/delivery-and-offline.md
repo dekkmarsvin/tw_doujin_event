@@ -64,7 +64,7 @@ Cloudflare 沒有提供降低帳號每日上限或模擬 Error 1027 的測試介
 
 由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份配額。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
 
-同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 只允許 `'self'`、`data:` 與 `THUMBNAIL_HOST_ALLOWLIST` 的主機，**不含裸 `https:`**。這份清單的唯一權威在 `app/circle-overrides.ts`，`_headers` 與它不一致時 `tests/circle-overrides.test.mjs` 失敗，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
+同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 允許 `'self'`、`data:` 與 `https:`——寫入驗證接受任何 https 圖片位址（[ADR-0052](../adr/0052-thumbnail-addresses-are-checked-as-images-not-hosts.md)），CSP 若比它窄，存得進去的圖片會在讀者瀏覽器被擋掉。兩者一致由 `tests/circle-overrides.test.mjs` 把關，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
 `/circle*` 與 `/organizer*` 各有一份放寬的 CSP：`script-src` 與 `frame-src` 加入 `https://challenges.cloudflare.com`，供登入表單的 Turnstile 使用（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)）。兩份內容相同。**閱讀端的策略不變**——這是全站唯一的第三方 script，且只在這兩個登入入口。Cloudflare 對多條命中的 `_headers` 規則採合併而非覆寫，所以該區塊先以 `! Content-Security-Policy` 移除站台層的策略再重新宣告；兩份策略同時生效會被瀏覽器取交集，反而擋掉元件。兩個入口的策略關係（站台層 + 恰好兩個 Turnstile 來源）由 `tests/circle-overrides.test.mjs` 斷言。
 

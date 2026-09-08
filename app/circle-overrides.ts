@@ -159,23 +159,6 @@ export function clearCircleOverrideField(fields: CircleOverrideFields, key: Circ
 /** The only accepted kinds. Exported so the editor cannot offer a value this file would reject. */
 export const LINK_KINDS: readonly CircleTemplateLinkKind[] = ["social", "support", "website", "announcement", "catalog", "store", "sample"];
 
-/**
- * Remote images are fetched by every reader who views the circle, so an
- * arbitrary host would be an IP-logging beacon aimed at the whole audience.
- * This list is the sole authority for `img-src` in `public/_headers`, which no
- * longer admits bare `https:`; `tests/circle-overrides.test.mjs` fails if the
- * two disagree.
- */
-export const THUMBNAIL_HOST_ALLOWLIST: readonly string[] = [
-  "media.kotoban.top",
-  "media-preview.kotoban.top",
-  "drive.google.com",
-  "lh3.googleusercontent.com",
-  "i.pximg.net",
-  "pbs.twimg.com",
-  "i.imgur.com",
-];
-
 /** Exported so the editor's inline warnings cannot disagree with this validator. */
 export function isHttpsUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -188,15 +171,6 @@ export function isHttpsUrl(value: unknown): value is string {
   // Explicit protocol check: never rely on framework escaping to stop
   // `javascript:` or `data:` reaching an href.
   return url.protocol === "https:";
-}
-
-/** Exported for the same reason as `isHttpsUrl`: one host rule, not two. */
-export function isAllowedThumbnailHost(value: string) {
-  try {
-    return THUMBNAIL_HOST_ALLOWLIST.includes(new URL(value).hostname);
-  } catch {
-    return false;
-  }
 }
 
 function isBoundedString(value: unknown, max: number): value is string {
@@ -220,9 +194,49 @@ function isLink(value: unknown): value is CircleExternalLink {
 function isThumbnail(value: unknown): value is CircleOverrideThumbnail {
   if (!value || typeof value !== "object") return false;
   const thumbnail = value as Record<string, unknown>;
-  return isHttpsUrl(thumbnail.url) && isAllowedThumbnailHost(thumbnail.url)
+  return isHttpsUrl(thumbnail.url)
     && isHttpsUrl(thumbnail.sourceUrl)
     && isBoundedString(thumbnail.provider, OVERRIDE_LIMITS.listItemLength);
+}
+
+/**
+ * Why the payload is refused, or `null` when it is fine.
+ *
+ * The write route answers with this sentence rather than one message for every
+ * field: an author who cannot see which row is wrong cannot fix it. The type
+ * guard below is this function, so there is one ruleset and the reason can
+ * never describe a rule the guard does not enforce.
+ */
+export function circleOverrideFieldsProblem(
+  value: unknown,
+  categories: CircleCategoryCatalog | null = ACTIVE_EVENT.circleCategories,
+): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "資料格式不符。";
+  const fields = value as Record<string, unknown>;
+
+  // `name` is deliberately not here: an override carrying one is refused, not
+  // silently dropped, so a client sending it learns the field is not authorable.
+  const known = new Set<string>(CIRCLE_OVERRIDE_FIELD_KEYS);
+  const unknownKey = Object.keys(fields).find((key) => !known.has(key));
+  if (unknownKey) return `這裡不能填寫「${unknownKey}」。`;
+
+  if ("pen" in fields && !isBoundedString(fields.pen, OVERRIDE_LIMITS.pen)) return `筆名最多 ${OVERRIDE_LIMITS.pen} 字。`;
+  if ("saleInfo" in fields && !isBoundedString(fields.saleInfo, OVERRIDE_LIMITS.saleInfo)) return `販售資訊最多 ${OVERRIDE_LIMITS.saleInfo} 字。`;
+  if ("circleCategory" in fields && !(categories
+    ? isCircleCategoryLabel(categories, fields.circleCategory)
+    : isBoundedString(fields.circleCategory, OVERRIDE_LIMITS.listItemLength))) return "社團主題類別不在這場活動的類別清單裡。";
+  const listField = CIRCLE_OVERRIDE_LIST_FIELDS.find(({ key }) => key in fields && !isBoundedList(fields[key]));
+  if (listField) return `${listField.label}最多 ${OVERRIDE_LIMITS.listItems} 項，每項最多 ${OVERRIDE_LIMITS.listItemLength} 字。`;
+  if ("links" in fields && !(Array.isArray(fields.links) && fields.links.length <= OVERRIDE_LIMITS.links && fields.links.every(isLink))) {
+    return `外部連結最多 ${OVERRIDE_LIMITS.links} 個，每個都要有平台名稱與 https:// 網址。`;
+  }
+  if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) {
+    return "代表圖需要 https:// 的圖片網址、出處頁面與來源標示。";
+  }
+
+  return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields
+    ? null
+    : `全部欄位合計超過 ${OVERRIDE_LIMITS.serializedFields} 字元，請縮短內容或連結。`;
 }
 
 /** Shared by the write route and the read guard so both enforce one ruleset. */
@@ -230,24 +244,7 @@ export function isCircleOverrideFields(
   value: unknown,
   categories: CircleCategoryCatalog | null = ACTIVE_EVENT.circleCategories,
 ): value is CircleOverrideFields {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const fields = value as Record<string, unknown>;
-
-  // `name` is deliberately not here: an override carrying one is refused, not
-  // silently dropped, so a client sending it learns the field is not authorable.
-  const known = new Set<string>(CIRCLE_OVERRIDE_FIELD_KEYS);
-  if (Object.keys(fields).some((key) => !known.has(key))) return false;
-
-  if ("pen" in fields && !isBoundedString(fields.pen, OVERRIDE_LIMITS.pen)) return false;
-  if ("saleInfo" in fields && !isBoundedString(fields.saleInfo, OVERRIDE_LIMITS.saleInfo)) return false;
-  if ("circleCategory" in fields && !(categories
-    ? isCircleCategoryLabel(categories, fields.circleCategory)
-    : isBoundedString(fields.circleCategory, OVERRIDE_LIMITS.listItemLength))) return false;
-  if (LIST_FIELDS.some((field) => field in fields && !isBoundedList(fields[field]))) return false;
-  if ("links" in fields && !(Array.isArray(fields.links) && fields.links.length <= OVERRIDE_LIMITS.links && fields.links.every(isLink))) return false;
-  if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) return false;
-
-  return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields;
+  return circleOverrideFieldsProblem(value, categories) === null;
 }
 
 function isCircleOverride(value: unknown, categories: CircleCategoryCatalog | null): value is CircleOverride {

@@ -630,7 +630,8 @@ test("rejects payloads the reader could not project", async () => {
   for (const fields of [
     { saleInfo: "x".repeat(2001) },
     { links: [{ provider: "X", kind: "social", url: "javascript:alert(1)" }] },
-    { thumbnail: { url: "https://tracker.example/pixel.png", sourceUrl: "https://tracker.example/p", provider: "x" } },
+    // Any https host is fine since ADR-0052; the protocol rule is what is left.
+    { thumbnail: { url: "http://images.example/pixel.png", sourceUrl: "https://images.example/p", provider: "x" } },
     { placements: { 1: ["A01"] } },
   ]) {
     const response = await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields }, owner), "ff47-site");
