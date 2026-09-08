@@ -52,6 +52,14 @@ test("R18 filtering distinguishes adult, R15, and general records", () => {
   assert.equal(matchesAdvancedCircleSearch(allAges, { ...all, adultContent: "GENERAL" }), true);
   assert.equal(matchesAdvancedCircleSearch(r15, { ...all, adultContent: "GENERAL" }), false);
   assert.equal(matchesAdvancedCircleSearch(unknown, { ...all, adultContent: "GENERAL" }), false);
+
+  // 販售內容可以同時是兩種。分級欄位是複選的（ADR-0051 決策 1），所以這種社團
+  // 兩個條件都要命中——查「只看全年齡」時漏掉它，等於說它沒有全年齡的東西。
+  const mixed = record({ ageRatings: ["全年齡", "R18"] });
+  assert.equal(circleIncludesGeneral(mixed), true);
+  assert.equal(circleIncludesR18(mixed), true);
+  assert.equal(matchesAdvancedCircleSearch(mixed, { ...all, adultContent: "GENERAL" }), true);
+  assert.equal(matchesAdvancedCircleSearch(mixed, { ...all, adultContent: "R18" }), true);
 });
 
 test("advanced circle search normalizes full-width and case variants", () => {
