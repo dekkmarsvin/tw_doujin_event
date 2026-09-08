@@ -70,11 +70,14 @@
 .card :is(input, select, textarea):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
 .card textarea { resize: vertical; }
 
-/* `:not(.previewFrame *)` keeps these off the reader component embedded in the
-   preview: it brings its own button styling, and the portal's block-button
+/* `:not(:where(.previewFrame *))` keeps these off the reader component embedded
+   in the preview: it brings its own button styling, and the portal's block-button
    rules landed on its icon buttons as a 38px pill with the glyph pushed off
-   centre. The preview has to look like the published card, not like the form. */
-.card button:not(.previewFrame *) {
+   centre. The preview has to look like the published card, not like the form.
+   `:where()` contributes no specificity, so this base rule stays weaker than the
+   variants below it (`.identity button`, `.inlineButton`, `.extraValues button`…)
+   the way it was before the exclusion existed. */
+.card button:not(:where(.previewFrame *)) {
   min-height: 38px;
   margin-top: 14px;
   padding: 8px 14px;
@@ -87,9 +90,9 @@
   letter-spacing: .06em;
   cursor: pointer;
 }
-.card button:not(.previewFrame *):hover { filter: brightness(1.15); }
-.card button:not(.previewFrame *):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
-.card button:not(.previewFrame *):disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
+.card button:not(:where(.previewFrame *)):hover { filter: brightness(1.15); }
+.card button:not(:where(.previewFrame *)):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
+.card button:not(:where(.previewFrame *)):disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
 
 .identity button {
   min-height: 28px;

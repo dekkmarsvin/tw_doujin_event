@@ -75,6 +75,8 @@ type StoredDraft = {
   listInputs: Partial<Record<CircleOverrideFieldKey, string>>;
   /** Without it a restored draft would send a hosted thumbnail URL the write route refuses. */
   stagedThumbnailKey: string | null;
+  /** Saved with the fields, so it is unsaved the same way they are. */
+  retention: CircleRetentionChoice | null;
   savedAt: string;
 };
 
@@ -574,7 +576,12 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // be asked rather than assumed to have chosen either side (ADR-0018).
   const [retention, setRetention] = useState<CircleRetentionChoice | null>(null);
   const [retentionExpiresAt, setRetentionExpiresAt] = useState<number | null>(null);
+  /** What the server holds, so an unsaved retention choice can be told apart from it. */
+  const [savedRetention, setSavedRetention] = useState<CircleRetentionChoice | null>(null);
   const [saved, setSaved] = useState(false);
+  // The editor is usable before the preview baseline arrives, and that request
+  // can fail; gating the draft on it would silently stop saving drafts.
+  const [hydrated, setHydrated] = useState(false);
   // What the server holds, as opposed to the draft in `fields`: the deletion
   // summary has to describe what would actually be deleted, not unsaved edits.
   const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
@@ -603,7 +610,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         // The stored draft wins over the saved record: it is the newer of the
         // two by construction, and dropping it is one click away.
         const stored = readStoredDraft(claim.circleId);
-        const restored = stored && JSON.stringify(stored.fields) !== JSON.stringify(initialFields);
+        // Retention counts as part of the draft: a tab closed after changing
+        // only that choice must not come back with the server's answer.
+        const restored = !!stored && (JSON.stringify(stored.fields) !== JSON.stringify(initialFields)
+          || (stored.retention ?? null) !== (result.retention ?? null));
         setFields(restored ? stored.fields : initialFields);
         setListInputs(restored ? stored.listInputs ?? {} : {});
         setStagedThumbnailKey(restored ? stored.stagedThumbnailKey ?? null : null);
@@ -611,9 +621,17 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         if (!restored) forgetStoredDraft(claim.circleId);
         setSavedFields(initialFields);
         setHidden(!!result.postEventHidden);
-        setRetention(result.retention ?? null);
-        setRetentionExpiresAt(result.retentionExpiresAt ?? null);
+        const storedRetention = restored ? stored.retention ?? null : null;
+        const activeRetention = storedRetention ?? result.retention ?? null;
+        setRetention(activeRetention);
+        setSavedRetention(result.retention ?? null);
+        // A restored choice has not been saved, so the deadline it implies is
+        // recomputed rather than taken from the row the server answered with.
+        setRetentionExpiresAt(storedRetention
+          ? circleRetentionExpiresAt(storedRetention, Date.parse(event.eventEndsAt))
+          : result.retentionExpiresAt ?? null);
         setSaved(result.status !== "none");
+        setHydrated(true);
         const requestGeneration = ++previewRequestGeneration.current;
         void previewOverride(claim.circleId, initialFields).then((previewResult) => {
           if (requestGeneration !== previewRequestGeneration.current) return;
@@ -621,23 +639,30 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           setProjectedAt(previewResult.projectedAt);
         }).catch(() => undefined);
       })
-      .catch(() => setFields({}));
-  }, [claim.circleId]);
+      .catch(() => {
+        setFields({});
+        setHydrated(true);
+      });
+  }, [claim.circleId, event.eventEndsAt]);
 
   // Written on every edit rather than on a button: a draft that needs an action
   // to exist is one the author remembers only after losing the tab.
-  const draftDiffersFromSaved = JSON.stringify(fields) !== JSON.stringify(savedFields);
+  const draftDiffersFromSaved = JSON.stringify(fields) !== JSON.stringify(savedFields) || retention !== savedRetention;
   useEffect(() => {
-    if (!loaded.current || !baseRecords) return;
+    if (!hydrated) return;
     if (!draftDiffersFromSaved) forgetStoredDraft(claim.circleId);
-    else writeStoredDraft(claim.circleId, { fields, listInputs, stagedThumbnailKey, savedAt: new Date().toISOString() });
-  }, [baseRecords, claim.circleId, draftDiffersFromSaved, fields, listInputs, stagedThumbnailKey]);
+    else writeStoredDraft(claim.circleId, { fields, listInputs, stagedThumbnailKey, retention, savedAt: new Date().toISOString() });
+  }, [claim.circleId, draftDiffersFromSaved, fields, hydrated, listInputs, retention, stagedThumbnailKey]);
 
   const discardDraft = () => {
     forgetStoredDraft(claim.circleId);
     setFields(savedFields);
     setListInputs({});
     setStagedThumbnailKey(null);
+    setRetention(savedRetention);
+    setRetentionExpiresAt(savedRetention
+      ? circleRetentionExpiresAt(savedRetention, Date.parse(event.eventEndsAt))
+      : null);
     setDraftRestoredAt(null);
   };
 
@@ -1084,6 +1109,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
               setDraftRestoredAt(null);
               setSavedFields({});
               setRetention(null);
+              setSavedRetention(null);
               setRetentionExpiresAt(null);
               setHidden(false);
               setSaved(false);
@@ -1120,6 +1146,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                   .then(() => {
                     setSaved(true);
                     setSavedFields(savingFields);
+                    setSavedRetention(reviewedRetention);
                     forgetStoredDraft(claim.circleId);
                     setDraftRestoredAt(null);
                     setStagedThumbnailKey(null);
