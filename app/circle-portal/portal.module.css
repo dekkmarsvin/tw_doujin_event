@@ -192,6 +192,24 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 .admin { border-color: #c9d2cc; background: var(--paper); }
 
+/* The admin step-up gate. One session state turns off every form in the panel,
+   so it is stated once at the top of that panel rather than under each form —
+   the heavier left edge is what separates it from the ordinary status lines
+   below, which stay free for what only one form can report.
+
+   Selector carries `.card` because `.card > p` is (0,1,1) and would otherwise
+   paint this muted along with every other loose paragraph. */
+.card .stepUp {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid #f0cdc6;
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+  background: #fff3f1;
+  color: var(--danger);
+  font-size: 11px;
+}
+
 .choiceGroup { margin: 12px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .choiceGroup legend { padding: 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
 .choiceGroup > div { display: flex; flex-wrap: wrap; gap: 8px; }

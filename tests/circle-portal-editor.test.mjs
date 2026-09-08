@@ -141,6 +141,58 @@ test("the age rating group carries no explanation beyond its own checkboxes", as
   assert.doesNotMatch(app, /不是一個社團只能有一種分級/);
 });
 
+test("only a load the reader asked for moves the refresh button", async () => {
+  const app = await source("portal-app.tsx");
+
+  // The queue polls every 30 seconds and on every return to the tab. Those
+  // used to run the same `refresh` the button ran, so the label flipped to
+  // 「更新中…」 twice a minute on its own: motion on a control nobody pressed,
+  // reporting nothing that could be acted on.
+  assert.match(app, /const refresh = useCallback\(\(announce: boolean\) => \{/);
+  assert.match(app, /if \(announce\) setLoading\(true\);/);
+  assert.match(app, /if \(document\.visibilityState === "visible"\) refresh\(false\);/);
+  assert.match(app, /window\.setTimeout\(\(\) => refresh\(true\), 0\)/);
+  assert.match(app, /onClick=\{\(\) => refresh\(true\)\}/);
+  // A decision reloads the queue down the same silent path.
+  assert.match(app, /\.then\(\(\) => refresh\(false\)\)/);
+});
+
+test("the step-up lock is stated once, above the forms it turns off", async () => {
+  const app = await source("portal-app.tsx");
+  const stepUp = await source("admin-step-up.tsx");
+  const mapPanel = await source("map-contribution-panel.tsx");
+  const client = await readFile(new URL("../app/circle-editor-client.ts", import.meta.url), "utf8");
+
+  // Admin writes are refused once the session passes the 24 hour step-up
+  // window. That refusal used to land in a status line at the foot of the
+  // panel, several controls below whatever produced it. One session state
+  // locks every form in the panel, so it is said once at the top, with the
+  // sign-in that clears it — repeating it under each form would be the same
+  // sentence four times. Recognised by the server's code, not its wording.
+  assert.match(client, /error\.body\?\.code === "admin_session_stale"/);
+  assert.match(stepUp, /if \(!adminSessionStale\(error\)\) return false;/);
+  assert.match(stepUp, /管理功能被鎖定，需要重新登入。/);
+
+  // The banner is the first thing in each admin card, and there is exactly one
+  // of it per card.
+  for (const [name, panel] of [["portal-app.tsx", app], ["map-contribution-panel.tsx", mapPanel]]) {
+    assert.equal(panel.split("<AdminStepUpBanner />").length - 1, 1, `${name} states the lock once`);
+    assert.match(panel, /styles\.admin\}`} id="(admin|map-review)">\r?\n    <AdminStepUpBanner \/>/, `${name} states it first`);
+  }
+
+  // Nothing routes a step-up refusal into a form's own line, and every gated
+  // control reads the one flag.
+  assert.doesNotMatch(app, /AdminStepUpNotice|stepUpHint|stepUpTarget/);
+  assert.doesNotMatch(mapPanel, /AdminStepUpNotice|stepUpHint|stepUpTarget/);
+  assert.ok(app.split("disabled={blocked").length - 1 >= 5, "each gated control reads the lock");
+
+  // Ordinary failures still belong to the form that produced them: an error
+  // about 核准 is not an error about 停用帳號.
+  for (const state of ["claimStatus", "takedownStatus", "rosterStatus", "disableStatus"]) {
+    assert.match(app, new RegExp(`const \\[${state}, set`), `${state} must be its own line`);
+  }
+});
+
 test("the picture is the only thing the upload asks for", async () => {
   const app = await source("portal-app.tsx");
 

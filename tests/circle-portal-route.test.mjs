@@ -1117,6 +1117,11 @@ test("admin actions require a recently created session", async () => {
     assert.deepEqual((await refreshed.json()).claims.map((item) => item.id), [claim.id]);
     const response = await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: claim.id, decision: "approve" }, admin));
     assert.equal(response.status, 401, "a stale admin session must re-authenticate before deciding");
+    // The panel disables its step-up controls and explains itself beside the
+    // one that was refused, which it can only do by telling this 401 apart
+    // from every other one. Matching on the message would tie that behaviour
+    // to the wording.
+    assert.equal((await response.json()).code, "admin_session_stale");
     assert.equal((await repository.getClaim(claim.id)).status, "pending");
     assert.equal((await handlers.adminListClaims(get("/api/admin/claims"))).status, 401);
     assert.equal((await handlers.adminListClaims(get("/api/admin/claims", owner))).status, 403);
