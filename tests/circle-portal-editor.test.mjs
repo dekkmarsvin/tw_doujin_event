@@ -84,3 +84,20 @@ test("the draft carries every unsent answer, including the retention choice", as
   assert.match(app, /setRetentionExpiresAt\(storedRetention\s*\r?\n?\s*\? circleRetentionExpiresAt\(storedRetention, Date\.parse\(event\.eventEndsAt\)\)/);
   assert.match(app, /setRetention\(savedRetention\);\s*\r?\n\s*setRetentionExpiresAt\(savedRetention/);
 });
+
+test("the rating field is a checkbox group, because a circle can sell both", async () => {
+  const app = await source("portal-app.tsx");
+
+  // `ageRatings` describes what is on the table, and "全年齡 and R18" is an
+  // ordinary answer. A single-select does not merely narrow the form: picking
+  // one value replaces the array, so the next edit deletes the other value
+  // silently (ADR-0051 decision 1, #193).
+  assert.match(app, /const MULTI_CHOICE_FIELD_KEYS = \["creatorTypes", "ageRatings"\] as const/);
+  assert.match(app, /if \(isMultiChoiceField\(key\)\) return <fieldset className=\{styles\.choiceGroup\}>/);
+
+  // The single-select branch replaces the whole array, so nothing that can hold
+  // more than one true value may fall through to it.
+  const single = app.slice(app.indexOf("if (key in CHOICE_FIELD_OPTIONS)"));
+  assert.match(single, /setChoice\(choiceKey, event\.target\.value\)/);
+  assert.match(app, /const setChoice = \(key: ChoiceFieldKey, value: string\) => setFields\(\(current\) => \(\{ \.\.\.current, \[key\]: value \? \[value\] : \[\] \}\)\);/);
+});
