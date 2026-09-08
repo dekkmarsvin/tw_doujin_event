@@ -70,7 +70,13 @@ const DRAFT_STORAGE_PREFIX = "circle-portal-draft:";
 
 const DRAFT_TIME = new Intl.DateTimeFormat("zh-TW", { dateStyle: "short", timeStyle: "short" });
 
-type StoredDraft = { fields: CircleOverrideFields; listInputs: Partial<Record<CircleOverrideFieldKey, string>>; savedAt: string };
+type StoredDraft = {
+  fields: CircleOverrideFields;
+  listInputs: Partial<Record<CircleOverrideFieldKey, string>>;
+  /** Without it a restored draft would send a hosted thumbnail URL the write route refuses. */
+  stagedThumbnailKey: string | null;
+  savedAt: string;
+};
 
 function readStoredDraft(circleId: string): StoredDraft | null {
   try {
@@ -600,6 +606,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         const restored = stored && JSON.stringify(stored.fields) !== JSON.stringify(initialFields);
         setFields(restored ? stored.fields : initialFields);
         setListInputs(restored ? stored.listInputs ?? {} : {});
+        setStagedThumbnailKey(restored ? stored.stagedThumbnailKey ?? null : null);
         setDraftRestoredAt(restored ? stored.savedAt : null);
         if (!restored) forgetStoredDraft(claim.circleId);
         setSavedFields(initialFields);
@@ -623,13 +630,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   useEffect(() => {
     if (!loaded.current || !baseRecords) return;
     if (!draftDiffersFromSaved) forgetStoredDraft(claim.circleId);
-    else writeStoredDraft(claim.circleId, { fields, listInputs, savedAt: new Date().toISOString() });
-  }, [baseRecords, claim.circleId, draftDiffersFromSaved, fields, listInputs]);
+    else writeStoredDraft(claim.circleId, { fields, listInputs, stagedThumbnailKey, savedAt: new Date().toISOString() });
+  }, [baseRecords, claim.circleId, draftDiffersFromSaved, fields, listInputs, stagedThumbnailKey]);
 
   const discardDraft = () => {
     forgetStoredDraft(claim.circleId);
     setFields(savedFields);
     setListInputs({});
+    setStagedThumbnailKey(null);
     setDraftRestoredAt(null);
   };
 
@@ -650,6 +658,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     return { ...current, [key]: checked ? [...values, option] : values.filter((value) => value !== option) };
   });
   const setChoice = (key: ChoiceFieldKey, value: string) => setFields((current) => ({ ...current, [key]: value ? [value] : [] }));
+  const removeChoice = (key: ChoiceFieldKey, value: string) => setFields((current) => ({
+    ...current,
+    [key]: (current[key] ?? []).filter((candidate) => candidate !== value),
+  }));
 
   const listField = (key: CircleOverrideListFieldKey, label: string) => {
     const id = `${key}-${claim.circleId}`;
@@ -662,9 +674,18 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     </fieldset>;
     if (key in CHOICE_FIELD_OPTIONS) {
       const choiceKey = key as ChoiceFieldKey;
+      const values = fields[choiceKey] ?? [];
       return <>
         <label htmlFor={id}>{label}</label>
-        <select id={id} value={(fields[choiceKey] ?? [])[0] ?? ""} onChange={(event) => setChoice(choiceKey, event.target.value)}>
+        {/* 這個欄位以前可以填多個。多值時每一個都要看得到、刪得掉，不能只把
+            第一個當成選取值，把其餘的留在送出的資料裡卻不顯示。 */}
+        {values.length > 1 && <div className={styles.extraValues}>
+          <span>目前有 {values.length} 個值，選一項會取代全部：</span>
+          {values.map((value) => <button key={value} type="button" onClick={() => removeChoice(choiceKey, value)}>
+            {value}<span aria-hidden="true">✕</span><span className={styles.visuallyHidden}>移除</span>
+          </button>)}
+        </div>}
+        <select id={id} value={values.length === 1 ? values[0] : ""} onChange={(event) => setChoice(choiceKey, event.target.value)}>
           <option value="">尚未選擇</option>
           {optionsFor(choiceKey).map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
@@ -737,8 +758,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       return problem ? { id: linkUrlProblem(link.url) ? `link-url-${claim.circleId}-${index}` : `link-provider-${claim.circleId}-${index}`, message: `第 ${index + 1} 個連結：${problem}` } : null;
     }),
     thumbnail && thumbnailUrlProblem(thumbnail.url) ? { id: `thumb-url-${claim.circleId}`, message: thumbnailUrlProblem(thumbnail.url) } : null,
-    thumbnail?.url && thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok
-      ? { id: `thumb-url-${claim.circleId}`, message: THUMBNAIL_NOT_AN_IMAGE } : null,
+    // Pending counts as not yet checked, not as fine: a slow address could
+    // otherwise be published in the window before `onError` fires.
+    thumbnail?.url && !thumbnailUrlProblem(thumbnail.url) && !(thumbnailLoad?.url === thumbnail.url && thumbnailLoad.ok)
+      ? {
+        id: `thumb-url-${claim.circleId}`,
+        message: thumbnailLoad?.url === thumbnail.url ? THUMBNAIL_NOT_AN_IMAGE : "代表圖還在確認能不能載入，請稍候。",
+      } : null,
     thumbnail && !thumbnail.sourceUrl.trim() ? { id: `thumb-source-${claim.circleId}`, message: "代表圖需要填寫出處頁面。" } : null,
     thumbnail?.sourceUrl?.trim() && linkUrlProblem(thumbnail.sourceUrl) ? { id: `thumb-source-${claim.circleId}`, message: linkUrlProblem(thumbnail.sourceUrl) } : null,
     thumbnail && !thumbnail.provider.trim() ? { id: `thumb-provider-${claim.circleId}`, message: "代表圖需要填寫來源標示。" } : null,
@@ -1084,7 +1110,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             <ReviewSummary fields={reviewedFields} retention={reviewedRetention} />
             <div className={styles.reviewActions}>
               <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
-              <button type="button" disabled={status.kind === "busy"} onClick={() => {
+              {/* Re-checked here, not only when the review opened: an image
+                  verdict can arrive after that, and a confirmation taken before
+                  it must not be the one that publishes. */}
+              <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
                 const savingFields = { ...reviewedFields };
                 setStatus({ kind: "busy", message: "儲存中…" });
                 void saveOverride(claim.circleId, savingFields, reviewedRetention, reviewedThumbnailKey ?? undefined)
@@ -1101,6 +1130,9 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                   .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
               }}>{status.kind === "busy" ? "儲存中…" : "確認儲存"}</button>
             </div>
+            {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
+              {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}>{problem.message}</li>)}
+            </ul>}
             {status.kind === "error" && <p className={styles.error} role="status">{status.message}</p>}
           </div>
           : <div className={styles.livePreview}>

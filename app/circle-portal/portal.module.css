@@ -251,7 +251,24 @@
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }
 .mapReviewPreview { max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .mapReviewPreview svg { display: block; width: 100%; height: auto; }
-.auditList, .thumbnailPreview { margin-top: 10px; }
+.auditList, /* 舊資料留下的多個值。每一個都是可移除的，因此是按鈕而不是純文字。 */
+.extraValues { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.extraValues > span { color: var(--muted); font-size: 11px; }
+.extraValues button {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 0; margin: 0; padding: 4px 9px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--ink);
+  font-size: 12px; font-weight: 400; letter-spacing: normal;
+}
+.extraValues button:hover { border-color: var(--danger); filter: none; }
+
+.visuallyHidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+.thumbnailPreview { margin-top: 10px; }
 .thumbnailPreview img {
   display: block; max-width: 200px; max-height: 200px;
   border: 1px solid var(--line); border-radius: 9px; background: #fff; object-fit: contain;

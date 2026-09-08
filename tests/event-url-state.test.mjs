@@ -44,6 +44,14 @@ test("invalid values use event-derived defaults and a foreign event fails closed
   const retired = codec.parseEventUrlState(eventA, "https://map.example/?event=event-a&day=7&area=ALL&workType=original");
   assert.equal(retired.state.advancedSearch.workType, "ALL");
 
+  // A parameter naming an inherited property must not become search state: the
+  // applied-filter chip renders this value, and an object there blanks the page.
+  for (const hostile of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    const parsed = codec.parseEventUrlState(eventA, `https://map.example/?event=event-a&day=7&area=ALL&workType=${hostile}`);
+    assert.equal(parsed.state.advancedSearch.workType, "ALL", `${hostile} must not resolve to a work type`);
+    assert.equal(codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/").searchParams.has("workType"), false);
+  }
+
   const foreign = codec.parseEventUrlState(eventB, "https://map.example/?event=event-a&day=8&query=must-not-leak&selectedCircle=c-000001");
   assert.equal(foreign.eventMatched, false);
   assert.equal(foreign.state.day, "sat-am");

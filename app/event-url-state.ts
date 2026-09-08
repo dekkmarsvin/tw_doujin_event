@@ -127,7 +127,10 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
         workTopics: normalizeWorkTopics(url.searchParams.getAll("work")),
         workTopicMode: url.searchParams.get("workMode") === "all" ? "all" : "any",
         excludedWorkTopics: normalizeWorkTopics(url.searchParams.getAll("workExclude")),
-        workType: WORK_TYPE_PARAMETERS[workType] ?? "ALL",
+        // Own-property check, not a bare lookup: `?workType=__proto__` would
+        // otherwise hand an inherited object to the search state and the applied
+        // filter chip would try to render it.
+        workType: Object.hasOwn(WORK_TYPE_PARAMETERS, workType) ? WORK_TYPE_PARAMETERS[workType] : "ALL",
         adultContent: adultContent === "include" ? "R18" : adultContent === "general" || adultContent === "exclude" ? "GENERAL" : "ALL",
       },
       planningDisplay: {
@@ -171,6 +174,7 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   if (state.advancedSearch.workTopicMode === "all") url.searchParams.set("workMode", "all");
   normalizeWorkTopics(state.advancedSearch.excludedWorkTopics).forEach((topic) => url.searchParams.append("workExclude", topic));
   const workTypeParameter = Object.keys(WORK_TYPE_PARAMETERS).find((key) => WORK_TYPE_PARAMETERS[key] === state.advancedSearch.workType);
+
   if (workTypeParameter) url.searchParams.set("workType", workTypeParameter);
   if (state.advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", state.advancedSearch.adultContent === "R18" ? "include" : "general");
   if (state.planningDisplay.favoriteGroupId !== "ALL") url.searchParams.set("favoriteGroup", state.planningDisplay.favoriteGroupId);

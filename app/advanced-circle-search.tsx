@@ -216,9 +216,9 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
         </div>
       </fieldset>
       <fieldset>
-        <legend>成人內容</legend>
+        <legend>年齡分級</legend>
         <div className={styles.segments}>
-          {(["ALL", "R18", "GENERAL"] as const).map((option) => <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{option === "ALL" ? "不限" : option === "R18" ? "只看 R18" : "只看一般"}</button>)}
+          {(["ALL", "R18", "GENERAL"] as const).map((option) => <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{option === "ALL" ? "不限" : option === "R18" ? "只看 R18" : "只看全年齡"}</button>)}
         </div>
       </fieldset>
       <footer>
