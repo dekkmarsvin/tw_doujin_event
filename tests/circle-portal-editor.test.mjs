@@ -61,7 +61,12 @@ test("the draft is kept as soon as the record loads, not when the preview answer
   const effect = app.slice(app.indexOf("if (!hydrated) return;"));
   const deps = effect.slice(effect.indexOf("}, ["), effect.indexOf("]);") + 3);
   assert.doesNotMatch(deps, /baseRecords/);
-  assert.match(app, /setHydrated\(true\);/);
+
+  // And only when the record actually arrived. Hydrating on the failure path
+  // leaves `savedFields` empty, every comparison then reads as "same as the
+  // server", and the next render deletes the draft the author still has.
+  assert.equal(app.match(/setHydrated\(true\)/g)?.length, 1);
+  assert.match(app, /\.catch\(\(\) => setFields\(\{\}\)\);/);
 });
 
 test("the draft carries every unsent answer, including the retention choice", async () => {
@@ -75,6 +80,7 @@ test("the draft carries every unsent answer, including the retention choice", as
 
   // Restoring one has to bring the derived date with it, and discarding has to
   // put both back to what the server holds.
-  assert.match(app, /setRetention\(restored \? storedRetention : initialRetention\);/);
-  assert.match(app, /setRetention\(savedRetention\);\s*\r?\n\s*setRetentionExpiresAt\(retentionExpiryFor\(savedRetention, event\.eventEndsAt\)\);/);
+  assert.match(app, /setRetention\(activeRetention\);\s*\r?\n\s*setSavedRetention\(result\.retention \?\? null\);/);
+  assert.match(app, /setRetentionExpiresAt\(storedRetention\s*\r?\n?\s*\? circleRetentionExpiresAt\(storedRetention, Date\.parse\(event\.eventEndsAt\)\)/);
+  assert.match(app, /setRetention\(savedRetention\);\s*\r?\n\s*setRetentionExpiresAt\(savedRetention/);
 });

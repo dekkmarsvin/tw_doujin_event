@@ -639,10 +639,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           setProjectedAt(previewResult.projectedAt);
         }).catch(() => undefined);
       })
-      .catch(() => {
-        setFields({});
-        setHydrated(true);
-      });
+      // Not hydrated: `savedFields` never arrived, so every comparison against
+      // it would read as "same as the server" and take the draft away from an
+      // author whose load simply failed.
+      .catch(() => setFields({}));
   }, [claim.circleId, event.eventEndsAt]);
 
   // Written on every edit rather than on a button: a draft that needs an action
