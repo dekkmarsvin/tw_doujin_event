@@ -28,13 +28,12 @@ function withFields(circleId, fields) {
 }
 
 /**
- * The host rule exists in two files that cannot import each other: the
- * validator in TypeScript, and the CSP the edge serves from `public/_headers`.
- * A host added to one and not the other fails in a way no page test would show
- * — the image is accepted on save and then silently blocked in the reader's
- * browser. So the agreement is asserted directly.
+ * The validator accepts any HTTPS image address (ADR-0052), so the CSP has to
+ * admit the same set or an accepted image would be blocked in the reader's
+ * browser with nothing to show for it. What must not come back is a wider
+ * scheme: `http:` or a bare `*` would let a saved address downgrade the page.
  */
-test("the served CSP admits exactly the thumbnail hosts the validator accepts", async () => {
+test("the served CSP admits the same HTTPS images the validator accepts", async () => {
   const headers = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
   const policy = headers.match(/Content-Security-Policy: ([^\r\n]+)/)?.[1];
   assert.ok(policy, "_headers must declare a Content-Security-Policy");
@@ -42,11 +41,8 @@ test("the served CSP admits exactly the thumbnail hosts the validator accepts", 
   assert.ok(imgSrc, "the policy must declare img-src");
 
   const sources = imgSrc.split(/\s+/).slice(1);
-  // Bare `https:` would readmit every host the allowlist exists to exclude.
-  assert.equal(sources.includes("https:"), false, "img-src must not admit all of HTTPS");
-  assert.deepEqual(sources.filter((source) => source.startsWith("https://")).sort(),
-    overrides.THUMBNAIL_HOST_ALLOWLIST.map((host) => `https://${host}`).sort());
-  assert.deepEqual(sources.filter((source) => !source.startsWith("https://")), ["'self'", "data:"]);
+  assert.ok(sources.includes("https:"), "img-src must admit the HTTPS images the validator accepts");
+  assert.deepEqual(sources.sort(), ["'self'", "data:", "https:"]);
 });
 
 /**
@@ -304,7 +300,7 @@ test("enforces length caps so one circle cannot bloat every reader's download", 
   assert.ok(JSON.stringify({ saleInfo: "x".repeat(saleInfo) }).length < serializedFields);
 });
 
-test("only https links and allowlisted image hosts are accepted", () => {
+test("only https links and https image addresses are accepted", () => {
   const link = (url) => overrides.isCircleOverrideFields({ links: [{ provider: "官方網站", kind: "website", url }] });
   assert.equal(link("https://example.com/a"), true);
   assert.equal(link("http://example.com/a"), false);
@@ -316,9 +312,10 @@ test("only https links and allowlisted image hosts are accepted", () => {
     thumbnail: { url, sourceUrl: "https://drive.google.com/file/d/x", provider: "Google Drive" },
   });
   assert.equal(thumb("https://drive.google.com/thumbnail?id=x"), true);
-  // An arbitrary host would fire from every reader's browser, logging their IP.
-  assert.equal(thumb("https://tracker.example.com/pixel.png"), false);
+  // The host allowlist is gone (ADR-0052); the protocol rule is not.
+  assert.equal(thumb("https://images.example/pixel.png"), true);
   assert.equal(thumb("http://drive.google.com/thumbnail?id=x"), false);
+  assert.equal(thumb("javascript:alert(1)"), false);
 });
 
 test("rejects a link kind outside the catalog vocabulary", () => {
@@ -334,10 +331,9 @@ test("rejects a link kind outside the catalog vocabulary", () => {
  * shared 400 with no clue which row caused it — the exact failure the per-field
  * messages exist to prevent. Compared directly rather than restating either rule.
  */
-const ALLOWED_HOST = overrides.THUMBNAIL_HOST_ALLOWLIST[0];
 const URL_CASES = [
   "https://example.com/circle",
-  `https://${ALLOWED_HOST}/file/abc`,
+  "https://images.example/file/abc",
   "http://example.com/insecure",
   "javascript:alert(1)",
   "data:text/html,hi",
@@ -357,7 +353,7 @@ test("the editor accepts a link URL exactly when the validator does", () => {
 });
 
 test("the editor accepts a thumbnail URL exactly when the validator does", () => {
-  for (const url of [...URL_CASES, "https://not-on-the-allowlist.example/img.png"]) {
+  for (const url of [...URL_CASES, "https://any-host.example/img.png"]) {
     assert.equal(
       messages.thumbnailUrlProblem(url) === "",
       overrides.isCircleOverrideFields({ thumbnail: { url, sourceUrl: "https://example.com/s", provider: "p" } }),
@@ -366,11 +362,8 @@ test("the editor accepts a thumbnail URL exactly when the validator does", () =>
   }
 });
 
-test("an off-allowlist thumbnail host is refused with the usable hosts named", () => {
-  const problem = messages.thumbnailUrlProblem("https://not-on-the-allowlist.example/img.png");
-  // "Rejected" alone leaves the author guessing which hosts would work.
-  assert.match(problem, /允許清單/);
-  assert.ok(problem.includes(ALLOWED_HOST), "the message should name at least one usable host");
+test("any HTTPS host is usable as a thumbnail address", () => {
+  assert.equal(messages.thumbnailUrlProblem("https://any-host.example/img.png"), "");
 });
 
 test("an empty URL reads as missing rather than malformed", () => {

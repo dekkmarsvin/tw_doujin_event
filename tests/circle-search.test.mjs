@@ -16,7 +16,7 @@ function record(overrides = {}) {
       creatorTypes: ["Vtuber"],
       work: "原神短篇集",
       referencedWorks: ["原神"],
-      workTypes: ["二創"],
+      workTypes: ["男性向"],
       ageRatings: ["一般"],
       specialTags: [],
       externalLinks: [],
@@ -29,24 +29,27 @@ const all = { creatorType: "ALL", workTopics: [], workTopicMode: "any", excluded
 
 test("advanced circle search combines creator, work name, and work type", () => {
   const candidate = record();
-  assert.equal(matchesAdvancedCircleSearch(candidate, { ...all, creatorType: "Vtuber", workTopics: ["原神"], workType: "二創" }), true);
+  assert.equal(matchesAdvancedCircleSearch(candidate, { ...all, creatorType: "Vtuber", workTopics: ["原神"], workType: "男性向" }), true);
   assert.equal(matchesAdvancedCircleSearch(candidate, { ...all, creatorType: "Coser" }), false);
   assert.equal(matchesAdvancedCircleSearch(candidate, { ...all, workTopics: ["蔚藍檔案"] }), false);
-  assert.equal(matchesAdvancedCircleSearch(candidate, { ...all, workType: "原創" }), false);
+  assert.equal(matchesAdvancedCircleSearch(candidate, { ...all, workType: "女性向" }), false);
 });
 
 test("R18 filtering distinguishes adult, R15, and general records", () => {
   const adult = record({ ageRatings: ["R18"] });
   const r15 = record({ ageRatings: ["R15"] });
   const general = record({ ageRatings: ["一般"] });
+  const allAges = record({ ageRatings: ["全年齡"] });
   const unknown = record({ ageRatings: [] });
   assert.equal(circleIncludesR18(adult), true);
   assert.equal(circleIncludesR18(r15), false);
   assert.equal(circleIncludesGeneral(general), true);
+  assert.equal(circleIncludesGeneral(allAges), true);
   assert.equal(circleIncludesGeneral(r15), false);
   assert.equal(matchesAdvancedCircleSearch(adult, { ...all, adultContent: "R18" }), true);
   assert.equal(matchesAdvancedCircleSearch(r15, { ...all, adultContent: "R18" }), false);
   assert.equal(matchesAdvancedCircleSearch(general, { ...all, adultContent: "GENERAL" }), true);
+  assert.equal(matchesAdvancedCircleSearch(allAges, { ...all, adultContent: "GENERAL" }), true);
   assert.equal(matchesAdvancedCircleSearch(r15, { ...all, adultContent: "GENERAL" }), false);
   assert.equal(matchesAdvancedCircleSearch(unknown, { ...all, adultContent: "GENERAL" }), false);
 });

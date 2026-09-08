@@ -21,7 +21,7 @@ const eventB = {
 };
 
 test("full URL state round-trips through one schema while defaults are omitted", () => {
-  const input = new URL("https://map.example/?event=event-a&day=8&area=EAST&query=%20needle%20&genre=%E5%8E%9F%E5%89%B5&favorite=1&creator=Alice&work=Book&workType=original&r18=include&favoriteGroup=g1&visit=next&sort=name&density=compact&media=3&selectedCircle=c-000001&selectedBooth=A01&keep=x");
+  const input = new URL("https://map.example/?event=event-a&day=8&area=EAST&query=%20needle%20&genre=%E5%8E%9F%E5%89%B5&favorite=1&creator=Alice&work=Book&workType=male&r18=include&favoriteGroup=g1&visit=next&sort=name&density=compact&media=3&selectedCircle=c-000001&selectedBooth=A01&keep=x");
   const parsed = codec.parseEventUrlState(eventA, input);
   assert.equal(parsed.eventMatched, true);
   const serialized = codec.serializeEventUrlState(eventA, parsed.state, input);
@@ -40,6 +40,17 @@ test("invalid values use event-derived defaults and a foreign event fails closed
   assert.equal(invalid.state.genre, "全部");
   assert.equal(invalid.state.planningDisplay.visitStatus, "ALL");
   assert.equal(invalid.state.planningDisplay.mediaCount, 0);
+  // 舊連結帶的 original／derivative 已無對應取向，只掉這個條件，不整條 URL 失效。
+  const retired = codec.parseEventUrlState(eventA, "https://map.example/?event=event-a&day=7&area=ALL&workType=original");
+  assert.equal(retired.state.advancedSearch.workType, "ALL");
+
+  // A parameter naming an inherited property must not become search state: the
+  // applied-filter chip renders this value, and an object there blanks the page.
+  for (const hostile of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    const parsed = codec.parseEventUrlState(eventA, `https://map.example/?event=event-a&day=7&area=ALL&workType=${hostile}`);
+    assert.equal(parsed.state.advancedSearch.workType, "ALL", `${hostile} must not resolve to a work type`);
+    assert.equal(codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/").searchParams.has("workType"), false);
+  }
 
   const foreign = codec.parseEventUrlState(eventB, "https://map.example/?event=event-a&day=8&query=must-not-leak&selectedCircle=c-000001");
   assert.equal(foreign.eventMatched, false);

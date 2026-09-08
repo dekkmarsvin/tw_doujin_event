@@ -77,6 +77,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題類別（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
 
+`creatorTypes`（可複選）、`workTypes` 與 `ageRatings`（各選一項）也不是自由文字：選項是 `circle-overrides.ts` 的固定清單，公開端搜尋讀同一份。寫入驗證只檢查長度與筆數，不檢查是否屬於清單——同一個驗證函式也是讀取端守門，收緊會讓既有帶舊值的資料列整列從公開文件消失（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`referencedWorks` 與 `specialTags` 仍是自由填寫。
+
 `circleCategory` 不是自由文字：控制面與寫入驗證共用 active event 的 `circleCategories`。選項集合來自主辦公開分類頁，但某社團選了哪一項仍是社團自述，不得標示為主辦認定。主辦 base 沒有逐社團分類，因此此欄的「繼承」在介面顯示為「尚未提供」。
 
 **永不開放**：攤位、日期、`SourceLink`。
@@ -123,7 +125,15 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 社團補充內容欄位與保存期限的發布只有一條寫入路徑：「預覽並送出」先讓 server preview 重新驗證擁有權、活動目錄與序列化上限，只有成功回傳的版本才能出現「確認儲存」。server preview 拒絕時不呼叫寫入端點，並保留原草稿、保存期限選擇與焦點脈絡。活動後退出與自助刪除是獨立的可逆／刪除動作，不屬於這條內容發布路徑。
 
-草稿的即時預覽、server preview 與公開文件共用 `projectCircleDraft` 投影及閱讀端 `CircleDetails` renderer；草稿變更只重算 client projection，不會自動儲存。確認頁可額外以「未提供」標示空白選填欄位，但不得把這些字寫入公開 projection。
+草稿的即時預覽、server preview 與公開文件共用 `projectCircleDraft` 投影及閱讀端 `CircleDetails` renderer；草稿變更只重算 client projection，**不會自動送出**。確認頁可額外以「未提供」標示空白選填欄位，但不得把這些字寫入公開 projection。
+
+嵌在預覽裡的是閱讀端元件，控制面的表單樣式不得延伸進去（`.previewFrame` 內的按鈕沿用閱讀端自己的樣式）：預覽要長得像刊出來的樣子，不是像表單。
+
+### 未儲存的內容留在這台裝置上
+
+編輯器很長，內容通常一次寫完，關掉分頁不該讓它全部消失。未送出的編輯逐社團自動存進這個瀏覽器的 `localStorage`，下次進編輯器帶回並顯示它是什麼時候寫的，附「改用已儲存的版本」一鍵丟棄。儲存成功或刪除整筆資料後即清除，與伺服器內容相同時也不保留。
+
+它是**還沒送出的東西**，不是資料的第二份權威：不同步、不跨裝置，瀏覽器拒絕儲存時編輯器照常運作。
 
 三段版面是同一條工作流，不是三種儲存語意：
 
@@ -214,9 +224,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 媒體安全
 
-社團提供的縮圖來源限於**允許清單內的主機**（`THUMBNAIL_HOST_ALLOWLIST`），CSP 與寫入驗證共用這份清單。
+社團提供的縮圖來源接受**任何 https 位址**：主機允許清單已於 [ADR-0052](../adr/0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) 移除，寫入驗證只檢查協定，編輯器另外以瀏覽器實際載入該位址判斷它是不是圖片，載不出來就擋住送出。CSP `img-src` 因此是 `'self' data: https:`，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)。
 
-依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**，這份清單因此同時是 CSP `img-src` 的主機集合，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)。
+依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**。
 
 代表圖採**本站代管為主、外部網址為輔**的雙線。已驗證的社團可上傳 JPEG／PNG／WebP，單檔上限 2 MiB，每個社團每個活動一張；伺服器驗證宣告 MIME 與檔案特徵，物件末段以內容 SHA-256 命名，不在 Worker 內重編碼。公開 URL 由 production `media.kotoban.top` 或 preview `media-preview.kotoban.top` 的 R2 custom domain 提供，帶一年 immutable 快取，**不經 Pages Function**。
 
@@ -247,7 +257,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 社團選擇活動後退出時，活動結束後公開文件裡查不到該筆內容，且快取不會提供舊版本。
 - 甲活動的認領無法對乙活動寫入；同一帳號在兩場活動各自持有的認領互不影響；服務不到的活動一律 `404`。
 - 管理者無法移除自己或最後一位管理者。
-- 縮圖主機不在允許清單時被拒絕，且錯誤訊息可讓社團理解原因。
+- 代表圖位址載不出圖片時擋住送出，且錯誤訊息可讓社團理解原因。
+- 送出被擋下時，畫面指得出是哪一個欄位；伺服器退件時回的也是那一個欄位的理由。
+- 未儲存的編輯保留在這台裝置上，下次進編輯器會帶回並可一鍵改用已儲存版本；儲存或刪除後不再保留。
 - 所有認領與撤下決策都可在稽核記錄中查到。
 - 過期的登入權杖、session 與 preview 信件會被清除，而清除不會動到速率限制視窗內的列。
 - 對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。

@@ -63,7 +63,7 @@
 一筆內容的出處：提供者、內容類型、原始連結、擷取時間與狀態。現行生產者是 `official`（主辦）與 `circle`（社團本人）；`catalog`、`social`、`media` 只保留為歷史／連結分類，不抓取第三方內容。**只有主辦提供的資料可標示為主辦單位；其他一律不得使用「官方」措辭。**`status` 是資料欄位，不轉成畫面上的信任措辭（[ADR-0036](docs/adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
 
 **facet**
-資料生成階段已正規化的搜尋欄位（`circleCategory`、`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`）。`circleCategory` 只能選自活動定義所固定的主辦分類目錄；其他 facet 仍是社團自由填寫。UI 只消費，不再切割字串。
+資料生成階段已正規化的搜尋欄位（`circleCategory`、`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`）。`circleCategory` 只能選自活動定義所固定的主辦分類目錄；`creatorTypes`、`workTypes`、`ageRatings` 只能選自 `circle-overrides.ts` 的站方固定選項（ADR-0051）；`referencedWorks` 仍是社團自由填寫。UI 只消費，不再切割字串。
 
 **revision**
 地圖 layout 的版本號，每次發布遞增。

@@ -1,16 +1,9 @@
 import type { CircleViewRecord } from "./circle-records";
 import { WORK_TOPIC_ALIAS_GROUPS, type WorkTopicAliasGroup } from "./work-topic-aliases";
+// 搜尋選項與社團可填的值是同一份清單，分成兩份就會漂移。
+import { CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS } from "./circle-overrides";
 
-export const CREATOR_TYPE_OPTIONS = [
-  "繪師",
-  "Coser",
-  "Vtuber",
-  "寫手",
-  "音聲作品",
-  "手工藝品",
-  "模型",
-  "攝影",
-] as const;
+export { CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS };
 
 /** `all` narrows to circles carrying every listed topic; `any` widens. The
  * mode only reaches the URL and the UI once a second topic exists, because a
@@ -22,7 +15,7 @@ export type AdvancedCircleSearch = {
   workTopics: string[];
   workTopicMode: WorkTopicMode;
   excludedWorkTopics: string[];
-  workType: "ALL" | "原創" | "二創";
+  workType: "ALL" | (typeof WORK_TYPE_OPTIONS)[number];
   adultContent: "ALL" | "R18" | "GENERAL";
 };
 
@@ -128,7 +121,7 @@ export function circleIncludesR18(record: CircleViewRecord) {
 }
 
 export function circleIncludesGeneral(record: CircleViewRecord) {
-  return record.circle.ageRatings.some((value) => /(^|[\s,，、/／])(?:一般|general)(?=$|[\s,，、/／])/i.test(value.normalize("NFKC")));
+  return record.circle.ageRatings.some((value) => /(^|[\s,，、/／])(?:一般|全年齡|general)(?=$|[\s,，、/／])/i.test(value.normalize("NFKC")));
 }
 
 export function matchesAdvancedCircleSearch(record: CircleViewRecord, search: AdvancedCircleSearch) {

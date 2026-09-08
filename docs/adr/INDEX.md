@@ -14,10 +14,10 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 
 | 區域 | 要讀的 ADR |
 |---|---|
-| 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042 |
+| 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051 |
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045 |
-| 社團控制面 | 0007、0016、0017、0020、0043 |
+| 社團控制面 | 0007、0016、0017、0020、0043、0051、0052 |
 | 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039 |
@@ -48,7 +48,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0014](./0014-event-data-lives-outside-the-code-repo.md) | 活動資料移出程式碼 repo，以固定 commit 引用 | **部分被取代** — 決策 3「一活動一 repo」由 0039 取代 |
 | [0015](./0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含第三方位元組時解除 | **部分被取代** — 最終邊界改由 0029 定義 |
 | [0016](./0016-human-verification-guards-the-mailer.md) | 真人驗證擋在寄信入口，不擋全站 | **部分被取代** — 「全站入口維持 Access」由 0029 取代；Turnstile 決策不變 |
-| [0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 | **部分被取代** — Error 1027 的後果敘述由 0031 取代 |
+| [0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 | **部分被取代** — Error 1027 的後果敘述由 0031 取代；主機允許清單由 0052 移除，代管為主線的決策不變 |
 | [0018](./0018-retention-is-the-circles-choice.md) | 保存期限由社團自己選，選了清除就真的刪除 | 生效 |
 | [0019](./0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md) | 個資請求走維運信箱，功能問題走公開 issue | 生效 |
 | [0020](./0020-self-service-deletion-reuses-the-existing-ownership-chain.md) | 自助刪除沿用既有的擁有權鏈 | 生效 |
@@ -82,3 +82,5 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
 | [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |
 | [0050](./0050-the-candidate-map-keeps-its-layout-plan.md) | 候選地圖保存它所依據的配置圖，存私人 bucket 不進 revision | 生效 |
+| [0051](./0051-three-circle-facets-move-to-fixed-options.md) | 創作者類型、作品類型與年齡分級改為固定選項，作品類型改講取向 | 生效 |
+| [0052](./0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) | 代表圖移除主機允許清單，改檢查網址是不是圖片 | 生效 |

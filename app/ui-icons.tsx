@@ -32,6 +32,10 @@ export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSV
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
     focusable: false,
+    // An inline SVG sits on the text baseline, so every icon rendered beside or
+    // instead of a label hangs a couple of pixels low. Pull it back onto the
+    // optical centre once here rather than per call site.
+    style: { verticalAlign: "-0.125em" },
   };
 
   return <svg {...shared} {...props}>

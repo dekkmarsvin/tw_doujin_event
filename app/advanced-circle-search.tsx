@@ -6,6 +6,7 @@ import {
   CREATOR_TYPE_OPTIONS,
   findWorkTopicSuggestions,
   normalizeWorkTopics,
+  WORK_TYPE_OPTIONS,
   type AdvancedCircleSearch,
   type WorkTopicSuggestion,
 } from "./circle-search";
@@ -211,13 +212,13 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
       <fieldset>
         <legend>作品類型</legend>
         <div className={styles.segments}>
-          {(["ALL", "原創", "二創"] as const).map((option) => <button type="button" key={option} aria-pressed={draft.workType === option} className={draft.workType === option ? styles.active : ""} onClick={() => setDraft({ ...draft, workType: option })}>{option === "ALL" ? "不限" : option}</button>)}
+          {(["ALL", ...WORK_TYPE_OPTIONS] as const).map((option) => <button type="button" key={option} aria-pressed={draft.workType === option} className={draft.workType === option ? styles.active : ""} onClick={() => setDraft({ ...draft, workType: option })}>{option === "ALL" ? "不限" : option}</button>)}
         </div>
       </fieldset>
       <fieldset>
-        <legend>成人內容</legend>
+        <legend>年齡分級</legend>
         <div className={styles.segments}>
-          {(["ALL", "R18", "GENERAL"] as const).map((option) => <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{option === "ALL" ? "不限" : option === "R18" ? "只看 R18" : "只看一般"}</button>)}
+          {(["ALL", "R18", "GENERAL"] as const).map((option) => <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{option === "ALL" ? "不限" : option === "R18" ? "只看 R18" : "只看全年齡"}</button>)}
         </div>
       </fieldset>
       <footer>

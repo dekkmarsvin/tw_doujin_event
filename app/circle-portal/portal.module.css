@@ -70,7 +70,14 @@
 .card :is(input, select, textarea):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
 .card textarea { resize: vertical; }
 
-.card button {
+/* `:not(:where(.previewFrame *))` keeps these off the reader component embedded
+   in the preview: it brings its own button styling, and the portal's block-button
+   rules landed on its icon buttons as a 38px pill with the glyph pushed off
+   centre. The preview has to look like the published card, not like the form.
+   `:where()` contributes no specificity, so this base rule stays weaker than the
+   variants below it (`.identity button`, `.inlineButton`, `.extraValues button`…)
+   the way it was before the exclusion existed. */
+.card button:not(:where(.previewFrame *)) {
   min-height: 38px;
   margin-top: 14px;
   padding: 8px 14px;
@@ -83,9 +90,9 @@
   letter-spacing: .06em;
   cursor: pointer;
 }
-.card button:hover { filter: brightness(1.15); }
-.card button:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
-.card button:disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
+.card button:not(:where(.previewFrame *)):hover { filter: brightness(1.15); }
+.card button:not(:where(.previewFrame *)):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
+.card button:not(:where(.previewFrame *)):disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
 
 .identity button {
   min-height: 28px;
@@ -169,12 +176,40 @@
 .notice { border: 1px solid #cfe4da; background: #edf8f3; color: var(--success); }
 .error { border: 1px solid #f0cdc6; background: #fff3f1; color: var(--danger); }
 
+/* Sits inside a sentence, so it carries the sentence's size and colour rather
+   than the card's block-button look. */
+.inlineButton {
+  min-height: 0; margin: 0 0 0 6px; padding: 2px 8px;
+  border: 1px solid currentColor; border-radius: 6px; background: transparent;
+  color: inherit; font-size: 11px; font-weight: 700; letter-spacing: normal;
+}
+
 .admin { border-color: #c9d2cc; background: var(--paper); }
 
 .visibility { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .visibility label { display: flex; align-items: start; gap: 8px; margin: 0; font-size: 12px; font-weight: 400; letter-spacing: normal; color: var(--ink); text-transform: none; }
 .visibility input { width: auto; margin: 2px 0 0; flex: 0 0 auto; }
 .visibility p { margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+
+.choiceGroup { margin: 12px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.choiceGroup legend { padding: 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+.choiceGroup > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.choiceGroup label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.choiceGroup label:has(input:checked) { border-color: var(--coral); }
+.choiceGroup input { width: auto; margin: 0; }
 
 /* Retention: the two options are laid out as equal columns, same border, same
    type scale, so neither reads as the recommended one. ADR-0018 forbids putting
@@ -219,7 +254,30 @@
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }
 .mapReviewPreview { max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .mapReviewPreview svg { display: block; width: 100%; height: auto; }
-.auditList, .problemList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
+.auditList, /* 舊資料留下的多個值。每一個都是可移除的，因此是按鈕而不是純文字。 */
+.extraValues { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.extraValues > span { color: var(--muted); font-size: 11px; }
+.extraValues button {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 0; margin: 0; padding: 4px 9px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--ink);
+  font-size: 12px; font-weight: 400; letter-spacing: normal;
+}
+.extraValues button:hover { border-color: var(--danger); filter: none; }
+
+.visuallyHidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+.thumbnailPreview { margin-top: 10px; }
+.thumbnailPreview img {
+  display: block; max-width: 200px; max-height: 200px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff; object-fit: contain;
+}
+
+.problemList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
 .auditList { overflow-wrap: anywhere; color: var(--muted); }
 .auditList a { color: inherit; }
 .problemList { color: var(--danger); }
@@ -336,15 +394,15 @@
 
 .linkList { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .linkList > li { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
-.linkRow { display: grid; grid-template-columns: 22px 1fr; gap: 4px 8px; align-items: center; }
-.linkRow label { margin-top: 0; grid-column: 1 / -1; }
-.linkRow :is(input, select) { grid-column: 1 / -1; margin-top: 0; }
+.linkRow { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; }
+.linkRow label { grid-column: 2; margin-top: 0; }
+.linkRow :is(input, select) { margin-top: 4px; }
 .linkPosition {
   grid-column: 1; grid-row: 1; width: 22px; height: 22px; display: grid; place-items: center;
   border-radius: 50%; background: var(--ink); color: #fff;
   font: 700 10px "Geist Mono", ui-monospace, monospace;
 }
-.linkActions { grid-column: 1 / -1; display: flex; gap: 6px; }
+.linkActions { grid-column: 2; display: flex; gap: 6px; }
 .linkActions button { margin-top: 8px; padding: 6px 10px; font-size: 10px; }
 .linkCut {
   margin: 10px -10px -10px; padding: 6px 10px;
@@ -353,10 +411,12 @@
 .problemList { margin: 10px 0 0; padding-left: 18px; color: var(--danger, #a43e30); font-size: 11px; line-height: 1.7; }
 
 @media (min-width: 560px) {
-  .linkRow { grid-template-columns: 22px minmax(0, 1fr) 130px; }
+  /* 平台名稱、類型、網址 side by side; the number keeps its own column and the
+     actions sit under the fields rather than squeezing into one. */
+  .linkRow { grid-template-columns: 22px minmax(0, 1.2fr) 130px minmax(0, 2fr); }
   .linkRow label { grid-column: auto; }
-  .linkRow > label:nth-of-type(1) { grid-column: 2; }
-  .linkRow :is(input, select) { grid-column: auto; }
+  .linkUrlField { grid-column: 4; }
+  .linkActions { grid-column: 2 / -1; }
 }
 
 .commentThread { display:grid; gap:9px; margin:0 0 13px; padding:0; list-style:none; }

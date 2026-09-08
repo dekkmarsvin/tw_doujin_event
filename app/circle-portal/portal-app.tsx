@@ -8,11 +8,11 @@ import {
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import {
-  CIRCLE_OVERRIDE_LIST_FIELDS, LINK_KINDS, OVERRIDE_LIMITS, THUMBNAIL_HOST_ALLOWLIST,
+  AGE_RATING_OPTIONS, CIRCLE_OVERRIDE_LIST_FIELDS, CREATOR_TYPE_OPTIONS, LINK_KINDS, OVERRIDE_LIMITS, WORK_TYPE_OPTIONS,
   circleOverrideFieldMode, circleRetentionExpiresAt, clearCircleOverrideField, inheritCircleOverrideField,
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail, type CircleRetentionChoice,
 } from "../circle-overrides";
-import { linkUrlProblem, thumbnailUrlProblem } from "../circle-override-messages";
+import { linkUrlProblem, thumbnailUrlProblem, THUMBNAIL_NOT_AN_IMAGE } from "../circle-override-messages";
 import { findCircleCategory } from "../circle-categories";
 import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
@@ -57,7 +57,68 @@ function initialPortalEventId() {
   return getPublishedEvent(stored) ? stored : fallback;
 }
 
+/**
+ * Unsaved edits, kept on this device only.
+ *
+ * The editor is long, the content is written in one sitting at a desk, and a
+ * closed tab used to lose all of it. This is the smallest thing that stops
+ * that: it is not a second copy of the record, it is what has not been sent
+ * yet, and it is dropped the moment the server has the same content. Planning
+ * data already lives in `localStorage` for the same reason (ADR-0002).
+ */
+const DRAFT_STORAGE_PREFIX = "circle-portal-draft:";
+
+const DRAFT_TIME = new Intl.DateTimeFormat("zh-TW", { dateStyle: "short", timeStyle: "short" });
+
+type StoredDraft = {
+  fields: CircleOverrideFields;
+  listInputs: Partial<Record<CircleOverrideFieldKey, string>>;
+  /** Without it a restored draft would send a hosted thumbnail URL the write route refuses. */
+  stagedThumbnailKey: string | null;
+  /** Saved with the fields, so it is unsaved the same way they are. */
+  retention: CircleRetentionChoice | null;
+  savedAt: string;
+};
+
+function readStoredDraft(circleId: string): StoredDraft | null {
+  try {
+    const raw = window.localStorage.getItem(`${DRAFT_STORAGE_PREFIX}${circleId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredDraft;
+    return parsed && typeof parsed === "object" && parsed.fields && typeof parsed.fields === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDraft(circleId: string, draft: StoredDraft) {
+  try {
+    window.localStorage.setItem(`${DRAFT_STORAGE_PREFIX}${circleId}`, JSON.stringify(draft));
+  } catch {
+    // A browser that refuses storage still edits; it just cannot keep the draft.
+  }
+}
+
+function forgetStoredDraft(circleId: string) {
+  try {
+    window.localStorage.removeItem(`${DRAFT_STORAGE_PREFIX}${circleId}`);
+  } catch {
+    // Nothing to recover from: the draft is a convenience, not a record.
+  }
+}
+
 const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
+
+type CircleOverrideListFieldKey = (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"];
+
+/** 只能從固定選項挑的欄位。清單本身住在 `circle-overrides.ts`，搜尋面板讀同一份。 */
+const CHOICE_FIELD_OPTIONS = {
+  creatorTypes: CREATOR_TYPE_OPTIONS,
+  workTypes: WORK_TYPE_OPTIONS,
+  ageRatings: AGE_RATING_OPTIONS,
+} as const;
+
+type ChoiceFieldKey = keyof typeof CHOICE_FIELD_OPTIONS;
 
 function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "沿用場刊", inheritAction = "沿用場刊" }: {
   mode: keyof typeof FIELD_MODE_LABEL;
@@ -503,17 +564,31 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const [reviewedFields, setReviewedFields] = useState<CircleOverrideFields | null>(null);
   const [reviewedRetention, setReviewedRetention] = useState<CircleRetentionChoice | null>(null);
   const [stagedThumbnailKey, setStagedThumbnailKey] = useState<string | null>(null);
+  // Reported next to the file picker: an error shown at the far end of the form
+  // reads as the picker doing nothing at all.
+  const [uploadNotice, setUploadNotice] = useState<Status>(IDLE);
+  // Whether the browser could load the current address as an image, keyed by the
+  // address it answered for so a stale verdict never blocks a new one.
+  const [thumbnailLoad, setThumbnailLoad] = useState<{ url: string; ok: boolean } | null>(null);
   const [reviewedThumbnailKey, setReviewedThumbnailKey] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
   // `null` is a third state, not a default: a circle that has not answered must
   // be asked rather than assumed to have chosen either side (ADR-0018).
   const [retention, setRetention] = useState<CircleRetentionChoice | null>(null);
   const [retentionExpiresAt, setRetentionExpiresAt] = useState<number | null>(null);
+  /** What the server holds, so an unsaved retention choice can be told apart from it. */
+  const [savedRetention, setSavedRetention] = useState<CircleRetentionChoice | null>(null);
   const [saved, setSaved] = useState(false);
+  // The editor is usable before the preview baseline arrives, and that request
+  // can fail; gating the draft on it would silently stop saving drafts.
+  const [hydrated, setHydrated] = useState(false);
   // What the server holds, as opposed to the draft in `fields`: the deletion
   // summary has to describe what would actually be deleted, not unsaved edits.
   const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
   const [confirmText, setConfirmText] = useState("");
+  // When the draft on this device differs from what the server holds. Shown as
+  // a line the author can act on, never as a silent restore.
+  const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null);
   const loaded = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const reviewPanel = useRef<HTMLDivElement | null>(null);
@@ -532,13 +607,31 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     void readMyOverride(claim.circleId)
       .then((result) => {
         const initialFields = result.fields ?? {};
-        setFields(initialFields);
-        setListInputs({});
+        // The stored draft wins over the saved record: it is the newer of the
+        // two by construction, and dropping it is one click away.
+        const stored = readStoredDraft(claim.circleId);
+        // Retention counts as part of the draft: a tab closed after changing
+        // only that choice must not come back with the server's answer.
+        const restored = !!stored && (JSON.stringify(stored.fields) !== JSON.stringify(initialFields)
+          || (stored.retention ?? null) !== (result.retention ?? null));
+        setFields(restored ? stored.fields : initialFields);
+        setListInputs(restored ? stored.listInputs ?? {} : {});
+        setStagedThumbnailKey(restored ? stored.stagedThumbnailKey ?? null : null);
+        setDraftRestoredAt(restored ? stored.savedAt : null);
+        if (!restored) forgetStoredDraft(claim.circleId);
         setSavedFields(initialFields);
         setHidden(!!result.postEventHidden);
-        setRetention(result.retention ?? null);
-        setRetentionExpiresAt(result.retentionExpiresAt ?? null);
+        const storedRetention = restored ? stored.retention ?? null : null;
+        const activeRetention = storedRetention ?? result.retention ?? null;
+        setRetention(activeRetention);
+        setSavedRetention(result.retention ?? null);
+        // A restored choice has not been saved, so the deadline it implies is
+        // recomputed rather than taken from the row the server answered with.
+        setRetentionExpiresAt(storedRetention
+          ? circleRetentionExpiresAt(storedRetention, Date.parse(event.eventEndsAt))
+          : result.retentionExpiresAt ?? null);
         setSaved(result.status !== "none");
+        setHydrated(true);
         const requestGeneration = ++previewRequestGeneration.current;
         void previewOverride(claim.circleId, initialFields).then((previewResult) => {
           if (requestGeneration !== previewRequestGeneration.current) return;
@@ -546,13 +639,87 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           setProjectedAt(previewResult.projectedAt);
         }).catch(() => undefined);
       })
-      .catch(() => setFields({}));
-  }, [claim.circleId]);
+      .catch(() => {
+        setFields({});
+        setHydrated(true);
+      });
+  }, [claim.circleId, event.eventEndsAt]);
+
+  // Written on every edit rather than on a button: a draft that needs an action
+  // to exist is one the author remembers only after losing the tab.
+  const draftDiffersFromSaved = JSON.stringify(fields) !== JSON.stringify(savedFields) || retention !== savedRetention;
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!draftDiffersFromSaved) forgetStoredDraft(claim.circleId);
+    else writeStoredDraft(claim.circleId, { fields, listInputs, stagedThumbnailKey, retention, savedAt: new Date().toISOString() });
+  }, [claim.circleId, draftDiffersFromSaved, fields, hydrated, listInputs, retention, stagedThumbnailKey]);
+
+  const discardDraft = () => {
+    forgetStoredDraft(claim.circleId);
+    setFields(savedFields);
+    setListInputs({});
+    setStagedThumbnailKey(null);
+    setRetention(savedRetention);
+    setRetentionExpiresAt(savedRetention
+      ? circleRetentionExpiresAt(savedRetention, Date.parse(event.eventEndsAt))
+      : null);
+    setDraftRestoredAt(null);
+  };
 
   const setList = (key: (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"], value: string) => {
     setListInputs((current) => ({ ...current, [key]: value }));
     const items = value.split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean);
     setFields((current) => ({ ...current, [key]: items }));
+  };
+
+  // 固定選項的欄位挑一個或幾個就好，剩下兩個仍然是自由填寫。既有的舊值不在選項
+  // 裡時補進清單，作者才看得到、也刪得掉。
+  const optionsFor = (key: ChoiceFieldKey) => {
+    const options: readonly string[] = CHOICE_FIELD_OPTIONS[key];
+    return [...options, ...(fields[key] ?? []).filter((value) => !options.includes(value))];
+  };
+  const toggleChoice = (key: ChoiceFieldKey, option: string, checked: boolean) => setFields((current) => {
+    const values = current[key] ?? [];
+    return { ...current, [key]: checked ? [...values, option] : values.filter((value) => value !== option) };
+  });
+  const setChoice = (key: ChoiceFieldKey, value: string) => setFields((current) => ({ ...current, [key]: value ? [value] : [] }));
+  const removeChoice = (key: ChoiceFieldKey, value: string) => setFields((current) => ({
+    ...current,
+    [key]: (current[key] ?? []).filter((candidate) => candidate !== value),
+  }));
+
+  const listField = (key: CircleOverrideListFieldKey, label: string) => {
+    const id = `${key}-${claim.circleId}`;
+    if (key === "creatorTypes") return <fieldset className={styles.choiceGroup}>
+      <legend>{label}</legend>
+      <div>{optionsFor(key).map((option) => <label key={option}>
+        <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
+        <span>{option}</span>
+      </label>)}</div>
+    </fieldset>;
+    if (key in CHOICE_FIELD_OPTIONS) {
+      const choiceKey = key as ChoiceFieldKey;
+      const values = fields[choiceKey] ?? [];
+      return <>
+        <label htmlFor={id}>{label}</label>
+        {/* 這個欄位以前可以填多個。多值時每一個都要看得到、刪得掉，不能只把
+            第一個當成選取值，把其餘的留在送出的資料裡卻不顯示。 */}
+        {values.length > 1 && <div className={styles.extraValues}>
+          <span>目前有 {values.length} 個值，選一項會取代全部：</span>
+          {values.map((value) => <button key={value} type="button" onClick={() => removeChoice(choiceKey, value)}>
+            {value}<span aria-hidden="true">✕</span><span className={styles.visuallyHidden}>移除</span>
+          </button>)}
+        </div>}
+        <select id={id} value={values.length === 1 ? values[0] : ""} onChange={(event) => setChoice(choiceKey, event.target.value)}>
+          <option value="">尚未選擇</option>
+          {optionsFor(choiceKey).map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </>;
+    }
+    return <>
+      <label htmlFor={id}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
+      <input id={id} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
+    </>;
   };
 
   const resetListInput = (key: CircleOverrideFieldKey) => {
@@ -616,6 +783,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       return problem ? { id: linkUrlProblem(link.url) ? `link-url-${claim.circleId}-${index}` : `link-provider-${claim.circleId}-${index}`, message: `第 ${index + 1} 個連結：${problem}` } : null;
     }),
     thumbnail && thumbnailUrlProblem(thumbnail.url) ? { id: `thumb-url-${claim.circleId}`, message: thumbnailUrlProblem(thumbnail.url) } : null,
+    // Pending counts as not yet checked, not as fine: a slow address could
+    // otherwise be published in the window before `onError` fires.
+    thumbnail?.url && !thumbnailUrlProblem(thumbnail.url) && !(thumbnailLoad?.url === thumbnail.url && thumbnailLoad.ok)
+      ? {
+        id: `thumb-url-${claim.circleId}`,
+        message: thumbnailLoad?.url === thumbnail.url ? THUMBNAIL_NOT_AN_IMAGE : "代表圖還在確認能不能載入，請稍候。",
+      } : null,
     thumbnail && !thumbnail.sourceUrl.trim() ? { id: `thumb-source-${claim.circleId}`, message: "代表圖需要填寫出處頁面。" } : null,
     thumbnail?.sourceUrl?.trim() && linkUrlProblem(thumbnail.sourceUrl) ? { id: `thumb-source-${claim.circleId}`, message: linkUrlProblem(thumbnail.sourceUrl) } : null,
     thumbnail && !thumbnail.provider.trim() ? { id: `thumb-provider-${claim.circleId}`, message: "代表圖需要填寫來源標示。" } : null,
@@ -662,6 +836,11 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     <h2>編輯：{claim.circleName}</h2>
     <p>儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。</p>
 
+    {draftRestoredAt && draftDiffersFromSaved && <p className={styles.notice} role="status">
+      這是你在這台裝置上{DRAFT_TIME.format(new Date(draftRestoredAt))}編輯到一半、還沒儲存的內容。
+      <button type="button" className={styles.inlineButton} onClick={discardDraft}>改用已儲存的版本</button>
+    </p>}
+
     <div className={styles.editorLayout}>
       <div id={`editor-fields-${claim.circleId}`} className={styles.editorForm} tabIndex={-1} inert={reviewOpen ? true : undefined}>
 
@@ -705,8 +884,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     />
 
     {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <div key={key}>
-      <label htmlFor={`${key}-${claim.circleId}`}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
-      <input id={`${key}-${claim.circleId}`} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
+      {listField(key, label)}
       <FieldModeControls mode={modeFor(key)} label={label} onInherit={() => inheritField(key)} onClear={() => clearField(key)} />
     </div>)}
 
@@ -723,28 +901,36 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           return <li key={index}>
             <div className={styles.linkRow}>
               <span className={styles.linkPosition} aria-hidden="true">{index + 1}</span>
-              <label htmlFor={`link-provider-${claim.circleId}-${index}`}>平台名稱</label>
-              <input
-                id={`link-provider-${claim.circleId}-${index}`}
-                value={link.provider} maxLength={OVERRIDE_LIMITS.listItemLength}
-                placeholder="例如：X、Pixiv、巴哈"
-                onChange={(event) => editLink(index, { provider: event.target.value })}
-              />
-              <label htmlFor={`link-kind-${claim.circleId}-${index}`}>類型</label>
-              <select
-                id={`link-kind-${claim.circleId}-${index}`}
-                value={link.kind}
-                onChange={(event) => editLink(index, { kind: event.target.value as CircleExternalLink["kind"] })}
-              >
-                {LINK_KINDS.map((kind) => <option key={kind} value={kind}>{LINK_KIND_LABEL[kind]}</option>)}
-              </select>
-              <label htmlFor={`link-url-${claim.circleId}-${index}`}>網址</label>
-              <input
-                id={`link-url-${claim.circleId}-${index}`}
-                value={link.url} inputMode="url" placeholder="https://"
-                aria-invalid={problem ? true : undefined}
-                onChange={(event) => editLink(index, { url: event.target.value })}
-              />
+              {/* Each label owns its control, so a row lays out as three fields
+                  rather than six items the grid has to guess the pairing of. */}
+              <label htmlFor={`link-provider-${claim.circleId}-${index}`}>
+                平台名稱
+                <input
+                  id={`link-provider-${claim.circleId}-${index}`}
+                  value={link.provider} maxLength={OVERRIDE_LIMITS.listItemLength}
+                  placeholder="例如：X、Pixiv、巴哈"
+                  onChange={(event) => editLink(index, { provider: event.target.value })}
+                />
+              </label>
+              <label htmlFor={`link-kind-${claim.circleId}-${index}`}>
+                類型
+                <select
+                  id={`link-kind-${claim.circleId}-${index}`}
+                  value={link.kind}
+                  onChange={(event) => editLink(index, { kind: event.target.value as CircleExternalLink["kind"] })}
+                >
+                  {LINK_KINDS.map((kind) => <option key={kind} value={kind}>{LINK_KIND_LABEL[kind]}</option>)}
+                </select>
+              </label>
+              <label htmlFor={`link-url-${claim.circleId}-${index}`} className={styles.linkUrlField}>
+                網址
+                <input
+                  id={`link-url-${claim.circleId}-${index}`}
+                  value={link.url} inputMode="url" placeholder="https://"
+                  aria-invalid={problem ? true : undefined}
+                  onChange={(event) => editLink(index, { url: event.target.value })}
+                />
+              </label>
               <div className={styles.linkActions}>
                 <button type="button" disabled={index === 0} onClick={() => moveLink(index, -1)} aria-label={`把第 ${index + 1} 個連結往前移`}>↑</button>
                 <button type="button" disabled={index === links.length - 1} onClick={() => moveLink(index, 1)} aria-label={`把第 ${index + 1} 個連結往後移`}>↓</button>
@@ -773,24 +959,33 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         const input = event.currentTarget;
         const file = event.target.files?.[0];
         if (!file) return;
+        // The upload needs a source page, but asking for it by silently failing
+        // a picker that sits above it reads as "nothing happened". Say it here,
+        // next to the control that was used.
         const sourceUrl = thumbnail?.sourceUrl?.trim() ?? "";
         const provider = thumbnail?.provider?.trim() || "社團本人";
         if (!sourceUrl || linkUrlProblem(sourceUrl)) {
-          setStatus({ kind: "error", message: "請先填寫有效的圖片出處頁面，再選擇檔案。" });
+          setUploadNotice({ kind: "error", message: "請先填寫下面的「圖片出處頁面」，再選擇檔案。" });
           input.value = "";
           return;
         }
+        setUploadNotice({ kind: "busy", message: "上傳中…" });
         setStatus({ kind: "busy", message: "上傳代表圖中…" });
         void uploadThumbnail(claim.circleId, file, sourceUrl, provider)
           .then(({ thumbnail: uploaded, uploadKey }) => {
             setFields((current) => ({ ...current, thumbnail: uploaded }));
             setStagedThumbnailKey(uploadKey);
-            setStatus({ kind: "ok", message: "代表圖已上傳到草稿，尚未公開；請預覽並確認儲存。" });
+            setUploadNotice({ kind: "ok", message: "已上傳到草稿，尚未公開。" });
+            setStatus(IDLE);
           })
-          .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
+          .catch((error: unknown) => {
+            setUploadNotice({ kind: "error", message: errorMessage(error) });
+            setStatus(IDLE);
+          })
           .finally(() => { input.value = ""; });
       }}
     />
+    {uploadNotice.kind !== "idle" && <p className={uploadNotice.kind === "error" ? styles.error : styles.notice}>{uploadNotice.message}</p>}
 
     <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址</label>
     <input
@@ -799,7 +994,18 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       onChange={(event) => editThumbnail({ url: event.target.value })}
     />
     {thumbnail?.url && thumbnailUrlProblem(thumbnail.url) && <p className={styles.error}>{thumbnailUrlProblem(thumbnail.url)}</p>}
-    <p className={styles.editorHint}>代表圖網址限使用以下圖片主機：{THUMBNAIL_HOST_ALLOWLIST.join("、")}。</p>
+
+    {/* The only check left on an external address is whether it is really an
+        image, and the browser is the one that can answer it (ADR-0052). The
+        preview is that answer, and doubles as the feedback an upload needs. */}
+    {thumbnail?.url && !thumbnailUrlProblem(thumbnail.url) && <div className={styles.thumbnailPreview}>
+      <img
+        src={thumbnail.url} alt="代表圖預覽"
+        onLoad={() => setThumbnailLoad({ url: thumbnail.url, ok: true })}
+        onError={() => setThumbnailLoad({ url: thumbnail.url, ok: false })}
+      />
+      {thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok && <p className={styles.error}>{THUMBNAIL_NOT_AN_IMAGE}</p>}
+    </div>}
 
     <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面</label>
     <input
@@ -899,8 +1105,11 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             .then(() => {
               setFields({});
               setListInputs({});
+              forgetStoredDraft(claim.circleId);
+              setDraftRestoredAt(null);
               setSavedFields({});
               setRetention(null);
+              setSavedRetention(null);
               setRetentionExpiresAt(null);
               setHidden(false);
               setSaved(false);
@@ -927,13 +1136,19 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             <ReviewSummary fields={reviewedFields} retention={reviewedRetention} />
             <div className={styles.reviewActions}>
               <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
-              <button type="button" disabled={status.kind === "busy"} onClick={() => {
+              {/* Re-checked here, not only when the review opened: an image
+                  verdict can arrive after that, and a confirmation taken before
+                  it must not be the one that publishes. */}
+              <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
                 const savingFields = { ...reviewedFields };
                 setStatus({ kind: "busy", message: "儲存中…" });
                 void saveOverride(claim.circleId, savingFields, reviewedRetention, reviewedThumbnailKey ?? undefined)
                   .then(() => {
                     setSaved(true);
                     setSavedFields(savingFields);
+                    setSavedRetention(reviewedRetention);
+                    forgetStoredDraft(claim.circleId);
+                    setDraftRestoredAt(null);
                     setStagedThumbnailKey(null);
                     setReviewedThumbnailKey(null);
                     setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" });
@@ -942,6 +1157,9 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                   .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
               }}>{status.kind === "busy" ? "儲存中…" : "確認儲存"}</button>
             </div>
+            {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
+              {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}>{problem.message}</li>)}
+            </ul>}
             {status.kind === "error" && <p className={styles.error} role="status">{status.message}</p>}
           </div>
           : <div className={styles.livePreview}>
