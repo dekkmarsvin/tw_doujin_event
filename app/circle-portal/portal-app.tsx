@@ -75,7 +75,7 @@ type StoredDraft = {
   listInputs: Partial<Record<CircleOverrideFieldKey, string>>;
   /** Without it a restored draft would send a hosted thumbnail URL the write route refuses. */
   stagedThumbnailKey: string | null;
-  /** Answered in the form and sent with the same save, so it is an unsent edit too (ADR-0018). */
+  /** Saved with the fields, so it is unsaved the same way they are. */
   retention: CircleRetentionChoice | null;
   savedAt: string;
 };
@@ -105,12 +105,6 @@ function forgetStoredDraft(circleId: string) {
   } catch {
     // Nothing to recover from: the draft is a convenience, not a record.
   }
-}
-
-/** `null` is "not answered yet", which has no date. The rest is the rule the
-    server applies at write time, so an answer restored here shows that date. */
-function retentionExpiryFor(choice: CircleRetentionChoice | null, eventEndsAt: string) {
-  return choice === null ? null : circleRetentionExpiresAt(choice, Date.parse(eventEndsAt));
 }
 
 const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
@@ -582,14 +576,15 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // be asked rather than assumed to have chosen either side (ADR-0018).
   const [retention, setRetention] = useState<CircleRetentionChoice | null>(null);
   const [retentionExpiresAt, setRetentionExpiresAt] = useState<number | null>(null);
+  /** What the server holds, so an unsaved retention choice can be told apart from it. */
+  const [savedRetention, setSavedRetention] = useState<CircleRetentionChoice | null>(null);
   const [saved, setSaved] = useState(false);
+  // The editor is usable before the preview baseline arrives, and that request
+  // can fail; gating the draft on it would silently stop saving drafts.
+  const [hydrated, setHydrated] = useState(false);
   // What the server holds, as opposed to the draft in `fields`: the deletion
   // summary has to describe what would actually be deleted, not unsaved edits.
   const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
-  const [savedRetention, setSavedRetention] = useState<CircleRetentionChoice | null>(null);
-  // The record is in state. Until then there is nothing to compare a draft
-  // against, and writing one would erase the draft this load is about to read.
-  const [hydrated, setHydrated] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   // When the draft on this device differs from what the server holds. Shown as
   // a line the author can act on, never as a silent restore.
@@ -612,28 +607,28 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     void readMyOverride(claim.circleId)
       .then((result) => {
         const initialFields = result.fields ?? {};
-        const initialRetention = result.retention ?? null;
         // The stored draft wins over the saved record: it is the newer of the
         // two by construction, and dropping it is one click away.
         const stored = readStoredDraft(claim.circleId);
-        // A draft written before `retention` was part of the shape says nothing
-        // about it, so it inherits the saved answer rather than clearing one.
-        const storedRetention = stored && stored.retention !== undefined ? stored.retention : initialRetention;
+        // Retention counts as part of the draft: a tab closed after changing
+        // only that choice must not come back with the server's answer.
         const restored = !!stored && (JSON.stringify(stored.fields) !== JSON.stringify(initialFields)
-          || storedRetention !== initialRetention);
+          || (stored.retention ?? null) !== (result.retention ?? null));
         setFields(restored ? stored.fields : initialFields);
         setListInputs(restored ? stored.listInputs ?? {} : {});
         setStagedThumbnailKey(restored ? stored.stagedThumbnailKey ?? null : null);
         setDraftRestoredAt(restored ? stored.savedAt : null);
         if (!restored) forgetStoredDraft(claim.circleId);
         setSavedFields(initialFields);
-        setSavedRetention(initialRetention);
         setHidden(!!result.postEventHidden);
-        setRetention(restored ? storedRetention : initialRetention);
-        // Derived from the answer, so a restored one has to be recomputed
-        // rather than left showing the date the saved answer implies.
-        setRetentionExpiresAt(restored && storedRetention !== initialRetention
-          ? retentionExpiryFor(storedRetention, event.eventEndsAt)
+        const storedRetention = restored ? stored.retention ?? null : null;
+        const activeRetention = storedRetention ?? result.retention ?? null;
+        setRetention(activeRetention);
+        setSavedRetention(result.retention ?? null);
+        // A restored choice has not been saved, so the deadline it implies is
+        // recomputed rather than taken from the row the server answered with.
+        setRetentionExpiresAt(storedRetention
+          ? circleRetentionExpiresAt(storedRetention, Date.parse(event.eventEndsAt))
           : result.retentionExpiresAt ?? null);
         setSaved(result.status !== "none");
         setHydrated(true);
@@ -644,16 +639,16 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           setProjectedAt(previewResult.projectedAt);
         }).catch(() => undefined);
       })
-      .catch(() => setFields({}));
+      .catch(() => {
+        setFields({});
+        setHydrated(true);
+      });
   }, [claim.circleId, event.eventEndsAt]);
 
   // Written on every edit rather than on a button: a draft that needs an action
   // to exist is one the author remembers only after losing the tab.
   const draftDiffersFromSaved = JSON.stringify(fields) !== JSON.stringify(savedFields) || retention !== savedRetention;
   useEffect(() => {
-    // Gated on the record being in state, not on the preview: the preview is a
-    // separate request that is allowed to fail, and hanging the draft on it
-    // turned one failed preview into an editor that quietly kept nothing.
     if (!hydrated) return;
     if (!draftDiffersFromSaved) forgetStoredDraft(claim.circleId);
     else writeStoredDraft(claim.circleId, { fields, listInputs, stagedThumbnailKey, retention, savedAt: new Date().toISOString() });
@@ -665,7 +660,9 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     setListInputs({});
     setStagedThumbnailKey(null);
     setRetention(savedRetention);
-    setRetentionExpiresAt(retentionExpiryFor(savedRetention, event.eventEndsAt));
+    setRetentionExpiresAt(savedRetention
+      ? circleRetentionExpiresAt(savedRetention, Date.parse(event.eventEndsAt))
+      : null);
     setDraftRestoredAt(null);
   };
 
@@ -1043,7 +1040,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             checked={retention === option.value}
             onChange={() => {
               setRetention(option.value);
-              setRetentionExpiresAt(retentionExpiryFor(option.value, event.eventEndsAt));
+              setRetentionExpiresAt(circleRetentionExpiresAt(option.value, Date.parse(event.eventEndsAt)));
             }}
           />
           <span>{option.title}</span>
