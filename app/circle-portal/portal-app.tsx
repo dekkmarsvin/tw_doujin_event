@@ -493,6 +493,8 @@ function ReviewSummary({ fields, retention }: { fields: CircleOverrideFields; re
 
 function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSummary }) {
   const [fields, setFields] = useState<CircleOverrideFields>({});
+  // Keep separators and in-progress IME text intact while the author types.
+  const [listInputs, setListInputs] = useState<Partial<Record<CircleOverrideFieldKey, string>>>({});
   const [status, setStatus] = useState<Status>(IDLE);
   const [baseRecords, setBaseRecords] = useState<CircleViewRecord[] | null>(null);
   const [serverPreview, setServerPreview] = useState<CircleViewRecord[] | null>(null);
@@ -531,6 +533,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       .then((result) => {
         const initialFields = result.fields ?? {};
         setFields(initialFields);
+        setListInputs({});
         setSavedFields(initialFields);
         setHidden(!!result.postEventHidden);
         setRetention(result.retention ?? null);
@@ -547,15 +550,25 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   }, [claim.circleId]);
 
   const setList = (key: (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"], value: string) => {
+    setListInputs((current) => ({ ...current, [key]: value }));
     const items = value.split(/[\n,，、;；]+/).map((item) => item.trim()).filter(Boolean);
     setFields((current) => ({ ...current, [key]: items }));
   };
 
+  const resetListInput = (key: CircleOverrideFieldKey) => {
+    setListInputs((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
   const inheritField = (key: CircleOverrideFieldKey) => {
+    resetListInput(key);
     if (key === "thumbnail") setStagedThumbnailKey(null);
     setFields((current) => inheritCircleOverrideField(current, key));
   };
   const clearField = (key: CircleOverrideFieldKey) => {
+    resetListInput(key);
     if (key === "thumbnail") setStagedThumbnailKey(null);
     setFields((current) => clearCircleOverrideField(current, key));
   };
@@ -693,7 +706,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
     {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <div key={key}>
       <label htmlFor={`${key}-${claim.circleId}`}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
-      <input id={`${key}-${claim.circleId}`} value={(fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
+      <input id={`${key}-${claim.circleId}`} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
       <FieldModeControls mode={modeFor(key)} label={label} onInherit={() => inheritField(key)} onClear={() => clearField(key)} />
     </div>)}
 
@@ -885,6 +898,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           void deleteMyOverride(claim.circleId)
             .then(() => {
               setFields({});
+              setListInputs({});
               setSavedFields({});
               setRetention(null);
               setRetentionExpiresAt(null);
