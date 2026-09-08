@@ -125,7 +125,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 `POST /api/circle/:circleId/preview` 以**閱讀端自己的投影元件**渲染草稿，唯讀、不寫入任何資料。預覽必須重用閱讀端元件，否則預覽會與實際呈現漂移。
 
-社團補充內容欄位的發布只有一條寫入路徑：「預覽並送出」先讓 server preview 重新驗證擁有權、活動目錄與序列化上限，只有成功回傳的版本才能出現「確認儲存」。server preview 拒絕時不呼叫寫入端點，並保留原草稿、保存期限選擇與焦點脈絡。活動後退出與自助刪除是獨立的可逆／刪除動作，不屬於這條內容發布路徑。
+社團補充內容欄位的發布只有一條寫入路徑：「預覽並送出」先讓 server preview 重新驗證擁有權、活動目錄與序列化上限，只有成功回傳的版本才能出現「確認儲存」。server preview 拒絕時不呼叫寫入端點，並保留原草稿與焦點脈絡。活動後退出與自助刪除是獨立的可逆／刪除動作，不屬於這條內容發布路徑。
 
 草稿的即時預覽、server preview 與公開文件共用 `projectCircleDraft` 投影及閱讀端 `CircleDetails` renderer；草稿變更只重算 client projection，**不會自動送出**。確認頁可額外以「未提供」標示空白選填欄位，但不得把這些字寫入公開 projection。
 
@@ -135,7 +135,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 編輯器很長，內容通常一次寫完，關掉分頁不該讓它全部消失。未送出的編輯逐社團自動存進這個瀏覽器的 `localStorage`，下次進編輯器帶回並顯示它是什麼時候寫的，附「改用已儲存的版本」一鍵丟棄。儲存成功或刪除整筆資料後即清除，與伺服器內容相同時也不保留。
 
-「未送出的編輯」是那一次送出會寫進去的全部內容，不只欄位：保存期限的選擇與代管圖片的上傳憑證都在同一次送出裡，因此都要一起留下、一起丟棄。帶回其中一項卻悄悄換掉另一項，等於替社團改了它沒改的答案。
+「未送出的編輯」是那一次送出會寫進去的全部內容，不只欄位：代管圖片的上傳憑證也在同一次送出裡，因此要一起留下、一起丟棄。帶回其中一項卻悄悄換掉另一項，等於替社團改了它沒改的答案。
 
 保留草稿只依賴編輯器讀到了資料列本身。即時預覽是另一個可以失敗的請求，失敗時編輯器照常編輯，因此不得拿它當保留草稿的條件。資料列本身讀取失敗時則兩邊都不做：沒有伺服器內容可比，把「與伺服器相同」當成結論會刪掉作者仍然握著的草稿。
 
@@ -176,7 +176,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 社團可決定自己填寫的補充資料在活動結束後是否繼續公開（`POST /api/circle/:circleId/visibility`）。
 
-介面上是兩個並列選項——「繼續公開」（預設）與「停止公開」——寫入即生效，不隨草稿一起送出。
+介面上是兩個並列選項——「繼續公開」（預設）與「不再公開」——寫入即生效，不隨草稿一起送出。
 
 - **範圍只限社團自述內容。** 主辦公布的社團名、攤位與日期不受影響，仍留在場刊。
 - 退出的內容在活動結束後**完全不出現在公開文件中**，而非由用戶端隱藏。
@@ -209,7 +209,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 **選擇存在資料列上**：`circle_overrides.retention_choice`（`keep`／`purge`）與 `circle_overrides.retention_expires_at`。兩欄都可為 NULL 且**沒有 DEFAULT**——NULL 是「尚未表態」，與「已選擇保留」是不同的狀態，控制面靠這個差別決定要不要問。到期時間**自活動結束時間起算**，不是最後編輯時間，並且在寫入時就算好存進資料列，維運端因此能直接查出哪些列在什麼時候會消失，不必讀程式碼推論。90 天的值是 `app/circle-overrides.ts` 的 `OVERRIDE_RETENTION_PURGE_AFTER_MS`。
 
 - **選擇隨內容一起送出**（`PUT /api/circle/:circleId/overrides` 的 `retention`），因為它是填寫時的決定，不是事後的設定。欄位缺席代表「這次沒有回答」，伺服器保留既有選擇，**永遠不會被解讀成選擇了清除**。
-- **控制面不再問這個問題**（[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md)）。編輯頁上只剩「活動結束後：繼續公開／停止公開」，`retention` 一律缺席，因此新資料列的 `retention_choice` 維持 NULL（語意同「保留」）。已經選過 `purge` 的資料列仍照原到期日清除，但社團在介面上看不到也改不回來。API、欄位與排程清除都沒有變動。這是 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 的決定，取代 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)「兩個選項並列、不預選、不得收進摺疊」的介面條款。
+- **控制面不再問這個問題**（[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md)）。編輯頁上只剩「活動結束後：繼續公開／不再公開」，`retention` 一律缺席，因此新資料列的 `retention_choice` 維持 NULL（語意同「保留」）。已經選過 `purge` 的資料列仍照原到期日清除，但社團在介面上看不到也改不回來。API、欄位與排程清除都沒有變動。這是 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 的決定，取代 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)「兩個選項並列、不預選、不得收進摺疊」的介面條款。
 - **選了清除的資料在等待刪除期間維持公開。** `listLiveOverrides` 與公開文件不看這兩個欄位；任何在讀取端過濾它們的作法都是錯的。
 - **選擇改變時寫一筆 `audit_log`**（`action = "override.retention"`，含 `choice` 與到期時間）。清除本身只記錄發生過、不留下內容，所以「當事人要求過、在哪一天」只會留在這裡。
 
@@ -270,7 +270,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 代表圖位址載不出圖片時擋住送出，且錯誤訊息可讓社團理解原因。
 - 只有圖片本身是代表圖的必要條件；有填的出處頁面不是 https 時擋住送出，未填時不擋。
 - 送出被擋下時，畫面指得出是哪一個欄位；伺服器退件時回的也是那一個欄位的理由。
-- 未儲存的編輯保留在這台裝置上，下次進編輯器會帶回並可一鍵改用已儲存版本；帶回的內容包含保存期限的選擇，儲存或刪除後不再保留。
+- 未儲存的編輯保留在這台裝置上，下次進編輯器會帶回並可一鍵改用已儲存版本；帶回的內容包含代管圖片的上傳憑證，儲存或刪除後不再保留。
 - 即時預覽失敗不影響未儲存的編輯是否被保留。
 - 所有認領與撤下決策都可在稽核記錄中查到。
 - 過期的登入權杖、session 與 preview 信件會被清除，而清除不會動到速率限制視窗內的列。
