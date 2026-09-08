@@ -1,6 +1,6 @@
 # ADR-0040：review 發現以 ticket 範圍與已記錄的威脅模型為界
 
-- 狀態：已定案（2026-08-30）
+- 狀態：已定案（2026-08-30）；2026-09-08 修訂決策 3，改以驗收條件而非「是否新增檔案」判斷範圍；決策 4 的熔斷條件不變
 - 延續：[ADR-0039](./0039-one-data-repo-for-events-and-references.md) 的 single-maintainer 前提
 - 相關 issue：[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - 相關 PR：[#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128)（未合併關閉）、[#129](https://github.com/dekkmarsvin/tw_doujin_event/pull/129)（已合併）
@@ -35,9 +35,9 @@
 
 任何 review finding 在修補前必須先通過範圍關卡，判準與流程見 [review-fix 迴圈守則](../agents/review-loop.md)。落在威脅模型之外的 finding 不是 bug，處置是記錄與拒絕，不是修補。
 
-### 3. review 觸發的修補不得新增模組或子系統
+### 3. review 觸發的修補不得超出原驗收條件
 
-修補只能就地改既有檔案。需要新檔案、新概念或新原語的，代表它不是這張 ticket 的修補，另開 issue 走 triage。
+修補優先就地改既有檔案；直接滿足原 ticket 驗收條件的必要實作檔案與回歸測試可以新增。新增檔案本身不是超出範圍的判準；超出驗收條件的新行為、子系統或保證，另開 issue 走 triage。
 
 ### 4. 迴圈有熔斷條件
 
