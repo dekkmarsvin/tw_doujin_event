@@ -144,9 +144,9 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
     </button>
     {open && <div ref={panelRef} id={panelId} className={styles.panel} role="dialog" aria-modal="true" aria-label="詳細搜尋條件" tabIndex={-1}>
       <label>
-        創作者類型
+        創作內容
         <select value={draft.creatorType} onChange={(event) => setDraft({ ...draft, creatorType: event.target.value })}>
-          <option value="ALL">全部類型</option>
+          <option value="ALL">全部</option>
           {CREATOR_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
       </label>
@@ -210,7 +210,7 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
         </div>
       </fieldset>}
       <fieldset>
-        <legend>作品類型</legend>
+        <legend>作品取向</legend>
         <div className={styles.segments}>
           {(["ALL", ...WORK_TYPE_OPTIONS] as const).map((option) => <button type="button" key={option} aria-pressed={draft.workType === option} className={draft.workType === option ? styles.active : ""} onClick={() => setDraft({ ...draft, workType: option })}>{option === "ALL" ? "不限" : option}</button>)}
         </div>

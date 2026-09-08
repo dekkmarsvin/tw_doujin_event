@@ -106,7 +106,10 @@ function forgetStoredDraft(circleId: string) {
   }
 }
 
-const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
+/* The three states an editable field can be in, said as what a reader would
+   see rather than as inherit/replace/clear (#197). The wording carries the
+   "目前" itself, so the row needs no separate prefix. */
+const FIELD_MODE_LABEL = { inherit: "目前顯示場刊資料", replace: "目前顯示你填寫的內容", clear: "目前不顯示" } as const;
 
 type CircleOverrideListFieldKey = (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"];
 
@@ -135,7 +138,7 @@ function isMultiChoiceField(key: CircleOverrideListFieldKey): key is MultiChoice
   return (MULTI_CHOICE_FIELD_KEYS as readonly string[]).includes(key);
 }
 
-function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "沿用場刊", inheritAction = "沿用場刊" }: {
+function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "目前顯示場刊資料", inheritAction = "使用場刊資料" }: {
   mode: keyof typeof FIELD_MODE_LABEL;
   label: string;
   onInherit: () => void;
@@ -143,10 +146,10 @@ function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "�
   inheritStatus?: string;
   inheritAction?: string;
 }) {
-  return <div className={styles.fieldMode} role="group" aria-label={`${label}的資料來源`}>
-    <span>目前：<b>{mode === "inherit" ? inheritStatus : FIELD_MODE_LABEL[mode]}</b></span>
+  return <div className={styles.fieldMode} role="group" aria-label={`${label}顯示什麼`}>
+    <span><b>{mode === "inherit" ? inheritStatus : FIELD_MODE_LABEL[mode]}</b></span>
     <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit"} onClick={onInherit}>{inheritAction}</button>
-    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear"} onClick={onClear}>清除此欄</button>
+    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear"} onClick={onClear}>不顯示</button>
   </div>;
 }
 
@@ -517,12 +520,12 @@ function deletionSummary(fields: CircleOverrideFields) {
   const lines: string[] = [];
   if (fields.pen) lines.push(`筆名：${fields.pen}`);
   if (fields.saleInfo) lines.push(`販售資訊 ${[...fields.saleInfo].length} 字`);
-  if (fields.circleCategory) lines.push(`社團主題類別：${fields.circleCategory}`);
+  if (fields.circleCategory) lines.push(`社團主題：${fields.circleCategory}`);
   for (const { key, label } of CIRCLE_OVERRIDE_LIST_FIELDS) {
     const items = fields[key];
     if (items?.length) lines.push(`${label} ${items.length} 項`);
   }
-  if (fields.links?.length) lines.push(`外部連結 ${fields.links.length} 條`);
+  if (fields.links?.length) lines.push(`連結 ${fields.links.length} 條`);
   if (fields.thumbnail) lines.push("代表圖 1 張");
   return lines;
 }
@@ -558,9 +561,9 @@ function ReviewSummary({ fields }: { fields: CircleOverrideFields }) {
   const rows = [
     ["筆名", value(fields.pen)],
     ["販售資訊", value(fields.saleInfo)],
-    ["社團主題類別", value(fields.circleCategory)],
+    ["社團主題", value(fields.circleCategory)],
     ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(fields[key])]),
-    ["外部連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
+    ["連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
     ["代表圖", fields.thumbnail ? fields.thumbnail.provider || "已提供" : "未提供"],
   ];
   return <dl className={styles.reviewSummary}>
@@ -856,7 +859,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     />
     <FieldModeControls mode={modeFor("saleInfo")} label="販售資訊" onInherit={() => inheritField("saleInfo")} onClear={() => clearField("saleInfo")} />
 
-    <label htmlFor={`circle-category-${claim.circleId}`}>社團主題類別</label>
+    <label htmlFor={`circle-category-${claim.circleId}`}>社團主題</label>
     <select
       id={`circle-category-${claim.circleId}`}
       value={fields.circleCategory ?? ""}
@@ -874,8 +877,8 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       </span>)}
     </p>
     <FieldModeControls
-      mode={modeFor("circleCategory")} label="社團主題類別"
-      inheritStatus="尚未提供" inheritAction="恢復未選擇"
+      mode={modeFor("circleCategory")} label="社團主題"
+      inheritStatus="目前未選擇" inheritAction="恢復未選擇"
       onInherit={() => inheritField("circleCategory")} onClear={() => clearField("circleCategory")}
     />
 
@@ -884,12 +887,12 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       <FieldModeControls mode={modeFor(key)} label={label} onInherit={() => inheritField(key)} onClear={() => clearField(key)} />
     </div>)}
 
-    <h3 className={styles.editorSection}>外部連結</h3>
+    <h3 className={styles.editorSection}>連結</h3>
     {/* The HTTPS rule lives in `linkUrlProblem`, which names the row that
         broke it; teaching it up here as well is a rule stated twice. */}
     <p className={styles.editorHint}>地圖側欄顯示前 {SIDE_PANEL_LINK_LIMIT} 個連結，最多可填 {OVERRIDE_LIMITS.links} 個。</p>
 
-    <FieldModeControls mode={modeFor("links")} label="外部連結" onInherit={() => inheritField("links")} onClear={() => clearField("links")} />
+    <FieldModeControls mode={modeFor("links")} label="連結" onInherit={() => inheritField("links")} onClear={() => clearField("links")} />
 
     {links.length === 0
       ? modeFor("links") === "inherit" && <p className={styles.editorHint}>新增後會改用你填寫的連結。</p>
@@ -1054,7 +1057,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {/* Clearing a field writes an empty value and leaves the row; this
           removes the row. ADR-0020 requires the two to read as different
           things, because only one of them is undoable. */}
-      <p>永久刪除這筆補充資料與上一版備份，<b>無法復原</b>。主辦公布的社團名、攤位與日期不受影響。</p>
+      <p>永久刪除你填寫的內容與上一版備份，<b>無法復原</b>。場刊中的社團名、攤位與日期不受影響。</p>
       <p>將被刪除的內容：</p>
       {deletionSummary(savedFields).length === 0
         ? <ul className={styles.dangerSummary}><li>（目前沒有任何欄位有內容，但資料列仍然存在）</li></ul>

@@ -65,7 +65,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **自助刪除沿用這條鏈**（`DELETE /api/circle/:circleId/overrides`）。[ADR-0020](../adr/0020-self-service-deletion-reuses-the-existing-ownership-chain.md) 決定不為刪除另發「持有即代表授權」的編輯連結——既有的登入加已驗證認領已經更強，而 bearer 連結會被轉寄、留在網址列，且撤不回來。
 
-- **「清除此欄」與「刪除這筆資料」是兩件事。** 前者寫入空值或 tombstone，資料列還在；後者刪掉資料列，`previous_fields_json` 與保存期限一併消失。介面上分屬兩區，措辭不得混用。
+- **「不顯示」與「刪除資料」是兩件事。** 前者（clear）寫入空值或 tombstone，資料列還在；後者刪掉資料列，`previous_fields_json` 一併消失。介面上分屬兩區，措辭不得混用。
 - **刪除前顯示即將刪除的內容摘要。** pretix 在刪除前強制先匯出，本站是它的弱化版：沒有人應該在看不見標的的情況下按下去。
 - **確認不得是單一按鈕，也不重寄郵件。** session 有效期 30 天，單一按鈕會讓一個久未使用的分頁抹掉全部內容；重寄郵件則會把不可逆的動作卡在送達率上。實作是把社團代號輸入一次——這條在伺服器端把關（`confirm` 必須等於該社團 id），不只是介面上的一道關。
 - **擁有權掛在社團身分上，不掛在帳號上。** 移轉後新擁有者可以刪除前任寫的內容；`audit_log` 的 `override.deleted` 記下是**哪個帳號**做的，那是移轉之後唯一分得出誰做了什麼的依據。稽核不留下被刪除的內容。
@@ -75,7 +75,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 可編輯範圍
 
-**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題類別（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
+**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
 
 `creatorTypes` 與 `ageRatings`（可複選）、`workTypes`（選一項）也不是自由文字：選項是 `circle-overrides.ts` 的固定清單，公開端搜尋讀同一份。寫入驗證只檢查長度與筆數，不檢查是否屬於清單——同一個驗證函式也是讀取端守門，收緊會讓既有帶舊值的資料列整列從公開文件消失（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`referencedWorks` 與 `specialTags` 仍是自由填寫。
 
@@ -99,11 +99,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 每個可編輯欄位都明確區分三種狀態：
 
-1. **沿用場刊**：override 不含該鍵，繼續使用 reviewed snapshot。
-2. **社團自填**：override 含非空值，整組取代 snapshot；陣列不逐項合併。
-3. **清除此欄**：空字串、空陣列或 thumbnail tombstone 明確移除 snapshot 的既有值。
+1. **沿用場刊**（畫面上寫「目前顯示場刊資料」）：override 不含該鍵，繼續使用 reviewed snapshot。
+2. **社團自填**（畫面上寫「目前顯示你填寫的內容」）：override 含非空值，整組取代 snapshot；陣列不逐項合併。
+3. **清除此欄**（畫面上寫「目前不顯示」）：空字串、空陣列或 thumbnail tombstone 明確移除 snapshot 的既有值。
 
-編輯器必須顯示目前狀態，並提供「沿用場刊」與「清除此欄」動作。不得在送出前丟掉 tombstone，否則社團只能改寫、不能明確撤下自己先前提供的內容。
+編輯器必須顯示目前狀態，並提供回到場刊資料與不顯示這兩個動作（畫面上是「使用場刊資料」與「不顯示」）。**這三個詞是內部詞彙**：契約、程式與 D1 用 inherit／replace／clear，介面一律寫使用者看得到的結果（#197）。不得在送出前丟掉 tombstone，否則社團只能改寫、不能明確撤下自己先前提供的內容。
 
 ### 欄位上限
 

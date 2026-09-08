@@ -88,6 +88,21 @@ test("the post-event question is two outcomes, and staying public is the default
   assert.match(app, /writeStoredDraft\(claim\.circleId, \{ fields, listInputs, stagedThumbnailKey, savedAt:/);
 });
 
+test("field state is described by what shows, not by inherit/replace/clear", async () => {
+  const app = await source("portal-app.tsx");
+
+  // inherit/replace/clear stay in the contract, the code and D1; the editor
+  // says what a reader would see instead (#197). The state text carries its own
+  // 「目前」, so the row no longer prefixes one.
+  assert.match(app, /const FIELD_MODE_LABEL = \{ inherit: "目前顯示場刊資料", replace: "目前顯示你填寫的內容", clear: "目前不顯示" \}/);
+  assert.match(app, /inheritAction = "使用場刊資料"/);
+  assert.match(app, /onClick=\{onClear\}>不顯示<\/button>/);
+  assert.doesNotMatch(app, /目前：<b>/);
+  for (const modelWord of [/沿用場刊/, /社團自填/, /清除此欄/, /補充資料/]) {
+    assert.doesNotMatch(app.slice(0, app.indexOf("function AdminPanel")), modelWord);
+  }
+});
+
 test("deleting is collapsed, and its button says the same words as the summary", async () => {
   const app = await source("portal-app.tsx");
 
