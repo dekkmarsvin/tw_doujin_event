@@ -70,7 +70,7 @@
 ### 資料規則
 
 - 搜尋投影直接使用資料生成階段已正規化的 `CircleRecord.circleCategory`、`creatorTypes`、`referencedWorks`、`workTypes`、`ageRatings`。`circleCategory` 是單一主題類別，其餘仍可為多值。**UI 不即時猜測或切割字串**。
-- `creatorTypes`、`workTypes`、`ageRatings` 的可寫入值由 [`app/circle-overrides.ts`](../../app/circle-overrides.ts) 的固定選項決定，搜尋面板讀同一份清單，兩邊不會出現對不上的選項（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。
+- `creatorTypes`、`workTypes`、`ageRatings` 的可寫入值由 [`app/circle-overrides.ts`](../../app/circle-overrides.ts) 的固定選項決定，搜尋面板讀同一份清單，兩邊不會出現對不上的選項（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`ageRatings` 是多值：同時標了全年齡與 R18 的社團，兩種分級條件都要命中。
 - 正規化只用於搜尋與聚合；原始名稱、標籤及來源值仍須保留。
 - **分級不推測**：`r18=general` 只匹配明確標記為一般的來源；未知與 R15 不得被推測成一般或 R18。
 - **跨語別同義名稱由 `work-topic-aliases.ts` 人工核對**擴展查詢，例如「賽馬娘 Pretty Derby」可由「賽馬娘」、「ウマ娘」或「ウマ娘Pretty Derby」找到。**別名不回寫來源資料**，也不得以模糊名稱自動合併不同主題。
@@ -97,6 +97,7 @@
 
 - 搜尋「蔚藍檔案」可限定只匹配作品／原作，不因社團介紹中的偶然文字造成難以解釋的結果。
 - 選擇 R18 時只回傳明確具有 R18 facet 的社團；資料不明不得視為 R18 或一般。
+- 同時標了全年齡與 R18 的社團，在「只看全年齡」與「只看 R18」都查得到。
 - 切換資訊密度、媒體數量或排序不改變結果 ID 集合。
 - 收藏群組與行程狀態不出現在詳細搜尋面板，但仍可與搜尋條件組合使用。
 - 桌機與手機使用相同的搜尋狀態、URL 與結果集合。

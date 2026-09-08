@@ -120,6 +120,27 @@ const CHOICE_FIELD_OPTIONS = {
 
 type ChoiceFieldKey = keyof typeof CHOICE_FIELD_OPTIONS;
 
+/**
+ * 可以同時成立好幾個的固定選項欄位，用核取方塊；其餘用下拉選單。
+ *
+ * `ageRatings` 講的是**販售內容**：同時出全年齡本與 R18 本是一件真實而且常見
+ * 的事，不是資料沒收乾淨。單選會在作者下次編輯任何一個分級時，把另一個值連同
+ * 它描述的事實一起刪掉——那是替社團改了它沒改的答案。閱讀端的限制分級要怎麼
+ * 從多值推導，另見 #193。
+ */
+const MULTI_CHOICE_FIELD_KEYS = ["creatorTypes", "ageRatings"] as const satisfies readonly ChoiceFieldKey[];
+
+type MultiChoiceFieldKey = (typeof MULTI_CHOICE_FIELD_KEYS)[number];
+
+function isMultiChoiceField(key: CircleOverrideListFieldKey): key is MultiChoiceFieldKey {
+  return (MULTI_CHOICE_FIELD_KEYS as readonly string[]).includes(key);
+}
+
+/** 只寫在會被讀成單選的欄位上。創作者類型本來就是複選，不需要解釋。 */
+const MULTI_CHOICE_HINT: Partial<Record<MultiChoiceFieldKey, string>> = {
+  ageRatings: "同時販售全年齡與 R18 就兩個都勾。這裡描述的是販售內容，不是一個社團只能有一種分級。",
+};
+
 function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "沿用場刊", inheritAction = "沿用場刊" }: {
   mode: keyof typeof FIELD_MODE_LABEL;
   label: string;
@@ -639,10 +660,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           setProjectedAt(previewResult.projectedAt);
         }).catch(() => undefined);
       })
-      .catch(() => {
-        setFields({});
-        setHydrated(true);
-      });
+      // Not hydrated: `savedFields` never arrived, so every comparison against
+      // it would read as "same as the server" and take the draft away from an
+      // author whose load simply failed.
+      .catch(() => setFields({}));
   }, [claim.circleId, event.eventEndsAt]);
 
   // Written on every edit rather than on a button: a draft that needs an action
@@ -690,8 +711,9 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
   const listField = (key: CircleOverrideListFieldKey, label: string) => {
     const id = `${key}-${claim.circleId}`;
-    if (key === "creatorTypes") return <fieldset className={styles.choiceGroup}>
+    if (isMultiChoiceField(key)) return <fieldset className={styles.choiceGroup}>
       <legend>{label}</legend>
+      {MULTI_CHOICE_HINT[key] && <p className={styles.editorHint}>{MULTI_CHOICE_HINT[key]}</p>}
       <div>{optionsFor(key).map((option) => <label key={option}>
         <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
         <span>{option}</span>

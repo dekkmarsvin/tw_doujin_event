@@ -75,9 +75,12 @@
    rules landed on its icon buttons as a 38px pill with the glyph pushed off
    centre. The preview has to look like the published card, not like the form.
    `:where()` contributes no specificity, so this base rule stays weaker than the
-   variants below it (`.identity button`, `.inlineButton`, `.extraValues button`…)
-   the way it was before the exclusion existed. */
-.card button:not(:where(.previewFrame *)) {
+   variants below it (`.extraValues button`, `.fieldMode button`…) the way it was
+   before the exclusion existed.
+   `.inlineButton` is in the exclusion rather than below it: a lone class is
+   weaker than a class plus an element, so it lost to this rule even before the
+   `:not()` existed and would still come out as a 38px block. */
+.card button:not(:where(.previewFrame *, .inlineButton)) {
   min-height: 38px;
   margin-top: 14px;
   padding: 8px 14px;
@@ -90,9 +93,9 @@
   letter-spacing: .06em;
   cursor: pointer;
 }
-.card button:not(:where(.previewFrame *)):hover { filter: brightness(1.15); }
-.card button:not(:where(.previewFrame *)):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
-.card button:not(:where(.previewFrame *)):disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
+.card button:not(:where(.previewFrame *, .inlineButton)):hover { filter: brightness(1.15); }
+.card button:not(:where(.previewFrame *, .inlineButton)):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
+.card button:not(:where(.previewFrame *, .inlineButton)):disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
 
 .identity button {
   min-height: 28px;
@@ -254,7 +257,8 @@
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }
 .mapReviewPreview { max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .mapReviewPreview svg { display: block; width: 100%; height: auto; }
-.auditList, /* 舊資料留下的多個值。每一個都是可移除的，因此是按鈕而不是純文字。 */
+.auditList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
+/* 舊資料留下的多個值。每一個都是可移除的，因此是按鈕而不是純文字。 */
 .extraValues { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .extraValues > span { color: var(--muted); font-size: 11px; }
 .extraValues button {
