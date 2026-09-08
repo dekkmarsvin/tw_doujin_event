@@ -2,8 +2,8 @@
 
 ## 環境需求
 
-- Node.js `>=22.13.0`
-- npm
+- Node.js `24.20.0`（見 `.nvmrc`）
+- npm `11.19.0`
 - 公開 Pages 前台不需要 Cloudflare 帳號或 D1；只有地圖 authoring、portal 或部署操作需要 Cloudflare 資源。
 
 ## 啟動 Pages 前台

@@ -54,7 +54,7 @@
 
 ## 快速開始
 
-需要 Node.js `>=22.13.0` 與 npm。公開前台不需要 Cloudflare 帳號或 D1。
+需要 Node.js `24.20.0` 與 npm `11.19.0`（版本固定於 `.nvmrc` 與 `package.json`）。公開前台不需要 Cloudflare 帳號或 D1。
 
 ```bash
 npm install
