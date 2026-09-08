@@ -1,6 +1,7 @@
 # ADR-0018：保存期限由社團自己選，選了清除就真的刪除
 
 - 狀態：已定案（2026-08-20）
+- **部分被取代**：核心決策「保存期限由社團自己選」與本文對介面的三項要求（兩個選項並列、不預選、不得收進摺疊），由 [ADR-0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 取代（2026-09-08）。「三個實作時不能選錯的約束」與稽核記錄一節對**已經帶著選擇的資料列**仍然有效
 - 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)
 - 相關 ADR：[ADR-0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md)、[ADR-0020](./0020-self-service-deletion-reuses-the-existing-ownership-chain.md)、[ADR-0021](./0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](./0022-expiry-runs-in-a-separate-cron-worker.md)
 - 相關 issue：[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)

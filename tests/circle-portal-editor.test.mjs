@@ -69,20 +69,33 @@ test("the draft is kept as soon as the record loads, not when the preview answer
   assert.match(app, /\.catch\(\(\) => setFields\(\{\}\)\);/);
 });
 
-test("the draft carries every unsent answer, including the retention choice", async () => {
+test("the post-event question is two outcomes, and staying public is the default", async () => {
   const app = await source("portal-app.tsx");
 
-  // Retention is edited in the form and sent by the same save (ADR-0018), so a
-  // draft without it restores the fields and silently reverts the answer.
-  assert.match(app, /type StoredDraft = \{[^}]*retention: CircleRetentionChoice \| null;/s);
-  assert.match(app, /writeStoredDraft\(claim\.circleId, \{ fields, listInputs, stagedThumbnailKey, retention, savedAt:/);
-  assert.match(app, /const draftDiffersFromSaved = .*\|\| retention !== savedRetention;/);
+  // The options name what the circle decides, not the mechanism underneath, and
+  // `hidden` starts false so the answer that changes nothing is preselected.
+  assert.match(app, /\{ value: false, title: "繼續公開" \}, \{ value: true, title: "不再公開" \}/);
+  assert.match(app, /const \[hidden, setHidden\] = useState\(false\);/);
+  assert.match(app, /checked=\{hidden === option\.value\}/);
 
-  // Restoring one has to bring the derived date with it, and discarding has to
-  // put both back to what the server holds.
-  assert.match(app, /setRetention\(activeRetention\);\s*\r?\n\s*setSavedRetention\(result\.retention \?\? null\);/);
-  assert.match(app, /setRetentionExpiresAt\(storedRetention\s*\r?\n?\s*\? circleRetentionExpiresAt\(storedRetention, Date\.parse\(event\.eventEndsAt\)\)/);
-  assert.match(app, /setRetention\(savedRetention\);\s*\r?\n\s*setRetentionExpiresAt\(savedRetention/);
+  // A failed write puts the radio back rather than leaving the page claiming a
+  // decision the server never took.
+  assert.match(app, /\.catch\(\(error: unknown\) => \{ setHidden\(!option\.value\);/);
+
+  // The retention question is gone from the editor, so neither the draft nor
+  // the save carries an answer to it any more.
+  assert.doesNotMatch(app, /CircleRetentionChoice/);
+  assert.match(app, /writeStoredDraft\(claim\.circleId, \{ fields, listInputs, stagedThumbnailKey, savedAt:/);
+});
+
+test("deleting is collapsed, and its button says the same words as the summary", async () => {
+  const app = await source("portal-app.tsx");
+
+  // One irreversible action, reached on purpose: `<details>` keeps it closed
+  // until asked for, while staying findable by the browser's own page search.
+  assert.match(app, /\{saved && <details className=\{styles\.danger\}>/);
+  assert.match(app, /<summary>刪除資料<\/summary>/);
+  assert.doesNotMatch(app, /<details className=\{styles\.danger\} open>/);
 });
 
 test("the rating field is a checkbox group, because a circle can sell both", async () => {
@@ -124,6 +137,6 @@ test("the picture is the only thing the upload asks for", async () => {
   assert.doesNotMatch(app, /代表圖需要填寫來源標示/);
   assert.match(app, /圖片出處頁面（選填）/);
   assert.match(app, /來源標示（選填/);
-  assert.match(app, /最多 5 MiB/);
+  assert.match(app, /JPEG、PNG、WebP，最大 5 MB/);
   assert.match(app, /thumbnail\?\.sourceUrl\?\.trim\(\) && linkUrlProblem\(thumbnail\.sourceUrl\)/);
 });

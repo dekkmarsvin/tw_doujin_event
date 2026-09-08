@@ -189,11 +189,6 @@
 
 .admin { border-color: #c9d2cc; background: var(--paper); }
 
-.visibility { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
-.visibility label { display: flex; align-items: start; gap: 8px; margin: 0; font-size: 12px; font-weight: 400; letter-spacing: normal; color: var(--ink); text-transform: none; }
-.visibility input { width: auto; margin: 2px 0 0; flex: 0 0 auto; }
-.visibility p { margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.6; }
-
 .choiceGroup { margin: 12px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .choiceGroup legend { padding: 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
 .choiceGroup > div { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -219,7 +214,6 @@
    the deleting choice anywhere less prominent than the keeping one. */
 .retention { margin: 16px 0; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 10px; }
 .retention legend { padding: 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
-.retentionAsk { margin-bottom: 10px; padding: 8px 10px; border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 11px; line-height: 1.6; }
 .retentionChoices { display: grid; gap: 8px; }
 .retentionChoices label {
   display: grid;
@@ -296,7 +290,8 @@
    in red. Kept visually apart from the per-field "clear" controls: ADR-0020
    requires clearing and deleting to read as two different things. */
 .danger { margin-top: 16px; padding: 12px; border: 1px solid #e7c4bd; border-radius: 10px; background: #fdf6f4; }
-.danger h3 { margin: 0; color: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.danger summary { color: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
+.danger summary:focus-visible { outline: 3px solid #f0cdc6; outline-offset: 3px; }
 .danger p { margin-top: 8px; color: var(--ink); font-size: 11px; line-height: 1.7; }
 .danger label { margin-top: 10px; }
 .danger code { padding: 1px 5px; border-radius: 4px; background: #f4e3df; font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
@@ -312,6 +307,9 @@
 /* Inert on purpose: the reader's planning controls render so the preview is
    faithful, but they must not act from inside a preview. */
 .previewFrame {
+  /* The embedded reader panel sizes its layout against this box, not the
+     window: the column is narrower than any viewport breakpoint. */
+  container-type: inline-size;
   margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -326,6 +324,18 @@
   color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .1em;
 }
 .livePreview h3, .reviewPanel h3 { margin: 4px 0 0; font-size: 13px; }
+.previewHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Above the review overlay's z-index 50: the full density can be opened from
+   either side of the editor. */
+.previewBackdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: #202a3566; }
+.previewDialog {
+  width: min(980px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--paper);
+}
 .livePreview > p, .reviewPanel > p { margin-top: 8px; color: var(--muted); font-size: 11px; }
 .reviewPanel { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .reviewHeading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
@@ -399,6 +409,8 @@
 .linkList { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .linkList > li { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
 .linkRow { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; }
+.linkAdd { display: flex; align-items: center; gap: 10px; }
+.linkAdd span { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .linkRow label { grid-column: 2; margin-top: 0; }
 .linkRow :is(input, select) { margin-top: 4px; }
 .linkPosition {

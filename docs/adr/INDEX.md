@@ -17,11 +17,11 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051 |
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045 |
-| 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053 |
+| 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054 |
 | 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039 |
-| 保存期限與個資 | 0018、0021、0022、0027 |
+| 保存期限與個資 | 0018、0021、0022、0027、0054 |
 | 部署、Access 與配額 | 0009、0015、0029、0031、0034 |
 | 對外文案與來源標示 | 0024、0036、0053 |
 | 產品範圍 | 0025、0041 |
@@ -49,7 +49,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0015](./0015-access-lifts-when-no-third-party-bytes-remain.md) | Access 閘控在 repo 不再含第三方位元組時解除 | **部分被取代** — 最終邊界改由 0029 定義 |
 | [0016](./0016-human-verification-guards-the-mailer.md) | 真人驗證擋在寄信入口，不擋全站 | **部分被取代** — 「全站入口維持 Access」由 0029 取代；Turnstile 決策不變 |
 | [0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md) | 縮圖由本站代管，外部網址保留為第二條線 | **部分被取代** — Error 1027 的後果敘述由 0031 取代；主機允許清單由 0052 移除；上傳邊界表的單檔容量由 0053 放寬到 5 MiB。代管為主線的決策不變 |
-| [0018](./0018-retention-is-the-circles-choice.md) | 保存期限由社團自己選，選了清除就真的刪除 | 生效 |
+| [0018](./0018-retention-is-the-circles-choice.md) | 保存期限由社團自己選，選了清除就真的刪除 | **部分被取代** — 「由社團選擇」的決策與三項介面要求由 0054 取代；對既有 `purge` 資料列的實作約束仍有效 |
 | [0019](./0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md) | 個資請求走維運信箱，功能問題走公開 issue | 生效 |
 | [0020](./0020-self-service-deletion-reuses-the-existing-ownership-chain.md) | 自助刪除沿用既有的擁有權鏈 | 生效 |
 | [0021](./0021-credentials-expire-and-are-purged-records-are-kept.md) | 憑證到期就清掉，紀錄類保留不設期限 | 生效 |
@@ -85,3 +85,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0051](./0051-three-circle-facets-move-to-fixed-options.md) | 創作者類型、作品類型與年齡分級改為固定選項，作品類型改講取向 | 生效 |
 | [0052](./0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) | 代表圖移除主機允許清單，改檢查網址是不是圖片 | 生效 |
 | [0053](./0053-the-thumbnail-upload-asks-for-the-picture-only.md) | 代表圖上傳只要圖片，出處與來源標示改為選填，上限 5 MiB | 生效 |
+| [0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md) | 保存期限選項退場，社團只決定公開與否，其餘靠手動刪除 | 生效 |
