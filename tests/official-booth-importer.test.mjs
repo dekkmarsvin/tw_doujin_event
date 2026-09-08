@@ -277,10 +277,11 @@ test("the interactive CLI accepts pasted CSV, previews it, and writes only after
       if (code === 0) resolve({ stdout, stderr });
       else reject(new Error(`CLI exited ${code}: ${stderr}`));
     });
+    // Include Vite startup and shutdown while the full suite runs concurrently.
     const timeout = setTimeout(() => {
       child.kill();
       reject(new Error(`CLI timed out after prompt ${exchange}: ${stdout}\n${stderr}`));
-    }, 10_000);
+    }, 30_000);
     child.on("exit", () => clearTimeout(timeout));
   });
   assert.match(result.stdout, /最終預覽：2 個社團列、2 個 booth code/);

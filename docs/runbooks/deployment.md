@@ -140,7 +140,7 @@ Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 prev
 
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
-- Node.js `22.13.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
+- Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`，它是本 repo 唯一的 Wrangler 設定。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；preview 的 Mailgun 用 sandbox 那一組，永遠不是 production 的。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。

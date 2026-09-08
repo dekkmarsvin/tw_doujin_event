@@ -6,7 +6,7 @@
 
 ## 本機開始
 
-需要 Node.js `>=22.13.0` 與 npm。公開前台不需要 Cloudflare 帳號、D1 或任何 secret。
+需要 Node.js `24.20.0` 與 npm `11.19.0`（版本固定於 `.nvmrc` 與 `package.json`）。公開前台不需要 Cloudflare 帳號、D1 或任何 secret。
 
 ```bash
 npm install

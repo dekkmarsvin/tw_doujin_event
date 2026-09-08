@@ -21,7 +21,7 @@ Answer all three before writing a single line of fix:
 
 1. **Which acceptance criterion does this violate?** Name the checkbox in the ticket, the contract in `docs/contracts/`, or the ADR. "It would be more correct" is not an answer.
 2. **Is the assumed failure mode inside the threat model?** Concurrent processes, arbitrary process termination between two renames, and hostile local users are outside it (ADR-0040 decision 1). A finding that only triggers there is out of scope regardless of how it is graded.
-3. **Does the fix need a new file, module, or concept?** If yes, it is not a fix for this ticket.
+3. **Does the fix introduce behavior or guarantees beyond the ticket's acceptance criteria?** A new file alone is not scope expansion; a necessary implementation file or regression test can remain in scope.
 
 Any "no" on 1–2, or "yes" on 3 → **do not fix**.
 
@@ -53,9 +53,9 @@ Stop and hand back to the maintainer when **any** of these hold. Do not push ano
 - **The same subsystem returns.** Three or more findings land on one file or one concern across different rounds, each fix opening the next window. The property being demanded is probably unreachable with the tools at hand; that needs a decision, not another patch.
 - **The PR body no longer describes the ticket.** If the Summary needs a new bullet with no counterpart in the issue, the drift is already shipped. Do not rewrite the body to match the code — stop.
 
-## Fixes stay in place
+## Fixes stay within acceptance criteria
 
-A review-triggered fix edits existing files. It does not add a module, a subsystem, or a new primitive. `scripts/event-onboarding-lock.mjs` was born mid-review-cycle in [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) and drew four further findings of its own; that first new file was the moment to stop.
+Prefer editing existing files. A new implementation file or regression test is allowed when it directly satisfies an existing acceptance criterion within the recorded threat model. New behavior, subsystems, or guarantees beyond those criteria require separate triage. A file born mid-review-cycle is different: it comes from a fix, not from the ticket's implementation, and trips the stop condition regardless of how it is argued. `scripts/event-onboarding-lock.mjs` arrived that way in [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) and drew four further findings of its own; that first new file was the moment to stop.
 
 ## Record the boundary in the PR
 
