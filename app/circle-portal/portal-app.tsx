@@ -27,8 +27,21 @@ type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
 
 const IDLE: Status = { kind: "idle", message: "" };
 const SAVED_MESSAGE = "已儲存，公開頁面會在一分鐘內更新。";
-/** The map reads the same `event` parameter it writes (`resolveUrlEvent`). */
-const mapHref = (eventId: string) => `/?event=${encodeURIComponent(eventId)}`;
+/**
+ * The map reads the same parameters it writes (`parseEventUrlState`), so a
+ * record is enough to open the reader on that booth. Without one the link is
+ * still the map, just not pointed anywhere in particular.
+ */
+const mapHref = (eventId: string, record?: CircleViewRecord) => {
+  const parameters = new URLSearchParams({ event: eventId });
+  if (record) {
+    parameters.set("day", String(record.day));
+    parameters.set("area", record.hall);
+    parameters.set("selectedCircle", record.circle.id);
+    parameters.set("selectedBooth", record.code);
+  }
+  return `/?${parameters.toString()}`;
+};
 /** The map side panel renders `externalLinks.slice(0, 6)`; the rest move to full detail. */
 const SIDE_PANEL_LINK_LIMIT = 6;
 
@@ -618,6 +631,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // State contains only fields the author has deliberately touched. Empty
   // strings/arrays and a null thumbnail are tombstones, not values to discard.
   const draft = (): CircleOverrideFields => ({ ...fields });
+  // A circle can sit in more than one day; the map link opens the first one it
+  // appears on, in the event's own day order rather than the array's.
+  const firstDayRecord = useMemo(
+    () => event.days.reduce<CircleViewRecord | undefined>(
+      (found, day) => found ?? baseRecords?.find((record) => record.day === day.id), undefined),
+    [baseRecords, event.days],
+  );
   const livePreview = useMemo(() => baseRecords && projectedAt
     ? projectCircleDraftRecords(baseRecords, fields, projectedAt)
     : serverPreview, [baseRecords, fields, projectedAt, serverPreview]);
@@ -1110,7 +1130,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>
       {status.message}
-      {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id)}>返回活動地圖</a>}
+      {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}
     </p>}
       </div>
 
