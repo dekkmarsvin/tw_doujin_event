@@ -97,12 +97,34 @@ export function circleRetentionExpiresAt(choice: CircleRetentionChoice, eventEnd
 }
 
 export const CIRCLE_OVERRIDE_LIST_FIELDS = [
-  { key: "referencedWorks", label: "參考作品／題材" },
+  { key: "referencedWorks", label: "作品／題材" },
   { key: "creatorTypes", label: "創作者類型" },
   { key: "workTypes", label: "作品類型" },
   { key: "ageRatings", label: "年齡分級" },
-  { key: "specialTags", label: "特殊標籤" },
+  { key: "specialTags", label: "作品標籤" },
 ] as const;
+
+/**
+ * 三個 facet 的可選值。編輯器只提供這些選項，搜尋面板讀同一份，兩邊不會漂移。
+ *
+ * 寫入驗證刻意不做成員檢查：`isCircleOverrideFields` 同時是讀取端守門，
+ * 收緊會讓既有含舊值的 override 整列從公開文件消失。收斂靠編輯器的選項，
+ * 舊值在作者下次編輯時換掉（ADR-0051）。
+ */
+export const CREATOR_TYPE_OPTIONS = [
+  "繪師",
+  "Coser",
+  "Vtuber",
+  "寫手",
+  "音聲作品",
+  "手工藝品",
+  "模型",
+  "攝影",
+] as const;
+
+export const WORK_TYPE_OPTIONS = ["男性向", "女性向", "一般向"] as const;
+
+export const AGE_RATING_OPTIONS = ["全年齡", "R18"] as const;
 
 const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
 const TEXT_FIELDS = ["pen", "saleInfo"] as const;

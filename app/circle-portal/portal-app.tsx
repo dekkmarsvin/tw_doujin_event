@@ -8,7 +8,7 @@ import {
   type AdminEntry, type CircleMatch, type ClaimSummary, type PendingClaim, type PortalSession,
 } from "../circle-editor-client";
 import {
-  CIRCLE_OVERRIDE_LIST_FIELDS, LINK_KINDS, OVERRIDE_LIMITS, THUMBNAIL_HOST_ALLOWLIST,
+  AGE_RATING_OPTIONS, CIRCLE_OVERRIDE_LIST_FIELDS, CREATOR_TYPE_OPTIONS, LINK_KINDS, OVERRIDE_LIMITS, THUMBNAIL_HOST_ALLOWLIST, WORK_TYPE_OPTIONS,
   circleOverrideFieldMode, circleRetentionExpiresAt, clearCircleOverrideField, inheritCircleOverrideField,
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail, type CircleRetentionChoice,
 } from "../circle-overrides";
@@ -58,6 +58,17 @@ function initialPortalEventId() {
 }
 
 const FIELD_MODE_LABEL = { inherit: "沿用場刊", replace: "社團自填", clear: "已清除此欄" } as const;
+
+type CircleOverrideListFieldKey = (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"];
+
+/** 只能從固定選項挑的欄位。清單本身住在 `circle-overrides.ts`，搜尋面板讀同一份。 */
+const CHOICE_FIELD_OPTIONS = {
+  creatorTypes: CREATOR_TYPE_OPTIONS,
+  workTypes: WORK_TYPE_OPTIONS,
+  ageRatings: AGE_RATING_OPTIONS,
+} as const;
+
+type ChoiceFieldKey = keyof typeof CHOICE_FIELD_OPTIONS;
 
 function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "沿用場刊", inheritAction = "沿用場刊" }: {
   mode: keyof typeof FIELD_MODE_LABEL;
@@ -555,6 +566,43 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     setFields((current) => ({ ...current, [key]: items }));
   };
 
+  // 固定選項的欄位挑一個或幾個就好，剩下兩個仍然是自由填寫。既有的舊值不在選項
+  // 裡時補進清單，作者才看得到、也刪得掉。
+  const optionsFor = (key: ChoiceFieldKey) => {
+    const options: readonly string[] = CHOICE_FIELD_OPTIONS[key];
+    return [...options, ...(fields[key] ?? []).filter((value) => !options.includes(value))];
+  };
+  const toggleChoice = (key: ChoiceFieldKey, option: string, checked: boolean) => setFields((current) => {
+    const values = current[key] ?? [];
+    return { ...current, [key]: checked ? [...values, option] : values.filter((value) => value !== option) };
+  });
+  const setChoice = (key: ChoiceFieldKey, value: string) => setFields((current) => ({ ...current, [key]: value ? [value] : [] }));
+
+  const listField = (key: CircleOverrideListFieldKey, label: string) => {
+    const id = `${key}-${claim.circleId}`;
+    if (key === "creatorTypes") return <fieldset className={styles.choiceGroup}>
+      <legend>{label}</legend>
+      <div>{optionsFor(key).map((option) => <label key={option}>
+        <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
+        <span>{option}</span>
+      </label>)}</div>
+    </fieldset>;
+    if (key in CHOICE_FIELD_OPTIONS) {
+      const choiceKey = key as ChoiceFieldKey;
+      return <>
+        <label htmlFor={id}>{label}</label>
+        <select id={id} value={(fields[choiceKey] ?? [])[0] ?? ""} onChange={(event) => setChoice(choiceKey, event.target.value)}>
+          <option value="">尚未選擇</option>
+          {optionsFor(choiceKey).map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </>;
+    }
+    return <>
+      <label htmlFor={id}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
+      <input id={id} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
+    </>;
+  };
+
   const resetListInput = (key: CircleOverrideFieldKey) => {
     setListInputs((current) => {
       const next = { ...current };
@@ -705,8 +753,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     />
 
     {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <div key={key}>
-      <label htmlFor={`${key}-${claim.circleId}`}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
-      <input id={`${key}-${claim.circleId}`} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
+      {listField(key, label)}
       <FieldModeControls mode={modeFor(key)} label={label} onInherit={() => inheritField(key)} onClear={() => clearField(key)} />
     </div>)}
 

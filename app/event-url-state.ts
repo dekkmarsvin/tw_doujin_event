@@ -1,6 +1,17 @@
 import { normalizeWorkTopics, type AdvancedCircleSearch } from "./circle-search";
+import type { WORK_TYPE_OPTIONS } from "./circle-overrides";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import { eventUsesVenueSpaceSwitcher, venueAssignmentForArea, type EventDefinition } from "./event-catalog";
+
+/**
+ * 作品類型在 URL 裡走 ASCII 代號。舊的 `original`／`derivative` 沒有對應的取向，
+ * 讀到就當成未設定，舊連結仍然開得起來，只是少一個條件。
+ */
+const WORK_TYPE_PARAMETERS: Record<string, (typeof WORK_TYPE_OPTIONS)[number]> = {
+  male: "男性向",
+  female: "女性向",
+  general: "一般向",
+};
 
 export type PendingCircleSelection<TDay extends string | number> = {
   day: TDay;
@@ -95,7 +106,7 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
     : event.areas.find(({ id }) => venueAssignment.areaIds.includes(id))?.id ?? defaults.area;
   const genreValue = url.searchParams.get("genre");
   const genre = genreValue && event.genres.includes(genreValue) ? genreValue : defaults.genre;
-  const workType = url.searchParams.get("workType");
+  const workType = url.searchParams.get("workType") ?? "";
   const adultContent = url.searchParams.get("r18");
   const visit = url.searchParams.get("visit");
   const sort = url.searchParams.get("sort");
@@ -116,7 +127,7 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
         workTopics: normalizeWorkTopics(url.searchParams.getAll("work")),
         workTopicMode: url.searchParams.get("workMode") === "all" ? "all" : "any",
         excludedWorkTopics: normalizeWorkTopics(url.searchParams.getAll("workExclude")),
-        workType: workType === "original" ? "原創" : workType === "derivative" ? "二創" : "ALL",
+        workType: WORK_TYPE_PARAMETERS[workType] ?? "ALL",
         adultContent: adultContent === "include" ? "R18" : adultContent === "general" || adultContent === "exclude" ? "GENERAL" : "ALL",
       },
       planningDisplay: {
@@ -159,7 +170,8 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   normalizeWorkTopics(state.advancedSearch.workTopics).forEach((topic) => url.searchParams.append("work", topic));
   if (state.advancedSearch.workTopicMode === "all") url.searchParams.set("workMode", "all");
   normalizeWorkTopics(state.advancedSearch.excludedWorkTopics).forEach((topic) => url.searchParams.append("workExclude", topic));
-  if (state.advancedSearch.workType !== "ALL") url.searchParams.set("workType", state.advancedSearch.workType === "原創" ? "original" : "derivative");
+  const workTypeParameter = Object.keys(WORK_TYPE_PARAMETERS).find((key) => WORK_TYPE_PARAMETERS[key] === state.advancedSearch.workType);
+  if (workTypeParameter) url.searchParams.set("workType", workTypeParameter);
   if (state.advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", state.advancedSearch.adultContent === "R18" ? "include" : "general");
   if (state.planningDisplay.favoriteGroupId !== "ALL") url.searchParams.set("favoriteGroup", state.planningDisplay.favoriteGroupId);
   if (state.planningDisplay.visitStatus !== "ALL") url.searchParams.set("visit", state.planningDisplay.visitStatus);

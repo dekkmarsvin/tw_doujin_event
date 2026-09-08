@@ -21,7 +21,7 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 | `work` | 詳細搜尋 | 作品名稱／題材。**可重複**，一枚題材一個參數 |
 | `workMode` | 詳細搜尋 | 多枚題材的組合方式；只有 `all` 會寫出，`any` 是預設 |
 | `workExclude` | 詳細搜尋 | 排除的作品名稱／題材。**可重複** |
-| `workType` | 詳細搜尋 | `original` 或 `derivative` |
+| `workType` | 詳細搜尋 | 作品類型；`male`、`female` 或 `general`。退役的 `original`／`derivative` 視為未設定 |
 | `r18` | 詳細搜尋 | 分級；`general` 只匹配明確一般分級 |
 | `favorite` | 規劃篩選 | `1` 代表只看收藏 |
 | `favoriteGroup` | 規劃篩選 | 收藏群組 ID |
