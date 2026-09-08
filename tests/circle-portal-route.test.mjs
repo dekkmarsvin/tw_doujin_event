@@ -632,11 +632,36 @@ test("rejects payloads the reader could not project", async () => {
     { links: [{ provider: "X", kind: "social", url: "javascript:alert(1)" }] },
     // Any https host is fine since ADR-0052; the protocol rule is what is left.
     { thumbnail: { url: "http://images.example/pixel.png", sourceUrl: "https://images.example/p", provider: "x" } },
+    // Optional does not mean unchecked: a stated source is still a URL.
+    { thumbnail: { url: "https://images.example/pixel.png", sourceUrl: "notaurl", provider: "x" } },
     { placements: { 1: ["A01"] } },
   ]) {
     const response = await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields }, owner), "ff47-site");
     assert.equal(response.status, 400, `should reject ${JSON.stringify(fields).slice(0, 60)}`);
   }
+});
+
+test("an upload without a source page publishes as the circle's own picture", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("own-artwork@example.com");
+  await approve(owner, "ff47-domain", admin);
+
+  const body = new FormData();
+  body.set("file", new File([Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x07])], "own.png", { type: "image/png" }));
+  const upload = await handlers.uploadThumbnail(new Request(`${ORIGIN}/api/circle/ff47-domain/thumbnail`, {
+    method: "POST", headers: { origin: ORIGIN, cookie: owner }, body,
+  }), "ff47-domain");
+  assert.equal(upload.status, 200);
+  const uploaded = await upload.json();
+  assert.deepEqual({ sourceUrl: uploaded.thumbnail.sourceUrl, provider: uploaded.thumbnail.provider }, { sourceUrl: "", provider: "" });
+
+  const saved = await handlers.putOverride(post("/api/circle/ff47-domain/overrides", {
+    fields: { thumbnail: uploaded.thumbnail }, hostedThumbnailKey: uploaded.uploadKey,
+  }, owner), "ff47-domain");
+  assert.equal(saved.status, 200);
+  const published = (await (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json())
+    .overrides.find((override) => override.circleId === "ff47-domain");
+  assert.deepEqual(published.fields.thumbnail, uploaded.thumbnail);
 });
 
 test("an admin address matches regardless of case or width", async () => {

@@ -191,11 +191,17 @@ function isLink(value: unknown): value is CircleExternalLink {
     && isHttpsUrl(link.url);
 }
 
+/**
+ * Provenance is optional on a thumbnail (ADR-0053): a circle's own artwork has
+ * no other page to cite, and demanding one only teaches authors to paste
+ * something that is not a source. Empty means "not stated"; a stated source is
+ * still checked, so a filled field is never a broken link.
+ */
 function isThumbnail(value: unknown): value is CircleOverrideThumbnail {
   if (!value || typeof value !== "object") return false;
   const thumbnail = value as Record<string, unknown>;
   return isHttpsUrl(thumbnail.url)
-    && isHttpsUrl(thumbnail.sourceUrl)
+    && (thumbnail.sourceUrl === "" || isHttpsUrl(thumbnail.sourceUrl))
     && isBoundedString(thumbnail.provider, OVERRIDE_LIMITS.listItemLength);
 }
 
@@ -231,7 +237,7 @@ export function circleOverrideFieldsProblem(
     return `外部連結最多 ${OVERRIDE_LIMITS.links} 個，每個都要有平台名稱與 https:// 網址。`;
   }
   if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) {
-    return "代表圖需要 https:// 的圖片網址、出處頁面與來源標示。";
+    return "代表圖需要 https:// 的圖片網址；出處頁面若要填寫也必須是 https。";
   }
 
   return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields

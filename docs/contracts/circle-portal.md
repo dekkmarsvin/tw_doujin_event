@@ -234,7 +234,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後，**社團自填是縮圖的唯一來源**。
 
-代表圖採**本站代管為主、外部網址為輔**的雙線。已驗證的社團可上傳 JPEG／PNG／WebP，單檔上限 2 MiB，每個社團每個活動一張；伺服器驗證宣告 MIME 與檔案特徵，物件末段以內容 SHA-256 命名，不在 Worker 內重編碼。公開 URL 由 production `media.kotoban.top` 或 preview `media-preview.kotoban.top` 的 R2 custom domain 提供，帶一年 immutable 快取，**不經 Pages Function**。
+**出處頁面與來源標示是選填**（[ADR-0053](../adr/0053-the-thumbnail-upload-asks-for-the-picture-only.md)）：上傳自己作品的社團就是出處，逼它指一個不存在的頁面只會換來湊數的網址。有填的出處仍必須是 https，來源標示仍受單項字數上限；空值的意思是「沒有另外標示」。沒有出處連結時，閱讀端的圖片來源列只顯示來源標示，兩者皆空則整列不出現（[ADR-0036](../adr/0036-provenance-labels-name-the-source-not-its-trust-level.md)）。
+
+代表圖採**本站代管為主、外部網址為輔**的雙線。已驗證的社團可上傳 JPEG／PNG／WebP，單檔上限 5 MiB（[ADR-0053](../adr/0053-the-thumbnail-upload-asks-for-the-picture-only.md)），每個社團每個活動一張；伺服器驗證宣告 MIME 與檔案特徵，物件末段以內容 SHA-256 命名，不在 Worker 內重編碼。公開 URL 由 production `media.kotoban.top` 或 preview `media-preview.kotoban.top` 的 R2 custom domain 提供，帶一年 immutable 快取，**不經 Pages Function**。
 
 檔案上傳只建立草稿物件並回填預覽，不直接改寫 overlay；經 server preview 與使用者確認儲存後，才把該物件連同其他欄位發布。更換圖片時先發布新物件與欄位，再移除舊物件；改用外部網址或清除欄位時會解除並刪除舊的代管物件。若代管線與外部網址都不可用，閱讀端維持文字卡。實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
 
@@ -264,6 +266,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 甲活動的認領無法對乙活動寫入；同一帳號在兩場活動各自持有的認領互不影響；服務不到的活動一律 `404`。
 - 管理者無法移除自己或最後一位管理者。
 - 代表圖位址載不出圖片時擋住送出，且錯誤訊息可讓社團理解原因。
+- 只有圖片本身是代表圖的必要條件；有填的出處頁面不是 https 時擋住送出，未填時不擋。
 - 送出被擋下時，畫面指得出是哪一個欄位；伺服器退件時回的也是那一個欄位的理由。
 - 未儲存的編輯保留在這台裝置上，下次進編輯器會帶回並可一鍵改用已儲存版本；帶回的內容包含保存期限的選擇，儲存或刪除後不再保留。
 - 即時預覽失敗不影響未儲存的編輯是否被保留。

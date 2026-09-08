@@ -362,6 +362,16 @@ test("the editor accepts a thumbnail URL exactly when the validator does", () =>
   }
 });
 
+test("a thumbnail may carry no source page and no credit", () => {
+  // The circle's own artwork has no page to cite (ADR-0053); a stated source
+  // is still held to the same protocol rule as every other link.
+  const url = "https://images.example/own.png";
+  assert.equal(overrides.isCircleOverrideFields({ thumbnail: { url, sourceUrl: "", provider: "" } }), true);
+  assert.equal(overrides.isCircleOverrideFields({ thumbnail: { url, sourceUrl: "", provider: "委託：某繪師" } }), true);
+  assert.equal(overrides.isCircleOverrideFields({ thumbnail: { url, sourceUrl: "http://images.example/s", provider: "" } }), false);
+  assert.match(overrides.circleOverrideFieldsProblem({ thumbnail: { url: "", sourceUrl: "", provider: "" } }), /圖片網址/);
+});
+
 test("any HTTPS host is usable as a thumbnail address", () => {
   assert.equal(messages.thumbnailUrlProblem("https://any-host.example/img.png"), "");
 });

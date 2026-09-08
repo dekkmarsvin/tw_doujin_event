@@ -34,11 +34,27 @@ test("rejects declared MIME that disagrees with the file signature", async () =>
   );
 });
 
-test("enforces the 2 MiB limit before storing bytes", async () => {
+test("enforces the 5 MiB limit before storing bytes", async () => {
+  assert.equal(thumbnails.HOSTED_THUMBNAIL_MAX_BYTES, 5 * 1024 * 1024);
   const file = new File([new Uint8Array(thumbnails.HOSTED_THUMBNAIL_MAX_BYTES + 1)], "large.png", { type: "image/png" });
   await assert.rejects(
     thumbnails.prepareHostedThumbnail({ eventId: "ff47", circleId: "c-1", file, sourceUrl: "https://circle.example/work", provider: "社團本人" }),
-    /2 MiB/,
+    /5 MiB/,
+  );
+});
+
+test("accepts an upload with no source page and no credit, and still checks a stated one", async () => {
+  const file = new File([Uint8Array.from(fixtures[1].bytes)], "own-work.png", { type: "image/png" });
+  const prepared = await thumbnails.prepareHostedThumbnail({ eventId: "ff47", circleId: "c-1", file });
+  assert.equal(prepared.sourceUrl, "");
+  assert.equal(prepared.provider, "");
+  await assert.rejects(
+    thumbnails.prepareHostedThumbnail({ eventId: "ff47", circleId: "c-1", file, sourceUrl: "http://circle.example/work" }),
+    /https/,
+  );
+  await assert.rejects(
+    thumbnails.prepareHostedThumbnail({ eventId: "ff47", circleId: "c-1", file, provider: "x".repeat(61) }),
+    /60 字/,
   );
 });
 

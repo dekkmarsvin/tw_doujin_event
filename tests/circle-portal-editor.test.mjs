@@ -101,3 +101,29 @@ test("the rating field is a checkbox group, because a circle can sell both", asy
   assert.match(single, /setChoice\(choiceKey, event\.target\.value\)/);
   assert.match(app, /const setChoice = \(key: ChoiceFieldKey, value: string\) => setFields\(\(current\) => \(\{ \.\.\.current, \[key\]: value \? \[value\] : \[\] \}\)\);/);
 });
+
+test("the age rating group carries no explanation beyond its own checkboxes", async () => {
+  const app = await source("portal-app.tsx");
+
+  // A checkbox group already says "tick as many as apply"; a paragraph
+  // restating it is copy the reader has to get past to reach the options
+  // (ADR-0024). The reason the field is multi-valued belongs to the code
+  // comment above MULTI_CHOICE_FIELD_KEYS, which is where it now lives.
+  assert.doesNotMatch(app, /MULTI_CHOICE_HINT/);
+  assert.doesNotMatch(app, /不是一個社團只能有一種分級/);
+});
+
+test("the picture is the only thing the upload asks for", async () => {
+  const app = await source("portal-app.tsx");
+
+  // A circle uploading its own artwork has no other page to cite, so neither
+  // credit field gates the picker or the save (ADR-0053). Both are still
+  // checked when filled: a stated source that is not a URL helps nobody.
+  assert.doesNotMatch(app, /請先填寫下面的「圖片出處頁面」/);
+  assert.doesNotMatch(app, /代表圖需要填寫出處頁面/);
+  assert.doesNotMatch(app, /代表圖需要填寫來源標示/);
+  assert.match(app, /圖片出處頁面（選填）/);
+  assert.match(app, /來源標示（選填/);
+  assert.match(app, /最多 5 MiB/);
+  assert.match(app, /thumbnail\?\.sourceUrl\?\.trim\(\) && linkUrlProblem\(thumbnail\.sourceUrl\)/);
+});
