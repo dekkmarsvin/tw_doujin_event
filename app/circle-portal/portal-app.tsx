@@ -26,6 +26,9 @@ import styles from "./portal.module.css";
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
 
 const IDLE: Status = { kind: "idle", message: "" };
+const SAVED_MESSAGE = "已儲存，公開頁面會在一分鐘內更新。";
+/** The map reads the same `event` parameter it writes (`resolveUrlEvent`). */
+const mapHref = (eventId: string) => `/?event=${encodeURIComponent(eventId)}`;
 /** The map side panel renders `externalLinks.slice(0, 6)`; the rest move to full detail. */
 const SIDE_PANEL_LINK_LIMIT = 6;
 
@@ -245,6 +248,7 @@ export default function CirclePortalApp() {
       <div>
         <h1>社團資料</h1>
         <p>{event.name}・{event.dateRangeLabel}</p>
+        <p className={styles.backLink}><a href={mapHref(event.id)}>返回活動地圖</a></p>
       </div>
       {session && <div className={styles.identity}>
         {/* Shows which identity the server resolved, so a mismatch against
@@ -607,6 +611,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const loaded = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const reviewPanel = useRef<HTMLDivElement | null>(null);
+  const reviewActions = useRef<HTMLDivElement | null>(null);
   const expandedPreview = useRef<HTMLDivElement | null>(null);
   const previewRequestGeneration = useRef(0);
 
@@ -800,8 +805,18 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     requestAnimationFrame(() => returnFocus.current?.focus());
   };
 
+  // The confirm button sits at the end of the review panel, which on a wide
+  // screen only replaces the right column: without this the page looks
+  // unchanged where the reader is looking.
   useEffect(() => {
-    if (reviewOpen) requestAnimationFrame(() => reviewPanel.current?.focus());
+    if (!reviewOpen) return;
+    requestAnimationFrame(() => {
+      reviewPanel.current?.focus({ preventScroll: true });
+      reviewActions.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "end",
+      });
+    });
   }, [reviewOpen]);
 
   useModalFocus(expanded, expandedPreview, () => setExpanded(false));
@@ -1019,7 +1034,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     />
 
     <div className={styles.editorActions}>
-      <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={openReview}>
+      <button type="button" disabled={status.kind === "busy" || problems.length > 0 || reviewOpen} onClick={openReview}>
         {status.kind === "busy" ? "檢查中…" : "預覽並送出"}
       </button>
     </div>
@@ -1093,7 +1108,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       >刪除資料</button>
     </details>}
 
-    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>
+      {status.message}
+      {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id)}>返回活動地圖</a>}
+    </p>}
       </div>
 
       <aside className={`${styles.previewColumn} ${reviewOpen ? styles.reviewOpen : ""}`} aria-label={reviewOpen ? "儲存前確認" : "即時公開預覽"}>
@@ -1106,7 +1124,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             <PublicationPreview records={serverPreview} />
             <h4>這次填寫的欄位</h4>
             <ReviewSummary fields={reviewedFields} />
-            <div className={styles.reviewActions}>
+            <div ref={reviewActions} className={styles.reviewActions}>
               <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
               {/* Re-checked here, not only when the review opened: an image
                   verdict can arrive after that, and a confirmation taken before
@@ -1122,7 +1140,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
                     setDraftRestoredAt(null);
                     setStagedThumbnailKey(null);
                     setReviewedThumbnailKey(null);
-                    setStatus({ kind: "ok", message: "已儲存，公開頁面會在一分鐘內更新。" });
+                    setStatus({ kind: "ok", message: SAVED_MESSAGE });
                     closeReview();
                   })
                   .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
