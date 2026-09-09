@@ -49,12 +49,16 @@ async function capture(page, name) {
   report.cases.push({ name, ...measured });
   return measured;
 }
+// The available rect already keeps 16px from the map edges and the floating
+// tools; the floor fills it on its binding axis instead of padding twice.
 function assertFit(measured) {
-  const toolBottom = measured.tools[1].bottom + 16;
-  assert.ok(measured.floor.top >= toolBottom + 36 - 1, "fit clears top tools and padding");
-  assert.ok(measured.floor.bottom <= measured.controls.top - 16 - 36 + 1, "fit clears bottom tools and padding");
-  assert.ok(measured.floor.left >= measured.map.left + 16 + 36 - 1, "fit clears left padding");
-  assert.ok(measured.floor.right <= measured.map.right - 16 - 36 + 1, "fit clears right padding");
+  const rect = { top: measured.tools[1].bottom + 16, bottom: measured.controls.top - 16, left: measured.map.left + 16, right: measured.map.right - 16 };
+  assert.ok(measured.floor.top >= rect.top - 1, "fit clears top tools");
+  assert.ok(measured.floor.bottom <= rect.bottom + 1, "fit clears bottom tools");
+  assert.ok(measured.floor.left >= rect.left - 1, "fit stays inside the left edge");
+  assert.ok(measured.floor.right <= rect.right + 1, "fit stays inside the right edge");
+  const slack = { x: rect.right - rect.left - (measured.floor.right - measured.floor.left), y: rect.bottom - rect.top - (measured.floor.bottom - measured.floor.top) };
+  assert.ok(Math.min(slack.x, slack.y) < 1, "fit uses the whole available rect on its binding axis");
 }
 function assertPosition(measured) {
   assert.ok(measured.selected && measured.detail);
