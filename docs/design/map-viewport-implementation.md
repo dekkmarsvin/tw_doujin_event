@@ -11,7 +11,7 @@
 
 **首次開啟維持完整場館 fit。** 取消原提案軸線 A 的固定可讀初始倍率；125% 僅是舊概念圖數字，不是常數或驗收值。不自動定位收藏、下一站或行程第一站。有效 URL 選取仍恢復並定位。
 
-第一期包含文字可讀性：概觀允許省略過小的格內數字，放大後顯示清楚的代碼；不承諾 fit 下所有攤位都可讀。不加入 minimap、圖磚、路徑演算法或新的篩選／排序能力。
+第一期包含文字可讀性：概觀的格內數字會隨格子縮小但不省略，放大後顯示清楚的代碼；不承諾 fit 下所有攤位都可讀。不加入 minimap、圖磚、路徑演算法或新的篩選／排序能力。
 
 ## 2. 純介面結構圖
 
@@ -102,7 +102,7 @@ offset.y = target.y - floorInset.y - sy * floorScale * zoom
 
 矩形寬或高非正值時不寫入 offset，也不產生 NaN；等 ResizeObserver 得到有效尺寸後處理最後一筆定位請求。選取與焦點提示同步顯示，避免等待過程無回饋。
 
-**新桌機 fit 規則**：按扣除固定工具群後的矩形計算，矩形內再保留既有每邊 36px padding，詳情不算入 fit 邊界。計算 fit 矩形時使用「詳情收起時」的工具排版尺寸；詳情開啟造成工具換行不得改變 fit 下限。controller 以不參與焦點及可存取樹的同寬測量容器取得這組尺寸，renderer 不參與測量。初始化、最小倍率、查看全場及原本在 fit 時的 resize 共用此結果；查看全場先收起詳情。手機使用原規則。
+**新桌機 fit 規則**：按扣除固定工具群後的矩形計算，矩形對 map 邊界與工具各留 16px，內部不再疊加 padding，詳情不算入 fit 邊界。計算 fit 矩形時使用「詳情收起時」的工具排版尺寸；詳情開啟造成工具換行不得改變 fit 下限。controller 以不參與焦點及可存取樹的同寬測量容器取得這組尺寸，renderer 不參與測量。初始化、最小倍率、查看全場及原本在 fit 時的 resize 共用此結果；查看全場先收起詳情。手機使用原規則。
 
 這是對現有「完整 map 容器扣 padding」計算的桌機調整，必須同步縮放契約；原因是新浮動日期工具可能遮住 fit 後的場地。詳情實際開啟時的工具尺寸僅用於選取定位矩形，避免詳情開關引起倍率跳動。
 
@@ -130,22 +130,22 @@ offset.y = target.y - floorInset.y - sy * floorScale * zoom
 
 ### 5.1 顯示策略
 
-桌機新增可選 renderer 輸入 `labelPresentation: { screenScale: number; targetPx: number; minimumPx: number; paddingPx: number }`，預設不傳即沿用舊策略，手機不傳。`screenScale` 為「一個 layout 單位換成多少 CSS px」，即 floor 實際尺寸比例乘 zoom；標準值 target 12、minimum 8、padding 2。不是 devicePixelRatio，不以 125% 或 FF47 layout 尺寸寫死。
+桌機新增可選 renderer 輸入 `labelPresentation: { screenScale: number; targetPx: number; paddingPx: number }`，預設不傳即沿用舊策略，手機不傳。`screenScale` 為「一個 layout 單位換成多少 CSS px」，即 floor 實際尺寸比例乘 zoom；標準值 target 12、padding 2。不是 devicePixelRatio，不以 125% 或 FF47 layout 尺寸寫死。
 
-字級控制沿用全域 1／1.12／1.24 比例，target 分別 12／13.44／14.88 CSS px；minimum 與 padding 固定，仍優先避免溢出。格子仍不足時靠完整代碼提示補充，不硬塞放大文字。
+字級控制沿用全域 1／1.12／1.24 比例，target 分別 12／13.44／14.88 CSS px；padding 固定，仍優先避免溢出。格子仍不足時靠完整代碼提示補充，不硬塞放大文字。
 
 一般格文字仍是現有數字部分，排字母由排標提供。媒體門檻維持 145%，有縮圖時底部最多 30% 格高作標籤帶，無圖時使用完整格高；圖片及文字皆限制在該 slot。
 
 ```text
 S = screenScale（必須有限且 > 0）
-W = max(0, slot.width * S - 2 * paddingPx)
-H = max(0, labelBandHeight * S - 2 * paddingPx)
+W = max(slot.width * S - 2 * paddingPx, slot.width * S / 2)
+H = max(labelBandHeight * S - 2 * paddingPx, labelBandHeight * S / 2)
 N = 字元數（一般格使用既有數字字串）
 fontPx = min(targetPx, W / max(1, N), H / 1.2)
 fontInLayoutUnits = fontPx / S
 ```
 
-每字以一個 em 估算，刻意比等寬數字實際字寬保守，避免 renderer 讀 DOM 或量測字型。`fontPx < minimumPx` 不 render 一般文字；剛好 8px 可顯示。字行盒置中於可用標籤帶，透過每 slot 的 clipPath 作最終防線。高亮、收藏、下一站標記仍可見，aria-label 不受文字省略影響。
+每字以一個 em 估算，刻意比等寬數字實際字寬保守，避免 renderer 讀 DOM 或量測字型。**沒有下限門檻，代碼一律 render**，格子太小只是字跟著變小；標籤帶不足以同時容納 2px 內距時，內距最多讓出一半而不是把字消掉。字行盒置中於可用標籤帶，透過每 slot 的 clipPath 作最終防線。高亮、收藏、下一站標記仍可見，aria-label 不受字級影響。
 
 ### 5.2 完整代碼提示
 
@@ -194,13 +194,13 @@ renderer 新增可選 `onFocusCode?: (code: string | null) => void` 回報方向
 
 | ID | 場景／輸入 | 預期結果與證據 |
 |---|---|---|
-| G1 | 新 viewport、floor、工具 bounds，詳情關閉 | 新桌機 fit 讓完整 layout 落在排除固定工具的矩形內，保留 36px padding；縮小下限與重設一致 |
+| G1 | 新 viewport、floor、工具 bounds，詳情關閉 | 新桌機 fit 讓完整 layout 貼齊排除固定工具的矩形，受限軸完全用滿；縮小下限與重設一致 |
 | G2 | 同一 viewport 開／關詳情 | fit 下限不變；點選攤位後中心位於未遮蔽矩形內、倍率完全相同 |
 | G3 | 零尺寸、工具換行、scope 快速切換 | 無 NaN；只處理目前 scope 及最後有效定位，舊回應不覆蓋 |
 | G4 | fit resize／手動視域 resize | 前者重新 fit，後者保留中心；僅低於新下限才夾值，不回到 selected |
-| T1 | 字級計算結果 7.99／8／12px | 依序省略／顯示／顯示；任何格內文字都在 2px inset 及 clip 內 |
+| T1 | 字級計算結果 7.99／8／12px 與極小標籤帶 | 一律顯示、只有字級不同；標籤帶容得下時都在 2px inset 及 clip 內 |
 | T2 | 144.9%／145%、有圖／無圖、長代碼、三種字級 | 媒體門檻不變；標籤帶不溢出；缺圖使用完整格，aria-label 始終完整 |
-| T3 | fit 中看不見格內數字，選取／方向鍵走訪 | 固定完整代碼提示可讀，狀態標記可辨識，不要求打開詳情才知道代碼 |
+| T3 | fit 中格內數字過小難以辨識，選取／方向鍵走訪 | 固定完整代碼提示可讀，狀態標記可辨識，不要求打開詳情才知道代碼 |
 | S1 | URL 選取比 map 晚到；中途有／無手動操作 | 倍率不回彈；無手動操作定位一次，有手動操作不搶走視野 |
 | S2 | 詳情 → 查看全場 → 同攤位點選 | 收起並 fit、選取與 URL 保留、再次點選重開；planning 完全不變 |
 | S3 | 探索／行程切換，長列表 | 各自內容與捲動恢復、地圖不跳動、不自動啟用導航 |
@@ -242,7 +242,7 @@ renderer 新增可選 `onFocusCode?: (code: string | null) => void` 回報方向
 | 要求 | 完成證據 |
 |---|---|
 | G1–G4 | map-desktop-geometry／map-viewport 純計算測試；browser state-and-resize、zero-geometry-last-selection、synthetic-scoped-map-and-stale-response：fit、詳情不改倍率、手動 resize、零尺寸及過期回應 |
-| T1–T3 | map-label-renderer／geometry 測試：8px 邊界、clip、媒體門檻與 focus；最大字級放大 DOM 實測 988 個標籤均在 slot inset 內；固定完整代碼由瀏覽器驗證 |
+| T1–T3 | map-label-renderer／geometry 測試：字級邊界、clip、媒體標籤帶與 focus；最大字級放大 DOM 實測 988 個標籤均在 slot inset 內；固定完整代碼由瀏覽器驗證 |
 | S1–S2 | late-url-manual-false／true、selection-before-map、state-and-resize：延後恢復不搶走手動視域，查看全場保留選取及規劃，重新點選開啟詳情 |
 | S3–S4 | state-and-resize、synthetic-long-plan-scroll，加 workspace-projection 測試：捲動恢復、導航／搜尋及保留條件 |
 | S5 | shared-day-and-history、synthetic-scoped-map-and-stale-response、map-error-and-retry：共享日期、history、分域載入及錯誤重試 |

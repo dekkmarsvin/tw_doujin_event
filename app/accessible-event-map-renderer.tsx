@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { mapAccessArrowTransform, rowLabelAnchor, type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
-import { mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
+import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
 
 export type MapSlotView = {
   tone?: "coral" | "mint" | "blue" | "amber" | "lilac";
@@ -96,8 +96,8 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     return <g key={slot.code} data-slot-code={slot.code} className={className} style={style} role={interactive ? "button" : undefined} tabIndex={interactive && activeKeyboardCode === slot.code ? 0 : -1} aria-label={view?.ariaLabel} onFocus={interactive ? () => { setKeyboardCode(slot.code); setFocusWithin(true); onFocusCode?.(slot.code); } : undefined} onClick={interactive ? (event) => activateSlot(slot.code, event.currentTarget) : undefined} onKeyDown={interactive ? (event) => handleKeyDown(event, slot.code) : undefined}>
       <rect className={styles.slotSurface} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
       {hasMedia && <image className={styles.slotMedia} href={view.thumbnailUrl} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipPrefix}-${slot.code})`} aria-hidden="true" />}
-      {hasMedia && <rect className={styles.mediaShade} x={slot.rect.x} y={slot.rect.y + slot.rect.height * .62} width={slot.rect.width} height={slot.rect.height * .38} />}
-      {labelSize !== null && <text clipPath={labelPresentation ? `url(#${clipPrefix}-${slot.code})` : undefined} style={labelPresentation ? { fontSize: labelSize, dominantBaseline: "central" } : undefined} x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * (labelPresentation ? (hasMedia ? .85 : .5) : (hasMedia ? .88 : .69))}>{slot.code.slice(1)}</text>}
+      {hasMedia && <rect className={styles.mediaShade} x={slot.rect.x} y={slot.rect.y + slot.rect.height * (1 - MAP_MEDIA_LABEL_BAND)} width={slot.rect.width} height={slot.rect.height * MAP_MEDIA_LABEL_BAND} />}
+      <text clipPath={labelPresentation ? `url(#${clipPrefix}-${slot.code})` : undefined} style={labelPresentation && labelSize !== null ? { fontSize: labelSize, dominantBaseline: "central" } : undefined} x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * (labelPresentation ? (hasMedia ? 1 - MAP_MEDIA_LABEL_BAND / 2 : .5) : (hasMedia ? .88 : .69))}>{slot.code.slice(1)}</text>
       {/* A withdrawal and a move are different destinations, so they are different
           shapes, not two shades of the same one; the label carries the wording. */}
       {view?.retired && <path className={styles.retiredMark} d={view.retired === "cancelled"

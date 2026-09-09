@@ -55,7 +55,7 @@ type AccessibleEventMapRendererProps = {
   layout: EventMapLayout;
   slots: Record<string, MapSlotView>;
   showMedia?: boolean;
-  labelPresentation?: { screenScale: number; targetPx: number; minimumPx: number; paddingPx: number };
+  labelPresentation?: { screenScale: number; targetPx: number; paddingPx: number };
   onFocusCode?: (code: string | null) => void;
   onSelect: (code: string) => void;
 };
@@ -88,14 +88,14 @@ type AccessibleEventMapRendererProps = {
 
 - **最大放大倍率 600%。**
 - **首次開啟採全場 fit，不使用固定 125%。** 不等待規劃資料，也不自動跳到收藏、下一站或行程第一站。
-- **最小倍率是動態下限**：`min((rect.width - 72) / floorWidth, (rect.height - 72) / floorHeight, 6)`，矩形內每邊保留 36px。桌機矩形扣除固定頂部工具與底部控制；手機使用完整 map 容器。查看全場、按鈕、滾輪與雙指縮放共用下限，查看全場把完整 layout 置中於該矩形。
+- **最小倍率是動態下限**：桌機為 `min(rect.width / floorWidth, rect.height / floorHeight, 6)`，矩形本身已對 map 邊界與固定工具各留 16px，內部不再加 padding；手機沿用完整 map 容器扣每邊 36px。桌機矩形扣除固定頂部工具與底部控制。查看全場、按鈕、滾輪與雙指縮放共用下限，查看全場把完整 layout 置中於該矩形。
 - 桌機 fit 使用詳情收起時的工具尺寸，由不參與焦點與可存取樹的測量容器取得；詳情開關不改變下限。選取定位另扣除實際詳情與工具尺寸，保留倍率。所有 rect 與 floor inset 均為 map 本地 CSS px。
 - 視窗尺寸改變時，原本位於 fit（差小於 0.006）則重新 fit；手動視域保留中心的 layout 座標，倍率僅在低於新下限時夾值，不持續吸回 selected。
 - 初始化依實際 artifact 路徑與 revision 分域。多日期共用 `map.json` 時換日保留視域；真正換 artifact 才重新 fit。載入失敗不使用舊 map，重試成功後才計算幾何。
 - 選取等待 React commit 與有效尺寸後單次定位；零尺寸暫緩並只保留最後請求。有效 URL 晚到只定位、不改倍率；其間有手動操作則恢復選取但取消自動定位。過期 scope 回應不套用。
 - **145% 起顯示具可追溯來源的社團縮圖**；低於門檻回到高辨識度的色塊與代碼。縮圖不得超出攤位格，以免遮住相鄰攤位。
 - **沒有縮圖的攤位在任何倍率都畫成一般攤位格**：色塊、可容納時的置中代碼與狀態標記，不留空白媒體區。依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後這是常態。
-- 桌機格內數字目標為 12 CSS px，較大／最大字級為 13.44／14.88px；每邊保留 2px，按字元數與行高 1.2 的保守估算限制字級，低於 8px 不畫文字，並以 slot clip 防止溢出。有縮圖使用底部 30% 標籤帶，無圖使用全格。省略文字不省略排標、狀態或完整 aria-label；fit 不承諾格內數字可讀。
+- 桌機格內數字目標為 12 CSS px，較大／最大字級為 13.44／14.88px；每邊保留 2px，按字元數與行高 1.2 的保守估算限制字級，並以 slot clip 防止溢出。**代碼在任何倍率都畫**，格子太小只會把字縮小，不會省略；標籤帶小到裝不下 2px 內距時內距讓步。縮圖出現只改版型：無圖時代碼置中於全格，有圖時移入底部 38% 遮罩帶並與遮罩共用同一個常數。排標、狀態與完整 aria-label 不受字級影響；fit 不承諾格內數字可讀。
 - **200% 以上固定控制器以 25% 級距縮放**，讓使用者能快速進入可辨識縮圖的倍率。
 - **選取後只移動不改倍率**：搜尋結果、URL 或地圖選取攤位後，地圖只移動至對應座標並保留使用者目前倍率，不回彈到預設倍率。單一搜尋結果可自動開啟詳情。
 

@@ -19,7 +19,9 @@ export function offsetMapPointInRect(point: MapPoint, rect: MapRect, zoom: numbe
 
 export function fitMapInRect(rect: MapRect, floor: MapSize, inset: MapPoint): MapView | null {
   if (rect.width <= 72 || rect.height <= 72 || floor.width <= 0 || floor.height <= 0) return null;
-  const zoom = calculateMapFitZoom(rect, floor);
+  // The rect already keeps a 16px gap from the map edges and the floating
+  // tools, so a second padding would only shrink the floor for no reason.
+  const zoom = calculateMapFitZoom(rect, floor, 0);
   return { zoom, offset: offsetMapPointInRect({ x: floor.width / 2, y: floor.height / 2 }, rect, zoom, inset) };
 }
 

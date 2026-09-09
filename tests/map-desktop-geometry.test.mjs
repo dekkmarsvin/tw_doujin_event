@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { availableMapRect, fitMapInRect, offsetMapPointInRect, resizeMapView } from "../app/map-viewport.ts";
-import { mapLabelFontSize } from "../app/map-label-presentation.ts";
+import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize } from "../app/map-label-presentation.ts";
 
 test("desktop fit contains the entire floor outside fixed tools; details only affect selection", () => {
   const viewport = { width: 1144, height: 828 };
@@ -12,9 +12,11 @@ test("desktop fit contains the entire floor outside fixed tools; details only af
   const floor = { width: 1344.34, height: 950 };
   const fit = fitMapInRect(rect, floor, inset);
   assert.ok(fit);
-  assert.ok(fit.offset.x + inset.x >= rect.x + 36 - 1e-8);
-  assert.ok(fit.offset.y + inset.y >= rect.y + 36 - 1e-8);
-  assert.ok(fit.offset.y + inset.y + floor.height * fit.zoom <= rect.y + rect.height - 36 + 1e-8);
+  assert.ok(fit.offset.x + inset.x >= rect.x - 1e-8);
+  assert.ok(fit.offset.y + inset.y >= rect.y - 1e-8);
+  assert.ok(fit.offset.y + inset.y + floor.height * fit.zoom <= rect.y + rect.height + 1e-8);
+  // The floor uses the whole available rect on its binding axis, no inner padding.
+  assert.ok(Math.abs(floor.height * fit.zoom - rect.height) < 1e-8);
   const safe = availableMapRect(viewport, { ...tools, detail: { x: 798, y: 16, width: 330, height: 736 } });
   assert.equal(safe.x + safe.width, 782);
   const point = { x: 900, y: 700 };
@@ -34,18 +36,22 @@ test("invalid available space defers fit; manual resize preserves center at clam
   }
 });
 
-test("labels appear at the inclusive 8px boundary and remain inside their band", () => {
-  const p = { screenScale: 1, targetPx: 12, minimumPx: 8, paddingPx: 2 };
-  assert.equal(mapLabelFontSize({ width: 19.98, height: 30 }, "03", false, p), null);
-  assert.equal(mapLabelFontSize({ width: 20, height: 30 }, "03", false, p), 8);
+test("labels always size to the available band and never leave it", () => {
+  const p = { screenScale: 1, targetPx: 12, paddingPx: 2 };
   assert.equal(mapLabelFontSize({ width: 40, height: 30 }, "03", false, p), 12);
-  assert.equal(mapLabelFontSize({ width: 40, height: 30 }, "03", true, p), null);
+  assert.equal(mapLabelFontSize({ width: 20, height: 30 }, "03", false, p), 8);
+  // Cramped overviews and media bands shrink the code, they never drop it.
+  assert.ok(mapLabelFontSize({ width: 19.98, height: 30 }, "03", false, p) > 0);
+  assert.ok(mapLabelFontSize({ width: 40, height: 30 }, "03", true, p) > 0);
   assert.equal(mapLabelFontSize({ width: 40, height: 30 }, "03", false, { ...p, screenScale: NaN }), null);
   for (const targetPx of [12, 13.44, 14.88]) for (const screenScale of [.5, 1, 2, 6]) for (const media of [false, true]) {
     const font = mapLabelFontSize({ width: 28.5, height: 18 }, "1234", media, { ...p, screenScale, targetPx });
-    if (font !== null) {
-      assert.ok(font * screenScale * 4 <= 28.5 * screenScale - 4 + 1e-8);
-      assert.ok(font * screenScale * 1.2 <= 18 * (media ? .3 : 1) * screenScale - 4 + 1e-8);
-    }
+    const band = { width: 28.5 * screenScale, height: 18 * (media ? MAP_MEDIA_LABEL_BAND : 1) * screenScale };
+    assert.ok(font > 0);
+    assert.ok(font * screenScale * 4 <= band.width + 1e-8);
+    assert.ok(font * screenScale * 1.2 <= band.height + 1e-8);
+    // Wherever the band can spare it, the 2px inset per side is still honoured.
+    if (band.width >= 8) assert.ok(font * screenScale * 4 <= band.width - 4 + 1e-8);
+    if (band.height >= 8) assert.ok(font * screenScale * 1.2 <= band.height - 4 + 1e-8);
   }
 });

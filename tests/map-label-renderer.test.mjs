@@ -12,7 +12,7 @@ const { default: Renderer } = await environment.runner.import("/app/accessible-e
 after(() => vite.close());
 const rect = { x: 10, y: 20, width: 24, height: 24 };
 const layout = { width: 100, height: 100, floor: { x: 0, y: 0, width: 100, height: 100 }, rows: [{ label: "A", orientation: "horizontal", slots: [{ code: "A01", rect }] }], pillars: [], landmarks: [], accessPoints: [] };
-const presentation = { screenScale: 1, targetPx: 12, minimumPx: 8, paddingPx: 2 };
+const presentation = { screenScale: 1, targetPx: 12, paddingPx: 2 };
 function output(props = {}) {
   const html = renderToStaticMarkup(React.createElement(Renderer, { eventName: "Test", layout, slots: { A01: { ariaLabel: "A01 完整社團名稱，已收藏", favorite: true } }, onSelect() {}, ...props }));
   const nodes = [];
@@ -36,15 +36,22 @@ test("pictureless slots retain mobile labels and gain bounded desktop labels wit
   }
 });
 
-test("small overview and media bands omit text but retain accessible identity and state marks", () => {
-  for (const props of [
-    { labelPresentation: { ...presentation, screenScale: .3 } },
-    { labelPresentation: presentation, showMedia: true, slots: { A01: { ariaLabel: "A01 完整社團名稱，已收藏", favorite: true, thumbnailUrl: "https://example.com/a.png" } } },
-  ]) {
-    const result = output(props);
-    assert.equal(result.slot.childNodes.filter((node) => node.tagName === "text").length, 0);
-    assert.match(result.attr(result.slot, "aria-label"), /A01 完整社團名稱/);
-    assert.ok(result.slot.childNodes.some((node) => node.tagName === "circle"));
-    assert.equal(result.attr(result.slot, "tabindex"), "0");
-  }
+test("small overviews keep the code, only shrinking it, and keep state marks", () => {
+  const result = output({ labelPresentation: { ...presentation, screenScale: .3 } });
+  const label = result.slot.childNodes.find((node) => node.tagName === "text");
+  assert.match(result.attr(label, "style"), /font-size:[\d.]+/);
+  assert.equal(result.attr(label, "y"), String(rect.y + rect.height * .5));
+  assert.match(result.attr(result.slot, "aria-label"), /A01 完整社團名稱/);
+  assert.ok(result.slot.childNodes.some((node) => node.tagName === "circle"));
+  assert.equal(result.attr(result.slot, "tabindex"), "0");
+});
+
+test("a thumbnail moves the code into the shaded band instead of dropping it", () => {
+  const result = output({ labelPresentation: presentation, showMedia: true, slots: { A01: { ariaLabel: "A01 完整社團名稱，已收藏", favorite: true, thumbnailUrl: "https://example.com/a.png" } } });
+  const shade = result.slot.childNodes.filter((node) => node.tagName === "rect").at(-1);
+  const label = result.slot.childNodes.find((node) => node.tagName === "text");
+  const band = { y: Number(result.attr(shade, "y")), height: Number(result.attr(shade, "height")) };
+  assert.equal(Number(result.attr(label, "y")), band.y + band.height / 2);
+  assert.match(result.attr(label, "style"), /font-size:[\d.]+/);
+  assert.ok(result.slot.childNodes.some((node) => node.tagName === "image"));
 });
