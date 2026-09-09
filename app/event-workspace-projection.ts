@@ -2,7 +2,7 @@ import type { MapSlotView } from "./accessible-event-map-renderer";
 import { circleSearchText, placementStatusLabel, type CircleViewRecord } from "./circle-records";
 import { buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
-import type { EventDefinition } from "./event-catalog";
+import { venueAssignmentForArea, type EventDefinition } from "./event-catalog";
 import type { PlanningDocument } from "./planning-store";
 
 type WorkspaceFilterKind = "area" | "genre" | "favorite" | "creator" | "work" | "work-exclude" | "work-type" | "adult" | "favorite-group" | "visit";
@@ -104,8 +104,9 @@ export function projectEventWorkspace(input: ProjectionInput) {
     }
     return left.code.localeCompare(right.code, undefined, { numeric: true }) || left.name.localeCompare(right.name, "zh-Hant");
   });
+  const visibleSpaceAreas = new Set(venueAssignmentForArea(event, area).areaIds);
   const mapRecords = navigationMode
-    ? dayPlan.flatMap((entry) => (recordsByCircleId.get(entry.circleId) ?? []).filter((record) => record.placement.eventId === event.id && record.day === day))
+    ? dayPlan.flatMap((entry) => (recordsByCircleId.get(entry.circleId) ?? []).filter((record) => record.placement.eventId === event.id && record.day === day && visibleSpaceAreas.has(record.hall)))
     : filtered;
   const workTopicSuggestions = buildWorkTopicSuggestions(eventRecords);
   // Only the visible result set is explained; the reasons are read per card and

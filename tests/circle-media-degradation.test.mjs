@@ -68,26 +68,6 @@ test("a tall picture stays inside the side panel's picture band", async () => {
   assert.match(css, /[.]galleryOpen img,[.]galleryFrame>img [{] width:100%; height:100%; min-height:0;/);
 });
 
-test("a booth without a thumbnail is drawn as a plain slot at every zoom", async () => {
-  const renderer = await source("accessible-event-map-renderer.tsx");
-
-  // One predicate gates every media-only element. `showMedia` alone is not
-  // enough: above the zoom threshold it is true for the whole map, so a slot
-  // with no picture must still fall back on `view?.thumbnailUrl`.
-  assert.match(renderer, /const hasMedia = !!\(showMedia && view\?\.thumbnailUrl\);/);
-  for (const guarded of [/hasMedia \? styles\.mediaSlot : ""/, /\{hasMedia && <image /, /\{hasMedia && <rect className=\{styles\.mediaShade\}/]) {
-    assert.match(renderer, guarded);
-  }
-
-  // The booth code moves down only when a picture is behind it; a plain slot
-  // keeps the centred label it had before the media layer existed.
-  assert.match(renderer, /y=\{slot\.rect\.y \+ slot\.rect\.height \* \(hasMedia \? \.88 : \.69\)\}/);
-
-  // The clip paths are per-slot and emitted only for slots that have a picture,
-  // so a mostly-pictureless map does not ship 988 unused <clipPath> nodes.
-  assert.match(renderer, /slots\[slot\.code\]\?\.thumbnailUrl \? \[<clipPath/);
-});
-
 test("no reader-facing copy still promises the retired thumbnail index", async () => {
   for (const path of ["display-filter-controls.tsx", "event-workspace-panels.tsx"]) {
     assert.doesNotMatch(await source(path), /縮圖索引/, `${path} still advertises the retired index`);

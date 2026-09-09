@@ -7,8 +7,7 @@
 .textScale button[aria-pressed="true"] { background:#fff; color:var(--ink); box-shadow:0 1px 4px #26362b1a; }
 .textScale button:active { background:#dfe4de; }
 .textScale button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
-.workspace { height:calc(100vh - 130px); min-height:0; grid-template-columns:296px minmax(430px,1fr) 330px; grid-template-rows:minmax(0,1fr); overflow:hidden; }
-.workspace.navigationWorkspace { grid-template-columns:360px minmax(430px,1fr) 330px; }
+ .workspace { min-height:0; grid-template-rows:minmax(0,1fr); overflow:hidden; }
 .leftRail { display:flex; flex-direction:column; overflow:hidden; }
 .workspace > .leftRail { padding:0; }
 .planningPanel { min-height:0; display:flex; flex:1; flex-direction:column; }
@@ -27,7 +26,7 @@
 :global(.app-shell)[data-text-scale="large"] .filterStack :global(.genres),
 :global(.app-shell)[data-text-scale="extra"] .filterStack :global(.genres) { grid-template-columns:1fr; }
 .filterStack :global(.favorite-only) { padding:9px; }
-.rightRail { min-width:0; display:grid; grid-template-rows:minmax(0,3fr) minmax(210px,2fr); border-left:1px solid var(--line); background:#fff; }
+ .rightRail { min-width:0; background:#fff; }
 .navigationRightRail { grid-template-rows:minmax(0,1fr); }
 .detailSlot,.planSlot { min-height:0; overflow:auto; }
 .planSlot { border-top:1px solid var(--line); }
@@ -62,14 +61,9 @@
 .fullDetailDialog>section { min-height:0; }
 
 @media (max-width:1180px) {
-  .workspace { grid-template-columns:260px minmax(400px,1fr) 310px; }
-  .workspace.navigationWorkspace { grid-template-columns:320px minmax(400px,1fr) 310px; }
   .filterStack :global(.genres) { grid-template-columns:1fr; }
 }
 @media (max-width:1050px) and (min-width:761px) {
-  .workspace { grid-template-columns:248px minmax(400px,1fr); }
-  .workspace.navigationWorkspace { grid-template-columns:300px minmax(400px,1fr); }
-  .rightRail { position:absolute; z-index:12; right:12px; top:12px; bottom:12px; width:310px; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 40px #2631293a; overflow:hidden; }
 }
 @media (max-width:760px) {
   .textScale { display:none; }
@@ -123,3 +117,85 @@
   .filterStack { display:none; }
   .layoutStatus { grid-template-columns:26px 1fr auto; }.layoutStatus small { max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }
+
+/* Desktop composition: the map owns the overlay, never a third grid column. */
+.shell :global(.event) h1 { margin:0; font-size:calc(14px * var(--ui-font-scale,1)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shell :global(.map-title) b { display:block; font-size:calc(20px * var(--ui-font-scale,1)); }
+.shell :global(.map-title) em { color:var(--coral); font-size:calc(12px * var(--ui-font-scale,1)); font-style:normal; }
+.explorePanel,.planPanel { display:flex; flex:1; flex-direction:column; min-height:0; min-width:0; overflow:hidden; }
+.explorePanel[hidden],.planPanel[hidden] { display:none; }
+.desktopTabs { display:grid; grid-template-columns:1fr 1fr; flex:0 0 auto; gap:4px; padding:8px; border-bottom:1px solid var(--line); }
+.desktopTabs button { min-height:44px; border:1px solid transparent; background:transparent; color:var(--ink); font:inherit; font-weight:700; cursor:pointer; }
+.desktopTabs button[aria-selected="true"] { border-bottom-color:var(--ink); background:var(--surface-soft); }
+.storageError { max-width:150px; color:#a43e30; font-size:calc(11px * var(--ui-font-scale,1)); }
+@media (min-width:761px) {
+  .shell:global(.app-shell) { height:100vh; height:100dvh; display:grid; grid-template-rows:auto minmax(0,1fr); min-height:0; }
+  .shell :global(.topbar) { height:auto; min-height:72px; grid-template-columns:auto minmax(100px,180px) minmax(120px,1fr) auto; gap:12px; padding:8px 16px; }
+  .shell :global(.event),.shell :global(.event)>div,.shell :global(.search) { min-width:0; }
+  .shell :global(.event) small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .shell :global(.brand) { gap:8px; }
+  .shell :global(.brand) small { display:none; }
+  .shell :global(.search) { min-height:44px; }
+  .textScale { grid-template-columns:repeat(3,44px); }
+  .textScale>span { display:none; }
+  .textScale button { height:44px; }
+  .shell .mobileToolbar,.mobileMapStatus,.shell :global(.map-title) { display:none; }
+  .shell .workspace { height:auto; grid-template-columns:296px minmax(0,1fr); }
+  .workspace :global(.map-region) { padding:0; min-height:0; }
+  .shell .mapCanvas { min-height:0; border:0; border-radius:0; isolation:isolate; }
+  .mapCanvas .vectorFloor { z-index:0; }
+  .mapCanvas :global(.controls) { z-index:2; grid-template-columns:44px 52px 44px 44px; }
+  .mapCanvas :global(.controls) button,.mapCanvas :global(.controls) span { height:44px; }
+  .mapCanvas :global(.controls)[data-navigation] { grid-template-columns:44px 52px 44px 44px auto; }
+  .mapCanvas :global(.controls) .exitNavigation { min-width:80px; padding-inline:10px; font-size:calc(12px * var(--ui-font-scale,1)); }
+  .mapCanvas :global(.compass) { z-index:2; width:44px; height:44px; }
+  .mapTools { position:absolute; z-index:2; top:16px; left:16px; width:calc(100% - 32px); max-height:30%; overflow:auto; cursor:auto; touch-action:auto; container-type:inline-size; }
+  .mapCanvas[data-details-open] .mapTools:not(.fitTools) { width:max(96px,calc(100% - 378px)); }
+  .mapTools.fitTools { visibility:hidden; pointer-events:none; z-index:-1; }
+  .locationControls { display:flex; flex-wrap:wrap; width:fit-content; max-width:100%; align-items:center; gap:8px; padding:6px; background:var(--surface-soft); border:1px solid var(--line); border-radius:8px; }
+  .locationControls label { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-width:0; font-size:calc(12px * var(--ui-font-scale,1)); }
+  .locationControls select { min-height:44px; width:auto; min-width:0; max-width:100%; font:inherit; color:var(--ink); background:#fff; border:1px solid var(--line); border-radius:6px; }
+  .dateTabs { display:flex; flex-wrap:wrap; gap:4px; }
+  .dateTabs button { min-height:44px; padding:6px 12px; border:1px solid transparent; border-radius:5px; background:transparent; color:var(--ink); cursor:pointer; }
+  .dateTabs button[aria-selected="true"] { background:var(--ink); color:#fff; }
+  .dateTabs b,.dateTabs span { display:block; font-size:calc(12px * var(--ui-font-scale,1)); }
+  .locationControls .dateSelect { display:none; }
+  .venueName { font-size:calc(12px * var(--ui-font-scale,1)); overflow-wrap:anywhere; }
+  .codeHint { width:fit-content; max-width:100%; margin-top:6px; padding:6px 8px; background:var(--surface-soft); border:1px solid var(--line); font-size:calc(12px * var(--ui-font-scale,1)); overflow-wrap:anywhere; }
+  .mapTools .navigationBanner { margin:6px 0 0; width:fit-content; max-width:100%; }
+  .mapTools :global(.route) { position:static; transform:none; margin-top:6px; width:fit-content; max-width:100%; min-width:0; box-shadow:none; }
+  .mapTools :global(.route) button:last-child { min-width:44px; min-height:44px; }
+  .mapTools :global(.route) button[aria-label="從行程移除下一站"] { font-size:calc(12px * var(--ui-font-scale,1)); }
+  .mapTools .routeMain b { max-width:100%; }
+  .mapTools .navigationBanner button { min-height:44px; min-width:44px; }
+  .planPanel>.navigationToggle { flex:0 0 auto; align-self:stretch; justify-content:center; min-height:44px; margin:10px; }
+  .mapCanvas>.rightRail { position:absolute; z-index:3; top:16px; bottom:76px; right:16px; width:min(330px,calc(100% - 32px)); display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px #202a3526; cursor:auto; touch-action:auto; }
+  .detailSlot { min-height:0; flex:1; }
+  .mapCanvas :global(button:focus-visible),.desktopTabs button:focus-visible { outline:3px solid #8fac9c; outline-offset:-3px; }
+  .rightRail button { min-height:44px; }
+  .rightRail button[aria-label="關閉攤位詳細資訊"] { min-width:44px; }
+  .planningPanel > :first-child { max-height:45%; overflow:auto; flex-shrink:0; }
+}
+@container (max-width:400px) {
+  .locationControls .dateTabs { display:none; }
+  .locationControls .dateSelect { display:flex; }
+  .mapTools .navigationBanner { grid-template-columns:minmax(0,1fr); }
+  .mapTools .navigationBanner>span { display:none; }
+  .mapTools :global(.route) { flex-wrap:wrap; }
+}
+@media (min-width:761px) and (max-width:1050px) {
+  .shell .workspace { grid-template-columns:248px minmax(0,1fr); }
+  .shell :global(.topbar) { grid-template-columns:auto minmax(0,1fr) auto; }
+  .shell :global(.search) { grid-column:1/-1; grid-row:2; }
+  .shell :global(.brand)>div { display:none; }
+}
+@media (min-width:1051px) {
+  .shell[data-text-scale="large"] :global(.topbar),.shell[data-text-scale="extra"] :global(.topbar) { grid-template-columns:auto minmax(100px,1fr) auto; }
+  .shell[data-text-scale="large"] :global(.search),.shell[data-text-scale="extra"] :global(.search) { grid-column:1/-1; grid-row:2; }
+}
+@media (max-width:760px) {
+  .desktopTabs { display:none; }
+  .shell :global(.event) h1 { max-width:210px; font-size:11px; }
+}
+@media (prefers-reduced-motion:reduce) { .vectorFloor { transition:none; } }
+.selectionAnnouncement { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }

@@ -10,6 +10,8 @@
 | 色彩、字體、層級、圓角 | [`DESIGN.md`](../DESIGN.md) |
 | **介面上該寫什麼字、不該寫什麼字** | [對外文案](./design/copy.md) |
 | 某個介面表面的元件長什麼樣 | [元件與介面規格](./design/components.md) |
+| 地圖版面與視域接下來要往哪走（**草案，非現況**） | [地圖視域改進方向](./design/map-viewport-direction.md) |
+| 新地圖介面如何落地、有哪些結構圖與驗收條件（**待實作**） | [地圖新介面技術落地規格](./design/map-viewport-implementation.md) |
 | 這個詞在本專案是什麼意思 | [`CONTEXT.md`](../CONTEXT.md) |
 | **我要改這個檔案，是哪份契約在管它** | [契約索引](./contracts/INDEX.md) |
 | **某個模組現在的行為是什麼、怎麼驗收** | [`contracts/`](#契約) |

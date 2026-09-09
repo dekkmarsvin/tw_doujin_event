@@ -24,7 +24,7 @@ export default function PlanningTools({ eventId }: { eventId: string }) {
   // Subscribe to the catalog so orphan detection re-runs once records arrive,
   // instead of reporting every favorite as unmatched while the snapshot loads.
   const { status: catalogStatus } = useCircleCatalog(eventId);
-  const { document, update, replace, storageError, unsupportedRaw } = usePlanning(eventId, catalogStatus !== "loading");
+  const { document, ready, update, replace, storageError, unsupportedRaw } = usePlanning(eventId, catalogStatus !== "loading");
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -43,6 +43,7 @@ export default function PlanningTools({ eventId }: { eventId: string }) {
     <button className={styles.launcher} onClick={() => setOpen(true)}>資料管理</button>
     {open && createPortal(<div className={styles.backdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}><section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="planning-tools-title" tabIndex={-1}>
       <header><div><h2 id="planning-tools-title">規劃資料管理</h2></div><button onClick={() => setOpen(false)} aria-label="關閉規劃資料管理"><UiIcon name="close" /></button></header>
+      <p className={styles.notice} role="status">{ready ? "資料僅儲存於瀏覽器，您可以匯出備份。" : "正在讀取瀏覽器資料"}</p>
       {storageError && <div className={styles.preview} role="alert"><b>原始規劃資料受到保護</b><p>{storageError}</p>{unsupportedRaw && <button onClick={() => download("場刊Map-原始規劃資料.json", unsupportedRaw, "application/json")}>先下載原始資料</button>}</div>}
       <div className={styles.summary}><span><b>{document.favorites.length}</b> 收藏</span><span><b>{memoCount}</b> 備註</span><span><b>{document.visitPlans.length}</b> 行程項目</span><span><b>{document.favoriteGroups.length}</b> 群組</span></div>
       <section className={styles.section}><div><h3>匯出備份</h3><p>群組、收藏、備註、行程、購買項目與預算。</p></div><div className={styles.actions}><button onClick={() => download("circle-plan.json", exportPlanningJson(document), "application/json")}>匯出 JSON</button><button onClick={() => download("circle-plan.csv", exportPlanningCsv(document), "text/csv;charset=utf-8")}>匯出 CSV</button></div></section>

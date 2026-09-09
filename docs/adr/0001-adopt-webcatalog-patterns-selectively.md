@@ -1,6 +1,7 @@
 # ADR-0001：選擇性採納 Comike WebCatalog 的模式
 
 - 狀態：已定案（2026-08-06）
+- 版面參考範圍由 [ADR-0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) 擴充；下文保留原決策脈絡。
 - 來源研究：[地圖功能紀錄](../research/comike-webcatalog-map.md)、[資訊介面與收藏紀錄](../research/comike-webcatalog-information-and-favorites.md)
 
 ## 脈絡

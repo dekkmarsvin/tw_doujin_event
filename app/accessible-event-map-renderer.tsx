@@ -3,6 +3,7 @@
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { mapAccessArrowTransform, rowLabelAnchor, type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
+import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
 
 export type MapSlotView = {
   tone?: "coral" | "mint" | "blue" | "amber" | "lilac";
@@ -23,20 +24,33 @@ type AccessibleEventMapRendererProps = {
   layout: EventMapLayout;
   slots: Record<string, MapSlotView>;
   showMedia?: boolean;
+  labelPresentation?: MapLabelPresentation;
+  onFocusCode?: (code: string | null) => void;
   onSelect: (code: string) => void;
 };
 
-export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, onSelect }: AccessibleEventMapRendererProps) {
+export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, labelPresentation, onFocusCode, onSelect }: AccessibleEventMapRendererProps) {
   const clipPrefix = useId().replaceAll(":", "");
   const interactiveSlots = useMemo(() => layout.rows.flatMap((row) => row.slots).filter((slot) => !!slots[slot.code]), [layout.rows, slots]);
   const selectedCode = interactiveSlots.find((slot) => slots[slot.code]?.selected)?.code;
   const [keyboardCode, setKeyboardCode] = useState(selectedCode ?? interactiveSlots[0]?.code ?? "");
-  const activeKeyboardCode = selectedCode ?? (interactiveSlots.some((slot) => slot.code === keyboardCode) ? keyboardCode : interactiveSlots[0]?.code ?? "");
+  const [focusWithin, setFocusWithin] = useState(false);
+  const preferredKeyboardCode = focusWithin ? keyboardCode : selectedCode;
+  const activeKeyboardCode = interactiveSlots.some((slot) => slot.code === preferredKeyboardCode) ? preferredKeyboardCode : interactiveSlots.some((slot) => slot.code === keyboardCode) ? keyboardCode : interactiveSlots[0]?.code ?? "";
+
+  const activateSlot = (code: string, element: SVGGElement) => {
+    const svg = element.ownerSVGElement;
+    const hadFocus = element === element.ownerDocument.activeElement;
+    onSelect(code);
+    // Selection moves the slot into the foreground group. Restore keyboard
+    // focus to its replacement node so Enter does not end arrow-key traversal.
+    if (hadFocus) requestAnimationFrame(() => svg?.querySelector<SVGGElement>(`[data-slot-code="${code}"]`)?.focus({ preventScroll: true }));
+  };
 
   const handleKeyDown = (event: KeyboardEvent<SVGGElement>, code: string) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onSelect(code);
+      activateSlot(code, event.currentTarget);
       return;
     }
     const directions: Record<string, { x: number; y: number }> = {
@@ -69,20 +83,21 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     if (!next) return;
     setKeyboardCode(next.code);
     const svg = event.currentTarget.ownerSVGElement;
-    requestAnimationFrame(() => svg?.querySelector<SVGGElement>(`[data-slot-code="${next.code}"]`)?.focus());
+    requestAnimationFrame(() => svg?.querySelector<SVGGElement>(`[data-slot-code="${next.code}"]`)?.focus({ preventScroll: true }));
   };
 
   const renderSlot = (slot: EventMapLayout["rows"][number]["slots"][number]) => {
     const view = slots[slot.code];
     const interactive = !!view;
     const hasMedia = !!(showMedia && view?.thumbnailUrl);
+    const labelSize = labelPresentation ? mapLabelFontSize(slot.rect, slot.code.slice(1), hasMedia, labelPresentation) : undefined;
     const className = [styles.slot, interactive ? styles.activeSlot : styles.emptySlot, hasMedia ? styles.mediaSlot : "", view?.retired ? styles.retiredSlot : "", view?.selected ? styles.selected : "", view?.visited ? styles.visited : ""].filter(Boolean).join(" ");
     const style = view?.tone ? ({ "--slot-tone": `var(--${view.tone})` } as CSSProperties) : undefined;
-    return <g key={slot.code} data-slot-code={slot.code} className={className} style={style} role={interactive ? "button" : undefined} tabIndex={interactive && activeKeyboardCode === slot.code ? 0 : -1} aria-label={view?.ariaLabel} onFocus={interactive ? () => setKeyboardCode(slot.code) : undefined} onClick={interactive ? () => onSelect(slot.code) : undefined} onKeyDown={interactive ? (event) => handleKeyDown(event, slot.code) : undefined}>
+    return <g key={slot.code} data-slot-code={slot.code} className={className} style={style} role={interactive ? "button" : undefined} tabIndex={interactive && activeKeyboardCode === slot.code ? 0 : -1} aria-label={view?.ariaLabel} onFocus={interactive ? () => { setKeyboardCode(slot.code); setFocusWithin(true); onFocusCode?.(slot.code); } : undefined} onClick={interactive ? (event) => activateSlot(slot.code, event.currentTarget) : undefined} onKeyDown={interactive ? (event) => handleKeyDown(event, slot.code) : undefined}>
       <rect className={styles.slotSurface} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} />
       {hasMedia && <image className={styles.slotMedia} href={view.thumbnailUrl} x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipPrefix}-${slot.code})`} aria-hidden="true" />}
-      {hasMedia && <rect className={styles.mediaShade} x={slot.rect.x} y={slot.rect.y + slot.rect.height * .62} width={slot.rect.width} height={slot.rect.height * .38} />}
-      <text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * (hasMedia ? .88 : .69)}>{slot.code.slice(1)}</text>
+      {hasMedia && <rect className={styles.mediaShade} x={slot.rect.x} y={slot.rect.y + slot.rect.height * (1 - MAP_MEDIA_LABEL_BAND)} width={slot.rect.width} height={slot.rect.height * MAP_MEDIA_LABEL_BAND} />}
+      <text clipPath={labelPresentation ? `url(#${clipPrefix}-${slot.code})` : undefined} style={labelPresentation && labelSize !== null ? { fontSize: labelSize, dominantBaseline: "central" } : undefined} x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * (labelPresentation ? (hasMedia ? 1 - MAP_MEDIA_LABEL_BAND / 2 : .5) : (hasMedia ? .88 : .69))}>{slot.code.slice(1)}</text>
       {/* A withdrawal and a move are different destinations, so they are different
           shapes, not two shades of the same one; the label carries the wording. */}
       {view?.retired && <path className={styles.retiredMark} d={view.retired === "cancelled"
@@ -98,9 +113,9 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
 
   const selectedSlots = layout.rows.flatMap((row) => row.slots).filter((slot) => slots[slot.code]?.selected);
 
-  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="group" aria-label={`${eventName} 社團攤位配置圖，使用方向鍵移動焦點，Enter 或空白鍵開啟攤位`}>
-    <title>{eventName} 社團攤位配置圖</title>
-    {showMedia && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
+  return <svg className={styles.map} viewBox={`0 0 ${layout.width} ${layout.height}`} role="group" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setFocusWithin(false); onFocusCode?.(null); } }} aria-label={`${eventName} 社團攤位配置圖，使用方向鍵移動焦點，Enter 或空白鍵開啟攤位`}>
+    <title>{`${eventName} 社團攤位配置圖`}</title>
+    {(showMedia || labelPresentation) && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => labelPresentation || slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
     <rect className={styles.floor} x={layout.floor.x} y={layout.floor.y} width={layout.floor.width} height={layout.floor.height} />
     <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id}><rect className={styles.landmark} {...landmark.rect} />{landmark.label && <text className={styles.landmarkLabel} x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label}</text>}</g>)}</g>

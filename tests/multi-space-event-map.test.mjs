@@ -8,6 +8,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR environment unavailable.");
 const { parseEventMapManifest } = await environment.runner.import("/app/event-map-manifest.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
+const { loadStaticEventMapResource } = await environment.runner.import("/app/static-event-map-client.ts");
 after(() => vite.close());
 
 const event = JSON.parse(await readFile(new URL("../fixtures/events/sample/event.json", import.meta.url), "utf8"));
@@ -47,4 +48,26 @@ test("staging requires exact day by venue-space coverage for a multi-space event
 
   const incomplete = { ...manifest, maps: entries.slice(0, -1) };
   assert.throws(() => validateStagedEventArtifacts(multiEvent, multiReferences, catalog, { manifest: incomplete, maps }, "sample"), /cover every event day/);
+});
+
+test("shared fallback retains one artifact identity across dates; scoped paths stay distinct", async (t) => {
+  let scoped = false;
+  const entries = [1, 2].map((day) => ({ periodKey: String(day), venueSpaceId: "sample-hall", path: `maps/${day}/sample-hall.json` }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("map-manifest.json")) return scoped
+      ? Response.json({ schema: "event-map-manifest/1", eventId: "sample", maps: entries })
+      : new Response(null, { status: 404 });
+    return Response.json(map);
+  });
+  const read = (day) => loadStaticEventMapResource("sample", { periodKey: String(day), venueSpaceId: "sample-hall" });
+  assert.equal((await read(1)).artifactKey, (await read(2)).artifactKey);
+  scoped = true;
+  assert.notEqual((await read(1)).artifactKey, (await read(2)).artifactKey);
+});
+
+test("an unavailable manifest cannot silently become a shared map", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url) => { calls.push(url); return new Response(null, { status: 503 }); });
+  await assert.rejects(loadStaticEventMapResource("sample", { periodKey: "1", venueSpaceId: "sample-hall" }), /503/);
+  assert.equal(calls.length, 1);
 });

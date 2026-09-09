@@ -1,5 +1,36 @@
 type MapPoint = { x: number; y: number };
 type MapSize = { width: number; height: number };
+export type MapRect = MapSize & MapPoint;
+
+/** All bounds use map-local CSS pixels, never layout or device pixels. */
+export function availableMapRect(viewport: MapSize, obstacles: { top?: MapRect; bottom?: MapRect; detail?: MapRect } = {}): MapRect {
+  const clampX = (x: number) => Math.max(0, Math.min(viewport.width, x));
+  const clampY = (y: number) => Math.max(0, Math.min(viewport.height, y));
+  const x = clampX(16);
+  const y = clampY(obstacles.top ? obstacles.top.y + obstacles.top.height + 16 : 16);
+  const right = clampX(obstacles.detail ? obstacles.detail.x - 16 : viewport.width - 16);
+  const bottom = clampY(obstacles.bottom ? obstacles.bottom.y - 16 : viewport.height - 16);
+  return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
+}
+
+export function offsetMapPointInRect(point: MapPoint, rect: MapRect, zoom: number, inset: MapPoint): MapPoint {
+  return { x: rect.x + rect.width / 2 - inset.x - point.x * zoom, y: rect.y + rect.height / 2 - inset.y - point.y * zoom };
+}
+
+export function fitMapInRect(rect: MapRect, floor: MapSize, inset: MapPoint): MapView | null {
+  if (rect.width <= 72 || rect.height <= 72 || floor.width <= 0 || floor.height <= 0) return null;
+  // The rect already keeps a 16px gap from the map edges and the floating
+  // tools, so a second padding would only shrink the floor for no reason.
+  const zoom = calculateMapFitZoom(rect, floor, 0);
+  return { zoom, offset: offsetMapPointInRect({ x: floor.width / 2, y: floor.height / 2 }, rect, zoom, inset) };
+}
+
+/** Preserve the layout point at the old viewport center across a resize. */
+export function resizeMapView(view: MapView, before: MapSize, after: MapSize, minimum: number, inset: MapPoint, previousInset = inset): MapView {
+  const point = { x: (before.width / 2 - previousInset.x - view.offset.x) / view.zoom, y: (before.height / 2 - previousInset.y - view.offset.y) / view.zoom };
+  const zoom = clampMapZoom(view.zoom, minimum);
+  return { zoom, offset: offsetMapPointInRect(point, { x: 0, y: 0, ...after }, zoom, inset) };
+}
 export type MapView = { zoom: number; offset: MapPoint };
 export type MapPinchOrigin = { distance: number; zoom: number; mapX: number; mapY: number; center: MapPoint; inset?: MapPoint; boundaryCenter?: MapPoint };
 type MapPinchView = MapView & { boundaryCenter?: MapPoint };

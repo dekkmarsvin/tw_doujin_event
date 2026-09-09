@@ -2,8 +2,8 @@
 
 公開閱讀端的向量地圖：資料不變量、renderer 邊界、互動與縮放規則。
 
-**實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
-**測試**：`tests/map-viewport.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`
+**實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
+**測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`
 **活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場館空間」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 
@@ -55,6 +55,8 @@ type AccessibleEventMapRendererProps = {
   layout: EventMapLayout;
   slots: Record<string, MapSlotView>;
   showMedia?: boolean;
+  labelPresentation?: { screenScale: number; targetPx: number; paddingPx: number };
+  onFocusCode?: (code: string | null) => void;
   onSelect: (code: string) => void;
 };
 ```
@@ -63,16 +65,19 @@ type AccessibleEventMapRendererProps = {
 - `retired` 只在該攤位號沒有任何 `active` placement 時帶 `cancelled` 或 `moved`；renderer 以形狀區分兩者（取消是叉、移動是箭頭），文字說明由 controller 投影進 `label` 與 `ariaLabel`，**不以顏色作為唯一狀態表達**。換手的攤位不算失效，仍由新主人的 placement 呈現。placement 狀態的完整語意見 [circle catalog 契約](./circle-catalog.md)。
 - **renderer 不自行讀取社團資料、規劃 store 或 URL**，也不寫入產品狀態。
 - 頁面 controller 負責把 URL、社團資料、收藏與行程投影成 renderer props，並在 `onSelect` 後同步 URL 與詳情。
+- 桌機傳入 layout 單位到 CSS px 的實際比例與標籤策略；手機不傳 `labelPresentation`，沿用舊顯示策略。renderer 不量測 DOM，焦點通知不修改 URL 或選取。
 - 這個邊界讓地圖可獨立測試，也讓同一份 layout 未來能投影出 minimap 而不維護第二套座標。
 
 ## 互動契約
 
 - **SVG slot 本身是互動元素。** 禁止在圖片上疊 HTML 按鈕。
 - **鍵盤**：攤位使用單一 Tab 入口的 roving focus，限制大量 Tab 停靠點；方向鍵依幾何鄰近攤位移動，Enter／Space 開啟。
+- 選取攤位移入前景圖層後保留鍵盤焦點；桌機固定提示優先顯示鍵盤焦點代碼，離開 SVG 後恢復選取代碼。**提示只用一個狀態詞彙**「已選取」，鍵盤焦點與選取對讀者是同一件事，不另寫「鍵盤焦點」。
 - **可讀名稱**：可互動 slot 的 `aria-label` 必須包含攤位、社團、類別**以及所有目前規劃狀態**（已收藏、待前往、下一站、已走訪）。視覺標記與文字狀態由同一投影產生，狀態變更後即時更新。
 - **指標與觸控**：滑鼠拖曳平移、游標中心滾輪縮放、觸控單指平移與雙指縮放（pointer capture）。空白地圖區支援拖曳；攤位本身保留點按，不觸發背景拖曳。
 - 地圖容器與 SVG 文字套用不可選取規則，並由 `selectstart` 防線阻止拖曳時產生文字反白。
 - **固定控制器**（放大、縮小、重設、指南針）固定在地圖邊緣，不隨 SVG 縮放。重設回到完整可用範圍。
+- 桌機的「查看全場」收起詳情、恢復 fit，保留選取、分享 URL 與規劃資料；關閉詳情只收起浮層、不移動視域。再次選取同攤位可重新開啟。Escape 只在詳情內關閉，焦點還給觸發來源，來源不存在則回 SVG 入口或作用中的左欄頁籤。手機關閉仍清除選取。
 - `prefers-reduced-motion` 時停用轉場；拖曳與縮放維持直接跟手，不加入彈性或慣性動畫。
 
 ### Slot 視覺狀態
@@ -82,11 +87,15 @@ type AccessibleEventMapRendererProps = {
 ## 縮放契約
 
 - **最大放大倍率 600%。**
-- **最小倍率是動態下限**，不是固定值：`min((viewportWidth - padding) / floorWidth, (viewportHeight - padding) / floorHeight, 6)`。重設、按鈕、滾輪與雙指縮放共用同一最小倍率；縮小到邊界後完整場館必須仍在可視區內。
-- 視窗尺寸改變時，若使用者原本停在完整場館倍率，地圖重新置中並套用新的完整場館倍率。
-- 實測參考值：614 × 430 的地圖可視區，完整場館倍率為 38%；再往下縮仍維持 38%，且場館四邊都在可視區內。
+- **首次開啟採全場 fit，不使用固定 125%。** 不等待規劃資料，也不自動跳到收藏、下一站或行程第一站。
+- **最小倍率是動態下限**：桌機為 `min(rect.width / floorWidth, rect.height / floorHeight, 6)`，矩形本身已對 map 邊界與固定工具各留 16px，內部不再加 padding；手機沿用完整 map 容器扣每邊 36px。桌機矩形扣除固定頂部工具與底部控制。查看全場、按鈕、滾輪與雙指縮放共用下限，查看全場把完整 layout 置中於該矩形。
+- 桌機 fit 使用詳情收起時的工具尺寸，由不參與焦點與可存取樹的測量容器取得；詳情開關不改變下限。選取定位另扣除實際詳情與工具尺寸，保留倍率。所有 rect 與 floor inset 均為 map 本地 CSS px。
+- 視窗尺寸改變時，原本位於 fit（差小於 0.006）則重新 fit；手動視域保留中心的 layout 座標，倍率僅在低於新下限時夾值，不持續吸回 selected。
+- 初始化依實際 artifact 路徑與 revision 分域。多日期共用 `map.json` 時換日保留視域；真正換 artifact 才重新 fit。載入失敗不使用舊 map，重試成功後才計算幾何。
+- 選取等待 React commit 與有效尺寸後單次定位；零尺寸暫緩並只保留最後請求。有效 URL 晚到只定位、不改倍率；其間有手動操作則恢復選取但取消自動定位。過期 scope 回應不套用。
 - **145% 起顯示具可追溯來源的社團縮圖**；低於門檻回到高辨識度的色塊與代碼。縮圖不得超出攤位格，以免遮住相鄰攤位。
-- **沒有縮圖的攤位在任何倍率都畫成一般攤位格**：色塊、置中代碼與狀態標記，不留空白媒體區。依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後這是常態——縮圖只剩社團自填，門檻之上多數攤位仍是色塊。
+- **沒有縮圖的攤位在任何倍率都畫成一般攤位格**：色塊、可容納時的置中代碼與狀態標記，不留空白媒體區。依 [ADR-0012](../adr/0012-first-party-sources-only.md) 退場工作簿縮圖索引後這是常態。
+- 桌機格內數字目標為 12 CSS px，較大／最大字級為 13.44／14.88px；每邊保留 2px，按字元數與行高 1.2 的保守估算限制字級，並以 slot clip 防止溢出。**代碼在任何倍率都畫**，格子太小只會把字縮小，不會省略；標籤帶小到裝不下 2px 內距時內距讓步。縮圖出現只改版型：無圖時代碼置中於全格，有圖時移入底部 38% 遮罩帶並與遮罩共用同一個常數。排標、狀態與完整 aria-label 不受字級影響；fit 不承諾格內數字可讀。
 - **200% 以上固定控制器以 25% 級距縮放**，讓使用者能快速進入可辨識縮圖的倍率。
 - **選取後只移動不改倍率**：搜尋結果、URL 或地圖選取攤位後，地圖只移動至對應座標並保留使用者目前倍率，不回彈到預設倍率。單一搜尋結果可自動開啟詳情。
 

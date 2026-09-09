@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+<title id="title">選取與詳情：桌機介面結構圖</title><desc id="desc">1440乘900 CSS像素，頂部72，左欄296，地圖1144乘828。這是元件結構圖，不是活動配置圖。各數字對應文件焦點群組。</desc>
+<style>text{font-family:system-ui,'Microsoft JhengHei','Noto Sans TC',sans-serif;fill:#202a35} .muted{fill:#707a82}</style>
+<rect x="0" y="0" width="1440" height="900" fill="#f8f7f2" stroke="#dfe3df" />
+<rect x="0" y="0" width="1440" height="72" fill="#f9faf8" stroke="#dfe3df" />
+<text x="20" y="43" font-size="20">場刊 Map · 活動名稱</text>
+<rect x="310" y="14" width="640" height="44" fill="#f8f7f2" stroke="#dfe3df" /><text x="326" y="42" font-size="18">① 搜尋社團、攤位或作品</text>
+<text x="985" y="42" font-size="18">② 字級　資料管理　關於</text>
+<rect x="0" y="72" width="296" height="828" fill="#f9faf8" stroke="#dfe3df" />
+<rect x="12" y="88" width="272" height="44" fill="#f8f7f2" stroke="#dfe3df" /><text x="24" y="117" font-size="18">③ [ 探索 ]　｜　行程</text>
+<rect x="12" y="146" width="272" height="250" fill="#f8f7f2" stroke="#dfe3df" /><text x="24" y="180" font-size="18">④ 篩選 · 獨立捲動</text><text x="24" y="220" font-size="16">社團主題／只看收藏</text><text x="24" y="253" font-size="16">進階搜尋條件</text>
+ <rect x="12" y="408" width="272" height="468" fill="#f8f7f2" stroke="#dfe3df" /><text x="24" y="442" font-size="18">結果 · 獨立捲動</text><text x="24" y="487" font-size="16">攤位／社團名稱</text><text x="24" y="520" font-size="16">收藏狀態／命中內容</text>
+<rect x="296" y="72" width="1144" height="828" fill="#f2f0e8" stroke="#dfe3df" />
+<rect x="312" y="88" width="766" height="72" fill="#f9faf8" stroke="#dfe3df" />
+<text x="328" y="116" font-size="17">⑤ 日期　DAY 1　DAY 2　DAY 3</text>
+<text x="328" y="145" font-size="16">場館空間名稱 · 展區依活動定義顯示</text>
+<rect x="328" y="184" width="726" height="608" fill="none" stroke="#57a88e" stroke-dasharray="8 6"/>
+ <text x="350" y="220" font-size="20">⑥ 未遮蔽的攤位定位區域</text>
+ <rect x="655" y="458" width="72" height="40" fill="#dcebe5" stroke="#202a35" />
+ <text x="673" y="485" font-size="16">A03</text>
+ <text x="350" y="760" font-size="17">地圖在詳情後方延伸；詳情不推擠容器</text>
+ <rect x="1094" y="88" width="330" height="736" fill="#f9faf8" stroke="#202a35" />
+ <text x="1110" y="123" font-size="17">⑧ A03 · 社團名稱　　關閉</text>
+ <rect x="1110" y="144" width="298" height="664" fill="#f8f7f2" stroke="#dfe3df" />
+ <text x="1126" y="180" font-size="17">詳情內容 · 獨立捲動</text>
+ <text x="1126" y="226" font-size="16">分類／來源／社團內容</text>
+ <text x="1126" y="277" font-size="17">收藏</text><text x="1126" y="317" font-size="17">加入／移出行程</text><text x="1126" y="357" font-size="17">設為下一站</text>
+ <text x="1126" y="430" font-size="15">三個獨立操作</text>
+ <text x="1126" y="470" font-size="17">完整詳細資訊</text>
+<rect x="312" y="840" width="346" height="44" fill="#f9faf8" stroke="#dfe3df" />
+<text x="328" y="869" font-size="18">⑦ −　倍率　＋　查看全場</text>
+<rect x="1348" y="840" width="76" height="44" fill="#f9faf8" stroke="#dfe3df" /><text x="1362" y="869" font-size="16">指南</text>
+</svg>
