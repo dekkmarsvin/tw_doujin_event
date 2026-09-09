@@ -12,6 +12,7 @@ const event = (id) => ({
   id, name: id, venue: id, dateRangeLabel: id, dataUpdatedAt: "2026-08-14", dataLastUpdatedLabel: "today", mapTemplate: id,
   areaMode: "switchable", days: [{ id: 1, label: "D1", dateLabel: "D1" }],
   areas: [{ id: "ALL", label: "全部", shortLabel: "全" }, { id: "A", label: "A 區", shortLabel: "A" }],
+  venueAssignments: [{ venueSpaceId: "main", areaIds: ["ALL", "A"] }],
   genres: ["全部類別", "原創"],
 });
 
@@ -104,6 +105,24 @@ test("navigation projection uses only this event's itinerary and selection", () 
   assert.deepEqual(result.mapRecords.map((item) => item.circle.id), ["c-b"]);
   assert.equal(result.selected, null, "a selected record from another event cannot leak into details");
   assert.equal(result.nextRecord.circle.id, "c-b");
+});
+
+test("navigation covers all areas in the current space without mixing identical booth codes from another space", () => {
+  const secondSpace = record("event-a", "c-other-space", "A02", { suffix: 1 });
+  secondSpace.hall = secondSpace.placement.area = "B";
+  const all = [...records, secondSpace];
+  const multiEvent = { ...event("event-a"), areas: [...event("event-a").areas, { id: "B", label: "B", shortLabel: "B" }], venueAssignments: [
+    { venueSpaceId: "main", areaIds: ["ALL", "A"] }, { venueSpaceId: "other", areaIds: ["B"] },
+  ] };
+  const input = {
+    event: multiEvent, records: all, recordsById: new Map(all.map((item) => [item.recordId, item])), recordsByCircleId: new Map(all.map((item) => [item.circle.id, [item]])),
+    planning: { ...planning, visitPlans: [...planning.visitPlans, { ...planning.visitPlans[0], circleId: "c-other-space", routeOrder: 1 }] },
+    ...defaults, navigationMode: true, query: "a filter that excludes everything", favoriteOnly: true,
+  };
+  assert.deepEqual(projectEventWorkspace(input).markersByCode.get("A02").records.map((item) => item.circle.id), ["c-b"]);
+  assert.deepEqual(projectEventWorkspace({ ...input, area: "B" }).markersByCode.get("A02").records.map((item) => item.circle.id), ["c-other-space"]);
+  assert.equal(input.query, "a filter that excludes everything");
+  assert.equal(input.area, "ALL");
 });
 
 test("each applied work topic gets its own removable chip", () => {

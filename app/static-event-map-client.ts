@@ -17,8 +17,10 @@ async function readMap(eventId: string, relativePath: string) {
   return map;
 }
 
-export async function loadStaticEventMap(eventId: string, scope?: { periodKey: string; venueSpaceId: string }): Promise<PublishedEventMap> {
-  if (!scope) return readMap(eventId, "map.json");
+/** The resolved artifact path distinguishes a shared map from a scoped map. */
+export async function loadStaticEventMapResource(eventId: string, scope?: { periodKey: string; venueSpaceId: string }): Promise<{ map: PublishedEventMap; artifactKey: string }> {
+  const resource = async (path: string) => ({ map: await readMap(eventId, path), artifactKey: `${eventId}/${path}` });
+  if (!scope) return resource("map.json");
   const manifestResponse = await fetch(eventDataEndpoint(eventId, "map-manifest.json"), {
     headers: { accept: "application/json" },
   });
@@ -26,10 +28,14 @@ export async function loadStaticEventMap(eventId: string, scope?: { periodKey: s
   // no manifest, so a missing index is that event, not a broken deployment.
   // Every other failure still surfaces: a 500 or a parse error must not be read
   // as "this event has one layout" and silently serve the wrong day's floor.
-  if (manifestResponse.status === 404) return readMap(eventId, "map.json");
+  if (manifestResponse.status === 404) return resource("map.json");
   if (!manifestResponse.ok) throw new Error(`讀取活動地圖索引失敗（${manifestResponse.status}）。`);
   const manifest = parseEventMapManifest(await manifestResponse.json(), eventId);
   const entry = manifest.maps.find((map) => map.periodKey === scope.periodKey && map.venueSpaceId === scope.venueSpaceId);
   if (!entry) throw new Error("找不到目前活動日與場地空間的地圖。");
-  return readMap(eventId, entry.path);
+  return resource(entry.path);
+}
+
+export async function loadStaticEventMap(eventId: string, scope?: { periodKey: string; venueSpaceId: string }): Promise<PublishedEventMap> {
+  return (await loadStaticEventMapResource(eventId, scope)).map;
 }

@@ -55,6 +55,7 @@ test("pinch zoom below the limit follows the live two-pointer center", () => {
 
 test("map media appears after the close-inspection zoom threshold", () => {
   assert.equal(shouldShowMapMedia(1.44), false);
+  assert.equal(shouldShowMapMedia(1.449), false);
   assert.equal(shouldShowMapMedia(1.45), true);
 });
 

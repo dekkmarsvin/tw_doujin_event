@@ -86,3 +86,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0052](./0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) | 代表圖移除主機允許清單，改檢查網址是不是圖片 | 生效 |
 | [0053](./0053-the-thumbnail-upload-asks-for-the-picture-only.md) | 代表圖上傳只要圖片，出處與來源標示改為選填，上限 5 MiB | 生效 |
 | [0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md) | 保存期限選項退場，社團只決定公開與否，其餘靠手動刪除 | 生效 |
+| [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | 生效；擴充 0001 版面範圍 |
