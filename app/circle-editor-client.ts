@@ -37,6 +37,18 @@ export class PortalError extends Error {
   }
 }
 
+/**
+ * Whether the refusal was the admin step-up gate rather than a real failure.
+ *
+ * The panel needs this to say the one thing the message alone cannot: the
+ * request was fine, the session is simply older than the step-up window, and
+ * signing in again is the whole fix. Matched on the server's code rather than
+ * its sentence so the copy stays free to change.
+ */
+export function adminSessionStale(error: unknown) {
+  return error instanceof PortalError && error.status === 401 && error.body?.code === "admin_session_stale";
+}
+
 let portalEventId = "";
 
 /**

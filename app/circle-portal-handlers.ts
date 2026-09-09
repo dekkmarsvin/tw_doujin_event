@@ -46,6 +46,14 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Approving or taking down requires a session created recently: cheap step-up. */
 const ADMIN_FRESH_SESSION_MS = 24 * 60 * 60 * 1000;
+/**
+ * Names the one refusal a reviewer can clear without help, so the panel can
+ * tell "this session is too old" apart from every other 401 without matching
+ * on the message text. That lets it disable exactly what the gate will refuse
+ * and point at the sign-in that fixes it, instead of leaving a sentence
+ * somewhere below the button that produced it.
+ */
+export const ADMIN_SESSION_STALE = "admin_session_stale";
 
 const LIMITS = {
   loginPerEmailPerHour: 5,
@@ -912,7 +920,7 @@ export function createCirclePortalHandlers({
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate;
     if (config.now() - gate.session.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
-      return { ok: false, response: json({ error: "管理操作需要重新登入。" }, 401) };
+      return { ok: false, response: json({ error: "管理操作需要重新登入。", code: ADMIN_SESSION_STALE }, 401) };
     }
     return gate;
   }

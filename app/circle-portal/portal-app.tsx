@@ -20,6 +20,7 @@ import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
 import { AdminMapReviewPanel, MapContributorPanel } from "./map-contribution-panel";
+import { AdminStepUpBanner, AdminStepUpProvider, useAdminStepUp } from "./admin-step-up";
 import styles from "./portal.module.css";
 
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
@@ -191,6 +192,9 @@ export default function CirclePortalApp() {
   const event = getPublishedEvent(eventId) ?? PUBLISHED_EVENTS[0];
   /** What a late answer is compared against; `claims` lives above the keyed subtree. */
   const maintainedEventId = useRef(event.id);
+  /** Signing out is the whole of the admin step-up remedy, so the panel needs
+   * the same reset the header's own sign-out performs. */
+  const forgetSession = useCallback(() => { setSession(null); setClaims([]); }, []);
 
   const refreshClaims = useCallback(async () => {
     // Set here as well as in the effect below: the claim list is the first
@@ -268,7 +272,7 @@ export default function CirclePortalApp() {
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
         {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
         {session.isAdmin && <a href="#admin">管理</a>}
-        <button type="button" onClick={() => void signOut().then(() => { setSession(null); setClaims([]); })}>登出</button>
+        <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
       </div>}
     </header>
 
@@ -276,7 +280,7 @@ export default function CirclePortalApp() {
 
     {!ready ? <p className={styles.notice}>載入中…</p>
       : !session ? <SignIn />
-        : <>
+        : <AdminStepUpProvider onSignedOut={forgetSession}>
           {/* One event: no choice to make, so the portal opens straight into it. */}
           {PUBLISHED_EVENTS.length > 1 && <EventPicker
             eventId={event.id}
@@ -294,7 +298,7 @@ export default function CirclePortalApp() {
             <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
             {session.isAdmin && <AdminPanel event={event} />}
           </Fragment>
-        </>}
+        </AdminStepUpProvider>}
 
   </div>;
 }
@@ -1194,18 +1198,31 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
 function AdminPanel({ event }: { event: EventDefinition }) {
   const [pending, setPending] = useState<PendingClaim[]>([]);
-  const [status, setStatus] = useState<Status>(IDLE);
+  const [claimStatus, setClaimStatus] = useState<Status>(IDLE);
+  const [takedownStatus, setTakedownStatus] = useState<Status>(IDLE);
   const [takedownId, setTakedownId] = useState("");
   const [reason, setReason] = useState("");
+  // One session state locks every form in this panel, so the banner at the top
+  // is the only place it is said; each form's own line stays free for what only
+  // that form can report.
+  const { blocked, report } = useAdminStepUp();
 
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const requestVersion = useRef({ version: 0 });
 
-  const refresh = useCallback(() => {
+  /**
+   * `announce` is what the button says out loud. The queue also refreshes on a
+   * timer and on every return to the tab, and letting those flip the label to
+   * 「更新中…」 blinked a control nobody had pressed, twice a minute, to report
+   * nothing the reader could act on. Only the first load and a press of the
+   * button move it; a background answer still replaces the list and still
+   * reports a failure, it just does not animate the control.
+   */
+  const refresh = useCallback((announce: boolean) => {
     const version = ++requestVersion.current.version;
-    setLoading(true);
+    if (announce) setLoading(true);
     void listPendingClaims()
       .then((result) => {
         if (version !== requestVersion.current.version) return;
@@ -1216,16 +1233,19 @@ function AdminPanel({ event }: { event: EventDefinition }) {
       .catch((error: unknown) => {
         if (version === requestVersion.current.version) setLoadError(errorMessage(error));
       })
+      // Unconditional for an announced request: the button is disabled while
+      // one is in flight, so no second announced request can supersede it and
+      // leave the label stuck on 「更新中…」.
       .finally(() => {
-        if (version === requestVersion.current.version) setLoading(false);
+        if (announce) setLoading(false);
       });
   }, []);
 
   useEffect(() => {
     const requests = requestVersion.current;
-    const initialRefresh = window.setTimeout(refresh, 0);
+    const initialRefresh = window.setTimeout(() => refresh(true), 0);
     const refreshVisible = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState === "visible") refresh(false);
     };
     const timer = window.setInterval(refreshVisible, 30_000);
     window.addEventListener("focus", refreshVisible);
@@ -1239,11 +1259,24 @@ function AdminPanel({ event }: { event: EventDefinition }) {
     };
   }, [refresh]);
 
+  const decide = (claimId: string, decision: "approve" | "reject") => {
+    void decideClaim(claimId, decision)
+      .then(() => refresh(false))
+      .catch((error: unknown) => {
+        // The step-up notice under the queue already says it, next to the
+        // buttons it disabled. A second copy in a status line would only
+        // repeat it further from where it happened.
+        if (report(error)) return;
+        setClaimStatus({ kind: "error", message: errorMessage(error) });
+      });
+  };
+
   return <section className={`${styles.card} ${styles.admin}`} id="admin">
+    <AdminStepUpBanner />
     <h2>管理：待審認領</h2>
     <p className={styles.editorHint}>目前活動：{event.name}。認領逐場活動分開，同名社團在不同活動是不同的認領。</p>
-    <button type="button" onClick={refresh} disabled={loading}>{loading ? "更新中…" : "重新整理待審認領"}</button>
-    {loadError && <p role="alert">{loadError}</p>}
+    <button type="button" onClick={() => refresh(true)} disabled={loading}>{loading ? "更新中…" : "重新整理待審認領"}</button>
+    {loadError && <p className={styles.error} role="alert">{loadError}</p>}
     {pending.length === 0 ? loaded && !loadError && <p>目前沒有待審項目。</p> : <ul className={styles.claimList}>
       {pending.map((claim) => <li key={claim.id}>
         <div>
@@ -1252,23 +1285,28 @@ function AdminPanel({ event }: { event: EventDefinition }) {
           {claim.evidenceUrl && <a href={claim.evidenceUrl} target="_blank" rel="noreferrer">佐證連結</a>}
           {claim.evidenceNote && <small>{claim.evidenceNote}</small>}
         </div>
-        <button type="button" onClick={() => void decideClaim(claim.id, "approve").then(refresh).catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))}>核准</button>
-        <button type="button" onClick={() => void decideClaim(claim.id, "reject").then(refresh).catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))}>婉拒</button>
+        <button type="button" disabled={blocked} onClick={() => decide(claim.id, "approve")}>核准</button>
+        <button type="button" disabled={blocked} onClick={() => decide(claim.id, "reject")}>婉拒</button>
       </li>)}
     </ul>}
+    {/* Under the queue rather than at the foot of the panel: an error about
+        核准 belongs where 核准 is, not four fields further down. */}
+    {claimStatus.kind === "error" && <p className={styles.error} role="alert">{claimStatus.message}</p>}
 
     <h2>撤下社團補充資料</h2>
     <label htmlFor="takedown-circle">社團 ID</label>
     <input id="takedown-circle" value={takedownId} onChange={(event) => setTakedownId(event.target.value)} placeholder="c-000001" />
     <label htmlFor="takedown-reason">原因</label>
     <input id="takedown-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
-    <button type="button" onClick={() => {
+    <button type="button" disabled={blocked} onClick={() => {
       void takedownOverride(takedownId, reason)
-        .then(() => { setStatus({ kind: "ok", message: "已撤下。" }); setTakedownId(""); setReason(""); })
-        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+        .then(() => { setTakedownStatus({ kind: "ok", message: "已撤下。" }); setTakedownId(""); setReason(""); })
+        .catch((error: unknown) => {
+          if (report(error)) return;
+          setTakedownStatus({ kind: "error", message: errorMessage(error) });
+        });
     }}>撤下</button>
-
-    {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+    {takedownStatus.kind !== "idle" && <p className={takedownStatus.kind === "error" ? styles.error : styles.notice}>{takedownStatus.message}</p>}
 
     <AdminRoster />
   </section>;
@@ -1278,22 +1316,34 @@ function AdminRoster() {
   const [admins, setAdmins] = useState<AdminEntry[]>([]);
   const [self, setSelf] = useState("");
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<Status>(IDLE);
+  const [rosterStatus, setRosterStatus] = useState<Status>(IDLE);
+  const [disableStatus, setDisableStatus] = useState<Status>(IDLE);
   const [disableEmail, setDisableEmail] = useState("");
+  // `report` is stable across renders, so the effect below is not re-run — and
+  // the roster not re-read — when some other form reports a refusal.
+  const { blocked, report } = useAdminStepUp();
 
   const refresh = useCallback(() => {
     void listAdmins()
       .then((result) => { setAdmins(result.admins); setSelf(result.self); })
-      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-  }, []);
+      .catch((error: unknown) => {
+        // Reading the roster is gated exactly like writing it, so a session
+        // past the step-up window lands here before anything has been pressed.
+        // That first refusal is what raises the banner above.
+        if (report(error)) return;
+        setRosterStatus({ kind: "error", message: errorMessage(error) });
+      });
+  }, [report]);
 
   useEffect(refresh, [refresh]);
 
   const run = (target: string, action: "add" | "remove") => {
-    setStatus({ kind: "busy", message: "處理中…" });
+    setRosterStatus({ kind: "busy", message: "處理中…" });
     void manageAdmin(target, action)
-      .then(() => { setStatus({ kind: "ok", message: action === "add" ? "已新增管理者。" : "已移除管理者。" }); setEmail(""); refresh(); })
-      .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
+      .then(() => { setRosterStatus({ kind: "ok", message: action === "add" ? "已新增管理者。" : "已移除管理者。" }); setEmail(""); refresh(); })
+      .catch((error: unknown) => {
+        setRosterStatus(report(error) ? IDLE : { kind: "error", message: errorMessage(error) });
+      });
   };
 
   return <>
@@ -1305,25 +1355,32 @@ function AdminRoster() {
           <small>{admin.addedBy === "bootstrap" ? "由設定值建立" : `由 ${admin.addedBy ?? "未知"} 新增`}</small>
         </div>
         {admin.email !== self && admins.length > 1
-          && <button type="button" onClick={() => run(admin.email, "remove")}>移除</button>}
+          && <button type="button" disabled={blocked} onClick={() => run(admin.email, "remove")}>移除</button>}
       </li>)}
     </ul>
 
     <label htmlFor="admin-email">新增管理者 email</label>
     <input id="admin-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="someone@example.com" />
-    <button type="button" disabled={status.kind === "busy"} onClick={() => run(email, "add")}>新增</button>
+    <button type="button" disabled={blocked || rosterStatus.kind === "busy"} onClick={() => run(email, "add")}>新增</button>
 
-    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
+    {rosterStatus.kind !== "idle" && rosterStatus.kind !== "busy" && <p className={rosterStatus.kind === "error" ? styles.error : styles.notice}>{rosterStatus.message}</p>}
 
     <h3>停用帳號</h3>
     <p>停用會立即撤銷該帳號的登入狀態，但保留資料供身分確認或後續刪除請求。</p>
     <label htmlFor="disable-account-email">帳號 email</label>
     <input id="disable-account-email" type="email" value={disableEmail} onChange={(event) => setDisableEmail(event.target.value)} />
-    <button type="button" disabled={!disableEmail || status.kind === "busy"} onClick={() => {
-      setStatus({ kind: "busy", message: "處理中…" });
-      void disableAccount(disableEmail)
-        .then(() => { setStatus({ kind: "ok", message: "帳號已停用。" }); setDisableEmail(""); })
-        .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-    }}>停用</button>
+    <button
+      type="button"
+      disabled={blocked || !disableEmail || disableStatus.kind === "busy"}
+      onClick={() => {
+        setDisableStatus({ kind: "busy", message: "處理中…" });
+        void disableAccount(disableEmail)
+          .then(() => { setDisableStatus({ kind: "ok", message: "帳號已停用。" }); setDisableEmail(""); })
+          .catch((error: unknown) => {
+            setDisableStatus(report(error) ? IDLE : { kind: "error", message: errorMessage(error) });
+          });
+      }}
+    >停用</button>
+    {disableStatus.kind !== "idle" && disableStatus.kind !== "busy" && <p className={disableStatus.kind === "error" ? styles.error : styles.notice}>{disableStatus.message}</p>}
   </>;
 }

@@ -14,6 +14,7 @@ import type { EventMapLayout, PublishedEventMap } from "../event-map";
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
 import { loadStaticEventMap } from "../static-event-map-client";
+import { AdminStepUpBanner, useAdminStepUp } from "./admin-step-up";
 import styles from "./portal.module.css";
 
 type Detail = { draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[] };
@@ -254,6 +255,7 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
   const [targetKind, setTargetKind] = useState<"slot" | "landmark" | "draft">("draft");
   const [targetRef, setTargetRef] = useState("");
   const [targetBody, setTargetBody] = useState("");
+  const { blocked, report } = useAdminStepUp();
   const refreshList = useCallback(async () => setDrafts((await listAdminMapDrafts()).drafts), []);
   /** Refreshes the thread without touching what the reviewer has queued or
    * typed, which is what a standalone reply needs. */
@@ -264,11 +266,22 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
     setSelectedId(id); setDetail(await readMapDraft(id, true)); setProblems([]); setCandidate(null);
     setOfficialSourceConfirmed(false); setTargets([]); setTargetKind("draft"); setTargetRef(""); setTargetBody("");
   }, []);
-  useEffect(() => { queueMicrotask(() => { void refreshList(); }); }, [refreshList]);
+  // Listing the queue is itself behind the step-up gate, so a session past the
+  // window fails here on mount. Swallowing that left the panel claiming there
+  // were no drafts, which is the one answer it could not know.
+  useEffect(() => {
+    queueMicrotask(() => {
+      void refreshList().catch((error: unknown) => {
+        if (report(error)) return;
+        setStatus({ kind: "error", message: message(error) });
+      });
+    });
+  }, [refreshList, report]);
   const run = async (task: () => Promise<void>, ok: string) => {
     setStatus({ kind: "busy", message: "處理中…" }); setProblems([]);
     try { await task(); setStatus({ kind: "ok", message: ok }); }
     catch (error) {
+      if (report(error)) return setStatus(IDLE);
       setProblems(mapDraftProblems(error));
       setStatus({ kind: "error", message: message(error), conflict: mapDraftConflict(error) ?? undefined });
     }
@@ -293,6 +306,7 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
   };
 
   return <section className={`${styles.card} ${styles.editorCard} ${styles.admin}`} id="map-review">
+    <AdminStepUpBanner />
     <h2>地圖草稿審閱</h2>
     <p>核准只確認私人草稿；「匯出候選」仍不會發布。請以候選 JSON 與語意差異建立 event-data repository 的可審查變更。</p>
     <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "審閱資料已載入。")} />
@@ -310,7 +324,7 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
       <div className={styles.reviewActions}>
         {/* Sent now, so a thread stays answerable after the draft has left
             `submitted` and the decision buttons below are gone. */}
-        <button type="button" disabled={!targetBody.trim() || (targetKind !== "draft" && !targetRef.trim())} onClick={() => void run(async () => {
+        <button type="button" disabled={blocked || !targetBody.trim() || (targetKind !== "draft" && !targetRef.trim())} onClick={() => void run(async () => {
           await postMapDraftComment({
             draftId: detail.draft.id, body: targetBody.trim(),
             ...(targetKind === "draft" ? {} : { targetKind, targetRef: targetRef.trim() }),
@@ -331,8 +345,8 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
       </li>)}</ul>}
       <label>取代既有核准 draftId（只有同範圍已有核准稿時填寫）<input value={replacementDraftId} onChange={(event) => setReplacementDraftId(event.target.value)} /></label>
       <label className={styles.confirmCheck}><input type="checkbox" checked={officialSourceConfirmed} onChange={(event) => setOfficialSourceConfirmed(event.target.checked)} /><span>我已逐一確認目前版本的來源檔來自活動官方說明頁面。</span></label>
-      {detail.draft.status === "submitted" && <div className={styles.reviewActions}><button type="button" onClick={() => void decide("changes_requested")}>要求修改</button><button type="button" onClick={() => void decide("reject")}>拒絕</button><button type="button" onClick={() => void decide("approve")}>核准</button></div>}
-      {(detail.draft.status === "approved" || detail.draft.status === "exported") && <button type="button" onClick={() => void run(async () => {
+      {detail.draft.status === "submitted" && <div className={styles.reviewActions}><button type="button" disabled={blocked} onClick={() => void decide("changes_requested")}>要求修改</button><button type="button" disabled={blocked} onClick={() => void decide("reject")}>拒絕</button><button type="button" disabled={blocked} onClick={() => void decide("approve")}>核准</button></div>}
+      {(detail.draft.status === "approved" || detail.draft.status === "exported") && <button type="button" disabled={blocked} onClick={() => void run(async () => {
         const result = await exportMapContributionCandidate(detail.draft.id, detail.draft.current_revision);
         await openDraft(detail.draft.id); await refreshList();
         setCandidate({ map: result.candidate, diff: result.diff, targetPath: result.targetPath, sha256: result.candidateSha256 });
