@@ -185,6 +185,9 @@ test("the step-up lock is stated once, above the forms it turns off", async () =
   assert.doesNotMatch(app, /AdminStepUpNotice|stepUpHint|stepUpTarget/);
   assert.doesNotMatch(mapPanel, /AdminStepUpNotice|stepUpHint|stepUpTarget/);
   assert.ok(app.split("disabled={blocked").length - 1 >= 5, "each gated control reads the lock");
+  // 送出留言 posts as the reviewer, so it is gated exactly like the decision
+  // buttons beside it and has to go grey with them.
+  assert.ok(mapPanel.split("disabled={blocked").length - 1 >= 5, "the review panel gates its posting controls too");
 
   // Ordinary failures still belong to the form that produced them: an error
   // about 核准 is not an error about 停用帳號.

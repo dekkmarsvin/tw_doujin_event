@@ -324,7 +324,7 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
       <div className={styles.reviewActions}>
         {/* Sent now, so a thread stays answerable after the draft has left
             `submitted` and the decision buttons below are gone. */}
-        <button type="button" disabled={!targetBody.trim() || (targetKind !== "draft" && !targetRef.trim())} onClick={() => void run(async () => {
+        <button type="button" disabled={blocked || !targetBody.trim() || (targetKind !== "draft" && !targetRef.trim())} onClick={() => void run(async () => {
           await postMapDraftComment({
             draftId: detail.draft.id, body: targetBody.trim(),
             ...(targetKind === "draft" ? {} : { targetKind, targetRef: targetRef.trim() }),
