@@ -603,6 +603,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     setShowFullDetail(false);
   };
   const navigationButton = <button className={styles.navigationToggle} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? "退出導航模式" : "開始導航"}</button>;
+  const hintedCode = focusedCode ?? selected?.code ?? null;
   const renderMapTools = (measurement = false) => <>
     <div className={styles.locationControls}>
       <div className={styles.dateTabs} role="tablist" aria-label="活動日期">{event.days.map((eventDay, index) => <button key={eventDay.id} role="tab" tabIndex={day === eventDay.id ? 0 : -1} aria-selected={day === eventDay.id} onClick={() => changeDay(eventDay.id)} onKeyDown={(keyEvent) => {
@@ -618,7 +619,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     </div>
     {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>導航模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{navigationTargetRecord ? ` · 目前目標 ${navigationTargetRecord.code}` : ""}</small></div></div>}
         {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>下一站</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, nextRecord.circle.id))} aria-label="從行程移除下一站">從行程移除</button></div>}
-    <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{focusedCode ? "鍵盤焦點 " + focusedCode : selected ? "已選取 " + selected.code : "選取攤位查看社團"}</div>
+    <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? "已選取 " + hintedCode : "選取攤位查看社團"}</div>
   </>;
 
   return <main className={`app-shell ${styles.shell}`} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>

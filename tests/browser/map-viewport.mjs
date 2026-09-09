@@ -223,7 +223,7 @@ try {
   await pause(keyboard);
   const focused = (await state(keyboard)).activeSlot;
   assert.ok(focused && focused !== "A01");
-  assert.equal(await keyboard.locator('[data-map-tools]:not([aria-hidden])').getByText(`鍵盤焦點 ${focused}`, { exact: true }).count(), 1);
+  assert.equal(await keyboard.locator('[data-map-tools]:not([aria-hidden])').getByText(`已選取 ${focused}`, { exact: true }).count(), 1);
   assert.equal(await keyboard.locator('.floor [tabindex="0"]').count(), 1);
   await keyboard.keyboard.press("Enter");
   await pause(keyboard);

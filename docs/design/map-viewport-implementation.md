@@ -149,7 +149,7 @@ fontInLayoutUnits = fontPx / S
 
 ### 5.2 完整代碼提示
 
-selected 或 roving keyboard focus 具有完整代碼提示；鍵盤焦點存在時優先顯示焦點攤位，否則顯示 selected。提示放在固定工具群中，以正常介面字級呈現，不放大格內文字或壓住相鄰格。selected 在全場概觀中保留標記，不等於詳情必須展開。
+selected 或 roving keyboard focus 具有完整代碼提示；鍵盤焦點存在時優先顯示焦點攤位，否則顯示 selected。兩者對讀者是同一個狀態，提示只用「已選取」一個詞彙。提示放在固定工具群中，以正常介面字級呈現，不放大格內文字或壓住相鄰格。selected 在全場概觀中保留標記，不等於詳情必須展開。
 
 renderer 新增可選 `onFocusCode?: (code: string | null) => void` 回報方向鍵／focus 的攤位與離開 SVG，controller 使用 layout 資料投影提示。此事件不寫 URL、不變更選取、不自行讀規劃 store。SVG aria-label 繼續包含社團與所有規劃狀態。
 
