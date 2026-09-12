@@ -58,11 +58,12 @@ export function projectEventWorkspace(input: ProjectionInput) {
   const plansById = new Map(dayPlan.map((entry) => [entry.circleId, entry]));
   // A circle that moved holds both the retired booth and its current one on the
   // same day, so the itinerary and the next stop have to resolve to the booth a
-  // reader can still walk to.
+  // reader can still walk to. A circle on two adjacent booths (A01/A02) has two
+  // active records, and keeping the first one makes the answer stable instead of
+  // whichever record happened to be read last.
   const dayRecordsByCircleId = new Map<string, CircleViewRecord>();
   eventRecords.filter((record) => record.day === day).forEach((record) => {
-    const current = dayRecordsByCircleId.get(record.circle.id);
-    if (current?.placement.status === "active" && record.placement.status !== "active") return;
+    if (dayRecordsByCircleId.get(record.circle.id)?.placement.status === "active") return;
     dayRecordsByCircleId.set(record.circle.id, record);
   });
   const selectedCandidate = recordsById.get(selectedRecordId ?? "") ?? null;

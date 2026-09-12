@@ -1,0 +1,44 @@
+[
+  {
+    "fitVisible": true,
+    "height": 844,
+    "overflow": false,
+    "scale": "standard",
+    "width": 761
+  },
+  {
+    "fitVisible": true,
+    "height": 844,
+    "overflow": false,
+    "scale": "large",
+    "width": 761
+  },
+  {
+    "fitVisible": true,
+    "height": 844,
+    "overflow": false,
+    "scale": "extra",
+    "width": 761
+  },
+  {
+    "fitVisible": true,
+    "height": 900,
+    "overflow": false,
+    "scale": "standard",
+    "width": 1440
+  },
+  {
+    "fitVisible": true,
+    "height": 900,
+    "overflow": false,
+    "scale": "large",
+    "width": 1440
+  },
+  {
+    "fitVisible": true,
+    "height": 900,
+    "overflow": false,
+    "scale": "extra",
+    "width": 1440
+  }
+]
