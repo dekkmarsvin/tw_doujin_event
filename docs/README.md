@@ -8,6 +8,7 @@
 | 三種使用者是誰、做到了長什麼樣 | [使用者](./product/users.md) |
 | 某個功能在 P0 還是 P2、算不算做完 | [交付範圍與完成定義](./product/scope.md) |
 | 色彩、字體、層級、圓角 | [`DESIGN.md`](../DESIGN.md) |
+| 手機地圖面板、搜尋定位與返回流程的改進方案（**已實作，本機驗收紀錄見計劃第 8 節**） | [手機地圖面板改進計劃](./design/mobile-map-panel-plan.md) |
 | **介面上該寫什麼字、不該寫什麼字** | [對外文案](./design/copy.md) |
 | 某個介面表面的元件長什麼樣 | [元件與介面規格](./design/components.md) |
 | 地圖版面與視域接下來要往哪走（**草案，非現況**） | [地圖視域改進方向](./design/map-viewport-direction.md) |

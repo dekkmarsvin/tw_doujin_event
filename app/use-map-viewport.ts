@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { PublishedEventMap } from "./event-map";
-import { availableMapRect, calculateMapFitZoom, centerMapOffset, fitMapInRect, offsetMapPointInRect, resizeMapView, type MapRect, type MapView } from "./map-viewport";
+import { availableMapRect, mobileAvailableMapRect, fitMapInRect, offsetMapPointInRect, resizeMapView, type MapRect, type MapView } from "./map-viewport";
 
 type ElementRef = RefObject<HTMLElement | null>;
 type ViewportElements = {
@@ -12,6 +12,8 @@ type ViewportElements = {
   fitTools: ElementRef;
   controls: ElementRef;
   details: ElementRef;
+  mobileDock: ElementRef;
+  mobileNav: ElementRef;
 };
 
 /** Owns DOM geometry and one-shot positioning; renderer only receives scale. */
@@ -33,7 +35,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
   const fittedKey = `${artifactKey}|${publishedMap?.revision ?? "pending"}`;
   const floorHeight = 950;
   const floorWidth = publishedMap ? floorHeight * publishedMap.layout.width / publishedMap.layout.height : 1344;
-  const { map, floor, tools, fitTools, controls, details } = elements;
+  const { map, floor, tools, fitTools, controls, details, mobileDock, mobileNav } = elements;
   const getInset = useCallback(() => ({ x: floor.current?.offsetLeft ?? 0, y: floor.current?.offsetTop ?? 0 }), [floor]);
   const setView = useCallback((next: MapView | ((current: MapView) => MapView)) => {
     const resolved = typeof next === "function" ? next(viewRef.current) : next;
@@ -54,13 +56,21 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
       const rect = element.getBoundingClientRect();
       return { x: rect.left - viewport.left, y: rect.top - viewport.top, width: rect.width, height: rect.height };
     };
+    // Fixed mobile controls keep the same horizontal reservation even when a
+    // full workspace hides them. Sheet height must never change the fit floor.
+    const mobileControls = !desktop && controls.current ? getComputedStyle(controls.current) : null;
+    const fitControlLeft = viewport.width - (Number.parseFloat(mobileControls?.right ?? "") || 12) - (Number.parseFloat(mobileControls?.width ?? "") || 64);
     const rect = desktop ? availableMapRect(viewport, {
       top: local(forFit ? fitTools.current : tools.current),
       bottom: local(controls.current),
       detail: !forFit && detailsOpen ? local(details.current) : undefined,
-    }) : { x: 0, y: 0, width: viewport.width, height: viewport.height };
+    }) : mobileAvailableMapRect(viewport, {
+      top: local(tools.current),
+      bottom: forFit ? { x: 0, y: viewport.height - (mobileNav.current?.getBoundingClientRect().height ?? 64) - 44, width: viewport.width, height: 0 } : local(mobileDock.current),
+      controls: forFit ? { x: fitControlLeft, y: 0, width: 0, height: 0 } : local(controls.current),
+    });
     return { viewport, rect };
-  }, [controls, desktop, details, detailsOpen, fitTools, map, tools]);
+  }, [controls, desktop, details, detailsOpen, fitTools, map, mobileDock, mobileNav, tools]);
 
   const getFit = useCallback(() => {
     if (!publishedMap) return null;
@@ -68,10 +78,9 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     if (!bounds) return null;
     const size = { width: floorWidth, height: floorHeight };
     const inset = getInset();
-    const zoom = calculateMapFitZoom(bounds.viewport, size);
-    const fit = desktop ? fitMapInRect(bounds.rect, size, inset) : { zoom, offset: centerMapOffset(bounds.viewport, size, zoom, inset) };
+    const fit = fitMapInRect(bounds.rect, size, inset);
     return fit ? { width: bounds.viewport.width, height: bounds.viewport.height, inset, fit } : null;
-  }, [desktop, floorWidth, getInset, measure, publishedMap]);
+  }, [floorWidth, getInset, measure, publishedMap]);
 
   const reset = useCallback(() => {
     cancelPosition();
@@ -116,9 +125,9 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     };
     schedule();
     const observer = new ResizeObserver(schedule);
-    for (const ref of [map, tools, fitTools, controls, details]) if (ref.current) observer.observe(ref.current);
+    for (const ref of [map, tools, fitTools, controls, details, mobileDock, mobileNav]) if (ref.current) observer.observe(ref.current);
     return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); };
-  }, [controls, details, fittedKey, fitTools, getFit, getInset, map, measure, publishedMap, request, scope, setView, tools]);
+  }, [controls, details, fittedKey, fitTools, getFit, getInset, map, measure, mobileDock, mobileNav, publishedMap, request, scope, setView, tools]);
 
   return { view, viewRef, setView, minimum, floorWidth, floorHeight, getInset, position, cancelPosition, reset };
 }

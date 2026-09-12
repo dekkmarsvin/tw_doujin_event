@@ -13,6 +13,13 @@ export function availableMapRect(viewport: MapSize, obstacles: { top?: MapRect; 
   return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
 }
 
+/** Mobile controls sit on the right; the sheet covers the bottom. */
+export function mobileAvailableMapRect(viewport: MapSize, obstacles: { top?: MapRect; bottom?: MapRect; controls?: MapRect } = {}): MapRect {
+  const rect = availableMapRect(viewport, { top: obstacles.top, bottom: obstacles.bottom });
+  const right = obstacles.controls ? Math.min(rect.x + rect.width, obstacles.controls.x - 12) : rect.x + rect.width;
+  return { ...rect, width: Math.max(0, right - rect.x) };
+}
+
 export function offsetMapPointInRect(point: MapPoint, rect: MapRect, zoom: number, inset: MapPoint): MapPoint {
   return { x: rect.x + rect.width / 2 - inset.x - point.x * zoom, y: rect.y + rect.height / 2 - inset.y - point.y * zoom };
 }

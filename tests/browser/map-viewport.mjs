@@ -25,6 +25,7 @@ const state = (page) => page.evaluate(() => {
     h1: document.querySelectorAll("h1").length, header: rect(document.querySelector(".topbar")), map: rect(map),
     floor: rect(floor), inset: { x: floor.offsetLeft, y: floor.offsetTop }, zoom: transform.a,
     offset: { x: transform.e, y: transform.f }, tools: tools.map(rect), controls: rect(document.querySelector(".controls")),
+    dock: rect(document.querySelector('aside[aria-label="行動版工作面板"]')), nav: rect(document.querySelector('[aria-label="行動版工作區"]')),
     detail: rect(document.querySelector('aside[aria-label="已選社團詳情"]')), selected: rect(selected?.querySelector("rect")),
     labelCount: document.querySelectorAll("[data-slot-code] text").length,
     activeSlot: document.activeElement?.getAttribute("data-slot-code"),
@@ -71,7 +72,7 @@ function assertPosition(measured) {
 }
 
 try {
-  for (const [width, height] of (process.env.MAP_TEST_SKIP_MATRIX ? [] : [[1440, 900], [1920, 1080], [1024, 768], [760, 768], [761, 768], [1050, 768], [1051, 768]])) {
+  for (const [width, height] of (process.env.MAP_TEST_SKIP_MATRIX ? [] : [[1440, 900], [1920, 1080], [1024, 768], [360, 640], [390, 844], [430, 932], [760, 844], [761, 844], [1050, 768], [1051, 768]])) {
     for (const scale of ["standard", "large", "extra"]) {
       const page = await open(width, height, scale);
       const prefix = `${width}-${height}-${scale}`;
@@ -96,13 +97,43 @@ try {
         assert.ok(selected.tools[0].right <= selected.detail.left - 16 + 1);
         assert.ok(selected.tools[0].height <= selected.map.height * .3 + 1);
       } else {
-        assert.equal(await page.getByRole("tablist", { name: "行動版工作區" }).getByRole("tab").count(), 4);
-        for (const name of ["展開工作面板", "完整展開工作面板", "縮小工作面板"]) {
-          await page.getByRole("button", { name, exact: true }).click();
-          await pause(page);
-        }
-        assert.equal(await page.locator("main").getAttribute("data-mobile-sheet-level"), "half");
-        await page.getByRole("tab", { name: /^結果/ }).click();
+        const workspace = page.getByRole("group", { name: "行動版工作區" });
+        assert.equal(await workspace.getByRole("button").count(), 2);
+        assert.ok(overview.floor.top >= overview.tools[0].bottom + 15);
+        assert.ok(overview.floor.bottom <= height - overview.nav.height - 44 - 15);
+        assert.ok(overview.floor.right <= overview.controls.left - 11);
+        await workspace.getByRole("button", { name: "探索", exact: true }).click();
+        await page.getByRole("button", { name: "完整展開工作面板", exact: true }).click();
+        await pause(page);
+        assert.equal(await page.locator("main").getAttribute("data-mobile-sheet-level"), "full");
+        assert.equal((await state(page)).zoom, overview.zoom, "full workspace does not change fit");
+        await page.getByRole("button", { name: "縮小工作面板", exact: true }).click();
+        await page.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+        await pause(page);
+        const selected = await capture(page, `${prefix}-summary`);
+        assert.equal(selected.zoom, overview.zoom, "summary does not change zoom");
+        assert.ok(selected.selected.top >= selected.tools[0].bottom + 15);
+        assert.ok(selected.selected.bottom <= selected.dock.top - 15);
+        assert.ok(selected.selected.right <= selected.controls.left - 11);
+        if (width === 390 && scale === "standard") assert.ok(selected.dock.top - selected.tools[0].bottom - 32 >= 240);
+        const selectedUrl = page.url();
+        await page.getByRole("button", { name: "查看完整資訊", exact: true }).click();
+        await page.getByRole("dialog").getByRole("button", { name: "關閉攤位詳細資訊", exact: true }).click();
+        assert.equal(await page.evaluate(() => document.activeElement.textContent), "查看完整資訊");
+        await page.getByRole("button", { name: "收起", exact: true }).click();
+        await pause(page);
+        assert.equal(page.url(), selectedUrl);
+        assert.deepEqual((await state(page)).offset, selected.offset);
+        await page.getByRole("button", { name: "A01 · OriginZero", exact: true }).click();
+        await page.getByRole("button", { name: "回結果", exact: true }).click();
+        const list = page.locator('[aria-label="探索結果"] [class*="resultList"]');
+        await list.evaluate((node) => { node.scrollTop = 350; });
+        const savedScroll = await list.evaluate((node) => node.scrollTop);
+        await page.getByRole("button", { name: "篩選攤位", exact: true }).click();
+        await page.getByRole("button", { name: "回結果", exact: true }).click();
+        await pause(page);
+        assert.equal(await list.evaluate((node) => node.scrollTop), savedScroll);
+        await workspace.getByRole("button", { name: "探索", exact: true }).click();
         assert.equal(await page.locator("main").getAttribute("data-mobile-sheet-level"), "peek");
       }
       await page.close();
