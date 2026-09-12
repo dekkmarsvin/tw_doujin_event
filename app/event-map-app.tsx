@@ -34,7 +34,7 @@ import { usePlanning } from "./use-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
-import { calculatePinchMapView, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
+import { calculatePinchMapView, clampMapZoom, mapViewFromWheel, MOBILE_SUMMARY_PEEK_HEIGHT, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
 import { eventUsesAreaSwitcher, eventUsesScopedMaps, venueAssignmentForArea, type EventAreaDefinition, type EventDayDefinition, type EventDefinition } from "./event-catalog";
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
@@ -115,6 +115,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
   const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
+  const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
   const { document: planning, update: updatePlanning, storageError: planningStorageError } = usePlanning(eventId, catalogStatus !== "loading");
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -134,6 +135,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
   const mobileResultsRef = useRef<HTMLDivElement | null>(null);
   const mobileResultScroll = useRef<{ element: HTMLElement; top: number }[]>([]);
   const mobileSummaryRef = useRef<HTMLButtonElement | null>(null);
+  const toolsMenuRef = useRef<HTMLDetailsElement | null>(null);
   const rememberMobileResultScroll = useCallback(() => {
     if (!mobileResultsRef.current?.getClientRects().length) return;
     mobileResultScroll.current = [...mobileResultsRef.current.querySelectorAll<HTMLElement>("*")].filter((element) => element.scrollHeight > element.clientHeight && element.clientHeight > 0).map((element) => ({ element, top: element.scrollTop }));
@@ -265,6 +267,36 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     return () => window.clearTimeout(timeout);
   }, [favoriteUndo]);
 
+  useEffect(() => {
+    if (!planNotice) return;
+    const timeout = window.setTimeout(() => setPlanNotice(null), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [planNotice]);
+
+  // The tools menu is a bare <details>, so it needs the two exits every menu
+  // owes a reader. Closing on an outside press must not steal that press: the
+  // map keeps the pan or the tap that happened to dismiss the menu.
+  useEffect(() => {
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      const menu = toolsMenuRef.current;
+      if (!menu?.open || (event.target instanceof Node && menu.contains(event.target))) return;
+      menu.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const menu = toolsMenuRef.current;
+      if (event.key !== "Escape" || !menu?.open || !menu.contains(document.activeElement)) return;
+      event.stopPropagation();
+      menu.open = false;
+      menu.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, []);
+
   useModalFocus(showFullDetail, fullDetailRef, () => setShowFullDetail(false));
 
   useEffect(() => {
@@ -350,6 +382,13 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     visitedCount, sharedRecords, filtered, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
     activeFilterDescriptors,
   } = workspace;
+  // A circle on two adjacent booths resolves to its first active record. When the
+  // reader already has one of them open, navigating keeps that booth rather than
+  // moving the selection and the URL to the sibling.
+  const navigationTarget = selected && navigationTargetRecord
+    && selected.circle.id === navigationTargetRecord.circle.id
+    && selected.day === navigationTargetRecord.day
+    && selected.placement.status === "active" ? selected : navigationTargetRecord;
 
   useEffect(() => {
     const code = pendingRestoreCode.current;
@@ -434,9 +473,9 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     if (!enabled) return;
     setDesktopPanel("plan");
     setMobileWorkspace("plan");
-    setMobilePanel(navigationTargetRecord ? "details" : "plan");
+    setMobilePanel(navigationTarget ? "details" : "plan");
     setMobileSheetLevel("half");
-    if (navigationTargetRecord && venueAssignmentForArea(event, navigationTargetRecord.hall).venueSpaceId === venueAssignmentForArea(event, hall).venueSpaceId) selectRecord(navigationTargetRecord, "details", false);
+    if (navigationTarget && venueAssignmentForArea(event, navigationTarget.hall).venueSpaceId === venueAssignmentForArea(event, hall).venueSpaceId) selectRecord(navigationTarget, "details", false);
   };
   const selectMobilePanel = (panel: "results" | "plan") => {
     setMobileWorkspace(panel === "plan" ? "plan" : "explore");
@@ -454,7 +493,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     const half = dock?.querySelector<HTMLElement>("[data-half-measure]")?.getBoundingClientRect().height ?? Math.min(window.innerHeight * .44, 420);
     const full = Math.min(window.innerHeight * .82, 760);
     return [
-      { level: "peek" as const, height: nav + (mobilePanel === "details" && selected ? 44 : 0) },
+      { level: "peek" as const, height: nav + (mobilePanel === "details" && selected ? MOBILE_SUMMARY_PEEK_HEIGHT : 0) },
       { level: "half" as const, height: half },
       ...(mobilePanel === "details" && selected ? [] : [{ level: "full" as const, height: full }]),
     ];
@@ -596,6 +635,9 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     onCreateGroup: (name: string) => updatePlanning((current) => createFavoriteGroup(current, name)),
   };
   const mobileSummaryIntro = selected ? [selected.circle.work, selected.circle.saleInfo || selected.note].filter(Boolean).join(" · ") : "";
+  // Saying "已加入行程" while the write failed would be a lie, so a storage error
+  // silences the notice and leaves the error banner to speak.
+  const mobileSummaryNotice = selected && planNotice?.recordId === selected.recordId && !planningStorageError ? planNotice.text : "";
   const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact onClose={closeDetails} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
   const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== event.genres[0] ? styles.clearFiltersActive : ""}`;
@@ -605,7 +647,10 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     <label className="favorite-only"><input type="checkbox" checked={favoriteOnly} onChange={(event) => { historyIntent.current = "push"; setFavoriteOnly(event.target.checked); }} /><i><UiIcon name="heart" /></i><span><b>只看收藏</b><small>已收藏 {favorites.length} 個社團</small></span></label>
     <AdvancedCircleSearchControls value={advancedSearch} workSuggestions={workTopicSuggestions} onApply={(next) => { historyIntent.current = "push"; setAdvancedSearch(next); }} />
   </section>;
-  const mobileDockStyle = mobileSheetDragHeight === null ? undefined : { "--mobile-sheet-height": `${mobileSheetDragHeight}px` } as CSSProperties;
+  const mobileShellStyle = {
+    "--mobile-peek-summary": `${MOBILE_SUMMARY_PEEK_HEIGHT}px`,
+    ...(mobileSheetDragHeight === null ? {} : { "--mobile-sheet-height": `${mobileSheetDragHeight}px` }),
+  } as CSSProperties;
   const mobileSheetActionLabel = mobileSheetLevel === "peek" ? "展開工作面板" : mobileSheetLevel === "half" && mobilePanel !== "details" ? "完整展開工作面板" : "縮小工作面板";
   const mobileSummary = mobilePanel === "details" && Boolean(selected);
   const backToResults = () => {
@@ -640,10 +685,14 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
   const navigationButton = <button className={styles.navigationToggle} aria-pressed={navigationMode} onClick={toggleNavigationMode}><UiIcon name="locate" />{navigationMode ? "退出導航模式" : "開始導航"}</button>;
   const hintedCode = focusedCode ?? selected?.code ?? null;
   const selectedSlot = !desktop && selected && publishedMap?.layout.rows.flatMap((row) => row.slots).find((slot) => slot.code === selected.code);
+  // At the whole-venue zoom a booth is a couple of pixels across, so the marker
+  // stays at the booth and the label is free to slide away from the zoom
+  // controls instead of being painted under them.
   const selectedMapPoint = selectedSlot && publishedMap ? {
     left: getFloorInset().x + offset.x + (selectedSlot.rect.x + selectedSlot.rect.width / 2) * floorHeight / publishedMap.layout.height * zoom,
     top: getFloorInset().y + offset.y + (selectedSlot.rect.y + selectedSlot.rect.height) * floorHeight / publishedMap.layout.height * zoom,
   } : null;
+  const selectedMapPointStyle = selectedMapPoint ? { "--map-selection-left": `${selectedMapPoint.left}px`, top: `${selectedMapPoint.top}px` } as CSSProperties : undefined;
   const renderMapTools = (measurement = false) => <>
     <div className={styles.locationControls}>
       <div className={styles.dateTabs} role="tablist" aria-label="活動日期">{event.days.map((eventDay, index) => <button key={eventDay.id} role="tab" tabIndex={day === eventDay.id ? 0 : -1} aria-selected={day === eventDay.id} onClick={() => changeDay(eventDay.id)} onKeyDown={(keyEvent) => {
@@ -657,15 +706,15 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
       {showAreaSwitcher && (venueAreas.length > 1 ? <label>展區<select value={hall} onChange={(change) => changeArea(change.target.value)}>{venueAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></label> : <span className={styles.venueName}>{venueAreas[0]?.label}</span>)}
 
     </div>
-    {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>導航模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{navigationTargetRecord ? ` · 目前目標 ${navigationTargetRecord.code}` : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>退出</button>}</div>}
+    {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>導航模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{navigationTarget ? ` · 目前目標 ${navigationTarget.code}` : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>退出</button>}</div>}
         {nextRecord && !navigationMode && <div className="route"><span><UiIcon name="external" /></span><button className={styles.routeMain} onClick={() => selectRecord(nextRecord)}><small>下一站</small><b>{nextRecord.code} · {nextRecord.name}</b></button><button onClick={() => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, nextRecord.circle.id))} aria-label="從行程移除下一站">從行程移除</button></div>}
     <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? "已選取 " + hintedCode : "選取攤位查看社團"}</div>
   </>;
 
   const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
 
-  return <main className={`app-shell ${styles.shell}`} style={mobileDockStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
-    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop ? <small>同人展逛攤地圖</small> : <h1 className={styles.mobileEventName}>{event.name}</h1>}</div></div>{desktop && <div className="event"><i>活動</i><div><h1 title={event.name}>{event.name}</h1><small>{event.dateRangeLabel} · {event.venue}</small></div></div>}<label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>{desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}</header>
+  return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
+    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop ? <small>同人展逛攤地圖</small> : <h1 className={styles.mobileEventName}>{event.name}</h1>}</div></div>{desktop && <div className="event"><i>活動</i><div><h1 title={event.name}>{event.name}</h1><small>{event.dateRangeLabel} · {event.venue}</small></div></div>}<label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>{desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}</header>
     <div className={`workspace ${styles.workspace}`}>
       <aside className={`filters ${styles.leftRail}`}>
         <div className={styles.desktopTabs} role="tablist" aria-label="工作區">{(["explore", "plan"] as const).map((panel, index) => <button key={panel} ref={desktopPanel === panel ? desktopTabRef : undefined} id={"desktop-tab-" + panel} role="tab" aria-controls={"desktop-panel-" + panel} aria-selected={desktopPanel === panel} tabIndex={desktopPanel === panel ? 0 : -1} onClick={() => setDesktopPanel(panel)} onKeyDown={(keyEvent) => {
@@ -680,12 +729,12 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
         <div ref={mapRef} className={`map ${styles.mapCanvas}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd} onLostPointerCapture={handlePointerEnd}>
           <div ref={toolsRef} className={styles.mapTools} data-map-tools>{renderMapTools()}</div>{desktop && <div ref={fitToolsRef} className={`${styles.mapTools} ${styles.fitTools}`} inert aria-hidden="true" data-map-tools>{renderMapTools(true)}</div>}
           {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * (textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1), paddingPx: 2 } : undefined} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
-          {selectedMapPoint && selected && <div className={styles.mobileMapSelection} style={selectedMapPoint}><b>{selected.code}</b><span>{selected.name}</span></div>}
+          {selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
           <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div><div className="compass"><small>N</small><UiIcon name="north" /></div>
           {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label="已選社團詳情" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{selected.code} · {selected.name} 詳情已更新</span><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
         </div>
       </section>
-      <aside ref={mobileDockRef} className={styles.mobileDock} style={mobileDockStyle} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}>
+      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}>
         <div className={styles.mobileHalfMeasure} data-half-measure aria-hidden="true" />
         {mobileSummary && selected && <button ref={mobileSummaryRef} className={styles.mobilePeekSummary} hidden={mobileSheetLevel !== "peek"} onClick={() => setMobileSheetLevel("half")}>{selected.code} · {selected.name}<UiIcon name="arrow-up" /></button>}
         <div className={styles.mobileSheetBody} hidden={mobileSheetLevel === "peek"}>
@@ -696,9 +745,10 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
           </div>
           {mobileSummary && selected && <section className={styles.mobileSummary} aria-label="已選社團摘要">
             <div className={styles.mobileSummaryTitle}><strong>{selected.code}</strong><h2>{selected.name}</h2></div>
-            <p>{selected.placement.status !== "active" ? "此攤位已異動，請查看完整資訊確認位置。" : mobileSummaryIntro ? <>{selected.sources.some((source) => source.contentType === "circle") && "由社團填寫 · "}{mobileSummaryIntro}</> : "尚未提供作品與販售介紹"}</p>
+            <p className={styles.mobileSummaryNotice} role="status">{mobileSummaryNotice}</p>
+            <p hidden={Boolean(mobileSummaryNotice)}>{selected.placement.status !== "active" ? "此攤位已異動" : mobileSummaryIntro ? <>{selected.sources.some((source) => source.contentType === "circle") && "由社團填寫 · "}{mobileSummaryIntro}</> : "尚未提供作品與販售介紹"}</p>
             <div className={styles.mobileSummaryActions}>
-              <button aria-pressed={Boolean(selectedPlan)} onClick={detailActions.onTogglePlan}>{selectedPlan ? "移出行程" : "加入行程"}</button>
+              <button aria-pressed={Boolean(selectedPlan)} onClick={() => { detailActions.onTogglePlan(); setPlanNotice({ recordId: selected.recordId, text: selectedPlan ? "已移出行程" : "已加入行程" }); }}>{selectedPlan ? "移出行程" : "加入行程"}</button>
               <button aria-pressed={Boolean(selectedFavorite)} onClick={detailActions.onToggleFavorite}>{selectedFavorite ? "已收藏" : "收藏"}</button>
               <button onClick={() => setShowFullDetail(true)}>{selected.placement.status === "active" ? "查看完整資訊" : `${placementStatusLabel(selected.placement.status)} · 完整資訊`}</button>
             </div>

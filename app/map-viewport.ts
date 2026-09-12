@@ -2,6 +2,14 @@ type MapPoint = { x: number; y: number };
 type MapSize = { width: number; height: number };
 export type MapRect = MapSize & MapPoint;
 
+/**
+ * Height of the collapsed selection row above the mobile workspace entries. The
+ * snap points, the fit reservation and the stylesheet all describe the same
+ * strip, so they read this one value — the CSS through the `--mobile-peek-summary`
+ * custom property the shell publishes.
+ */
+export const MOBILE_SUMMARY_PEEK_HEIGHT = 44;
+
 /** All bounds use map-local CSS pixels, never layout or device pixels. */
 export function availableMapRect(viewport: MapSize, obstacles: { top?: MapRect; bottom?: MapRect; detail?: MapRect } = {}): MapRect {
   const clampX = (x: number) => Math.max(0, Math.min(viewport.width, x));
@@ -56,13 +64,6 @@ export function calculateMapFitZoom(viewport: MapSize, floor: MapSize, padding =
   const usableWidth = Math.max(1, viewport.width - padding * 2);
   const usableHeight = Math.max(1, viewport.height - padding * 2);
   return Math.min(MAP_MAX_ZOOM, usableWidth / floor.width, usableHeight / floor.height);
-}
-
-export function centerMapOffset(viewport: MapSize, floor: MapSize, zoom: number, inset: MapPoint = { x: 18, y: 18 }): MapPoint {
-  return {
-    x: (viewport.width - floor.width * zoom) / 2 - inset.x,
-    y: (viewport.height - floor.height * zoom) / 2 - inset.y,
-  };
 }
 
 export function shouldShowMapMedia(zoom: number) {

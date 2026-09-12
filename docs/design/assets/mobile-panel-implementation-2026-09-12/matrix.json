@@ -1,122 +1,122 @@
 [
   {
-    "actionCount": 3,
-    "actionsClear": true,
+    "width": 360,
     "height": 640,
-    "mapHeight": 232.2083282470703,
-    "overflow": false,
     "scale": "standard",
-    "selectedInside": true,
-    "width": 360
-  },
-  {
+    "mapHeight": 231.21875,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 640,
-    "mapHeight": 224.9583282470703,
     "overflow": false,
-    "scale": "large",
-    "selectedInside": true,
-    "width": 360
+    "selectedInside": true
   },
   {
+    "width": 360,
+    "height": 640,
+    "scale": "large",
+    "mapHeight": 223.953125,
+    "actionCount": 3,
+    "actionsClear": true,
+    "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 360,
+    "height": 640,
+    "scale": "extra",
+    "mapHeight": 215.5,
     "actionCount": 1,
     "actionsClear": true,
-    "height": 640,
-    "mapHeight": 216.47916412353516,
     "overflow": false,
-    "scale": "extra",
-    "selectedInside": true,
-    "width": 360
+    "selectedInside": true
   },
   {
-    "actionCount": 3,
-    "actionsClear": true,
+    "width": 390,
     "height": 844,
-    "mapHeight": 392.2083282470703,
-    "overflow": false,
     "scale": "standard",
-    "selectedInside": true,
-    "width": 390
-  },
-  {
+    "mapHeight": 391.21875,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 844,
-    "mapHeight": 354.4792022705078,
     "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 390,
+    "height": 844,
     "scale": "large",
-    "selectedInside": true,
-    "width": 390
-  },
-  {
+    "mapHeight": 353.484375,
     "actionCount": 3,
     "actionsClear": true,
+    "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 390,
     "height": 844,
-    "mapHeight": 315.5208511352539,
-    "overflow": false,
     "scale": "extra",
-    "selectedInside": true,
-    "width": 390
-  },
-  {
+    "mapHeight": 314.546875,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 932,
-    "mapHeight": 480.2083282470703,
     "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 430,
+    "height": 932,
     "scale": "standard",
-    "selectedInside": true,
-    "width": 430
-  },
-  {
+    "mapHeight": 479.21875,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 932,
-    "mapHeight": 442.4792022705078,
     "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 430,
+    "height": 932,
     "scale": "large",
-    "selectedInside": true,
-    "width": 430
-  },
-  {
+    "mapHeight": 441.484375,
     "actionCount": 3,
     "actionsClear": true,
+    "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 430,
     "height": 932,
-    "mapHeight": 403.5208511352539,
-    "overflow": false,
     "scale": "extra",
-    "selectedInside": true,
-    "width": 430
-  },
-  {
+    "mapHeight": 402.546875,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 844,
-    "mapHeight": 392.2083282470703,
     "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 760,
+    "height": 844,
     "scale": "standard",
-    "selectedInside": true,
-    "width": 760
-  },
-  {
+    "mapHeight": 391.21875,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 844,
-    "mapHeight": 354.4792022705078,
     "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 760,
+    "height": 844,
     "scale": "large",
-    "selectedInside": true,
-    "width": 760
-  },
-  {
+    "mapHeight": 353.484375,
     "actionCount": 3,
     "actionsClear": true,
-    "height": 844,
-    "mapHeight": 315.5208511352539,
     "overflow": false,
+    "selectedInside": true
+  },
+  {
+    "width": 760,
+    "height": 844,
     "scale": "extra",
-    "selectedInside": true,
-    "width": 760
+    "mapHeight": 314.546875,
+    "actionCount": 3,
+    "actionsClear": true,
+    "overflow": false,
+    "selectedInside": true
   }
 ]

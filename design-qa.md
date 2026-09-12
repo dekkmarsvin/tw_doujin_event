@@ -4,32 +4,40 @@ final result: passed
 
 2026-09-12；範圍為本機 Chrome 桌面及手機尺寸驗收，真機驗收未完成。
 
-**後續複核：** [issue #202 驗證](docs/design/issue-202-verification.md) 確認仍有未解決事項。上方 passed 是讀取該 issue 前已測畫面的結果，不是合併核准，也不代表全部需求通過；以複核紀錄列出的缺口為準。
 
 ## 視覺對照
 
-目標為使用者選定的 [參考圖](docs/design/assets/mobile-panel-implementation-2026-09-12/selected-reference.png)，853×1844 正規化至 390×844；[最終畫面](docs/design/assets/mobile-panel-implementation-2026-09-12/summary-final-390.png) 使用相同尺寸、OriginZero／A01 選取與搜尋狀態。
+目標為使用者選定的 [參考圖](docs/design/assets/mobile-panel-implementation-2026-09-12/selected-reference.png)，853×1844 正規化至 390×844；[最終畫面](docs/design/assets/mobile-panel-implementation-2026-09-12/summary-final-390.png) 使用相同尺寸與 OriginZero／A01 選取；實測未套用搜尋，地圖比例沿用真實 fit／選取行為。
 
 - 版面：精簡 header、日期／場館浮層、右側縮放與全場、底部摘要及探索／行程兩入口已完成。
 - 字體：沿用專案字體；摘要名稱 18px／700，三種字級均檢查。修正標題、工具及導覽排列衝突。
 - 顏色與圖示：沿用既有色票、品牌和圖示；摘要白底、深色行程按鈕、收藏及完整資訊次要按鈕。
 - 圖像與資料：保留官方 FF47 攤位幾何，不依生成圖重排 A01。搜尋造成非命中攤位退色屬既有行為。真實資料無介紹時顯示「尚未提供作品與販售介紹」，不使用生成圖的虛構文案。
-- 已修正 P1/P2：短螢幕大字級按鈕被遮住、標題重疊、全場控制文字太小、右側控制覆蓋 fit、結果容器雙層捲動。此階段畫面檢查未發現其他 P0/P1/P2；後續 issue #202 複核另外確認把手觸控尺寸及行為缺口，詳見複核紀錄。既有品牌及圖示與示意圖不同屬保留的產品設計。
+- 已修正 P1/P2：短螢幕大字級按鈕被遮住、標題重疊、全場控制文字太小、右側控制覆蓋 fit、結果容器雙層捲動。既有品牌及圖示與示意圖不同屬保留的產品設計。
+- 驗收階段另做獨立視覺檢查（檢查者未參與實作，只看截圖）：指出選取攤位的浮動標籤被「查看全場」控制蓋住且社團名被切斷，已修正並加上攤位圓點標記。
 
 ## 瀏覽器與幾何
 
-[手機矩陣](docs/design/assets/mobile-panel-implementation-2026-09-12/matrix.json)：360×640、390×844、430×932、760×844 × 標準／較大／最大，共 12 組，均無水平溢出，摘要操作未被導覽覆蓋，選取在可見區。390×844 標準字級有效地圖高度約 392px，超過 240px 目標。360×640 採緊湊摘要，最大字級僅保留完整資訊入口。
+[手機矩陣](docs/design/assets/mobile-panel-implementation-2026-09-12/matrix.json)：360×640、390×844、430×932、760×844 × 標準／較大／最大，共 12 組，均無水平溢出，摘要操作未被導覽覆蓋，選取在可見區。390×844 標準字級有效地圖高度 391px，超過 240px 目標。360×640 採緊湊摘要，最大字級僅保留完整資訊入口。
 
-761×844 與 1440×900 × 三種字級共 6 組桌機回歸通過。矩陣截圖位於同一資產目錄；最終手機截圖更新於收尾檢查，桌機矩陣截圖早於移除桌機全場按鈕多餘文字的微調。
+最新尺寸矩陣與對應尺寸截圖由同一次 `tests/browser/map-viewport.mjs` 執行產出，`mapHeight` 固定為 `dock.top − tools.bottom − 32`，與腳本的 240px 斷言同源，重跑即可重現：
+
+```
+npm run data:stage -- ff47
+npx vite --config vite.pages.config.ts
+MAP_TEST_URL=http://localhost:5173 node tests/browser/map-viewport.mjs
+```
+
+761×844 與 1440×900 × 三種字級共 6 組桌機回歸通過，截圖同樣來自該次執行。
 
 實際 Chrome 操作通過：結果選取、回結果、收藏、行程、導航、搜尋退出導航、換日、完整資訊 Escape 與焦點還原、收起保留 URL／位置／倍率、手動平移、把手收起、工作面板展開不改 fit。篩選返回結果實測 scrollTop 844 → 844。重新啟動預覽後瀏覽器 error log 為空。
 
 ## 程式驗證
 
-- 完整 npm test：623 通過，0 失敗；收尾微調後另跑幾何 5 項全過。
-- 完整 lint 通過；收尾檔案 ESLint 與 TypeScript noEmit 再次通過。
-- 正式 build:staged 通過；FF47 1340 社團、2953 配置通過資料檢查。
-- 瀏覽器回歸腳本已更新且 node --check 通過；本次互動驗收使用 CUA Chrome，未宣稱執行該獨立腳本。
+- 完整 npm test：626 通過，0 失敗（新增三項雙攤位投影測試）。
+- 完整 lint 與 TypeScript noEmit 通過。
+- 修復交付時記錄正式 build:staged 通過；FF47 1340 社團、2953 配置通過資料檢查。
+- `tests/browser/map-viewport.mjs` 實際執行通過，93 項擷取與斷言，涵蓋手機導航目標、行程狀態、工具選單出口、換日失效選取、網址恢復與 390→761→390 斷點來回。執行前有一次桌機「加入今日行程」等待元素穩定逾時，重跑同一版程式即通過；未確定逾時根因。
 
 ## 尚未驗證
 

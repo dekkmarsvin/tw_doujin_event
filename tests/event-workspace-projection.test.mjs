@@ -211,3 +211,47 @@ test("a favourite survives its circle leaving the event and never moves to anoth
   assert.equal(projected.favoriteIds.has("c-gone"), true);
   assert.deepEqual(projected.filtered.filter((item) => projected.favoriteIds.has(item.circle.id)).map((item) => item.name), ["退出社團"]);
 });
+
+const pairRecords = [
+  record("event-p", "c-pair", "A01", { name: "雙攤社團" }),
+  record("event-p", "c-pair", "A02", { name: "雙攤社團", suffix: "second" }),
+  record("event-p", "c-pair", "A09", { name: "雙攤社團", suffix: "other-day", day: 2 }),
+  record("event-p", "c-closed", "B01", { name: "撤攤社團", status: "cancelled" }),
+  record("event-p", "c-closed", "B02", { name: "撤攤社團", suffix: "live" }),
+];
+const pairPlanning = {
+  schemaVersion: 3,
+  favoriteGroups: [],
+  favorites: [],
+  visitPlans: [
+    { eventId: "event-p", day: 1, circleId: "c-pair", status: "next", routeOrder: 0, purchaseMemo: "", budget: null, updatedAt: "2026-09-12" },
+    { eventId: "event-p", day: 1, circleId: "c-closed", status: "planned", routeOrder: 1, purchaseMemo: "", budget: null, updatedAt: "2026-09-12" },
+  ],
+};
+
+function projectPair(records) {
+  const recordsByCircleId = new Map();
+  records.forEach((item) => recordsByCircleId.set(item.circle.id, [...(recordsByCircleId.get(item.circle.id) ?? []), item]));
+  return projectEventWorkspace({
+    event: event("event-p"), records,
+    recordsById: new Map(records.map((item) => [item.recordId, item])),
+    recordsByCircleId, planning: pairPlanning, ...defaults,
+  });
+}
+
+test("a circle on two booths resolves to one of them, and the itinerary and navigation agree", () => {
+  const projected = projectPair(pairRecords);
+  assert.equal(projected.nextRecord.code, "A01");
+  assert.equal(projected.navigationTargetRecord.code, "A01");
+  assert.equal(projected.dayRecordsByCircleId.get("c-pair").code, "A01");
+});
+
+test("the resolved booth follows the record order rather than whichever record was read last", () => {
+  assert.equal(projectPair([...pairRecords].reverse()).navigationTargetRecord.code, "A02");
+});
+
+test("booth resolution skips another day and prefers a live booth over a retired one", () => {
+  const projected = projectPair(pairRecords);
+  assert.equal(projected.dayRecordsByCircleId.get("c-pair").day, 1);
+  assert.equal(projected.dayRecordsByCircleId.get("c-closed").code, "B02");
+});

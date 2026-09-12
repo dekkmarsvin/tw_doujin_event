@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { PublishedEventMap } from "./event-map";
-import { availableMapRect, mobileAvailableMapRect, fitMapInRect, offsetMapPointInRect, resizeMapView, type MapRect, type MapView } from "./map-viewport";
+import { availableMapRect, mobileAvailableMapRect, fitMapInRect, MOBILE_SUMMARY_PEEK_HEIGHT, offsetMapPointInRect, resizeMapView, type MapRect, type MapView } from "./map-viewport";
 
 type ElementRef = RefObject<HTMLElement | null>;
 type ViewportElements = {
@@ -66,7 +66,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
       detail: !forFit && detailsOpen ? local(details.current) : undefined,
     }) : mobileAvailableMapRect(viewport, {
       top: local(tools.current),
-      bottom: forFit ? { x: 0, y: viewport.height - (mobileNav.current?.getBoundingClientRect().height ?? 64) - 44, width: viewport.width, height: 0 } : local(mobileDock.current),
+      bottom: forFit ? { x: 0, y: viewport.height - (mobileNav.current?.getBoundingClientRect().height ?? 64) - MOBILE_SUMMARY_PEEK_HEIGHT, width: viewport.width, height: 0 } : local(mobileDock.current),
       controls: forFit ? { x: fitControlLeft, y: 0, width: 0, height: 0 } : local(controls.current),
     });
     return { viewport, rect };

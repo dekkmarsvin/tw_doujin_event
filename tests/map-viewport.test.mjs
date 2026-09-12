@@ -5,7 +5,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { calculateMapFitZoom, calculatePinchMapView, centerMapOffset, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint } = await environment.runner.import("/app/map-viewport.ts");
+const { calculateMapFitZoom, calculatePinchMapView, clampMapZoom, mapViewFromWheel, shouldShowMapMedia, zoomOffsetAroundPoint } = await environment.runner.import("/app/map-viewport.ts");
 after(() => vite.close());
 
 test("button zoom preserves the map coordinate at the viewport center", () => {
@@ -27,7 +27,6 @@ test("map zoom remains inside the supported range", () => {
   assert.equal(clampMapZoom(7.2), 6);
   assert.equal(clampMapZoom(5.5), 5.5);
   assert.equal(clampMapZoom(.9, fitZoom), .9);
-  assert.deepEqual(centerMapOffset({ width: 800, height: 600 }, { width: 1600, height: 1000 }, fitZoom), { x: 32, y: 63.25 });
 });
 
 test("pinch zoom at the supported limit ignores alternating pointer-center jitter", () => {

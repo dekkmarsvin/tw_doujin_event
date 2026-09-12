@@ -178,24 +178,33 @@
 
 /* Mobile scheme B: the map and selection summary share the viewport. */
 .fitLabel,.mobileToolsMenu,.mobileDateLabel { display:none; }
+/* The label stays centred under its booth so the pair reads as one thing, and
+   near an edge it narrows — ellipsising the name — rather than sliding away
+   from the marker. The centre is only clamped in the last stretch where even a
+   code-width label would reach the fixed zoom controls (12px inset + 64px wide
+   + 12px gap = 88px, half of an 84px label = 42px). */
+.mobileMapSelection { position:absolute; z-index:8; left:clamp(58px,var(--map-selection-left),100% - 130px); display:flex; align-items:center; gap:7px; max-width:min(220px,calc(2 * (100% - 88px - var(--map-selection-left))),calc(2 * (var(--map-selection-left) - 16px))); padding:7px 10px; transform:translate(-50%,10px); border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 3px 12px #202a3526; pointer-events:none; font-size:calc(13px * var(--ui-font-scale)); }
+.mobileMapSelection span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mobileMapMarker { position:absolute; z-index:8; width:16px; height:16px; transform:translate(-50%,-50%); border:3px solid var(--ink); border-radius:50%; box-shadow:0 0 0 2px #fff,0 2px 8px #202a3540; pointer-events:none; }
 @media (max-width:760px) {
+ /* --mobile-peek-summary is published by the shell from MOBILE_SUMMARY_PEEK_HEIGHT
+    so the collapsed selection row has one height for CSS, snap points and fit. */
  .shell { --mobile-half-height:min(44dvh,420px); --mobile-sheet-height:var(--mobile-half-height); }
  .shell[data-mobile-summary="true"] { --mobile-half-height:calc(254px * var(--ui-font-scale) + env(safe-area-inset-bottom)); }
  .shell[data-mobile-sheet-level="peek"] { --mobile-sheet-height:calc(64px + env(safe-area-inset-bottom)); }
- .shell[data-mobile-sheet-level="peek"][data-mobile-summary="true"] { --mobile-sheet-height:calc(108px + env(safe-area-inset-bottom)); }
+ .shell[data-mobile-sheet-level="peek"][data-mobile-summary="true"] { --mobile-sheet-height:calc(64px + var(--mobile-peek-summary) + env(safe-area-inset-bottom)); }
  .shell[data-mobile-sheet-level="full"] { --mobile-sheet-height:min(82dvh,760px); }
  .shell :global(.topbar) { grid-template-columns:minmax(0,1fr) auto; gap:0 12px; padding:8px 13px; }
- .shell :global(.brand) { grid-column:1; grid-row:1 / 3; align-self:start; gap:10px; }
+ .shell :global(.brand) { grid-column:1; grid-row:1; align-self:start; gap:10px; }
  .shell :global(.brand)>span { width:34px; height:34px; }
  .shell :global(.brand) b { font-size:calc(18px * var(--ui-font-scale)); line-height:1.25; }
  .shell :global(.brand) small { display:none; }
- .shell :global(.event) { grid-column:1; grid-row:2; margin-left:44px; pointer-events:none; }
- .shell :global(.event) h1 { font-size:calc(11px * var(--ui-font-scale)); color:var(--muted); font-weight:500; }
- .shell :global(.event) small { display:none; }
- .shell :global(.search) { grid-column:1 / -1; margin-top:5px; }
+ .mobileEventName { margin:2px 0 0; font-size:calc(11px * var(--ui-font-scale)); line-height:1.3; font-weight:500; color:var(--muted); }
+ .shell :global(.search) { grid-column:1 / -1; grid-row:2; margin-top:5px; }
+ .shell .searchClear { display:grid; place-items:center; width:32px; height:40px; padding:0; border:0; background:transparent; cursor:pointer; }
  .shell :global(.map-region) { padding:0; }
  .shell .mapCanvas { border:0; border-radius:0; }
- .mobileToolsMenu { display:block; grid-column:2; grid-row:1 / 3; align-self:start; }
+ .mobileToolsMenu { display:block; grid-column:2; grid-row:1; align-self:start; }
  .mobileToolsMenu>summary { min-width:74px; min-height:40px; display:grid; place-items:center; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:14px; font-weight:700; cursor:pointer; list-style:none; }
  .mobileToolsMenu>summary::-webkit-details-marker { display:none; }
  .mobileToolsMenu>div { position:absolute; right:12px; top:56px; z-index:35; display:flex; flex-wrap:wrap; gap:10px; width:min(320px,calc(100vw - 24px)); padding:14px; border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:0 8px 26px #202a3533; }
@@ -208,102 +217,72 @@
  .locationControls .dateTabs { display:none; }
  .locationControls label { display:flex; flex-direction:column; max-width:100%; padding:4px 8px; background:#fff; border:1px solid var(--line); border-radius:9px; font-size:10px; box-shadow:0 3px 10px #202a3517; }
  .locationControls select { max-width:100%; min-height:32px; border:0; background:transparent; color:var(--ink); }
- .locationControls .dateSelect { border-bottom:3px solid var(--coral); }
+ .locationControls .dateSelect { position:relative; padding:6px 12px; min-width:108px; border-bottom:3px solid var(--coral); font-size:0; text-align:center; }
+ .locationControls .dateSelect select { position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; }
+ .dateSelect:focus-within { outline:3px solid #71a58f; outline-offset:2px; }
+ .mobileDateLabel { display:block; font-size:calc(14px * var(--ui-font-scale)); font-weight:800; line-height:1.3; }
+ .mobileDateLabel small { display:block; margin-top:2px; font-size:calc(12px * var(--ui-font-scale)); font-weight:500; color:#59626c; }
  .venueName { display:flex; align-items:center; min-height:44px; padding:7px 11px; border-radius:9px; border:1px solid var(--line); background:#fff; font-size:calc(12px * var(--ui-font-scale)); font-weight:700; box-shadow:0 3px 10px #202a3517; }
  .codeHint { display:none; }
  .mapTools :global(.route) { position:static; min-width:0; margin-top:8px; transform:none; }
  .mapTools .navigationBanner { margin-top:8px; }
  .mobileDock { --mobile-sheet-height:inherit; position:fixed; z-index:20; inset:auto 0 0; display:flex; flex-direction:column; height:var(--mobile-sheet-height); padding:0; border-top:1px solid var(--line); border-radius:20px 20px 0 0; background:#fff; box-shadow:0 -5px 24px #26312918; overflow:hidden; transform:none; transition:none; will-change:auto; }
- .mobileDock[data-mobile-sheet-level] { --mobile-sheet-height:inherit; }
  .mobileHalfMeasure { position:absolute; width:0; height:var(--mobile-half-height); visibility:hidden; pointer-events:none; }
  .mobileSheetBody { display:flex; flex:1; flex-direction:column; min-height:0; }
- .mobileSheetBody[hidden],.mobilePanel[hidden],.mobilePeekSummary[hidden] { display:none; }
- .mobileSheetHandle { width:100%; height:14px; min-height:14px; display:grid; place-items:center; flex:none; padding:0; border:0; background:#fff; cursor:ns-resize; touch-action:none; }
+ .mobileSheetBody[hidden],.mobilePanel[hidden],.mobilePeekSummary[hidden],.mobileSummary p[hidden] { display:none; }
+ /* The grab line stays a thin rule; its press target reaches down across the
+    header row, which keeps 44px without taking height from the map. The header
+    buttons sit above it, so tapping them never drags the sheet. */
+ .mobileSheetHandle { position:relative; width:100%; height:14px; min-height:14px; display:grid; place-items:center; flex:none; padding:0; border:0; background:#fff; cursor:ns-resize; touch-action:none; }
+ .mobileSheetHandle::after { content:""; position:absolute; left:0; right:0; top:0; height:44px; }
  .mobileSheetHandle span { width:40px; height:4px; border-radius:3px; background:#b8bcbc; }
  .mobilePanelHeader { display:flex; align-items:center; justify-content:space-between; flex:none; height:44px; margin:0 16px; border-bottom:1px solid var(--line); font-size:calc(14px * var(--ui-font-scale)); }
- .shell .mobilePanelHeader button { display:flex; align-items:center; gap:5px; min-height:44px; padding:0; border:0; background:none; font-weight:700; cursor:pointer; }
+ .shell .mobilePanelHeader button { position:relative; z-index:1; display:flex; align-items:center; gap:5px; min-height:44px; padding:0; border:0; background:none; font-weight:700; cursor:pointer; }
  .mobilePanelHeader svg { width:20px; height:20px; }
  .mobileTabs { flex:none; display:grid; grid-template-columns:1fr 1fr; height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); gap:0; border:0; border-top:1px solid var(--line); background:#fff; }
- .shell .mobileTabs button { position:relative; display:flex; align-items:center; justify-content:center; gap:7px; min-width:0; border:0; border-radius:0; background:transparent; color:#787e87; font-size:calc(14px * var(--ui-font-scale)); font-weight:700; cursor:pointer; }
+ .shell .mobileTabs button { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:0; padding:3px 0 8px; border:0; border-radius:0; background:transparent; color:#787e87; font-size:calc(14px * var(--ui-font-scale)); font-weight:700; cursor:pointer; }
  .mobileTabs button svg { width:24px; height:24px; }
+ .mobileTabs button>span { display:flex; align-items:center; gap:4px; height:auto; margin:0; padding:0; border-radius:0; background:transparent; color:inherit; font:inherit; line-height:1.2; }
+ .mobileTabs small { font-size:10px; }
  .mobileTabs button[aria-pressed="true"] { color:var(--ink); }
  .mobileTabs button[aria-pressed="true"]::after { content:""; position:absolute; bottom:4px; width:56px; height:3px; border-radius:3px; background:var(--mint); }
  .mobilePanel { min-height:0; height:auto; flex:1; display:block; overflow:auto; overscroll-behavior:contain; scroll-padding-block:12px; }
  .mobilePanel>* { width:100%; min-width:0; max-width:none; }
+ .mobilePanel[aria-label="探索結果"]:not([hidden]) { display:flex; flex-direction:column; overflow:hidden; }
+ .mobilePanel[aria-label="探索結果"]>button { flex:none; }
+ .mobilePanel[aria-label="探索結果"]>section { height:auto; min-height:0; }
  .mobileFilterButton { min-height:44px; padding:8px 16px; border:0; border-bottom:1px solid var(--line); background:var(--surface-soft); text-align:left; font-weight:700; cursor:pointer; }
  .mobileSummary { min-height:0; flex:1; display:flex; flex-direction:column; padding:4px 16px 10px; }
  .mobileSummaryTitle { display:flex; align-items:center; gap:10px; min-width:0; flex:none; }
  .mobileSummaryTitle strong { flex:none; padding:7px 11px; border-radius:6px; background:#deebe6; font-size:calc(16px * var(--ui-font-scale)); }
  .mobileSummaryTitle h2 { font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(18px * var(--ui-font-scale)); line-height:1.4; }
  .mobileSummary p { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; margin:7px 0; color:#59626c; font-size:calc(13px * var(--ui-font-scale)); line-height:1.45; }
+ .mobileSummaryNotice { color:#276149; font-weight:700; }
+ .mobileSummaryNotice:empty { display:none; }
  .mobileSummaryActions { display:grid; grid-template-columns:1fr .85fr 1.1fr; gap:7px; margin-top:auto; padding-top:7px; border-top:1px solid var(--line); }
  .mobileSummaryActions button { min-height:44px; padding:5px 7px; border:1px solid var(--line); border-radius:6px; background:#fff; font-size:calc(13px * var(--ui-font-scale)); font-weight:700; line-height:1.2; cursor:pointer; }
  .mobileSummaryActions button:first-child { background:var(--ink); color:#fff; border-color:var(--ink); }
  .mobileSummaryActions button[aria-pressed="true"] { background:#e3f1eb; color:#276149; border-color:#8fbba9; }
  .mobilePeekSummary { display:flex; align-items:center; justify-content:center; gap:8px; flex:1; min-height:44px; padding:0 16px; border:0; background:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(14px * var(--ui-font-scale)); cursor:pointer; }
  .mobilePeekSummary svg { flex:none; width:20px; height:20px; }
- .shell[data-mobile-sheet-level] :global(.controls) { position:fixed; right:12px; left:auto; bottom:calc(var(--mobile-sheet-height) + 14px); display:flex; flex-direction:column; width:44px; border-radius:12px; }
+ .shell[data-mobile-sheet-level] :global(.controls) { position:fixed; right:12px; left:auto; bottom:calc(var(--mobile-sheet-height) + 14px); display:flex; flex-direction:column; align-items:flex-end; width:64px; border:0; background:transparent; box-shadow:none; overflow:visible; }
  .shell :global(.controls)>span { display:none; }
- .shell :global(.controls) button { flex:none; width:44px; height:44px; border-right:0; border-bottom:1px solid var(--line); }
- .shell :global(.controls) button:last-child { height:64px; font-size:20px; }
- .shell :global(.controls) .fitLabel { display:block; height:auto; border:0; font-size:9px; background:none; }
+ .shell :global(.controls) button { flex:none; width:44px; height:44px; border:1px solid var(--line); font-size:20px; }
+ .shell :global(.controls) button:first-child { border-radius:12px 12px 0 0; border-bottom:0; }
+ .shell :global(.controls) button:nth-of-type(2) { border-radius:0 0 12px 12px; }
+ .shell :global(.controls) button:last-child { width:64px; height:64px; margin-top:8px; border-radius:12px; box-shadow:0 3px 12px #202a3517; }
+ .shell :global(.controls) .fitLabel { display:block; height:auto; border:0; font-size:12px; background:none; }
  .shell[data-mobile-sheet-level] :global(.compass) { display:none; }
  .shell[data-mobile-sheet-level="full"] :global(.controls) { display:none; }
  .mobileDock button:focus-visible,.mobileToolsMenu summary:focus-visible { outline:3px solid #71a58f; outline-offset:-3px; }
+ .vectorFloor { transition:none; }
 }
 @media (max-width:760px) and (max-height:740px) {
  .shell[data-mobile-summary="true"] { --mobile-half-height:calc(210px + env(safe-area-inset-bottom)); }
- .mobileSummary p { display:none; }
-}
-
-@media (max-width:760px) {
- .shell .searchClear { display:grid; place-items:center; width:32px; height:40px; padding:0; border:0; background:transparent; cursor:pointer; }
- .locationControls .dateSelect { position:relative; padding:6px 12px; min-width:108px; font-size:0; text-align:center; }
- .locationControls .dateSelect select { position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; }
- .mobileDateLabel { display:block; font-size:calc(14px * var(--ui-font-scale)); font-weight:800; line-height:1.3; }
- .mobileDateLabel small { display:block; margin-top:2px; font-size:calc(12px * var(--ui-font-scale)); font-weight:500; color:#59626c; }
- .dateSelect:focus-within { outline:3px solid #71a58f; outline-offset:2px; }
-}
-.searchClear { border:0; background:none; cursor:pointer; }
-
-.mobileMapSelection { position:absolute; z-index:8; display:flex; align-items:center; gap:7px; max-width:220px; padding:7px 10px; transform:translate(-50%,10px); border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 3px 12px #202a3526; pointer-events:none; font-size:calc(13px * var(--ui-font-scale)); }
-.mobileMapSelection span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-@media (max-width:760px) and (max-height:740px) {
- .shell[data-text-scale="extra"] .mobileSummaryActions { grid-template-columns:1fr; }
- .shell[data-text-scale="extra"] .mobileSummaryActions button:not(:last-child) { display:none; }
-}
-
-@media (max-width:760px) {
- .shell :global(.brand) { grid-row:1; }
- .shell :global(.event) { display:none; }
- .shell :global(.search) { grid-row:2; }
- .shell .mobileToolsMenu { grid-row:1; }
- .mobileEventName { margin:2px 0 0; font-size:calc(11px * var(--ui-font-scale)); line-height:1.3; font-weight:500; color:var(--muted); }
-}
-@media (max-width:760px) and (max-height:740px) {
  .mobileDock[data-summary="true"] .mobileSheetHandle { height:8px; min-height:8px; }
  .mobileSummary { padding:0 16px 4px; }
+ .mobileSummary p:not(.mobileSummaryNotice) { display:none; }
  .mobileSummaryActions { padding-top:0; border:0; }
-}
-
-@media (max-width:760px) {
- .shell .mobileTabs button { flex-direction:column; gap:2px; padding:3px 0 8px; }
- .mobileTabs button>span { display:flex; align-items:center; gap:4px; height:auto; margin:0; padding:0; border-radius:0; background:transparent; color:inherit; font:inherit; line-height:1.2; }
- .mobileTabs small { font-size:10px; }
-}
-
-@media (max-width:760px) {
- .mobilePanel[aria-label="探索結果"]:not([hidden]) { display:flex; flex-direction:column; overflow:hidden; }
- .mobilePanel[aria-label="探索結果"]>button { flex:none; }
- .mobilePanel[aria-label="探索結果"]>section { height:auto; min-height:0; }
- .vectorFloor { transition:none; }
-}
-
-@media (max-width:760px) {
- .shell[data-mobile-sheet-level] :global(.controls) { width:64px; align-items:flex-end; border:0; background:transparent; box-shadow:none; overflow:visible; }
- .shell :global(.controls) button { border:1px solid var(--line); font-size:20px; }
- .shell :global(.controls) button:first-child { border-radius:12px 12px 0 0; border-bottom:0; }
- .shell :global(.controls) button:nth-of-type(2) { border-radius:0 0 12px 12px; }
- .shell :global(.controls) button:last-child { width:64px; margin-top:8px; border-radius:12px; box-shadow:0 3px 12px #202a3517; }
- .shell :global(.controls) .fitLabel { font-size:12px; }
+ .shell[data-text-scale="extra"] .mobileSummaryActions { grid-template-columns:1fr; }
+ .shell[data-text-scale="extra"] .mobileSummaryActions button:not(:last-child) { display:none; }
 }

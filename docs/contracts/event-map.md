@@ -88,7 +88,7 @@ type AccessibleEventMapRendererProps = {
 
 - **最大放大倍率 600%。**
 - **首次開啟採全場 fit，不使用固定 125%。** 不等待規劃資料，也不自動跳到收藏、下一站或行程第一站。
-- **最小倍率是動態下限**：桌機為 `min(rect.width / floorWidth, rect.height / floorHeight, 6)`，矩形本身已對 map 邊界與固定工具各留 16px，內部不再加 padding；手機亦使用矩形 fit，扣除頂部工具與收合底部預留（實測 dock 導航高度加 44px 社團列），對邊界與工具保留 16px。桌機矩形扣除固定頂部工具與底部控制。查看全場、按鈕、滾輪與雙指縮放共用下限，查看全場把完整 layout 置中於該矩形。
+- **最小倍率是動態下限**：桌機為 `min(rect.width / floorWidth, rect.height / floorHeight, 6)`，矩形本身已對 map 邊界與固定工具各留 16px，內部不再加 padding；手機亦使用矩形 fit，扣除右側控制欄、頂部工具與收合底部預留（實測 dock 導航高度加 44px 社團列），對邊界與工具保留 16px。桌機矩形扣除固定頂部工具與底部控制。查看全場、按鈕、滾輪與雙指縮放共用下限，查看全場把完整 layout 置中於該矩形。
 - 桌機 fit 使用詳情收起時的工具尺寸，由不參與焦點與可存取樹的測量容器取得；詳情開關不改變下限。選取定位另扣除實際詳情與工具尺寸，保留倍率。手機選取矩形扣除實際面板與右側縮放控制，面板開關不改 fit 下限；查看全場先收合。所有 rect 與 floor inset 均為 map 本地 CSS px。
 - 視窗尺寸改變時，原本位於 fit（差小於 0.006）則重新 fit；手動視域保留中心的 layout 座標，倍率僅在低於新下限時夾值，不持續吸回 selected。
 - 初始化依實際 artifact 路徑與 revision 分域。多日期共用 `map.json` 時換日保留視域；真正換 artifact 才重新 fit。載入失敗不使用舊 map，重試成功後才計算幾何。
@@ -120,6 +120,9 @@ type AccessibleEventMapRendererProps = {
 - 圖磚式地圖（Leaflet 等）。見 [ADR-0001](../adr/0001-adopt-webcatalog-patterns-selectively.md)。
 
 ## 驗收條件
+
+- 手機工具選單在焦點位於選單內時支援 Escape 並回焦工具觸發器；外部按壓關閉選單且保留該次地圖操作。
+- 手機摘要加入／移出行程後提供短暫文字 status；儲存異常時不顯示成功。把手觸控範圍至少 44px 高且不攔截回結果／收起按鈕；細線外觀不代表命中區高度。
 
 - FF47 原圖辨識結果包含 23 排：A–W；A–V 縱向、W 橫向，slot 總數 988，柱子與 5 個出入口在 SVG 中可見。
 - 靜態快照發布後，另一個全新瀏覽器工作階段不需圖片、Worker 或 D1 即可取得同一 event map。

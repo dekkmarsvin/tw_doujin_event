@@ -62,6 +62,7 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 - **歷史紀錄**：只有使用者透過明確操作改變選取或篩選時才建立歷史紀錄；連續平移與縮放不得淹沒瀏覽器上一頁。
 - **桌機與手機使用相同的 URL 狀態與結果集合**，不建立第二套參數語意。
 - 搜尋結果、地圖 markers、selection、planning、active filters 與桌機／手機 panels 都消費同一份 event-scoped workspace projection；rendering 與 pointer gestures 不進入該 domain seam。
+- 同社團當日多攤位的行程／下一站／導航預設使用快照順序中的第一筆 active 配置，active 優先於已異動配置；不承諾重新排序快照後仍選同一預設攤位。啟用導航時，若目前選取是目標社團同日的有效攤位，保留該選取與 `selectedBooth`，不跳到相鄰攤位。此偏好不新增持久化欄位。
 
 ## 驗收條件
 
