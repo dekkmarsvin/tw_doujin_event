@@ -1,16 +1,39 @@
-// Opt-in browser acceptance against staged FF47 data. No production writes.
+// Browser acceptance against staged FF47 data. No production writes.
 // PLAYWRIGHT_MODULE may point to an existing Playwright installation; the
 // ordinary Node suite does not depend on browsers. See the validation record.
+//
+// `npm run test:browser` runs this with a server and staged data already set
+// up; the environment variables below stay supported for driving it by hand
+// against a preview or a deployment.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
+// Which sizes a run covers. `full` is the release matrix: ten sizes across the
+// three text scales, which is thirty page loads and belongs to QA. A PR gate
+// that slow stops being run, so `representative` proves the two shapes the
+// layout actually branches on — one desktop, one phone — at the scale most
+// readers use, and leaves the permutations to the release run. `none` keeps
+// only the interaction journeys below the matrix.
+const SCALES = ["standard", "large", "extra"];
+const MATRICES = {
+  full: [[1440, 900], [1920, 1080], [1024, 768], [360, 640], [390, 844], [430, 932], [760, 844], [761, 844], [1050, 768], [1051, 768]].map(([width, height]) => [width, height, SCALES]),
+  representative: [[1440, 900, ["standard"]], [390, 844, ["standard"]]],
+  none: [],
+};
+const matrixMode = process.env.MAP_TEST_MATRIX || (process.env.MAP_TEST_SKIP_MATRIX ? "none" : "full");
+const MATRIX = MATRICES[matrixMode];
+if (!MATRIX) throw new Error(`MAP_TEST_MATRIX must be one of ${Object.keys(MATRICES).join(", ")}`);
+
+// Playwright's entry is CommonJS, so a PLAYWRIGHT_MODULE pointing straight at
+// a file lands the exports under `default` instead of beside it.
+const playwright = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
+const chromium = playwright.chromium ?? playwright.default?.chromium;
 const base = process.env.MAP_TEST_URL || "http://127.0.0.1:5173";
 const output = path.resolve(process.env.MAP_TEST_OUTPUT || "outputs/map-viewport");
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
-const report = { browser: browser.version(), recordedAt: new Date().toISOString(), source: "local pinned FF47, not production", cases: [], matrix: [], errors: [] };
+const report = { browser: browser.version(), recordedAt: new Date().toISOString(), source: "local pinned FF47, not production", matrixMode, cases: [], matrix: [], errors: [] };
 const pause = (page) => page.waitForTimeout(180);
 const detail = (page) => page.locator('aside[aria-label="已選社團詳情"]');
 const state = (page) => page.evaluate(() => {
@@ -90,8 +113,8 @@ function assertPosition(measured) {
 }
 
 try {
-  for (const [width, height] of (process.env.MAP_TEST_SKIP_MATRIX ? [] : [[1440, 900], [1920, 1080], [1024, 768], [360, 640], [390, 844], [430, 932], [760, 844], [761, 844], [1050, 768], [1051, 768]])) {
-    for (const scale of ["standard", "large", "extra"]) {
+  for (const [width, height, scales] of MATRIX) {
+    for (const scale of scales) {
       const page = await open(width, height, scale);
       const prefix = `${width}-${height}-${scale}`;
       const overview = await capture(page, `${prefix}-explore`);
@@ -484,7 +507,7 @@ try {
   report.cases.push({ name: "synthetic-storage-error", passed: true });
   assert.deepEqual(report.errors, []);
 } finally {
-  await writeFile(path.join(output, process.env.MAP_TEST_SKIP_MATRIX ? "browser-state-report.json" : "browser-report.json"), JSON.stringify(report, null, 2));
+  await writeFile(path.join(output, `browser-report-${matrixMode}.json`), JSON.stringify(report, null, 2));
   if (report.matrix.length) await writeFile(path.join(output, "matrix.json"), JSON.stringify(report.matrix, null, 2));
   await browser.close();
 }

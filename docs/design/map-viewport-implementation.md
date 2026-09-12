@@ -256,6 +256,6 @@ renderer 新增可選 `onFocusCode?: (code: string | null) => void` 回報方向
 
 ### 重現
 
-按本機開發 runbook 準備相依套件與 pinned FF47 staging，啟動 Vite。使用已安裝 Playwright 執行 `node tests/browser/map-viewport.mjs`；可設定 PLAYWRIGHT_MODULE、BROWSER_CHANNEL、MAP_TEST_URL、MAP_TEST_OUTPUT。MAP_TEST_SKIP_MATRIX=1 僅執行互動補測，不代替尺寸矩陣。一般 gate 為 `npm test`、`npm run lint`、`npx tsc --noEmit --incremental false`。
+本節記錄的尺寸矩陣由 `npm run test:browser:matrix` 重現；它自行處理 pinned FF47 staging 與 Vite 啟動。第一次執行前需 `npm run test:browser:install`。`npm run test:browser` 是 PR gate 的代表性尺寸子集，不代替此處的完整矩陣。`MAP_TEST_URL`、`BROWSER_CHANNEL`、`MAP_TEST_OUTPUT` 仍可覆寫；詳見[本機開發與驗證](../runbooks/local-development.md#瀏覽器驗收)。一般 gate 為 `npm test`、`npm run lint`、`npx tsc --noEmit --incremental false`。
 
 驗證結果：npm ci 成功、npm test 620／620 通過、lint 與 TypeScript 通過、文件連結與契約索引 4／4 通過。環境實際為 Node 24.11.1／npm 11.6.2；npm ci 對專案要求的 Node ≥24.20.0／npm ≥11.19.0 發出 engine 警告。上述通過結果限於此本機版本，未宣稱已驗證要求版本或正式部署。

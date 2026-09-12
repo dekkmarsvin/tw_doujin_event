@@ -107,6 +107,29 @@ npx tsc --noEmit --incremental false
 
 分層不需要維護清單：tier 歸屬由 `scripts/run-tests.mjs` 讀每支測試自己的原始碼推導——讀 `dist/` 的是 artifact、`import "miniflare"` 的是 d1、`import "node:child_process"` 的是 cli，其餘是 module。新增測試檔不必登記到任何地方，也因此不可能有測試檔落在所有 tier 之外而到處都不跑。
 
+### 瀏覽器驗收
+
+`tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：
+
+| 命令 | 跑什麼 | 約略耗時 |
+|---|---|---|
+| `npm run test:browser` | 代表性尺寸（`1440x900` 與 `390x844`，標準字級）與全部互動 journey | 30 秒 |
+| `npm run test:browser:matrix` | 完整 10 尺寸 × 3 字級矩陣 | 90 秒 |
+
+`npm run test:browser` 自己處理所有前置：staging pinned FF47、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
+
+瀏覽器**刻意不列入 `package.json`**——`npm ci` 與整套 Node 測試必須能在沒有瀏覽器的機器上執行。第一次跑之前安裝一次：
+
+```bash
+npm run test:browser:install
+```
+
+它使用 `--no-save`，所以不會動到 `package.json`；下一次 `npm ci` 之後需要重跑。已經有 Playwright 的話，改設 `PLAYWRIGHT_MODULE` 指向它即可。
+
+代表性尺寸是 PR gate（CI 的 `Browser acceptance` job），完整矩陣是 QA／release 前的檢查。要對既有的伺服器或 preview 部署執行，設 `MAP_TEST_URL`；此時資料與伺服器由呼叫者負責，腳本不會 staging。`BROWSER_CHANNEL` 可改用系統安裝的 Chrome 通道。
+
+**注意**：`npm run test:browser` 會把 staging 從 fixture 換成 FF47。之後跑 `npm test` 會自動換回 fixture，但開發途中若直接執行 `npm run dev:pages` 看到的會是 FF47。
+
 **交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 
 ## 額外檢查
@@ -116,9 +139,9 @@ npx tsc --noEmit --incremental false
 | `npm run build:production` | 更新 pin、release 或部署前；需要 GitHub 網路 |
 | `npm run purge:dev` | 手動觸發 retention purge |
 
-## 瀏覽器實測
+## 人工瀏覽器實測
 
-自動測試不取代以下實際操作：
+`npm run test:browser` 已涵蓋地圖 viewport、選取、焦點與 URL 狀態的自動驗收。以下仍需人工操作，自動測試不取代：
 
 - 桌機探索／行程左欄與詳情浮層，以及行動版探索／行程兩入口與獨立社團摘要；
 - 鍵盤焦點、Escape 與焦點復原；
