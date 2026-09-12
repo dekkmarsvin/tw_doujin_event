@@ -16,7 +16,3 @@
 - 可見區、fit、選取與操作：[活動地圖契約](../contracts/event-map.md)。
 - 分享連結與工作區投影：[URL 檢視狀態契約](../contracts/url-state.md)。
 - 本機量測、截圖、重現命令與設備限制：[驗收紀錄](../../design-qa.md)。
-
-## 原畫面觀察
-
-[改版前全場](./assets/mobile-panel-audit-2026-09-11/01-overview.png)、[結果](./assets/mobile-panel-audit-2026-09-11/02-results.png)、[詳情](./assets/mobile-panel-audit-2026-09-11/03-details.png) 是 2026-09-11 的觀察證據，保留供設計比較，不作為現行行為規範。
