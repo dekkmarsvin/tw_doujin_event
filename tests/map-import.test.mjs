@@ -11,7 +11,7 @@ const { hasMapTemplateRecognizer, recognizeMapTemplate, validateMapTemplateLayou
 const { createBlankEventMapLayout, mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, scaleMapLandmarks, validateEventMapLayout, MAP_ACCESS_DIRECTIONS } = await environment.runner.import("/app/event-map.ts");
 const { validateLayout: validateFf47Layout } = await environment.runner.import("/app/ff47-map-template-validator.ts");
 const { confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
-const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, autoArrangeBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
+const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, planSlotMerge, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
@@ -1011,6 +1011,90 @@ test("removing a multi-selection splices from the highest index down so the rest
   assert.deepEqual(layout.rows[0].slots.map((slot) => slot.code), ["A02"], "the surviving booth is the untouched middle one");
   assert.deepEqual(layout.pillars.map((pillar) => pillar.id), ["pillar-2"]);
   assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+/** A row whose first three booths are flush against each other and whose fourth
+ * sits across a gangway, plus a second row and a row stored backwards. That is
+ * everything a merge has to tell apart. */
+function mergeLayout() {
+  return {
+    version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 120,
+    floor: { x: 0, y: 0, width: 200, height: 120 },
+    rows: [
+      { label: "A", orientation: "horizontal", confidence: 1, slots: [
+        { code: "A01", rect: { x: 10, y: 10, width: 20, height: 10 } },
+        { code: "A02", rect: { x: 30, y: 10, width: 20, height: 10 } },
+        { code: "A03", rect: { x: 50, y: 10, width: 20, height: 10 } },
+        { code: "A04", rect: { x: 90, y: 10, width: 20, height: 10 } },
+      ] },
+      { label: "B", orientation: "horizontal", confidence: 1, slots: [
+        { code: "B01", rect: { x: 10, y: 60, width: 20, height: 10 } },
+        { code: "B02", rect: { x: 30, y: 60, width: 20, height: 10 } },
+      ] },
+      { label: "C", orientation: "horizontal", confidence: 1, slots: [
+        { code: "C02", rect: { x: 30, y: 90, width: 20, height: 10 } },
+        { code: "C01", rect: { x: 10, y: 90, width: 20, height: 10 } },
+      ] },
+    ],
+    pillars: [{ id: "pillar-1", x: 120, y: 20, width: 8, height: 8 }],
+    accessPoints: [],
+    landmarks: [],
+  };
+}
+
+const slotAt = (rowIndex, itemIndex) => ({ kind: "slot", rowIndex, itemIndex });
+
+test("merging two adjacent booths leaves the one booth a double stand is", () => {
+  const layout = mergeLayout();
+  const result = planSlotMerge(layout, [slotAt(0, 0), slotAt(0, 1)]);
+  assert.equal(result.ok, true);
+  assert.equal(result.plan.slot.code, "A01A02", "the roster writes a double stand as its two codes run together");
+  assert.deepEqual(result.plan.slot.rect, { x: 10, y: 10, width: 40, height: 10 });
+  applySlotMerge(layout, result.plan);
+  assert.deepEqual(layout.rows[0].slots.map((slot) => slot.code), ["A01A02", "A03", "A04"], "the merged booth keeps the place its members held");
+  assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("merging takes in every booth of the run, not only a pair", () => {
+  const layout = mergeLayout();
+  const result = planSlotMerge(layout, [slotAt(0, 2), slotAt(0, 0), slotAt(0, 1)]);
+  assert.equal(result.ok, true);
+  assert.equal(result.plan.slot.code, "A01A02A03", "selection order is not floor order");
+  assert.deepEqual(result.plan.slot.rect, { x: 10, y: 10, width: 60, height: 10 });
+});
+
+test("a row stored backwards still names its merged booth along the floor", () => {
+  const layout = mergeLayout();
+  const result = planSlotMerge(layout, [slotAt(2, 0), slotAt(2, 1)]);
+  assert.equal(result.ok, true);
+  assert.equal(result.plan.slot.code, "C01C02");
+  applySlotMerge(layout, result.plan);
+  assert.deepEqual(layout.rows[2].slots.map((slot) => slot.code), ["C01C02"]);
+});
+
+test("a merge refuses anything that is not one run of booths", () => {
+  const layout = mergeLayout();
+  const refusals = [
+    [[slotAt(0, 2), slotAt(0, 3)], /連續相鄰/, "a gangway between them"],
+    [[slotAt(0, 0), slotAt(0, 2)], /連續相鄰/, "a booth skipped in the middle"],
+    [[slotAt(0, 0), slotAt(1, 0)], /同一排/, "two different rows"],
+    [[slotAt(0, 0)], /兩格以上/, "one booth is not a merge"],
+    [[slotAt(0, 0), slotAt(0, 1), { kind: "pillar", itemIndex: 0 }], /只能合併攤位/, "a pillar in the set"],
+  ];
+  for (const [selections, expected, reason] of refusals) {
+    const result = planSlotMerge(layout, selections);
+    assert.equal(result.ok, false, reason);
+    assert.match(result.errors[0], expected, reason);
+  }
+  assert.deepEqual(layout, mergeLayout(), "planning never touches the layout");
+});
+
+test("a merge refuses a code the map already carries", () => {
+  const layout = mergeLayout();
+  layout.rows[1].slots[0].code = "A01A02";
+  const result = planSlotMerge(layout, [slotAt(0, 0), slotAt(0, 1)]);
+  assert.equal(result.ok, false);
+  assert.match(result.errors[0], /A01A02 已經存在/);
 });
 
 test("auto arrange turns two hand-traced columns into one tight grid", () => {

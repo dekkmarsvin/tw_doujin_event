@@ -1,5 +1,5 @@
 import { resolveMapLandmarkKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapRect } from "./event-map";
-import { clamp, rowOrientationFromEndpoints } from "./map-layout-editor-geometry";
+import { clamp, contiguousSegment, rowOrientationFromEndpoints } from "./map-layout-editor-geometry";
 
 export type Selection =
   | { kind: "floor" }
@@ -351,6 +351,82 @@ export function removeSelectionsFrom(draft: EventMapLayout, selections: readonly
   descending(itemIndicesOf(selections, "pillar")).forEach((itemIndex) => draft.pillars.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "access")).forEach((itemIndex) => draft.accessPoints.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "landmark")).forEach((itemIndex) => draft.landmarks.splice(itemIndex, 1));
+}
+
+/** Which booths a merge replaces, and the single booth it leaves in their
+ * place. Planning and applying are separate so the panel can ask whether a
+ * selection is mergeable on every render without touching the layout. */
+export type SlotMergePlan = { rowIndex: number; itemIndex: number; items: number[]; slot: BoothSlot };
+
+type SlotMergeResult =
+  | { ok: true; plan: SlotMergePlan; errors: [] }
+  | { ok: false; plan: null; errors: string[] };
+
+function refuseMerge(message: string): SlotMergeResult {
+  return { ok: false, plan: null, errors: [message] };
+}
+
+/** Whether a selection describes one booth of two or more booths' worth of
+ * floor, and what that booth would be.
+ *
+ * A circle that bought a double booth reaches the map as one code — the roster
+ * writes `A01A02` on a single line, and `validateMapContributionDraft` compares
+ * codes as whole strings — so the map needs one rectangle carrying that code.
+ * Drawing it by hand means matching the width of two booths by eye, which is
+ * the precision `seamlessSpans` exists to avoid asking for; merging the two
+ * booths that are already there gets it exactly right instead.
+ *
+ * The merged code is the members' codes run together, because that is how the
+ * rosters write it. Other spellings stay reachable: the merged booth comes back
+ * selected, and the inspector's code field is where `A01-A02` is typed.
+ *
+ * Only a run of booths can merge. `contiguousSegment` decides what a run is —
+ * booths flush against each other and lined up across the row — so the check is
+ * the same one that recognizes a segment for re-cutting, and two booths with a
+ * gangway between them are refused rather than swallowing the gangway. */
+export function planSlotMerge(layout: RowsOnly, selections: readonly Selection[]): SlotMergeResult {
+  const picked = slotSelections(selections);
+  if (picked.length !== selections.length) return refuseMerge("只能合併攤位，請取消選取其他元素。");
+  if (picked.length < 2) return refuseMerge("請選取兩格以上相鄰的攤位。");
+  const rowIndex = picked[0].rowIndex;
+  if (picked.some((item) => item.rowIndex !== rowIndex)) return refuseMerge("只能合併同一排的攤位。");
+  const row = layout.rows[rowIndex];
+  const items = [...new Set(picked.map(({ itemIndex }) => itemIndex))];
+  if (!row || items.some((item) => !row.slots[item])) return refuseMerge("選取的攤位已經不存在。");
+
+  // The run is read from the first selected booth, so a booth outside it has no
+  // position and the same answer covers both "not adjacent" and "not the same
+  // run" -- a second column of the row, say.
+  const segment = contiguousSegment(row.slots.map(({ rect }) => rect), items[0]);
+  const positions = items.map((item) => segment.items.indexOf(item)).sort((a, b) => a - b);
+  if (positions[0] < 0 || positions[positions.length - 1] - positions[0] !== positions.length - 1) {
+    return refuseMerge("只能合併連續相鄰的攤位。");
+  }
+
+  // Run order, not array order: a row traced backwards stores its booths in the
+  // reverse of the order they sit in, and the code has to read along the floor.
+  const ordered = positions.map((position) => segment.items[position]);
+  const code = ordered.map((item) => row.slots[item].code).join("");
+  const taken = new Set(layout.rows.flatMap((candidate, index) => candidate.slots
+    .filter((unused, itemIndex) => index !== rowIndex || !items.includes(itemIndex))
+    .map((slot) => slot.code)));
+  if (taken.has(code)) return refuseMerge(`攤位代碼 ${code} 已經存在。`);
+
+  const rect = boundingBox(ordered.map((item) => row.slots[item].rect));
+  // The merged booth takes the lowest index its members occupied, so the row's
+  // stored order survives a merge and the caller knows what to select without
+  // waiting for the draft to be applied.
+  return { ok: true, plan: { rowIndex, itemIndex: Math.min(...ordered), items: ordered, slot: { code, rect } }, errors: [] };
+}
+
+/** Replaces the planned booths with the merged one. The members are spliced out
+ * from the highest array index down, for the reason `removeSelectionsFrom`
+ * gives, and the merged booth is inserted where the lowest of them was. */
+export function applySlotMerge(draft: EventMapLayout, plan: SlotMergePlan) {
+  const row = draft.rows[plan.rowIndex];
+  if (!row) return;
+  descending(plan.items).forEach((item) => row.slots.splice(item, 1));
+  row.slots.splice(plan.itemIndex, 0, { code: plan.slot.code, rect: { ...plan.slot.rect } });
 }
 
 /** The two uniqueness rules a separately created row has to satisfy before it
