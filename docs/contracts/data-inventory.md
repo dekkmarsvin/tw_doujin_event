@@ -202,7 +202,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 - 管理者名冊：`admin.added`、`admin.removed`
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
 - 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.reject`／`map_draft.approve`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
-- 主辦單位工作區：`organizer_event.created`、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`、`organizer_publication.retried`
+- 主辦單位工作區：`organizer_event.created`、`organizer_event.owner_granted_on_create`（建立者即負責人時的直接授予）、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`、`organizer_publication.retried`
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
 兩點值得單獨記下：
