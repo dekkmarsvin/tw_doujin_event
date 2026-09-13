@@ -348,3 +348,52 @@ jobs:
             exit "$e2e_status"
           fi
           echo "Preview E2E used isolated D1; production fingerprint is unchanged."
+
+
+  # Browser acceptance is its own job rather than a step inside `deploy` so a
+  # flaky journey shows red on the pull request without holding back a release
+  # the Node gate already cleared. It needs no secrets, so it runs for forks too.
+  #
+  # The PR gate is the representative sizes. The full viewport x text-scale
+  # matrix is thirty page loads and belongs to QA before a release:
+  # `npm run test:browser:matrix`.
+  browser-acceptance:
+    name: Browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      # Browsers are deliberately absent from package.json so `npm ci` and the
+      # Node suite stay browser-free; this job is the one place that wants them.
+      # The same command a maintainer runs, plus the shared libraries a bare
+      # runner image does not carry.
+      - name: Install Chromium
+        run: |
+          npm run test:browser:install
+          npx playwright install-deps chromium
+
+      # The journeys assert against real FF47 booths, which the fixture event
+      # cannot stand in for. `test:browser` fetches the pinned data itself.
+      - name: Run representative browser journeys
+        run: npm run test:browser
+
+      - name: Upload browser report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-acceptance
+          path: outputs/map-viewport-pr
+          retention-days: 7
+          if-no-files-found: warn

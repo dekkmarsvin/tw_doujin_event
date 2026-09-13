@@ -22,10 +22,8 @@ final result: passed
 
 最新尺寸矩陣與對應尺寸截圖由同一次 `tests/browser/map-viewport.mjs` 執行產出，`mapHeight` 固定為 `dock.top − tools.bottom − 32`，與腳本的 240px 斷言同源，重跑即可重現：
 
-```
-npm run data:stage -- ff47
-npx vite --config vite.pages.config.ts
-MAP_TEST_URL=http://localhost:5173 node tests/browser/map-viewport.mjs
+```bash
+npm run test:browser:matrix
 ```
 
 761×844 與 1440×900 × 三種字級共 6 組桌機回歸通過，截圖同樣來自該次執行。
