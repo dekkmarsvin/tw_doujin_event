@@ -115,9 +115,13 @@ draft → submitted → approved → publishing → published
 
 步驟為 preparing_data → waiting_data_checks → merging_data → preparing_main → waiting_main_checks → merging_main → waiting_deployment → verifying_production → completed。失敗保留原 step、failure_code、error、retryable 與 metadata。Main 需要 data merge SHA，deployment 需要 main merge SHA；productionVerified 必須明確為 true 才能完成。此 boolean 是 **driver 的 blocking Pages smoke 結果**，目前沒有 production adapter 實作，不能把測試 driver 當成真實 smoke。
 
-`POST /api/organizer/publications/:jobId/retry` 與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
+同版本核准重送沿用相同 snapshot/hash 的既有 job，不重寫核准、不重複 dispatch；不一致回報 `approval_mismatch`。相同 snapshot/hash 的既有 queued job 可在 submitted 核准時沿用。nullish metadata 表示未提供更新，保留已保存的 checkpoint。
 
-UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」。每五秒重新讀取進行中的工作與活動列表狀態。送審與發布只有 published 才算完成，不能在 approved/queued 顯示 6/6。登入逾時提供重新登入入口；同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
+lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 failed/retryable；不能推進步驟，也不能覆寫新 lease 持有者。失敗記錄遭 fence 拒絕時向 dispatcher 拋出失敗，不把該 delivery 當成成功。
+
+`POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
+
+UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。送審與發布只有 published 才算完成，不能在 approved/queued 顯示 6/6。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
 
 目前 production gate：
 

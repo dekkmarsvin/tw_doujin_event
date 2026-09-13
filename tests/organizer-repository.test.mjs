@@ -71,6 +71,80 @@ function checkpoint(step) {
     merging_main: { main_merge_sha: "d".repeat(40) }, waiting_deployment: { workflow_run_id: 3 } })[step] ?? {};
 }
 
+test("expired publication lease records a retryable failure without losing its step", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => { clock += 31_000; return { metadata: checkpoint("preparing_data") }; },
+  }, () => clock);
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.failure_code, "lease_lost");
+  assert.equal(job.retryable, 1);
+  assert.equal(job.step, "preparing_data");
+  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: clock + 1 })).ok, true);
+});
+
+test("an expired executor cannot overwrite or release a newer lease", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  let newer;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => {
+      clock += 31_000;
+      newer = await repository.claimOrganizerPublicationLease({ jobId, now: clock, ttlMs: 30_000 });
+      return {};
+    },
+  }, () => clock);
+  await assert.rejects(execute(jobId), (error) => error.code === "lease_lost");
+  assert.equal(newer.ok, true);
+  assert.equal(await repository.hasOrganizerPublicationLease(jobId, newer.token, clock), true);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
+});
+
+test("nullish metadata preserves the checkpoint from a pending delivery", async () => {
+  const { jobId } = await publicationFixture();
+  let pending = true;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => pending ? { pending: true, metadata: checkpoint("preparing_data") }
+      : { metadata: { data_pr_number: null, data_head_sha: undefined } },
+  }, () => NOW + 10);
+  await execute(jobId);
+  pending = false;
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.step, "waiting_data_checks");
+  assert.equal(job.status, "publishing");
+  assert.equal(job.data_pr_number, 1);
+  assert.equal(job.data_head_sha, "a".repeat(40));
+});
+
+test("repeated approval reuses the same job and rejects a different approval hash", async () => {
+  const { id, jobId } = await publicationFixture();
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  const input = { candidateId: id, expectedVersion: 1, decision: "approve", actorAccountId: adminId,
+    publication: { jobId: "another-job", snapshotId: job.snapshot_id, approvalHash: job.approval_hash }, now: NOW + 20 };
+  const original = await repository.getOrganizerCandidate(id);
+  const result = await repository.reviewOrganizerCandidate(input);
+  assert.equal(result.ok, true);
+  assert.equal(result.publicationJobId, jobId);
+  assert.equal(result.alreadyReviewed, true);
+  assert.deepEqual(await repository.getOrganizerCandidate(id), original);
+  assert.equal(await repository.getOrganizerPublicationJob("another-job"), null);
+  assert.equal((await repository.reviewOrganizerCandidate({ ...input,
+    publication: { ...input.publication, approvalHash: "mismatch" } })).reason, "approval_mismatch");
+
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'submitted', approved_at = NULL WHERE id = ?1").bind(id).run();
+  const reused = await repository.reviewOrganizerCandidate(input);
+  assert.equal(reused.ok, true);
+  assert.equal(reused.publicationJobId, jobId);
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "publishing");
+});
+
 test("publication resumes main and smoke failures without recreating successful data or main steps", async () => {
   const { id, jobId } = await publicationFixture();
   const calls = [];

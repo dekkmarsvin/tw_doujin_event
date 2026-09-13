@@ -5,7 +5,7 @@ export const PUBLICATION_REQUIRED_CHECKS = {
 
 type Ruleset = {
   enforcement: string;
-  conditions?: { ref_name?: { include: string[]; exclude: string[] } };
+  conditions?: { ref_name?: { include?: string[]; exclude?: string[] } };
   bypass_actors?: Array<{ actor_type: string; actor_id: number | null }>;
   rules: Array<{ type: string; parameters?: { required_status_checks?: Array<{ context: string }> } }>;
 };
@@ -15,7 +15,8 @@ type Ruleset = {
 export function publicationRolloutProblems(stage: "data" | "main", rulesets: readonly Ruleset[], appId: number) {
   const problems: string[] = [];
   const applicable = rulesets.filter((ruleset) => ruleset.enforcement === "active"
-    && ruleset.conditions?.ref_name?.exclude.length === 0
+    && Array.isArray(ruleset.conditions?.ref_name?.exclude) && ruleset.conditions.ref_name.exclude.length === 0
+    && Array.isArray(ruleset.conditions.ref_name.include)
     && ruleset.conditions.ref_name.include.some((ref) => ["~ALL", "~DEFAULT_BRANCH", "refs/heads/main"].includes(ref)));
   if (!applicable.some((ruleset) => ruleset.rules.some((rule) => rule.type === "pull_request"))) problems.push("missing_pull_request_rule");
   const checks = new Set(applicable.flatMap((ruleset) => ruleset.rules.flatMap((rule) => rule.type === "required_status_checks"

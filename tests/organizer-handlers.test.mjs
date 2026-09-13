@@ -511,6 +511,18 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
   assert.deepEqual(dispatched, [approval.publicationJobId]);
   const jobId = approval.publicationJobId;
+  const repeated = await handlers.adminReviewOrganizerCandidate(request(
+    `/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: 5, decision: "approve" }, adminCookie,
+  ), candidateId);
+  assert.equal(repeated.status, 200);
+  assert.equal((await repeated.json()).publicationJobId, jobId);
+  assert.deepEqual(dispatched, [jobId], "approval replay must not dispatch again");
+  for (const id of [jobId, "missing-job"]) {
+    const response = await handlers.adminRetryOrganizerPublication(request(`/api/organizer/publications/${id}/retry`, "POST", {}), id);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "尚未登入。" });
+  }
   const lease = await repository.claimOrganizerPublicationLease({ jobId, now, ttlMs: 30_000 });
   await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: "preparing_data",
     nextStep: "preparing_main", status: "failed", error: "temporary", retryable: true, now });

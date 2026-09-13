@@ -300,7 +300,11 @@ function OrganizerSignIn() {
 function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
   const resumeKey = `organizer.resumeCandidate:${session.email}`;
-  const [selectedId, setSelectedId] = useState<string | null>(() => localStorage.getItem(resumeKey));
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try { return localStorage.getItem(resumeKey); } catch { return null; }
+  });
+  const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
+  const [pollGeneration, setPollGeneration] = useState(0);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
   const [section, setSection] = useState<OrganizerWorkspaceSection>("event");
   const [guidedTask, setGuidedTask] = useState<OrganizerGuidedTask>("identity_source");
@@ -329,6 +333,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   }, []);
   const reloadDetail = useCallback(async (candidateId: string) => {
     const next = await readOrganizerEvent(candidateId);
+    setPublicationReadError(null);
+    setPollGeneration((value) => value + 1);
     setDetail(next);
     setSection(next.workspace.resume.section);
     setGuidedTask(next.workspace.resume.guidedTask);
@@ -337,23 +343,36 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => { queueMicrotask(() => { if (selectedId) void reloadDetail(selectedId).catch((error) => setNotice({ kind: "error", message: message(error) })); else setDetail(null); }); }, [reloadDetail, selectedId]);
   useEffect(() => {
-    if (selectedId) localStorage.setItem(resumeKey, selectedId);
-    else localStorage.removeItem(resumeKey);
+    try {
+      if (selectedId) localStorage.setItem(resumeKey, selectedId);
+      else localStorage.removeItem(resumeKey);
+    } catch { /* Remembering the selection is optional; keep the workspace usable. */ }
   }, [selectedId, resumeKey]);
   const publicationStatus = detail?.publication?.status;
   useEffect(() => {
     if (!selectedId || !publicationStatus || !["queued", "publishing"].includes(publicationStatus)) return;
     let active = true;
+    let inFlight = false;
+    let failures = 0;
     const timer = window.setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
       void readOrganizerEvent(selectedId).then((next) => {
         if (active) {
+          failures = 0;
+          setPublicationReadError(null);
           setDetail(next);
           setEvents((items) => items.map((item) => item.id === next.event.id ? next.event : item));
         }
-      }).catch(() => {});
+      }).catch((error) => {
+        if (!active) return;
+        const needsLogin = error instanceof PortalError && error.status === 401;
+        setPublicationReadError({ candidateId: selectedId, needsLogin });
+        if (needsLogin || ++failures >= 3) window.clearInterval(timer);
+      }).finally(() => { inFlight = false; });
     }, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [selectedId, publicationStatus]);
+  }, [selectedId, publicationStatus, pollGeneration]);
 
   const refresh = useCallback(async () => {
     await reloadList();
@@ -443,6 +462,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
+      {publicationReadError?.candidateId === selectedId && publicationReadError && <div role="alert" className={styles.error}>
+        <p>{publicationReadError.needsLogin ? "登入已失效，無法更新發布進度。" : "暫時無法讀取發布進度。"}目前顯示的是上次讀取的進度。</p>
+        {publicationReadError.needsLogin ? <a href="/organizer?reauth=1">重新登入並返回活動</a>
+          : <button type="button" onClick={() => { void refresh().catch((error) => setNotice({ kind: "error", message: message(error) })); }}>重新讀取進度</button>}
+      </div>}
       {!detail ? <div className={styles.empty}><h2>選擇活動</h2><p>從左側開啟活動，開始準備送審資料。</p></div>
         : <WorkspaceSurface
           key={detail.event.id}

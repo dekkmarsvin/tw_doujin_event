@@ -70,7 +70,8 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
       const result = await driver.run({ job, snapshot: input, step: step as Exclude<PublicationStep, "completed">,
         idempotencyKey: `${job.id}/${step}/${job.approval_hash}`, assertLease });
       await assertLease();
-      const checkpoint = { ...job, ...result.metadata };
+      const metadata = Object.fromEntries(Object.entries(result.metadata ?? {}).filter(([, value]) => value != null)) as PublicationMetadata;
+      const checkpoint = { ...job, ...metadata };
       if (!result.pending) {
         const required = step === "preparing_data" ? [checkpoint.data_pr_number, checkpoint.data_head_sha]
           : step === "merging_data" ? [checkpoint.data_merge_sha]
@@ -79,7 +80,7 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
                 : step === "waiting_deployment" ? [checkpoint.workflow_run_id] : [];
         if (required.some((value) => !value)) throw new PublicationFailure("missing_checkpoint", "Publication adapter did not supply the required checkpoint.", false);
       }
-      for (const [key, value] of Object.entries(result.metadata ?? {})) {
+      for (const [key, value] of Object.entries(metadata)) {
         if (value !== null && job[key as keyof PublicationMetadata] !== null && job[key as keyof PublicationMetadata] !== value) {
           throw new PublicationFailure("checkpoint_mismatch", "Pinned publication metadata changed.", false);
         }
@@ -90,13 +91,18 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
       const next = result.pending ? step : PUBLICATION_STEPS[PUBLICATION_STEPS.indexOf(step as PublicationStep) + 1];
       if (!await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
         expectedStep: job.step, nextStep: next, status: next === "completed" ? "published" : "publishing",
-        metadata: result.metadata, productionVerified: result.productionVerified, now: now() })) throw new Error("Publication checkpoint conflict.");
+        metadata, productionVerified: result.productionVerified, now: now() })) throw new Error("Publication checkpoint conflict.");
     } catch (error) {
       const failure = error instanceof PublicationFailure ? error
         : new PublicationFailure("infrastructure_error", error instanceof Error ? error.message : String(error), true);
-      if (job) await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
+      if (job && !await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
         expectedStep: job.step, nextStep: job.step, status: "failed", error: failure.message,
-        failureCode: failure.code, retryable: failure.retryable, now: now() });
+        failureCode: failure.code, retryable: failure.retryable, now: now(),
+        allowExpiredFailure: true })) {
+        // A newer lease/step owns the job now. Do not overwrite it, but let the
+        // dispatcher record this delivery as unprocessed rather than successful.
+        throw failure;
+      }
     } finally {
       await repository.releaseOrganizerPublicationLease(jobId, lease.token);
     }

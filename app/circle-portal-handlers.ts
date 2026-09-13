@@ -2564,21 +2564,27 @@ export function createCirclePortalHandlers({
       if (await sha256Hex(snapshot.snapshot_json) !== snapshot.sha256) {
         return json({ error: "送審內容與記錄不一致，無法核准。", code: "snapshot_mismatch" }, 409);
       }
-      const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-      if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-      const exists = draft.event.id && (config.publishedEvent
-        ? await config.publishedEvent(draft.event.id) : draft.event.id === config.eventId);
-      if (exists) return json({ error: "這個活動代碼已存在，首次發布不能覆寫。請使用已發布活動修正流程。", code: "event_id_collision" }, 409);
-      const { issues } = await validateOrganizerWorkspace(candidateId, draft);
-      if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
+      if (candidate.status === "submitted") {
+        const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+        if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
+        const exists = draft.event.id && (config.publishedEvent
+          ? await config.publishedEvent(draft.event.id) : draft.event.id === config.eventId);
+        if (exists) return json({ error: "這個活動代碼已存在，首次發布不能覆寫。請使用已發布活動修正流程。", code: "event_id_collision" }, 409);
+        const { issues } = await validateOrganizerWorkspace(candidateId, draft);
+        if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
+      }
     }
-    const publicationJobId = decision === "approve" ? crypto.randomUUID() : null;
+    let publicationJobId: string | null = decision === "approve" ? crypto.randomUUID() : null;
     const result = await repository.reviewOrganizerCandidate({
       candidateId, expectedVersion: expectedVersion as number, decision,
       actorAccountId: gate.session.accountId, note, now: config.now(),
       ...(publicationJobId ? { publication: { jobId: publicationJobId, snapshotId: snapshot.id, approvalHash: snapshot.sha256 } } : {}),
     });
-    if (!result.ok) return json({ error: "版本或狀態已變更。", conflict: result }, 409);
+    if (!result.ok) return json({ error: result.reason === "approval_mismatch" ? "既有發布工作與核准內容不一致，請聯絡網站管理者。" : "版本或狀態已變更。", conflict: result }, 409);
+    if (result.publicationJobId) publicationJobId = result.publicationJobId;
+    if (result.alreadyReviewed) return json({ ok: true,
+      status: (await repository.getOrganizerPublicationJob(result.publicationJobId))?.status,
+      revisionHash: snapshot.sha256, publicationJobId, selfApproval: candidate.submitted_by === gate.session.accountId });
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
       action: decision === "approve" ? "organizer_event.approved" : "organizer_event.changes_requested",
@@ -2611,6 +2617,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminRetryOrganizerPublication(request: Request, jobId: string) {
+    if (!await currentSession(request)) return json({ error: "尚未登入。" }, 401);
     const job = await repository.getOrganizerPublicationJob(jobId);
     if (!job) return json({ error: "找不到發布工作。" }, 404);
     const access = await organizerAccess(request, job.candidate_id);

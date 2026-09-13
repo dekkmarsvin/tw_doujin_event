@@ -22,6 +22,11 @@ test("an active ruleset alone is not rollout approval", () => {
     required_status_checks: PUBLICATION_REQUIRED_CHECKS.main.map((context) => ({ context })),
   } }] };
   assert.deepEqual(publicationRolloutProblems("main", [valid], 1), []);
+  for (const ref_name of [{ include: ["~DEFAULT_BRANCH"] }, { exclude: [] }, { include: ["~DEFAULT_BRANCH"], exclude: "" }]) {
+    assert.ok(publicationRolloutProblems("main", [{ ...valid, conditions: { ref_name } }], 1).length);
+  }
+  // ADR-0046 prohibits the publication App bypass; human governance is separate.
+  assert.deepEqual(publicationRolloutProblems("main", [{ ...valid, bypass_actors: [{ actor_type: "OrganizationAdmin", actor_id: 1 }] }], 1), []);
   assert.deepEqual(publicationRolloutProblems("main", [{ ...valid, bypass_actors: [{ actor_type: "Integration", actor_id: 1 }] }], 1), ["app_bypasses_ruleset"]);
   assert.ok(publicationRolloutProblems("main", [{ ...valid, enforcement: "disabled" }], 1).length);
   assert.ok(publicationRolloutProblems("main", [valid], 0).includes("unverified_app_identity"));

@@ -2408,6 +2408,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (candidate.current_version !== input.expectedVersion) {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
     }
+    let publication = input.decision === "approve" ? input.publication : undefined;
+    let reuseQueuedJob = false;
+    if (publication) {
+      const existing = await database.prepare(`SELECT id, snapshot_id, approval_hash, status FROM organizer_publication_jobs
+        WHERE candidate_id = ?1 AND candidate_version = ?2`).bind(input.candidateId, input.expectedVersion)
+        .first<{ id: string; snapshot_id: string; approval_hash: string; status: string }>();
+      if (existing) {
+        if (existing.approval_hash !== publication.approvalHash || existing.snapshot_id !== publication.snapshotId) {
+          return { ok: false as const, reason: "approval_mismatch" as const };
+        }
+        if (candidate.approved_at !== null && ["approved", "publishing", "failed", "published"].includes(candidate.status)) {
+          return { ok: true as const, status: candidate.status, publicationJobId: existing.id, alreadyReviewed: true as const };
+        }
+        if (candidate.status !== "submitted" || existing.status !== "queued") {
+          return { ok: false as const, reason: "status" as const, status: candidate.status };
+        }
+        publication = { ...publication, jobId: existing.id };
+        reuseQueuedJob = true;
+      }
+    }
     if (candidate.status !== "submitted") return { ok: false as const, reason: "status" as const, status: candidate.status };
     const status = input.decision === "approve" ? "approved" : "changes_requested";
     const transitionToken = crypto.randomUUID();
@@ -2431,22 +2451,24 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              AND last_updated_by = ?3 AND updated_at = ?5`,
       ).bind(transitionToken, status, input.actorAccountId, input.note ?? null, input.now,
         input.candidateId, input.expectedVersion),
-      ...(input.decision === "approve" && input.publication ? [
+      ...(publication ? [
         database.prepare(`INSERT INTO organizer_publication_jobs (
           id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, created_at, updated_at
         ) SELECT ?1, c.id, c.current_version, ?2, ?3, 'queued', 'preparing_data', ?4, ?4
           FROM organizer_event_candidates c WHERE c.id = ?5 AND c.status = 'approved'
-            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?6 AND r.candidate_id = c.id)`)
-          .bind(input.publication.jobId, input.publication.snapshotId, input.publication.approvalHash,
+            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?6 AND r.candidate_id = c.id)
+          ON CONFLICT(candidate_id, candidate_version) DO NOTHING`)
+          .bind(publication.jobId, publication.snapshotId, publication.approvalHash,
             input.now, input.candidateId, transitionToken),
         database.prepare(`UPDATE organizer_event_candidates SET status = 'publishing'
           WHERE id = ?1 AND status = 'approved' AND EXISTS (
             SELECT 1 FROM organizer_publication_jobs j WHERE j.id = ?2 AND j.candidate_id = ?1)`)
-          .bind(input.candidateId, input.publication.jobId),
+          .bind(input.candidateId, publication.jobId),
       ] : []),
     ]);
-    return results.every((result) => result.meta.changes === 1)
-      ? { ok: true as const, status: input.decision === "approve" && input.publication ? "publishing" : status }
+    return results.every((result, index) => result.meta.changes === (reuseQueuedJob && index === 2 ? 0 : 1))
+      ? { ok: true as const, status: publication ? "publishing" : status,
+        ...(publication ? { publicationJobId: publication.jobId } : {}) }
       : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
   }
 
@@ -2622,6 +2644,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     error?: string | null;
     failureCode?: string | null;
     productionVerified?: boolean;
+    /** Failure-only checkpoint; the original token and step must still own it. */
+    allowExpiredFailure?: boolean;
     retryable?: boolean;
     metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id", string | number | null>>;
     now: number;
@@ -2639,13 +2663,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
        WHERE id = ?5 AND step = ?6
          AND (?7 IS NULL OR data_head_sha = ?7 OR main_head_sha = ?7)
          AND EXISTS (SELECT 1 FROM organizer_publication_lease
-           WHERE id = 'global' AND job_id = ?5 AND token = ?8 AND expires_at > ?4)`,
+           WHERE id = 'global' AND job_id = ?5 AND token = ?8
+             AND (expires_at > ?4 OR ?18 = 1))`,
     ).bind(input.nextStep, input.status, input.error ?? null, input.now, input.jobId,
       input.expectedStep, input.expectedHeadSha ?? null, input.leaseToken,
       input.failureCode ?? null, input.retryable === false ? 0 : 1,
       input.metadata?.data_pr_number ?? null, input.metadata?.data_head_sha ?? null, input.metadata?.data_merge_sha ?? null,
       input.metadata?.main_pr_number ?? null, input.metadata?.main_head_sha ?? null, input.metadata?.main_merge_sha ?? null,
-      input.metadata?.workflow_run_id ?? null).run();
+      input.metadata?.workflow_run_id ?? null,
+      input.status === "failed" && input.allowExpiredFailure ? 1 : 0).run();
     if (result.meta.changes !== 1) return false;
     if (input.status !== "published") {
       await database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
