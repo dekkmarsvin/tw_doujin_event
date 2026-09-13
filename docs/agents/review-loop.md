@@ -6,7 +6,7 @@ The decision behind these rules, and the incident that produced them, is [ADR-00
 
 ## Before triggering a review
 
-Never post a bare `@codex review`. The reviewer compares the diff against the base branch, not against the ticket, so the ticket has to be handed to it explicitly:
+When review posting is authorized, include the ticket and scope in the request. The reviewer compares the diff against the base branch, so supply the ticket explicitly:
 
 ```
 @codex review — 範圍限 issue #<n>。非目標見該 issue「非目標」段與 ADR-0040 的威脅模型。
@@ -17,21 +17,21 @@ Fill in the real issue number. If the PR closes more than one issue, name them a
 
 ## The scope gate
 
-Answer all three before writing a single line of fix:
+Evaluate these criteria for each finding. Within the task's existing authorization, complete necessary fixes and targeted validation without per-fix approval when the finding is in scope and no stop condition has triggered:
 
 1. **Which acceptance criterion does this violate?** Name the checkbox in the ticket, the contract in `docs/contracts/`, or the ADR. "It would be more correct" is not an answer.
 2. **Is the assumed failure mode inside the threat model?** Concurrent processes, arbitrary process termination between two renames, and hostile local users are outside it (ADR-0040 decision 1). A finding that only triggers there is out of scope regardless of how it is graded.
 3. **Does the fix introduce behavior or guarantees beyond the ticket's acceptance criteria?** A new file alone is not scope expansion; a necessary implementation file or regression test can remain in scope.
 
-Any "no" on 1–2, or "yes" on 3 → **do not fix**.
+A finding passes when it violates a named acceptance criterion, its failure mode is inside the recorded threat model, and the remedy adds no guarantees beyond the ticket. Otherwise record the scope decision and propose separate triage.
 
 ## Declining is a normal outcome
 
-Declining must be visible and cheap. On the review thread, state the refusal and its basis:
+Declining must be visible and cheap. When the task authorizes GitHub review-thread replies, state the refusal and its basis there; otherwise prepare the disposition in the task response:
 
 > 不修：此情境落在 ADR-0040 決策 1 的威脅模型之外（並發執行 / 外部終止），且不對應 #<n> 的任何驗收條件。已記錄於 #<m>。
 
-Then open a follow-up issue with `needs-triage` if the finding is worth keeping, and resolve the thread. Silently ignoring a thread is not declining — it leaves the loop armed.
+Within the task's existing authorization for GitHub issue and review-thread operations, open a follow-up issue with `needs-triage` if the finding is worth keeping, and resolve the thread. Otherwise include the proposed issue and disposition in the handoff. Cite a follow-up number only after that issue exists; do not report a thread as resolved without performing the authorized action.
 
 `wontfix` already exists in this repo's [triage vocabulary](./triage-labels.md); this extends it to review threads.
 
@@ -55,7 +55,7 @@ Stop and hand back to the maintainer when **any** of these hold. Do not push ano
 
 ## Fixes stay within acceptance criteria
 
-Prefer editing existing files. A new implementation file or regression test is allowed when it directly satisfies an existing acceptance criterion within the recorded threat model. New behavior, subsystems, or guarantees beyond those criteria require separate triage. A file born mid-review-cycle is different: it comes from a fix, not from the ticket's implementation, and trips the stop condition regardless of how it is argued. `scripts/event-onboarding-lock.mjs` arrived that way in [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) and drew four further findings of its own; that first new file was the moment to stop.
+Prefer editing existing files. A new implementation file or regression test is allowed when it directly satisfies an existing acceptance criterion within the recorded threat model. New behavior, subsystems, or guarantees beyond those criteria require separate triage. A later finding against a file born from a fix after review began trips the stop condition: the loop is then reviewing its own output. Creating a necessary file is not itself this circuit breaker. `scripts/event-onboarding-lock.mjs` arrived during [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) and drew four further findings; the first finding against that review-generated file was the moment to stop.
 
 ## Record the boundary in the PR
 
