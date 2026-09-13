@@ -9,15 +9,27 @@ after(() => vite.close());
 test("failed deployment preserves completed data stages and never looks published", () => {
   assert.deepEqual(publicationProgress({ step: "waiting_deployment", status: "failed" }).map(({ state }) => state), ["complete", "complete", "failed", "pending"]);
   assert.deepEqual(publicationProgress({ step: "verifying_production", status: "publishing" }).map(({ state }) => state), ["complete", "complete", "complete", "current"]);
-  assert.match(publicationFailureMessage("event_id_collision", false), /首次發布不能覆寫/);
-  assert.match(publicationFailureMessage("infrastructure_error", true), /內容沒有被退件/);
+  assert.match(publicationFailureMessage({ failureCode: "event_id_collision", retryable: false, step: "preparing_data" }), /首次發布不能覆寫/);
+  assert.match(publicationFailureMessage({ failureCode: "infrastructure_error", retryable: true, step: "waiting_deployment" }), /內容沒有被退件/);
 });
 
 test("a job that never started says so instead of reading as a failure part-way through", () => {
-  assert.deepEqual(publicationProgress({ step: "preparing_data", status: "failed" }).map(({ state }) => state),
+  assert.deepEqual(publicationProgress({ step: "assemble", status: "failed" }).map(({ state }) => state),
     ["failed", "pending", "pending", "pending"]);
-  assert.match(publicationFailureMessage("queued_timeout", true), /發布沒有開始/);
-  assert.notEqual(publicationFailureMessage("queued_timeout", true), publicationFailureMessage("infrastructure_error", true));
+  const neverStarted = { failureCode: "queued_timeout", retryable: true, step: "assemble" };
+  assert.match(publicationFailureMessage(neverStarted), /發布沒有開始/);
+  assert.notEqual(publicationFailureMessage(neverStarted),
+    publicationFailureMessage({ failureCode: "infrastructure_error", retryable: true, step: "assemble" }));
+
+  // Retry keeps the step the job failed on, so the same timeout also lands on
+  // jobs that did publish part-way. The stage list shows 準備活動資料 complete
+  // for those, and telling the owner nothing started contradicts it.
+  const stalledAfterRetry = { failureCode: "queued_timeout", retryable: true, step: "preparing_main" };
+  assert.deepEqual(publicationProgress({ step: "preparing_main", status: "failed" }).map(({ state }) => state),
+    ["complete", "failed", "pending", "pending"]);
+  assert.doesNotMatch(publicationFailureMessage(stalledAfterRetry), /發布沒有開始/);
+  assert.equal(publicationFailureMessage(stalledAfterRetry),
+    publicationFailureMessage({ failureCode: "infrastructure_error", retryable: true, step: "preparing_main" }));
 });
 
 test("an active ruleset alone is not rollout approval", () => {

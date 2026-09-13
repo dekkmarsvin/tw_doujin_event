@@ -121,7 +121,9 @@ lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 fa
 
 `POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
 
-**`queued` 停留超過 15 分鐘就是失敗。** 只有 dispatch 會讓 job 離開 `queued`，而 retry 只接受 `failed`，所以 dispatch 從未發生的 job 原本會永遠卡住。超過這個逾時值後，下一次讀取活動列表或任一候選活動時，系統把該 job 改為 `failed` + `queued_timeout` + retryable，step 維持在它從未開始的那一步，candidate 一併轉為 `failed`。接手的是上一段那條既有恢復路徑——同一筆 job、同一份 snapshot——不另外提供「手動啟動 queued job」的入口，否則就出現第二條產生 publication 的路徑。等待 CI 的狀態是 `publishing` 而不是 `queued`，不受這個逾時影響；lease 仍未過期的 job 留給持有者，不在這裡改寫。失敗訊息說的是發布沒有開始，不是發布中途失敗。
+**`queued` 停留超過 15 分鐘就是失敗。** 只有 dispatch 會讓 job 離開 `queued`，而 retry 只接受 `failed`，所以 dispatch 從未發生的 job 原本會永遠卡住。超過這個逾時值後，下一次讀取活動列表或任一候選活動時，系統把該 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`。接手的是上一段那條既有恢復路徑——同一筆 job、同一份 snapshot——不另外提供「手動啟動 queued job」的入口，否則就出現第二條產生 publication 的路徑。等待 CI 的狀態是 `publishing` 而不是 `queued`，不受這個逾時影響；lease 仍未過期的 job 留給持有者，不在這裡改寫。
+
+**逾時的 job 不一定從未開始，所以失敗訊息看 step。** retry 會把 job 放回 `queued` 並保留原 step，因此同一個逾時有兩種來源：從未被 dispatch 的 job，step 仍是建立時的 `assemble`；以及重試後 dispatch 又沒發生的 job，step 停在它上次失敗的那一步，先前的 checkpoint 都還在。只有前者的訊息說發布沒有開始；後者沿用既有 retryable 措辭，因為 UI 四階段對它已經顯示出已完成的階段，說「沒有開始」會與同一畫面互相矛盾。
 
 UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。送審與發布只有 published 才算完成，不能在 approved/queued 顯示 6/6。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
 
@@ -157,6 +159,7 @@ ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected S
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場館空間或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准後的候選停在 `approved`，且 webhook 回 503。
 - 停在 `queued` 超過 15 分鐘的發布工作，在活動列表與活動頁都顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
+- 逾時失敗的訊息只有在該 job 的 step 仍是建立時的 `assemble` 才說發布沒有開始；重試後才逾時、step 已經走到後面的工作沿用既有 retryable 措辭，不與四階段清單上已完成的階段互相矛盾。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。
