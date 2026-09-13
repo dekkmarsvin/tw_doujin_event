@@ -465,7 +465,14 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       {publicationReadError?.candidateId === selectedId && publicationReadError && <div role="alert" className={styles.error}>
         <p>{publicationReadError.needsLogin ? "登入已失效，無法更新發布進度。" : "暫時無法讀取發布進度。"}目前顯示的是上次讀取的進度。</p>
         {publicationReadError.needsLogin ? <a href="/organizer?reauth=1">重新登入並返回活動</a>
-          : <button type="button" onClick={() => { void refresh().catch((error) => setNotice({ kind: "error", message: message(error) })); }}>重新讀取進度</button>}
+          : <button type="button" onClick={() => {
+            // Three failures stop the interval, and the publication status the
+            // effect keys on does not change while it is still publishing, so
+            // the poll only comes back when this press advances the generation.
+            setPublicationReadError(null);
+            setPollGeneration((value) => value + 1);
+            void refresh().catch((error) => setNotice({ kind: "error", message: message(error) }));
+          }}>重新讀取進度</button>}
       </div>}
       {!detail ? <div className={styles.empty}><h2>選擇活動</h2><p>從左側開啟活動，開始準備送審資料。</p></div>
         : <WorkspaceSurface
