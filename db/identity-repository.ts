@@ -2608,6 +2608,45 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       : { ok: false as const, reason: "status" as const, status: job.status };
   }
 
+  /**
+   * Nothing but dispatch moves a job out of `queued`, so a job whose dispatch
+   * never happened waits forever: the executor is only entered by the
+   * dispatcher, and `retryOrganizerPublicationJob()` refuses every status but
+   * `failed`. Past the contract's timeout that wait becomes the failure —
+   * retryable, on the step it never started — so the recovery path the
+   * workspace already has takes the job over, instead of a second way to start
+   * a publication (issue #228). Waiting on CI is `publishing`, never `queued`,
+   * so no in-flight step is reachable from here, and a job under a live lease
+   * is left to whoever holds it.
+   */
+  async function expireStalledOrganizerPublicationJobs(input: { now: number; timeoutMs: number }) {
+    await ensureTables();
+    const cutoff = input.now - input.timeoutMs;
+    const stalled = await database.prepare(
+      `SELECT id FROM organizer_publication_jobs WHERE status = 'queued' AND updated_at <= ?1
+         AND NOT EXISTS (SELECT 1 FROM organizer_publication_lease
+           WHERE id = 'global' AND job_id = organizer_publication_jobs.id AND expires_at > ?2)`,
+    ).bind(cutoff, input.now).all<{ id: string }>();
+    const expired = stalled.results.map((row) => row.id);
+    if (expired.length === 0) return { expired };
+    await database.batch(expired.flatMap((jobId) => [
+      database.prepare(
+        `UPDATE organizer_publication_jobs SET status = 'failed', failure_code = 'queued_timeout',
+           retryable = 1, error = ?1, updated_at = ?2
+         WHERE id = ?3 AND status = 'queued' AND updated_at <= ?4`,
+      ).bind("Publication never started: the job stayed queued past the timeout.", input.now, jobId, cutoff),
+      database.prepare(
+        `UPDATE organizer_event_candidates SET status = 'failed', updated_at = ?1, last_updated_role = 'system'
+         WHERE status IN ('approved', 'publishing')
+           AND EXISTS (SELECT 1 FROM organizer_publication_jobs j
+             WHERE j.id = ?2 AND j.status = 'failed' AND j.failure_code = 'queued_timeout'
+               AND j.candidate_id = organizer_event_candidates.id
+               AND j.candidate_version = organizer_event_candidates.current_version)`,
+      ).bind(input.now, jobId),
+    ]));
+    return { expired };
+  }
+
   async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
     await ensureTables();
     const job = await getOrganizerPublicationJob(input.jobId);
@@ -2797,7 +2836,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     saveOrganizerCandidate, submitOrganizerCandidate, reviewOrganizerCandidate,
     storeOrganizerSubmissionSnapshot, getOrganizerSubmissionSnapshot,
     createOrganizerPublicationJob, getOrganizerPublicationJob, getLatestOrganizerPublicationJob,
-    retryOrganizerPublicationJob, claimOrganizerPublicationLease,
+    retryOrganizerPublicationJob, expireStalledOrganizerPublicationJobs, claimOrganizerPublicationLease,
     hasOrganizerPublicationLease, releaseOrganizerPublicationLease,
     updateOrganizerPublicationJob, recordGitHubWebhookDelivery, completeGitHubWebhookDelivery,
     storePreviewMail, latestPreviewMail, clearPreviewData,

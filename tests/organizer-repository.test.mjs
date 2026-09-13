@@ -14,7 +14,7 @@ const vite = await createServer({
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
-const { createOrganizerPublicationExecutor, PublicationFailure } = await environment.runner.import("/app/organizer-publication.ts");
+const { createOrganizerPublicationExecutor, PublicationFailure, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
@@ -182,6 +182,38 @@ test("publication resumes main and smoke failures without recreating successful 
     assert.equal(calls.filter((value) => value === step).length, step === "preparing_main" ? 2 : 1);
   }
   assert.equal((await repository.getLatestOrganizerPublicationJob(id)).id, jobId);
+});
+
+test("a job nobody dispatched times out into the existing retry path", async () => {
+  const { id, jobId } = await publicationFixture();
+  const queuedAt = (await repository.getOrganizerPublicationJob(jobId)).updated_at;
+  const expire = (now) => repository.expireStalledOrganizerPublicationJobs({ now, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS });
+
+  assert.deepEqual(await expire(queuedAt + QUEUED_PUBLICATION_TIMEOUT_MS - 1), { expired: [] });
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
+
+  const timedOut = queuedAt + QUEUED_PUBLICATION_TIMEOUT_MS;
+  assert.deepEqual(await expire(timedOut), { expired: [jobId] });
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.failure_code, "queued_timeout");
+  assert.equal(job.retryable, 1);
+  assert.equal(job.step, "preparing_data", "the job failed on the step it never started");
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
+
+  // No second way to start a publication: recovery is the retry that already exists.
+  const retried = await repository.retryOrganizerPublicationJob({ jobId, now: timedOut + 1 });
+  assert.equal(retried.ok, true);
+  assert.equal(retried.step, "preparing_data");
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "publishing");
+
+  // A live lease owns its job even where a lost delivery left the row queued.
+  const lease = await repository.claimOrganizerPublicationLease({ jobId, now: timedOut + 2, ttlMs: 30_000 });
+  assert.equal(lease.ok, true);
+  await database.prepare("UPDATE organizer_publication_jobs SET status = 'queued', updated_at = ?1 WHERE id = ?2")
+    .bind(queuedAt, jobId).run();
+  assert.deepEqual(await expire(timedOut + 3), { expired: [] });
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
 });
 
 test("CREATE collision is permanent, leaves content locked and never calls the adapter", async () => {

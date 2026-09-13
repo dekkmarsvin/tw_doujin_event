@@ -1707,7 +1707,7 @@ function ReviewPanel({ session, detail, onChanged, setNotice }: {
     {detail.publication && <div className={styles.subpanel} aria-live="polite"><h4>發布狀態</h4><p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
       <ol>{publicationProgress(detail.publication).map((stage) => <li key={stage.label}>{stage.label}：{({ complete: "已完成", current: "處理中", failed: "未完成，發布停止", pending: "尚未開始" })[stage.state]}</li>)}</ol>
       {detail.publication.status !== "published" && <p>公開結果確認成功前，活動尚未完成發布。</p>}
-      {detail.publication.status === "failed" && <p className={styles.warning}>{publicationFailureMessage(detail.publication.failureCode, Boolean(detail.publication.retryable))}</p>}
+      {detail.publication.status === "failed" && <p className={styles.warning}>{publicationFailureMessage(detail.publication)}</p>}
       {(session.isAdmin || owner) && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable} onClick={() => act(retryOrganizerPublication(detail.publication!.id), "已要求從失敗步驟繼續，請查看發布進度。")}>重試發布</button>}
       <details><summary>技術詳細資訊</summary><p>工作：{detail.publication.id}</p><p>步驟：{detail.publication.step}</p>{detail.publication.failureCode && <p>錯誤代碼：{detail.publication.failureCode}</p>}{detail.publication.error && <p>{detail.publication.error}</p>}</details>
     </div>}

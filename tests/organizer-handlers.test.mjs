@@ -15,6 +15,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers } = await environment.runner.import("/app/circle-portal-handlers.ts");
+const { QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -532,6 +533,25 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.equal(retried.status, 200);
   assert.equal((await retried.json()).step, "preparing_main");
   assert.deepEqual(dispatched, [jobId, jobId]);
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
+
+  // Nothing ever picked the job up. The workspace entry itself ends the wait,
+  // so the activity is findable as failed before it is opened, and the retry
+  // the workspace already has takes the same job from there.
+  now += QUEUED_PUBLICATION_TIMEOUT_MS;
+  const listed = await handlers.listOrganizerCandidates(request("/api/organizer/events", "GET", undefined, ownerCookie));
+  assert.equal((await listed.json()).events.find((event) => event.id === candidateId).status, "failed");
+  const detail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  assert.deepEqual((await detail.json()).publication, {
+    id: jobId, status: "failed", step: "preparing_main", retryable: true,
+    failureCode: "queued_timeout", error: "Publication never started: the job stayed queued past the timeout.",
+    updatedAt: now,
+  });
+  const resumed = await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, ownerCookie), jobId);
+  assert.equal(resumed.status, 200);
+  assert.deepEqual(dispatched, [jobId, jobId, jobId]);
   assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
 });
 
