@@ -113,12 +113,29 @@ npx tsc --noEmit --incremental false
 
 | 命令 | 跑什麼 | 約略耗時 |
 |---|---|---|
-| `npm run test:browser` | 代表性尺寸（`1440x900` 與 `390x844`，標準字級）與全部互動 journey | 30 秒 |
-| `npm run test:browser:matrix` | 完整 10 尺寸 × 3 字級矩陣 | 90 秒 |
+| `npm run test:browser` | 全部 journey；地圖以代表性尺寸（`1440x900` 與 `390x844`，標準字級） | 60 秒 |
+| `npm run test:browser:matrix` | 同上，但地圖改跑完整 10 尺寸 × 3 字級矩陣 | 2 分鐘 |
 
-`npm run test:browser` 自己處理所有前置：staging pinned FF47、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
+`npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
-本機模式每次都會下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料。因此每次執行需要 GitHub 網路；下載或驗證失敗就停止，不沿用舊資料繼續測試。
+### journey 與它需要的資料
+
+journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runner 掃描該目錄，並從每支 journey 自己的原始碼讀出它需要哪一組 staged 資料，與 `scripts/run-tests.mjs` 推導 tier 的原則相同。檔案開頭宣告：
+
+```js
+// staged-data: fixture
+```
+
+| 宣告 | staging | 用途 |
+|---|---|---|
+| `pinned`（預設，可省略） | pinned FF47 | 真實 catalog 的尺寸、幾何與互動 |
+| `fixture` | `sample` + `sample-two` | 真實資料不該有的情境：已移動／已取消攤位、有圖與無圖社團、多活動選擇器 |
+
+staging 一次只能一組，所以 runner 依宣告分組：先 stage 並啟動一台伺服器跑完該組，再換下一組。即使某支 journey 失敗，其餘仍會跑完，最後一次回報全部失敗項目。
+
+`pinned` 每次都重新下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料；下載或驗證失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要 GitHub 網路，`fixture` 則完全離線。
+
+`fixture` journey 以攔截 `circles.json` 與 `overrides.json` 的方式供應情境資料，不修改 `fixtures/` 內任何檔案；圖片只接受 https，所以 journey 自行應答該來源，藉此區分「沒有圖」與「有圖但讀不到」。共用工具在 `tests/browser/support/`，該子目錄不會被當成 journey 執行。
 
 瀏覽器**刻意不列入 `package.json`**——`npm ci` 與整套 Node 測試必須能在沒有瀏覽器的機器上執行。第一次跑之前安裝一次：
 
@@ -128,9 +145,9 @@ npm run test:browser:install
 
 它使用 `--no-save`，所以不會動到 `package.json`；下一次 `npm ci` 之後需要重跑。已經有 Playwright 的話，改設 `PLAYWRIGHT_MODULE` 指向它即可。
 
-代表性尺寸是 PR gate（CI 的 `Browser acceptance` job），完整矩陣是 QA／release 前的檢查。要對既有的伺服器或 preview 部署執行，設 `MAP_TEST_URL`；此時資料與伺服器由呼叫者負責，腳本不會 staging。`BROWSER_CHANNEL` 可改用系統安裝的 Chrome 通道。
+代表性尺寸是 PR gate（CI 的 `Browser acceptance` job），完整矩陣是 QA／release 前的檢查。要對既有的伺服器或 preview 部署執行，設 `MAP_TEST_URL`；此時資料與伺服器由呼叫者負責，腳本不會 staging，因此**只會執行 `pinned` journey**——部署提供的是已發布活動，不是 fixture。`BROWSER_CHANNEL` 可改用系統安裝的 Chrome 通道。
 
-**注意**：`npm run test:browser` 會把 staging 從 fixture 換成 FF47。之後跑 `npm test` 會自動換回 fixture，但開發途中若直接執行 `npm run dev:pages` 看到的會是 FF47。
+**注意**：`npm run test:browser` 會改寫 staging（最後一組是 fixture `sample` + `sample-two`）。之後跑 `npm test` 會自動換回單一 fixture，但開發途中若直接執行 `npm run dev:pages`，看到的會是上一次驗收留下的 staging。
 
 **交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 

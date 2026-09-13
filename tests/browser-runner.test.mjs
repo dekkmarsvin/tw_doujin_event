@@ -15,6 +15,10 @@ for (const fetchFails of [false, true]) {
     await mkdir(path.join(root, "scripts"));
     await mkdir(path.join(root, ".event-data", "ff47"), { recursive: true });
     await writeFile(path.join(root, ".event-data", "ff47", "event.json"), "old pin");
+    // The runner reads the journeys off disk to decide what to stage, so one
+    // pinned journey has to exist for the pinned staging to be reached at all.
+    await mkdir(path.join(root, "tests", "browser"), { recursive: true });
+    await writeFile(path.join(root, "tests", "browser", "pinned-journey.mjs"), "// staged-data: pinned\n");
     await copyFile(new URL("../scripts/run-browser-tests.mjs", import.meta.url), path.join(root, "scripts", "run-browser-tests.mjs"));
     await writeFile(path.join(root, "scripts", "fetch-event-data.mjs"), `
       import { writeFileSync } from "node:fs";
@@ -45,3 +49,26 @@ for (const fetchFails of [false, true]) {
     }
   });
 }
+
+// Discovery decides what gets staged, so a journey that asks for data the
+// runner cannot supply has to stop the run by name rather than silently fall
+// back to the pinned event and assert against the wrong catalog.
+test("browser runner refuses a journey that declares unknown staged data", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "browser-runner-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, "scripts"));
+  await mkdir(path.join(root, "tests", "browser"), { recursive: true });
+  await copyFile(new URL("../scripts/run-browser-tests.mjs", import.meta.url), path.join(root, "scripts", "run-browser-tests.mjs"));
+  // Would exit 17 if it were ever reached; reaching it at all is the failure.
+  await writeFile(path.join(root, "scripts", "fetch-event-data.mjs"), "process.exit(17);");
+  await writeFile(path.join(root, "scripts", "stage-event-data.mjs"), "process.exit(17);");
+  await writeFile(path.join(root, "tests", "browser", "typo.mjs"), "// staged-data: fixtures\n");
+
+  const env = { ...process.env, PLAYWRIGHT_MODULE: "unused-before-staging" };
+  delete env.MAP_TEST_URL;
+  const result = spawnSync(process.execPath, [path.join(root, "scripts", "run-browser-tests.mjs")], { cwd: root, env, encoding: "utf8", timeout: 10000 });
+
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.match(result.stderr, /typo\.mjs/, "the refusal names the journey that has to be fixed");
+  assert.match(result.stderr, /fixtures/, "and the declaration it could not honour");
+});
