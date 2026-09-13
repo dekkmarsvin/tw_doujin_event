@@ -18,7 +18,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054 |
-| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050 |
+| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039 |
 | 保存期限與個資 | 0018、0021、0022、0027、0054 |
@@ -77,7 +77,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0043](./0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口，claim 逐活動隔離 | 生效 |
 | [0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目，身分等主辦攤位證據 | 生效 |
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
-| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | 生效 |
+| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | 部分被取代（0058） |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
 | [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
 | [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |
@@ -89,3 +89,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | 生效；擴充 0001 版面範圍 |
 | [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | 生效；取代 0055 的手機維持原行為限制 |
 | [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |
+| [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046 |
