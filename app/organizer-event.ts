@@ -15,6 +15,7 @@ export type OrganizerValidationIssue = {
   code: string;
   row?: number;
   target?: string;
+  boothCodes?: string[];
   message: string;
 };
 

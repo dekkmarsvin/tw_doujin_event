@@ -360,6 +360,12 @@ test("organizer detail uses formal map validation for readiness", async () => {
   const readiness = (await detail.json()).workspace.readiness;
   assert.equal(readiness.sections.find((section) => section.id === "map").state, "needs_attention");
   assert.equal(readiness.blockers.some((blocker) => blocker.code === "missing_booth"), true);
+  const validated = await handlers.validateOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}/validate`, "POST", {}, ownerCookie,
+  ), candidateId);
+  const missing = (await validated.json()).issues.find((issue) => issue.code === "missing_booth");
+  assert.deepEqual(missing.boothCodes, ["A01"]);
+  assert.equal(missing.target, `1/${VENUE_SPACE_ID}`);
 });
 
 test("owner and editor use one validated optimistic workflow while only admin approves", async (t) => {

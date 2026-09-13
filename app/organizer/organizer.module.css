@@ -234,3 +234,8 @@
   .identity span { display: none; }
   .shell { display: none; }
 }
+.validationCodes {
+  max-height: 20rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}

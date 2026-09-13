@@ -2099,6 +2099,7 @@ export function createCirclePortalHandlers({
           issues.push({
             severity: problem.severity === "warning" ? "warning" : "error", step: "map", code: problem.code,
             target: `${day.id}/${assignment.venueSpaceId}`, message: problem.message,
+            ...("boothCodes" in problem && problem.boothCodes ? { boothCodes: problem.boothCodes } : {}),
           });
         }
       }

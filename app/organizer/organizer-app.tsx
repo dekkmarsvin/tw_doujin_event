@@ -1585,9 +1585,40 @@ function ValidationPanel({ detail, onChanged, setNotice }: { detail: OrganizerEv
       <button type="button" className={styles.ghost} onClick={() => void previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }).catch((error) => setNotice({ kind: "error", message: message(error) }))}>建立預覽</button>
     </div></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
-    {issues?.map((issue, index) => <p key={`${issue.code}-${index}`} className={issue.severity === "error" ? styles.issueError : styles.issueWarning}><b>{STEP_LABEL[issue.step]}</b> {organizerIssueMessage(issue, detail.venueCatalog, detail.draft)}</p>)}
+    {issues?.map((issue, index) => <OrganizerValidationIssueCard key={`${issue.code}-${index}`} issue={issue} detail={detail} />)}
     {preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}
   </section>;
+}
+
+export function OrganizerValidationIssueCard({ issue, detail }: { issue: OrganizerValidationIssue; detail: OrganizerEventDetail }) {
+  const [dayId, venueSpaceId] = issue.step === "map" ? (issue.target ?? "").split("/") : [];
+  const scopeLabel = dayId && venueSpaceId
+    ? `${organizerDayLabel(detail.draft.event.days, dayId)}・${organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}` : null;
+  const unknown = issue.step === "map" && issue.code === "unknown_booth";
+  const missing = issue.step === "map" && issue.code === "missing_booth";
+  const rows = detail.import?.rows.filter((row) => row.dayId === dayId && row.venueSpaceId === venueSpaceId) ?? [];
+  const rowsByCode = new Map(rows.map((row) => [row.boothCode, row]));
+  const description = unknown
+    ? `地圖有 ${issue.boothCodes?.length ?? "部分"} 個攤位代碼未出現在同一天、同一場館空間的匯入資料。`
+    : missing ? `匯入資料有 ${issue.boothCodes?.length ?? "部分"} 個攤位代碼未出現在這份地圖。`
+      : organizerIssueMessage(issue, detail.venueCatalog, detail.draft);
+  return <div className={issue.severity === "error" ? styles.issueError : styles.issueWarning}>
+    <p><b>{issue.severity === "error" ? "必須修正" : "建議確認"}・{STEP_LABEL[issue.step]}</b>{scopeLabel && <>・{scopeLabel}</>}<br />{description}</p>
+    {(unknown || missing) && <>
+      <p>比對來源：已儲存的地圖 ↔ {detail.import ? `${detail.import.source.fileName}${detail.import.source.worksheet ? `／工作表「${detail.import.source.worksheet}」` : ""}` : "尚無匯入資料"}（此活動日與場館空間共 {rows.length} 筆匯入資料）。</p>
+      <p>{unknown
+        ? "請到「地圖」對照主辦配置圖，確認代碼是否打錯；也請到「攤位匯入」檢查活動日、場館空間與攤位代碼的欄位對應。若確定是未分配給社團的空攤位，可保留，不影響送審。"
+        : "請到「地圖」確認是否漏畫攤位或代碼不同（例如 A1 與 A01）；若匯入資料的日期、場館空間或代碼有誤，請到「攤位匯入」修正後重新儲存。"}</p>
+      <p>修正並儲存後，請重新執行檢查。</p>
+    </>}
+    {!!issue.boothCodes?.length && <details>
+      <summary>查看全部 {issue.boothCodes.length} 個攤位代碼{missing ? "與匯入資料列" : ""}</summary>
+      <div className={styles.validationCodes}><ul>{issue.boothCodes.map((code) => {
+        const row = rowsByCode.get(code);
+        return <li key={code}><code>{code}</code>{row && <> — {row.circleName}（來源第 {row.sourceRow} 列）</>}</li>;
+      })}</ul></div>
+    </details>}
+  </div>;
 }
 
 function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: OrganizerReaderPreview; venueCatalog: OrganizerVenueCatalog }) {

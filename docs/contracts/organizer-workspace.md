@@ -96,6 +96,8 @@ draft → submitted → approved → publishing → published
 
 ## 驗證、預覽與送審
 
+- 地圖檢查保留完整 `boothCodes`，檢查與預覽以活動日與場館空間標示每項問題；攤位差異顯示比對的匯入檔名、工作表與該範圍列數，可展開全部代碼，缺少的攤位另顯示社團名稱與來源列號。提示分別引導檢查地圖與匯入欄位，未知攤位維持 warning，缺少攤位維持 error。
+
 - `POST …/validate` 回傳 `issues[]`，每筆帶 `severity`、`step`（`event`／`venue`／`import`／`map`／`preview`）、`code`，必要時帶 `row` 或 `target`。缺任何一份「活動日 × venue-space」地圖是 error，不是 warning。成功時只把 workspace 的 `last_validated_version` 記為目前版本；不增加 candidate version，也不建立內容 revision。任何後續內容寫入使版本前進後，這個完成狀態自然失效；若版本在 validation 與 marker 寫入之間前進，API 回 409 並要求重新驗證，不會對舊版回報成功。
 - `POST …/preview` 回傳 `organizer-reader-preview/1`：草稿、匯入的配置與每份地圖 layout，供 Reader 樣式預覽。它不寫入任何資料。
 - `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。送審會固定一份 `organizer-submission-snapshot/1`（草稿、所選場館與使用空間的完整名稱／官方來源記錄、匯入來源 metadata、全部資料列與每份地圖內容），以其 SHA-256 作為 approval hash。這使候選 review 不會隱性讀取日後新增的 catalog 狀態；發布仍必須把 snapshot 內的來源記錄轉成 data repository 中經 review 的 reference records、selection 與 commit/hash pin，不能直接把 D1 catalog 當成公開 reference data。
