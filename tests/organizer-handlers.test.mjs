@@ -133,6 +133,69 @@ test("admin invitation creates an organizer event entry that only its owner can 
   assert.equal(hidden.status, 404);
 });
 
+/**
+ * The admin who names themselves the owner used to hold the `admin` event role
+ * until they opened the mailed link. The submit control is rendered only for
+ * `owner`, so an admin could build a whole activity and never see it — not
+ * disabled, absent. Only admins may add Owners at all, so the trip through the
+ * mailbox proved nothing.
+ */
+test("an admin who creates an activity for themselves is its owner without opening the invitation", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const sentBefore = sent.length;
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "Comic Horizon 20", ownerEmail: "admin@example.test" }, adminCookie,
+  ));
+  assert.equal(created.status, 201);
+  const { candidateId } = await created.json();
+
+  // The session that created the activity opens it; no second sign-in, no mail.
+  const detail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, adminCookie,
+  ), candidateId);
+  assert.equal(detail.status, 200);
+  assert.equal((await detail.json()).event.role, "owner");
+
+  // The audit says the grant came from creating the activity, not from
+  // accepting an invitation.
+  const actions = (await database.prepare("SELECT action FROM audit_log WHERE subject_id = ?1 ORDER BY at, action")
+    .bind(candidateId).all()).results.map((row) => row.action);
+  assert.deepEqual(actions, ["organizer_event.created", "organizer_event.owner_granted_on_create"]);
+
+  // The invitation is spent at creation, so signing in through the link that
+  // still goes out cannot mint a second grant.
+  assert.equal(sent.length, sentBefore + 1);
+  await signIn("admin@example.test", "organizer");
+  const grants = await database.prepare(
+    "SELECT COUNT(*) AS total FROM organizer_event_grants WHERE candidate_id = ?1 AND role = 'owner' AND revoked_at IS NULL",
+  ).bind(candidateId).first();
+  assert.equal(grants.total, 1);
+});
+
+test("an activity created for someone else still waits for that owner to accept the invitation", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST",
+    { tentativeName: "PF46", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+
+  assert.equal((await database.prepare(
+    "SELECT COUNT(*) AS total FROM organizer_event_grants WHERE candidate_id = ?1",
+  ).bind(candidateId).first()).total, 0);
+  const adminDetail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, adminCookie,
+  ), candidateId);
+  assert.equal((await adminDetail.json()).event.role, "admin");
+
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const ownerDetail = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  assert.equal((await ownerDetail.json()).event.role, "owner");
+});
+
 test("an event organizer can list and immediately extend the shared venue catalog", async () => {
   const adminCookie = await signIn("admin@example.test");
   const createdCandidate = await handlers.adminCreateOrganizerCandidate(request(

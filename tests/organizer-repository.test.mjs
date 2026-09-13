@@ -263,6 +263,55 @@ test("an admin creates an empty event entry and its invited owner gains only tha
   assert.equal(adminEvents[0].role, "admin");
 });
 
+test("an admin named as their own event's owner is granted it in the creating transaction", async () => {
+  const created = await repository.createOrganizerCandidate({
+    id: "candidate-self-owned",
+    tentativeName: "自己負責的候選活動",
+    ownerEmail: "admin@example.test",
+    createdByAccountId: adminId,
+    draftJson: JSON.stringify(initialDraft),
+    now: NOW,
+    ownerGrant: { accountId: adminId, audit: {
+      at: NOW, actorAccountId: adminId, actorRole: "admin",
+      action: "organizer_event.owner_granted_on_create", subjectType: "organizer_event",
+      subjectId: "candidate-self-owned", detail: { reason: "creator_is_owner" },
+    } },
+  });
+  assert.deepEqual(created, { ok: true, version: 1 });
+  assert.equal(await repository.organizerRole("candidate-self-owned", adminId), "owner");
+
+  // The grant and the audit row that explains it are in the same batch: an
+  // account holding owner with nothing saying why is not an outcome to allow.
+  const audit = await database.prepare(
+    "SELECT action, actor_role FROM audit_log WHERE subject_id = ?1",
+  ).bind("candidate-self-owned").all();
+  assert.deepEqual(audit.results.map((row) => `${row.actor_role}:${row.action}`),
+    ["admin:organizer_event.owner_granted_on_create"]);
+
+  // The invitation is stamped accepted at creation, so the ordinary sign-in
+  // path finds nothing pending and cannot mint a second grant.
+  assert.deepEqual(await repository.acceptOrganizerInvitations({
+    accountId: adminId, email: "admin@example.test", now: NOW + 1,
+  }), []);
+  assert.equal((await database.prepare(
+    "SELECT COUNT(*) AS total FROM organizer_event_grants WHERE candidate_id = ?1",
+  ).bind("candidate-self-owned").first()).total, 1);
+
+  // Everyone else still reaches the workspace through the invitation.
+  await repository.createOrganizerCandidate({
+    id: "candidate-invited",
+    tentativeName: "別人負責的候選活動",
+    ownerEmail: "owner@example.test",
+    createdByAccountId: adminId,
+    draftJson: JSON.stringify(initialDraft),
+    now: NOW,
+  });
+  assert.equal(await repository.organizerRole("candidate-invited", ownerId), null);
+  assert.deepEqual(await repository.acceptOrganizerInvitations({
+    accountId: ownerId, email: "owner@example.test", now: NOW + 2,
+  }), [{ candidateId: "candidate-invited", role: "owner" }]);
+});
+
 test("workspace progress is per candidate and resume location is per collaborator without candidate revisions", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-workspace",

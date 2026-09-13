@@ -1608,6 +1608,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return !!row;
   }
 
+  /**
+   * `ownerGrant` is set only when the admin creating the candidate named
+   * themselves as its Owner. Admins already hold the sole authority to add and
+   * remove Owners, so routing their own grant through an emailed invitation
+   * proves nothing — and until they accepted it their event role stayed
+   * `admin`, which hides the Owner-only submit control entirely. The grant is
+   * written in this batch, the invitation is stamped accepted at creation so a
+   * later sign-in cannot grant it twice, and its own audit action separates a
+   * create-time grant from an accepted invitation.
+   */
   async function createOrganizerCandidate(input: {
     id: string;
     tentativeName: string;
@@ -1615,8 +1625,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     createdByAccountId: string;
     draftJson: string;
     now: number;
+    ownerGrant?: { accountId: string; audit: IdentityAuditEntry } | null;
   }) {
     await ensureTables();
+    const ownerGrant = input.ownerGrant ?? null;
     try {
       const results = await database.batch([
         database.prepare(
@@ -1638,9 +1650,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         ).bind(input.id, input.now),
         database.prepare(
           `INSERT INTO organizer_event_invitations (
-             id, candidate_id, email, role, invited_by, created_at
-           ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5)`,
-        ).bind(crypto.randomUUID(), input.id, input.ownerEmail, input.createdByAccountId, input.now),
+             id, candidate_id, email, role, invited_by, created_at, accepted_by, accepted_at
+           ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5, ?6, ?7)`,
+        ).bind(
+          crypto.randomUUID(), input.id, input.ownerEmail, input.createdByAccountId, input.now,
+          ownerGrant?.accountId ?? null, ownerGrant ? input.now : null,
+        ),
+        ...(ownerGrant ? [
+          database.prepare(
+            `INSERT INTO organizer_event_grants (
+               id, candidate_id, account_id, role, granted_by, granted_at, revoked_by, revoked_at
+             ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5, NULL, NULL)`,
+          ).bind(crypto.randomUUID(), input.id, ownerGrant.accountId, input.createdByAccountId, input.now),
+          auditStatement(ownerGrant.audit),
+        ] : []),
       ]);
       return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const, version: 1 }

@@ -1803,10 +1803,21 @@ export function createCirclePortalHandlers({
     }
     const candidateId = crypto.randomUUID();
     const draft = createEmptyOrganizerEventDraft(tentativeName);
+    const createdAt = config.now();
+    // An admin who names themselves the owner is granted it here, in the same
+    // transaction as the candidate. Only admins may add Owners, so the round
+    // trip through the mailbox added no guarantee — it only left the creator on
+    // the `admin` event role, which renders no submit control at all.
+    const selfOwned = ownerEmail === normalizeEmail(gate.session.email);
     const created = await repository.createOrganizerCandidate({
       id: candidateId, tentativeName, ownerEmail,
       createdByAccountId: gate.session.accountId,
-      draftJson: JSON.stringify(draft), now: config.now(),
+      draftJson: JSON.stringify(draft), now: createdAt,
+      ownerGrant: selfOwned ? { accountId: gate.session.accountId, audit: {
+        at: createdAt, actorAccountId: gate.session.accountId, actorRole: "admin",
+        action: "organizer_event.owner_granted_on_create", subjectType: "organizer_event",
+        subjectId: candidateId, detail: { tentativeName, reason: "creator_is_owner" }, ipHash,
+      } } : null,
     });
     if (!created.ok) return json({ error: "無法建立活動，請重新整理後再試。" }, 409);
     // The candidate exists from here on, so its audit row is written before
