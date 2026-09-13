@@ -29,12 +29,13 @@ export async function start(name) {
 
   return {
     report,
-    async page({ event = "sample", params = "", viewport = { width: 1440, height: 900 }, routes } = {}) {
+    /** `url` opens an exact address — a one-time login link; otherwise an event. */
+    async page({ event = "sample", params = "", url, viewport = { width: 1440, height: 900 }, routes } = {}) {
       const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
       page.setDefaultTimeout(10000);
       page.on("pageerror", (error) => report.errors.push(error.message));
       if (routes) await routes(page);
-      await page.goto(`${base}/?event=${encodeURIComponent(event)}${params}`);
+      await page.goto(url ?? `${base}/?event=${encodeURIComponent(event)}${params}`);
       return page;
     },
     /** Wait for the map itself, so a journey never asserts against a half-built page. */

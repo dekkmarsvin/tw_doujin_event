@@ -113,8 +113,8 @@ npx tsc --noEmit --incremental false
 
 | 命令 | 跑什麼 | 約略耗時 |
 |---|---|---|
-| `npm run test:browser` | 全部 journey；地圖以代表性尺寸（`1440x900` 與 `390x844`，標準字級） | 60 秒 |
-| `npm run test:browser:matrix` | 同上，但地圖改跑完整 10 尺寸 × 3 字級矩陣 | 2 分鐘 |
+| `npm run test:browser` | 全部 journey；地圖以代表性尺寸（`1440x900` 與 `390x844`，標準字級） | 3 分鐘 |
+| `npm run test:browser:matrix` | 同上，但地圖改跑完整 10 尺寸 × 3 字級矩陣 | 4 分鐘 |
 
 `npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
@@ -126,14 +126,23 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 // staged-data: fixture
 ```
 
-| 宣告 | staging | 用途 |
+| 宣告 | 環境 | 用途 |
 |---|---|---|
-| `pinned`（預設，可省略） | pinned FF47 | 真實 catalog 的尺寸、幾何與互動 |
-| `fixture` | `sample` + `sample-two` | 真實資料不該有的情境：已移動／已取消攤位、有圖與無圖社團、多活動選擇器 |
+| `pinned`（預設，可省略） | Vite + pinned FF47 | 真實 catalog 的尺寸、幾何與互動 |
+| `fixture` | Vite + `sample` + `sample-two` | 真實資料不該有的情境：已移動／已取消攤位、有圖與無圖社團、多活動選擇器 |
+| `portal` | `dev:portal` 的隔離環境 | 需要登入的流程：magic-link、認領、審核、編輯與發布 |
 
-staging 一次只能一組，所以 runner 依宣告分組：先 stage 並啟動一台伺服器跑完該組，再換下一組。即使某支 journey 失敗，其餘仍會跑完，最後一次回報全部失敗項目。
+一次只能有一組資料，所以 runner 依宣告分組：先備妥並啟動一台伺服器跑完該組，再換下一組。即使某支 journey 失敗，其餘仍會跑完，最後一次回報全部失敗項目。
+
+`portal` 組與 Vite 組是**不同的伺服器**：`/api/*` 只存在於 Pages Functions 底下，Vite dev server 會把登入請求當成前台 HTML fallback。runner 會自行 build `dist`、清空 `.wrangler/local-portal`，再用 `scripts/run-local-portal.mjs`（與 `npm run dev:portal` 同一支）啟動。
+
+清空是必要的：帳號、認領、收信與**登入連結速率限制**都存在那個 D1。journey 會斷言「這個社團尚未被認領」並固定登入幾次，沿用上一輪的資料會第一次通過、之後因為與程式無關的原因失敗。
+
+因此 `portal` journey 需要 8788 埠。若你自己的 `npm run dev:portal` 正在跑，runner 會直接停下並說明，不會半跑在你的資料上。
 
 `pinned` 每次都重新下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料；下載或驗證失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要 GitHub 網路，`fixture` 則完全離線。
+
+`portal` journey 使用 `config/local-portal.env` 的本機測試值（Cloudflare 官方 always-pass Turnstile 金鑰、保留的 `.test` 收信地址、local D1 收信槽），magic link 由本機收信槽取得，與 `npm run smoke:portal` 同一條路徑。安全性本身的驗證仍留在 `tests/circle-portal-route.test.mjs`：enumeration resistance、Turnstile/CSRF 檢查順序、rejected request 不寫 DB、claim 唯一性與競態、retention/刪除、token 不變式——這些 browser 證明不了，改用 browser 會是拿真實覆蓋換更慢更不穩的版本。
 
 `fixture` journey 以攔截 `circles.json` 與 `overrides.json` 的方式供應情境資料，不修改 `fixtures/` 內任何檔案；圖片只接受 https，所以 journey 自行應答該來源，藉此區分「沒有圖」與「有圖但讀不到」。共用工具在 `tests/browser/support/`，該子目錄不會被當成 journey 執行。
 

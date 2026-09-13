@@ -384,8 +384,11 @@ jobs:
           npm run test:browser:install
           npx playwright install-deps chromium
 
-      # The journeys assert against real FF47 booths, which the fixture event
-      # cannot stand in for. `test:browser` fetches the pinned data itself.
+      # Each journey declares what it needs and `test:browser` stands it up: the
+      # pinned FF47 data it fetches itself, the fixtures it stages, and the
+      # isolated local portal — Wrangler with local D1 and R2, always-pass
+      # Turnstile and mail captured in D1 — that the signed-in journeys need.
+      # Nothing here reaches a remote binding or sends mail.
       - name: Run representative browser journeys
         run: npm run test:browser
 
