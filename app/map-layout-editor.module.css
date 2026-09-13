@@ -92,7 +92,8 @@
 .remove:hover { background:#ffebe7; }.remove:active { background:#f8ddd8; }
 .batchTools { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px; }
 .batchTools button { flex:1 1 44%; min-height:34px; border:1px solid #d4dad5; border-radius:7px; background:#fff; color:#344039; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
-.batchTools button:hover { border-color:#79857d; background:#f2f4f1; }
+.batchTools button:hover:not(:disabled) { border-color:#79857d; background:#f2f4f1; }
+.batchTools button:disabled { border-color:#e4e8e5; background:#f6f8f6; color:#a6ada8; cursor:default; }
 .batchTools button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
 .batchTools .batchWide { flex-basis:100%; }
 .hint { margin:13px 0 0; color:#89928c; font-size:calc(8px * var(--ui-font-scale,1)); line-height:1.55; }

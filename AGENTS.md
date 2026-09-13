@@ -14,8 +14,8 @@ The five canonical triage roles, each label string equal to its name. See `docs/
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Domain vocabulary, architecture decisions, and behavioral contracts are located through `docs/agents/domain.md`.
 
 ### Review-fix loop
 
-Automated review findings are bounded by the ticket that opened the PR. Pass the scope gate before fixing, decline out-of-scope findings on the thread, and stop at the circuit breakers. See `docs/agents/review-loop.md` and ADR-0040.
+Automated review findings are bounded by the ticket that opened the PR. `docs/agents/review-loop.md` owns scope checks, authorized fixes, disposition, and circuit breakers under ADR-0040.
