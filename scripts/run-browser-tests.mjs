@@ -15,7 +15,6 @@
 // Playwright is resolved wherever it already is rather than depended upon, and
 // its absence is reported as the one command that fixes it.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,11 +66,11 @@ const external = process.env.MAP_TEST_URL;
 if (!external) {
   // The journeys assert against real FF47 booths, so the fixture event cannot
   // stand in. The fetch is the same pinned, per-file SHA-256 verified one that
-  // `build:production` performs, and it is skipped once the pin is on disk.
-  if (!existsSync(path.join(ROOT, ".event-data", EVENT))) {
-    console.error(`staging ${EVENT}: fetching the pinned event data`);
-    run("fetch-event-data.mjs", [EVENT]);
-  }
+  // `build:production` performs. An existing directory may belong to an older
+  // pin or contain incomplete data; always refresh before staging, and stop
+  // if verification fails rather than running against the previous checkout.
+  console.error(`staging ${EVENT}: fetching the pinned event data`);
+  run("fetch-event-data.mjs", [EVENT]);
   console.error(`staging ${EVENT} into public/data/events (this replaces the fixture staging; \`npm test\` restages the fixture)`);
   run("stage-event-data.mjs", [EVENT]);
 }

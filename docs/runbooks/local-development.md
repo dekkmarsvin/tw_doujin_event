@@ -118,6 +118,8 @@ npx tsc --noEmit --incremental false
 
 `npm run test:browser` 自己處理所有前置：staging pinned FF47、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
+本機模式每次都會下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料。因此每次執行需要 GitHub 網路；下載或驗證失敗就停止，不沿用舊資料繼續測試。
+
 瀏覽器**刻意不列入 `package.json`**——`npm ci` 與整套 Node 測試必須能在沒有瀏覽器的機器上執行。第一次跑之前安裝一次：
 
 ```bash
