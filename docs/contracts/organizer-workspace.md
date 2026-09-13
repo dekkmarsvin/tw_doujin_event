@@ -107,7 +107,7 @@ draft → submitted → approved → publishing → published
 
 ## 發布邊界
 
-核心實作：[`organizer-publication.ts`](../../app/organizer-publication.ts)、[`organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`publication-rollout.ts`](../../app/publication-rollout.ts)。測試：`tests/organizer-repository.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-publication-presentation.test.mjs`。決策：[ADR-0057](../adr/0057-approval-starts-create-publication.md)。
+核心實作：[`organizer-publication.ts`](../../app/organizer-publication.ts)、[`organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`publication-rollout.ts`](../../app/publication-rollout.ts)。測試：`tests/organizer-repository.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-publication-presentation.test.mjs`。決策：[ADR-0057](../adr/0057-approval-starts-create-publication.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)。
 
 依 ADR-0057，UI 動作為「核准並發布」。已啟用且有 durable dispatch adapter 時，同一 D1 transaction 記錄核准、建立唯一 `queued/preparing_data` job、把 candidate 改為 publishing，再交給 dispatcher；不需要第二次人工發布。dispatch 失敗記錄 `dispatch_failed`，內容保持核准與鎖定，可由 Owner 或 Admin 重試。
 
@@ -131,7 +131,8 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；尚未提供 dispatcher，即使改成 github 也不能核准或 retry。
 2. `POST /api/integrations/github/webhook` 仍未連接 executor，非 github 或缺 secret 回 503，否則 processing fail closed，不能宣稱已完成 GitHub publication。
-3. `app/publication-rollout.ts` 提供 ruleset 評估器；active 不足以通過，必須要求 PR、所有指定 checks、已確認 App id 且無 App bypass。這是 rollout 檢查，尚未接入 production driver。
+
+`app/publication-rollout.ts` 的 ruleset 評估器**不是 gate**：依 [ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md) §3 它是維運報告，不阻擋任何 publication 步驟，也不是開啟 `ORGANIZER_PUBLICATION_MODE` 的必要條件。它目前的判定仍是 active 不足以通過、必須要求 PR、所有指定 checks、已確認 App id 且無 App bypass；該判定要到 #227 的程式改動落地才改變。它沒有 runtime caller。
 
 既有純函式邊界保留：
 
