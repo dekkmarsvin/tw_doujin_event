@@ -14,6 +14,9 @@ export function publicationProgress(job: { step: string; status: string }) {
 }
 
 export function publicationFailureMessage(code: string | null | undefined, retryable: boolean) {
+  // A job that never started reads as a mid-publication failure unless it says
+  // otherwise, and the owner then looks for progress that was never made.
+  if (code === "queued_timeout") return "發布沒有開始，內容沒有被退件。可以重試發布。";
   if (code === "event_id_collision") return "這個活動代碼已存在，首次發布不能覆寫。請聯絡網站管理者，透過已發布活動修正流程處理。";
   if (code === "snapshot_mismatch") return "已核准內容與發布記錄不一致，系統已停止發布。請聯絡網站管理者檢查這一版的送審記錄。";
   return retryable ? "發布暫時失敗，內容沒有被退件。可以重試發布，系統會從失敗步驟繼續，保留已完成的進度。"

@@ -13,6 +13,13 @@ test("failed deployment preserves completed data stages and never looks publishe
   assert.match(publicationFailureMessage("infrastructure_error", true), /內容沒有被退件/);
 });
 
+test("a job that never started says so instead of reading as a failure part-way through", () => {
+  assert.deepEqual(publicationProgress({ step: "preparing_data", status: "failed" }).map(({ state }) => state),
+    ["failed", "pending", "pending", "pending"]);
+  assert.match(publicationFailureMessage("queued_timeout", true), /發布沒有開始/);
+  assert.notEqual(publicationFailureMessage("queued_timeout", true), publicationFailureMessage("infrastructure_error", true));
+});
+
 test("an active ruleset alone is not rollout approval", () => {
   const ruleset = { enforcement: "active", conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } }, bypass_actors: [],
     rules: [{ type: "deletion" }, { type: "non_fast_forward" }] };

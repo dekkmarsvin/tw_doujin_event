@@ -15,6 +15,17 @@ export class PublicationFailure extends Error {
   constructor(public code: string, message: string, public retryable: boolean) { super(message); }
 }
 
+/**
+ * How long a job may stay `queued` before the wait itself is the failure.
+ * Only dispatch moves a job out of `queued`, so one whose dispatch never
+ * happened waits forever; past this bound it becomes an ordinary retryable
+ * failure and the existing retry path takes it over. Waiting on CI is
+ * `publishing`, never `queued`, so no in-flight step is affected. The value is
+ * the contract's — `docs/contracts/organizer-workspace.md`, 發布邊界 — and
+ * changing it changes that document too.
+ */
+export const QUEUED_PUBLICATION_TIMEOUT_MS = 15 * 60 * 1000;
+
 /** A runtime adapter must reconcile remote effects by job/stage and pinned SHA
  * before creating anything. Returning pending never advances the durable step.
  * This seam is intentionally not a fake production GitHub implementation. */

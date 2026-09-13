@@ -121,6 +121,8 @@ lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 fa
 
 `POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
 
+**`queued` 停留超過 15 分鐘就是失敗。** 只有 dispatch 會讓 job 離開 `queued`，而 retry 只接受 `failed`，所以 dispatch 從未發生的 job 原本會永遠卡住。超過這個逾時值後，下一次讀取活動列表或任一候選活動時，系統把該 job 改為 `failed` + `queued_timeout` + retryable，step 維持在它從未開始的那一步，candidate 一併轉為 `failed`。接手的是上一段那條既有恢復路徑——同一筆 job、同一份 snapshot——不另外提供「手動啟動 queued job」的入口，否則就出現第二條產生 publication 的路徑。等待 CI 的狀態是 `publishing` 而不是 `queued`，不受這個逾時影響；lease 仍未過期的 job 留給持有者，不在這裡改寫。失敗訊息說的是發布沒有開始，不是發布中途失敗。
+
 UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。送審與發布只有 published 才算完成，不能在 approved/queued 顯示 6/6。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
 
 目前 production gate：
@@ -134,7 +136,7 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 - [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
 - webhook 的 HMAC 驗證與以 delivery id 去重。
 
-ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected SHA merge、data → main → deployment 與 production origin smoke 仍須由 production driver 接線並實測。既有 approved/queued（包括 ch-20）保留原 snapshot/job，未自動修改或發布；啟用時要以原 job 恢復，不能要求 Organizer 再按一次 Publish。
+ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected SHA merge、data → main → deployment 與 production origin smoke 仍須由 production driver 接線並實測。既有 approved/queued（包括 ch-20）保留原 snapshot/job，不做一次性資料修正，也不會被自動發布；超過 `queued` 逾時的那幾筆由上述機制轉成 failed + retryable，恢復仍是重試原 job，不要求 Organizer 再按一次 Publish。
 
 ## 與地圖貢獻流程的邊界
 
@@ -154,6 +156,7 @@ ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected S
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場館空間或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准後的候選停在 `approved`，且 webhook 回 503。
+- 停在 `queued` 超過 15 分鐘的發布工作，在活動列表與活動頁都顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。
