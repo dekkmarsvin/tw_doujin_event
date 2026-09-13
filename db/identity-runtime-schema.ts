@@ -409,6 +409,8 @@ export const IDENTITY_TABLES = [
     "main_head_sha TEXT",
     "main_merge_sha TEXT",
     "workflow_run_id INTEGER",
+    "failure_code TEXT",
+    "retryable INTEGER NOT NULL DEFAULT 1",
     "error TEXT",
     "created_at INTEGER NOT NULL",
     "updated_at INTEGER NOT NULL",
@@ -494,6 +496,8 @@ export const IDENTITY_INDEXES = [
  * NOT EXISTS`, so duplicate-column errors are the idempotent success case.
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
+  { table: "organizer_publication_jobs", column: "failure_code", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN failure_code TEXT" },
+  { table: "organizer_publication_jobs", column: "retryable", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN retryable INTEGER NOT NULL DEFAULT 1" },
   { table: "accounts", column: "deletion_started_at", sql: "ALTER TABLE accounts ADD COLUMN deletion_started_at INTEGER" },
   { table: "login_tokens", column: "audience", sql: "ALTER TABLE login_tokens ADD COLUMN audience TEXT NOT NULL DEFAULT 'circle'" },
   { table: "login_tokens", column: "minted_by", sql: "ALTER TABLE login_tokens ADD COLUMN minted_by TEXT" },

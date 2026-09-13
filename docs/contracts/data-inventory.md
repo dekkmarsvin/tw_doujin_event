@@ -136,7 +136,7 @@
 | `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
 | `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場館空間、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
 | `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
-| `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA 與錯誤 |
+| `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA、workflow run id、錯誤訊息、failure_code 與 retryable；重試保留原 job 與核准 snapshot |
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
 | `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
 

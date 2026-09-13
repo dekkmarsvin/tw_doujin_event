@@ -489,12 +489,38 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     }],
   });
 
+  const disabled = await handlers.adminReviewOrganizerCandidate(request(
+    `/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: 5, decision: "approve" }, adminCookie,
+  ), candidateId);
+  assert.equal(disabled.status, 503);
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "submitted");
+  assert.equal(await repository.getLatestOrganizerPublicationJob(candidateId), null);
+  const dispatched = [];
+  handlers = createCirclePortalHandlers({ ...handlerOptions,
+    config: { ...handlerOptions.config, organizerPublicationMode: "fake" },
+    dispatchOrganizerPublication: async (jobId) => { dispatched.push(jobId); },
+  });
   const approved = await handlers.adminReviewOrganizerCandidate(request(
     `/api/admin/organizer/events/${candidateId}/review`, "POST",
     { expectedVersion: 5, decision: "approve", note: "資料可發布" }, adminCookie,
   ), candidateId);
   assert.equal(approved.status, 200);
-  assert.equal((await approved.json()).status, "approved");
+  const approval = await approved.json();
+  assert.equal(approval.status, "queued");
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
+  assert.deepEqual(dispatched, [approval.publicationJobId]);
+  const jobId = approval.publicationJobId;
+  const lease = await repository.claimOrganizerPublicationLease({ jobId, now, ttlMs: 30_000 });
+  await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: "preparing_data",
+    nextStep: "preparing_main", status: "failed", error: "temporary", retryable: true, now });
+  const retryPath = `/api/organizer/publications/${jobId}/retry`;
+  assert.equal((await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, editorCookie), jobId)).status, 403);
+  const retried = await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, ownerCookie), jobId);
+  assert.equal(retried.status, 200);
+  assert.equal((await retried.json()).step, "preparing_main");
+  assert.deepEqual(dispatched, [jobId, jobId]);
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
 });
 
 test("import API persists confirmed normalized rows and rejects stale versions", async () => {
