@@ -3,7 +3,7 @@
 - **狀態**：Accepted
 - **日期**：2026-09-13
 - **依據**：#212、#227、#104
-- **部分取代**：[ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 決策第 4 點（Repository ruleset 是第二道強制邊界），以及該點附帶的「兩個 ruleset 經 API 實測完成前 production merge feature flag 必須保持關閉」。第 1、2、3、5 點全部不變
+- **部分取代**：[ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 的三處——(a) 決策第 4 點（Repository ruleset 是第二道強制邊界）與該點附帶的「兩個 ruleset 經 API 實測完成前 production merge feature flag 必須保持關閉」全數失效；(b) 決策第 3 點條件 5「repository ruleset 要求的所有 checks 已成功」，其 required checks 的權威來源改為程式常數 `PUBLICATION_REQUIRED_CHECKS`（條件本身仍成立，改由 App adapter 驗證）；(c)〈結果〉第一句的「ruleset 仍決定可否合併」。決策第 1、2、5 點與第 3 點的其餘七項條件不變
 - **延續**：ADR-0046 第 3 點的八項合併充分條件、[ADR-0057](./0057-approval-starts-create-publication.md) 的核准即發布
 
 ## 背景
@@ -24,13 +24,15 @@
 
 ### 1. 合併前的強制檢查在 App adapter 執行
 
-`mergeOwnedPullRequest()` 在合併前逐項驗證：PR 仍為 open、base 為 `main`、head branch 等於 `organizer/{jobId}/{stage}`、head SHA 等於 job 記錄的 `expectedHeadSha`、PR 作者為 App，以及 `["Organizer publication approval", ...requiredChecks]` 中的每一項都在同一個 head SHA 上以 `conclusion === "success"` 完成。任一項不成立即失敗關閉。
+`mergeOwnedPullRequest()` 在合併前逐項驗證六件事：PR 仍為 open、base 為 `main`、head branch 等於 `organizer/{jobId}/{stage}`、head SHA 等於 job 記錄的 `expectedHeadSha`、PR 作者為 bot 帳號（`user.login` 以 `[bot]` 結尾），以及 `["Organizer publication approval", ...requiredChecks]` 中的每一項都在同一個 head SHA 上以 `conclusion === "success"` 完成。任一項不成立即失敗關閉。
 
-ADR-0046 第 3 點的八項充分條件完全保留。本決策改變的只是「repository ruleset 必須同時強制同一組 checks」這一條。
+**已知缺口**：作者檢查只確認 PR 由某個 bot 帳號建立，沒有比對本 App 的 app id、slug 或 installation，因此不等於 ADR-0046 第 3 點開頭的「App 只能合併同一 publication job 自己建立的 PR」。第 5 點重新評估時必須把這個缺口一併列入。
+
+ADR-0046 第 3 點的八項充分條件完全保留，但不是全部落在這個 adapter：條件 1（snapshot hash）、7（publication lease）與 8（data 先於 main）由 `app/organizer-publication.ts` 的 driver 維持，adapter 負責條件 2、3、4、6 與條件 5 的比對。本決策改變的只是條件 5 的權威來源——required checks 由第 2 點的常數定義，不再要求 repository ruleset 同時強制同一組 checks。
 
 ### 2. required checks 由程式定義
 
-`PUBLICATION_REQUIRED_CHECKS` 是這組檢查的唯一定義：
+`PUBLICATION_REQUIRED_CHECKS` 是這組檢查的唯一定義。目標值為：
 
 ```text
 data  →  data / check
@@ -42,7 +44,7 @@ main  →  Verify and deploy
          Organizer publication approval
 ```
 
-`Browser acceptance` 為本次新增。名稱必須與 workflow 的 job name 逐字相符。
+`Browser acceptance` 是本決策新增的目標項，**尚未寫進常數**：`app/publication-rollout.ts` 的 `PUBLICATION_REQUIRED_CHECKS.main` 目前只有 `Verify and deploy`、`Full preview portal E2E` 與 `Organizer publication approval` 三項，加入 `Browser acceptance` 由 #227 落地。名稱必須與 workflow 的 job name 逐字相符。
 
 實作要注意 `Full preview portal E2E` 在 push 事件下的 conclusion 是 `skipped`，只有 PR 事件會實際執行；adapter 驗的是 PR head SHA，因此檢查對象正確，但不得把 `skipped` 當成通過。
 
@@ -62,7 +64,12 @@ main  →  Verify and deploy
 4. App ID、installation ID、private key 與 webhook secret 已設定，且可實際簽出 installation token。
 5. data → main → deployment → Pages production origin smoke 的順序與 blocking 性質不變。
 
-不再要求兩個 ruleset 先帶齊 required status checks。
+ADR-0046 第 4 點原本要求三件事，其中兩件在此不再要求：
+
+- data repository 的 active ruleset 增加 `Organizer publication approval` check；
+- main repository ruleset 必須啟用，且要求 PR、`Verify and deploy`、`Full preview portal E2E` 與 `Organizer publication approval`——**連「要求 PR」這條規則本身也不再要求**，`22001248` 目前正好沒有 `pull_request` rule。
+
+保留的是第三件「GitHub App 不得列為 bypass actor」，即上面第 3 項。ADR-0046 標頭沿用 ADR-0037 的「不可繞過 repository ruleset」仍然有效：App 不以管理權限繞過任何現存規則，改變的是不再要求 ruleset 先帶齊這些規則。
 
 ### 5. 這是單人維護期間的邊界，不是終局
 
@@ -73,6 +80,6 @@ main  →  Verify and deploy
 ## 結果
 
 - 一般 PR 不會因為發布機制而被鎖死，日常開發與 Wave 0／Wave 1 自己的 PR 都能正常合併。
-- **失去 ADR-0046 第 4 點的第二道邊界。** 若 App 憑證外洩，repository ruleset 不會再擋住它；殘餘風險由第 1 點的八項條件、path allowlist、publication lease 與 audit 承擔。這個風險是明確接受的，不是疏漏。
+- **失去 ADR-0046 第 4 點的第二道邊界。** 若 App 憑證外洩，repository ruleset 不會再擋住它；殘餘風險由 ADR-0046 第 3 點的八項條件（其中 snapshot hash、lease 與 data 先於 main 由 driver 維持）、path allowlist 與 audit 承擔，而第 1 點的作者檢查只認 bot 帳號、不綁定本 App 身分。這個風險是明確接受的，不是疏漏。
 - ADR-0046 第 4 點的「flag 保持關閉」不再是阻擋首次發布的條件；`ORGANIZER_PUBLICATION_MODE` 仍預設 `disabled`，由第 4 點的五項前置決定何時開啟。
 - `publicationRolloutProblems()` 目前沒有 runtime caller，本決策使這個狀態成為刻意的設計而非待補的接線。

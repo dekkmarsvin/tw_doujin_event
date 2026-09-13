@@ -2,7 +2,7 @@
 
 - **狀態**：Accepted
 - **日期**：2026-08-31
-- **部分被取代**：決策第 4 點（Repository ruleset 是第二道強制邊界）與其「兩個 ruleset 經 API 實測完成前 production merge feature flag 必須保持關閉」已由 [ADR-0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md)（2026-09-13）取代：強制點移至 App adapter，ruleset 偏差降為維運報告。第 1、2、3、5 點不變
+- **部分被取代**：[ADR-0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md)（2026-09-13）把強制點移至 App adapter，ruleset 偏差降為維運報告。被取代的是三處——(a) 決策第 4 點（Repository ruleset 是第二道強制邊界）與其「兩個 ruleset 經 API 實測完成前 production merge feature flag 必須保持關閉」全數失效；(b) 決策第 3 點條件 5「repository ruleset 要求的所有 checks 已成功」，required checks 的權威來源改為程式常數 `PUBLICATION_REQUIRED_CHECKS`，不再由 ruleset 定義（條件本身仍成立，改由 App adapter 驗證）；(c) 下面〈結果〉第一句的「ruleset 仍決定可否合併」不再為真，可否合併由 App adapter 決定。決策第 1、2、5 點與第 3 點的其餘七項條件不變
 - **取代**：[ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) 的「控制面不得 merge」；其路徑限制、不可直接寫既有分支、不可繞過 repository ruleset 與稽核要求仍有效
 - **延續**：[ADR-0039](./0039-one-data-repo-for-events-and-references.md) 的固定兩個 repository 與 data → main 順序
 
