@@ -13,6 +13,7 @@ const { validateLayout: validateFf47Layout } = await environment.runner.import("
 const { confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, rowOrientationFromRect, seamlessSpans, segmentSlotRects, snapRectToAdjacentRects } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
 const { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, commonBoxSize, facingRowOffset, findRowConflicts, mergeSelections, pasteRowAtOffset, planSlotMerge, removeSelectionsFrom, resizeBoxesToCommonSize, resolveSelectionBoxes, scaleBoxesIntoBox, selectionSetKey, selectionsWithinBox, toggleSelection, translateBoxesWithin } = await environment.runner.import("/app/map-layout-editor-selection.ts");
 const { LAYOUT_HISTORY_LIMIT, canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory } = await environment.runner.import("/app/map-editor-history.ts");
+const { overlappingSlotCodes } = await environment.runner.import("/app/map-contribution-draft.ts");
 const { validateStagedEventArtifacts } = await environment.runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
 
@@ -1053,6 +1054,34 @@ test("merging two adjacent booths leaves the one booth a double stand is", () =>
   applySlotMerge(layout, result.plan);
   assert.deepEqual(layout.rows[0].slots.map((slot) => slot.code), ["A01A02", "A03", "A04"], "the merged booth keeps the place its members held");
   assert.equal(validateEventMapLayout(layout).ok, true);
+});
+
+test("merging fractional booth spans preserves non-overlapping edges on both axes", () => {
+  for (const orientation of ["horizontal", "vertical"]) {
+    const vertical = orientation === "vertical";
+    const layout = mergeLayout();
+    layout.width = layout.height = 1000;
+    layout.floor.width = layout.floor.height = 1000;
+    const generated = generateRowSlotsFromRect({
+      label: "A", orientation, slotCount: 7,
+      frame: vertical
+        ? { x: 10, y: 3.2, width: 20, height: 236.8 }
+        : { x: 3.2, y: 10, width: 236.8, height: 20 },
+      numberingStart: vertical ? "top" : "left",
+      codePrefix: "A", startNumber: 1, numberPadding: 2,
+    }, layout);
+    assert.equal(generated.ok, true);
+    layout.rows = [generated.row];
+    assert.deepEqual(overlappingSlotCodes(layout), [], "the generated row starts without overlaps");
+    const remaining = structuredClone(layout.rows[0].slots.filter((unused, index) => index !== 1 && index !== 2));
+    const result = planSlotMerge(layout, [slotAt(0, 1), slotAt(0, 2)]);
+    assert.equal(result.ok, true);
+    applySlotMerge(layout, result.plan);
+    assert.equal(layout.rows[0].slots[1].code, "A02A03");
+    assert.deepEqual(layout.rows[0].slots.filter((unused, index) => index !== 1), remaining);
+    assert.deepEqual(overlappingSlotCodes(layout), [], `${orientation} merge must not round into A04`);
+    assert.equal(validateEventMapLayout(layout).ok, true);
+  }
 });
 
 test("merging takes in every booth of the run, not only a pair", () => {

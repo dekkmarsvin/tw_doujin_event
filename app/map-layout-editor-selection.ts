@@ -412,7 +412,17 @@ export function planSlotMerge(layout: RowsOnly, selections: readonly Selection[]
     .map((slot) => slot.code)));
   if (taken.has(code)) return refuseMerge(`攤位代碼 ${code} 已經存在。`);
 
-  const rect = boundingBox(ordered.map((item) => row.slots[item].rect));
+  const boxes = ordered.map((item) => row.slots[item].rect);
+  const rect = boundingBox(boxes);
+  // Reconstructing an edge as start + (end - start) can round beyond the
+  // original end and overlap the next booth. As in seamlessSpans, step the
+  // size down only when needed to keep the stored rectangle inside that edge.
+  for (const [start, size] of [["x", "width"], ["y", "height"]] as const) {
+    const end = Math.max(...boxes.map((box) => box[start] + box[size]));
+    for (let guard = 0; guard < 4 && rect[start] + rect[size] > end; guard += 1) {
+      rect[size] -= Math.abs(rect[size]) * Number.EPSILON;
+    }
+  }
   // The merged booth takes the lowest index its members occupied, so the row's
   // stored order survives a merge and the caller knows what to select without
   // waiting for the draft to be applied.
