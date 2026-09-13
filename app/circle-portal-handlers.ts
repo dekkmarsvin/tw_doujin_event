@@ -100,6 +100,9 @@ type PortalConfig = {
 };
 
 type PortalDependencies = {
+  /** Durable dispatch only; never wait for checks or deployment in a request.
+   * Omitted until the production driver and rollout gates are verified. */
+  dispatchOrganizerPublication?: (jobId: string) => Promise<void>;
   repository: IdentityRepository;
   sendMail: (message: { to: string; subject: string; text: string }) => Promise<void>;
   /**
@@ -192,6 +195,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({
+  dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
   projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap, config,
 }: PortalDependencies) {
@@ -1912,11 +1916,14 @@ export function createCirclePortalHandlers({
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
+      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
       publication: publication ? {
         id: publication.id,
         status: publication.status,
         step: publication.step,
         error: publication.error,
+        failureCode: publication.failure_code,
+        retryable: Boolean(publication.retryable),
         updatedAt: publication.updated_at,
       } : null,
       workspace: {
@@ -2551,25 +2558,33 @@ export function createCirclePortalHandlers({
     const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, expectedVersion as number);
     if (!snapshot) return json({ error: "找不到這一版的送審內容。" }, 409);
     if (decision === "approve") {
-      const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
-      if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-      const { issues } = await validateOrganizerWorkspace(candidateId, draft);
-      if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
+      if (!dispatchOrganizerPublication || !config.organizerPublicationMode || config.organizerPublicationMode === "disabled") {
+        return json({ error: "自動發布尚未通過啟用檢查，目前無法核准並發布。送審內容會保留，請聯絡網站管理者。", code: "publication_unavailable" }, 503);
+      }
+      if (await sha256Hex(snapshot.snapshot_json) !== snapshot.sha256) {
+        return json({ error: "送審內容與記錄不一致，無法核准。", code: "snapshot_mismatch" }, 409);
+      }
+      if (candidate.status === "submitted") {
+        const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
+        if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
+        const exists = draft.event.id && (config.publishedEvent
+          ? await config.publishedEvent(draft.event.id) : draft.event.id === config.eventId);
+        if (exists) return json({ error: "這個活動代碼已存在，首次發布不能覆寫。請使用已發布活動修正流程。", code: "event_id_collision" }, 409);
+        const { issues } = await validateOrganizerWorkspace(candidateId, draft);
+        if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
+      }
     }
+    let publicationJobId: string | null = decision === "approve" ? crypto.randomUUID() : null;
     const result = await repository.reviewOrganizerCandidate({
       candidateId, expectedVersion: expectedVersion as number, decision,
       actorAccountId: gate.session.accountId, note, now: config.now(),
+      ...(publicationJobId ? { publication: { jobId: publicationJobId, snapshotId: snapshot.id, approvalHash: snapshot.sha256 } } : {}),
     });
-    if (!result.ok) return json({ error: "版本或狀態已變更。", conflict: result }, 409);
-    let publicationJobId: string | null = null;
-    if (decision === "approve") {
-      const publication = await repository.createOrganizerPublicationJob({
-        candidateId, candidateVersion: expectedVersion as number, snapshotId: snapshot.id,
-        approvalHash: snapshot.sha256, now: config.now(),
-      });
-      if (!publication.ok) return json({ error: "核准已記錄，但無法建立發布工作；請由管理者重試。" }, 500);
-      publicationJobId = publication.jobId;
-    }
+    if (!result.ok) return json({ error: result.reason === "approval_mismatch" ? "既有發布工作與核准內容不一致，請聯絡網站管理者。" : "版本或狀態已變更。", conflict: result }, 409);
+    if (result.publicationJobId) publicationJobId = result.publicationJobId;
+    if (result.alreadyReviewed) return json({ ok: true,
+      status: (await repository.getOrganizerPublicationJob(result.publicationJobId))?.status,
+      revisionHash: snapshot.sha256, publicationJobId, selfApproval: candidate.submitted_by === gate.session.accountId });
     await repository.writeAudit({
       at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
       action: decision === "approve" ? "organizer_event.approved" : "organizer_event.changes_requested",
@@ -2580,29 +2595,54 @@ export function createCirclePortalHandlers({
       },
       ipHash: await clientIpHash(request),
     });
+    if (publicationJobId) await dispatchPublication(publicationJobId);
     return json({
-      ok: true, status: result.status, revisionHash: snapshot.sha256, publicationJobId,
+      ok: true, status: publicationJobId ? (await repository.getOrganizerPublicationJob(publicationJobId))?.status : result.status, revisionHash: snapshot.sha256, publicationJobId,
       selfApproval: candidate.submitted_by === gate.session.accountId,
     });
   }
 
+  async function dispatchPublication(jobId: string) {
+    try { await dispatchOrganizerPublication!(jobId); }
+    catch {
+      const job = await repository.getOrganizerPublicationJob(jobId);
+      const lease = await repository.claimOrganizerPublicationLease({ jobId, now: config.now(), ttlMs: 30_000 });
+      if (job && lease.ok) {
+        await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
+          expectedStep: job.step, nextStep: job.step, status: "failed", failureCode: "dispatch_failed",
+          error: "Publication dispatch failed.", retryable: true, now: config.now() });
+        await repository.releaseOrganizerPublicationLease(jobId, lease.token);
+      }
+    }
+  }
+
   async function adminRetryOrganizerPublication(request: Request, jobId: string) {
-    const gate = await requireFreshAdmin(request);
-    if (!gate.ok) return gate.response;
-    if ((config.organizerPublicationMode ?? "disabled") === "disabled") {
+    if (!await currentSession(request)) return json({ error: "尚未登入。" }, 401);
+    const job = await repository.getOrganizerPublicationJob(jobId);
+    if (!job) return json({ error: "找不到發布工作。" }, 404);
+    const access = await organizerAccess(request, job.candidate_id);
+    if (!access.ok) return access.response;
+    if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以重試發布。" }, 403);
+    if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) return json({ error: "重試發布需要重新登入。" }, 401);
+    if ((config.organizerPublicationMode ?? "disabled") === "disabled" || !dispatchOrganizerPublication) {
       return json({ error: "發布功能尚未啟用。" }, 503);
+    }
+    const snapshot = await repository.getOrganizerSubmissionSnapshot(job.candidate_id, job.candidate_version);
+    if (!snapshot || await sha256Hex(snapshot.snapshot_json) !== job.approval_hash) {
+      return json({ error: "已核准內容與發布記錄不一致，請聯絡網站管理者。", code: "snapshot_mismatch" }, 409);
     }
     const result = await repository.retryOrganizerPublicationJob({ jobId, now: config.now() });
     if (!result.ok) {
       if (result.reason === "not_found") return json({ error: "找不到發布工作。" }, 404);
-      return json({ error: "只有失敗的發布工作可以重試。", status: result.status }, 409);
+      return json({ error: "這筆發布工作目前不能重試，請聯絡網站管理者。", code: result.reason, status: result.status }, 409);
     }
     await repository.writeAudit({
-      at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
+      at: config.now(), actorAccountId: access.current.accountId, actorRole: access.admin ? "admin" : "organizer_owner",
       action: "organizer_publication.retried", subjectType: "organizer_publication", subjectId: jobId,
       detail: { step: result.step }, ipHash: await clientIpHash(request),
     });
-    return json({ ok: true, jobId, status: "queued", step: result.step });
+    await dispatchPublication(jobId);
+    return json({ ok: true, jobId, status: (await repository.getOrganizerPublicationJob(jobId))?.status, step: result.step });
   }
 
   /**

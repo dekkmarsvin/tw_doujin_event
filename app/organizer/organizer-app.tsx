@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
 import {
   PortalError,
   readSession,
@@ -115,7 +116,7 @@ const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
   draft: "草稿",
   changes_requested: "要求修改",
   submitted: "審閱中",
-  approved: "已核准",
+  approved: "已核准，等待發布",
   publishing: "發布中",
   published: "已發布",
   failed: "發布失敗",
@@ -134,12 +135,6 @@ const PUBLICATION_STATUS_LABEL: Record<string, string> = {
   publishing: "發布中",
   published: "已發布",
   failed: "發布失敗",
-};
-const PUBLICATION_STEP_LABEL: Record<string, string> = {
-  assemble: "整理資料",
-  smoke: "檢查結果",
-  commit: "寫入資料",
-  verify: "確認發布",
 };
 
 /** What picking this template actually does, in the two terms the organizer
@@ -231,6 +226,11 @@ export default function OrganizerApp() {
 
   useEffect(() => {
     const token = takeLoginToken();
+    if (!token && new URL(window.location.href).searchParams.has("reauth")) {
+      window.history.replaceState(null, "", "/organizer");
+      queueMicrotask(() => setReady(true));
+      return;
+    }
     void (token ? verifyLoginToken(token) : readSession())
       .then((current) => {
         if (!current.isAdmin && !current.hasOrganizerAccess) throw new PortalError("此帳號沒有活動工作區權限。", 403);
@@ -299,7 +299,12 @@ function OrganizerSignIn() {
 
 function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const resumeKey = `organizer.resumeCandidate:${session.email}`;
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try { return localStorage.getItem(resumeKey); } catch { return null; }
+  });
+  const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
+  const [pollGeneration, setPollGeneration] = useState(0);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
   const [section, setSection] = useState<OrganizerWorkspaceSection>("event");
   const [guidedTask, setGuidedTask] = useState<OrganizerGuidedTask>("identity_source");
@@ -328,6 +333,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   }, []);
   const reloadDetail = useCallback(async (candidateId: string) => {
     const next = await readOrganizerEvent(candidateId);
+    setPublicationReadError(null);
+    setPollGeneration((value) => value + 1);
     setDetail(next);
     setSection(next.workspace.resume.section);
     setGuidedTask(next.workspace.resume.guidedTask);
@@ -335,6 +342,37 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   }, []);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => { queueMicrotask(() => { if (selectedId) void reloadDetail(selectedId).catch((error) => setNotice({ kind: "error", message: message(error) })); else setDetail(null); }); }, [reloadDetail, selectedId]);
+  useEffect(() => {
+    try {
+      if (selectedId) localStorage.setItem(resumeKey, selectedId);
+      else localStorage.removeItem(resumeKey);
+    } catch { /* Remembering the selection is optional; keep the workspace usable. */ }
+  }, [selectedId, resumeKey]);
+  const publicationStatus = detail?.publication?.status;
+  useEffect(() => {
+    if (!selectedId || !publicationStatus || !["queued", "publishing"].includes(publicationStatus)) return;
+    let active = true;
+    let inFlight = false;
+    let failures = 0;
+    const timer = window.setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
+      void readOrganizerEvent(selectedId).then((next) => {
+        if (active) {
+          failures = 0;
+          setPublicationReadError(null);
+          setDetail(next);
+          setEvents((items) => items.map((item) => item.id === next.event.id ? next.event : item));
+        }
+      }).catch((error) => {
+        if (!active) return;
+        const needsLogin = error instanceof PortalError && error.status === 401;
+        setPublicationReadError({ candidateId: selectedId, needsLogin });
+        if (needsLogin || ++failures >= 3) window.clearInterval(timer);
+      }).finally(() => { inFlight = false; });
+    }, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [selectedId, publicationStatus, pollGeneration]);
 
   const refresh = useCallback(async () => {
     await reloadList();
@@ -424,6 +462,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
+      {publicationReadError?.candidateId === selectedId && publicationReadError && <div role="alert" className={styles.error}>
+        <p>{publicationReadError.needsLogin ? "登入已失效，無法更新發布進度。" : "暫時無法讀取發布進度。"}目前顯示的是上次讀取的進度。</p>
+        {publicationReadError.needsLogin ? <a href="/organizer?reauth=1">重新登入並返回活動</a>
+          : <button type="button" onClick={() => { void refresh().catch((error) => setNotice({ kind: "error", message: message(error) })); }}>重新讀取進度</button>}
+      </div>}
       {!detail ? <div className={styles.empty}><h2>選擇活動</h2><p>從左側開啟活動，開始準備送審資料。</p></div>
         : <WorkspaceSurface
           key={detail.event.id}
@@ -1643,18 +1686,30 @@ function ReviewPanel({ session, detail, onChanged, setNotice }: {
   const [editorEmail, setEditorEmail] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [note, setNote] = useState("");
+  const [needsLogin, setNeedsLogin] = useState(false);
   const owner = detail.event.role === "owner";
   const act = (promise: Promise<unknown>, success: string) => {
     setNotice({ kind: "busy", message: "處理中…" });
-    void promise.then(async () => { setNotice({ kind: "ok", message: success }); await onChanged(); }).catch((error) => setNotice({ kind: "error", message: message(error) }));
+    void promise.then(async () => { setNotice({ kind: "ok", message: success }); await onChanged(); }).catch((error) => {
+      if (error instanceof PortalError && error.status === 401) setNeedsLogin(true);
+      setNotice({ kind: "error", message: message(error) });
+    });
   };
   return <section className={styles.panel}>
     <h3>送審與發布狀態</h3>
+    {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
     {owner && <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), "協作者邀請已寄出。"); }}><input type="email" required placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit">邀請協作者</button><button type="button" className={styles.dangerText} disabled={!editorEmail} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form></div>}
     {session.isAdmin && <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), "負責人邀請已寄出。"); }}><input type="email" required placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit">新增負責人</button><button type="button" className={styles.dangerText} disabled={!ownerEmail} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form></div>}
     {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <div className={styles.subpanel}><h4>送審</h4><p>送審後，活動代碼就不能再更改。</p><button type="button" onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出審閱</button></div>}
-    {session.isAdmin && detail.event.status === "submitted" && <div className={styles.subpanel}><h4>網站管理者審閱</h4><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "已核准；發布功能尚未開放。")}>核准送審內容</button></div></div>}
-    {detail.publication && <div className={styles.subpanel}><h4>發布狀態</h4><div className={styles.statusBoard}><span>狀態</span><strong>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? detail.publication.status}</strong><span>目前步驟</span><strong>{PUBLICATION_STEP_LABEL[detail.publication.step] ?? detail.publication.step}</strong></div>{detail.publication.error && <p className={styles.warning}>{detail.publication.error}</p>}{session.isAdmin && detail.publication.status === "failed" && <button type="button" onClick={() => act(retryOrganizerPublication(detail.publication!.id), "已重新排入發布。")}>重試發布</button>}</div>}
+    {session.isAdmin && detail.event.status === "submitted" && <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准即同意這一版送審內容公開，系統會自動開始發布。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={!detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "核准已記錄，請查看下方發布進度。")}>核准並發布</button></div></div>}
+    {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>自動發布尚未啟用，活動尚未公開。內容會保留，請聯絡網站管理者完成發布啟用檢查。</p>}
+    {detail.publication && <div className={styles.subpanel} aria-live="polite"><h4>發布狀態</h4><p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
+      <ol>{publicationProgress(detail.publication).map((stage) => <li key={stage.label}>{stage.label}：{({ complete: "已完成", current: "處理中", failed: "未完成，發布停止", pending: "尚未開始" })[stage.state]}</li>)}</ol>
+      {detail.publication.status !== "published" && <p>公開結果確認成功前，活動尚未完成發布。</p>}
+      {detail.publication.status === "failed" && <p className={styles.warning}>{publicationFailureMessage(detail.publication.failureCode, Boolean(detail.publication.retryable))}</p>}
+      {(session.isAdmin || owner) && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable} onClick={() => act(retryOrganizerPublication(detail.publication!.id), "已要求從失敗步驟繼續，請查看發布進度。")}>重試發布</button>}
+      <details><summary>技術詳細資訊</summary><p>工作：{detail.publication.id}</p><p>步驟：{detail.publication.step}</p>{detail.publication.failureCode && <p>錯誤代碼：{detail.publication.failureCode}</p>}{detail.publication.error && <p>{detail.publication.error}</p>}</details>
+    </div>}
   </section>;
 }

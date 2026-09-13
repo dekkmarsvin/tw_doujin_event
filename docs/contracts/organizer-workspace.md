@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-> **實作狀態（2026-08-31）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審 → 核准已在 Web UI 完成，不需要修改程式、操作 Git 或執行 CLI。**發布尚未啟用**：核准只建立一筆 `queued` 發布工作，沒有任何東西寫進 data 或 main repository（見[發布邊界](#發布邊界)）。
+> **實作狀態（2026-09-13）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX。**正式發布仍未啟用**：production driver、durable dispatch、snapshot → repository artifacts 轉換與真實 smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
 
 ## 入口與登入
 
@@ -24,7 +24,7 @@
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
 - 表單有未儲存變更時，切換活動、引導任務或建置冊區段會提供「儲存並切換／放棄／取消」；離開瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
 - 建置冊直接開放活動、場館與使用空間、攤位匯入、地圖、驗證與預覽、送審與發布六區。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
-- 六區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列且沒有 import error；地圖要求匯入已完成、完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則（未知攤位在候選活動是 warning，不擋住地圖區；理由見下方[地圖](#地圖)）；驗證只在沒有 error 且 `last_validated_version` 等於目前 candidate version 時完成；送審後 review 才完成。
+- 六區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列且沒有 import error；地圖要求匯入已完成、完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則（未知攤位在候選活動是 warning，不擋住地圖區；理由見下方[地圖](#地圖)）；驗證只在沒有 error 且 `last_validated_version` 等於目前 candidate version 時完成；只有 published 才把送審與發布區段標為完成。
 
 ## 邀請制，不能自助開活動
 
@@ -43,7 +43,7 @@ draft → submitted → approved → publishing → published
 
 - `draft` 與 `changes_requested` 可編輯；其餘狀態一律不可寫入。
 - 每一次寫入都要帶 `expectedVersion`，成功後 `current_version` 遞增並留下一筆 immutable revision。版本落後回 409 並指出目前版本，不靜默覆寫。
-- `eventId` 在**首次送審時鎖定**，之後不得改成別的值；未送審前可以修改。它在候選之間唯一（partial unique index）。**候選 eventId 與已發布活動同名的檢查目前不存在**；兩條管線靠 `candidate_id` 分離（見[與地圖貢獻流程的邊界](#與地圖貢獻流程的邊界)）。
+- `eventId` 在**首次送審時鎖定**，之後不得改成別的值；未送審前可以修改。它在候選之間唯一（partial unique index）。首次發布是 CREATE：核准 handler 對目前 published event resolver 預檢，executor 的 preparing_data 再透過 driver 檢查 published collection；同名以 `event_id_collision` 拒絕。amendment 由 #190 的明確 baseline 流程處理，不 silent overwrite 或自動轉換。兩條地圖管線仍靠 `candidate_id` 分離。
 
 ## 草稿內容
 
@@ -107,18 +107,34 @@ draft → submitted → approved → publishing → published
 
 ## 發布邊界
 
-核准會建立一筆 `queued` 發布工作，記錄 candidate、版本、snapshot 與 approval hash。**目前它不會前進。** 三處各自 fail closed：
+核心實作：[`organizer-publication.ts`](../../app/organizer-publication.ts)、[`organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`publication-rollout.ts`](../../app/publication-rollout.ts)。測試：`tests/organizer-repository.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-publication-presentation.test.mjs`。決策：[ADR-0057](../adr/0057-approval-starts-create-publication.md)。
 
-1. `ORGANIZER_PUBLICATION_MODE` 預設 `disabled`；管理者的重試路徑在 disabled 時回 503。
-2. `POST /api/integrations/github/webhook` 在非 `github` 模式或缺 secret 時回 503。
-3. 即使模式打開，`onDelivery` 目前直接 throw，delivery 記為未處理並可用同一個 delivery id 重試。
+依 ADR-0057，UI 動作為「核准並發布」。已啟用且有 durable dispatch adapter 時，同一 D1 transaction 記錄核准、建立唯一 `queued/preparing_data` job、把 candidate 改為 publishing，再交給 dispatcher；不需要第二次人工發布。dispatch 失敗記錄 `dispatch_failed`，內容保持核准與鎖定，可由 Owner 或 Admin 重試。
 
-已經在位的只有純函式邊界：
+`app/organizer-publication.ts` 每次 delivery 至多執行一個 transition，持有有時限的全域 lease。snapshot id、版本、hash 與 snapshot bytes 必須相符。driver 以 job/step/hash 作為 reconciliation key，副作用前必須再次確認 lease；pending 保留步驟。已保存的 PR、head SHA、merge SHA 與 workflow id 不能被新的 checkpoint 改寫。
+
+步驟為 preparing_data → waiting_data_checks → merging_data → preparing_main → waiting_main_checks → merging_main → waiting_deployment → verifying_production → completed。失敗保留原 step、failure_code、error、retryable 與 metadata。Main 需要 data merge SHA，deployment 需要 main merge SHA；productionVerified 必須明確為 true 才能完成。此 boolean 是 **driver 的 blocking Pages smoke 結果**，目前沒有 production adapter 實作，不能把測試 driver 當成真實 smoke。
+
+同版本核准重送沿用相同 snapshot/hash 的既有 job，不重寫核准、不重複 dispatch；不一致回報 `approval_mismatch`。相同 snapshot/hash 的既有 queued job 可在 submitted 核准時沿用。nullish metadata 表示未提供更新，保留已保存的 checkpoint。
+
+lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 failed/retryable；不能推進步驟，也不能覆寫新 lease 持有者。失敗記錄遭 fence 拒絕時向 dispatcher 拋出失敗，不把該 delivery 當成成功。
+
+`POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
+
+UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資訊」。每五秒重新讀取進行中的工作與活動列表狀態，不重疊請求；讀取失敗立即標示目前為上次讀取的進度，401 停止輪詢並提供重新登入入口，其他錯誤連續三次後停止，提供手動重新讀取。送審與發布只有 published 才算完成，不能在 approved/queued 顯示 6/6。同源、同瀏覽器帳號的上次 candidate 保存於 localStorage，讀寫被封鎖時仍可在記憶體中操作；登入後仍以伺服器授權清單確認可達性，各協作者的區段仍由 D1 保存。
+
+目前 production gate：
+
+1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；尚未提供 dispatcher，即使改成 github 也不能核准或 retry。
+2. `POST /api/integrations/github/webhook` 仍未連接 executor，非 github 或缺 secret 回 503，否則 processing fail closed，不能宣稱已完成 GitHub publication。
+3. `app/publication-rollout.ts` 提供 ruleset 評估器；active 不足以通過，必須要求 PR、所有指定 checks、已確認 App id 且無 App bypass。這是 rollout 檢查，尚未接入 production driver。
+
+既有純函式邊界保留：
 
 - [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
 - webhook 的 HMAC 驗證與以 delivery id 去重。
 
-ADR-0046 §3 的 head SHA pin、PR ownership、required checks 與 publication lease 條件要在 GitHub App 安裝與兩個 repository ruleset 經 API 實測之後才會接上。在那之前，核准後的候選停在 `approved`。
+ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected SHA merge、data → main → deployment 與 production origin smoke 仍須由 production driver 接線並實測。既有 approved/queued（包括 ch-20）保留原 snapshot/job，未自動修改或發布；啟用時要以原 job 恢復，不能要求 Organizer 再按一次 Publish。
 
 ## 與地圖貢獻流程的邊界
 

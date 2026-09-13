@@ -2399,6 +2399,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     decision: "changes_requested" | "approve";
     actorAccountId: string;
     note?: string;
+    publication?: { snapshotId: string; approvalHash: string; jobId: string };
     now: number;
   }) {
     await ensureTables();
@@ -2406,6 +2407,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
     if (candidate.current_version !== input.expectedVersion) {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
+    }
+    let publication = input.decision === "approve" ? input.publication : undefined;
+    let reuseQueuedJob = false;
+    if (publication) {
+      const existing = await database.prepare(`SELECT id, snapshot_id, approval_hash, status FROM organizer_publication_jobs
+        WHERE candidate_id = ?1 AND candidate_version = ?2`).bind(input.candidateId, input.expectedVersion)
+        .first<{ id: string; snapshot_id: string; approval_hash: string; status: string }>();
+      if (existing) {
+        if (existing.approval_hash !== publication.approvalHash || existing.snapshot_id !== publication.snapshotId) {
+          return { ok: false as const, reason: "approval_mismatch" as const };
+        }
+        if (candidate.approved_at !== null && ["approved", "publishing", "failed", "published"].includes(candidate.status)) {
+          return { ok: true as const, status: candidate.status, publicationJobId: existing.id, alreadyReviewed: true as const };
+        }
+        if (candidate.status !== "submitted" || existing.status !== "queued") {
+          return { ok: false as const, reason: "status" as const, status: candidate.status };
+        }
+        publication = { ...publication, jobId: existing.id };
+        reuseQueuedJob = true;
+      }
     }
     if (candidate.status !== "submitted") return { ok: false as const, reason: "status" as const, status: candidate.status };
     const status = input.decision === "approve" ? "approved" : "changes_requested";
@@ -2416,8 +2437,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            last_updated_by = ?3, last_updated_role = 'admin',
            approved_by = CASE WHEN ?1 = 'approved' THEN ?3 ELSE NULL END,
            approved_at = CASE WHEN ?1 = 'approved' THEN ?2 ELSE NULL END
-         WHERE id = ?4 AND current_version = ?5 AND status = 'submitted'`,
-      ).bind(status, input.now, input.actorAccountId, input.candidateId, input.expectedVersion),
+         WHERE id = ?4 AND current_version = ?5 AND status = 'submitted'
+           AND (?6 IS NULL OR EXISTS (SELECT 1 FROM organizer_submission_snapshots s
+             WHERE s.id = ?6 AND s.candidate_id = ?4 AND s.candidate_version = ?5 AND s.sha256 = ?7))`,
+      ).bind(status, input.now, input.actorAccountId, input.candidateId, input.expectedVersion,
+        input.publication?.snapshotId ?? null, input.publication?.approvalHash ?? null),
       database.prepare(
         `INSERT INTO organizer_event_reviews (
            id, candidate_id, version, from_status, to_status, actor_account_id, note, at
@@ -2427,9 +2451,24 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              AND last_updated_by = ?3 AND updated_at = ?5`,
       ).bind(transitionToken, status, input.actorAccountId, input.note ?? null, input.now,
         input.candidateId, input.expectedVersion),
+      ...(publication ? [
+        database.prepare(`INSERT INTO organizer_publication_jobs (
+          id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, created_at, updated_at
+        ) SELECT ?1, c.id, c.current_version, ?2, ?3, 'queued', 'preparing_data', ?4, ?4
+          FROM organizer_event_candidates c WHERE c.id = ?5 AND c.status = 'approved'
+            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?6 AND r.candidate_id = c.id)
+          ON CONFLICT(candidate_id, candidate_version) DO NOTHING`)
+          .bind(publication.jobId, publication.snapshotId, publication.approvalHash,
+            input.now, input.candidateId, transitionToken),
+        database.prepare(`UPDATE organizer_event_candidates SET status = 'publishing'
+          WHERE id = ?1 AND status = 'approved' AND EXISTS (
+            SELECT 1 FROM organizer_publication_jobs j WHERE j.id = ?2 AND j.candidate_id = ?1)`)
+          .bind(input.candidateId, publication.jobId),
+      ] : []),
     ]);
-    return results.every((result) => result.meta.changes === 1)
-      ? { ok: true as const, status }
+    return results.every((result, index) => result.meta.changes === (reuseQueuedJob && index === 2 ? 0 : 1))
+      ? { ok: true as const, status: publication ? "publishing" : status,
+        ...(publication ? { publicationJobId: publication.jobId } : {}) }
       : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
   }
 
@@ -2520,6 +2559,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       status: string; step: string; data_pr_number: number | null; data_head_sha: string | null;
       data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
       main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
+      failure_code: string | null; retryable: number;
       created_at: number; updated_at: number;
     }>();
   }
@@ -2534,6 +2574,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       status: string; step: string; data_pr_number: number | null; data_head_sha: string | null;
       data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
       main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
+      failure_code: string | null; retryable: number;
       created_at: number; updated_at: number;
     }>();
   }
@@ -2543,15 +2584,24 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const job = await getOrganizerPublicationJob(input.jobId);
     if (!job) return { ok: false as const, reason: "not_found" as const };
     if (job.status !== "failed") return { ok: false as const, reason: "status" as const, status: job.status };
+    if (!job.retryable) return { ok: false as const, reason: "not_retryable" as const, status: job.status };
+    const snapshot = await getOrganizerSubmissionSnapshot(job.candidate_id, job.candidate_version);
+    if (!snapshot || snapshot.id !== job.snapshot_id || snapshot.sha256 !== job.approval_hash) {
+      return { ok: false as const, reason: "snapshot_mismatch" as const, status: job.status };
+    }
     const results = await database.batch([
       database.prepare(
         `DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1
            AND EXISTS (SELECT 1 FROM organizer_publication_jobs WHERE id = ?1 AND status = 'failed')`,
       ).bind(input.jobId),
       database.prepare(
-        `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, updated_at = ?1
+        `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, failure_code = NULL, updated_at = ?1
          WHERE id = ?2 AND status = 'failed' AND step = ?3`,
       ).bind(input.now, input.jobId, job.step),
+      database.prepare(`UPDATE organizer_event_candidates SET status = 'publishing', updated_at = ?1
+        WHERE id = ?2 AND current_version = ?3 AND status = 'failed'
+          AND EXISTS (SELECT 1 FROM organizer_publication_jobs WHERE id = ?4 AND status = 'queued')`)
+        .bind(input.now, job.candidate_id, job.candidate_version, job.id),
     ]);
     return results[1].meta.changes === 1
       ? { ok: true as const, step: job.step }
@@ -2560,6 +2610,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
     await ensureTables();
+    const job = await getOrganizerPublicationJob(input.jobId);
+    if (!job || !["queued", "publishing"].includes(job.status)) return { ok: false as const, reason: "busy" as const };
     const token = crypto.randomUUID();
     const results = await database.batch([
       database.prepare(
@@ -2571,13 +2623,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).bind(input.jobId, token, input.now, input.now + input.ttlMs),
       database.prepare(
         `UPDATE organizer_publication_jobs SET status = 'publishing', updated_at = ?1, error = NULL
-         WHERE id = ?2 AND status IN ('queued', 'failed')
+         WHERE id = ?2 AND status IN ('queued', 'publishing')
            AND EXISTS (SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?2 AND token = ?3)`,
       ).bind(input.now, input.jobId, token),
     ]);
-    return results[0].meta.changes === 1 && results[1].meta.changes === 1
-      ? { ok: true as const, token, expiresAt: input.now + input.ttlMs }
-      : { ok: false as const, reason: "busy" as const };
+    if (results[0].meta.changes === 1 && results[1].meta.changes === 1) {
+      return { ok: true as const, token, expiresAt: input.now + input.ttlMs };
+    }
+    await releaseOrganizerPublicationLease(input.jobId, token);
+    return { ok: false as const, reason: "busy" as const };
   }
 
   async function updateOrganizerPublicationJob(input: {
@@ -2588,18 +2642,43 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     status: "publishing" | "published" | "failed";
     expectedHeadSha?: string | null;
     error?: string | null;
+    failureCode?: string | null;
+    productionVerified?: boolean;
+    /** Failure-only checkpoint; the original token and step must still own it. */
+    allowExpiredFailure?: boolean;
+    retryable?: boolean;
+    metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id", string | number | null>>;
     now: number;
   }) {
     await ensureTables();
+    if (input.status === "published" && (input.expectedStep !== "verifying_production"
+      || input.nextStep !== "completed" || input.productionVerified !== true)) return false;
     const result = await database.prepare(
-      `UPDATE organizer_publication_jobs SET step = ?1, status = ?2, error = ?3, updated_at = ?4
+      `UPDATE organizer_publication_jobs SET step = ?1, status = ?2, error = ?3, updated_at = ?4,
+         failure_code = ?9, retryable = ?10,
+         data_pr_number = COALESCE(?11, data_pr_number), data_head_sha = COALESCE(?12, data_head_sha),
+         data_merge_sha = COALESCE(?13, data_merge_sha), main_pr_number = COALESCE(?14, main_pr_number),
+         main_head_sha = COALESCE(?15, main_head_sha), main_merge_sha = COALESCE(?16, main_merge_sha),
+         workflow_run_id = COALESCE(?17, workflow_run_id)
        WHERE id = ?5 AND step = ?6
          AND (?7 IS NULL OR data_head_sha = ?7 OR main_head_sha = ?7)
          AND EXISTS (SELECT 1 FROM organizer_publication_lease
-           WHERE id = 'global' AND job_id = ?5 AND token = ?8 AND expires_at > ?4)`,
+           WHERE id = 'global' AND job_id = ?5 AND token = ?8
+             AND (expires_at > ?4 OR ?18 = 1))`,
     ).bind(input.nextStep, input.status, input.error ?? null, input.now, input.jobId,
-      input.expectedStep, input.expectedHeadSha ?? null, input.leaseToken).run();
+      input.expectedStep, input.expectedHeadSha ?? null, input.leaseToken,
+      input.failureCode ?? null, input.retryable === false ? 0 : 1,
+      input.metadata?.data_pr_number ?? null, input.metadata?.data_head_sha ?? null, input.metadata?.data_merge_sha ?? null,
+      input.metadata?.main_pr_number ?? null, input.metadata?.main_head_sha ?? null, input.metadata?.main_merge_sha ?? null,
+      input.metadata?.workflow_run_id ?? null,
+      input.status === "failed" && input.allowExpiredFailure ? 1 : 0).run();
     if (result.meta.changes !== 1) return false;
+    if (input.status !== "published") {
+      await database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
+        WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?3)
+          AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?3)
+          AND status IN ('approved', 'publishing', 'failed')`).bind(input.status, input.now, input.jobId).run();
+    }
     if (input.status === "published") {
       await database.batch([
         database.prepare("DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2")
@@ -2613,6 +2692,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ]);
     }
     return true;
+  }
+
+  async function hasOrganizerPublicationLease(jobId: string, token: string, now: number) {
+    await ensureTables();
+    return Boolean(await database.prepare(`SELECT 1 FROM organizer_publication_lease
+      WHERE id = 'global' AND job_id = ?1 AND token = ?2 AND expires_at > ?3`).bind(jobId, token, now).first());
+  }
+
+  async function releaseOrganizerPublicationLease(jobId: string, token: string) {
+    await ensureTables();
+    await database.prepare("DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2")
+      .bind(jobId, token).run();
   }
 
   async function recordGitHubWebhookDelivery(input: {
@@ -2707,6 +2798,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     storeOrganizerSubmissionSnapshot, getOrganizerSubmissionSnapshot,
     createOrganizerPublicationJob, getOrganizerPublicationJob, getLatestOrganizerPublicationJob,
     retryOrganizerPublicationJob, claimOrganizerPublicationLease,
+    hasOrganizerPublicationLease, releaseOrganizerPublicationLease,
     updateOrganizerPublicationJob, recordGitHubWebhookDelivery, completeGitHubWebhookDelivery,
     storePreviewMail, latestPreviewMail, clearPreviewData,
   };

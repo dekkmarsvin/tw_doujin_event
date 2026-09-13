@@ -88,3 +88,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md) | 保存期限選項退場，社團只決定公開與否，其餘靠手動刪除 | 生效 |
 | [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | 生效；擴充 0001 版面範圍 |
 | [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | 生效；取代 0055 的手機維持原行為限制 |
+| [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |

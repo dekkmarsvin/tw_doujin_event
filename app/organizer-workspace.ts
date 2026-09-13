@@ -183,7 +183,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     && input.draft.event.days.length > 0 && input.draft.venue.assignments.length > 0
     && !issues.some((issue) => issue.step === "map");
   const validationComplete = issues.length === 0 && input.lastValidatedVersion === input.currentVersion;
-  const reviewComplete = input.status !== "draft" && input.status !== "changes_requested";
+  const reviewComplete = input.status === "published";
 
   const sections: OrganizerWorkspaceReadiness["sections"] = [
     { id: "event", state: eventComplete ? "complete" : "needs_attention" },
@@ -207,7 +207,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     },
     {
       id: "review",
-      state: reviewComplete ? "complete" : validationComplete ? "available" : "blocked",
+      state: reviewComplete ? "complete" : input.status === "failed" ? "needs_attention" : validationComplete ? "available" : "blocked",
     },
   ];
 
@@ -224,7 +224,7 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
       message: "目前這一版尚未通過檢查。",
     });
   }
-  if (!reviewComplete) {
+  if (input.status === "draft" || input.status === "changes_requested") {
     blockers.push({
       section: "review",
       code: "submission_required",

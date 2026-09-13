@@ -14,6 +14,8 @@ const vite = await createServer({
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
+const { createOrganizerPublicationExecutor, PublicationFailure } = await environment.runner.import("/app/organizer-publication.ts");
+const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -43,6 +45,194 @@ const initialDraft = {
   venue: { assignments: [] },
   officialSource: { label: "", url: null },
 };
+
+async function publicationFixture() {
+  const id = "publication-candidate";
+  await repository.createOrganizerCandidate({ id, tentativeName: "Publication", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify({ ...initialDraft, event: { ...initialDraft.event, id: "second-event" } }), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await database.prepare("UPDATE organizer_event_candidates SET event_id = 'second-event' WHERE id = ?1").bind(id).run();
+  const snapshotJson = JSON.stringify({ candidateId: id, candidateVersion: 1, eventId: "second-event" });
+  const hash = await sha256Hex(snapshotJson);
+  const snapshot = await repository.storeOrganizerSubmissionSnapshot({ candidateId: id, candidateVersion: 1,
+    actorAccountId: ownerId, snapshotJson, sha256: hash, now: NOW + 2 });
+  await repository.submitOrganizerCandidate({ candidateId: id, actorAccountId: ownerId, expectedVersion: 1, now: NOW + 3 });
+  const publication = { jobId: "publication-job", snapshotId: snapshot.snapshotId, approvalHash: hash };
+  const approved = await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1,
+    decision: "approve", actorAccountId: adminId, publication, now: NOW + 4 });
+  assert.equal(approved.status, "publishing");
+  return { id, jobId: publication.jobId };
+}
+
+function checkpoint(step) {
+  return ({ preparing_data: { data_pr_number: 1, data_head_sha: "a".repeat(40) },
+    merging_data: { data_merge_sha: "b".repeat(40) },
+    preparing_main: { main_pr_number: 2, main_head_sha: "c".repeat(40) },
+    merging_main: { main_merge_sha: "d".repeat(40) }, waiting_deployment: { workflow_run_id: 3 } })[step] ?? {};
+}
+
+test("expired publication lease records a retryable failure without losing its step", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => { clock += 31_000; return { metadata: checkpoint("preparing_data") }; },
+  }, () => clock);
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.failure_code, "lease_lost");
+  assert.equal(job.retryable, 1);
+  assert.equal(job.step, "preparing_data");
+  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: clock + 1 })).ok, true);
+});
+
+test("an expired executor cannot overwrite or release a newer lease", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  let newer;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => {
+      clock += 31_000;
+      newer = await repository.claimOrganizerPublicationLease({ jobId, now: clock, ttlMs: 30_000 });
+      return {};
+    },
+  }, () => clock);
+  await assert.rejects(execute(jobId), (error) => error.code === "lease_lost");
+  assert.equal(newer.ok, true);
+  assert.equal(await repository.hasOrganizerPublicationLease(jobId, newer.token, clock), true);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
+});
+
+test("nullish metadata preserves the checkpoint from a pending delivery", async () => {
+  const { jobId } = await publicationFixture();
+  let pending = true;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => pending ? { pending: true, metadata: checkpoint("preparing_data") }
+      : { metadata: { data_pr_number: null, data_head_sha: undefined } },
+  }, () => NOW + 10);
+  await execute(jobId);
+  pending = false;
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.step, "waiting_data_checks");
+  assert.equal(job.status, "publishing");
+  assert.equal(job.data_pr_number, 1);
+  assert.equal(job.data_head_sha, "a".repeat(40));
+});
+
+test("repeated approval reuses the same job and rejects a different approval hash", async () => {
+  const { id, jobId } = await publicationFixture();
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  const input = { candidateId: id, expectedVersion: 1, decision: "approve", actorAccountId: adminId,
+    publication: { jobId: "another-job", snapshotId: job.snapshot_id, approvalHash: job.approval_hash }, now: NOW + 20 };
+  const original = await repository.getOrganizerCandidate(id);
+  const result = await repository.reviewOrganizerCandidate(input);
+  assert.equal(result.ok, true);
+  assert.equal(result.publicationJobId, jobId);
+  assert.equal(result.alreadyReviewed, true);
+  assert.deepEqual(await repository.getOrganizerCandidate(id), original);
+  assert.equal(await repository.getOrganizerPublicationJob("another-job"), null);
+  assert.equal((await repository.reviewOrganizerCandidate({ ...input,
+    publication: { ...input.publication, approvalHash: "mismatch" } })).reason, "approval_mismatch");
+
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'submitted', approved_at = NULL WHERE id = ?1").bind(id).run();
+  const reused = await repository.reviewOrganizerCandidate(input);
+  assert.equal(reused.ok, true);
+  assert.equal(reused.publicationJobId, jobId);
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "publishing");
+});
+
+test("publication resumes main and smoke failures without recreating successful data or main steps", async () => {
+  const { id, jobId } = await publicationFixture();
+  const calls = [];
+  let failure = "preparing_main";
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async ({ step, assertLease }) => {
+      await assertLease();
+      calls.push(step);
+      if (step === failure) throw new PublicationFailure("test_outage", "temporary", true);
+      return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
+    },
+  }, () => NOW + 10);
+  for (let i = 0; i < 4; i++) await execute(jobId);
+  let job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.step, "preparing_main");
+  assert.equal(job.data_merge_sha, "b".repeat(40));
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
+  await execute(jobId);
+  assert.equal(calls.length, 4, "a webhook cannot silently retry a failed publication");
+  await repository.retryOrganizerPublicationJob({ jobId, now: NOW + 11 });
+  failure = "verifying_production";
+  for (let i = 0; i < 5; i++) await execute(jobId);
+  job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.step, "verifying_production");
+  assert.equal(job.main_merge_sha, "d".repeat(40));
+  await repository.retryOrganizerPublicationJob({ jobId, now: NOW + 12 });
+  failure = null;
+  await execute(jobId);
+  await execute(jobId);
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
+  for (const step of ["preparing_data", "merging_data", "preparing_main", "merging_main"]) {
+    assert.equal(calls.filter((value) => value === step).length, step === "preparing_main" ? 2 : 1);
+  }
+  assert.equal((await repository.getLatestOrganizerPublicationJob(id)).id, jobId);
+});
+
+test("CREATE collision is permanent, leaves content locked and never calls the adapter", async () => {
+  const { id, jobId } = await publicationFixture();
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => true, run: async () => assert.fail("must not publish"),
+  }, () => NOW + 10);
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.failure_code, "event_id_collision");
+  assert.equal(job.retryable, 0);
+  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: NOW + 11 })).reason, "not_retryable");
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
+});
+
+test("tampered snapshot fails closed before any remote publication effect", async () => {
+  const { jobId } = await publicationFixture();
+  await database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = '{}' ").run();
+  await createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => assert.fail("must not query remote"), run: async () => assert.fail("must not publish"),
+  }, () => NOW + 10)(jobId);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).failure_code, "snapshot_mismatch");
+});
+
+test("pending checks preserve step and release the delivery lease for a later delivery", async () => {
+  const { jobId } = await publicationFixture();
+  let pending = true;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async ({ step }) => ({ pending: step === "waiting_data_checks" && pending, metadata: checkpoint(step) }),
+  }, () => NOW + 10);
+  await execute(jobId);
+  await execute(jobId);
+  await execute(jobId);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "waiting_data_checks");
+  pending = false;
+  await execute(jobId);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "merging_data");
+});
+
+test("production verification must explicitly pass before completing publication", async () => {
+  const { jobId } = await publicationFixture();
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false, run: async ({ step }) => ({ metadata: checkpoint(step) }),
+  }, () => NOW + 10);
+  for (let i = 0; i < 8; i++) await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.failure_code, "production_smoke_failed");
+  assert.equal(job.step, "verifying_production");
+});
 
 test("an admin creates an empty event entry and its invited owner gains only that event", async () => {
   const created = await repository.createOrganizerCandidate({
@@ -449,8 +639,16 @@ test("approved snapshots create one leased publication job and webhook deliverie
   const retriedLease = await repository.claimOrganizerPublicationLease({ jobId: publication.jobId, now: NOW + 12, ttlMs: 60_000 });
   assert.equal(retriedLease.ok, true);
   assert.equal(await repository.updateOrganizerPublicationJob({
-    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "assemble", nextStep: "smoke",
+    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "assemble", nextStep: "completed",
     status: "published", now: NOW + 13,
+  }), false, "merge alone cannot mark a publication complete");
+  await repository.updateOrganizerPublicationJob({
+    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "assemble", nextStep: "verifying_production",
+    status: "publishing", now: NOW + 13,
+  });
+  assert.equal(await repository.updateOrganizerPublicationJob({
+    jobId: publication.jobId, leaseToken: retriedLease.token, expectedStep: "verifying_production", nextStep: "completed",
+    status: "published", productionVerified: true, now: NOW + 13,
   }), true);
   assert.equal((await repository.getOrganizerCandidate("candidate-pf")).status, "published");
 

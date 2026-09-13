@@ -65,7 +65,7 @@ test("readiness names actionable and blocked sections and never invents a percen
   assert.equal(Object.hasOwn(readiness, "percentage"), false);
 });
 
-test("validation completion follows the candidate version and submission completes review", () => {
+test("validation follows the candidate version and only publication completes review", () => {
   const input = {
     draft: base,
     importedRows: 1,
@@ -84,7 +84,11 @@ test("validation completion follows the candidate version and submission complet
   assert.equal(changed.completed, 4);
 
   const submitted = evaluateOrganizerWorkspaceReadiness({ ...input, status: "submitted" });
-  assert.equal(submitted.completed, 6);
+  assert.equal(submitted.completed, 5);
+  for (const status of ["approved", "publishing", "failed"]) {
+    assert.equal(evaluateOrganizerWorkspaceReadiness({ ...input, status }).completed, 5);
+  }
+  assert.equal(evaluateOrganizerWorkspaceReadiness({ ...input, status: "published" }).completed, 6);
 });
 
 test("a stored map with formal validation errors still needs attention", () => {

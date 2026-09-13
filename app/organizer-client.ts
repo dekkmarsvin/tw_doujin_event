@@ -51,6 +51,7 @@ export type OrganizerEventSummary = {
 };
 
 export type OrganizerEventDetail = {
+  publicationAvailable?: boolean;
   event: OrganizerEventSummary & { eventIdLocked: boolean };
   draft: OrganizerEventDraft;
   venueCatalog: OrganizerVenueCatalog;
@@ -67,6 +68,8 @@ export type OrganizerEventDetail = {
     status: string;
     step: string;
     error: string | null;
+    failureCode?: string | null;
+    retryable?: boolean;
     updatedAt: number;
   };
   workspace: {
@@ -268,7 +271,7 @@ export function reviewOrganizerEvent(candidateId: string, expectedVersion: numbe
 }
 
 export function retryOrganizerPublication(jobId: string) {
-  return organizerCall<{ ok: true; status: "queued"; step: string }>(`/api/admin/organizer/publications/${encodeURIComponent(jobId)}/retry`, {
+  return organizerCall<{ ok: true; status: string; step: string }>(`/api/organizer/publications/${encodeURIComponent(jobId)}/retry`, {
     method: "POST",
   });
 }
