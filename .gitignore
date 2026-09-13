@@ -60,3 +60,7 @@ yarn-error.log*
 # Playwright MCP session logs
 /.playwright-mcp/
 /.playwright-cli/
+
+# Next.js / vinext dev build output
+/.next/
+/.vinext/
