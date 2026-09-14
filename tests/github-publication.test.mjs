@@ -7,6 +7,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR environment unavailable.");
 const github = await environment.runner.import("/app/github-publication.ts");
 const publication = await environment.runner.import("/app/publication-bundle-assembler.ts");
+const failures = await environment.runner.import("/app/organizer-publication.ts");
 after(() => vite.close());
 
 test("webhook handler verifies exact bytes before delivery idempotency", async () => {
@@ -74,4 +75,101 @@ test("GitHub adapter refuses a changed PR head before merge", async () => {
     expectedHeadSha: "expected", requiredChecks: ["data / check"],
   }), /head SHA changed/);
   assert.deepEqual(calls.map(([, method]) => method), ["GET"]);
+});
+
+test("GitHub adapter invalidates and retries one 401 with a provider token", async () => {
+  let token = "old-token";
+  const invalidated = [];
+  const calls = [];
+  const adapter = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin",
+    tokenProvider: {
+      getToken: async () => token,
+      invalidate: (rejected) => { invalidated.push(rejected); token = "new-token"; },
+    },
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), authorization: init.headers.authorization });
+      return calls.length === 1
+        ? new Response("rejected", { status: 401 })
+        : new Response(JSON.stringify({ full_name: "dekkmarsvin/tw_doujin_event-data" }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+  assert.deepEqual(await adapter.readRepositoryMetadata("tw_doujin_event-data"), { full_name: "dekkmarsvin/tw_doujin_event-data" });
+  assert.deepEqual(invalidated, ["old-token"]);
+  assert.deepEqual(calls.map(({ authorization }) => authorization), ["Bearer old-token", "Bearer new-token"]);
+});
+
+test("a repeated 401 stops after one retry and a 403 never refreshes", async () => {
+  let invalidations = 0;
+  let calls = 0;
+  const adapter = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin", tokenProvider: {
+      getToken: async () => "token",
+      invalidate: () => { invalidations += 1; },
+    },
+    fetch: async () => { calls += 1; return new Response("secret response sentinel", { status: calls === 1 ? 401 : 401 }); },
+  });
+  await assert.rejects(adapter.readRepositoryMetadata("tw_doujin_event-data"), (error) => {
+    assert.equal(error instanceof failures.PublicationFailure, true);
+    assert.equal(error.code, "github_api_response");
+    assert.doesNotMatch(error.message, /secret response sentinel/u);
+    return true;
+  });
+  assert.equal(calls, 2);
+  assert.equal(invalidations, 1);
+
+  calls = 0;
+  invalidations = 0;
+  const forbidden = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin", tokenProvider: {
+      getToken: async () => "token",
+      invalidate: () => { invalidations += 1; },
+    },
+    fetch: async () => { calls += 1; return new Response("forbidden sentinel", { status: 403 }); },
+  });
+  await assert.rejects(forbidden.readRepositoryMetadata("tw_doujin_event-data"), (error) => {
+    assert.equal(error.code, "github_api_response");
+    assert.doesNotMatch(error.message, /forbidden sentinel/u);
+    return true;
+  });
+  assert.equal(calls, 1);
+  assert.equal(invalidations, 0);
+});
+
+test("adapter fetch and JSON exceptions become fixed safe PublicationFailures", async () => {
+  const sentinel = "AUTHORIZATION_SECRET_SENTINEL";
+  const providerFailure = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin",
+    tokenProvider: {
+      getToken: async () => { throw new failures.PublicationFailure("secret_code", sentinel, false); },
+      invalidate: () => {},
+    },
+    fetch: async () => new Response("unexpected", { status: 200 }),
+  });
+  await assert.rejects(providerFailure.readRepositoryMetadata("tw_doujin_event-data"), (error) => {
+    assert.equal(error instanceof failures.PublicationFailure, true);
+    assert.equal(error.code, "github_app_request");
+    assert.equal(error.retryable, true);
+    assert.doesNotMatch(error.message, /AUTHORIZATION_SECRET_SENTINEL/u);
+    return true;
+  });
+
+  const fetchFailure = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin", installationToken: "token", fetch: async () => { throw new Error(sentinel); },
+  });
+  await assert.rejects(fetchFailure.readRepositoryMetadata("tw_doujin_event-data"), (error) => {
+    assert.equal(error instanceof failures.PublicationFailure, true);
+    assert.equal(error.code, "github_api_request");
+    assert.doesNotMatch(error.message, /AUTHORIZATION_SECRET_SENTINEL/u);
+    return true;
+  });
+
+  const jsonFailure = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin", installationToken: "token", fetch: async () => new Response(sentinel, { status: 200 }),
+  });
+  await assert.rejects(jsonFailure.readRepositoryMetadata("tw_doujin_event-data"), (error) => {
+    assert.equal(error.code, "github_api_response");
+    assert.doesNotMatch(error.message, /AUTHORIZATION_SECRET_SENTINEL/u);
+    return true;
+  });
 });

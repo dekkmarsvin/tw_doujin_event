@@ -26,7 +26,7 @@ import {
   validateOrganizerImportedRowsAgainstDraft,
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
-import { publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } from "./organizer-publication";
+import { PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } from "./organizer-publication";
 import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueName,
@@ -141,6 +141,8 @@ type PortalDependencies = {
   resolveMapContributionScope?: (input: { periodKey: string; venueSpaceId: string }) => Promise<MapContributionScope | null>;
   /** Reads only the reviewed public repository snapshot used as diff base. */
   readPublishedEventMap?: (targetPath: string) => Promise<PublishedEventMap | null>;
+  /** Fixed-scope, server-side GitHub App installation probe. */
+  githubInstallationProbe?: () => Promise<{ ok: true }>;
   config: PortalConfig;
 };
 
@@ -198,7 +200,8 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 export function createCirclePortalHandlers({
   dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
-  projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap, config,
+  projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap,
+  githubInstallationProbe, config,
 }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
@@ -928,6 +931,26 @@ export function createCirclePortalHandlers({
       return { ok: false, response: json({ error: "管理操作需要重新登入。", code: ADMIN_SESSION_STALE }, 401) };
     }
     return gate;
+  }
+
+  async function adminProbeGitHubInstallation(request: Request) {
+    const gate = await requireFreshAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    if (!body || Object.keys(body).length !== 0) {
+      return json({ error: "請求格式無效。", code: "invalid_request" }, 400);
+    }
+    if (!githubInstallationProbe) {
+      return json({ error: "GitHub App 尚未設定。", code: "github_app_not_configured" }, 503);
+    }
+    try {
+      await githubInstallationProbe();
+      return json({ ok: true });
+    } catch (error) {
+      const code = error instanceof PublicationFailure && error.code === "github_app_config"
+        ? "github_app_not_configured" : "github_installation_probe_failed";
+      return json({ error: "GitHub App installation probe failed.", code }, 503);
+    }
   }
 
   async function adminManageMapContributor(request: Request) {
@@ -2720,6 +2743,7 @@ export function createCirclePortalHandlers({
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
+    adminProbeGitHubInstallation,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and
     // exists before any event is published, so `eventScoped` — which demands a
     // published event this deployment serves — would refuse every one of them.
