@@ -15,6 +15,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
+const { createGitHubPublicationAdapter } = await environment.runner.import("/app/github-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 
@@ -183,6 +184,26 @@ test("publication resumes main and smoke failures without recreating successful 
     assert.equal(calls.filter((value) => value === step).length, step === "preparing_main" ? 2 : 1);
   }
   assert.equal((await repository.getLatestOrganizerPublicationJob(id)).id, jobId);
+});
+
+test("GitHub publication failures persist only safe executor error text", async () => {
+  const { jobId } = await publicationFixture();
+  const adapter = createGitHubPublicationAdapter({
+    owner: "dekkmarsvin",
+    installationToken: "INSTALLATION_TOKEN_SENTINEL",
+    fetch: async () => { throw new Error("PRIVATE_KEY_SENTINEL"); },
+  });
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => { await adapter.readRepositoryMetadata("tw_doujin_event-data"); return {}; },
+  }, () => NOW + 10);
+
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed");
+  assert.equal(job.failure_code, "github_api_request");
+  assert.equal(job.error, "GitHub API request failed.");
+  assert.doesNotMatch(job.error, /PRIVATE_KEY_SENTINEL|INSTALLATION_TOKEN_SENTINEL/u);
 });
 
 test("a job nobody dispatched times out into the existing retry path", async () => {

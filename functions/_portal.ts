@@ -8,6 +8,7 @@ import type { MapContributionFileStore } from "../app/map-contribution-files";
 import { isPublishedEventMap } from "../app/event-map";
 import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
 import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
+import { createGitHubInstallationProbe } from "../app/github-installation-probe";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -312,6 +313,13 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     const value: unknown = await response.json();
     return isPublishedEventMap(value) && value.eventId === eventId ? value : null;
   };
+  const githubInstallationProbe = createGitHubInstallationProbe({
+    appId: env.GITHUB_APP_ID ?? "",
+    installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
+    privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
+    webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? "",
+    now: () => Date.now(),
+  });
   return createCirclePortalHandlers({
     repository,
     sendMail: async (message) => {
@@ -376,6 +384,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       return resolved ? { ...resolved, periodAliases } : null;
     },
     readPublishedEventMap,
+    githubInstallationProbe,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.

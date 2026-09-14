@@ -1,5 +1,7 @@
 import { sha256Hex } from "./portal-crypto";
 import { verifyGitHubWebhookSignature } from "./publication-bundle-assembler";
+import { PublicationFailure } from "./organizer-publication";
+import { GITHUB_USER_AGENT, type GitHubTokenProvider } from "./github-app-token";
 
 export function createGitHubWebhookHandler(input: {
   secret: string;
@@ -37,24 +39,95 @@ export function createGitHubWebhookHandler(input: {
   };
 }
 
-type GitHubAdapterOptions = {
+export type GitHubAdapterOptions = {
   owner: string;
-  installationToken: string;
+  /** Kept for existing publication callers and tests. */
+  installationToken?: string | GitHubTokenProvider;
+  /** Runtime App authentication source. */
+  tokenProvider?: GitHubTokenProvider;
   fetch?: typeof globalThis.fetch;
 };
 
+function safeTokenProviderFailure(error: unknown) {
+  if (error instanceof PublicationFailure) {
+    if (error.code === "github_app_config") {
+      return new PublicationFailure("github_app_config", "GitHub App authentication is not configured.", false);
+    }
+    if (error.code === "github_app_key") {
+      return new PublicationFailure("github_app_key", "GitHub App private key is invalid.", false);
+    }
+    if (error.code === "github_app_token") {
+      return new PublicationFailure("github_app_token", "GitHub App token response is invalid.", error.retryable);
+    }
+    if (error.code === "github_app_request") {
+      return new PublicationFailure("github_app_request", "GitHub App token request failed.", error.retryable);
+    }
+  }
+  return new PublicationFailure("github_app_request", "GitHub App token request failed.", true);
+}
+
 export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
   const requestFetch = options.fetch ?? globalThis.fetch;
-  const request = async <T>(repository: string, path: string, init?: RequestInit): Promise<T> => {
-    const response = await requestFetch(`https://api.github.com/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(repository)}${path}`, {
-      ...init,
-      headers: {
-        accept: "application/vnd.github+json", authorization: `Bearer ${options.installationToken}`,
-        "x-github-api-version": "2022-11-28", ...init?.headers,
-      },
-    });
-    if (!response.ok) throw new Error(`GitHub API ${path} failed (${response.status}).`);
-    return response.status === 204 ? undefined as T : await response.json() as T;
+  const tokenProvider = options.tokenProvider
+    ?? (typeof options.installationToken === "object" ? options.installationToken : undefined);
+  const staticToken = typeof options.installationToken === "string" ? options.installationToken : undefined;
+
+  function tokenConfigurationFailure() {
+    return new PublicationFailure("github_app_config", "GitHub App authentication is not configured.", false);
+  }
+
+  async function tokenForRequest() {
+    if (tokenProvider) {
+      try {
+        const token = await tokenProvider.getToken();
+        if (typeof token !== "string" || token.length === 0 || token.trim() !== token) throw tokenConfigurationFailure();
+        return token;
+      } catch (error) {
+        throw safeTokenProviderFailure(error);
+      }
+    }
+    if (staticToken && staticToken.trim() === staticToken) return staticToken;
+    throw tokenConfigurationFailure();
+  }
+
+  const request = async <T>(repository: string, path: string, init?: RequestInit, expectedStatus?: number): Promise<T> => {
+    let retriedUnauthorized = false;
+    while (true) {
+      const token = await tokenForRequest();
+      let response: Response;
+      try {
+        response = await requestFetch(`https://api.github.com/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(repository)}${path}`, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            accept: "application/vnd.github+json", authorization: `Bearer ${token}`,
+            "user-agent": GITHUB_USER_AGENT, "x-github-api-version": "2022-11-28",
+          },
+        });
+      } catch {
+        throw new PublicationFailure("github_api_request", "GitHub API request failed.", true);
+      }
+      let status: number;
+      let ok: boolean;
+      try {
+        status = response.status;
+        ok = response.ok;
+      } catch {
+        throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true);
+      }
+      if (status === 401 && tokenProvider && !retriedUnauthorized) {
+        retriedUnauthorized = true;
+        try { tokenProvider.invalidate(token); } catch { throw new PublicationFailure("github_app_request", "GitHub App token request failed.", true); }
+        continue;
+      }
+      if (!ok || (expectedStatus !== undefined && status !== expectedStatus)) {
+        const retryable = status === 429 || status >= 500;
+        throw new PublicationFailure("github_api_response", "GitHub API request was rejected.", retryable);
+      }
+      if (status === 204) return undefined as T;
+      try { return await response.json() as T; }
+      catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+    }
   };
 
   return {
@@ -92,6 +165,9 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     },
     rerunWorkflow(repository: string, runId: number) {
       return request<void>(repository, `/actions/runs/${runId}/rerun`, { method: "POST" });
+    },
+    readRepositoryMetadata(repository: string) {
+      return request<{ full_name?: unknown }>(repository, "", undefined, 200);
     },
   };
 }
