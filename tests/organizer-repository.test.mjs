@@ -224,7 +224,7 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
   assert.equal(job.pending_attempts, 0);
 });
 
-test("scheduled Worker entry is disabled by default and advances only a preview-gated fake", async (t) => {
+test("scheduled Worker entry ignores disabled environments and advances only a preview-gated fake", async (t) => {
   const { jobId } = await publicationFixture();
   t.mock.method(Date, "now", () => NOW + 10);
   for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }]) {
@@ -237,11 +237,11 @@ test("scheduled Worker entry is disabled by default and advances only a preview-
   }
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
   assert.equal(scheduledWorker.fetch, undefined);
-  // Parsed production config must keep the independently deployed worker off.
+  // Explicit production rollout does not enable the preview Worker.
   const { readFile } = await import("node:fs/promises");
   const config = JSON.parse(await readFile("workers/publication-dispatch/wrangler.jsonc", "utf8"));
   assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
-  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
+  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "github");
   assert.equal(config.env.preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
 });
 

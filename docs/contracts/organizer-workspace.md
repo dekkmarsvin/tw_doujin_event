@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供純產檔，#245 接上 GitHub data／main driver，#246 接上持久化排程，Phase 4 接上固定 deployment／origin verification。**正式發布仍未啟用**：Worker 設定與 CH20 真實發布／恢復尚待驗收；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
+> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供純產檔，#245 接上 GitHub data／main driver，#246 接上持久化排程，Phase 4 接上固定 deployment／origin verification。**CH20 真實發布／恢復仍待驗收**：production 設定採 github，部署與核准必須先完成 #212 真人啟用確認；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
 
 ## 入口與登入
 
@@ -153,7 +153,7 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 目前 production gate：
 
-1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。github 注入真實 data／main driver，每次呼叫只推進一個 bounded transition；独立 Worker 依上一段持續推進，設定仍為 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
+1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github，實際啟用依 #212 核准 rollout 執行；每次呼叫只推進一個 bounded transition。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
 2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
 3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求 fresh-admin session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 

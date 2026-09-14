@@ -10,6 +10,7 @@
 - Origin 模擬以兩場活動檢查 manifest、data pin、每個 artifact SHA-256、Reader HTML、匿名 session 401 與 manifest 前後一致；舊版本、漏活動／地圖、既有活動內容改變、redirect 均不能 published。
 - 本機實際 `build:production` 使用 FF47 pin `8c645303fa6838383549fbe8433ece081c514e1e` 成功生成全部公開 JSON 的 manifest；沒有更改 pin 或正式活動內容。Wrangler 4.120.1 dry-run：340.75 KiB，production mode disabled。
 - 新增 11 項聚焦檢查通過；相關 regression 82/82 通過，typecheck／完整 lint 通過。Required CI 結果另在 PR 留存。
+- PR #258 已合併為 `ed0c0bb`；同 head `d18b011e` 的 CI `34863232221` 三項 required checks 通過，正式部署 `34863799639` 與 Pages origin smoke 成功。2026-09-14T15:47:00Z 使用實際 runtime verifier 對公開 FF47 的版本、全部 JSON bytes、Reader 200、session 401 與前後 manifest 重讀通過：[唯讀證據](./assets/publication-deployment-2026-09-14/ff47-origin.json)。這不是 CH20 首次發布證據。
 
 ## 上線与恢復邊界
 

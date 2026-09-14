@@ -37,6 +37,7 @@
   // Top level is production only — `vars` is non-inheritable, which is why the
   // preview environment declares its own dummy pair below.
   "vars": {
+    "ORGANIZER_PUBLICATION_MODE": "github",
     "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
     "THUMBNAIL_PUBLIC_ORIGIN": "https://media.kotoban.top"
