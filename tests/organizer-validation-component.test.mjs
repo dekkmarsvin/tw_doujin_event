@@ -14,17 +14,17 @@ const detail = {
   import: {
     source: { fileName: "主辦.xlsx", worksheet: "攤位清單" },
     rows: [
-      { dayId: "1", venueSpaceId: "hall", boothCode: "A01", circleName: "當日社團", sourceRow: 9 },
-      { dayId: "2", venueSpaceId: "hall", boothCode: "A01", circleName: "其他日期社團", sourceRow: 20 },
-      { dayId: "1", venueSpaceId: "other", boothCode: "A01", circleName: "其他空間社團", sourceRow: 30 },
+      { dayId: "1", venueSpaceId: "hall", codes: ["A01", "A02"], circleName: "當日社團", sourceRow: 9 },
+      { dayId: "2", venueSpaceId: "hall", codes: ["A01", "A02"], circleName: "其他日期社團", sourceRow: 20 },
+      { dayId: "1", venueSpaceId: "other", codes: ["A01", "A02"], circleName: "其他空間社團", sourceRow: 30 },
     ],
   },
 };
 const render = (issue) => renderToStaticMarkup(React.createElement(OrganizerValidationIssueCard, { issue, detail }));
 
 test("missing booths identify the map, source and scoped source row", () => {
-  const html = render({ step: "map", code: "missing_booth", severity: "error", target: "1/hall", boothCodes: ["A01"], message: "legacy" });
-  for (const text of ["必須修正", "第一日", "展覽館", "一樓", "主辦.xlsx", "攤位清單", "共 1 筆", "A01", "當日社團", "來源第 9 列", "A1 與 A01", "重新執行檢查"]) assert.ok(html.includes(text), text);
+  const html = render({ step: "map", code: "missing_booth", severity: "error", target: "1/hall", boothCodes: ["A02"], message: "legacy" });
+  for (const text of ["必須修正", "第一日", "展覽館", "一樓", "主辦.xlsx", "攤位清單", "共 1 筆", "A02", "當日社團", "來源第 9 列", "A1 與 A01", "重新執行檢查"]) assert.ok(html.includes(text), text);
   assert.doesNotMatch(html, /其他日期社團|其他空間社團|legacy|period/);
 });
 

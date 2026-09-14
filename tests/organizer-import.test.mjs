@@ -36,7 +36,7 @@ test("required mapping accepts columns or unambiguous fixed event values", () =>
     },
   });
   assert.deepEqual(result.issues, []);
-  assert.deepEqual(result.rows.map(({ dayId, venueSpaceId, boothCode }) => [dayId, venueSpaceId, boothCode]), [
+  assert.deepEqual(result.rows.map(({ dayId, venueSpaceId, codes }) => [dayId, venueSpaceId, codes[0]]), [
     ["1", "zhengyan", "A01"], ["2", "zhengyan", "A02"], ["2", "zhengyan", "A03"],
   ]);
   assert.equal(result.rows[0].identityGroup, "stable:circle-101");
@@ -151,7 +151,7 @@ test("a removed source row produces neither an imported row nor an issue", () =>
     rows: DUPLICATE_ROWS, headerRow: 1, mapping: DUPLICATE_MAPPING, excludedRows: [6, 8],
   });
   assert.deepEqual(removeFirst.issues, []);
-  assert.deepEqual(removeFirst.rows.map((row) => [row.sourceRow, row.boothCode]), [[7, "a01"]]);
+  assert.deepEqual(removeFirst.rows.map((row) => [row.sourceRow, row.codes[0]]), [[7, "a01"]]);
 });
 
 test("a correction supplies a missing value and the row stops being rejected", () => {
@@ -180,7 +180,7 @@ test("correcting the venue space re-decides whether the row needs an area at all
   assert.deepEqual(result.issues, []);
   assert.deepEqual(result.rows.find((row) => row.sourceRow === 4), {
     sourceRow: 4, dayId: "1", venueSpaceId: "whole-hall", areaId: "ALL",
-    boothCode: "B02", circleName: "丙社", stableKey: null, identityGroup: null,
+    codes: ["B02"], circleName: "丙社", stableKey: null, identityGroup: null,
   });
 });
 
@@ -286,4 +286,48 @@ test("the example leaves the area blank for a space that has no divisions", () =
   const cells = sample.rows.map((row) => [row[space], row[area]]);
   assert.deepEqual(cells.filter(([name]) => name === "全館").map(([, value]) => value), ["", ""]);
   assert.equal(cells.find(([name]) => name === "分區館")[1], "A");
+});
+
+const groupImport = (values, mapping = {}) => imports.prepareOrganizerImport({
+  rows: [{ sourceRow: 1, cells: ["攤位", "社團"] }, ...values.map((code, index) => ({ sourceRow: index + 2, cells: [code, `社團${index}`] }))],
+  headerRow: 1, mapping: { day: { fixed: "1" }, venueSpace: { fixed: "hall" }, area: { fixed: "ALL" }, boothCode: { column: 0 }, circleName: { column: 1 }, ...mapping },
+});
+
+test("combined codes require confirmed width, preserve groups, and detect individual collisions", () => {
+  const single = groupImport(["A01", "A02A03"]);
+  assert.deepEqual(single.rows[1].codes, ["A02A03"]);
+  assert.equal(single.suggestedWidth, 3);
+  assert.equal(single.issues[0].code, "possibly_combined_booth");
+  assert.throws(() => groupImport(["A01A02"], { boothCodeMode: "fixed-width" }), /確認/);
+  const grouped = groupImport(["A01A02", "A03"], { boothCodeMode: "fixed-width", boothCodeWidth: 3 });
+  assert.equal(grouped.boothCount, 3);
+  assert.deepEqual(grouped.rows[0].codes, ["A01", "A02"]);
+  assert.equal(grouped.rows[0].identityGroup, null, "a multi-booth circle needs no stable key");
+  const duplicates = groupImport(["A01A02", "a02A03"], { boothCodeMode: "fixed-width", boothCodeWidth: 3 });
+  assert.equal(duplicates.rejected[0].sourceRow, 3);
+  assert.equal(duplicates.issues[0].code, "duplicate_booth");
+  assert.equal(groupImport(["A01A01"], { boothCodeMode: "fixed-width", boothCodeWidth: 3 }).rejected.length, 1);
+  const invalid = groupImport(["A01A0"], { boothCodeMode: "fixed-width", boothCodeWidth: 3 });
+  assert.equal(invalid.rows.length, 0);
+  assert.equal(invalid.issues[0].row, 2);
+});
+
+test("delimited mode supports official separators and rejects duplicates inside a group", () => {
+  assert.deepEqual(groupImport(["A01，A02、A03;A04；A05/A06 A07"], { boothCodeMode: "delimited" }).rows[0].codes,
+    ["A01", "A02", "A03", "A04", "A05", "A06", "A07"]);
+  assert.equal(groupImport(["A01,a01"], { boothCodeMode: "delimited" }).rejected.length, 1);
+  assert.equal(groupImport([",;/"], { boothCodeMode: "delimited" }).rejected.length, 1);
+  assert.equal(groupImport(["A01 A02"], { boothCodeMode: "fixed-width", boothCodeWidth: 7 }).rejected.length, 1);
+});
+
+test("CH20-shaped 170 groups cover all 202 physical booths without invented identity", () => {
+  // Structural regression fixture, not a copy of the official circle names.
+  const codes = Object.entries({ A: 18, B: 30, C: 30, D: 28, E: 28, F: 30, G: 30, S: 8 })
+    .flatMap(([area, count]) => Array.from({ length: count }, (_, index) => `${area}${String(index + 1).padStart(2, "0")}`));
+  const rows = [...Array.from({ length: 32 }, (_, index) => codes[index * 2] + codes[index * 2 + 1]), ...codes.slice(64)];
+  const result = groupImport(rows, { boothCodeMode: "fixed-width", boothCodeWidth: 3 });
+  assert.equal(result.rows.length, 170);
+  assert.equal(result.boothCount, 202);
+  assert.deepEqual(result.rows.flatMap((row) => row.codes), codes);
+  assert.deepEqual(result.issues, []);
 });

@@ -658,7 +658,7 @@ test("normalized import rows advance the candidate version without storing workb
     },
     rows: [{
       sourceRow: 2, dayId: "1", venueSpaceId: "hall-a", areaId: "A",
-      boothCode: "A01", circleName: "甲社", stableKey: "circle-1", identityGroup: "stable:circle-1",
+      codes: ["A01", "A02"], circleName: "甲社", stableKey: "circle-1", identityGroup: "stable:circle-1",
     }],
   }), { ok: true, version: 2 });
 
@@ -669,6 +669,11 @@ test("normalized import rows advance the candidate version without storing workb
   assert.deepEqual(imported.rows.map(({ day_id, booth_code, circle_name, identity_group }) => ({ day_id, booth_code, circle_name, identity_group })), [{
     day_id: "1", booth_code: "A01", circle_name: "甲社", identity_group: "stable:circle-1",
   }]);
+
+  assert.deepEqual(imported.rows[0].codes, ["A01", "A02"]);
+  // Existing scalar records must stay literal until the organizer confirms a reimport.
+  await database.prepare("UPDATE organizer_import_rows SET codes_json = NULL, booth_code = 'A01A02' WHERE source_id = ?1").bind(imported.source.id).run();
+  assert.deepEqual((await repository.getOrganizerImport("candidate-pf")).rows[0].codes, ["A01A02"]);
 
   assert.deepEqual(await repository.replaceOrganizerImport({
     candidateId: "candidate-pf", actorAccountId: ownerId, expectedVersion: 1, now: NOW + 3,
@@ -884,7 +889,7 @@ test("a booth list larger than one bound parameter still imports atomically", as
     dayId: String((index % 2) + 1),
     venueSpaceId: "hall-a",
     areaId: "a",
-    boothCode: `A-${String(index).padStart(5, "0")}`,
+    codes: [`A-${String(index).padStart(5, "0")}`],
     circleName: `サークル${index}・${"名".repeat(40)}`,
     stableKey: null,
     identityGroup: null,
@@ -938,7 +943,7 @@ test("account deletion shreds the private workbook name alongside its uploader",
     },
     rows: [{
       sourceRow: 2, dayId: "1", venueSpaceId: "hall-a", areaId: "a",
-      boothCode: "A-01", circleName: "測試社團", stableKey: null, identityGroup: null,
+      codes: ["A-01"], circleName: "測試社團", stableKey: null, identityGroup: null,
     }],
     now: NOW + 4,
   });

@@ -405,7 +405,7 @@ test("organizer detail uses formal map validation for readiness", async () => {
     `/api/organizer/events/${candidateId}/imports`, "PUT", {
       expectedVersion: 2,
       source: { fileName: "official.csv", worksheet: null, sha256: "b".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
-      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A", codes: ["A01"], circleName: "甲社", stableKey: null, identityGroup: null }],
     }, ownerCookie,
   ), candidateId)).status, 200);
   assert.equal((await handlers.createOrganizerMap(request(
@@ -474,7 +474,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     `/api/organizer/events/${candidateId}/imports`, "PUT", {
       expectedVersion: 2,
       source: { fileName: "official.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
-      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "來源中的假分區", boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null }],
+      rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "來源中的假分區", codes: ["A01", "A02"], circleName: "甲社", stableKey: null, identityGroup: null }],
     }, editorCookie,
   ), candidateId);
   assert.equal(imported.status, 200);
@@ -485,7 +485,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
       layout: {
         version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80,
         floor: { x: 0, y: 0, width: 100, height: 80 },
-        rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 5, y: 5, width: 10, height: 8 } }] }],
+        rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 5, y: 5, width: 10, height: 8 } }, { code: "A02", rect: { x: 20, y: 5, width: 10, height: 8 } }] }],
         pillars: [], accessPoints: [], landmarks: [],
       },
     }, editorCookie,
@@ -528,6 +528,9 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.equal(validatedWorkspace.readiness.completed, 5);
   assert.equal(validatedWorkspace.readiness.sections.find((section) => section.id === "validate").state, "complete");
 
+  const preview = await handlers.previewOrganizerCandidate(request(`/api/organizer/events/${candidateId}/preview`, "POST", {}, ownerCookie), candidateId);
+  assert.equal(preview.status, 200);
+  assert.deepEqual((await preview.json()).preview.placements.map((row) => [row.boothCode, row.circleName]), [["A01", "甲社"], ["A02", "甲社"]]);
   const editorSubmit = await handlers.submitOrganizerCandidate(request(
     `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 5 }, editorCookie,
   ), candidateId);
@@ -538,6 +541,9 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   ), candidateId);
   assert.equal(submitted.status, 200);
   const submissionSnapshot = JSON.parse((await repository.getOrganizerSubmissionSnapshot(candidateId, 5)).snapshot_json);
+  assert.equal(submissionSnapshot.schema, "organizer-submission-snapshot/2");
+  assert.deepEqual(submissionSnapshot.import.rows[0].codes, ["A01", "A02"]);
+  assert.equal(Object.hasOwn(submissionSnapshot.import.rows[0], "boothCode"), false);
   assert.deepEqual(submissionSnapshot.venueReferences, {
     schema: "organizer-venue-reference-snapshot/1",
     venues: [{
@@ -668,7 +674,7 @@ test("import API persists confirmed normalized rows and rejects stale versions",
     },
     rows: [{
       sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A",
-      boothCode: "A01", circleName: "甲社", stableKey: null, identityGroup: null,
+      codes: ["A01", "A02"], circleName: "甲社", stableKey: null, identityGroup: null,
     }],
   };
   const imported = await handlers.putOrganizerImport(request(
@@ -677,6 +683,20 @@ test("import API persists confirmed normalized rows and rejects stale versions",
   assert.equal(imported.status, 200);
   assert.equal((await imported.json()).version, 3);
   assert.equal((await repository.getOrganizerImport(candidateId)).rows[0].circle_name, "甲社");
+
+  assert.deepEqual((await repository.getOrganizerImport(candidateId)).rows[0].codes, ["A01", "A02"]);
+  const detail = await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie), candidateId);
+  assert.deepEqual((await detail.json()).import.rows[0].codes, ["A01", "A02"]);
+  for (const codes of [["A01", "a01"], [], [""], [123]]) {
+    const bad = await handlers.putOrganizerImport(request(`/api/organizer/events/${candidateId}/imports`, "PUT",
+      { ...payload, expectedVersion: 3, rows: [{ ...payload.rows[0], codes }] }, ownerCookie), candidateId);
+    assert.equal(bad.status, 422);
+    assert.equal((await repository.getOrganizerCandidate(candidateId)).current_version, 3);
+  }
+  const duplicated = await handlers.putOrganizerImport(request(`/api/organizer/events/${candidateId}/imports`, "PUT",
+    { ...payload, expectedVersion: 3, rows: [payload.rows[0], { ...payload.rows[0], sourceRow: 3, codes: ["A02", "A03"] }] }, ownerCookie), candidateId);
+  assert.equal(duplicated.status, 422);
+  assert.equal((await repository.getOrganizerImport(candidateId)).rows.length, 1);
 
   const stale = await handlers.putOrganizerImport(request(
     `/api/organizer/events/${candidateId}/imports`, "PUT", payload, ownerCookie,
@@ -724,7 +744,7 @@ test("import API tells the organizer which limit rejected the batch", async () =
   };
   const row = (index, circleName) => ({
     sourceRow: index + 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "A",
-    boothCode: `A${index}`, circleName, stableKey: null, identityGroup: null,
+    codes: [`A${index}`], circleName, stableKey: null, identityGroup: null,
   });
 
   const tooManyRows = await handlers.putOrganizerImport(request(

@@ -2,7 +2,7 @@ import type { OrganizerEventDraft } from "./organizer-event";
 import { eventUsesScopedMaps, type EventDefinition } from "./event-catalog";
 import { eventMapArtifactPath } from "./event-map-manifest";
 
-type ImportedPlacement = { dayId: string; venueSpaceId: string; boothCode: string };
+type ImportedPlacement = { dayId: string; venueSpaceId: string; codes: readonly string[] };
 
 type CandidateAuthoringScope = {
   kind: "candidate";
@@ -39,7 +39,7 @@ export function resolveCandidateAuthoringScope(input: {
   if (!period || !assignment) return null;
   const boothCodes = [...new Set(input.importedRows
     .filter((row) => row.dayId === period.id && row.venueSpaceId === assignment.venueSpaceId)
-    .map((row) => row.boothCode))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    .flatMap((row) => row.codes))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
   return {
     kind: "candidate", candidateId: input.candidateId, eventId: input.draft.event.id,
     periodKey: period.id, venueSpaceId: assignment.venueSpaceId, mapTemplate: assignment.mapTemplate,

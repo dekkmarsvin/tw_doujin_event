@@ -13,6 +13,8 @@ export type OrganizerImportMapping = {
   boothCode: OrganizerImportFieldMapping;
   circleName: OrganizerImportFieldMapping;
   stableKey?: OrganizerImportFieldMapping;
+  boothCodeMode?: "single" | "delimited" | "fixed-width";
+  boothCodeWidth?: number;
 };
 
 export type OrganizerNormalizedImportRow = {
@@ -20,7 +22,7 @@ export type OrganizerNormalizedImportRow = {
   dayId: string;
   venueSpaceId: string;
   areaId: string;
-  boothCode: string;
+  codes: string[];
   circleName: string;
   stableKey: string | null;
   /** Name equality is deliberately absent from this field. */
@@ -38,12 +40,28 @@ export type OrganizerImportOverrides =
  * A row the mapping could not turn into a placement, carrying the values it did
  * resolve so the preview can show it and let the organizer fill in the rest.
  */
-export type OrganizerRejectedImportRow = Omit<OrganizerNormalizedImportRow, "identityGroup"> & {
+export type OrganizerRejectedImportRow = Omit<OrganizerNormalizedImportRow, "identityGroup" | "codes"> & {
+  boothCode: string;
   codes: string[];
 };
 
 function compact(value: unknown) {
   return String(value ?? "").normalize("NFKC").trim().replace(/\s+/gu, " ");
+}
+
+/** Suggest only: choosing a width is an explicit organizer decision. */
+export function suggestOrganizerBoothCodeWidth(values: readonly string[]): number | null {
+  const lengths = values.map((value) => [...compact(value)].length).filter((length) => length > 0);
+  if (!lengths.length) return null;
+  const smallest = Math.min(...lengths);
+  if (lengths.some((length) => length > smallest) && lengths.some((length) => length > smallest && length % smallest === 0)) return smallest;
+  // Also recognize a file containing only concatenated letter-number codes.
+  const units = values.flatMap((value) => compact(value).match(/[A-Za-z]+[0-9]+/gu) ?? []);
+  if (units.length && values.every((value) => (compact(value).match(/[A-Za-z]+[0-9]+/gu) ?? []).join("") === compact(value))) {
+    const width = [...units[0]].length;
+    if (units.every((unit) => [...unit].length === width) && lengths.some((length) => length > width)) return width;
+  }
+  return null;
 }
 
 /**
@@ -123,6 +141,15 @@ export function prepareOrganizerImport(input: {
   const issues: OrganizerValidationIssue[] = [];
   const rows: OrganizerNormalizedImportRow[] = [];
   const rejected: OrganizerRejectedImportRow[] = [];
+  const mode = input.mapping.boothCodeMode ?? "single";
+  const width = input.mapping.boothCodeWidth;
+  if (!["single", "delimited", "fixed-width"].includes(mode)) throw new Error("請選擇攤位代碼格式。");
+  if (mode === "fixed-width" && (!Number.isSafeInteger(width) || width! < 1 || width! > 80)) {
+    throw new Error("請確認每個攤位代碼的字元數（1–80）。");
+  }
+  const suggestedWidth = suggestOrganizerBoothCodeWidth(input.rows.slice(input.headerRow)
+    .filter((row) => !input.excludedRows?.includes(row.sourceRow))
+    .map((row) => input.overrides?.[row.sourceRow]?.boothCode ?? mapped(row, input.mapping.boothCode)));
   const placements = new Map<string, { sourceRow: number; boothCode: string }>();
   const excluded = new Set(input.excludedRows ?? []);
 
@@ -165,27 +192,41 @@ export function prepareOrganizerImport(input: {
       continue;
     }
 
-    const placementKey = `${dayId}\u0000${venueSpaceId}\u0000${boothCode.toLocaleLowerCase("en-US")}`;
-    const previous = placements.get(placementKey);
-    if (previous) {
-      issues.push({
-        severity: "error", step: "import", code: "duplicate_booth", row: source.sourceRow,
-        target: `${dayId}/${venueSpaceId}/${boothCode}`,
-        message: `攤位 ${boothCode} 與來源列 ${previous.sourceRow} 重複。`,
-      });
-      rejected.push({
-        sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey,
-        codes: ["duplicate_booth"],
-      });
+    const characters = [...boothCode];
+    const boothCodes = mode === "delimited"
+      ? boothCode.split(/[\s,，、;；/]+/u).filter(Boolean)
+      : mode === "fixed-width"
+        ? Array.from({ length: Math.ceil(characters.length / width!) }, (_, index) => characters.slice(index * width!, (index + 1) * width!).join(""))
+        : [boothCode];
+    if (!boothCodes.length || boothCodes.some((code) => code.length > 80) || (mode === "fixed-width" && (characters.length % width! !== 0 || /[\s,，、;；/]/u.test(boothCode)))) {
+      issues.push({ severity: "error", step: "import", code: "invalid_booth_width", row: source.sourceRow,
+        message: `來源列 ${source.sourceRow} 的攤位代碼無法依目前格式拆分，請確認字元數與內容。` });
+      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes: ["invalid_booth_width"] });
       continue;
     }
-    placements.set(placementKey, { sourceRow: source.sourceRow, boothCode });
-    rows.push({
-      sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey,
-      identityGroup: stableKey ? `stable:${stableKey}` : null,
+    const keys = boothCodes.map((code) => `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`);
+    const local = new Set<string>();
+    const duplicateIndex = keys.findIndex((key) => {
+      if (placements.has(key) || local.has(key)) return true;
+      local.add(key); return false;
     });
+    if (duplicateIndex >= 0) {
+      const code = boothCodes[duplicateIndex];
+      const previousRow = placements.get(keys[duplicateIndex])?.sourceRow ?? source.sourceRow;
+      issues.push({ severity: "error", step: "import", code: "duplicate_booth", row: source.sourceRow,
+        target: `${dayId}/${venueSpaceId}/${code}`, message: `攤位 ${code} 與來源列 ${previousRow} 重複。` });
+      rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes: ["duplicate_booth"] });
+      continue;
+    }
+    keys.forEach((key, index) => placements.set(key, { sourceRow: source.sourceRow, boothCode: boothCodes[index] }));
+    if (mode === "single" && suggestedWidth && boothCode.length > suggestedWidth && boothCode.length % suggestedWidth === 0) {
+      issues.push({ severity: "warning", step: "import", code: "possibly_combined_booth", row: source.sourceRow,
+        message: `來源列 ${source.sourceRow} 的 ${boothCode} 可能包含多個攤位，請確認攤位代碼格式。` });
+    }
+    rows.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, codes: boothCodes, circleName, stableKey,
+      identityGroup: stableKey ? `stable:${stableKey}` : null });
   }
-  return { rows, issues, rejected };
+  return { rows, issues, rejected, suggestedWidth, boothCount: rows.reduce((total, row) => total + row.codes.length, 0) };
 }
 
 export async function buildOrganizerImportMetadata(input: {

@@ -381,6 +381,7 @@ export const IDENTITY_TABLES = [
     "venue_space_id TEXT NOT NULL",
     "area_id TEXT NOT NULL",
     "booth_code TEXT NOT NULL",
+    "codes_json TEXT",
     "circle_name TEXT NOT NULL",
     "stable_key TEXT",
     "identity_group TEXT",
@@ -496,6 +497,7 @@ export const IDENTITY_INDEXES = [
  * NOT EXISTS`, so duplicate-column errors are the idempotent success case.
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
+  { table: "organizer_import_rows", column: "codes_json", sql: "ALTER TABLE organizer_import_rows ADD COLUMN codes_json TEXT" },
   { table: "organizer_publication_jobs", column: "failure_code", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN failure_code TEXT" },
   { table: "organizer_publication_jobs", column: "retryable", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN retryable INTEGER NOT NULL DEFAULT 1" },
   { table: "accounts", column: "deletion_started_at", sql: "ALTER TABLE accounts ADD COLUMN deletion_started_at INTEGER" },
