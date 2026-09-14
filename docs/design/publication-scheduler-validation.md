@@ -10,6 +10,7 @@
 - 工作區讀取測試保留原 job，明確確認 GET／list 不再造成 timeout 寫入；獨立排程處理後，原 UI failure／retry 文案與 checkpoint 維持。
 - 既有資料庫測試新增缺少兩個排程欄位的舊表，驗證 additive migrations 先於 index 建立。
 - 聚焦測試 75/75、typecheck、相關 lint 通過。Wrangler 4.120.1 實際 dry-run bundle 328.15 KiB，production vars 仍 disabled。
+- 實際 workerd 的 `scheduled` handler 以 Miniflare API 觸發八輪，D1 中同一 job／approval hash 依序到 completed，所有 scheduled outcome 為 ok；[逐輪證據](./assets/publication-scheduler-2026-09-14/evidence.json)。這是本機 fake adapter，不是已部署 cron 或公開發布證據。
 
 ## 實際環境界線
 

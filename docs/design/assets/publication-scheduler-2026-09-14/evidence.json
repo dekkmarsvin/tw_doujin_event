@@ -1,0 +1,59 @@
+{
+  "at": "2026-09-14T15:14:21.242Z",
+  "runtime": "actual workerd via Miniflare scheduled events",
+  "mode": "local fake + preview D1",
+  "bundleSha256": "9b65aa997ad7fb492f91c7e5aa81238d9808d7e4946dd515452e587b46c8a1f7",
+  "jobId": "scheduled-246-job",
+  "approvalHash": "4a32df0ada9ac9d67bd0fbae43f0e38d5cd819c7cd1b0f668176ddcdbdaa9a81",
+  "ticks": [
+    {
+      "tick": 1,
+      "outcome": "ok",
+      "step": "waiting_data_checks",
+      "status": "publishing"
+    },
+    {
+      "tick": 2,
+      "outcome": "ok",
+      "step": "merging_data",
+      "status": "publishing"
+    },
+    {
+      "tick": 3,
+      "outcome": "ok",
+      "step": "preparing_main",
+      "status": "publishing"
+    },
+    {
+      "tick": 4,
+      "outcome": "ok",
+      "step": "waiting_main_checks",
+      "status": "publishing"
+    },
+    {
+      "tick": 5,
+      "outcome": "ok",
+      "step": "merging_main",
+      "status": "publishing"
+    },
+    {
+      "tick": 6,
+      "outcome": "ok",
+      "step": "waiting_deployment",
+      "status": "publishing"
+    },
+    {
+      "tick": 7,
+      "outcome": "ok",
+      "step": "verifying_production",
+      "status": "publishing"
+    },
+    {
+      "tick": 8,
+      "outcome": "ok",
+      "step": "completed",
+      "status": "published"
+    }
+  ],
+  "limitation": "Synthetic fixture; ticks triggered through Miniflare API, not a deployed cron. No production publication or GitHub side effects."
+}
