@@ -14,7 +14,8 @@ const vite = await createServer({
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
-const { createOrganizerPublicationExecutor, PublicationFailure, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
+const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
+const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
@@ -201,6 +202,15 @@ test("a job nobody dispatched times out into the existing retry path", async () 
   assert.equal(job.step, "preparing_data", "the job failed on the step it never started");
   assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
 
+  // The two layers have to meet here. This is the job the approval flow
+  // creates, and its owner is the one who must not be sent looking for
+  // progress that was never made. Asserting the step alone let the wording key
+  // on `assemble`, which only the older creation path ever wrote.
+  assert.equal(publicationHasStarted(job), false);
+  assert.match(publicationFailureMessage({
+    failureCode: job.failure_code, retryable: Boolean(job.retryable), started: publicationHasStarted(job),
+  }), /發布沒有開始/);
+
   // No second way to start a publication: recovery is the retry that already exists.
   const retried = await repository.retryOrganizerPublicationJob({ jobId, now: timedOut + 1 });
   assert.equal(retried.ok, true);
@@ -214,6 +224,33 @@ test("a job nobody dispatched times out into the existing retry path", async () 
     .bind(queuedAt, jobId).run();
   assert.deepEqual(await expire(timedOut + 3), { expired: [] });
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
+});
+
+test("a timeout that follows real progress keeps the retryable wording", async () => {
+  const { jobId } = await publicationFixture();
+  const queuedAt = (await repository.getOrganizerPublicationJob(jobId)).updated_at;
+  const lease = await repository.claimOrganizerPublicationLease({ jobId, now: queuedAt, ttlMs: 30_000 });
+  // What the executor writes when a step completes: it refuses to advance a
+  // step whose checkpoint is missing, so a job past `preparing_data` always
+  // carries one. This timeout really did stop part-way.
+  assert.equal(await repository.updateOrganizerPublicationJob({
+    jobId, leaseToken: lease.token, expectedStep: "preparing_data", nextStep: "merging_data",
+    status: "failed", error: "temporary", retryable: true, now: queuedAt,
+    metadata: { data_pr_number: 7, data_head_sha: "a".repeat(40) },
+  }), true);
+  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: queuedAt + 1 })).ok, true);
+
+  const timedOut = queuedAt + 1 + QUEUED_PUBLICATION_TIMEOUT_MS;
+  assert.deepEqual(await repository.expireStalledOrganizerPublicationJobs({
+    now: timedOut, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS,
+  }), { expired: [jobId] });
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.failure_code, "queued_timeout");
+  assert.equal(job.step, "merging_data", "retry keeps the step the job failed on");
+  assert.equal(publicationHasStarted(job), true);
+  assert.doesNotMatch(publicationFailureMessage({
+    failureCode: job.failure_code, retryable: Boolean(job.retryable), started: publicationHasStarted(job),
+  }), /發布沒有開始/);
 });
 
 test("CREATE collision is permanent, leaves content locked and never calls the adapter", async () => {

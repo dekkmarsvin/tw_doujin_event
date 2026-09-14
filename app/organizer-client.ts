@@ -70,6 +70,7 @@ export type OrganizerEventDetail = {
     error: string | null;
     failureCode?: string | null;
     retryable?: boolean;
+    started?: boolean;
     updatedAt: number;
   };
   workspace: {

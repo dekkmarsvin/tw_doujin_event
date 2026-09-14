@@ -13,20 +13,16 @@ export function publicationProgress(job: { step: string; status: string }) {
   }));
 }
 
-/** The step a job is created on. Only a completed transition moves a job off
- * it, so a job still sitting here has never finished a stage and carries no
- * checkpoint. Retry keeps the step it failed on, so a timed-out retry can sit
- * on a later step with merged data behind it. */
-const CREATED_STEP = "assemble";
-
-export function publicationFailureMessage(job: { failureCode?: string | null; retryable?: boolean; step: string }) {
+export function publicationFailureMessage(job: { failureCode?: string | null; retryable?: boolean; started?: boolean }) {
   // A job that never started reads as a mid-publication failure unless it says
   // otherwise, and the owner then looks for progress that was never made. The
   // timeout also catches jobs that stalled again after a retry: those really
   // did stop part-way, and the stage list beside this message already shows
-  // their completed stages, so only the never-dispatched ones may claim that
-  // nothing ran.
-  if (job.failureCode === "queued_timeout" && job.step === CREATED_STEP) return "發布沒有開始，內容沒有被退件。可以重試發布。";
+  // their completed stages, so only the ones that finished no stage at all may
+  // claim that nothing ran. `started` carries that, because the step does not:
+  // approval creates a job on `preparing_data` and retry keeps the failed step,
+  // so the same name covers both cases.
+  if (job.failureCode === "queued_timeout" && !job.started) return "發布沒有開始，內容沒有被退件。可以重試發布。";
   if (job.failureCode === "event_id_collision") return "這個活動代碼已存在，首次發布不能覆寫。請聯絡網站管理者，透過已發布活動修正流程處理。";
   if (job.failureCode === "snapshot_mismatch") return "已核准內容與發布記錄不一致，系統已停止發布。請聯絡網站管理者檢查這一版的送審記錄。";
   return job.retryable ? "發布暫時失敗，內容沒有被退件。可以重試發布，系統會從失敗步驟繼續，保留已完成的進度。"
