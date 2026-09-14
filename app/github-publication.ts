@@ -208,6 +208,16 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     listPullRequestsPage,
     readPullRequest,
     readChecks,
+    async isAncestor(repository: string, ancestor: string, currentMain: string) {
+      gitSha(ancestor); gitSha(currentMain);
+      if (ancestor === currentMain) return true;
+      const value = await request<{ status: string; base_commit: { sha: string }; merge_base_commit: { sha: string } }>(
+        repository, `/compare/${ancestor}...${currentMain}`,
+      );
+      if (value?.base_commit?.sha !== ancestor || !["ahead", "behind", "diverged", "identical"].includes(value.status)) invalidGitHubResponse();
+      gitSha(value.merge_base_commit?.sha);
+      return value.status === "ahead" && value.merge_base_commit.sha === ancestor;
+    },
     async readRef(repository: string, branch: string) {
       const value = await request<{ ref: string; object: { sha: string; type: string } } | null>(repository, `/git/ref/heads/${branch.split("/").map(encodeURIComponent).join("/")}`, undefined, [200, 404]);
       if (value === null) return null;

@@ -69,6 +69,12 @@ async function remoteFixture() {
       const id = path.split("/").at(-1); output = response({ sha: id, tree: repo.trees.get(id), truncated: false });
     } else if (method === "GET" && path.startsWith("/git/blobs/")) {
       const id = path.split("/").at(-1); output = response({ sha: id, encoding: "base64", content: Buffer.from(repo.blobs.get(id)).toString("base64") });
+    } else if (method === "GET" && path.startsWith("/compare/")) {
+      const [base, head] = path.slice("/compare/".length).split("...");
+      const ancestors = (id, found = new Set()) => { if (found.has(id)) return found; found.add(id); for (const parent of repo.commits.get(id).parents) ancestors(parent.sha, found); return found; };
+      const baseHistory = ancestors(base); const headHistory = ancestors(head);
+      const mergeBase = [...baseHistory].find((id) => headHistory.has(id));
+      output = response({ status: base === head ? "identical" : headHistory.has(base) ? "ahead" : baseHistory.has(head) ? "behind" : "diverged", base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } });
     } else if (method === "POST" && path === "/git/trees") {
       const files = new Map(repo.trees.get(body.base_tree).map((entry) => [entry.path, repo.blobs.get(entry.sha)]));
       for (const entry of body.tree) { assert.equal(entry.mode, "100644"); files.set(entry.path, entry.content); }
@@ -179,4 +185,31 @@ test("expired lease, changed tree or PR, and failed latest checks refuse writes"
     await assert.rejects(run(change === "extra-file" ? "preparing_data" : "merging_data"), (error) => error instanceof PublicationFailure);
     assert.equal(remote.calls.filter((call) => call.method !== "GET").length, writes, change);
   }
+});
+
+test("recovery requires a trusted main ancestor, including when no head checkpoint was saved", async () => {
+  for (const stage of ["data", "main"]) {
+    const { remote, job, run } = await setup();
+    await run("preparing_data"); remote.green("data", job.data_head_sha); await run("merging_data");
+    if (stage === "main") await run("preparing_main");
+    const repo = remote.repos.get(stage === "data" ? "tw_doujin_event-data" : "tw_doujin_event");
+    const pull = repo.pulls.get(1); const previous = repo.commits.get(pull.head.sha);
+    const originalBase = previous.parents[0].sha;
+    const changedBaseFiles = remote.filesAt(repo, originalBase); changedBaseFiles.set("README.md", "Unapproved parent change");
+    const untrustedParent = remote.commit(repo, remote.tree(repo, changedBaseFiles), [originalBase], "Untrusted base");
+    const changedHeadFiles = remote.filesAt(repo, pull.head.sha); changedHeadFiles.set("README.md", "Unapproved parent change");
+    const untrustedHead = remote.commit(repo, remote.tree(repo, changedHeadFiles), [untrustedParent], previous.message);
+    pull.head.sha = untrustedHead; repo.refs.set(pull.head.ref, untrustedHead);
+    job[`${stage}_head_sha`] = null; job[`${stage}_pr_number`] = null;
+    const writes = remote.calls.filter((call) => call.method !== "GET").length;
+    await assert.rejects(run(`preparing_${stage}`), (error) => error.code === "publication_base_changed");
+    assert.equal(remote.calls.filter((call) => call.method !== "GET").length, writes);
+  }
+  const { remote, job, run } = await setup();
+  remote.loseNext("POST /git/refs"); await assert.rejects(run("preparing_data"));
+  const repo = remote.repos.get("tw_doujin_event-data");
+  const current = repo.refs.get("main"); const files = remote.filesAt(repo, current); files.set("README.md", "New main documentation");
+  repo.refs.set("main", remote.commit(repo, remote.tree(repo, files), [current], "Trusted main advancement"));
+  await run("preparing_data");
+  assert.ok(job.data_head_sha); assert.equal(repo.pulls.size, 1, "a legitimate main ancestor can still recover");
 });

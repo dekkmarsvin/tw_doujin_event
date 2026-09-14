@@ -127,6 +127,12 @@ export function createGitHubPublicationDriver(options: Pick<GitHubAdapterOptions
         if (pinnedPull && pinnedPull !== pull?.number) fail("checkpoint_mismatch", "固定發布 PR 已改變或消失。");
         const existing = head ? await adapter.readCommit(repository, head) : null;
         if (existing && (existing.message !== messageFor(input, stage) || existing.parents.length !== 1)) fail("publication_commit_changed", "發布 commit 的工作記錄或 parent 不符。");
+        if (existing) {
+          const currentMain = await adapter.readRef(repository, "main");
+          if (!currentMain || !await adapter.isAncestor(repository, existing.parents[0].sha, currentMain)) {
+            fail("publication_base_changed", "發布 commit 的基準不屬於 main 歷史，停止恢復。");
+          }
+        }
         const base = await readBase(adapter, repository, existing?.parents[0].sha);
         let files: Awaited<ReturnType<typeof buildPublicationDataStage>>["files"];
         if (stage === "data") {

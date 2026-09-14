@@ -44,7 +44,8 @@ test("an active ruleset alone is not rollout approval", () => {
   const ruleset = { enforcement: "active", conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } }, bypass_actors: [],
     rules: [{ type: "deletion" }, { type: "non_fast_forward" }] };
   const problems = publicationRolloutProblems("main", [ruleset], 1);
-  assert.equal(problems.length, 4);
+  assert.deepEqual(problems, ["missing_pull_request_rule", "missing_check:Verify and deploy", "missing_check:Full preview portal E2E",
+    "missing_check:Browser acceptance", "missing_check:Organizer publication approval"]);
   const valid = { ...ruleset, rules: [{ type: "pull_request" }, { type: "required_status_checks", parameters: {
     required_status_checks: PUBLICATION_REQUIRED_CHECKS.main.map((context) => ({ context })),
   } }] };

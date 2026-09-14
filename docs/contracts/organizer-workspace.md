@@ -171,7 +171,7 @@ main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE�
 
 `github-publication-driver.ts` 只使用伺服器固定的兩個 repository 與 `organizer/{jobId}/{stage}` 分支，接收未重新序列化的核准 snapshot bytes。首次 data 發布前先查本部署的 published event resolver，再查 GitHub 固定 main commit 的 published collection；讀取失敗不是活動不存在的證據。
 
-每次 preparing 先找所有狀態的同分支 PR／branch；已有 commit 時以其唯一 parent 重建預期產物，比對完整 leaf tree（包含保留的舊檔與所有新檔的 Git blob hash），不只比对 PR 本文。分支、PR、核准 check 寫入成功但回應遺失時沿用遠端產物；已關閉未合併、換 head、额外檔案或 snapshot 不符時停止，不自動覆寫。每一次 GitHub mutation（含 tree／commit、branch、PR、check、merge）都在發送前持久化 write intent 並重驗 lease。
+每次 preparing 先找所有狀態的同分支 PR／branch；已有 commit 時先確認其唯一 parent 是固定 current main 的歷史祖先，再以該 parent 重建預期產物，比對完整 leaf tree（包含保留的舊檔與所有新檔的 Git blob hash），不只比對 PR 本文。不接受分支自行提出、未進入 main 的基準。分支、PR、核准 check 寫入成功但回應遺失時沿用遠端產物；已關閉未合併、換 head、額外檔案或 snapshot 不符時停止，不自動覆寫。每一次 GitHub mutation（含 tree／commit、branch、PR、check、merge）都在發送前持久化 write intent 並重驗 lease。
 
 必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 已加入唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義（#227 A）。
 
