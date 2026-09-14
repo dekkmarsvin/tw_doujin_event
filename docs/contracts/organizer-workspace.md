@@ -66,7 +66,7 @@ draft → submitted → approved → publishing → published
 
 ## 主辦與分類目錄
 
-活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。
+活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。建立及選取共用 Reader 分類驗證，分類名稱不可使用其保留名稱「全部類別」。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。
 
 `POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。Owner／Editor／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
 

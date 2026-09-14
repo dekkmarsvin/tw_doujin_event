@@ -691,7 +691,9 @@ test("reference catalog creation enforces actor, editable state and version with
   const references = await createReferenceSelection(candidateId, ownerCookie);
   const catalogBody = { expectedVersion: 1, kind: "category-catalog", name: "分類", sourceUrl: "https://organizer.example/categories",
     organizerId: references.organizerAssignments[0].organizerId, categories: [{ label: "原創", description: "" }] };
-  for (const categories of [[], [{ label: "" }], [{ label: "同名" }, { label: "同名" }]]) assert.equal((await send({ ...catalogBody, categories })).status, 400);
+  const beforeInvalid = await counts();
+  for (const categories of [[], [{ label: "" }], [{ label: "同名" }, { label: "同名" }], [{ label: "全部類別" }]]) assert.equal((await send({ ...catalogBody, categories })).status, 400);
+  assert.deepEqual(await counts(), beforeInvalid);
   assert.equal((await send({ ...catalogBody, organizerId: "unknown-organizer" })).status, 409);
   const afterValid = await counts();
   for (const status of ["submitted", "approved", "publishing", "published", "failed"]) {
@@ -735,6 +737,15 @@ test("candidate reference selection rejects wrong catalog ownership and duplicat
   assert.equal((await save(references)).status, 200);
   assert.equal((await save(another)).status, 409);
   assert.deepEqual(JSON.parse((await repository.getOrganizerCandidate(candidateId)).current_draft_json).references, references);
+  const records = await repository.listOrganizerReferenceRecords();
+  const selected = records.find((record) => record.id === references.categoryCatalog.id);
+  const invalid = JSON.parse(selected.publicReferenceJson);
+  invalid.categories[0].label = "全部類別";
+  selected.publicReferenceJson = JSON.stringify(invalid);
+  const { resolveOrganizerReferences } = await environment.runner.import("/app/organizer-reference-catalog.ts");
+  const resolved = await resolveOrganizerReferences({ ...draft, references }, records);
+  assert.ok(resolved.issues.some((issue) => issue.code === "invalid_category_catalog" && issue.message.includes("全部類別")));
+  assert.equal(resolved.snapshot, null, "an existing catalog with a reader-reserved label cannot reach the snapshot");
 });
 
 test("import API persists confirmed normalized rows and rejects stale versions", async () => {

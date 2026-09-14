@@ -45,6 +45,7 @@ try {
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("partner");
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByText("請指定恰好一個主辦單位；其餘可設為協辦或合作夥伴。", { exact: true }).waitFor();
+  await page.getByText("請指定恰好一個主辦單位；其餘可設為協辦或合作夥伴。", { exact: true }).scrollIntoViewIfNeeded();
   await journey.capture(page, "references-lead-validation");
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("lead");
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();

@@ -10,4 +10,6 @@
 
 自動回歸 journey：`tests/browser/portal-organizer-references.mjs` 使用真實本機登入／API／D1，沒有 mock reference API。權限、鎖定狀態、stale version、部分寫入、分類歸屬、完整 snapshot/hash 與 parser 邊界由 `tests/organizer-handlers.test.mjs` 檢查。
 
+以上截圖取自 journey 對應 assertion 完成後的真實畫面；缺少主辦的錯誤先捲入畫面再擷取。獨立 review 發現「全部類別」為 Reader 保留名稱，建立及選取現在共用 Reader 分類驗證並有拒絕／無部分寫入回歸。
+
 獨立 review 與同 head CI 結果記在本切片 PR。此證據只接受 #248 的工程交付，不表示 CH20 已發布，也不替代 #212 正式發布／failure-retry 驗收。

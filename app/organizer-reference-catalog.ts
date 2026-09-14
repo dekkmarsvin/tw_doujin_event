@@ -3,6 +3,7 @@ import { INITIAL_ORGANIZER_VENUE_CATALOG, normalizeOrganizerVenueName, normalize
 import { parseReferenceRecord, verifyReferenceFiles } from "./reference-selection.mjs";
 import { sha256Hex } from "./portal-crypto";
 import { pinnedVenue, pinnedSpace } from "./organizer-reference-seeds";
+import { parseCircleCategoryDefinitions } from "./circle-categories";
 
 export type OrganizerReferenceRecord = {
   path: string;
@@ -68,6 +69,8 @@ export function createCategoryReference(input: { name: unknown; sourceUrl: unkno
     return { id: `category-${index + 1}`, label, ...(description ? { description } : {}) };
   });
   const id = `catalog-${crypto.randomUUID()}`;
+  try { parseCircleCategoryDefinitions(categories); }
+  catch { throw new Error("分類名稱不可空白、重複或使用系統保留名稱「全部類別」。"); }
   const revision = "1";
   const pointers = categories.flatMap((category, index) => [`/categories/${index}/label`, ...(category.description ? [`/categories/${index}/description`] : [])]);
   return record("category-catalog", { schema: "category-catalog/1", id, organizerId, revision, categories,
@@ -131,6 +134,10 @@ export function validateOrganizerReferences(draft: OrganizerEventDraft, catalog:
   else if (!assignments.some((item) => item.organizerId === category.organizerId)
     || !catalog.categories.some((item) => item.id === category.id && item.organizerId === category.organizerId && item.revision === category.revision && item.categories.length > 0)) {
     add("invalid_category_catalog", "分類目錄必須屬於已選取的主辦單位，且含至少一個分類。");
+  } else {
+    const selected = catalog.categories.find((item) => item.id === category.id && item.organizerId === category.organizerId && item.revision === category.revision)!;
+    try { parseCircleCategoryDefinitions(selected.categories); }
+    catch { add("invalid_category_catalog", "分類名稱不可空白、重複或使用系統保留名稱「全部類別」，請重新選擇分類目錄。"); }
   }
   return issues;
 }

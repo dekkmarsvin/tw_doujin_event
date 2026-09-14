@@ -1,7 +1,7 @@
 {
   "journey": "portal-organizer-references",
   "browser": "153.0.4234.32",
-  "recordedAt": "2026-09-14T13:35:57.049Z",
+  "recordedAt": "2026-09-14T13:44:30.835Z",
   "source": "local fixtures, not production",
   "checks": [
     "references-invalid-source",
