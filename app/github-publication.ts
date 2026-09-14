@@ -52,6 +52,10 @@ export type GitHubAdapterOptions = {
 
 export type GitHubTreeEntry = { path: string; mode: string; type: string; sha: string };
 export type GitHubCommit = { sha: string; tree: { sha: string }; parents: Array<{ sha: string }>; message: string };
+export type GitHubWorkflowRun = { id: number; workflow_id: number; head_sha: string; head_branch: string; event: string;
+  path: string; run_attempt: number; status: string; conclusion: string | null; repository: { full_name: string } };
+export type GitHubWorkflowJob = { id: number; run_id: number; run_attempt: number; head_sha: string; name: string;
+  status: string; conclusion: string | null; steps: Array<{ name: string; status: string; conclusion: string | null }> };
 export type GitHubPull = { number: number; state: string; merged: boolean; merge_commit_sha: string | null;
   body: string | null; base: { ref: string; repo: { full_name: string } }; head: { ref: string; sha: string; repo: { full_name: string } }; user: { login: string } };
 export type GitHubCheck = { id: number; name: string; status: string; conclusion: string | null; head_sha: string;
@@ -155,6 +159,10 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     if (status === 404 && expected?.includes(404)) return null as T;
     try { return await response.json() as T; }
     catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+  };
+
+  const parseResponse = async <T>(response: Response): Promise<T> => {
+    try { return await response.json() as T; } catch { return invalidGitHubResponse(); }
   };
 
   const requestPage = async <T>(repository: string, path: string, init?: RequestInit) => {
@@ -299,8 +307,27 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
         method: "PUT", body: JSON.stringify({ sha: input.expectedHeadSha, merge_method: "squash" }),
       });
     },
-    rerunWorkflow(repository: string, runId: number) {
-      return request<void>(repository, `/actions/runs/${runId}/rerun`, { method: "POST" });
+    async rerunWorkflow(repository: string, runId: number) {
+      const response = await requestRaw(repository, `/actions/runs/${runId}/rerun`, { method: "POST" });
+      if (response.status !== 201) invalidGitHubResponse();
+      // GitHub acknowledges this mutation with an empty 201 response.
+    },
+    async listWorkflowRuns(repository: string, workflowId: number, headSha: string) {
+      const response = await requestRaw(repository, `/actions/workflows/${workflowId}/runs?branch=main&event=push&head_sha=${gitSha(headSha)}&per_page=100`);
+      if (response.status !== 200 || response.headers.get("link")?.includes('rel="next"')) invalidGitHubResponse();
+      const body = await parseResponse<{ total_count: number; workflow_runs: GitHubWorkflowRun[] }>(response);
+      if (!Array.isArray(body.workflow_runs) || body.total_count !== body.workflow_runs.length) invalidGitHubResponse();
+      return body.workflow_runs;
+    },
+    readWorkflowRun(repository: string, runId: number) {
+      return request<GitHubWorkflowRun>(repository, `/actions/runs/${runId}`, undefined, 200);
+    },
+    async readWorkflowAttemptJobs(repository: string, runId: number, attempt: number) {
+      const response = await requestRaw(repository, `/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`);
+      if (response.status !== 200 || response.headers.get("link")?.includes('rel="next"')) invalidGitHubResponse();
+      const body = await parseResponse<{ total_count: number; jobs: GitHubWorkflowJob[] }>(response);
+      if (!Array.isArray(body.jobs) || body.total_count !== body.jobs.length) invalidGitHubResponse();
+      return body.jobs;
     },
     readRepositoryMetadata(repository: string) {
       return request<{ full_name?: unknown }>(repository, "", undefined, 200);

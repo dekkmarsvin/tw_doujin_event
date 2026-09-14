@@ -547,6 +547,52 @@ test("production verification must explicitly pass before completing publication
   assert.equal(job.step, "verifying_production");
 });
 
+test("deployment retry durably authorizes only the next attempt of the original pinned run", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  let failAttempt = false;
+  let desiredAttempt = 1;
+  const execute = createOrganizerPublicationExecutor(repository, { eventExists: async () => false,
+    run: async ({ step, job }) => {
+      if (step === "waiting_deployment") {
+        if (job.workflow_run_attempt !== desiredAttempt) return { pending: true, metadata: { workflow_run_id: 55, workflow_run_attempt: desiredAttempt } };
+        if (failAttempt) throw new PublicationFailure("publication_deployment_failed", "Cancelled deployment", true);
+        return {};
+      }
+      return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
+    } }, () => clock++);
+  for (let i = 0; i < 7; i += 1) await execute(jobId);
+  let job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.workflow_run_id, 55); assert.equal(job.workflow_run_attempt, 1);
+  failAttempt = true;
+  await execute(jobId);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "failed");
+  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: clock++ })).ok, true);
+  job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.workflow_retry_attempt, 2);
+  assert.equal(job.workflow_run_id, 55);
+  assert.equal(job.workflow_run_attempt, 1);
+  const originalHash = job.approval_hash;
+  desiredAttempt = 2; failAttempt = false;
+  await execute(jobId); // pins attempt before interpreting its result
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).workflow_run_attempt, 2);
+  await execute(jobId); await execute(jobId);
+  job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "published");
+  assert.equal(job.workflow_run_id, 55); assert.equal(job.approval_hash, originalHash);
+  assert.equal(job.data_merge_sha, "b".repeat(40)); assert.equal(job.main_merge_sha, "d".repeat(40));
+});
+
+test("executor rejects an attempt change without the existing explicit retry transition", async () => {
+  const { jobId } = await publicationFixture();
+  await database.prepare("UPDATE organizer_publication_jobs SET workflow_run_id = 55, workflow_run_attempt = 1 WHERE id = ?1").bind(jobId).run();
+  await createOrganizerPublicationExecutor(repository, { eventExists: async () => false,
+    run: async () => ({ pending: true, metadata: { workflow_run_attempt: 2 } }) }, () => NOW + 10)(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "failed"); assert.equal(job.failure_code, "checkpoint_mismatch");
+  assert.equal(job.workflow_run_attempt, 1);
+});
+
 test("an admin creates an empty event entry and its invited owner gains only that event", async () => {
   const created = await repository.createOrganizerCandidate({
     id: "candidate-pf",

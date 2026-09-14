@@ -8,7 +8,7 @@ export const PUBLICATION_STEPS = [
 export type PublicationStep = typeof PUBLICATION_STEPS[number];
 export type PublicationJob = NonNullable<Awaited<ReturnType<IdentityRepository["getOrganizerPublicationJob"]>>>;
 export type PublicationMetadata = Partial<Pick<PublicationJob,
-  "data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id"
+  "data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id" | "workflow_run_attempt" | "production_manifest_sha256"
 >>;
 
 /**
@@ -126,6 +126,8 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
         if (required.some((value) => !value)) throw new PublicationFailure("missing_checkpoint", "Publication adapter did not supply the required checkpoint.", false);
       }
       for (const [key, value] of Object.entries(metadata)) {
+        if (key === "workflow_run_attempt" && job.workflow_run_attempt !== null
+          && value === job.workflow_retry_attempt && typeof value === "number" && value === job.workflow_run_attempt + 1) continue;
         if (value !== null && job[key as keyof PublicationMetadata] !== null && job[key as keyof PublicationMetadata] !== value) {
           throw new PublicationFailure("checkpoint_mismatch", "Pinned publication metadata changed.", false);
         }

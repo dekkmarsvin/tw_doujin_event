@@ -3,6 +3,7 @@ import { MAP_MANIFEST_FILE, eventUsesScopedMaps } from "./event-data-pin-utils.m
 
 const baseUrl = process.argv[2];
 if (!baseUrl) throw new Error("Usage: node scripts/smoke-published-events.mjs <base-url>");
+const expectedCommit = process.argv[3];
 const published = JSON.parse(await readFile(new URL("../data/published-events.json", import.meta.url), "utf8"));
 const eventIds = Array.isArray(published) ? published : published.events?.map((entry) => typeof entry === "string" ? entry : entry.eventId ?? entry.id);
 if (!Array.isArray(eventIds) || eventIds.length === 0 || eventIds.some((id) => typeof id !== "string")) {
@@ -22,6 +23,12 @@ async function readOptional(path, label) {
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${label} returned ${response.status}.`);
   return response;
+}
+
+if (expectedCommit) {
+  if (!/^[0-9a-f]{40}$/.test(expectedCommit)) throw new Error("Invalid expected deployment commit.");
+  const manifest = await (await read("/deployment-manifest.json", "deployment manifest")).json();
+  if (manifest.schema !== "publication-deployment/1" || manifest.commit !== expectedCommit) throw new Error("Pages serves a different deployment commit.");
 }
 
 for (const eventId of eventIds) {

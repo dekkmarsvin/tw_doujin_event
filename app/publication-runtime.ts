@@ -2,16 +2,19 @@ import { createGitHubAppTokenProvider } from "./github-app-token";
 import { createGitHubPublicationDriver } from "./github-publication-driver";
 import { GITHUB_PUBLICATION_REPOSITORIES } from "./github-remote-auditor";
 import { PublicationFailure } from "./organizer-publication";
+import { createGitHubPublicationDeployment } from "./github-publication-deployment";
+import { PAGES_PRODUCTION_ORIGIN } from "./publication-origin";
+export { PAGES_PRODUCTION_ORIGIN } from "./publication-origin";
 
 type Credentials = Pick<PortalEnv, "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY">;
-export const PAGES_PRODUCTION_ORIGIN = "https://tw-catalog.pages.dev";
 
 export function createRuntimePublicationDriver(env: Credentials, publishedEvent: (id: string) => Promise<unknown | null>) {
-  return createGitHubPublicationDriver({ publishedEvent, tokenProvider: createGitHubAppTokenProvider({
+  const tokenProvider = createGitHubAppTokenProvider({
     appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "", privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
     repositories: GITHUB_PUBLICATION_REPOSITORIES,
-    permissions: { contents: "write", pull_requests: "write", checks: "write", actions: "read", metadata: "read" }, now: Date.now,
-  }) });
+    permissions: { contents: "write", pull_requests: "write", checks: "write", actions: "write", metadata: "read" }, now: Date.now,
+  });
+  return createGitHubPublicationDriver({ publishedEvent, tokenProvider, deployment: createGitHubPublicationDeployment({ tokenProvider }) });
 }
 
 /** Cron has no ASSETS binding; query the fixed public origin without cookies. */
