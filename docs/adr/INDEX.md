@@ -26,7 +26,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | 對外文案與來源標示 | 0024、0036、0053 |
 | 產品範圍 | 0025、0041 |
 | 對外政策 | 0019、0023 |
-| 代理人流程 | 0040 |
+| 代理人流程 | 0040、0060 |
 
 ## 全部
 
@@ -71,7 +71,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR | **部分被取代且暫緩** — 「不得合併」由 0046 取代；PAT 路線由 0039 決策 5 暫緩。文中的 repo 表已封存，照字面執行會保護錯的對象。憑證範圍與外洩分析仍有效 |
 | [0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援 | **部分被取代** — 決策第 3 點（本機備援保留）由 0049 取代；其餘各點仍有效 |
 | [0039](./0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo | 生效 |
-| [0040](./0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍為界 | 生效 |
+| [0040](./0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍為界 | **部分被取代** — finding 處置與熔斷方式由 0060 調整 |
 | [0041](./0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界 | 生效 |
 | [0042](./0042-the-public-entry-is-an-event-chooser.md) | 公開入口支援多活動選擇，既有 deep link 保持有效 | 生效 |
 | [0043](./0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口，claim 逐活動隔離 | 生效 |
@@ -91,3 +91,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |
 | [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046 |
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
+| [0060](./0060-review-ends-when-scoped-blockers-are-resolved.md) | 範圍內 blocker 解決後，review 必須結束 | 生效；部分取代 0040 |
