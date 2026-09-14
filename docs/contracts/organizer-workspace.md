@@ -106,7 +106,7 @@ draft → submitted → approved → publishing → published
 
 - `POST …/validate` 回傳 `issues[]`，每筆帶 `severity`、`step`（`event`／`venue`／`import`／`map`／`preview`）、`code`，必要時帶 `row` 或 `target`。缺任何一份「活動日 × venue-space」地圖是 error，不是 warning。成功時只把 workspace 的 `last_validated_version` 記為目前版本；不增加 candidate version，也不建立內容 revision。任何後續內容寫入使版本前進後，這個完成狀態自然失效；若版本在 validation 與 marker 寫入之間前進，API 回 409 並要求重新驗證，不會對舊版回報成功。
 - `POST …/preview` 回傳 `organizer-reader-preview/1`：草稿、匯入的配置與每份地圖 layout，供 Reader 樣式預覽。它不寫入任何資料。
-- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。送審會固定一份 `organizer-submission-snapshot/1`（草稿、所選場館與使用空間的完整名稱／官方來源記錄、匯入來源 metadata、全部資料列與每份地圖內容），以其 SHA-256 作為 approval hash。這使候選 review 不會隱性讀取日後新增的 catalog 狀態；發布仍必須把 snapshot 內的來源記錄轉成 data repository 中經 review 的 reference records、selection 與 commit/hash pin，不能直接把 D1 catalog 當成公開 reference data。
+- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。新送審會固定一份 `organizer-submission-snapshot/2`（草稿、所選場館與使用空間的完整名稱／官方來源記錄、匯入來源 metadata、帶 `codes[]` 的全部攤位群組與每份地圖內容），以其 SHA-256 作為 approval hash；既有 `/1` snapshot 的 bytes 與 hash 保持不變。這使候選 review 不會隱性讀取日後新增的 catalog 狀態；發布仍必須把 snapshot 內的來源記錄轉成 data repository 中經 review 的 reference records、selection 與 commit/hash pin，不能直接把 D1 catalog 當成公開 reference data。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
 - `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以 fresh session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。

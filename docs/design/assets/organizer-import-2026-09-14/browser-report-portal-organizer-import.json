@@ -1,0 +1,20 @@
+{
+  "journey": "portal-organizer-import",
+  "browser": "153.0.4234.32",
+  "recordedAt": "2026-09-14T08:45:16.016Z",
+  "source": "local fixtures, not production",
+  "checks": [
+    "organizer-import-page-1",
+    "organizer-import-page-2",
+    "organizer-import-page-200",
+    "organizer-import-sort-desc",
+    "organizer-import-filtered-second-code"
+  ],
+  "errors": [],
+  "sourceHead": "70a905153d2d88c9460afc97540e5bbfc617c9ae",
+  "fixture": {
+    "kind": "synthetic-response",
+    "groups": 20000,
+    "purpose": "saved-list pagination, second-code search, day and venue-space filters"
+  }
+}

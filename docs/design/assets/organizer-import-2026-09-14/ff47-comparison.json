@@ -1,0 +1,37 @@
+{
+  "result": "PASS",
+  "checks": [
+    [
+      "pin",
+      true
+    ],
+    [
+      "pinnedInputHashes",
+      true
+    ],
+    [
+      "stagedOutputHashes",
+      true
+    ],
+    [
+      "map",
+      true
+    ],
+    [
+      "catalog",
+      true
+    ],
+    [
+      "official",
+      true
+    ],
+    [
+      "projectionCounts",
+      true
+    ],
+    [
+      "projectionSha256",
+      true
+    ]
+  ]
+}
