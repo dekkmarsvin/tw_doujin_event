@@ -259,6 +259,9 @@ test("a timeout that follows real progress keeps the retryable wording", async (
     status: "failed", error: "temporary", retryable: true, now: queuedAt,
     metadata: { data_pr_number: 7, data_head_sha: "a".repeat(40) },
   }), true);
+  // Retry cannot take over a live global lease; the failed delivery releases
+  // its lease before a later retry claims the same job.
+  await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: queuedAt + 1 })).ok, true);
 
   const timedOut = queuedAt + 1 + QUEUED_PUBLICATION_TIMEOUT_MS;
@@ -774,6 +777,7 @@ test("approved snapshots create one leased publication job and webhook deliverie
     jobId: publication.jobId, leaseToken: lease.token, expectedStep: "assemble", nextStep: "assemble",
     status: "failed", error: "simulated", now: NOW + 9,
   }), true);
+  await repository.releaseOrganizerPublicationLease(publication.jobId, lease.token);
   assert.deepEqual(await repository.retryOrganizerPublicationJob({ jobId: publication.jobId, now: NOW + 10 }), {
     ok: true, step: "assemble",
   });

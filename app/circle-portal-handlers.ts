@@ -143,6 +143,8 @@ type PortalDependencies = {
   readPublishedEventMap?: (targetPath: string) => Promise<PublishedEventMap | null>;
   /** Fixed-scope, server-side GitHub App installation probe. */
   githubInstallationProbe?: () => Promise<{ ok: true }>;
+  /** Audits the fixed publication repositories before a failed candidate is reopened. */
+  githubRemoteAuditor?: (jobId: string) => Promise<{ clear: true }>;
   config: PortalConfig;
 };
 
@@ -201,7 +203,7 @@ export function createCirclePortalHandlers({
   dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
   projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap,
-  githubInstallationProbe, config,
+  githubInstallationProbe, githubRemoteAuditor, config,
 }: PortalDependencies) {
   // The roster lives in the database so it can change without a redeploy.
   // Normalized on both sides, as a stored account email is: comparing a raw
@@ -1974,6 +1976,7 @@ export function createCirclePortalHandlers({
         failureCode: publication.failure_code,
         retryable: Boolean(publication.retryable),
         started: publicationHasStarted(publication),
+        candidateVersion: publication.candidate_version,
         updatedAt: publication.updated_at,
       } : null,
       workspace: {
@@ -2699,6 +2702,83 @@ export function createCirclePortalHandlers({
   }
 
   /**
+   * Return a failed approval to the organizer only after the fixed GitHub
+   * repositories prove that no branch or PR was left behind. The failed job
+   * stays failed while the remote audit runs under the same global lease as a
+   * publication, so an old retry cannot race the version transition.
+   */
+  async function reopenOrganizerCandidate(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以退回修改。" }, 403);
+    if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
+      return json({ error: "退回修改需要重新登入。", code: ADMIN_SESSION_STALE }, 401);
+    }
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const reason = typeof body?.reason === "string" ? body.reason.normalize("NFKC").trim() : "";
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1
+      || !reason || reason.length > 1000) {
+      return json({ error: "版本與退回理由為必填，理由不可超過 1000 字。" }, 400);
+    }
+    if (!githubRemoteAuditor) {
+      return json({ error: "目前無法確認發布儲存庫狀態，請稍後再試。", code: "github_remote_audit_unavailable" }, 503);
+    }
+    const now = config.now();
+    const lease = await repository.claimFailedOrganizerCandidateReopenLease({
+      candidateId, expectedVersion: expectedVersion as number, actorAccountId: access.current.accountId,
+      now, ttlMs: 30_000, admin: access.admin,
+    });
+    if (!lease.ok) {
+      if (lease.reason === "not_found") return json({ error: "找不到活動。" }, 404);
+      const error = lease.reason === "busy" ? "這筆活動目前正在處理，請稍後重新載入。"
+        : lease.reason === "remote_write_started" || lease.reason === "started"
+          ? "發布已留下遠端處理紀錄，無法安全退回修改，請聯絡網站管理者。"
+          : lease.reason === "status" ? "這筆活動目前不能退回修改，請重新載入。"
+            : "版本或發布狀態已變更，請重新載入。";
+      return json({ error, code: lease.reason, currentVersion: "currentVersion" in lease ? lease.currentVersion : undefined }, 409);
+    }
+    let committed = false;
+    try {
+      if (!await repository.hasOrganizerPublicationLease(lease.jobId, lease.token, config.now())) {
+        return json({ error: "退回處理逾時，請重新載入後再試。", code: "lease_lost" }, 409);
+      }
+      try {
+        const audited = await githubRemoteAuditor(lease.jobId);
+        if (!audited || audited.clear !== true) {
+          throw new PublicationFailure("github_remote_audit", "GitHub remote publication state could not be verified.", true);
+        }
+      } catch (error) {
+        const code = error instanceof PublicationFailure && error.code === "github_remote_started"
+          ? "remote_state_exists" : "github_remote_audit_failed";
+        const status = code === "remote_state_exists" ? 409 : 503;
+        return json({ error: code === "remote_state_exists"
+          ? "發布儲存庫已有這筆工作的遠端紀錄，無法安全退回修改。"
+          : "目前無法完整確認發布儲存庫狀態，請稍後再試。", code }, status);
+      }
+      if (!await repository.hasOrganizerPublicationLease(lease.jobId, lease.token, config.now())) {
+        return json({ error: "退回處理逾時，請重新載入後再試。", code: "lease_lost" }, 409);
+      }
+      const result = await repository.reopenFailedOrganizerCandidate({
+        candidateId, expectedVersion: expectedVersion as number, actorAccountId: access.current.accountId,
+        reason, jobId: lease.jobId, leaseToken: lease.token, now: config.now(), admin: access.admin,
+        audit: {
+          at: config.now(), actorAccountId: access.current.accountId,
+          actorRole: access.admin ? "admin" : "organizer_owner",
+          action: "organizer_event.reopened", subjectType: "organizer_event", subjectId: candidateId,
+          detail: { reason, previousVersion: expectedVersion, nextVersion: (expectedVersion as number) + 1, jobId: lease.jobId },
+          ipHash: await clientIpHash(request),
+        },
+      });
+      if (!result.ok) return json({ error: "版本或發布狀態已變更，請重新載入。", code: result.reason }, 409);
+      committed = true;
+      return json({ ok: true, status: result.status, version: result.version, previousPublicationJobId: result.jobId });
+    } finally {
+      if (!committed) await repository.releaseOrganizerPublicationLease(lease.jobId, lease.token);
+    }
+  }
+
+  /**
    * The public overlay. The strong ETag is keyed on the stored revision so a
    * reader that already has the current document gets a bodyless 304 — but the
    * saving is bandwidth, not quota. Nothing collapses this at the edge: the
@@ -2754,7 +2834,7 @@ export function createCirclePortalHandlers({
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     putOrganizerMapBackground, getOrganizerMapBackground,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
-    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication,
+    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate,
     // Event-scoped: each answers only for the event the request named.
     listClaims: eventScoped(listClaims),
     createClaim: eventScoped(createClaim),

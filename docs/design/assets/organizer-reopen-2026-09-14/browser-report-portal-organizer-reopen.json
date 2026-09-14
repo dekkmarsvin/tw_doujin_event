@@ -1,0 +1,94 @@
+{
+  "journey": "portal-organizer-reopen",
+  "browser": "153.0.4234.32",
+  "recordedAt": "2026-09-14T10:57:26.370Z",
+  "source": "local fixtures, not production",
+  "checks": [
+    "organizer-reopen-owner-required",
+    "organizer-reopen-owner-pending",
+    "organizer-reopen-owner-history",
+    "organizer-reopen-owner-editable",
+    "organizer-reopen-admin-fresh-login-error",
+    "organizer-reopen-remote-audit-error",
+    "organizer-reopen-editor-hidden",
+    "organizer-reopen-started-remote-record"
+  ],
+  "errors": [],
+  "sourceHead": "d487a36e242317289ff14bea55a54e41dbd1498e",
+  "sourceDirty": true,
+  "sourceStatus": [
+    "M app/circle-portal-handlers.ts",
+    " M app/github-publication.ts",
+    " M app/organizer-client.ts",
+    " M app/organizer-publication.ts",
+    " M app/organizer/organizer-app.tsx",
+    " M db/identity-repository.ts",
+    " M db/identity-runtime-schema.ts",
+    " M docs/adr/INDEX.md",
+    " M docs/contracts/INDEX.md",
+    " M docs/contracts/data-inventory.md",
+    " M docs/contracts/organizer-workspace.md",
+    " M functions/_portal.ts",
+    " M tests/organizer-handlers.test.mjs",
+    " M tests/organizer-repository.test.mjs",
+    "?? app/github-remote-auditor.ts",
+    "?? docs/adr/0059-failed-publication-requires-explicit-reopen.md",
+    "?? docs/design/assets/organizer-reopen-2026-09-14/",
+    "?? docs/design/github-app-token-validation.md",
+    "?? docs/design/organizer-reopen-validation.md",
+    "?? functions/api/organizer/events/[candidateId]/reopen.ts",
+    "?? tests/browser/portal-organizer-reopen.mjs",
+    "?? tests/github-remote-auditor.test.mjs",
+    "?? tests/organizer-reopen-handlers.test.mjs",
+    "?? tests/organizer-reopen.test.mjs"
+  ],
+  "run": {
+    "base": "http://127.0.0.1:8790",
+    "startedAt": "2026-09-14T10:57:26.370Z",
+    "candidateId": "issue-242-failed-candidate",
+    "publicationJobId": "issue-242-failed-job",
+    "synthetic": true
+  },
+  "screenshots": [
+    {
+      "name": "organizer-reopen-owner-required",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-owner-required.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-owner-pending",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-owner-pending.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-owner-history",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-owner-history.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-owner-editable",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-owner-editable.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-admin-fresh-login-error",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-admin-fresh-login-error.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-remote-audit-error",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-remote-audit-error.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-editor-hidden",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-editor-hidden.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    },
+    {
+      "name": "organizer-reopen-started-remote-record",
+      "path": "D:\\Workspace\\Github\\tw_doujin_event-worktrees\\242-failed-candidate-reopen\\.tmp\\outputs\\issue242-browser-evidence-final\\organizer-reopen-started-remote-record.png",
+      "url": "http://127.0.0.1:8790/organizer"
+    }
+  ]
+}

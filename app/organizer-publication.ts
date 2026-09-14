@@ -29,9 +29,10 @@ export type PublicationMetadata = Partial<Pick<PublicationJob,
  * retry keeps the step it failed on, so one step name covers both a
  * publication that was never dispatched and one that stopped part-way.
  */
-export function publicationHasStarted(job: PublicationMetadata) {
+export function publicationHasStarted(job: PublicationMetadata & { remote_write_intent_at?: number | null }) {
   return Boolean(job.data_pr_number || job.data_head_sha || job.data_merge_sha
-    || job.main_pr_number || job.main_head_sha || job.main_merge_sha || job.workflow_run_id);
+    || job.main_pr_number || job.main_head_sha || job.main_merge_sha || job.workflow_run_id
+    || (job.remote_write_intent_at !== null && job.remote_write_intent_at !== undefined));
 }
 
 export class PublicationFailure extends Error {
@@ -57,6 +58,8 @@ export interface PublicationDriver {
   run(input: {
     job: PublicationJob; step: Exclude<PublicationStep, "completed">;
     snapshot: unknown; idempotencyKey: string; assertLease: () => Promise<void>;
+    /** Persist remote-write intent before the first mutating API call. */
+    beginRemoteWrite: () => Promise<void>;
   }): Promise<{ pending?: boolean; metadata?: PublicationMetadata; productionVerified?: boolean }>;
 }
 
@@ -101,8 +104,15 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
         throw new PublicationFailure("missing_main_commit", "Deployment requires the main merge commit.", false);
       }
       await assertLease();
+      const beginRemoteWrite = async () => {
+        await assertLease();
+        if (!await repository.markOrganizerPublicationRemoteWriteIntent({ jobId, leaseToken: lease.token, now: now() })) {
+          throw new PublicationFailure("remote_write_intent", "Publication remote-write intent could not be recorded.", true);
+        }
+      };
       const result = await driver.run({ job, snapshot: input, step: step as Exclude<PublicationStep, "completed">,
-        idempotencyKey: `${job.id}/${step}/${job.approval_hash}`, assertLease });
+        idempotencyKey: `${job.id}/${step}/${job.approval_hash}`, assertLease,
+        beginRemoteWrite });
       await assertLease();
       const metadata = Object.fromEntries(Object.entries(result.metadata ?? {}).filter(([, value]) => value != null)) as PublicationMetadata;
       const checkpoint = { ...job, ...metadata };

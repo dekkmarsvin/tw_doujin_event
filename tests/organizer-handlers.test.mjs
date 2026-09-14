@@ -614,12 +614,14 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.deepEqual(dispatched, [jobId, jobId]);
 
   const lease = await repository.claimOrganizerPublicationLease({ jobId, now, ttlMs: 30_000 });
+  assert.equal(lease.ok, true);
   await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: "preparing_data",
     nextStep: "preparing_main", status: "failed", error: "temporary", retryable: true, now,
     // The executor never advances a step without its checkpoint, so a job this
     // far along carries one — and the workspace must not tell its owner that
     // nothing ran.
     metadata: { data_pr_number: 4, data_head_sha: "b".repeat(40), data_merge_sha: "c".repeat(40) } });
+  await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   const retryPath = `/api/organizer/publications/${jobId}/retry`;
   assert.equal((await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, editorCookie), jobId)).status, 403);
   const retried = await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, ownerCookie), jobId);
@@ -638,7 +640,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
   ), candidateId);
   assert.deepEqual((await detail.json()).publication, {
-    id: jobId, status: "failed", step: "preparing_main", retryable: true, started: true,
+    id: jobId, status: "failed", step: "preparing_main", candidateVersion: 5, retryable: true, started: true,
     failureCode: "queued_timeout", error: "Publication never started: the job stayed queued past the timeout.",
     updatedAt: now,
   });

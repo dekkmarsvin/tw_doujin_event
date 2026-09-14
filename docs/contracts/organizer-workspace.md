@@ -2,8 +2,8 @@
 
 主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開場刊仍只來自 data repository 的 reviewed snapshot 與 pin。
 
-**實作**：[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`app/github-app-token.ts`](../../app/github-app-token.ts)、[`app/github-installation-probe.ts`](../../app/github-installation-probe.ts)、[`app/github-publication.ts`](../../app/github-publication.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/api/organizer/`](../../functions/api/organizer)、[`functions/api/admin/organizer/`](../../functions/api/admin/organizer)、[`functions/api/admin/integrations/github/probe.ts`](../../functions/api/admin/integrations/github/probe.ts)
-**測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
+**實作**：[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`app/github-app-token.ts`](../../app/github-app-token.ts)、[`app/github-installation-probe.ts`](../../app/github-installation-probe.ts)、[`app/github-publication.ts`](../../app/github-publication.ts)、[`app/github-remote-auditor.ts`](../../app/github-remote-auditor.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/api/organizer/`](../../functions/api/organizer)、[`functions/api/admin/organizer/`](../../functions/api/admin/organizer)、[`functions/api/admin/integrations/github/probe.ts`](../../functions/api/admin/integrations/github/probe.ts)
+**測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
 > **實作狀態（2026-09-13）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX。**正式發布仍未啟用**：production driver、durable dispatch、snapshot → repository artifacts 轉換與真實 smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
@@ -113,7 +113,7 @@ draft → submitted → approved → publishing → published
 
 ## 發布邊界
 
-核心實作：[`organizer-publication.ts`](../../app/organizer-publication.ts)、[`organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`publication-rollout.ts`](../../app/publication-rollout.ts)。測試：`tests/organizer-repository.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-publication-presentation.test.mjs`。決策：[ADR-0057](../adr/0057-approval-starts-create-publication.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)。
+核心實作：[`organizer-publication.ts`](../../app/organizer-publication.ts)、[`organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`publication-rollout.ts`](../../app/publication-rollout.ts)、[`github-remote-auditor.ts`](../../app/github-remote-auditor.ts)。測試：`tests/organizer-repository.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-publication-presentation.test.mjs`。決策：[ADR-0057](../adr/0057-approval-starts-create-publication.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0059](../adr/0059-failed-publication-requires-explicit-reopen.md)。
 
 依 ADR-0057，UI 動作為「核准並發布」。已啟用且有 durable dispatch adapter 時，同一 D1 transaction 記錄核准、建立唯一 `queued/preparing_data` job、把 candidate 改為 publishing，再交給 dispatcher；不需要第二次人工發布。dispatch 失敗記錄 `dispatch_failed`，內容保持核准與鎖定，可由 Owner 或 Admin 重試。
 
@@ -121,11 +121,17 @@ draft → submitted → approved → publishing → published
 
 步驟為 preparing_data → waiting_data_checks → merging_data → preparing_main → waiting_main_checks → merging_main → waiting_deployment → verifying_production → completed。失敗保留原 step、failure_code、error、retryable 與 metadata。Main 需要 data merge SHA，deployment 需要 main merge SHA；productionVerified 必須明確為 true 才能完成。此 boolean 是 **driver 的 blocking Pages smoke 結果**，目前沒有 production adapter 實作，不能把測試 driver 當成真實 smoke。
 
+driver 第一次 remote mutation 前必須先以目前 job、candidate version、approval 與 lease CAS 寫入 sticky `remote_write_intent_at`，再在每個 mutation 前 assert lease；錯誤、timeout、空 remote audit 與 retry 都不清除它。這個欄位只表示遠端結果可能未知，不代替已確認的 PR／SHA／workflow checkpoint，因此有 intent 的 failed candidate 不能被 reopen。
+
 同版本核准重送沿用相同 snapshot/hash 的既有 job，不重寫核准、不重複 dispatch；不一致回報 `approval_mismatch`。相同 snapshot/hash 的既有 queued job 可在 submitted 核准時沿用。nullish metadata 表示未提供更新，保留已保存的 checkpoint。
 
 lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 failed/retryable；不能推進步驟，也不能覆寫新 lease 持有者。失敗記錄遭 fence 拒絕時向 dispatcher 拋出失敗，不把該 delivery 當成成功。
 
 `POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
+
+只有明確的 Owner／Admin 動作可以把「目前版本、已核准、狀態為 `failed`」的候選退回 `changes_requested`：`POST /api/organizer/events/:candidateId/reopen` 需要 fresh session、`expectedVersion` 與必填退回理由。它不受 publication mode disabled 影響，但會先取得既有 global lease，查核固定 data/main repository 中 `organizer/{jobId}/data` 與 `/main` 的分支，以及包含 closed／merged 的完整 PR 分頁；任何 branch、PR、403、網路錯誤、格式錯誤或不完整分頁都拒絕。七個 remote checkpoint 與 `remote_write_intent_at` 都必須為 NULL，且 audit 與提交交易間 lease token 仍有效。
+
+成功退回會遞增 candidate version、保留 `eventId` 鎖定與舊 snapshot／review／job，新增 immutable revision 與含理由的 `changes_requested` review，並令舊 job `retryable = 0`。舊 job 仍會在頁面顯示為上一版本的歷史發布紀錄，不能再 retry；新的版本回到一般編輯、驗證與送審流程。Owner／Admin 以外的 Editor 沒有此動作。
 
 **`queued` 停留超過 15 分鐘就是失敗。** 只有 dispatch 會讓 job 離開 `queued`，而 retry 只接受 `failed`，所以 dispatch 從未發生的 job 原本會永遠卡住。超過這個逾時值後，下一次讀取活動列表或任一候選活動時，系統把該 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`。接手的是上一段那條既有恢復路徑——同一筆 job、同一份 snapshot——不另外提供「手動啟動 queued job」的入口，否則就出現第二條產生 publication 的路徑。等待 CI 的狀態是 `publishing` 而不是 `queued`，不受這個逾時影響；lease 仍未過期的 job 留給持有者，不在這裡改寫。
 
@@ -168,6 +174,8 @@ ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected S
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場館空間或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准後的候選停在 `approved`，且 webhook 回 503。
+- 只有 Owner／Admin 以 fresh session、目前版本與非空理由可退回 `failed` 候選；系統先以 global lease 查核固定遠端分支與完整 PR 分頁，任何遠端紀錄或不確定性都拒絕，成功後保留 eventId／歷史並令舊 job 不可重試。
+- 退回期間若 lease 過期或版本 CAS 失敗，不新增 revision、review 或 audit；sticky `remote_write_intent_at` 與任一 confirmed checkpoint 也會阻止退回。
 - 停在 `queued` 超過 15 分鐘的發布工作，在活動列表與活動頁都顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
 - 逾時失敗的訊息只有在該 job 一個 checkpoint 都沒有時才說發布沒有開始；已經留下 checkpoint 的工作沿用既有 retryable 措辭，不與四階段清單上的進度互相矛盾。這條對核准流程建立的 job（`preparing_data`）與舊建立路徑（`assemble`）都成立。
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
