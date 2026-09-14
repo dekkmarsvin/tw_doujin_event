@@ -1,0 +1,17 @@
+{
+  "journey": "portal-circle-claim",
+  "browser": "153.0.4234.32",
+  "recordedAt": "2026-09-14T08:16:37.970Z",
+  "source": "local fixtures, not production",
+  "checks": [
+    "portal-signed-in",
+    "portal-claim-pending",
+    "portal-claim-approved",
+    "portal-editor-hydrating",
+    "portal-editor-load-error",
+    "portal-editor-hydrated",
+    "portal-review-open",
+    "portal-saved"
+  ],
+  "errors": []
+}
