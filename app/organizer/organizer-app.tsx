@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
+import { OrganizerReferencePanel } from "./organizer-reference-panel";
 import {
   PortalError,
   readSession,
@@ -1533,7 +1534,10 @@ function DraftForm({
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>
         <label>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "小寫英數字與連字號"}</small></label>
         <label>官方來源說明<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /></label>
-        <label>官方來源網址<input disabled={!editable} type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /></label>
+        <label>官方來源網址（必填）<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /></label>
+        <OrganizerReferencePanel candidateId={detail.event.id} expectedVersion={expectedVersion}
+          catalog={detail.referenceCatalog} selection={draft.references} editable={editable}
+          onChange={(references) => update((next) => ({ ...next, references }))} />
       </>}
       {showDays && <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>新增日期</button></div>
         {draft.event.days.map((day, index) => <div className={styles.inlineFields} key={`${index}-${day.id}`}>
@@ -1727,6 +1731,9 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     .filter((row) => row.dayId === selected.periodKey && row.venueSpaceId === selected.venueSpaceId)
     .map((row) => [row.boothCode, { label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}` }])) : {}, [preview, selected]);
   return <div className={styles.readerPreview}>
+    <p>{(preview.references ?? []).filter((record) => record.schema === "organizer/1").map((record) => record.name).join("、")}</p>
+    <p>{(preview.references ?? []).filter((record) => record.schema === "venue/1" || record.schema === "venue-space/1").map((record) => record.name).join("・")}</p>
+    <p>{(preview.references ?? []).flatMap((record) => record.categories?.map((category) => category.label) ?? []).join("、")}</p>
     <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => setMapIndex(Number(event.target.value))}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{organizerDayLabel(preview.event.days, map.periodKey)}{preview.venueAssignments.length > 1 ? `・${organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}` : ""}</option>)}</select></div>
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} onSelect={() => undefined} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>

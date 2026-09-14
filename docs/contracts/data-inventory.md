@@ -122,7 +122,7 @@
 
 ### `organizer_*` — 主辦單位工作區
 
-十三張表，行為與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
+十四張表，行為與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
 
 | 表 | 內容 |
 |---|---|
@@ -136,6 +136,7 @@
 | `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
 | `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場館空間、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
 | `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
+| `organizer_reference_records` | 主辦／分類／場館／空間的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
 | `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA、workflow run id、錯誤訊息、failure_code、retryable 與 sticky `remote_write_intent_at`；重試保留原 job 與核准 snapshot，退回修改後舊 job 標為不可重試歷史 |
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
 | `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
@@ -143,6 +144,7 @@
 **目的**：讓受邀的主辦單位在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
 **保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時刪除該帳號的 workspace preference，清空 onboarding 完成者，其他 actor 與 email 依既有塗銷規則去識別化；匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除。
 `audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。
+可重用 reference 目錄不設期限；帳號刪除時將 `created_by` 去識別化，保留主辦提供的名稱／官方來源。`organizer_reference.created` audit 只記候選 id 與記錄種類，不複製分類內容。
 
 ### `map_contributor_grants` — 地圖貢獻授權
 

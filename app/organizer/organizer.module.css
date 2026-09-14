@@ -116,6 +116,8 @@
 .panel h4 { margin: 0; font-size: 12px; }
 .panel p { max-width: 72ch; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 20px; }
+.referencePanel { grid-column: 1 / -1; }
+.referencePanel fieldset { min-width: 0; border: 0; padding: 0; margin: 12px 0; }
 .full { grid-column: 1 / -1; }
 .page :global(label small) { color: var(--muted); font-weight: 400; }
 .inlineFields { display: grid; grid-template-columns: .55fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }

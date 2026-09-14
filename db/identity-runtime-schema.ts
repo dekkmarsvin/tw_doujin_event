@@ -262,6 +262,17 @@ export const IDENTITY_TABLES = [
     "created_by TEXT",
     "created_at INTEGER NOT NULL",
   ]),
+  table("organizer_reference_records", [
+    "path TEXT PRIMARY KEY NOT NULL",
+    "kind TEXT NOT NULL",
+    "reference_id TEXT NOT NULL",
+    "organizer_id TEXT",
+    "revision TEXT",
+    "display_name TEXT NOT NULL",
+    "public_reference_json TEXT NOT NULL",
+    "source_captured_at INTEGER NOT NULL",
+    "created_by TEXT NOT NULL",
+  ]),
   table("organizer_venues", [
     "id TEXT PRIMARY KEY NOT NULL",
     "name TEXT NOT NULL",

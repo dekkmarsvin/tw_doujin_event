@@ -47,22 +47,27 @@ export function parseCircleCategoryCatalog(value: unknown): CircleCategoryCatalo
       && nonempty(source.retrievedAt) && !Number.isNaN(Date.parse(source.retrievedAt)))) {
     throw new Error("Circle category catalog sources are invalid.");
   }
-  if (!Array.isArray(value.categories) || value.categories.length === 0 || !value.categories.every((category) =>
+  return {
+    schema: CIRCLE_CATEGORY_CATALOG_SCHEMA,
+    sources: (value.sources as CircleCategoryCatalog["sources"]).map((source) => ({ ...source })),
+    categories: parseCircleCategoryDefinitions(value.categories),
+  };
+}
+
+/** Shared with Organizer so accepted vocabularies remain readable after publication. */
+export function parseCircleCategoryDefinitions(value: unknown): CircleCategoryDefinition[] {
+  if (!Array.isArray(value) || value.length === 0 || !value.every((category) =>
     isRecord(category) && nonempty(category.id) && /^[a-z0-9][a-z0-9-]*$/.test(category.id)
       && nonempty(category.label) && (category.description === undefined || typeof category.description === "string"))) {
     throw new Error("Circle category catalog categories are invalid.");
   }
-  const categories = value.categories as CircleCategoryDefinition[];
+  const categories = value as CircleCategoryDefinition[];
   if (new Set(categories.map(({ id }) => id)).size !== categories.length
     || new Set(categories.map(({ label }) => label)).size !== categories.length
     || categories.some(({ label }) => label === ALL_CIRCLE_CATEGORIES)) {
     throw new Error("Circle category catalog ids and labels must be unique.");
   }
-  return {
-    schema: CIRCLE_CATEGORY_CATALOG_SCHEMA,
-    sources: (value.sources as CircleCategoryCatalog["sources"]).map((source) => ({ ...source })),
-    categories: categories.map((category) => ({ ...category, description: category.description ?? "" })),
-  };
+  return categories.map((category) => ({ ...category, description: category.description ?? "" }));
 }
 
 export function circleCategoryLabels(catalog: CircleCategoryCatalog) {

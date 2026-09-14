@@ -26,6 +26,8 @@ import {
   validateOrganizerImportedRowsAgainstDraft,
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
+import { createOrganizerReference, createCategoryReference, projectReferenceCatalog,
+  resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
 import { PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } from "./organizer-publication";
 import {
   isOrganizerVenueSpaceAreaMode,
@@ -1733,6 +1735,28 @@ export function createCirclePortalHandlers({
     return json(await repository.listOrganizerVenueCatalog());
   }
 
+  async function createOrganizerReferenceEntry(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    if (!Number.isSafeInteger(body?.expectedVersion) || (body!.expectedVersion as number) < 1) return json({ error: "版本資訊無效，請重新載入。" }, 400);
+    const now = config.now();
+    let record: OrganizerReferenceRecord;
+    try {
+      if (body?.kind === "organizer") record = createOrganizerReference({ name: body.name, sourceUrl: body.sourceUrl }, now);
+      else if (body?.kind === "category-catalog" && typeof body.organizerId === "string") {
+        record = createCategoryReference({ name: body.name, sourceUrl: body.sourceUrl, categories: body.categories }, body.organizerId, now);
+      } else return json({ error: "請選擇要建立的主辦或分類目錄。" }, 400);
+    } catch (error) { return json({ error: error instanceof Error ? error.message : "主辦或分類資料無效。" }, 400); }
+    const created = await repository.createOrganizerReferenceRecord({
+      record, candidateId, expectedVersion: body!.expectedVersion as number,
+      actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access), admin: access.admin, now,
+    });
+    if (!created) return json({ error: "活動版本、編輯權限、狀態或主辦資料已變更，請重新載入。" }, 409);
+    return json({ created: { id: record.id, organizerId: record.organizerId, revision: record.revision },
+      catalog: projectReferenceCatalog(await repository.listOrganizerReferenceRecords()) }, 201);
+  }
+
   async function createOrganizerVenue(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -1945,6 +1969,7 @@ export function createCirclePortalHandlers({
       },
       draft,
       venueCatalog,
+      referenceCatalog: workspaceValidation.referenceCatalog,
       revisions: revisions.map((revision) => ({
         version: revision.version,
         eventId: revision.event_id,
@@ -2004,6 +2029,9 @@ export function createCirclePortalHandlers({
     if (venueIssues.length > 0) {
       return json({ error: venueIssues[0].message, issues: venueIssues }, 422);
     }
+    const referenceIssues = validateOrganizerReferences(serialized.draft,
+      projectReferenceCatalog(await repository.listOrganizerReferenceRecords()), false);
+    if (referenceIssues.length) return json({ error: referenceIssues[0].message, issues: referenceIssues }, 422);
     const result = await repository.saveOrganizerCandidate({
       candidateId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number,
@@ -2109,6 +2137,10 @@ export function createCirclePortalHandlers({
       maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
     });
     const venueCatalog = await repository.listOrganizerVenueCatalog();
+    const referenceRecords = await repository.listOrganizerReferenceRecords();
+    const referenceCatalog = projectReferenceCatalog(referenceRecords);
+    const resolved = await resolveOrganizerReferences(draft, referenceRecords);
+    issues.push(...resolved.issues);
     issues.push(...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, venueCatalog));
     issues.push(...validateOrganizerImportedRowsAgainstDraft(
       draft,
@@ -2164,7 +2196,7 @@ export function createCirclePortalHandlers({
         }
       }
     }
-    return { issues, imported, maps, contents, venueCatalog };
+    return { issues, imported, maps, contents, venueCatalog, referenceCatalog, referenceSnapshot: resolved.snapshot };
   }
 
   async function putOrganizerImport(request: Request, candidateId: string) {
@@ -2454,7 +2486,7 @@ export function createCirclePortalHandlers({
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-    const { issues, imported, maps, contents } = await validateOrganizerWorkspace(candidateId, draft);
+    const { issues, imported, maps, contents, referenceSnapshot } = await validateOrganizerWorkspace(candidateId, draft);
     const mapArtifacts = maps.map((map) => {
       const stored = contents.get(map.id);
       const content = stored ? parseMapContributionDraftContent(JSON.parse(stored) as unknown) : null;
@@ -2469,6 +2501,7 @@ export function createCirclePortalHandlers({
       preview: {
         schema: "organizer-reader-preview/1",
         event: draft.event, venueAssignments: draft.venue.assignments, officialSource: draft.officialSource,
+        references: referenceSnapshot ? referenceSnapshot.files.map((file) => JSON.parse(file.content) as unknown) : [],
         placements: (imported?.rows ?? []).flatMap((row) => row.codes.map((boothCode) => ({
           sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
           areaId: row.area_id, boothCode, circleName: row.circle_name,
@@ -2537,8 +2570,12 @@ export function createCirclePortalHandlers({
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     // The snapshot is hashed from the same bytes validation just read, so a
     // second load cannot let the two disagree about what was approved.
-    const { issues, imported, maps, contents, venueCatalog } = await validateOrganizerWorkspace(candidateId, draft);
+    if (candidate.current_version !== expectedVersion) return json({ error: "草稿已被其他人更新，請重新載入。" }, 409);
+    const { issues, imported, maps, contents, referenceSnapshot } = await validateOrganizerWorkspace(candidateId, draft);
     if (issues.some((issue) => issue.severity === "error")) return json({ error: "請先修正待修正項目。", issues }, 422);
+    if (!referenceSnapshot) return json({ error: "缺少完整的主辦、分類與場館來源記錄。" }, 422);
+    const contentRevision = (await repository.listOrganizerCandidateRevisions(candidateId)).find((revision) => revision.version === expectedVersion);
+    if (!contentRevision) return json({ error: "找不到目前內容版本，請重新載入。" }, 409);
     const mapSnapshots = maps.map((map) => {
       const stored = contents.get(map.id);
       return {
@@ -2548,23 +2585,10 @@ export function createCirclePortalHandlers({
       };
     });
     const snapshotJson = JSON.stringify({
-      schema: "organizer-submission-snapshot/2", candidateId, candidateVersion: expectedVersion,
+      schema: "organizer-submission-snapshot/3", candidateId, candidateVersion: expectedVersion,
       eventId: draft.event.id, draft,
-      venueReferences: {
-        schema: "organizer-venue-reference-snapshot/1",
-        venues: venueCatalog.venues
-          .filter((venue) => draft.venue.assignments.some((assignment) => assignment.venueId === venue.id))
-          .map((venue) => ({
-            id: venue.id,
-            name: venue.name,
-            sourceUrl: venue.sourceUrl,
-            spaces: venue.spaces
-              .filter((space) => draft.venue.assignments.some((assignment) => assignment.venueSpaceId === space.id))
-              .map((space) => ({ ...space }))
-              .sort((a, b) => a.id.localeCompare(b.id, "en")),
-          }))
-          .sort((a, b) => a.id.localeCompare(b.id, "en")),
-      },
+      contentUpdatedAt: new Date(contentRevision.created_at).toISOString(),
+      references: referenceSnapshot,
       import: imported ? {
         source: {
           fileName: imported.source.file_name, worksheet: imported.source.worksheet,
@@ -2829,7 +2853,7 @@ export function createCirclePortalHandlers({
     // published event this deployment serves — would refuse every one of them.
     // Authority comes from the candidate's own grant, checked in each handler.
     adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate,
-    listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace,
+    listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace, createOrganizerReferenceEntry,
     updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     putOrganizerMapBackground, getOrganizerMapBackground,
