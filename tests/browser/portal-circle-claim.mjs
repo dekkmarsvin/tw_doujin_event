@@ -60,9 +60,66 @@ try {
   await admin.close();
 
   // 4. The same session, reloaded: approval reaches the circle without a
-  //    second login, which is also all the rate limit allows.
+  //    second login, which is also all the rate limit allows. Hold the saved
+  //    record read open so the editor must keep every control unavailable
+  //    until it knows what the server currently holds.
+  let overrideReadMode = "delay";
+  let releaseOverrideRead;
+  const delayedOverrideRead = new Promise((resolve) => { releaseOverrideRead = resolve; });
+  let overrideReadCount = 0;
+  await circle.route(`**/api/circle/${CIRCLE_ID}/overrides**`, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    overrideReadCount += 1;
+    if (overrideReadMode === "delay") await delayedOverrideRead;
+    if (overrideReadMode === "fail") {
+      return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "測試中的讀取失敗" }) });
+    }
+    return route.continue();
+  });
   await circle.reload();
-  await circle.getByRole("button", { name: "預覽並送出", exact: true }).waitFor();
+  await circle.getByRole("heading", { name: `編輯：${CIRCLE_NAME}`, exact: true }).waitFor();
+  await circle.getByText("正在載入已儲存內容，完成前無法編輯。", { exact: true }).waitFor();
+  const submit = circle.getByRole("button", { name: "預覽並送出", exact: true });
+  assert.equal(await penField(circle).isDisabled(), true, "the pen name stays disabled while the saved record is loading");
+  assert.equal(await submit.isDisabled(), true, "preview and submit stays disabled while the saved record is loading");
+  assert.equal(overrideReadCount, 1, "the delayed read is the first saved-record request");
+  await journey.capture(circle, "portal-editor-hydrating");
+  overrideReadMode = "pass";
+  const hydrationResponse = circle.waitForResponse((response) => {
+    const request = response.request();
+    return request.method() === "GET" && new URL(response.url()).pathname === `/api/circle/${CIRCLE_ID}/overrides` && response.status() === 200;
+  });
+  releaseOverrideRead();
+  await hydrationResponse;
+  await circle.locator('section[aria-busy="false"]').waitFor();
+  assert.equal(await penField(circle).isDisabled(), false, "the editor unlocks after the saved record arrives");
+  assert.equal(await circle.getByRole("button", { name: "預覽並送出", exact: true }).isDisabled(), false, "preview and submit unlocks after the saved record arrives");
+  assert.equal(await circle.getByText("正在載入已儲存內容，完成前無法編輯。", { exact: true }).count(), 0, "the loading message leaves after hydration");
+  await circle.getByText("正在準備預覽…", { exact: true }).waitFor({ state: "hidden" });
+
+  // A failed first load leaves the editor protected and offers a retry that
+  // really issues another request. The successful retry resumes the same
+  // journey, so later assertions still prove the original claim flow.
+  overrideReadMode = "fail";
+  await circle.reload();
+  await circle.getByRole("heading", { name: `編輯：${CIRCLE_NAME}`, exact: true }).waitFor();
+  await circle.getByRole("alert").getByText(/無法載入已儲存內容/).waitFor();
+  assert.equal(await penField(circle).isDisabled(), true, "a failed saved-record read keeps editing disabled");
+  assert.equal(await circle.getByRole("button", { name: "預覽並送出", exact: true }).isDisabled(), true, "a failed saved-record read keeps preview disabled");
+  assert.equal(overrideReadCount, 2, "the failed reload made one new saved-record request");
+  await journey.capture(circle, "portal-editor-load-error");
+  overrideReadMode = "pass";
+  const retryResponse = circle.waitForResponse((response) => {
+    const request = response.request();
+    return request.method() === "GET" && new URL(response.url()).pathname === `/api/circle/${CIRCLE_ID}/overrides` && response.status() === 200;
+  });
+  await circle.getByRole("button", { name: "重試載入已儲存內容", exact: true }).click();
+  await retryResponse;
+  await circle.locator('section[aria-busy="false"]').waitFor();
+  assert.equal(await submit.isDisabled(), false, "retry unlocks preview and submit after the saved record arrives");
+  assert.equal(overrideReadCount, 3, "retry made a fresh saved-record request");
+  assert.equal(await circle.getByText("正在載入已儲存內容，完成前無法編輯。", { exact: true }).count(), 0, "the retry leaves the loading state");
+  await journey.capture(circle, "portal-editor-hydrated");
   assert.match(await mine.innerText(), /已通過/, "the approved claim is granted");
 
   // 5. Filling in what only the circle knows, and reviewing it before it is
@@ -72,7 +129,6 @@ try {
   //    were — a keyboard user who looks and cancels must not be dropped at the
   //    top of a long form.
   await penField(circle).fill(PEN_NAME);
-  const submit = circle.getByRole("button", { name: "預覽並送出", exact: true });
   await submit.focus();
   await submit.click();
 
@@ -105,8 +161,9 @@ try {
   // 7. What was saved survives a reload — the reader's copy is not a local draft.
   await circle.reload();
   await penField(circle).waitFor();
-  // The editor mounts before the saved override has been fetched, so an empty
-  // field here means "not yet", and only staying empty means "not saved".
+  // The editor keeps its controls disabled until the saved override has been
+  // fetched, so this waits for the hydrated value rather than a mount-time
+  // placeholder.
   await circle.waitForFunction((expected) => document.querySelector('input[id^="pen-"]')?.value === expected, PEN_NAME, { timeout: 10000 })
     .catch(() => { throw new Error(`the saved pen name did not come back from the server (field held "${""}")`); });
   await circle.close();

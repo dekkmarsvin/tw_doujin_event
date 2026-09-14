@@ -617,6 +617,8 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // The editor is usable before the preview baseline arrives, and that request
   // can fail; gating the draft on it would silently stop saving drafts.
   const [hydrated, setHydrated] = useState(false);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [hydrationAttempt, setHydrationAttempt] = useState(0);
   // What the server holds, as opposed to the draft in `fields`: the deletion
   // summary has to describe what would actually be deleted, not unsaved edits.
   const [savedFields, setSavedFields] = useState<CircleOverrideFields>({});
@@ -624,7 +626,6 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // When the draft on this device differs from what the server holds. Shown as
   // a line the author can act on, never as a silent restore.
   const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null);
-  const loaded = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const reviewPanel = useRef<HTMLDivElement | null>(null);
   const reviewActions = useRef<HTMLDivElement | null>(null);
@@ -646,10 +647,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     : serverPreview, [baseRecords, fields, projectedAt, serverPreview]);
 
   useEffect(() => {
-    if (loaded.current) return;
-    loaded.current = true;
+    let active = true;
     void readMyOverride(claim.circleId)
       .then((result) => {
+        if (!active) return;
         const initialFields = result.fields ?? {};
         // The stored draft wins over the saved record: it is the newer of the
         // two by construction, and dropping it is one click away.
@@ -673,9 +674,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       })
       // Not hydrated: `savedFields` never arrived, so every comparison against
       // it would read as "same as the server" and take the draft away from an
-      // author whose load simply failed.
-      .catch(() => setFields({}));
-  }, [claim.circleId]);
+      // author whose load simply failed. Keep the editor disabled until the
+      // author retries and the saved record actually arrives.
+      .catch((error: unknown) => {
+        if (!active) return;
+        setHydrationError(errorMessage(error));
+      });
+    return () => { active = false; };
+  }, [claim.circleId, hydrationAttempt]);
 
   // Written on every edit rather than on a button: a draft that needs an action
   // to exist is one the author remembers only after losing the tab.
@@ -692,6 +698,12 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     setListInputs({});
     setStagedThumbnailKey(null);
     setDraftRestoredAt(null);
+  };
+
+  const retryHydration = () => {
+    setHydrated(false);
+    setHydrationError(null);
+    setHydrationAttempt((attempt) => attempt + 1);
   };
 
   const setList = (key: (typeof CIRCLE_OVERRIDE_LIST_FIELDS)[number]["key"], value: string) => {
@@ -868,9 +880,15 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       });
   };
 
-  return <section className={`${styles.card} ${styles.editorCard}`}>
+  return <section className={`${styles.card} ${styles.editorCard}`} aria-busy={!hydrated && !hydrationError}>
     <h2>編輯：{claim.circleName}</h2>
     <p>儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。</p>
+
+    {!hydrated && !hydrationError && <p className={styles.notice} role="status">正在載入已儲存內容，完成前無法編輯。</p>}
+    {hydrationError && <p className={styles.error} role="alert">
+      無法載入已儲存內容：{hydrationError}
+      <button type="button" className={styles.inlineButton} onClick={retryHydration}>重試載入已儲存內容</button>
+    </p>}
 
     {draftRestoredAt && draftDiffersFromSaved && <p className={styles.notice} role="status">
       這是你在這台裝置上{DRAFT_TIME.format(new Date(draftRestoredAt))}編輯到一半、還沒儲存的內容。
@@ -879,6 +897,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
     <div className={styles.editorLayout}>
       <div id={`editor-fields-${claim.circleId}`} className={styles.editorForm} tabIndex={-1} inert={reviewOpen ? true : undefined}>
+      <fieldset className={styles.editorFieldset} disabled={!hydrated || reviewOpen}>
 
     <label htmlFor={`pen-${claim.circleId}`}>筆名（最多 {OVERRIDE_LIMITS.pen} 字）</label>
     <input
@@ -1126,6 +1145,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {status.message}
       {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}
     </p>}
+      </fieldset>
       </div>
 
       <aside className={`${styles.previewColumn} ${reviewOpen ? styles.reviewOpen : ""}`} aria-label={reviewOpen ? "儲存前確認" : "即時公開預覽"}>
