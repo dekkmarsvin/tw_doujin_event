@@ -9,7 +9,7 @@ type PublicationBundleInput = {
   mainFiles: readonly PublicationFileInput[];
 };
 
-type PublicationBundleFile = { path: string; text: string; sha256: string };
+export type PublicationBundleFile = { path: string; text: string; sha256: string };
 type PublicationBundle = {
   schema: "organizer-publication-bundle/1";
   candidateId: string;
@@ -58,7 +58,7 @@ function publicationPathAllowed(repository: "data" | "main", eventId: string, pa
     || path === `data/event-data-pins/${eventId}.json`;
 }
 
-async function stage(repository: "data" | "main", eventId: string, files: readonly PublicationFileInput[]) {
+export async function assemblePublicationStage(repository: "data" | "main", eventId: string, files: readonly PublicationFileInput[]) {
   const seen = new Set<string>();
   const output: PublicationBundleFile[] = [];
   for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path, "en-US"))) {
@@ -76,8 +76,8 @@ async function stage(repository: "data" | "main", eventId: string, files: readon
 export async function assemblePublicationBundle(input: PublicationBundleInput): Promise<PublicationBundle> {
   if (!input.candidateId || !EVENT_ID.test(input.eventId) || !Number.isSafeInteger(input.candidateVersion)
     || input.candidateVersion < 1 || !HASH.test(input.approvalHash)) throw new Error("Publication bundle identity is invalid.");
-  const dataFiles = await stage("data", input.eventId, input.dataFiles);
-  const mainFiles = await stage("main", input.eventId, input.mainFiles);
+  const dataFiles = await assemblePublicationStage("data", input.eventId, input.dataFiles);
+  const mainFiles = await assemblePublicationStage("main", input.eventId, input.mainFiles);
   const hashInput = JSON.stringify({
     schema: "organizer-publication-bundle/1", candidateId: input.candidateId, eventId: input.eventId,
     candidateVersion: input.candidateVersion, approvalHash: input.approvalHash,

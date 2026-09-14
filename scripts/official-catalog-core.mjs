@@ -49,6 +49,8 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
   for (const day of official.days) {
     if (dayId(day.day) === undefined) throw new Error(`Official data contains undeclared day ${day.day}.`);
     for (const group of day.booths) {
+      const area = group.areaId ?? defaultArea;
+      if (!area || !event.areas.some((candidate) => candidate.id === area)) throw new Error("Official booth group must resolve its declared area.");
       const keys = group.codes.map((code) => `${day.day}:${code}`);
       keys.forEach((key) => consumeOrganizerEvidenceKey(consumedSources, key));
       const entries = keys.map((key) => sourceIndex.get(key));
@@ -65,7 +67,7 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
           id: `${day.day}-${code.toLocaleLowerCase("en-US")}`,
           circleId: entry.circleId,
           day: day.day,
-          area: defaultArea,
+          area,
           boothCode: code,
           status: "active",
           tone: "mint",

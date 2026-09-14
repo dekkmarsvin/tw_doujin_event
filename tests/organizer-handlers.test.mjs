@@ -570,6 +570,9 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   const { createHash } = await import('node:crypto');
   for (const file of submissionSnapshot.references.files) assert.equal(createHash('sha256').update(file.content).digest('hex'), file.sha256);
   const beforeCatalogChange = await repository.getOrganizerSubmissionSnapshot(candidateId, 5);
+  const { buildApprovedPublicationArtifacts } = await environment.runner.import('/app/publication-artifacts.ts');
+  const artifacts = await buildApprovedPublicationArtifacts({ snapshotJson: beforeCatalogChange.snapshot_json, approvalHash: beforeCatalogChange.sha256 });
+  assert.deepEqual(artifacts.official.days[0].booths[0], { codes: ['A01', 'A02'], name: '甲社', areaId: 'ALL' });
   await database.prepare("UPDATE organizer_reference_records SET display_name = '新版顯示名稱' WHERE kind = 'category-catalog'").run();
   assert.deepEqual(await repository.getOrganizerSubmissionSnapshot(candidateId, 5), beforeCatalogChange);
   const { readFile } = await import('node:fs/promises');

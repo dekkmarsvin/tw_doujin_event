@@ -52,6 +52,8 @@ type CircleCatalogPayload = {
 
 ## 身分規則
 
+`official-booths.json` 的 `schemaVersion: 1` 群組保留 `codes[]`／`name`，並可帶已宣告的 `areaId`。新的 Organizer publication 必須從核准列逐筆固定 areaId，catalog 按此配置展區；不再把新活動全部攤位投到第一個展區。既有未帶 areaId 的 pinned 資料沿用原本第一展區相容讀取，bytes 不改寫。未知展區拒絕；場館空間由 event-definition 的唯一展區指派解析，不從 booth code 猜測。
+
 - **已公開發布**的 ID 是只增不減、不重排、不重用的 `c-xxxxxx` 配發序號。尚未公開的候選 registry／pin 沒有 Reader 連結、收藏或認領依賴，可以整組捨棄並重跑；首次公開發布才是不可回頭的邊界。見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md) 與 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
 - 同一活動中，經主辦穩定鍵或可追溯主辦證據連結的同一社團可在同日或跨日有多筆 placement，仍使用同一 ID。不同活動不建立 identity linkage。
 - `evidence.json` 的正式活動證據為 `{ eventId, kind: "organizer-booth", value: "<day>:<booth>" }`。

@@ -1,3 +1,5 @@
+import { isRecord, normalizedText, eventImportDefinition, placementCodeKey, parseOfficialBoothData } from "../app/official-booth-data.mjs";
+export { parseOfficialBoothData } from "../app/official-booth-data.mjs";
 import { lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFragment } from "parse5";
@@ -5,18 +7,8 @@ import { replaceVerifiedTrees } from "./verified-tree-replace.mjs";
 
 const FORMATS = new Set(["csv", "tsv", "html"]);
 
-function isRecord(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
 
-function onlyKeys(value, allowed, label) {
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown) throw new Error(`${label} contains unknown field ${unknown}.`);
-}
 
-function normalizedText(value) {
-  return String(value ?? "").normalize("NFKC").trim().replace(/\s+/gu, " ");
-}
 
 function parseDelimited(text, delimiter) {
   const input = String(text ?? "").replace(/^\uFEFF/u, "");
@@ -153,19 +145,6 @@ export function parseOfficialBoothImportTable(text, format) {
   return { format, rows };
 }
 
-function eventImportDefinition(event) {
-  if (!isRecord(event) || !Array.isArray(event.days) || event.days.length === 0
-    || !isRecord(event.officialData) || !isRecord(event.officialData.boothListUrls)) {
-    throw new Error("A validated event definition is required for official booth import.");
-  }
-  const dayIds = event.days.map(({ id }) => String(id));
-  if (new Set(dayIds).size !== dayIds.length) throw new Error("Event day ids must be unique.");
-  for (const day of dayIds) {
-    const url = event.officialData.boothListUrls[day];
-    if (typeof url !== "string" || !url.startsWith("https://")) throw new Error(`Event is missing an official booth URL for day ${day}.`);
-  }
-  return { event, dayIds, daySet: new Set(dayIds) };
-}
 
 function mappedDay(mapping, row, daySet) {
   if (mapping.fixedDay !== undefined && mapping.fixedDay !== null && String(mapping.fixedDay).trim() !== "") {
@@ -202,9 +181,6 @@ function boothCodes(value, mapping) {
   throw new Error("Official booth code parsing mode must be single, delimited, or fixed-width.");
 }
 
-function placementCodeKey(value) {
-  return value.toLocaleLowerCase("en-US");
-}
 
 export function prepareOfficialBoothImport({ table, event, mapping, headerRow = 1, requireEveryDay = true }) {
   const { event: validatedEvent, dayIds, daySet } = eventImportDefinition(event);
@@ -333,37 +309,6 @@ export function mergeOfficialBoothImports(previews, event) {
   };
 }
 
-export function parseOfficialBoothData(value, event) {
-  const { event: validatedEvent, dayIds } = eventImportDefinition(event);
-  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.days)) throw new Error("Unsupported official booth data schema.");
-  onlyKeys(value, ["schemaVersion", "days"], "Official booth data");
-  if (value.days.length !== dayIds.length) throw new Error("Official booth data must cover every event day exactly once.");
-  const seenDays = new Set();
-  for (const [dayIndex, day] of value.days.entries()) {
-    if (!isRecord(day)) throw new Error(`Official booth day ${dayIndex} is invalid.`);
-    onlyKeys(day, ["day", "url", "booths"], `Official booth day ${dayIndex}`);
-    const id = String(day.day);
-    if (!dayIds.includes(id) || seenDays.has(id)) throw new Error(`Official booth day ${id} is unknown or duplicated.`);
-    seenDays.add(id);
-    if (day.url !== validatedEvent.officialData.boothListUrls[id]) throw new Error(`Official booth day ${id} does not use the event's official URL.`);
-    if (!Array.isArray(day.booths) || day.booths.length === 0) throw new Error(`Official booth day ${id} has no booths.`);
-    const seenCodes = new Set();
-    for (const [groupIndex, group] of day.booths.entries()) {
-      if (!isRecord(group)) throw new Error(`Official booth group ${id}/${groupIndex} is invalid.`);
-      onlyKeys(group, ["codes", "name"], `Official booth group ${id}/${groupIndex}`);
-      if (!Array.isArray(group.codes) || group.codes.length === 0 || !group.codes.every((code) => normalizedText(code) === code && code !== "")) {
-        throw new Error(`Official booth group ${id}/${groupIndex} has invalid codes.`);
-      }
-      if (normalizedText(group.name) !== group.name || group.name === "") throw new Error(`Official booth group ${id}/${groupIndex} has an invalid circle name.`);
-      for (const code of group.codes) {
-        const placementKey = placementCodeKey(code);
-        if (seenCodes.has(placementKey)) throw new Error(`Official booth day ${id} has booth ${code} that collapses to a duplicate placement ID.`);
-        seenCodes.add(placementKey);
-      }
-    }
-  }
-  return value;
-}
 
 async function exists(target) {
   try { return await lstat(target); } catch (error) { if (error?.code === "ENOENT") return null; throw error; }
