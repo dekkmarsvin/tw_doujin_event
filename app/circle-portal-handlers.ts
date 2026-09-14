@@ -26,7 +26,7 @@ import {
   validateOrganizerImportedRowsAgainstDraft,
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
-import { QUEUED_PUBLICATION_TIMEOUT_MS } from "./organizer-publication";
+import { publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } from "./organizer-publication";
 import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueName,
@@ -1950,6 +1950,7 @@ export function createCirclePortalHandlers({
         error: publication.error,
         failureCode: publication.failure_code,
         retryable: Boolean(publication.retryable),
+        started: publicationHasStarted(publication),
         updatedAt: publication.updated_at,
       } : null,
       workspace: {
