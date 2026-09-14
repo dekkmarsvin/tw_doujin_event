@@ -18,7 +18,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054 |
-| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058 |
+| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0062 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039 |
 | 保存期限與個資 | 0018、0021、0022、0027、0054 |
@@ -93,3 +93,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
 | [0060](./0060-review-ends-when-scoped-blockers-are-resolved.md) | 範圍內 blocker 解決後，review 必須結束 | 生效；部分取代 0040 |
 | [0061](./0061-organizer-snapshot-pins-complete-reference-records.md) | Organizer 送審固定完整 reference 記錄 | 生效 |
+| [0062](./0062-publication-wakes-through-webhooks-and-a-dedicated-cron.md) | Webhook 喚醒，由獨立 cron 持續推進 publication | 生效；延續 0057、0058 |

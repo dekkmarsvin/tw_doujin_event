@@ -1,5 +1,6 @@
 import type { IdentityRepository } from "../db/identity-repository";
 import { createOrganizerPublicationExecutor, type PublicationDriver, type PublicationMetadata } from "./organizer-publication";
+import { createScheduledPublicationDispatcher } from "./publication-scheduler";
 
 /** Preview-only driver: it never contacts GitHub or certifies a public origin. */
 export function createFakePublicationDriver(eventExists: PublicationDriver["eventExists"]): PublicationDriver {
@@ -20,15 +21,16 @@ export function createPublicationDispatcher(input: {
   github: () => PublicationDriver; eventExists: PublicationDriver["eventExists"]; now?: () => number;
 }) {
   if (input.mode !== "github" && !(input.mode === "fake" && input.allowFake)) return undefined;
+  if (input.mode === "github") {
+    const dispatch = createScheduledPublicationDispatcher(input.repository, input.github(), input.now);
+    return async (jobId: string) => { await dispatch(jobId); };
+  }
   const execute = createOrganizerPublicationExecutor(input.repository,
-    input.mode === "fake" ? createFakePublicationDriver(input.eventExists) : input.github(), input.now);
+    createFakePublicationDriver(input.eventExists), input.now);
   return async (jobId: string) => {
-    // GitHub performs one bounded transition. #246 supplies durable deliveries;
-    // fake has no external wait and completes all eight transitions in preview.
-    const deliveries = input.mode === "fake" ? 8 : 1;
-    for (let index = 0; index < deliveries; index++) {
+    // Fake has no external wait and completes all eight transitions in preview.
+    for (let index = 0; index < 8; index++) {
       await execute(jobId);
-      if (input.mode !== "fake") break;
       const job = await input.repository.getOrganizerPublicationJob(jobId);
       if (!job || job.status === "failed" || job.status === "published") break;
     }

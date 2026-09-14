@@ -28,7 +28,7 @@ import {
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import { createOrganizerReference, createCategoryReference, projectReferenceCatalog,
   resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
-import { PublicationFailure, publicationHasStarted, QUEUED_PUBLICATION_TIMEOUT_MS } from "./organizer-publication";
+import { PublicationFailure, publicationHasStarted } from "./organizer-publication";
 import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueName,
@@ -1895,22 +1895,9 @@ export function createCirclePortalHandlers({
     return json({ ok: true, candidateId, version: 1, invitationSent }, 201);
   }
 
-  /**
-   * The workspace entry is where the timeout is observed: a stalled job has no
-   * dispatcher left to notice it, so the read that would have shown it waiting
-   * is what ends the wait. Both entry surfaces sweep, so the event list and the
-   * event itself agree on the status without either having to be opened first.
-   */
-  async function expireStalledPublications() {
-    await repository.expireStalledOrganizerPublicationJobs({
-      now: config.now(), timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS,
-    });
-  }
-
   async function listOrganizerCandidates(request: Request) {
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
-    await expireStalledPublications();
     const events = await repository.listOrganizerCandidatesForAccount(current.accountId, await isAdmin(current.email));
     return json({ events: events.map((event) => ({
       id: event.id,
@@ -1928,7 +1915,6 @@ export function createCirclePortalHandlers({
   async function getOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    await expireStalledPublications();
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);

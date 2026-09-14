@@ -21,6 +21,12 @@ const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
 const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
 const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
+const { runPublicationTick, createScheduledPublicationDispatcher,
+  PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS } = await environment.runner.import("/app/publication-scheduler.ts");
+const { signGitHubWebhookForTest } = await environment.runner.import("/app/publication-bundle-assembler.ts");
+const { onRequest: middleware } = await environment.runner.import("/functions/_middleware.ts");
+const { onRequestPost: webhook } = await environment.runner.import("/functions/api/integrations/github/webhook.ts");
+const { default: scheduledWorker } = await environment.runner.import("/workers/publication-dispatch/index.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -75,6 +81,169 @@ function checkpoint(step) {
     preparing_main: { main_pr_number: 2, main_head_sha: "c".repeat(40) },
     merging_main: { main_merge_sha: "d".repeat(40) }, waiting_deployment: { workflow_run_id: 3 } })[step] ?? {};
 }
+
+test("durable ticks resume all waiting stages after runtime recreation without workspace requests", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  const counts = new Map();
+  const driver = { eventExists: async () => false, run: async ({ step }) => {
+    counts.set(step, (counts.get(step) ?? 0) + 1);
+    return { pending: step.startsWith("waiting_") && counts.get(step) <= 5,
+      metadata: checkpoint(step), productionVerified: step === "verifying_production" };
+  } };
+  let recreated = repository;
+  for (let i = 0; i < 30; i += 1) {
+    if (i === 3) recreated = createIdentityRepository(database);
+    await runPublicationTick({ repository: recreated, driver, now: () => clock });
+    const job = await recreated.getOrganizerPublicationJob(jobId);
+    if (job.status === "published") break;
+    assert.equal(job.status, "publishing");
+    assert.ok(job.next_attempt_at - clock <= PUBLICATION_RETRY_MAX_MS);
+    if (job.next_attempt_at > clock) {
+      const calls = [...counts.values()].reduce((a, b) => a + b, 0);
+      assert.deepEqual((await runPublicationTick({ repository: recreated, driver, now: () => clock })).results, []);
+      assert.equal([...counts.values()].reduce((a, b) => a + b, 0), calls);
+    }
+    clock = Math.max(clock + 60_000, job.next_attempt_at);
+  }
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "published");
+  assert.equal(job.step, "completed");
+  for (const step of ["waiting_data_checks", "waiting_main_checks", "waiting_deployment"]) assert.equal(counts.get(step), 6);
+  for (const step of ["preparing_data", "merging_data", "preparing_main", "merging_main"]) assert.equal(counts.get(step), 1);
+  assert.ok(PUBLICATION_RETRY_MAX_MS < QUEUED_PUBLICATION_TIMEOUT_MS);
+  assert.equal(PUBLICATION_CRON, "* * * * *");
+});
+
+test("cron expires abandoned queued work without any UI request and never dispatches old revisions", async () => {
+  const { id, jobId } = await publicationFixture();
+  const driver = { eventExists: async () => assert.fail("must not query"), run: async () => assert.fail("must not run") };
+  const now = NOW + 4 + QUEUED_PUBLICATION_TIMEOUT_MS;
+  const tick = await runPublicationTick({ repository, driver, now: () => now });
+  assert.deepEqual(tick, { expired: [jobId], results: [] });
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).failure_code, "queued_timeout");
+  await repository.retryOrganizerPublicationJob({ jobId, now: now + 1 });
+  await database.prepare("UPDATE organizer_event_candidates SET current_version = 2 WHERE id = ?1").bind(id).run();
+  assert.deepEqual((await runPublicationTick({ repository, driver, now: () => now + 2 })).results, []);
+});
+
+test("expiry rechecks the lease after its SELECT and cannot fail a delivery that started concurrently", async () => {
+  const { jobId } = await publicationFixture();
+  const clock = NOW + 4 + QUEUED_PUBLICATION_TIMEOUT_MS;
+  let injected = false;
+  const concurrentDatabase = { prepare: (sql) => database.prepare(sql), batch: (statements) => database.batch(statements) };
+  const concurrent = createIdentityRepository(concurrentDatabase);
+  // Finish schema initialization before injecting into the expiry transaction.
+  await concurrent.ensureTables();
+  concurrentDatabase.batch = async (statements) => {
+    if (!injected) {
+      injected = true;
+      assert.equal((await repository.claimOrganizerPublicationLease({ jobId, now: clock, ttlMs: 30_000 })).ok, true);
+    }
+    return database.batch(statements);
+  };
+  assert.deepEqual(await concurrent.expireStalledOrganizerPublicationJobs({ now: clock, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS }), { expired: [] });
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "publishing");
+});
+
+async function webhookRequest({ deliveryId = "delivery-246", event = "check_run", body = JSON.stringify({
+  repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "a".repeat(40) },
+}), signature, mode = "github", contentType = "application/json", method = "POST", path = "/api/integrations/github/webhook" } = {}) {
+  const request = new Request(`https://portal.example.test${path}`, { method, headers: {
+    "content-type": contentType, "x-github-delivery": deliveryId, "x-github-event": event,
+    "x-hub-signature-256": signature ?? await signGitHubWebhookForTest("webhook-secret", body),
+  }, ...(method === "GET" ? {} : { body }) });
+  const env = { DB: database, ORGANIZER_PUBLICATION_MODE: mode, GITHUB_WEBHOOK_SECRET: "webhook-secret" };
+  return middleware({ request, next: () => webhook({ request, env }) });
+}
+
+test("only the exact webhook POST passes Origin and still enforces JSON, HMAC and disabled mode", async () => {
+  assert.equal((await webhookRequest({ signature: "" })).status, 401);
+  assert.equal((await webhookRequest({ contentType: "text/plain" })).status, 415);
+  assert.equal((await webhookRequest({ mode: "disabled" })).status, 503);
+  for (const method of ["PATCH", "PUT", "DELETE"]) assert.equal((await webhookRequest({ method })).status, 403);
+  for (const path of ["/api/integrations/github/webhook/", "/api/claims", "/api/integrations/github/webhook-other"]) {
+    assert.equal((await webhookRequest({ path })).status, 403);
+  }
+  assert.equal((await webhookRequest({ method: "GET" })).status, 405);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM github_webhook_deliveries").first()).n, 0);
+});
+
+test("signed concurrent webhook replay wakes a pinned job once and never advances a step itself", async () => {
+  const { jobId } = await publicationFixture();
+  const dispatch = createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
+    run: async ({ step }) => ({ pending: true, metadata: checkpoint(step) }) }, () => NOW + 10);
+  await dispatch(jobId);
+  const responses = await Promise.all([webhookRequest(), webhookRequest(), webhookRequest()]);
+  for (const response of responses) assert.equal(response.status, 202);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.next_attempt_at, 0);
+  assert.equal(job.pending_attempts, 0);
+  assert.equal(job.step, "preparing_data");
+  // Once a later tick defers again, a replay cannot reset its due time.
+  await dispatch(jobId);
+  const deferred = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal((await webhookRequest()).status, 202);
+  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred);
+  assert.equal((await webhookRequest({ event: "check_suite" })).status, 409);
+  assert.equal(await repository.completeGitHubWebhookDelivery({ deliveryId: "delivery-246", processed: false, now: NOW + 20 }), false);
+  assert.equal((await webhookRequest()).status, 202);
+  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred, "a late failed duplicate cannot erase processed delivery");
+  for (const [event, payload] of [
+    ["check_run", { repository: { full_name: "someone/other" }, check_run: { head_sha: "a".repeat(40) } }],
+    ["push", { repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "a".repeat(40) } }],
+    ["check_run", { repository: { full_name: "dekkmarsvin/tw_doujin_event-data" }, check_run: { head_sha: "b".repeat(40) } }],
+  ]) {
+    assert.equal((await webhookRequest({ deliveryId: crypto.randomUUID(), event, body: JSON.stringify(payload) })).status, 202);
+    assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), deferred);
+  }
+});
+
+test("a cron overlapping webhook and another tick has one leased mutation and keeps its checkpoint", async () => {
+  const { jobId } = await publicationFixture();
+  await createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
+    run: async () => ({ metadata: checkpoint("preparing_data") }) }, () => NOW + 10)(jobId);
+  let release;
+  const barrier = new Promise((resolve) => { release = resolve; });
+  let entered;
+  const started = new Promise((resolve) => { entered = resolve; });
+  let calls = 0;
+  const driver = { eventExists: async () => false, run: async () => { calls += 1; entered(); await barrier; return {}; } };
+  const first = runPublicationTick({ repository, driver, now: () => NOW + 60_000 });
+  await started;
+  assert.equal((await webhookRequest()).status, 202);
+  const competing = await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
+  assert.deepEqual(competing.results, [{ jobId, result: "skipped" }]);
+  release();
+  await first;
+  assert.equal(calls, 1);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.step, "merging_data");
+  assert.equal(job.data_head_sha, "a".repeat(40));
+  assert.equal(job.pending_attempts, 0);
+});
+
+test("scheduled Worker entry is disabled by default and advances only a preview-gated fake", async (t) => {
+  const { jobId } = await publicationFixture();
+  t.mock.method(Date, "now", () => NOW + 10);
+  for (const env of [{}, { ORGANIZER_PUBLICATION_MODE: "fake" }]) {
+    await scheduledWorker.scheduled({}, { ...env, DB: database });
+    assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
+  }
+  t.mock.method(console, "log", () => {});
+  for (let i = 0; i < 8; i += 1) {
+    await scheduledWorker.scheduled({}, { DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" });
+  }
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
+  assert.equal(scheduledWorker.fetch, undefined);
+  // Parsed production config must keep the independently deployed worker off.
+  const { readFile } = await import("node:fs/promises");
+  const config = JSON.parse(await readFile("workers/publication-dispatch/wrangler.jsonc", "utf8"));
+  assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
+  assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
+  assert.equal(config.env.preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
+});
 
 test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {
   const { id, jobId } = await publicationFixture();

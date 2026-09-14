@@ -64,12 +64,13 @@ export interface PublicationDriver {
 }
 
 /** One bounded transition per delivery; never wait for CI in a Pages request. */
-export function createOrganizerPublicationExecutor(repository: IdentityRepository, driver: PublicationDriver, now = Date.now) {
+export function createOrganizerPublicationExecutor(repository: IdentityRepository, driver: PublicationDriver, now = Date.now,
+  pendingBackoff?: (attempt: number) => number) {
   return async (jobId: string) => {
     let job = await repository.getOrganizerPublicationJob(jobId);
-    if (!job || job.status === "published" || job.status === "failed") return;
+    if (!job || job.status === "published" || job.status === "failed") return "skipped" as const;
     const lease = await repository.claimOrganizerPublicationLease({ jobId, now: now(), ttlMs: 30_000 });
-    if (!lease.ok) return;
+    if (!lease.ok) return "skipped" as const;
     const assertLease = async () => {
       if (!await repository.hasOrganizerPublicationLease(jobId, lease.token, now())) {
         throw new PublicationFailure("lease_lost", "Publication lease expired.", true);
@@ -77,7 +78,7 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
     };
     try {
       job = await repository.getOrganizerPublicationJob(jobId);
-      if (!job) return;
+      if (!job) return "skipped" as const;
       const candidate = await repository.getOrganizerCandidate(job.candidate_id);
       const snapshot = await repository.getOrganizerSubmissionSnapshot(job.candidate_id, job.candidate_version);
       if (!candidate || !snapshot || snapshot.id !== job.snapshot_id || snapshot.sha256 !== job.approval_hash
@@ -133,9 +134,14 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
         throw new PublicationFailure("production_smoke_failed", "Pages production origin smoke has not passed.", true);
       }
       const next = result.pending ? step : PUBLICATION_STEPS[PUBLICATION_STEPS.indexOf(step as PublicationStep) + 1];
+      const pendingAttempts = result.pending ? Math.min(job.pending_attempts + 1, 32) : 0;
+      const completedAt = now();
       if (!await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
         expectedStep: job.step, nextStep: next, status: next === "completed" ? "published" : "publishing",
-        metadata, productionVerified: result.productionVerified, now: now() })) throw new Error("Publication checkpoint conflict.");
+        metadata, productionVerified: result.productionVerified, now: completedAt,
+        ...(pendingBackoff ? { pendingAttempts, nextAttemptAt: completedAt + (result.pending ? pendingBackoff(pendingAttempts) : 0) } : {}),
+      })) throw new Error("Publication checkpoint conflict.");
+      return result.pending ? "pending" as const : "advanced" as const;
     } catch (error) {
       const failure = error instanceof PublicationFailure ? error
         : new PublicationFailure("infrastructure_error", error instanceof Error ? error.message : String(error), true);
@@ -147,6 +153,7 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
         // dispatcher record this delivery as unprocessed rather than successful.
         throw failure;
       }
+      return "failed" as const;
     } finally {
       await repository.releaseOrganizerPublicationLease(jobId, lease.token);
     }

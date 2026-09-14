@@ -63,6 +63,7 @@ test("additive column migrations upgrade an existing database idempotently", asy
     // already working, and takes every request down with it.
     ["map_drafts", ["candidate_id"]],
     ["login_tokens", ["audience", "minted_by"]],
+    ["organizer_publication_jobs", ["next_attempt_at", "pending_attempts"]],
   ]) {
     const definition = IDENTITY_TABLES.find((table) => table.name === tableName);
     assert.ok(definition);
