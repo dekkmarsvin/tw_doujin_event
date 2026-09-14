@@ -76,6 +76,25 @@ test("the shared Organizer catalog starts with four venues and six human-readabl
   assert.equal(INITIAL_ORGANIZER_VENUE_CATALOG.length, 4);
 });
 
+test("canonical seed adoption preserves pinned public names and bytes across repository restarts", async () => {
+  const initial = await repository.listOrganizerReferenceRecords();
+  assert.equal(initial.length, 10);
+  const space = initial.find((item) => item.id === "zhengyan-exhibition-area");
+  assert.equal(space.displayName, "全館");
+  assert.equal(JSON.parse(space.publicReferenceJson).name, "爭艷館展區");
+  assert.equal(JSON.parse(space.publicReferenceJson).sources[0].retrievedAt, "2026-08-25T03:43:00Z");
+  const restarted = createIdentityRepository(database);
+  await restarted.ensureTables();
+  assert.deepEqual(await restarted.listOrganizerReferenceRecords(), initial);
+  // A changed legacy seed is not silently rewritten or assigned unrelated provenance.
+  await database.prepare("DELETE FROM organizer_reference_records WHERE path = ?1").bind(space.path).run();
+  await database.prepare("UPDATE organizer_venue_spaces SET name = '既有自訂名稱' WHERE id = ?1").bind(space.id).run();
+  const incompatible = createIdentityRepository(database);
+  await incompatible.ensureTables();
+  assert.equal((await incompatible.listOrganizerReferenceRecords()).some((item) => item.path === space.path), false);
+  assert.equal((await incompatible.listOrganizerVenueCatalog()).venues.flatMap((venue) => venue.spaces).find((item) => item.id === space.id).name, "既有自訂名稱");
+});
+
 test("a new venue and spaces are immediately shared while duplicate human names are refused", async () => {
   assert.deepEqual(await repository.createOrganizerVenue({
     id: "venue-new",

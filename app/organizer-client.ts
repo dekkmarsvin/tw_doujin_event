@@ -1,4 +1,5 @@
 import { PortalError } from "./circle-editor-client";
+import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
 import type {
   OrganizerCandidateStatus,
   OrganizerEventDraft,
@@ -55,6 +56,7 @@ export type OrganizerEventDetail = {
   event: OrganizerEventSummary & { eventIdLocked: boolean };
   draft: OrganizerEventDraft;
   venueCatalog: OrganizerVenueCatalog;
+  referenceCatalog?: OrganizerReferenceCatalog;
   revisions: Array<{ version: number; eventId: string | null; createdByRole: string; createdAt: number }>;
   import: null | {
     source: {
@@ -101,6 +103,14 @@ export function listOrganizerVenues(candidateId: string) {
   return organizerCall<OrganizerVenueCatalog>(
     `/api/organizer/events/${encodeURIComponent(candidateId)}/venues`,
   );
+}
+
+export function createOrganizerReferenceEntry(candidateId: string, input: {
+  expectedVersion: number; kind: "organizer" | "category-catalog"; name: string; sourceUrl: string;
+  organizerId?: string; categories?: Array<{ label: string; description: string }>;
+}) {
+  return organizerCall<{ created: { id: string; organizerId: string | null; revision: string | null }; catalog: OrganizerReferenceCatalog }>(
+    `/api/organizer/events/${encodeURIComponent(candidateId)}/references`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function createOrganizerVenue(candidateId: string, input: {
@@ -167,6 +177,8 @@ export type OrganizerReaderPreview = {
   event: OrganizerEventDraft["event"];
   venueAssignments: OrganizerEventDraft["venue"]["assignments"];
   officialSource: OrganizerEventDraft["officialSource"];
+  references?: Array<{ schema: string; id: string; name?: string; venueId?: string;
+    categories?: Array<{ label: string; description?: string }> }>;
   placements: Array<{
     sourceRow: number; dayId: string; venueSpaceId: string; areaId: string;
     boothCode: string; circleName: string; identityGroup: string | null;

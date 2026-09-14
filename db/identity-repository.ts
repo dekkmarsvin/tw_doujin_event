@@ -6,6 +6,7 @@ import {
   type OrganizerVenueSpaceAreaMode,
 } from "../app/organizer-venue-catalog";
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
+import { createVenueReference, createVenueSpaceReference, initialVenueReferences, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -137,21 +138,75 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       statements.push(database.prepare(
         `INSERT INTO organizer_venues (id, name, name_key, source_url, created_by, created_at)
          VALUES (?1, ?2, ?3, ?4, 'system', 0)
-         ON CONFLICT(id) DO UPDATE SET name = excluded.name, name_key = excluded.name_key,
-           source_url = excluded.source_url`,
+         ON CONFLICT(id) DO NOTHING`,
       ).bind(venue.id, venue.name, organizerVenueNameKey(venue.name), venue.sourceUrl));
       for (const space of venue.spaces) {
         statements.push(database.prepare(
           `INSERT INTO organizer_venue_spaces (
              id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'system', 0)
-           ON CONFLICT(id) DO UPDATE SET venue_id = excluded.venue_id, name = excluded.name,
-             name_key = excluded.name_key, source_url = excluded.source_url,
-             default_area_mode = excluded.default_area_mode`,
+           ON CONFLICT(id) DO NOTHING`,
         ).bind(space.id, venue.id, space.name, organizerVenueNameKey(space.name), space.sourceUrl, space.defaultAreaMode));
       }
     }
     if (statements.length > 0) await database.batch(statements);
+    // Explicit adoption only for seed identities whose existing metadata still matches.
+    // Never repair a changed canonical record by overwriting it during startup.
+    for (const reference of initialVenueReferences()) {
+      const venue = INITIAL_ORGANIZER_VENUE_CATALOG.find((item) => item.id === reference.id);
+      const space = INITIAL_ORGANIZER_VENUE_CATALOG.flatMap((item) => item.spaces.map((space) => ({ ...space, venueId: item.id })))
+        .find((item) => item.id === reference.id);
+      const compatible = venue
+        ? await database.prepare("SELECT id FROM organizer_venues WHERE id = ?1 AND name = ?2 AND source_url = ?3")
+          .bind(venue.id, venue.name, venue.sourceUrl).first()
+        : space && await database.prepare("SELECT id FROM organizer_venue_spaces WHERE id = ?1 AND name = ?2 AND source_url = ?3 AND venue_id = ?4")
+          .bind(space.id, space.name, space.sourceUrl, space.venueId).first();
+      if (compatible) await referenceInsertStatement(reference, "system", "ON CONFLICT(path) DO NOTHING").run();
+    }
+  }
+
+  function referenceInsertStatement(record: OrganizerReferenceRecord, actor: string, conflict = "") {
+    return database.prepare(`INSERT INTO organizer_reference_records
+      (path, kind, reference_id, organizer_id, revision, display_name, public_reference_json, source_captured_at, created_by)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ${conflict}`)
+      .bind(record.path, record.kind, record.id, record.organizerId, record.revision, record.displayName,
+        record.publicReferenceJson, record.sourceCapturedAt, actor);
+  }
+
+  async function listOrganizerReferenceRecords(): Promise<OrganizerReferenceRecord[]> {
+    await ensureTables();
+    const result = await database.prepare(`SELECT path, kind, reference_id AS id, organizer_id AS organizerId,
+      revision, display_name AS displayName, public_reference_json AS publicReferenceJson,
+      source_captured_at AS sourceCapturedAt FROM organizer_reference_records ORDER BY path`).all<OrganizerReferenceRecord>();
+    return result.results;
+  }
+
+  async function createOrganizerReferenceRecord(input: {
+    record: OrganizerReferenceRecord; candidateId: string; expectedVersion: number;
+    actorAccountId: string; actorRole: IdentityAuditEntry["actorRole"]; admin: boolean; now: number;
+  }) {
+    await ensureTables();
+    const row = input.record;
+    // Creating a reusable record does not apply it to the candidate. The existing
+    // save endpoint owns that versioned content change; even catalog creation is
+    // conditional on the candidate still being editable by this actor.
+    const results = await database.batch([
+      database.prepare(`INSERT INTO organizer_reference_records
+        (path, kind, reference_id, organizer_id, revision, display_name, public_reference_json, source_captured_at, created_by)
+        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 FROM organizer_event_candidates c
+        WHERE c.id = ?10 AND c.current_version = ?11 AND c.status IN ('draft', 'changes_requested')
+          AND (?12 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
+            AND g.account_id = ?9 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
+          AND (?4 IS NULL OR EXISTS (SELECT 1 FROM organizer_reference_records r WHERE r.kind = 'organizer' AND r.reference_id = ?4))`)
+        .bind(row.path, row.kind, row.id, row.organizerId, row.revision, row.displayName, row.publicReferenceJson,
+          row.sourceCapturedAt, input.actorAccountId, input.candidateId, input.expectedVersion, input.admin ? 1 : 0),
+      database.prepare(`INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
+        SELECT ?1, ?2, ?3, ?4, 'organizer_reference.created', 'organizer_reference', ?5, ?6, NULL
+        WHERE changes() = 1`)
+        .bind(crypto.randomUUID(), input.now, input.actorAccountId, input.actorRole, row.id,
+          JSON.stringify({ candidateId: input.candidateId, kind: row.kind })),
+    ]);
+    return results[0].meta.changes === 1;
   }
 
   async function listAdmins() {
@@ -411,6 +466,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venue_spaces SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_reference_records SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET last_updated_by = '[shredded]' WHERE last_updated_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET submitted_by = '[shredded]' WHERE submitted_by = ?1`).bind(input.accountId),
@@ -1545,6 +1601,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           organizerVenueNameKey(input.initialSpace.name), input.initialSpace.sourceUrl,
           input.initialSpace.defaultAreaMode, input.createdByAccountId, input.now,
         ),
+        ...(input.sourceUrl ? [referenceInsertStatement(createVenueReference(input, input.now), input.createdByAccountId)] : []),
+        ...(input.initialSpace.sourceUrl ? [referenceInsertStatement(createVenueSpaceReference({ ...input.initialSpace, venueId: input.id }, input.now), input.createdByAccountId)] : []),
         auditStatement(input.audit),
       ]);
       return results.every((result) => result.meta.changes === 1)
@@ -1579,7 +1637,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).bind(
         input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl,
         input.defaultAreaMode, input.createdByAccountId, input.now, input.venueId,
-      ), auditStatement(input.audit)]);
+      ), ...(input.sourceUrl ? [referenceInsertStatement(createVenueSpaceReference(input, input.now), input.createdByAccountId)] : []), auditStatement(input.audit)]);
       return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const }
         : { ok: false as const, reason: "conflict" as const };
@@ -3179,7 +3237,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
-      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues",
+      "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
@@ -3205,6 +3263,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
     listOrganizerVenueCatalog, createOrganizerVenue, createOrganizerVenueSpace,
+    listOrganizerReferenceRecords, createOrganizerReferenceRecord,
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,

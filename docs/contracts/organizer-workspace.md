@@ -54,7 +54,7 @@ draft → submitted → approved → publishing → published
 |---|---|---|
 | `event` | `id`、`name`、`days[]` | `id` 只允許小寫英數與連字號；每個活動日需要 id、名稱與 `YYYY-MM-DD` 日期，id 不得重複 |
 | `venue.assignments` | `venueId`、`venueSpaceId`、`areaMode`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複且必須屬於所選場館；`areaMode` 為 `imported` 或 `none`；`none` 必須且只能保存 `areaIds: ["ALL"]` |
-| `officialSource` | `label`、`url` | 來源說明必填；網址若填寫必須是 HTTPS |
+| `officialSource` | `label`、`url` | 來源說明與 HTTPS 網址均必填 |
 
 新增活動日時，表單預設第一日為作者當地的今天，之後每一日為最後一個有日期的活動日加一天；新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
@@ -64,6 +64,16 @@ draft → submitted → approved → publishing → published
 
 `mapTemplate` 的值域是 `listMapTemplateOptions()`，介面以下拉選單呈現並預覽這個選擇的後果（能否自動辨識配置圖、存檔時依什麼檢查）。草稿裡不在清單內的既有值會原樣保留為額外選項，不被靜默改寫。
 
+## 主辦與分類目錄
+
+活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。
+
+`POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。Owner／Editor／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
+
+`organizer_reference_records` 保存 canonical public_reference_json 與 source_captured_at。場館／空間正常建立在同交易固定 canonical 記錄；seed adoption 依 [ADR-0061](../adr/0061-organizer-snapshot-pins-complete-reference-records.md) 的已核對來源與時間，只補缺少記錄，既有 metadata 不一致時不強行採用。控制面名稱「全館」與公開名稱「爭艷館展區」分開保存。
+
+validate／preview／submit 共用 selected-reference resolver。`organizer-reader-preview/1.references` 是所選 canonical 公開記錄，介面呈現主辦、分類與正式場館名稱；選單仍使用原本 venueCatalog 的友善名稱。公開 schema／檔案選取 parser 與 CLI 共用 `app/reference-selection.mjs`。
+
 ## 攤位匯入
 
 - **原始檔只在瀏覽器裡解析與雜湊。** `readOrganizerWorkbook()` 讀 CSV 或 XLSX、列出工作表、保留實體列號；沒有任何 API 接受這個 File。
@@ -72,7 +82,7 @@ draft → submitted → approved → publishing → published
 - 每個群組保存 `codes[]`、社團名稱與原來源列；一團多攤不需要填主辦內部編號。重複驗證逐個代碼進行，同群組內重複也整批拒絕；API 要求非空的字串陣列，各碼不超過 80 字元，現有 20,000 群組與 8 MiB 上限不變。
 - 欄位 mapping 保存 `boothCodeMode`：預設 `single` 不拆碼；`delimited` 以空白、逗號（含全形）、頓號、分號（含全形）或斜線拆分；`fixed-width` 使用主辦明確確認的 `boothCodeWidth`（1–80 字元）。寬度只提出候選值、不自動套用；不可整除或包含分隔符號時，指出來源列並擋住儲存。`single` 遇可能連寫的代碼，於 mapping／預覽即提示。
 - 預覽顯示群組列數、展開代碼總數與各列的全部代碼；已儲存清單提供社團／代碼／內部編號搜尋、活動日與使用空間篩選、依第一個攤位代碼自然排序及每頁 100 列的分頁。唯讀清單在候選鎖定時仍可檢視；逐列編輯、拆分／合併與地圖雙向對照分別由 #214／#215 承接。
-- D1 以新增的 nullable `codes_json` 保存群組，舊 `booth_code` 欄保留為相容投影（新寫入為群組第一碼）。舊資料未有 `codes_json` 時讀成 `[booth_code]`，**不猜拆舊合併代碼**，不改寫任何既有 approval snapshot。新送審使用 `organizer-submission-snapshot/2` 並保存 `codes[]`；舊 `/1` snapshot 原 bytes 與 hash 不變。舊版匯入寫入格式會被 API 拒絕，重新載入 UI 後使用新版群組格式。
+- D1 以新增的 nullable `codes_json` 保存群組，舊 `booth_code` 欄保留為相容投影（新寫入為群組第一碼）。舊資料未有 `codes_json` 時讀成 `[booth_code]`，**不猜拆舊合併代碼**，不改寫任何既有 approval snapshot。新送審使用 `organizer-submission-snapshot/3` 並保存 `codes[]`；舊 `/1` snapshot 原 bytes 與 hash 不變。舊版匯入寫入格式會被 API 拒絕，重新載入 UI 後使用新版群組格式。
 - authoring scope 與地圖覆蓋驗證攤平 `codes[]`；Reader preview 的 placement 仍一碼一筆，同群組每碼帶相同社團名稱。正式已發布活動的讀取／身分投影不變。metadata mapping 與新 snapshot 均可追溯主辦確認的拆碼選擇。
 - **預覽可以逐列修正。** 缺值或攤位重複的列會列在「待修正」，直接在預覽裡補上活動日、使用空間、展區、攤位代碼、社團名稱或主辦內部編號；也可以移除個別列，或一次略過全部待修正的列。活動日與使用空間只能從活動已宣告的清單選，展區與攤位代碼是來源檔的事實，維持自由輸入。補上主辦內部編號會一併重算該列的 `identityGroup`。
 - 移除的列**既不匯入也不再回報問題**，而且不佔用攤位位置：同一攤位的重複因此可能由移除另一列解除。修正與移除以來源列號為鍵，換檔案、換工作表或改標題列時一律清空——那三個動作會改變列號指的是哪一列。
@@ -106,7 +116,7 @@ draft → submitted → approved → publishing → published
 
 - `POST …/validate` 回傳 `issues[]`，每筆帶 `severity`、`step`（`event`／`venue`／`import`／`map`／`preview`）、`code`，必要時帶 `row` 或 `target`。缺任何一份「活動日 × venue-space」地圖是 error，不是 warning。成功時只把 workspace 的 `last_validated_version` 記為目前版本；不增加 candidate version，也不建立內容 revision。任何後續內容寫入使版本前進後，這個完成狀態自然失效；若版本在 validation 與 marker 寫入之間前進，API 回 409 並要求重新驗證，不會對舊版回報成功。
 - `POST …/preview` 回傳 `organizer-reader-preview/1`：草稿、匯入的配置與每份地圖 layout，供 Reader 樣式預覽。它不寫入任何資料。
-- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。新送審會固定一份 `organizer-submission-snapshot/2`（草稿、所選場館與使用空間的完整名稱／官方來源記錄、匯入來源 metadata、帶 `codes[]` 的全部攤位群組與每份地圖內容），以其 SHA-256 作為 approval hash；既有 `/1` snapshot 的 bytes 與 hash 保持不變。這使候選 review 不會隱性讀取日後新增的 catalog 狀態；發布仍必須把 snapshot 內的來源記錄轉成 data repository 中經 review 的 reference records、selection 與 commit/hash pin，不能直接把 D1 catalog 當成公開 reference data。
+- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。新送審固定 `organizer-submission-snapshot/3`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2` snapshot bytes/hash 保持不變。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
 - `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以 fresh session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。

@@ -43,6 +43,10 @@ export type OrganizerEventDraft = {
     label: string;
     url: string | null;
   };
+  references?: {
+    organizerAssignments: Array<{ organizerId: string; role: "lead" | "co-organizer" | "partner" }>;
+    categoryCatalog: { id: string; organizerId: string; revision: string } | null;
+  };
 };
 
 const ID = /^[a-z0-9][a-z0-9-]*$/u;
@@ -58,7 +62,7 @@ function text(value: unknown) {
 }
 
 function httpsUrl(value: string | null) {
-  if (value === null) return true;
+  if (!value) return false;
   try {
     const url = new URL(value);
     return url.protocol === "https:" && url.hostname !== "";
@@ -164,11 +168,27 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
   const sourceUrl = value.officialSource.url === null || value.officialSource.url === undefined
     ? null
     : text(value.officialSource.url);
+  let references: OrganizerEventDraft["references"];
+  if (value.references !== undefined) {
+    const input = value.references;
+    if (!record(input) || !Array.isArray(input.organizerAssignments)) return null;
+    const organizerAssignments: NonNullable<OrganizerEventDraft["references"]>["organizerAssignments"] = [];
+    for (const assignment of input.organizerAssignments) {
+      if (!record(assignment) || !["lead", "co-organizer", "partner"].includes(String(assignment.role))) return null;
+      organizerAssignments.push({ organizerId: text(assignment.organizerId), role: assignment.role as "lead" | "co-organizer" | "partner" });
+    }
+    const category = input.categoryCatalog;
+    if (category !== null && !record(category)) return null;
+    references = { organizerAssignments, categoryCatalog: category === null ? null : {
+      id: text(category.id), organizerId: text(category.organizerId), revision: text(category.revision),
+    } };
+  }
   return {
     schema: "organizer-event-draft/1",
     event: { id: eventId, name, days },
     venue: { assignments },
     officialSource: { label: text(value.officialSource.label), url: sourceUrl },
+    ...(references ? { references } : {}),
   };
 }
 

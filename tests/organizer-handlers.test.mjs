@@ -48,6 +48,21 @@ function cookieFrom(response) {
   return (response.headers.get("set-cookie") ?? "").split(";")[0];
 }
 
+async function createReferenceSelection(candidateId, cookie, expectedVersion = 1) {
+  const path = `/api/organizer/events/${candidateId}/references`;
+  const organizer = await handlers.createOrganizerReferenceEntry(request(path, "POST", {
+    expectedVersion, kind: "organizer", name: "測試主辦", sourceUrl: "https://organizer.example/",
+  }, cookie), candidateId);
+  assert.equal(organizer.status, 201);
+  const organizerId = (await organizer.json()).created.id;
+  const catalog = await handlers.createOrganizerReferenceEntry(request(path, "POST", {
+    expectedVersion, kind: "category-catalog", organizerId, name: "官方分類", sourceUrl: "https://organizer.example/categories",
+    categories: [{ label: "原創", description: "原創作品" }, { label: "二創", description: "" }],
+  }, cookie), candidateId);
+  assert.equal(catalog.status, 201);
+  return { organizerAssignments: [{ organizerId, role: "lead" }], categoryCatalog: (await catalog.json()).created };
+}
+
 async function signIn(email, audience = "circle") {
   await handlers.requestLink(request("/api/auth/request-link", "POST", { email, turnstileToken: "solved", audience }));
   const path = audience === "organizer" ? "organizer" : "circle";
@@ -337,7 +352,7 @@ test("organizer onboarding persists real progress and completes without a candid
   ), candidateId);
   assert.equal(invalid.status, 422);
   assert.deepEqual((await invalid.json()).issues.map((issue) => issue.code), [
-    "missing_event_id", "missing_source", "missing_days", "missing_venue",
+    "missing_event_id", "missing_source", "invalid_source_url", "missing_days", "missing_venue",
   ]);
 
   const preference = await handlers.updateOrganizerWorkspacePreference(request(
@@ -347,6 +362,7 @@ test("organizer onboarding persists real progress and completes without a candid
   assert.equal(preference.status, 200);
 
   const draft = {
+    references: await createReferenceSelection(candidateId, ownerCookie),
     schema: "organizer-event-draft/1",
     event: { id: "pf45-rf14", name: "PF45 x RF14", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
     venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
@@ -393,6 +409,7 @@ test("organizer detail uses formal map validation for readiness", async () => {
   const { candidateId } = await created.json();
   const ownerCookie = await signIn("owner@example.test", "organizer");
   const draft = {
+    references: await createReferenceSelection(candidateId, ownerCookie),
     schema: "organizer-event-draft/1",
     event: { id: "map-readiness", name: "地圖 readiness 測試", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
     venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["A"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
@@ -450,6 +467,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   const editorCookie = await signIn("editor@example.test", "organizer");
 
   const draft = {
+    references: await createReferenceSelection(candidateId, ownerCookie),
     schema: "organizer-event-draft/1",
     event: {
       id: "pf45-rf14",
@@ -541,24 +559,26 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   ), candidateId);
   assert.equal(submitted.status, 200);
   const submissionSnapshot = JSON.parse((await repository.getOrganizerSubmissionSnapshot(candidateId, 5)).snapshot_json);
-  assert.equal(submissionSnapshot.schema, "organizer-submission-snapshot/2");
+  assert.equal(submissionSnapshot.schema, "organizer-submission-snapshot/3");
   assert.deepEqual(submissionSnapshot.import.rows[0].codes, ["A01", "A02"]);
   assert.equal(Object.hasOwn(submissionSnapshot.import.rows[0], "boothCode"), false);
-  assert.deepEqual(submissionSnapshot.venueReferences, {
-    schema: "organizer-venue-reference-snapshot/1",
-    venues: [{
-      id: VENUE_ID,
-      name: "花博公園爭艷館",
-      sourceUrl: "https://www.expopark.taipei/FieldInfo_Detail.aspx?n=205&s=1",
-      spaces: [{
-        id: VENUE_SPACE_ID,
-        venueId: VENUE_ID,
-        name: "全館",
-        sourceUrl: "https://ws.expopark.taipei/Download.ashx?u=LzAwMS9VcGxvYWQvNDAwL3JlbGZpbGUvOTAyMi8xLzQzNGEzOWM4LWZlMWYtNDIxMi05MDc3LWJhZGY0NDc2NTI5ZS5wZGY%3d&n=6Iqx5Y2a5YWs5ZyS54it6Im36aSo5bGV5Y2A5bmz6Z2i6YWN572u5ZyWLnBkZg%3d%3d",
-        defaultAreaMode: "none",
-      }],
-    }],
-  });
+  const referenceFiles = new Map(submissionSnapshot.references.files.map((file) => [file.path, new TextEncoder().encode(file.content)]));
+  const { verifyReferenceFiles } = await import('../scripts/reference-selection-utils.mjs');
+  verifyReferenceFiles(submissionSnapshot.references.selection, referenceFiles, 'pf45-rf14');
+  assert.equal(JSON.parse(submissionSnapshot.references.files.find((file) => file.path.endsWith('/zhengyan-exhibition-area.json')).content).name, '爭艷館展區');
+  assert.equal(submissionSnapshot.contentUpdatedAt, new Date((await repository.listOrganizerCandidateRevisions(candidateId)).find((row) => row.version === 5).created_at).toISOString());
+  const { createHash } = await import('node:crypto');
+  for (const file of submissionSnapshot.references.files) assert.equal(createHash('sha256').update(file.content).digest('hex'), file.sha256);
+  const beforeCatalogChange = await repository.getOrganizerSubmissionSnapshot(candidateId, 5);
+  await database.prepare("UPDATE organizer_reference_records SET display_name = '新版顯示名稱' WHERE kind = 'category-catalog'").run();
+  assert.deepEqual(await repository.getOrganizerSubmissionSnapshot(candidateId, 5), beforeCatalogChange);
+  const { readFile } = await import('node:fs/promises');
+  const definition = JSON.parse(await readFile(new URL('../fixtures/events/sample/event.json', import.meta.url), 'utf8'));
+  const { parseEventDefinition } = await environment.runner.import('/app/event-catalog.ts');
+  const publishedShape = { ...definition, id: 'pf45-rf14', organizerAssignments: draft.references.organizerAssignments,
+    categoryCatalog: draft.references.categoryCatalog,
+    venueAssignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ['north', 'south'] }] };
+  assert.equal(parseEventDefinition(publishedShape, submissionSnapshot.references.files.map((file) => JSON.parse(file.content))).organizerAssignments[0].name, '測試主辦');
 
   const disabled = await handlers.adminReviewOrganizerCandidate(request(
     `/api/admin/organizer/events/${candidateId}/review`, "POST",
@@ -648,6 +668,73 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.equal(resumed.status, 200);
   assert.deepEqual(dispatched, [jobId, jobId, jobId, jobId]);
   assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
+});
+
+test("reference catalog creation enforces actor, editable state and version without partial writes", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "References", ownerEmail: "owner@example.test" }, adminCookie));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const strangerCookie = await signIn("stranger@example.test", "organizer");
+  const path = `/api/organizer/events/${candidateId}/references`;
+  const body = { expectedVersion: 1, kind: "organizer", name: "新主辦", sourceUrl: "https://organizer.example/" };
+  const send = (input, cookie = ownerCookie) => handlers.createOrganizerReferenceEntry(request(path, "POST", input, cookie), candidateId);
+  const counts = async () => ({ records: (await repository.listOrganizerReferenceRecords()).length,
+    audits: (await database.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'organizer_reference.created'").first()).n });
+  const before = await counts();
+  assert.equal((await handlers.createOrganizerReferenceEntry(request(path, "POST", body), candidateId)).status, 401);
+  assert.equal((await send(body, strangerCookie)).status, 404);
+  assert.equal((await send({ ...body, expectedVersion: 2 })).status, 409);
+  for (const sourceUrl of ["", "http://organizer.example/", "not a URL"]) assert.equal((await send({ ...body, sourceUrl })).status, 400);
+  assert.deepEqual(await counts(), before);
+  const references = await createReferenceSelection(candidateId, ownerCookie);
+  const catalogBody = { expectedVersion: 1, kind: "category-catalog", name: "分類", sourceUrl: "https://organizer.example/categories",
+    organizerId: references.organizerAssignments[0].organizerId, categories: [{ label: "原創", description: "" }] };
+  for (const categories of [[], [{ label: "" }], [{ label: "同名" }, { label: "同名" }]]) assert.equal((await send({ ...catalogBody, categories })).status, 400);
+  assert.equal((await send({ ...catalogBody, organizerId: "unknown-organizer" })).status, 409);
+  const afterValid = await counts();
+  for (const status of ["submitted", "approved", "publishing", "published", "failed"]) {
+    await database.prepare("UPDATE organizer_event_candidates SET status = ?1 WHERE id = ?2").bind(status, candidateId).run();
+    assert.equal((await send(body)).status, 409);
+    assert.deepEqual(await counts(), afterValid);
+  }
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'changes_requested' WHERE id = ?1").bind(candidateId).run();
+  assert.equal((await send(body, adminCookie)).status, 201);
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).current_version, 1, "catalog creation does not apply a selection");
+  const audit = await database.prepare("SELECT actor_role FROM audit_log WHERE action = 'organizer_reference.created' AND subject_id = ?1")
+    .bind(references.organizerAssignments[0].organizerId).first();
+  assert.equal(audit.actor_role, "organizer_owner");
+});
+
+test("candidate reference selection rejects wrong catalog ownership and duplicate leads, and missing references block submit", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "References", ownerEmail: "admin@example.test" }, adminCookie));
+  const { candidateId } = await created.json();
+  const references = await createReferenceSelection(candidateId, adminCookie);
+  const another = await createReferenceSelection(candidateId, adminCookie);
+  const original = await repository.getOrganizerCandidate(candidateId);
+  const draft = JSON.parse(original.current_draft_json);
+  const save = (selection, expectedVersion = 1) => handlers.updateOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "PATCH",
+    { expectedVersion, draft: { ...draft, references: selection } }, adminCookie), candidateId);
+  for (const selection of [
+    { ...references, categoryCatalog: another.categoryCatalog },
+    { ...references, organizerAssignments: [...references.organizerAssignments, ...another.organizerAssignments] },
+    { ...references, organizerAssignments: [...references.organizerAssignments, ...references.organizerAssignments] },
+    { ...references, organizerAssignments: [{ ...references.organizerAssignments[0], role: "partner" }] },
+  ]) {
+    assert.equal((await save(selection)).status, 422);
+    assert.deepEqual(await repository.getOrganizerCandidate(candidateId), original);
+  }
+  const result = await handlers.validateOrganizerCandidate(request(`/api/organizer/events/${candidateId}/validate`, "POST", {}, adminCookie), candidateId);
+  const issues = (await result.json()).issues;
+  assert.ok(issues.some((issue) => issue.code === "missing_organizer"));
+  assert.ok(issues.some((issue) => issue.code === "missing_category_catalog"));
+  assert.ok(issues.some((issue) => issue.code === "invalid_source_url"));
+  assert.equal((await save(references)).status, 200);
+  assert.equal((await save(another)).status, 409);
+  assert.deepEqual(JSON.parse((await repository.getOrganizerCandidate(candidateId)).current_draft_json).references, references);
 });
 
 test("import API persists confirmed normalized rows and rejects stale versions", async () => {

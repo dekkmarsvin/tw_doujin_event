@@ -92,3 +92,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046 |
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
 | [0060](./0060-review-ends-when-scoped-blockers-are-resolved.md) | 範圍內 blocker 解決後，review 必須結束 | 生效；部分取代 0040 |
+| [0061](./0061-organizer-snapshot-pins-complete-reference-records.md) | Organizer 送審固定完整 reference 記錄 | 生效 |
