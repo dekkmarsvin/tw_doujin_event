@@ -9,6 +9,8 @@ import { isPublishedEventMap } from "../app/event-map";
 import { resolveCanonicalMapPeriod } from "../app/map-contribution-draft";
 import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
 import { createGitHubInstallationProbe } from "../app/github-installation-probe";
+import { createGitHubRemoteAuditor, GITHUB_PUBLICATION_REPOSITORIES } from "../app/github-remote-auditor";
+import { createGitHubAppTokenProvider } from "../app/github-app-token";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -320,6 +322,16 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? "",
     now: () => Date.now(),
   });
+  const githubRemoteAuditor = createGitHubRemoteAuditor({
+    tokenProvider: createGitHubAppTokenProvider({
+      appId: env.GITHUB_APP_ID ?? "",
+      installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
+      privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
+      repositories: GITHUB_PUBLICATION_REPOSITORIES,
+      permissions: { contents: "read", pull_requests: "read", metadata: "read" },
+      now: () => Date.now(),
+    }),
+  });
   return createCirclePortalHandlers({
     repository,
     sendMail: async (message) => {
@@ -385,6 +397,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     },
     readPublishedEventMap,
     githubInstallationProbe,
+    githubRemoteAuditor,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.

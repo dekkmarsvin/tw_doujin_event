@@ -412,6 +412,11 @@ export const IDENTITY_TABLES = [
     "workflow_run_id INTEGER",
     "failure_code TEXT",
     "retryable INTEGER NOT NULL DEFAULT 1",
+    // Sticky marker: a driver may have sent a remote mutation even when no
+    // checkpoint was returned. It is deliberately separate from confirmed
+    // remote metadata so recovery can distinguish "nothing attempted" from
+    // "the remote result is unknown".
+    "remote_write_intent_at INTEGER",
     "error TEXT",
     "created_at INTEGER NOT NULL",
     "updated_at INTEGER NOT NULL",
@@ -500,6 +505,7 @@ export const IDENTITY_COLUMN_MIGRATIONS = [
   { table: "organizer_import_rows", column: "codes_json", sql: "ALTER TABLE organizer_import_rows ADD COLUMN codes_json TEXT" },
   { table: "organizer_publication_jobs", column: "failure_code", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN failure_code TEXT" },
   { table: "organizer_publication_jobs", column: "retryable", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN retryable INTEGER NOT NULL DEFAULT 1" },
+  { table: "organizer_publication_jobs", column: "remote_write_intent_at", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN remote_write_intent_at INTEGER" },
   { table: "accounts", column: "deletion_started_at", sql: "ALTER TABLE accounts ADD COLUMN deletion_started_at INTEGER" },
   { table: "login_tokens", column: "audience", sql: "ALTER TABLE login_tokens ADD COLUMN audience TEXT NOT NULL DEFAULT 'circle'" },
   { table: "login_tokens", column: "minted_by", sql: "ALTER TABLE login_tokens ADD COLUMN minted_by TEXT" },

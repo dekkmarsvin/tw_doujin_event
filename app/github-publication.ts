@@ -90,7 +90,8 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     throw tokenConfigurationFailure();
   }
 
-  const request = async <T>(repository: string, path: string, init?: RequestInit, expectedStatus?: number): Promise<T> => {
+  const requestRaw = async (repository: string, path: string, init?: RequestInit,
+    acceptedStatuses: readonly number[] = []): Promise<Response> => {
     let retriedUnauthorized = false;
     while (true) {
       const token = await tokenForRequest();
@@ -120,17 +121,61 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
         try { tokenProvider.invalidate(token); } catch { throw new PublicationFailure("github_app_request", "GitHub App token request failed.", true); }
         continue;
       }
-      if (!ok || (expectedStatus !== undefined && status !== expectedStatus)) {
+      if (!ok && !acceptedStatuses.includes(status)) {
         const retryable = status === 429 || status >= 500;
         throw new PublicationFailure("github_api_response", "GitHub API request was rejected.", retryable);
       }
-      if (status === 204) return undefined as T;
-      try { return await response.json() as T; }
-      catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+      return response;
     }
   };
 
+  const request = async <T>(repository: string, path: string, init?: RequestInit,
+    expectedStatus?: number | readonly number[]): Promise<T> => {
+    const expected = expectedStatus === undefined ? undefined
+      : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    const response = await requestRaw(repository, path, init, expected);
+    const status = response.status;
+    if (expected && !expected.includes(status)) {
+      throw new PublicationFailure("github_api_response", "GitHub API request was rejected.", status === 429 || status >= 500);
+    }
+    if (status === 204) return undefined as T;
+    if (status === 404 && expected?.includes(404)) return null as T;
+    try { return await response.json() as T; }
+    catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+  };
+
+  const requestPage = async <T>(repository: string, path: string, init?: RequestInit) => {
+    const response = await requestRaw(repository, path, init);
+    if (response.status !== 200) {
+      throw new PublicationFailure("github_api_response", "GitHub API request was rejected.", response.status === 429 || response.status >= 500);
+    }
+    let body: T;
+    try { body = await response.json() as T; }
+    catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+    return { body, headers: response.headers };
+  };
+
+  const readBranch = async (repository: string, branch: string) => {
+    const response = await requestRaw(repository, `/branches/${encodeURIComponent(branch)}`, undefined, [200, 404]);
+    if (response.status === 404) return null;
+    let body: unknown;
+    try { body = await response.json() as unknown; }
+    catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+    if (!body || typeof body !== "object" || typeof (body as { name?: unknown }).name !== "string") {
+      throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true);
+    }
+    return { name: (body as { name: string }).name };
+  };
+
+  const listPullRequestsPage = (repository: string, branch: string, page: number) =>
+    requestPage<Array<{ number?: unknown; state?: unknown; merged_at?: unknown; head?: unknown }>>(
+      repository,
+      `/pulls?head=${encodeURIComponent(`${options.owner}:${branch}`)}&state=all&per_page=100&page=${page}`,
+    );
+
   return {
+    readBranch,
+    listPullRequestsPage,
     createApprovalCheck(repository: string, headSha: string, jobId: string, approvalHash: string) {
       return request(repository, "/check-runs", {
         method: "POST", body: JSON.stringify({
