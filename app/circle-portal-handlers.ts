@@ -1938,7 +1938,7 @@ export function createCirclePortalHandlers({
         },
         rows: imported.rows.map((row) => ({
           sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
-          areaId: row.area_id, boothCode: row.booth_code, circleName: row.circle_name,
+          areaId: row.area_id, codes: row.codes, circleName: row.circle_name,
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
@@ -2099,7 +2099,7 @@ export function createCirclePortalHandlers({
     // case this workspace exists for — paid for the full booth list once per
     // scope on validate, on preview and again on submit.
     const importedRows = (imported?.rows ?? []).map((row) => ({
-      dayId: row.day_id, venueSpaceId: row.venue_space_id, boothCode: row.booth_code,
+      dayId: row.day_id, venueSpaceId: row.venue_space_id, codes: row.codes,
     }));
     const contents = new Map<string, string>();
     for (const [index, detail] of (await Promise.all(
@@ -2176,7 +2176,7 @@ export function createCirclePortalHandlers({
     const days = new Set(draft.event.days.map((day) => day.id));
     const spaces = new Map(draft.venue.assignments.map((assignment) => [assignment.venueSpaceId, assignment]));
     const normalized: Array<{
-      sourceRow: number; dayId: string; venueSpaceId: string; areaId: string; boothCode: string;
+      sourceRow: number; dayId: string; venueSpaceId: string; areaId: string; codes: string[];
       circleName: string; stableKey: string | null; identityGroup: string | null;
     }> = [];
     const placements = new Set<string>();
@@ -2187,7 +2187,8 @@ export function createCirclePortalHandlers({
       const dayId = typeof row.dayId === "string" ? row.dayId.normalize("NFKC").trim() : "";
       const venueSpaceId = typeof row.venueSpaceId === "string" ? row.venueSpaceId.normalize("NFKC").trim() : "";
       const submittedAreaId = typeof row.areaId === "string" ? row.areaId.normalize("NFKC").trim() : "";
-      const boothCode = typeof row.boothCode === "string" ? row.boothCode.normalize("NFKC").trim() : "";
+      const codes = Array.isArray(row.codes) && row.codes.every((code) => typeof code === "string")
+        ? row.codes.map((code: string) => code.normalize("NFKC").trim()) : [];
       const circleName = typeof row.circleName === "string" ? row.circleName.normalize("NFKC").trim().replace(/\s+/gu, " ") : "";
       const stableKey = row.stableKey === null ? null : typeof row.stableKey === "string" ? row.stableKey.normalize("NFKC").trim() : undefined;
       const identityGroup = row.identityGroup === null ? null : typeof row.identityGroup === "string" ? row.identityGroup.normalize("NFKC").trim() : undefined;
@@ -2195,15 +2196,17 @@ export function createCirclePortalHandlers({
       const areaId = assignment?.areaMode === "none" ? "ALL" : submittedAreaId;
       const areaAllowed = assignment?.areaMode === "none" || assignment?.areaIds.includes(areaId);
       if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 1 || !days.has(dayId)
-        || !assignment || !areaAllowed || !boothCode || boothCode.length > 80
+        || !assignment || !areaAllowed || codes.length === 0 || codes.some((code) => !code || code.length > 80)
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
         || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
         return json({ error: `來源列 ${String(sourceRow)} 與活動日、venue-space、area 或 identity mapping 不一致。` }, 422);
       }
-      const placement = `${dayId}\u0000${venueSpaceId}\u0000${boothCode.toLocaleLowerCase("en-US")}`;
-      if (placements.has(placement)) return json({ error: `來源列 ${sourceRow} 的攤位重複。` }, 422);
-      placements.add(placement);
-      normalized.push({ sourceRow: sourceRow as number, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, identityGroup });
+      for (const code of codes) {
+        const placement = `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;
+        if (placements.has(placement)) return json({ error: `來源列 ${sourceRow} 的攤位 ${code} 重複。` }, 422);
+        placements.add(placement);
+      }
+      normalized.push({ sourceRow: sourceRow as number, dayId, venueSpaceId, areaId, codes, circleName, stableKey, identityGroup });
     }
     // The row count and per-field caps bound a normal import, but 20,000 rows
     // of maximum-length names escape to far more bytes than a Worker should
@@ -2244,7 +2247,7 @@ export function createCirclePortalHandlers({
     return resolveCandidateAuthoringScope({
       candidateId, draft,
       importedRows: (imported?.rows ?? []).map((row) => ({
-        dayId: row.day_id, venueSpaceId: row.venue_space_id, boothCode: row.booth_code,
+        dayId: row.day_id, venueSpaceId: row.venue_space_id, codes: row.codes,
       })),
     }, periodKey, venueSpaceId);
   }
@@ -2440,11 +2443,11 @@ export function createCirclePortalHandlers({
       preview: {
         schema: "organizer-reader-preview/1",
         event: draft.event, venueAssignments: draft.venue.assignments, officialSource: draft.officialSource,
-        placements: (imported?.rows ?? []).map((row) => ({
+        placements: (imported?.rows ?? []).flatMap((row) => row.codes.map((boothCode) => ({
           sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
-          areaId: row.area_id, boothCode: row.booth_code, circleName: row.circle_name,
+          areaId: row.area_id, boothCode, circleName: row.circle_name,
           identityGroup: row.identity_group,
-        })),
+        }))),
         maps: mapArtifacts.filter(Boolean),
       },
     });
@@ -2519,7 +2522,7 @@ export function createCirclePortalHandlers({
       };
     });
     const snapshotJson = JSON.stringify({
-      schema: "organizer-submission-snapshot/1", candidateId, candidateVersion: expectedVersion,
+      schema: "organizer-submission-snapshot/2", candidateId, candidateVersion: expectedVersion,
       eventId: draft.event.id, draft,
       venueReferences: {
         schema: "organizer-venue-reference-snapshot/1",
@@ -2544,7 +2547,7 @@ export function createCirclePortalHandlers({
         },
         rows: imported.rows.map((row) => ({
           sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
-          areaId: row.area_id, boothCode: row.booth_code, circleName: row.circle_name,
+          areaId: row.area_id, codes: row.codes, circleName: row.circle_name,
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,

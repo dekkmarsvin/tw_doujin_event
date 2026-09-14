@@ -2189,14 +2189,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (!source) return null;
     const rows = await database.prepare(
       `SELECT id, source_id, candidate_id, source_row, day_id, venue_space_id, area_id,
-              booth_code, circle_name, stable_key, identity_group
+              booth_code, codes_json, circle_name, stable_key, identity_group
        FROM organizer_import_rows WHERE source_id = ?1 ORDER BY source_row, id`,
     ).bind(source.id).all<{
       id: string; source_id: string; candidate_id: string; source_row: number; day_id: string;
-      venue_space_id: string; area_id: string; booth_code: string; circle_name: string;
+      venue_space_id: string; area_id: string; booth_code: string; codes_json: string | null; circle_name: string;
       stable_key: string | null; identity_group: string | null;
     }>();
-    return { source, rows: rows.results };
+    return { source, rows: rows.results.map((row) => ({
+      ...row,
+      // Legacy imports remain one literal code; only a confirmed reimport splits them.
+      codes: row.codes_json === null ? [row.booth_code] : JSON.parse(row.codes_json) as string[],
+    })) };
   }
 
   async function replaceOrganizerImport(input: {
@@ -2215,7 +2219,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       dayId: string;
       venueSpaceId: string;
       areaId: string;
-      boothCode: string;
+      codes: readonly string[];
       circleName: string;
       stableKey: string | null;
       identityGroup: string | null;
@@ -2283,7 +2287,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ...chunked(input.rows, 500).map((chunk) => database.prepare(
         `INSERT INTO organizer_import_rows (
            id, source_id, candidate_id, source_row, day_id, venue_space_id, area_id,
-           booth_code, circle_name, stable_key, identity_group
+           booth_code, codes_json, circle_name, stable_key, identity_group
          ) SELECT
            lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
              substr(lower(hex(randomblob(2))), 2) || '-' ||
@@ -2292,7 +2296,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            ?1, source.candidate_id,
            CAST(json_extract(item.value, '$.sourceRow') AS INTEGER),
            json_extract(item.value, '$.dayId'), json_extract(item.value, '$.venueSpaceId'),
-           json_extract(item.value, '$.areaId'), json_extract(item.value, '$.boothCode'),
+           json_extract(item.value, '$.areaId'), json_extract(item.value, '$.codes[0]'),
+           json_extract(item.value, '$.codes'),
            json_extract(item.value, '$.circleName'), json_extract(item.value, '$.stableKey'),
            json_extract(item.value, '$.identityGroup')
          FROM organizer_import_sources source, json_each(?2) item

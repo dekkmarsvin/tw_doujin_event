@@ -51,6 +51,7 @@ import {
   buildOrganizerImportMetadata,
   buildOrganizerImportSample,
   prepareOrganizerImport,
+  suggestOrganizerBoothCodeWidth,
   toOrganizerCsv,
   type OrganizerImportFieldMapping,
   type OrganizerImportMapping,
@@ -1068,6 +1069,8 @@ function ImportPanel({ detail, onChanged, setNotice }: {
   const [area, setArea] = useState<MappingChoice>({ column: null, fixed: "" });
   const [boothColumn, setBoothColumn] = useState<number | null>(null);
   const [circleColumn, setCircleColumn] = useState<number | null>(null);
+  const [boothCodeMode, setBoothCodeMode] = useState<"single" | "delimited" | "fixed-width">("single");
+  const [boothCodeWidth, setBoothCodeWidth] = useState("");
   const [stableColumn, setStableColumn] = useState<number | null>(null);
   const [previewRequested, setPreviewRequested] = useState(false);
   const [overrides, setOverrides] = useState<OrganizerImportOverrides>({});
@@ -1121,10 +1124,14 @@ function ImportPanel({ detail, onChanged, setNotice }: {
       venueSpace: fieldMapping(venueSpace, venueSpace.column === null ? undefined : venueSpaceValues),
       ...(requiresAreaMapping ? { area: fieldMapping(area) } : {}),
       boothCode: { column: boothColumn }, circleName: { column: circleColumn },
+      boothCodeMode, ...(boothCodeMode === "fixed-width" ? { boothCodeWidth: Number(boothCodeWidth) } : {}),
       ...(stableColumn === null ? {} : { stableKey: { column: stableColumn } }),
     };
-  }, [day, venueSpace, area, boothColumn, circleColumn, stableColumn, requiresAreaMapping, dayValues, venueSpaceValues]);
+  }, [day, venueSpace, area, boothColumn, circleColumn, stableColumn, requiresAreaMapping, dayValues, venueSpaceValues, boothCodeMode, boothCodeWidth]);
 
+  const suggestedWidth = useMemo(() => sheet && boothColumn !== null
+    ? suggestOrganizerBoothCodeWidth(sheet.rows.slice(headerRow).map((row) => String(row.cells[boothColumn] ?? ""))) : null,
+  [sheet, boothColumn, headerRow]);
   const excludedRows = useMemo(() => excluded.map((row) => row.sourceRow), [excluded]);
   const prepared = useMemo(() => {
     if (!previewRequested || !sheet || !mapping) return null;
@@ -1200,11 +1207,12 @@ function ImportPanel({ detail, onChanged, setNotice }: {
 
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>檔案只在你的瀏覽器讀取，不會上傳；送出的是你確認過的資料。</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
+    {detail.import && <SavedImportList detail={detail} />}
     <div className={styles.importGrid}>
       <label>來源檔案<input type="file" disabled={!editable} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        forgetPreview();
+        forgetPreview(); setBoothCodeMode("single"); setBoothCodeWidth("");
         setNotice({ kind: "busy", message: "正在讀取檔案…" });
         void readOrganizerWorkbook(file).then((workbook) => {
           setFileName(file.name); setBytes(workbook.bytes); setSheets(workbook.sheets);
@@ -1224,7 +1232,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
       </div>
       <div className={styles.sampleActions}>
         <button type="button" className={styles.secondary} onClick={() => downloadText(`${detail.draft.event.id ?? "event"}-攤位名單範例.csv`, toOrganizerCsv([sample.header, ...sample.rows]), "text/csv;charset=utf-8")}>下載範例 CSV</button>
-        <p>主辦內部編號留空也可以匯入，填了才能跨活動認出同一個社團。</p>
+        <p>主辦內部編號留空也可以匯入，供主辦自行核對，不代表跨活動社團識別。</p>
       </div>
     </div>}
     {sheet && <>
@@ -1235,6 +1243,17 @@ function ImportPanel({ detail, onChanged, setNotice }: {
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
         <ColumnSelect label="社團名稱" value={circleColumn} header={header} required onChange={setCircleColumn} />
         <ColumnSelect label="主辦內部編號（選填）" value={stableColumn} header={header} onChange={setStableColumn} />
+      </div>
+      <div className={styles.importGrid}>
+        <label>攤位代碼格式<select value={boothCodeMode} onChange={(event) => { setBoothCodeMode(event.target.value as typeof boothCodeMode); setBoothCodeWidth(""); }}>
+          <option value="single">一列一個代碼</option><option value="delimited">用分隔符號分開（A01、A02）</option><option value="fixed-width">固定字元數連寫（A01A02）</option>
+        </select></label>
+        {boothCodeMode === "fixed-width" && <label>每個代碼的字元數<input type="number" min={1} max={80} value={boothCodeWidth} onChange={(event) => setBoothCodeWidth(event.target.value)} />
+          <small>請核對原始名單後填入；不會自動套用。</small>
+          {suggestedWidth !== null && <button type="button" className={styles.ghost} onClick={() => setBoothCodeWidth(String(suggestedWidth))}>確認使用建議的 {suggestedWidth} 個字元</button>}
+        </label>}
+        {boothCodeMode === "delimited" && <p>支援空白、逗號、頓號、分號與斜線。</p>}
+        {boothCodeMode === "single" && suggestedWidth !== null && <p role="status">名單可能含合併攤位；例如每 {suggestedWidth} 個字元為一碼。請核對格式再儲存。</p>}
       </div>
       <div className={styles.row}>
         <button type="button" disabled={!mapping} onClick={() => setPreviewRequested(true)}>預覽對應結果</button>
@@ -1257,7 +1276,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
       </div>
       {prepared && !prepared.ok && <p className={styles.issueError}>{prepared.message}</p>}
       {result && <div className={styles.importPreview}>
-        <div className={styles.validationSummary}><b>{result.rows.length} 列可匯入</b><span>{result.rejected.length} 列待修正</span><span>{excluded.length} 列已移除</span></div>
+        <div className={styles.validationSummary}><b>{result.rows.length} 列 → {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 列待修正</span><span>{excluded.length} 列已移除</span></div>
         {derived.length > 0 && <div className={styles.derivedSummary}>
           <h4>這份檔案裡的場館空間與展區</h4>
           {derived.map((space) => <div key={space.venueSpaceId} className={space.declared ? undefined : styles.issueError}>
@@ -1270,14 +1289,15 @@ function ImportPanel({ detail, onChanged, setNotice }: {
           {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場館空間會變成沒有攤位。</p>}
           <p>儲存時會把分區空間的展區寫進活動設定；無分區空間固定使用 ALL。沒出現在檔案裡的使用空間會標示為未匯入。</p>
         </div>}
+        {result.issues.filter((issue) => issue.severity === "warning").slice(0, 10).map((issue) => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
         <table>
-          <thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>社團識別</th><th /></tr></thead>
+          <thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
           {result.rejected.length > 0 && <tbody>
             <tr className={styles.rowGroup}><td colSpan={columns}>待修正 {result.rejected.length} 列<span>填好標記的欄位，這一列就會移到可匯入。</span></td></tr>
             {result.rejected.slice(0, 100).map((row) => <RejectedImportRow key={row.sourceRow} row={row} columns={columns}
               dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping}
               overrides={overrides[row.sourceRow]}
-              duplicate={result.issues.find((issue) => issue.code === "duplicate_booth" && issue.row === row.sourceRow)?.message ?? null}
+              duplicate={result.issues.find((issue) => issue.severity === "error" && issue.row === row.sourceRow)?.message ?? null}
               onCorrect={(field, value) => correct(row.sourceRow, field, value)} onRemove={() => remove(row)} />)}
           </tbody>}
           <tbody>
@@ -1285,8 +1305,8 @@ function ImportPanel({ detail, onChanged, setNotice }: {
             {result.rows.slice(0, 100).map((row) => <tr key={row.sourceRow}>
               <td>{row.sourceRow}</td><td>{row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>
               {requiresAreaMapping && <td>{row.areaId}</td>}
-              <td>{row.boothCode}</td><td>{row.circleName}</td><td>{row.identityGroup ?? "未合併"}</td>
-              <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={() => remove(row)}>移除</button></td>
+              <td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
+              <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>移除</button></td>
             </tr>)}
           </tbody>
           {excluded.length > 0 && <tbody>
@@ -1308,6 +1328,41 @@ function ImportPanel({ detail, onChanged, setNotice }: {
         {(result.rows.length > 100 || result.rejected.length > 100) && <p>每一組先顯示 100 列；儲存時會包含全部確認列。</p>}
       </div>}
     </>}
+  </section>;
+}
+
+function SavedImportList({ detail }: { detail: OrganizerEventDetail }) {
+  const [query, setQuery] = useState("");
+  const [day, setDay] = useState("");
+  const [space, setSpace] = useState("");
+  const [descending, setDescending] = useState(false);
+  const [page, setPage] = useState(0);
+  const filtered = useMemo(() => {
+    const needle = query.normalize("NFKC").toLocaleLowerCase("zh-Hant");
+    return (detail.import?.rows ?? []).filter((row) => (!day || row.dayId === day) && (!space || row.venueSpaceId === space)
+      && [row.circleName, row.stableKey ?? "", ...row.codes].some((value) => value.toLocaleLowerCase("zh-Hant").includes(needle)))
+      .toSorted((a, b) => (descending ? -1 : 1) * a.codes[0].localeCompare(b.codes[0], "zh-Hant", { numeric: true }));
+  }, [detail.import, query, day, space, descending]);
+  const pages = Math.max(1, Math.ceil(filtered.length / 100));
+  const shownPage = Math.min(page, pages - 1);
+  const savedDays = [...new Set(detail.import?.rows.map((row) => row.dayId))];
+  const savedSpaces = [...new Set(detail.import?.rows.map((row) => row.venueSpaceId))];
+  return <section aria-label="已儲存的攤位清單" className={styles.importPreview}>
+    <h4>已儲存的攤位清單</h4>
+    <p>{detail.import?.rows.length ?? 0} 列・{detail.import?.rows.reduce((total, row) => total + row.codes.length, 0) ?? 0} 個攤位代碼。此處供檢視；更新內容請重新匯入。</p>
+    <div className={styles.importGrid}>
+      <label>搜尋清單<input type="search" value={query} placeholder="社團、攤位或主辦內部編號" onChange={(event) => { setQuery(event.target.value); setPage(0); }} /></label>
+      <label>清單活動日<select value={day} onChange={(event) => { setDay(event.target.value); setPage(0); }}><option value="">全部活動日</option>{savedDays.map((id) => <option key={id} value={id}>{organizerDayLabel(detail.draft.event.days, id)}</option>)}</select></label>
+      <label>清單使用空間<select value={space} onChange={(event) => { setSpace(event.target.value); setPage(0); }}><option value="">全部使用空間</option>{savedSpaces.map((id) => <option key={id} value={id}>{organizerVenueSpaceLabel(detail.venueCatalog, id)}</option>)}</select></label>
+      <label>攤位排序<select value={descending ? "desc" : "asc"} onChange={(event) => { setDescending(event.target.value === "desc"); setPage(0); }}><option value="asc">代碼由小到大</option><option value="desc">代碼由大到小</option></select></label>
+    </div>
+    <p role="status">符合 {filtered.length} 列・第 {shownPage + 1} / {pages} 頁</p>
+    <div className={`${styles.sampleTable} ${styles.savedImportTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th><th>展區</th><th>攤位代碼</th><th>社團名稱</th><th>主辦內部編號</th></tr></thead>
+      <tbody>{filtered.slice(shownPage * 100, (shownPage + 1) * 100).map((row, index) => <tr key={`${row.sourceRow}-${index}`}>
+        <td>{row.sourceRow}</td><td>{organizerDayLabel(detail.draft.event.days, row.dayId)}</td><td>{organizerVenueSpaceLabel(detail.venueCatalog, row.venueSpaceId)}</td><td>{row.areaId}</td><td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
+      </tr>)}</tbody></table></div>
+    {filtered.length === 0 && <p>沒有符合條件的攤位。</p>}
+    <div className={styles.row}><button type="button" className={styles.ghost} disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={shownPage + 1 >= pages} onClick={() => setPage(shownPage + 1)}>下一頁</button></div>
   </section>;
 }
 
@@ -1350,7 +1405,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
       {requiresArea && cell("areaId", row.areaId, "展區")}
       {cell("boothCode", row.boothCode, "攤位代碼")}
       {cell("circleName", row.circleName, "社團名稱")}
-      <td>{row.stableKey ? `stable:${row.stableKey}` : "未合併"}</td>
+      <td>{row.stableKey ?? "—"}</td>
       <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={onRemove}>移除</button></td>
     </tr>
     {duplicate && <tr className={styles.duplicateNote}><td colSpan={columns}>{duplicate}</td></tr>}
@@ -1640,7 +1695,7 @@ export function OrganizerValidationIssueCard({ issue, detail }: { issue: Organiz
   const unknown = issue.step === "map" && issue.code === "unknown_booth";
   const missing = issue.step === "map" && issue.code === "missing_booth";
   const rows = detail.import?.rows.filter((row) => row.dayId === dayId && row.venueSpaceId === venueSpaceId) ?? [];
-  const rowsByCode = new Map(rows.map((row) => [row.boothCode, row]));
+  const rowsByCode = new Map(rows.flatMap((row) => row.codes.map((code) => [code, row] as const)));
   const description = unknown
     ? `地圖有 ${issue.boothCodes?.length ?? "部分"} 個攤位代碼未出現在同一天、同一場館空間的匯入資料。`
     : missing ? `匯入資料有 ${issue.boothCodes?.length ?? "部分"} 個攤位代碼未出現在這份地圖。`

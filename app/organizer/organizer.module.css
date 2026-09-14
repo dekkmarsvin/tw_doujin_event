@@ -181,6 +181,7 @@
 .sampleActions p { margin: 0; font-size: 10px; }
 .importPreview, .sampleTable { margin-top: 18px; overflow: auto; }
 .sampleTable { margin-top: 0; }
+.savedImportTable { max-height: 420px; }
 .importPreview table, .sampleTable table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .importPreview th, .importPreview td, .sampleTable th, .sampleTable td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; white-space: nowrap; }
 .importPreview th, .sampleTable th { color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
