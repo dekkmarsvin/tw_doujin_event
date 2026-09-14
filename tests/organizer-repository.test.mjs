@@ -18,6 +18,9 @@ const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasSt
 const { createGitHubPublicationAdapter } = await environment.runner.import("/app/github-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
+const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
+const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
+const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -72,6 +75,54 @@ function checkpoint(step) {
     preparing_main: { main_pr_number: 2, main_head_sha: "c".repeat(40) },
     merging_main: { main_merge_sha: "d".repeat(40) }, waiting_deployment: { workflow_run_id: 3 } })[step] ?? {};
 }
+
+test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {
+  const { id, jobId } = await publicationFixture();
+  t.mock.method(Date, "now", () => NOW + 10);
+  const sessionId = "runtime-admin-session";
+  await repository.addAdmin("admin@example.test", "bootstrap", NOW);
+  await repository.createSession(adminId, NOW, NOW + 60_000, sessionId);
+  const secret = "runtime-test-secret";
+  const cookie = `__Host-ff47_session=${sessionId}.${await hmacSign(secret, sessionId)}`;
+  const request = (path, method = "GET") => new Request(`https://portal.example.test${path}`, { method, headers: {
+    cookie, origin: "https://portal.example.test", "content-type": "application/json",
+  }, ...(method === "POST" ? { body: "{}" } : {}) });
+  const base = { DB: database, EVENT_ID: "sample", SESSION_SECRET: secret, HASH_PEPPER: "pepper",
+    ADMIN_EMAILS: "admin@example.test", ASSETS: { fetch: async () => new Response(null, { status: 404 }) } };
+  const path = `/api/organizer/events/${id}`;
+  for (const [mode, preview, expected] of [["disabled", true, false], ["fake", false, false], ["fake", true, true], ["github", false, true]]) {
+    const env = { ...base, ORGANIZER_PUBLICATION_MODE: mode, ...(preview ? { PREVIEW_MAIL_SINK: "d1" } : {}) };
+    const runtime = portalHandlers({ request: request(path), env });
+    const detail = await runtime.getOrganizerCandidate(request(path), id);
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).publicationAvailable, expected, `${mode}/${preview}`);
+  }
+  const lease = await repository.claimOrganizerPublicationLease({ jobId, now: NOW + 9, ttlMs: 30_000 });
+  const step = (await repository.getOrganizerPublicationJob(jobId)).step;
+  assert.equal(await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: step, nextStep: step, status: "failed", retryable: true, failureCode: "dispatch_failed", error: "Test dispatch failure", now: NOW + 9 }), true);
+  await repository.releaseOrganizerPublicationLease(jobId, lease.token);
+  const retryPath = `/api/organizer/publications/${jobId}/retry`;
+  const runtime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
+  const response = await runtime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "completed");
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
+});
+
+test("one fake dispatch completes a queued job and disabled mode never creates a GitHub driver", async () => {
+  const { jobId } = await publicationFixture();
+  const input = { repository, eventExists: async () => false, now: () => NOW + 10, github: () => { throw new Error("No GitHub calls allowed"); } };
+  assert.equal(createPublicationDispatcher({ ...input, mode: "disabled", allowFake: true }), undefined);
+  assert.equal(createPublicationDispatcher({ ...input, mode: "fake", allowFake: false }), undefined);
+  const dispatch = createPublicationDispatcher({ ...input, mode: "fake", allowFake: true });
+  await dispatch(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.status, "published"); assert.equal(job.step, "completed");
+  assert.equal(job.remote_write_intent_at, null, "fake makes no remote publication claim");
+  await dispatch(jobId);
+  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), job);
+});
 
 test("expired publication lease records a retryable failure without losing its step", async () => {
   const { jobId } = await publicationFixture();

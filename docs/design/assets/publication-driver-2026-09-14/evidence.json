@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-09-14T14:43:12.898Z",
+  "base": "http://127.0.0.1:8789",
+  "sourceHead": "9636d6d921549e478b32e54366c7971721b1eefd",
+  "browser": "153.0.4234.32",
+  "candidateId": "07b8f98a-a038-457a-9221-f705956754f4",
+  "publicationJobId": "753c45c5-b8a6-4950-a2ed-5e3bec77d962",
+  "synthetic": true,
+  "mode": "fake",
+  "preparation": "Authenticated normal APIs created fixture, references, import, map, validation, preview and submission. No response mocks or production writes.",
+  "uiAction": "Clicked 核准並發布 once, observed completion, reloaded same job",
+  "final": {
+    "event": "published",
+    "job": "published",
+    "step": "completed"
+  },
+  "errors": []
+}

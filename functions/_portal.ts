@@ -11,6 +11,8 @@ import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
 import { createGitHubInstallationProbe } from "../app/github-installation-probe";
 import { createGitHubRemoteAuditor, GITHUB_PUBLICATION_REPOSITORIES } from "../app/github-remote-auditor";
 import { createGitHubAppTokenProvider } from "../app/github-app-token";
+import { createGitHubPublicationDriver } from "../app/github-publication-driver";
+import { createPublicationDispatcher } from "../app/publication-dispatch";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -271,6 +273,22 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
   const { request, env } = context;
   const eventId = requestedEventId(request, env);
   const repository = repositoryFor(env);
+  const publishedEvent = async (id: string) => {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return null;
+    try {
+      const { event } = await catalog(env, request, id);
+      return { dataUpdatedAt: event.dataUpdatedAt, eventEndsAt: event.eventEndsAt };
+    } catch { return null; }
+  };
+  const dispatchOrganizerPublication = createPublicationDispatcher({
+    repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1",
+    eventExists: async (id) => Boolean(await publishedEvent(id)),
+    github: () => createGitHubPublicationDriver({ publishedEvent, tokenProvider: createGitHubAppTokenProvider({
+      appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "", privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
+      repositories: GITHUB_PUBLICATION_REPOSITORIES, permissions: { contents: "write", pull_requests: "write", checks: "write", actions: "read", metadata: "read" },
+      now: () => Date.now(),
+    }) }),
+  });
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
     url: (key) => `${thumbnailOrigin.replace(/\/$/, "")}/${key}`,
@@ -398,6 +416,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     readPublishedEventMap,
     githubInstallationProbe,
     githubRemoteAuditor,
+    dispatchOrganizerPublication,
     projectCircle: async (circleId, fields, updatedAt = new Date().toISOString()) => {
       // Runs the same projection the reader runs, against the same snapshot, so
       // the preview shows the published result rather than an approximation.
@@ -430,15 +449,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       // that could drift away from it. Ill-formed ids are rejected without a
       // lookup; anything else resolves through the same cached read the rest of
       // the portal uses.
-      publishedEvent: async (id) => {
-        if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return null;
-        try {
-          const { event } = await catalog(env, request, id);
-          return { dataUpdatedAt: event.dataUpdatedAt, eventEndsAt: event.eventEndsAt };
-        } catch {
-          return null;
-        }
-      },
+      publishedEvent,
     },
   });
 }
