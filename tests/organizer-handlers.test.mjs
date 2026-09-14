@@ -16,6 +16,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test envir
 const { createIdentityRepository } = await environment.runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers } = await environment.runner.import("/app/circle-portal-handlers.ts");
 const { QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
+const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -587,6 +588,25 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "尚未登入。" });
   }
+  // Nothing dispatched the job the approval flow just created, so the timeout
+  // is the first thing that happens to it. Reading the workspace is what ends
+  // the wait, and what comes back has to tell the owner publication never
+  // began: the wording used to key on the step, and `preparing_data` — the step
+  // approval writes — is exactly the case that missed.
+  now += QUEUED_PUBLICATION_TIMEOUT_MS;
+  const stalled = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  const neverStarted = (await stalled.json()).publication;
+  assert.equal(neverStarted.status, "failed");
+  assert.equal(neverStarted.step, "preparing_data", "approval creates the job here, not on assemble");
+  assert.equal(neverStarted.started, false);
+  assert.match(publicationFailureMessage(neverStarted), /發布沒有開始/);
+  assert.equal((await handlers.adminRetryOrganizerPublication(request(
+    `/api/organizer/publications/${jobId}/retry`, "POST", {}, ownerCookie,
+  ), jobId)).status, 200);
+  assert.deepEqual(dispatched, [jobId, jobId]);
+
   const lease = await repository.claimOrganizerPublicationLease({ jobId, now, ttlMs: 30_000 });
   await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: "preparing_data",
     nextStep: "preparing_main", status: "failed", error: "temporary", retryable: true, now,
@@ -599,7 +619,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   const retried = await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, ownerCookie), jobId);
   assert.equal(retried.status, 200);
   assert.equal((await retried.json()).step, "preparing_main");
-  assert.deepEqual(dispatched, [jobId, jobId]);
+  assert.deepEqual(dispatched, [jobId, jobId, jobId]);
   assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
 
   // Nothing ever picked the job up. The workspace entry itself ends the wait,
@@ -618,7 +638,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   });
   const resumed = await handlers.adminRetryOrganizerPublication(request(retryPath, "POST", {}, ownerCookie), jobId);
   assert.equal(resumed.status, 200);
-  assert.deepEqual(dispatched, [jobId, jobId, jobId]);
+  assert.deepEqual(dispatched, [jobId, jobId, jobId, jobId]);
   assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
 });
 

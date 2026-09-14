@@ -12,10 +12,18 @@ export type PublicationMetadata = Partial<Pick<PublicationJob,
 >>;
 
 /**
- * Whether the publication ever completed a stage. Checkpoint columns are the
- * record of work actually done: `missing_checkpoint` refuses to advance a step
- * that did not report its metadata, so a job carrying none of them has
- * finished nothing and nothing is waiting behind it.
+ * Whether this publication has left any record of remote work. `preparing_data`
+ * is the first step a new job can complete and `missing_checkpoint` refuses to
+ * let it pass without `data_pr_number` and `data_head_sha`; every later step is
+ * unreachable until then, `preparing_main` onwards additionally guarded by
+ * `missing_data_commit`. So a job with none of these columns has reached
+ * nothing — not every step declares a required checkpoint, but the only one a
+ * created job can pass through does.
+ *
+ * A pending delivery also records metadata without advancing the step, so this
+ * is "something ran", not "a stage completed". That is the distinction the
+ * timeout wording needs: it separates a job nobody ever dispatched from one
+ * whose remote work is already pinned and waiting.
  *
  * The step cannot answer this. Approval creates a job on `preparing_data` and
  * retry keeps the step it failed on, so one step name covers both a
