@@ -57,7 +57,7 @@ export interface PublicationDriver {
   eventExists(eventId: string): Promise<boolean>;
   run(input: {
     job: PublicationJob; step: Exclude<PublicationStep, "completed">;
-    snapshot: unknown; idempotencyKey: string; assertLease: () => Promise<void>;
+    snapshot: unknown; snapshotJson: string; idempotencyKey: string; assertLease: () => Promise<void>;
     /** Persist remote-write intent before the first mutating API call. */
     beginRemoteWrite: () => Promise<void>;
   }): Promise<{ pending?: boolean; metadata?: PublicationMetadata; productionVerified?: boolean }>;
@@ -110,7 +110,7 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
           throw new PublicationFailure("remote_write_intent", "Publication remote-write intent could not be recorded.", true);
         }
       };
-      const result = await driver.run({ job, snapshot: input, step: step as Exclude<PublicationStep, "completed">,
+      const result = await driver.run({ job, snapshot: input, snapshotJson: snapshot.snapshot_json, step: step as Exclude<PublicationStep, "completed">,
         idempotencyKey: `${job.id}/${step}/${job.approval_hash}`, assertLease,
         beginRemoteWrite });
       await assertLease();

@@ -1,6 +1,6 @@
 export const PUBLICATION_REQUIRED_CHECKS = {
   data: ["data / check", "Organizer publication approval"],
-  main: ["Verify and deploy", "Full preview portal E2E", "Organizer publication approval"],
+  main: ["Verify and deploy", "Full preview portal E2E", "Browser acceptance", "Organizer publication approval"],
 } as const;
 
 type Ruleset = {

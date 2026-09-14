@@ -46,7 +46,19 @@ export type GitHubAdapterOptions = {
   /** Runtime App authentication source. */
   tokenProvider?: GitHubTokenProvider;
   fetch?: typeof globalThis.fetch;
+  /** Publication runtime persists intent and rechecks its lease at each write. */
+  beforeWrite?: () => Promise<void>;
 };
+
+export type GitHubTreeEntry = { path: string; mode: string; type: string; sha: string };
+export type GitHubCommit = { sha: string; tree: { sha: string }; parents: Array<{ sha: string }>; message: string };
+export type GitHubPull = { number: number; state: string; merged: boolean; merge_commit_sha: string | null;
+  body: string | null; base: { ref: string; repo: { full_name: string } }; head: { ref: string; sha: string; repo: { full_name: string } }; user: { login: string } };
+export type GitHubCheck = { id: number; name: string; status: string; conclusion: string | null; head_sha: string;
+  external_id?: string | null; output?: { summary?: string | null } };
+const GIT_SHA = /^[0-9a-f]{40}$/;
+function invalidGitHubResponse(): never { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
+function gitSha(value: unknown): string { if (typeof value !== "string" || !GIT_SHA.test(value)) invalidGitHubResponse(); return value; }
 
 function safeTokenProviderFailure(error: unknown) {
   if (error instanceof PublicationFailure) {
@@ -95,6 +107,7 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     let retriedUnauthorized = false;
     while (true) {
       const token = await tokenForRequest();
+      if (init?.method && !["GET", "HEAD"].includes(init.method)) await options.beforeWrite?.();
       let response: Response;
       try {
         response = await requestFetch(`https://api.github.com/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(repository)}${path}`, {
@@ -122,7 +135,7 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
         continue;
       }
       if (!ok && !acceptedStatuses.includes(status)) {
-        const retryable = status === 429 || status >= 500;
+        const retryable = status === 409 || status === 422 || status === 429 || status >= 500;
         throw new PublicationFailure("github_api_response", "GitHub API request was rejected.", retryable);
       }
       return response;
@@ -173,9 +186,75 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
       `/pulls?head=${encodeURIComponent(`${options.owner}:${branch}`)}&state=all&per_page=100&page=${page}`,
     );
 
+  const readPullRequest = (repository: string, number: number) => request<GitHubPull>(repository, `/pulls/${number}`);
+  const readChecks = async (repository: string, sha: string) => {
+    gitSha(sha);
+    const checks: GitHubCheck[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const response = await requestPage<{ check_runs: GitHubCheck[] }>(repository, `/commits/${sha}/check-runs?filter=latest&per_page=100&page=${page}`);
+      if (!Array.isArray(response.body?.check_runs)) invalidGitHubResponse();
+      for (const check of response.body.check_runs) {
+        if (!check || !Number.isSafeInteger(check.id) || typeof check.name !== "string" || typeof check.status !== "string"
+          || check.head_sha !== sha || !(check.conclusion === null || typeof check.conclusion === "string")) invalidGitHubResponse();
+        checks.push(check);
+      }
+      if (!response.headers.get("link")?.includes('rel="next"')) return checks;
+    }
+    invalidGitHubResponse();
+  };
+
   return {
     readBranch,
     listPullRequestsPage,
+    readPullRequest,
+    readChecks,
+    async readRef(repository: string, branch: string) {
+      const value = await request<{ ref: string; object: { sha: string; type: string } } | null>(repository, `/git/ref/heads/${branch.split("/").map(encodeURIComponent).join("/")}`, undefined, [200, 404]);
+      if (value === null) return null;
+      if (value.ref !== `refs/heads/${branch}` || value.object?.type !== "commit") invalidGitHubResponse();
+      return gitSha(value.object.sha);
+    },
+    async readCommit(repository: string, sha: string) {
+      const value = await request<GitHubCommit>(repository, `/git/commits/${gitSha(sha)}`);
+      if (value?.sha !== sha || !Array.isArray(value.parents) || typeof value.message !== "string") invalidGitHubResponse();
+      gitSha(value.tree?.sha); value.parents.forEach((parent) => gitSha(parent?.sha));
+      return value;
+    },
+    async readTree(repository: string, sha: string) {
+      const value = await request<{ sha: string; tree: GitHubTreeEntry[]; truncated: boolean }>(repository, `/git/trees/${gitSha(sha)}?recursive=1`);
+      if (value?.sha !== sha || value.truncated !== false || !Array.isArray(value.tree)) invalidGitHubResponse();
+      const seen = new Set<string>();
+      for (const entry of value.tree) {
+        if (!entry || typeof entry.path !== "string" || !entry.path || seen.has(entry.path)
+          || typeof entry.mode !== "string" || !["blob", "tree", "commit"].includes(entry.type)) invalidGitHubResponse();
+        gitSha(entry.sha); seen.add(entry.path);
+      }
+      return value.tree;
+    },
+    async readBlob(repository: string, sha: string) {
+      const value = await request<{ sha: string; encoding: string; content: string }>(repository, `/git/blobs/${gitSha(sha)}`);
+      if (value?.sha !== sha || value.encoding !== "base64" || typeof value.content !== "string") invalidGitHubResponse();
+      try { return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(value.content.replace(/\s/g, "")), (char) => char.charCodeAt(0))); }
+      catch { return invalidGitHubResponse(); }
+    },
+    async createTree(repository: string, baseTree: string, files: readonly { path: string; text: string }[]) {
+      const value = await request<{ sha: string }>(repository, "/git/trees", { method: "POST", body: JSON.stringify({
+        base_tree: gitSha(baseTree), tree: files.map((file) => ({ path: file.path, mode: "100644", type: "blob", content: file.text })),
+      }) });
+      return gitSha(value?.sha);
+    },
+    async createCommit(repository: string, parent: string, tree: string, message: string) {
+      const value = await request<{ sha: string }>(repository, "/git/commits", { method: "POST", body: JSON.stringify({ message, tree: gitSha(tree), parents: [gitSha(parent)] }) });
+      return gitSha(value?.sha);
+    },
+    async createRef(repository: string, branch: string, sha: string) {
+      await request(repository, "/git/refs", { method: "POST", body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: gitSha(sha) }) });
+    },
+    async createPullRequest(repository: string, branch: string, title: string, body: string) {
+      const value = await request<GitHubPull>(repository, "/pulls", { method: "POST", body: JSON.stringify({ title, body, head: branch, base: "main" }) });
+      if (!Number.isSafeInteger(value?.number) || value.number <= 0) invalidGitHubResponse();
+      return value.number;
+    },
     createApprovalCheck(repository: string, headSha: string, jobId: string, approvalHash: string) {
       return request(repository, "/check-runs", {
         method: "POST", body: JSON.stringify({
@@ -188,20 +267,22 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     async mergeOwnedPullRequest(input: {
       repository: string; pullNumber: number; jobId: string; stage: "data" | "main";
       expectedHeadSha: string; requiredChecks: readonly string[];
+      approvalHash?: string;
     }) {
-      const pull = await request<{
-        state: string; base: { ref: string }; head: { ref: string; sha: string }; user: { login: string };
-      }>(input.repository, `/pulls/${input.pullNumber}`);
+      const pull = await readPullRequest(input.repository, input.pullNumber);
       const expectedRef = `organizer/${input.jobId}/${input.stage}`;
-      if (pull.state !== "open" || pull.base.ref !== "main" || pull.head.ref !== expectedRef) throw new Error("Publication PR identity changed.");
-      if (pull.head.sha !== input.expectedHeadSha) throw new Error("Publication PR head SHA changed.");
-      if (!pull.user.login.endsWith("[bot]")) throw new Error("Publication PR is not App-owned.");
-      const checks = await request<{ check_runs: Array<{ name: string; conclusion: string | null; head_sha: string }> }>(
-        input.repository, `/commits/${input.expectedHeadSha}/check-runs?per_page=100`,
-      );
+      if (pull.state !== "open" || pull.base?.ref !== "main" || pull.head?.ref !== expectedRef) throw new PublicationFailure("publication_pr_changed", "Publication PR identity changed.", false);
+      if (pull.head.sha !== input.expectedHeadSha) throw new PublicationFailure("publication_pr_changed", "Publication PR head SHA changed.", false);
+      if (!pull.user?.login?.endsWith("[bot]")) throw new PublicationFailure("publication_pr_changed", "Publication PR is not App-owned.", false);
+      const checks = await readChecks(input.repository, input.expectedHeadSha);
       for (const required of ["Organizer publication approval", ...input.requiredChecks]) {
-        if (!checks.check_runs.some((check) => check.name === required && check.head_sha === input.expectedHeadSha && check.conclusion === "success")) {
-          throw new Error(`Required check is not successful: ${required}`);
+        const latest = checks.filter((check) => check.name === required).sort((a, b) => b.id - a.id)[0];
+        if (!latest || latest.status !== "completed" || latest.conclusion !== "success") {
+          throw new PublicationFailure("publication_check_failed", `Required check is not successful: ${required}`, true);
+        }
+        if (required === "Organizer publication approval" && input.approvalHash
+          && (latest.external_id !== input.jobId || latest.output?.summary !== `Approval snapshot ${input.approvalHash}`)) {
+          throw new PublicationFailure("publication_approval_changed", "Publication approval check changed.", false);
         }
       }
       return request<{ merged: boolean; sha: string }>(input.repository, `/pulls/${input.pullNumber}/merge`, {

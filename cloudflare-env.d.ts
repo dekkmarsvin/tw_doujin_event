@@ -92,8 +92,8 @@ interface PortalEnv {
    * personal addresses and the repository is public. */
   PREVIEW_SANDBOX_RECIPIENTS?: string;
   PREVIEW_E2E_TOKEN?: string;
-  /** Organizer publication stays disabled until GitHub App installation and
-   * both repository rulesets have been independently verified. */
+  /** Defaults disabled. Production enablement follows ADR-0058; fake is accepted
+   * only with the isolated preview mail sink. */
   ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github";
   GITHUB_WEBHOOK_SECRET?: string;
   GITHUB_APP_ID?: string;

@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供 snapshot → repository artifacts 純產檔。**正式發布仍未啟用**：production driver、durable dispatch 與真實 smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
+> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供 snapshot → repository artifacts 純產檔，#245 接上 GitHub data／main driver 與 Pages dispatcher。**正式發布仍未啟用**：durable dispatch 與真實部署／smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
 
 ## 入口與登入
 
@@ -151,7 +151,7 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 目前 production gate：
 
-1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；尚未提供 dispatcher，即使改成 github 也不能核准或 retry。
+1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。github 注入真實 data／main driver，每次呼叫只推進一個 bounded transition；持續交付由 #246 接線。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
 2. `POST /api/integrations/github/webhook` 仍未連接 executor，非 github 或缺 secret 回 503，否則 processing fail closed，不能宣稱已完成 GitHub publication。
 3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求 fresh-admin session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 
@@ -165,14 +165,24 @@ GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 6
 
 `buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
 
-main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE。沿用同一份 event-local identity 配號器追加 allocations／evidence，不因同名猜 linkage，不動既有活動 pin；身分群組使用 codes[]，只有 snapshot 的 stableKey 能合併多個官方群組。完整產物再經 publication allowlist。這些純函式不建立或合併 PR，production driver 仍由 #245 接線。
+main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE。沿用同一份 event-local identity 配號器追加 allocations／evidence，不因同名猜 linkage，不動既有活動 pin；身分群組使用 codes[]，只有 snapshot 的 stableKey 能合併多個官方群組。完整產物再經 publication allowlist。這些純函式不建立或合併 PR；GitHub driver 將其結果寫入固定工作分支。
+
+### GitHub data／main driver
+
+`github-publication-driver.ts` 只使用伺服器固定的兩個 repository 與 `organizer/{jobId}/{stage}` 分支，接收未重新序列化的核准 snapshot bytes。首次 data 發布前先查本部署的 published event resolver，再查 GitHub 固定 main commit 的 published collection；讀取失敗不是活動不存在的證據。
+
+每次 preparing 先找所有狀態的同分支 PR／branch；已有 commit 時以其唯一 parent 重建預期產物，比對完整 leaf tree（包含保留的舊檔與所有新檔的 Git blob hash），不只比对 PR 本文。分支、PR、核准 check 寫入成功但回應遺失時沿用遠端產物；已關閉未合併、換 head、额外檔案或 snapshot 不符時停止，不自動覆寫。每一次 GitHub mutation（含 tree／commit、branch、PR、check、merge）都在發送前持久化 write intent 並重驗 lease。
+
+必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 已加入唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義（#227 A）。
+
+Deployment seam 缺少實作時回 `publication_deployment_unavailable`，不能完成 published；#212 Phase 4 負責 workflow run 與 Pages origin evidence。此處的 fake／模擬 GitHub／本機 D1 驗證只證明接線與恢復能力，不代替真實發布與故障恢復驗收。
 
 既有純函式邊界保留：
 
 - [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
 - webhook 的 HMAC 驗證與以 delivery id 去重。
 
-ADR-0046 §3 的 GitHub App ownership、required checks、allowlist、expected SHA merge、data → main → deployment 與 production origin smoke 仍須由 production driver 接線並實測。既有 approved/queued（包括 ch-20）保留原 snapshot/job，不做一次性資料修正，也不會被自動發布；超過 `queued` 逾時的那幾筆由上述機制轉成 failed + retryable，恢復仍是重試原 job，不要求 Organizer 再按一次 Publish。
+#245 接上 data／main 的 PR、核准 check、allowlist 與 expected SHA merge；App ownership 沿用 ADR-0058 已接受的 bot 作者邊界。Deployment 與 production origin smoke 仍須接線並實測。既有 approved/queued（包括 ch-20）保留原 snapshot/job，不做一次性資料修正，也不會被自動發布；超過 `queued` 逾時的那幾筆由上述機制轉成 failed + retryable，恢復仍是重試原 job，不要求 Organizer 再按一次 Publish。
 
 ## 與地圖貢獻流程的邊界
 

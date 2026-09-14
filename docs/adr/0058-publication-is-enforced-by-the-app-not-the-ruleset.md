@@ -44,7 +44,7 @@ main  →  Verify and deploy
          Organizer publication approval
 ```
 
-`Browser acceptance` 是本決策新增的目標項，**尚未寫進常數**：`app/publication-rollout.ts` 的 `PUBLICATION_REQUIRED_CHECKS.main` 目前只有 `Verify and deploy`、`Full preview portal E2E` 與 `Organizer publication approval` 三項，加入 `Browser acceptance` 由 #227 落地。名稱必須與 workflow 的 job name 逐字相符。
+`Browser acceptance` 是本決策新增的目標項，已在 #245 driver 切片將 #227 A 落地，寫進 `app/publication-rollout.ts` 的 `PUBLICATION_REQUIRED_CHECKS.main`。名稱必須與 workflow 的 job name 逐字相符。
 
 實作要注意 `Full preview portal E2E` 在 push 事件下的 conclusion 是 `skipped`，只有 PR 事件會實際執行；adapter 驗的是 PR head SHA，因此檢查對象正確，但不得把 `skipped` 當成通過。
 
