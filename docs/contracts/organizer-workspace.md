@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-> **實作狀態（2026-09-13）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX。**正式發布仍未啟用**：production driver、durable dispatch、snapshot → repository artifacts 轉換與真實 smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
+> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供 snapshot → repository artifacts 純產檔。**正式發布仍未啟用**：production driver、durable dispatch 與真實 smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
 
 ## 入口與登入
 
@@ -158,6 +158,14 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 60s`、`exp = iat + 600s`），接受 PKCS#8 與 PKCS#1 RSA private key。每個 provider／job 只有一份記憶體 cache；token 剩餘 60 秒內更新，進行中的 mint 共用同一個 pending promise。請求遭遇 `401` 時，每個 request 最多 invalidate 並重試一次，而且只有被拒絕的 token 仍是目前 cache 才能 invalidate；`403` 不刷新 token。缺少 App ID、installation ID 或 private key，以及 import/sign/fetch/JSON 例外，都轉成固定 `PublicationFailure`，不保存或回傳 raw exception、request body、Authorization、key、JWT 或 token。
 
 `app/publication-rollout.ts` 的 ruleset 評估器**不是 gate**：依 [ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md) §3 它是維運報告，不阻擋任何 publication 步驟，也不是開啟 `ORGANIZER_PUBLICATION_MODE` 的必要條件。它目前的判定仍是 active 不足以通過、必須要求 PR、所有指定 checks、已確認 App id 且無 App bypass；該判定要到 #227 的程式改動落地才改變。它沒有 runtime caller。
+
+### 核准 snapshot 產檔
+
+`app/publication-artifacts.ts` 只消費完整 snapshot/3 與其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；活動與逐日攤位表網址皆取已核准 officialSource.url。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由使用空間唯一持有；不相容 snapshot 明確拒絕，不取第一個空間猜值。
+
+`buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
+
+main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE。沿用同一份 event-local identity 配號器追加 allocations／evidence，不因同名猜 linkage，不動既有活動 pin；身分群組使用 codes[]，只有 snapshot 的 stableKey 能合併多個官方群組。完整產物再經 publication allowlist。這些純函式不建立或合併 PR，production driver 仍由 #245 接線。
 
 既有純函式邊界保留：
 
