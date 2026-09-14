@@ -1,6 +1,7 @@
 # ADR-0040：review 發現以 ticket 範圍與已記錄的威脅模型為界
 
 - 狀態：已定案（2026-08-30）；2026-09-08 修訂決策 3，改以驗收條件而非「是否新增檔案」判斷範圍；決策 4 的熔斷條件不變
+- **部分被取代**：[ADR-0060](./0060-review-ends-when-scoped-blockers-are-resolved.md)（2026-09-14）調整決策 2–4 的 finding 處置、開票與熔斷方式；本機威脅模型及下列歷史理由保留，現行執行規則以 review-fix loop 為準。
 - 延續：[ADR-0039](./0039-one-data-repo-for-events-and-references.md) 的 single-maintainer 前提
 - 相關 issue：[#116](https://github.com/dekkmarsvin/tw_doujin_event/issues/116)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - 相關 PR：[#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128)（未合併關閉）、[#129](https://github.com/dekkmarsvin/tw_doujin_event/pull/129)（已合併）

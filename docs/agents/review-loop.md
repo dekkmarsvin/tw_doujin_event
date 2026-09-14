@@ -1,64 +1,60 @@
 # Review-fix loop
 
-How to act on automated review findings on a pull request without letting the PR grow past the ticket that opened it.
+本文件管理實作 review、finding 處置、聚焦 verification 與 review Done。Finding 是待判斷的觀察，不是新的工作需求。歷史理由見 [ADR-0040](../adr/0040-review-findings-are-bounded-by-the-ticket.md)，本次收斂決策見 [ADR-0060](../adr/0060-review-ends-when-scoped-blockers-are-resolved.md)。
 
-The decision behind these rules, and the incident that produced them, is [ADR-0040](../adr/0040-review-findings-are-bounded-by-the-ticket.md). The threat model referenced below is decision 1 of that ADR: data-operations commands under `scripts/` assume **one maintainer, one sequential command, on a local filesystem**.
+## 固定範圍與證據
 
-## Before triggering a review
+開始 review 時提供對應 Issue／使用者已接受的任務、驗收條件、非目標、適用 contract／ADR，以及第一次受審的 commit。PR 模板的「範圍邊界」記錄這次刻意不做的事。文件只讀受影響部分。
 
-When review posting is authorized, include the ticket and scope in the request. The reviewer compares the diff against the base branch, so supply the ticket explicitly:
+新 finding 或新文件不自動改寫已接受的驗收條件。已拒絕或明確接受風險的事項，沒有新證據就沿用處置；目前實作、實際配置或可信失敗路徑出現新證據時，必須重新判斷。程式路徑、配置與可重現測試可以證明重大風險，不必等正式事故發生。
 
-```
-@codex review — 範圍限 issue #<n>。非目標見該 issue「非目標」段與 ADR-0040 的威脅模型。
-超出驗收條件的發現請標記 out-of-scope，不要標 P2。
-```
+ADR-0040 決策 1 的「單一維護者、單一序列指令、本機檔案系統」只適用於該 ADR 列出的資料維運指令，不能套用到網路 publication。後者依其適用的授權、snapshot、遠端副作用、恢復與發布邊界判斷。
 
-Fill in the real issue number. If the PR closes more than one issue, name them all.
+每項 finding 必須提供：
 
-## The scope gate
+- **失敗與證據**：什麼輸入／操作或 actor 前置條件，經哪條路徑得到什麼錯誤結果；附相關 commit、程式路徑、配置或重現結果。
+- **依據與影響**：違反哪項已接受的驗收或適用邊界、是否由本次變更造成，以及不處理的具體影響。「更完整／更一致」不是阻擋證據。
+- **處置與阻擋對象**：採下表哪一類，並明說阻擋「目前 PR」、「正式啟用」、「產品里程碑」或「不阻擋」。若影響多個對象，分別說明；剩餘里程碑工作不自動阻擋有明確切片邊界的 PR。
 
-Evaluate these criteria for each finding. Within the task's existing authorization, complete necessary fixes and targeted validation without per-fix approval when the finding is in scope and no stop condition has triggered:
+## Finding 處置
 
-1. **Which acceptance criterion does this violate?** Name the checkbox in the ticket, the contract in `docs/contracts/`, or the ADR. "It would be more correct" is not an answer.
-2. **Is the assumed failure mode inside the threat model?** Concurrent processes, arbitrary process termination between two renames, and hostile local users are outside it (ADR-0040 decision 1). A finding that only triggers there is out of scope regardless of how it is graded.
-3. **Does the fix introduce behavior or guarantees beyond the ticket's acceptance criteria?** A new file alone is not scope expansion; a necessary implementation file or regression test can remain in scope.
+| 處置 | 判準與動作 |
+| --- | --- |
+| **MUST FIX NOW** | 有證據違反目前範圍的驗收條件、已生效且適用的必要 contract／ADR；或有本次變更造成的可重現 regression、supported 正常流程失敗，或目前適用邊界內的直接授權／資料完整性／秘密／發布違反。修正前先指明受阻的交付對象；不得把正式啟用或里程碑的 blocker 混作目前 PR 的 blocker。 |
+| **FIX IF LOCAL** | 可選的小修正：只在目前改動附近、意圖明確、能局部驗證。不得藉機新增機制或 abstraction、擴大清理、搜尋其他小問題或新增產品保證。選擇不修即可結束，不因此欠一張 Issue。 |
+| **FOLLOW-UP** | 問題有具體影響，但不影響目前工作完成。預設留在原 review thread 或既有主票；只有同時具備具體影響、需要獨立排程、且沒有承接處時才開新 Issue。 |
+| **DECLINE** | 無可信失敗依據的推測、格式偏好、未來提醒、重複保護，或只有「更完整／更漂亮／更一致」。在原處簡述理由即可結束，不必形成新待辦。 |
 
-A finding passes when it violates a named acceptance criterion, its failure mode is inside the recorded threat model, and the remedy adds no guarantees beyond the ticket. Otherwise record the scope decision and propose separate triage.
+文件索引、拼字或實作描述漂移不自動成為 release blocker；要阻擋仍須說明實際影響。純文件任務本身的驗收錯誤可阻擋該 PR，不能因此升級成產品發布阻擋。
 
-## Declining is a normal outcome
+在既有授權與範圍內完成必要修正，不逐項重新索取許可。必要的實作檔案與回歸驗證可以新增；若修正需要擴大產品保證或改變已接受的範圍，交由維護者決定，並在受影響的交付對象上保留未處置風險，不能以 scope 外為由放行重大風險。
 
-Declining must be visible and cheap. When the task authorizes GitHub review-thread replies, state the refusal and its basis there; otherwise prepare the disposition in the task response:
+處置寫在原 thread；未授權 GitHub 發文時，留在任務回覆。若符合開票門檻且已授權，使用 `needs-triage`，不要直接加入 critical path。只引用已存在的票號，只宣稱實際完成的 thread resolution。
 
-> 不修：此情境落在 ADR-0040 決策 1 的威脅模型之外（並發執行 / 外部終止），且不對應 #<n> 的任何驗收條件。已記錄於 #<m>。
+## Reviewer 編成與 verification
 
-Within the task's existing authorization for GitHub issue and review-thread operations, open a follow-up issue with `needs-triage` if the finding is worth keeping, and resolve the thread. Otherwise include the proposed issue and disposition in the handoff. Cite a follow-up number only after that issue exists; do not report a thread as resolved without performing the authorized action.
+預設一位未參與實作的主要獨立 reviewer；有修正時，優先由同一 reviewer 做聚焦 verification。額外 reviewer 必須負責尚未涵蓋的具體風險，先說明其範圍，不重做同一份全面審查。自動 review 的觸發保持手動、按風險判斷。
 
-`wontfix` already exists in this repo's [triage vocabulary](./triage-labels.md); this extends it to review threads.
+Verification 只驗原 blocker、修正引入的 regression 及必要證據；可讀取相關呼叫路徑以確認修正，但不重新進行全面架構審查。新證據依前述關卡判斷，不能因換 reviewer 就重審已處置的同一事項。
 
-## Stop conditions
+UI 的任務式瀏覽器操作與視覺驗收維持適用要求；減少全面 reviewer 不取消這些驗收。驗收者檢查受影響的使用者任務，額外觀察仍依本文件處置。
 
-Stop and hand back to the maintainer when **any** of these hold. Do not push another fix first.
+## 相稱的驗證
 
-- **Three rounds.** A PR has had 3 review-fix rounds.
-- **The loop is reviewing its own output.** A finding's `path` points at a file that no review-fix round had yet seen — that is, a file created *after* review started, by a fix rather than by the ticket's implementation. The anchor is the commit the **first** review ran against (Codex prints it as `Reviewed commit:`; otherwise use the PR's first commit):
+沿用同一份未改變內容的有效本機驗證；修正後驗受影響的行為與接線。只有內容、依賴、環境或新證據使原結果不再適用時，才重跑對應檢查，並說明原因。
 
-  ```bash
-  git cat-file -e <first-reviewed-sha>:<path> 2>/dev/null \
-    || echo "OUT OF LOOP: <path> did not exist when review round 1 ran"
-  ```
+純流程／說明文件變更以內容、連結及適用文件檢查驗證，在 PR 註明未跑程式測試的理由。既有 required CI checks 照常執行，不因本機驗證減量而關閉、繞過或削弱；必要的授權、資料完整性、snapshot、恢復與發布驗證也不得移除。驗證結果要能對應待交付版本，不能把未執行、失敗或 skipped 的必要檢查寫成通過。
 
-  A finding against a file that some later round invented is a finding against a previous fix, not against the ticket.
+## Review Done 與熔斷
 
-  Absence from `main` alone is **not** the test. A ticket may legitimately add files — issue #116 asked for a generator, and `scripts/generate-circle-identities.mjs` arrived in the implementation commit — and the first finding against such a file is ordinary in-scope review. What makes [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) different is that `scripts/event-onboarding-lock.mjs` appeared in round 6, in a `fix:` commit answering round 5, and then drew four findings of its own.
-- **The same subsystem returns.** Three or more findings land on one file or one concern across different rounds, each fix opening the next window. The property being demanded is probably unreachable with the tools at hand; that needs a decision, not another patch.
-- **The PR body no longer describes the ticket.** If the Summary needs a new bullet with no counterpart in the issue, the drift is already shipped. Do not rewrite the body to match the code — stop.
+預設流程是 implementation → primary review → 必要修正 → 聚焦 verification → review Done。沒有修正時不為了流程再加一輪 verification。
 
-## Fixes stay within acceptance criteria
+目前範圍的 blocker 為零、適用驗證完成，且不存在尚未處置的重大授權、資料、秘密或發布風險時，**review 必須結束**。不要求非阻擋觀察清空。Review Done 不等於 production 啟用或產品里程碑完成；合併仍依使用者授權與既有 CI gate。
 
-Prefer editing existing files. A new implementation file or regression test is allowed when it directly satisfies an existing acceptance criterion within the recorded threat model. New behavior, subsystems, or guarantees beyond those criteria require separate triage. A later finding against a file born from a fix after review began trips the stop condition: the loop is then reviewing its own output. Creating a necessary file is not itself this circuit breaker. `scripts/event-onboarding-lock.mjs` arrived during [#128](https://github.com/dekkmarsvin/tw_doujin_event/pull/128) and drew four further findings; the first finding against that review-generated file was the moment to stop.
+同一組驗收與修正沿用第一次受審 commit、已處置 findings 與累計輪次；更換 PR 或 reviewer 不重啟相同審計。以下情況停止自動修補，帶著未解 blocker 與最小範圍選項交回維護者，不先推另一輪修正：
 
-## Record the boundary in the PR
+- 已累計三輪 review-fix 仍未達 Done；三輪是上限，不是必須用完的額度。
+- 同一 concern 跨輪反覆出現三項以上 findings，修正持續產生下一個缺口。
+- 補救需要新增超出驗收的機制／保證，或 PR Summary 必須加入沒有對應已接受範圍的新目的。
 
-Fill the `## 範圍邊界` section of the PR template with what the PR deliberately does not do, and why it is not required by the ticket. [#129](https://github.com/dekkmarsvin/tw_doujin_event/pull/129) is the worked example.
-
-This section is for the maintainer and for the next reader. It is not sufficient on its own as a reviewer anchor — the reviewer weights repo docs above PR prose, so a boundary that keeps getting challenged belongs in an ADR.
+檔案是否在修正期間新增，不單獨決定熔斷；聚焦驗證修正造成的 regression 是必要工作。判斷的是有沒有擴張需求。已達 Done 後，只有新的具體證據能重新打開受影響的判斷；不能以未處置的重大風險換取合併。

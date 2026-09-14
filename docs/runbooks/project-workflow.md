@@ -18,7 +18,7 @@ gh issue list --state open --limit 100 --json number,title,labels,assignees
 
 ## 2. 新發現先分類，再決定是否排入
 
-依序回答，將答案寫進 issue 的「目標與排程」段：
+Review 發現先依 [review-fix loop](../agents/review-loop.md) 決定處置與是否需要開票；需要排程的工作才依序回答以下問題，將答案寫進承接 issue 的「目標與排程」段：
 
 1. 對應哪一條 Core User Task？不處理會在哪個真實操作步驟失敗？附輸入、重現方式或缺少的必要能力。
 2. 它是否阻止本輪正常流程或既有必要發布 gate？若有可行 UI 路徑，記錄該路徑與代價；僅有優先級或 review 評分不足以證明 blocker。
@@ -78,8 +78,8 @@ flowchart LR
 
 1. **選票**：從本輪 critical path 中選一張規格完整、依賴已解除的票；確認 assignee 與既有 PR，避免重複實作。#222 這類建議提前修的票，仍須記錄選入理由，不自動成為發布 gate。
 2. **實作**：依 [domain 查找規則](../agents/domain.md) 讀受影響契約與 ADR，先固定驗收與非目標，再做最小必要變更。完成標準是每項驗收都有實作或明確未完成原因。
-3. **驗證與 review**：依 [本機開發與驗證](./local-development.md) 完成適用 gate；UI 變更需在真實瀏覽器操作並留下結果。提交前報告工作樹、diff 摘要與風險。PR 對應主票、契約、驗收證據與範圍邊界。
-4. **處理發現**：依 [review-fix loop](../agents/review-loop.md) 判定與修正；自動 review 的觸發保持手動、按風險判斷。範圍外發現回到分類，不自動擴充主票。觸發該文件停止條件時交回維護者。
+3. **驗證與 review**：依 [review-fix loop](../agents/review-loop.md) 決定 reviewer 編成與相稱驗證，[本機開發與驗證](./local-development.md) 提供適用 gate 的執行方式。提交前報告工作樹、diff 摘要與風險。PR 對應主票、契約、驗收證據與範圍邊界。
+4. **處理發現**：finding 處置、聚焦 verification、review Done 與熔斷均依 [review-fix loop](../agents/review-loop.md)，不在本文件另設 review 輪次或編成。
 5. **交付**：實作票按自己的驗收完成；依賴部署或真實活動驗收的票，在相應證據到齊前保持待驗收。合併 PR 不等於本輪目標達成。
 
 GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授權時先準備可貼上的分類與驗收內容。本流程本身不授權發布留言、開啟 production flag 或部署。
@@ -135,7 +135,7 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 
 #190 與 #104 結案後，再依實際使用回饋選 UX 工作；#134、#163、#161 留待下一輪產品排程，#163 的 #104 依賴維持。首次發布與可恢復失敗完成也會觸發 ADR-0058 §5 的治理重新評估。
 
-票仍標 `needs-triage` 時，先補齊該票的決策與驗收才開工。若真實驗收冒出新的正常流程 blocker，記錄它替換／阻擋哪一個步驟並重新排序；其他發現回 backlog。此表不自動修改 GitHub 標籤、依賴或關閉子票。
+票仍標 `needs-triage` 時，先補齊該票的決策與驗收才開工。若真實驗收冒出新的正常流程 blocker，記錄它替換／阻擋哪一個步驟並重新排序；其他發現依 [review-fix loop](../agents/review-loop.md) 處置。此表不自動修改 GitHub 標籤、依賴或關閉子票。
 
 ## 6. 留下完整驗收證據
 

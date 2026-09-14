@@ -22,4 +22,4 @@ Domain vocabulary, architecture decisions, and behavioral contracts are located 
 
 ### Review-fix loop
 
-Automated review findings are bounded by the ticket that opened the PR. `docs/agents/review-loop.md` owns scope checks, authorized fixes, disposition, and circuit breakers under ADR-0040.
+For implementation review, finding disposition, reviewer assignment, verification, and review completion, follow `docs/agents/review-loop.md` as the single rule source.
