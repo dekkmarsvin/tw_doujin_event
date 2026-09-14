@@ -46,6 +46,7 @@
 | 文件 | 何時用 |
 |---|---|
 | [本機開發與驗證](./runbooks/local-development.md) | 啟動、跑 gate、交付前檢查 |
+| [專案工作流程](./runbooks/project-workflow.md) | issue 分類、挑選工作、review 分流與第二場活動發布驗收 |
 | [社團資料更新](./runbooks/catalog-data-update.md) | 主辦活動資料或 data pin 有變動時 |
 | [地圖 authoring](./runbooks/map-authoring.md) | 要更新地圖靜態快照時 |
 | [部署](./runbooks/deployment.md) | 改密鑰、看 CI 行為、發布前 gate、回滾 |
