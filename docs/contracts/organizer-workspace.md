@@ -161,7 +161,7 @@ GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 6
 
 ### 核准 snapshot 產檔
 
-`app/publication-artifacts.ts` 只消費完整 snapshot/3 與其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；活動與逐日攤位表網址皆取已核准 officialSource.url。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由使用空間唯一持有；不相容 snapshot 明確拒絕，不取第一個空間猜值。
+`app/publication-artifacts.ts` 只消費完整 snapshot/3 與其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；活動與逐日攤位表網址皆取已核准 officialSource.url，統一經 URL canonicalization（合法的大寫 HTTPS scheme 轉小寫），snapshot bytes/hash 不改写。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由使用空間唯一持有；不相容 snapshot 明確拒絕，不取第一個空間猜值。
 
 `buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
 

@@ -49,6 +49,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     const areaIds = draft.venue.assignments.flatMap((assignment) => assignment.areaIds);
     if (!areaIds.length || new Set(areaIds).size !== areaIds.length) fail("各使用空間的展區必須明確且不可重複。");
     const dates = draft.event.days.map((day) => day.date).sort();
+    const officialUrl = new URL(draft.officialSource.url!).href;
     const event = {
       schema: "event-definition/3", id: snapshot.eventId, name: draft.event.name,
       dateRangeLabel: dates[0] === dates.at(-1) ? dates[0] : `${dates[0]}–${dates.at(-1)}`,
@@ -58,8 +59,8 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       areas: areaIds.map((id) => ({ id, label: id, shortLabel: id })),
       organizerAssignments: draft.references.organizerAssignments, categoryCatalog: draft.references.categoryCatalog,
       venueAssignments: draft.venue.assignments.map(({ venueId, venueSpaceId, areaIds }) => ({ venueId, venueSpaceId, areaIds })),
-      officialData: { adapter: "organizer-import/1", eventUrl: draft.officialSource.url,
-        boothListUrls: Object.fromEntries(draft.event.days.map((day) => [day.id, draft.officialSource.url])) },
+      officialData: { adapter: "organizer-import/1", eventUrl: officialUrl,
+        boothListUrls: Object.fromEntries(draft.event.days.map((day) => [day.id, officialUrl])) },
     };
     const prefix = `events/${snapshot.eventId}/`;
     const inputs: Array<{ path: string; content: unknown }> = [];
@@ -76,14 +77,14 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       if (!draft.event.days.some((day) => day.id === row.dayId) || !assignment?.areaIds.includes(row.areaId)
         || row.identityGroup !== (row.stableKey ? `stable:${row.stableKey}` : null)) fail("匯入列與已核准日期、展區或身分連結不符。");
     }
-    const official = { schemaVersion: 1, days: draft.event.days.map((day) => ({ day: day.id, url: draft.officialSource.url,
+    const official = { schemaVersion: 1, days: draft.event.days.map((day) => ({ day: day.id, url: officialUrl,
       booths: snapshot.import.rows.filter((row) => row.dayId === day.id).map((row) => ({ codes: row.codes, name: row.circleName, areaId: row.areaId })) })) };
     parseOfficialBoothData(official, event);
     const groups = new Map<string, { sources: string[]; linkage?: { kind: string; value: string; reference: string } }>();
     snapshot.import.rows.forEach((row, index) => {
       const key = row.stableKey ? `stable:${row.stableKey}` : `row:${index}`;
       const group: { sources: string[]; linkage?: { kind: string; value: string; reference: string } } = groups.get(key) ?? { sources: [], ...(row.stableKey ? { linkage: {
-        kind: "organizer-stable-key", value: row.stableKey, reference: draft.officialSource.url!,
+        kind: "organizer-stable-key", value: row.stableKey, reference: officialUrl,
       } } : {}) };
       group.sources.push(...row.codes.map((code) => `${row.dayId}:${code}`));
       groups.set(key, group);
@@ -112,7 +113,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     if (scoped) inputs.push({ path: prefix + "map-manifest.json", content: { schema: "event-map-manifest/1", eventId: snapshot.eventId, maps: manifest } });
     inputs.push({ path: prefix + "event.json", content: event }, { path: prefix + "official-booths.json", content: official },
       { path: prefix + "circle-identity-groups.json", content: grouping }, { path: prefix + "reference-selection.json", content: snapshot.references.selection },
-      { path: prefix + "NOTICE", content: `${draft.officialSource.label}\n${draft.officialSource.url}\n` });
+      { path: prefix + "NOTICE", content: `${draft.officialSource.label}\n${officialUrl}\n` });
     return { snapshot, event, official, grouping, files: await assemblePublicationStage("data", snapshot.eventId, inputs) };
   } catch (error) {
     if (error instanceof PublicationFailure) throw error;

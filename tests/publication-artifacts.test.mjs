@@ -136,3 +136,20 @@ test("legacy, altered approvals, collisions, missing maps and merged-data drift 
   input.dataFiles.delete("events/next-event/official-booths.json");
   await assert.rejects(builder.buildPublicationMainStage(approved, input), /缺少/);
 });
+
+test("accepted HTTPS URL schemes normalize consistently without altering approved bytes", async () => {
+  const snapshot = await sample();
+  snapshot.draft.officialSource.url = "HTTPS://Organizer.Example/event";
+  snapshot.import.rows[0].stableKey = "stable-1";
+  snapshot.import.rows[0].identityGroup = "stable:stable-1";
+  const approved = source(snapshot);
+  const before = structuredClone(approved);
+  const artifacts = await builder.buildApprovedPublicationArtifacts(approved);
+  assert.equal(artifacts.event.officialData.eventUrl, "https://organizer.example/event");
+  assert.equal(artifacts.event.officialData.boothListUrls["1"], "https://organizer.example/event");
+  assert.equal(artifacts.official.days[0].url, "https://organizer.example/event");
+  assert.equal(artifacts.grouping.groups[0].linkage.reference, "https://organizer.example/event");
+  assert.equal(artifacts.files.find((file) => file.path.endsWith("/NOTICE")).text, "主辦提供名單\nhttps://organizer.example/event\n");
+  assert.deepEqual(approved, before);
+  assert.equal(JSON.parse(approved.snapshotJson).draft.officialSource.url, "HTTPS://Organizer.Example/event");
+});
