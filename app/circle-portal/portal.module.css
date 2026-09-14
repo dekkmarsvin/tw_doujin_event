@@ -69,6 +69,13 @@
   /* 16px avoids the iOS zoom-on-focus jump on a phone at the venue. */
   font-size: 16px;
 }
+.editorFieldset :is(input, select, textarea):disabled {
+  border-color: #c8d0cb;
+  background: #eef1ef;
+  color: #6a746e;
+  cursor: not-allowed;
+}
+.editorFieldset :is(input, select, textarea):disabled::placeholder { color: #87918b; }
 .card :is(input, select, textarea):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
 .card textarea { resize: vertical; }
 
@@ -266,6 +273,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 .editorLayout { margin-top: 14px; }
 .editorForm { min-width: 0; }
+.editorFieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .editorActions { display: flex; gap: 8px; }
 .editorActions button { width: 100%; }
 

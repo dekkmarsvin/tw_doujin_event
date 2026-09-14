@@ -62,11 +62,14 @@ test("the draft is kept as soon as the record loads, not when the preview answer
   const deps = effect.slice(effect.indexOf("}, ["), effect.indexOf("]);") + 3);
   assert.doesNotMatch(deps, /baseRecords/);
 
-  // And only when the record actually arrived. Hydrating on the failure path
-  // leaves `savedFields` empty, every comparison then reads as "same as the
-  // server", and the next render deletes the draft the author still has.
+  // And only when the record actually arrived. A failed load leaves the editor
+  // disabled with a retry path; it must not clear the fields or lock retries
+  // behind a ref that was set before the request answered.
   assert.equal(app.match(/setHydrated\(true\)/g)?.length, 1);
-  assert.match(app, /\.catch\(\(\) => setFields\(\{\}\)\);/);
+  assert.match(app, /setHydrationError\(errorMessage\(error\)\)/);
+  assert.match(app, /disabled=\{!hydrated \|\| reviewOpen\}/);
+  assert.match(app, /重試載入已儲存內容/);
+  assert.doesNotMatch(app, /\.catch\(\(\) => setFields\(\{\}\)\)/);
 });
 
 test("the post-event question is two outcomes, and staying public is the default", async () => {
