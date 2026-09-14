@@ -2647,6 +2647,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
       failure_code: string | null; retryable: number; remote_write_intent_at: number | null;
       next_attempt_at: number; pending_attempts: number;
+      workflow_run_attempt: number | null; workflow_retry_attempt: number | null; production_manifest_sha256: string | null;
       created_at: number; updated_at: number;
     }>();
   }
@@ -2985,7 +2986,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).bind(input.jobId, input.now),
       database.prepare(
         `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, failure_code = NULL, retryable = 1, updated_at = ?1,
-           next_attempt_at = 0, pending_attempts = 0
+           next_attempt_at = 0, pending_attempts = 0,
+           workflow_retry_attempt = CASE WHEN failure_code = 'publication_deployment_failed' AND workflow_run_attempt IS NOT NULL
+             THEN workflow_run_attempt + 1 ELSE workflow_retry_attempt END
          WHERE id = ?2 AND status = 'failed' AND step = ?3
            AND retryable = 1
            AND EXISTS (
@@ -3148,7 +3151,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     retryable?: boolean;
     nextAttemptAt?: number;
     pendingAttempts?: number;
-    metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id", string | number | null>>;
+    metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id" | "workflow_run_attempt" | "production_manifest_sha256", string | number | null>>;
     now: number;
   }) {
     await ensureTables();
@@ -3161,7 +3164,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          data_merge_sha = COALESCE(?13, data_merge_sha), main_pr_number = COALESCE(?14, main_pr_number),
          main_head_sha = COALESCE(?15, main_head_sha), main_merge_sha = COALESCE(?16, main_merge_sha),
          workflow_run_id = COALESCE(?17, workflow_run_id),
-         next_attempt_at = COALESCE(?19, next_attempt_at), pending_attempts = COALESCE(?20, pending_attempts)
+         next_attempt_at = COALESCE(?19, next_attempt_at), pending_attempts = COALESCE(?20, pending_attempts),
+         workflow_run_attempt = COALESCE(?21, workflow_run_attempt), production_manifest_sha256 = COALESCE(?22, production_manifest_sha256)
        WHERE id = ?5 AND step = ?6
          AND (?7 IS NULL OR data_head_sha = ?7 OR main_head_sha = ?7)
          AND EXISTS (
@@ -3180,7 +3184,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.metadata?.main_pr_number ?? null, input.metadata?.main_head_sha ?? null, input.metadata?.main_merge_sha ?? null,
       input.metadata?.workflow_run_id ?? null,
       input.status === "failed" && input.allowExpiredFailure ? 1 : 0,
-      input.nextAttemptAt ?? null, input.pendingAttempts ?? null).run();
+      input.nextAttemptAt ?? null, input.pendingAttempts ?? null,
+      input.metadata?.workflow_run_attempt ?? null, input.metadata?.production_manifest_sha256 ?? null).run();
     if (result.meta.changes !== 1) return false;
     if (input.status !== "published") {
       await database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'

@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供 snapshot → repository artifacts 純產檔，#245 接上 GitHub data／main driver 與 Pages dispatcher。**正式發布仍未啟用**：durable dispatch 與真實部署／smoke 尚未接線；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
+> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供純產檔，#245 接上 GitHub data／main driver，#246 接上持久化排程，Phase 4 接上固定 deployment／origin verification。**正式發布仍未啟用**：Worker 設定與 CH20 真實發布／恢復尚待驗收；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
 
 ## 入口與登入
 
@@ -177,14 +177,18 @@ main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE�
 
 必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 已加入唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義（#227 A）。
 
-Deployment seam 缺少實作時回 `publication_deployment_unavailable`，不能完成 published；#212 Phase 4 負責 workflow run 與 Pages origin evidence。此處的 fake／模擬 GitHub／本機 D1 驗證只證明接線與恢復能力，不代替真實發布與故障恢復驗收。
+Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不能完成 published；Pages 與 cron 共用的 runtime 已接上 #212 Phase 4 adapter。只接受 main repository、`deploy-pages.yml`（workflow ID 331570396）、push/main、本 job `main_merge_sha` 的唯一 run。先保存 run ID／attempt，再讀該 attempt 的 jobs；`Deploy to Cloudflare Pages` 成功才進入 verifying，該 attempt 的 `Verify and deploy` 與 `Smoke test production deployment` 均 completed + success 才檢查公開來源。Skipped 不通過，custom domain 結果不影響 blocking gate。
+
+CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部署 commit、所有 published event 的 data pin commit 與實際輸出 JSON SHA-256；production smoke 同時核對部署 commit。Runtime 僅查固定 `https://tw-catalog.pages.dev`、不帶認證且不接受 redirect，核對本次 main SHA／data SHA、固定 main commit 的完整公開活動清單、全部列出的活動 JSON bytes（含既有活動、地圖）、Reader HTML 與匿名 session 401，最後重讀 manifest 確認驗證途中未換版。通過後保存 manifest SHA-256 才可 published。這不取代 CH20 真實 Reader UI 驗收。
+
+部署或 workflow smoke 失敗記錄 retryable `publication_deployment_failed`；既有 Owner／Admin retry 交易僅授權原 run 的下一個 attempt，保留 snapshot、data／main SHA、PR 與原 stage。Adapter 重跑原 run，接受 GitHub 空 body 201，回應遺失後先 reconcile 已出現的下一 attempt；未經 retry 的 attempt 改變 fail closed。重跑前在既有 lease／remote intent 下重查 main，若已前進就拒絕部署舊 checkout。只有 origin 檢查失敗則重驗 origin，不重新建立 PR 或主動重部署。模擬 GitHub／本機 D1 證據不能代替真正的發布失敗恢復。
 
 既有純函式邊界保留：
 
 - [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
 - webhook 的 HMAC 驗證與以 delivery id 去重。
 
-#245 接上 data／main 的 PR、核准 check、allowlist 與 expected SHA merge；#246 接上持久化排程。App ownership 沿用 ADR-0058 已接受的 bot 作者邊界。Deployment 與 production origin smoke 仍須接線並實測。disabled 不自動發布；啟用後僅目前核准版本的 active job 可派送，超時 queued 先轉 failed，failed 舊 job 不自行恢復。CH20 舊內容修正須明確經 UI reopen、重新匯入、validate／submit／approve，不重試錯誤 snapshot。
+#245 接上 data／main 的 PR、核准 check、allowlist 與 expected SHA merge；#246 接上持久化排程，Phase 4 接上 deployment／origin。App ownership 沿用 ADR-0058 已接受的 bot 作者邊界。正式端到端流程仍須實測。disabled 不自動發布；啟用後僅目前核准版本的 active job 可派送，超時 queued 先轉 failed，failed 舊 job 不自行恢復。CH20 舊內容修正須明確經 UI reopen、重新匯入、validate／submit／approve，不重試錯誤 snapshot。
 
 ## 與地圖貢獻流程的邊界
 

@@ -49,6 +49,11 @@ jobs:
       - name: Build pinned production event
         run: npm run build:production
 
+      - name: Record deployed commit and event bytes
+        env:
+          DEPLOYMENT_COMMIT: ${{ github.sha }}
+        run: node scripts/build-deployment-manifest.mjs "$DEPLOYMENT_COMMIT"
+
       - name: Normalize Cloudflare API token
         id: cloudflare-auth
         shell: bash
@@ -94,12 +99,13 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref_name == 'main'
         env:
           BASE_URL: https://tw-catalog.pages.dev
+          DEPLOYMENT_COMMIT: ${{ github.sha }}
         run: |
           for attempt in $(seq 1 8); do
             static_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/" || echo 000)
             session_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/auth/session" || echo 000)
             if [ "$static_code" = "200" ] && [ "$session_code" = "401" ]; then
-              if node scripts/smoke-published-events.mjs "$BASE_URL"; then
+              if node scripts/smoke-published-events.mjs "$BASE_URL" "$DEPLOYMENT_COMMIT"; then
                 echo "Production deployment is live; static assets, Functions and every published event asset passed smoke checks."
                 exit 0
               fi
