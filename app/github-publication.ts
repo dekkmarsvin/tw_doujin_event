@@ -146,6 +146,9 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
 
   const requestPage = async <T>(repository: string, path: string, init?: RequestInit) => {
     const response = await requestRaw(repository, path, init);
+    if (response.status !== 200) {
+      throw new PublicationFailure("github_api_response", "GitHub API request was rejected.", response.status === 429 || response.status >= 500);
+    }
     let body: T;
     try { body = await response.json() as T; }
     catch { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }

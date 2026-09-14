@@ -71,6 +71,18 @@ test("a closed or merged PR remains remote evidence after its branch is deleted"
   await assert.rejects(audit(jobId), (error) => error.code === "github_remote_started");
 });
 
+test("a non-200 empty PR page cannot prove that remote state is clear", async () => {
+  for (const status of [202, 206]) {
+    const audit = createGitHubRemoteAuditor({ tokenProvider: provider(), fetch: async (input) => {
+      const url = new URL(input);
+      if (url.pathname.includes("/branches/")) return new Response(null, { status: 404 });
+      if (url.pathname.endsWith("/pulls")) return new Response("[]", { status });
+      throw new Error("unexpected URL");
+    }});
+    await assert.rejects(audit(jobId), (error) => error.code === "github_api_response");
+  }
+});
+
 test("incomplete or failed remote responses refuse closed-state proof", async () => {
   const incomplete = createGitHubRemoteAuditor({ tokenProvider: provider(), fetch: async (input) => {
     const url = new URL(input);
