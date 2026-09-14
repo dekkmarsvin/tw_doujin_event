@@ -2646,6 +2646,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       data_merge_sha: string | null; main_pr_number: number | null; main_head_sha: string | null;
       main_merge_sha: string | null; workflow_run_id: number | null; error: string | null;
       failure_code: string | null; retryable: number; remote_write_intent_at: number | null;
+      next_attempt_at: number; pending_attempts: number;
       created_at: number; updated_at: number;
     }>();
   }
@@ -2983,7 +2984,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            )`,
       ).bind(input.jobId, input.now),
       database.prepare(
-        `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, failure_code = NULL, retryable = 1, updated_at = ?1
+        `UPDATE organizer_publication_jobs SET status = 'queued', error = NULL, failure_code = NULL, retryable = 1, updated_at = ?1,
+           next_attempt_at = 0, pending_attempts = 0
          WHERE id = ?2 AND status = 'failed' AND step = ?3
            AND retryable = 1
            AND EXISTS (
@@ -3049,22 +3051,49 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(cutoff, input.now).all<{ id: string }>();
     const expired = stalled.results.map((row) => row.id);
     if (expired.length === 0) return { expired };
-    await database.batch(expired.flatMap((jobId) => [
+    const results = await database.batch(expired.flatMap((jobId) => [
       database.prepare(
         `UPDATE organizer_publication_jobs SET status = 'failed', failure_code = 'queued_timeout',
            retryable = 1, error = ?1, updated_at = ?2
-         WHERE id = ?3 AND status = 'queued' AND updated_at <= ?4`,
+         WHERE id = ?3 AND status = 'queued' AND updated_at <= ?4
+           AND NOT EXISTS (SELECT 1 FROM organizer_publication_lease
+             WHERE id = 'global' AND job_id = ?3 AND expires_at > ?2)`,
       ).bind("Publication never started: the job stayed queued past the timeout.", input.now, jobId, cutoff),
       database.prepare(
         `UPDATE organizer_event_candidates SET status = 'failed', updated_at = ?1, last_updated_role = 'system'
          WHERE status IN ('approved', 'publishing')
            AND EXISTS (SELECT 1 FROM organizer_publication_jobs j
-             WHERE j.id = ?2 AND j.status = 'failed' AND j.failure_code = 'queued_timeout'
+             WHERE j.id = ?2 AND j.status = 'failed' AND j.failure_code = 'queued_timeout' AND j.updated_at = ?1
                AND j.candidate_id = organizer_event_candidates.id
                AND j.candidate_version = organizer_event_candidates.current_version)`,
       ).bind(input.now, jobId),
     ]));
-    return { expired };
+    return { expired: expired.filter((_, index) => results[index * 2].meta.changes === 1) };
+  }
+
+  async function listDueOrganizerPublicationJobs(now: number, limit = 10) {
+    await ensureTables();
+    return (await database.prepare(`SELECT j.id FROM organizer_publication_jobs j
+      JOIN organizer_event_candidates c ON c.id = j.candidate_id AND c.current_version = j.candidate_version
+      WHERE j.status IN ('queued', 'publishing') AND j.next_attempt_at <= ?1
+        AND c.approved_at IS NOT NULL AND c.status IN ('approved', 'publishing')
+      ORDER BY j.next_attempt_at, j.created_at, j.id LIMIT ?2`).bind(now, Math.max(1, Math.min(10, limit))).all<{ id: string }>()).results;
+  }
+
+  /** The wake and delivery completion share one transaction. Duplicate POSTs
+   * can enqueue once; they never execute a publication step in the request. */
+  async function wakeOrganizerPublications(input: { deliveryId: string; stage: 'data' | 'main'; sha: string; now: number }) {
+    await ensureTables();
+    const results = await database.batch([
+      database.prepare(`UPDATE organizer_publication_jobs SET next_attempt_at = 0, pending_attempts = 0
+        WHERE status IN ('queued', 'publishing')
+          AND ((?1 = 'data' AND data_head_sha = ?2) OR (?1 = 'main' AND (main_head_sha = ?2 OR main_merge_sha = ?2)))
+          AND EXISTS (SELECT 1 FROM github_webhook_deliveries WHERE delivery_id = ?3 AND processed_at IS NULL)`)
+        .bind(input.stage, input.sha, input.deliveryId),
+      database.prepare(`UPDATE github_webhook_deliveries SET processed_at = ?1, result = 'processed'
+        WHERE delivery_id = ?2 AND processed_at IS NULL`).bind(input.now, input.deliveryId),
+    ]);
+    return { woken: results[0].meta.changes };
   }
 
   async function claimOrganizerPublicationLease(input: { jobId: string; now: number; ttlMs: number }) {
@@ -3117,6 +3146,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     /** Failure-only checkpoint; the original token and step must still own it. */
     allowExpiredFailure?: boolean;
     retryable?: boolean;
+    nextAttemptAt?: number;
+    pendingAttempts?: number;
     metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id", string | number | null>>;
     now: number;
   }) {
@@ -3129,7 +3160,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          data_pr_number = COALESCE(?11, data_pr_number), data_head_sha = COALESCE(?12, data_head_sha),
          data_merge_sha = COALESCE(?13, data_merge_sha), main_pr_number = COALESCE(?14, main_pr_number),
          main_head_sha = COALESCE(?15, main_head_sha), main_merge_sha = COALESCE(?16, main_merge_sha),
-         workflow_run_id = COALESCE(?17, workflow_run_id)
+         workflow_run_id = COALESCE(?17, workflow_run_id),
+         next_attempt_at = COALESCE(?19, next_attempt_at), pending_attempts = COALESCE(?20, pending_attempts)
        WHERE id = ?5 AND step = ?6
          AND (?7 IS NULL OR data_head_sha = ?7 OR main_head_sha = ?7)
          AND EXISTS (
@@ -3147,7 +3179,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.metadata?.data_pr_number ?? null, input.metadata?.data_head_sha ?? null, input.metadata?.data_merge_sha ?? null,
       input.metadata?.main_pr_number ?? null, input.metadata?.main_head_sha ?? null, input.metadata?.main_merge_sha ?? null,
       input.metadata?.workflow_run_id ?? null,
-      input.status === "failed" && input.allowExpiredFailure ? 1 : 0).run();
+      input.status === "failed" && input.allowExpiredFailure ? 1 : 0,
+      input.nextAttemptAt ?? null, input.pendingAttempts ?? null).run();
     if (result.meta.changes !== 1) return false;
     if (input.status !== "published") {
       await database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
@@ -3195,9 +3228,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     } catch (error) {
       if (error instanceof Error && /unique constraint/i.test(error.message)) {
         const existing = await database.prepare(
-          "SELECT payload_sha256, processed_at, result FROM github_webhook_deliveries WHERE delivery_id = ?1",
-        ).bind(input.deliveryId).first<{ payload_sha256: string; processed_at: number | null; result: string | null }>();
-        if (!existing || existing.payload_sha256 !== input.payloadSha256) return "mismatch" as const;
+          "SELECT event, payload_sha256, processed_at, result FROM github_webhook_deliveries WHERE delivery_id = ?1",
+        ).bind(input.deliveryId).first<{ event: string; payload_sha256: string; processed_at: number | null; result: string | null }>();
+        if (!existing || existing.event !== input.event || existing.payload_sha256 !== input.payloadSha256) return "mismatch" as const;
         return existing.processed_at !== null && existing.result === "processed"
           ? "duplicate" as const
           : "recorded" as const;
@@ -3211,7 +3244,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const result = await database.prepare(
       `UPDATE github_webhook_deliveries
        SET processed_at = CASE WHEN ?1 = 1 THEN ?2 ELSE NULL END, result = ?3
-       WHERE delivery_id = ?4`,
+       WHERE delivery_id = ?4 AND processed_at IS NULL`,
     ).bind(input.processed ? 1 : 0, input.now,
       input.processed ? "processed" : `failed:${(input.result ?? "unknown").slice(0, 500)}`,
       input.deliveryId).run();
@@ -3277,6 +3310,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     claimFailedOrganizerCandidateReopenLease, reopenFailedOrganizerCandidate,
     markOrganizerPublicationRemoteWriteIntent,
     retryOrganizerPublicationJob, expireStalledOrganizerPublicationJobs, claimOrganizerPublicationLease,
+    listDueOrganizerPublicationJobs, wakeOrganizerPublications,
     hasOrganizerPublicationLease, releaseOrganizerPublicationLease,
     updateOrganizerPublicationJob, recordGitHubWebhookDelivery, completeGitHubWebhookDelivery,
     storePreviewMail, latestPreviewMail, clearPreviewData,

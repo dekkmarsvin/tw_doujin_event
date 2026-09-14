@@ -143,7 +143,9 @@ lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 fa
 
 成功退回會遞增 candidate version、保留 `eventId` 鎖定與舊 snapshot／review／job，新增 immutable revision 與含理由的 `changes_requested` review，並令舊 job `retryable = 0`。舊 job 仍會在頁面顯示為上一版本的歷史發布紀錄，不能再 retry；新的版本回到一般編輯、驗證與送審流程。Owner／Admin 以外的 Editor 沒有此動作。
 
-**`queued` 停留超過 15 分鐘就是失敗。** 只有 dispatch 會讓 job 離開 `queued`，而 retry 只接受 `failed`，所以 dispatch 從未發生的 job 原本會永遠卡住。超過這個逾時值後，下一次讀取活動列表或任一候選活動時，系統把該 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`。接手的是上一段那條既有恢復路徑——同一筆 job、同一份 snapshot——不另外提供「手動啟動 queued job」的入口，否則就出現第二條產生 publication 的路徑。等待 CI 的狀態是 `publishing` 而不是 `queued`，不受這個逾時影響；lease 仍未過期的 job 留給持有者，不在這裡改寫。
+**`queued` 停留超過 15 分鐘就是失敗。** 依 ADR-0062，獨立 publication Worker 每分鐘掃描，把超時 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`；活動列表與候選 GET 不執行掃描或寫入。更新交易再次檢查 live lease，避免掃描與 dispatch 同時開始時錯誤判定逾時。恢復沿用同一筆 job、同一份 snapshot，不新增手動啟動 queued job 的入口。等待 CI 是 `publishing`，不受 queued timeout 影響。
+
+**持續推進不依賴使用者開啟頁面。** 核准／retry 先嘗試一步；cron 每輪最多處理十筆目前核准版本且到期的 queued／publishing job，各推進一步。pending 的 next attempt 與 checkpoint 在同一 lease 下寫入 D1，退避依序 1、2、4、5 分鐘，上限五分鐘，短於 queued timeout。前進後下一輪可續推；failed 不自動 retry，舊版本不派送。Webhook 只重設到期時間，漏送或早於 checkpoint 到達仍由 cron 接手。服務停機時不保證一分鐘執行，恢復後超時 queued 仍按既有失敗／retry 路徑處理。
 
 **逾時的 job 不一定從未開始，所以失敗訊息看 checkpoint 而不是 step。** retry 會把 job 放回 `queued` 並保留原 step，因此同一個逾時有兩種來源：從未被 dispatch 的 job，以及重試後 dispatch 又沒發生、先前 checkpoint 都還在的 job。判準是這份工作有沒有留下任何 checkpoint。`preparing_data` 是新工作唯一能通過的第一步，而 `missing_checkpoint` 不允許它在缺 `data_pr_number` 與 `data_head_sha` 的情況下前進；其後每一步在它完成前都到不了，`preparing_main` 起另有 `missing_data_commit` 把關。因此七個 checkpoint 欄位全空就代表這份工作什麼都還沒碰到。（並非每個步驟都宣告 required checkpoint——`waiting_data_checks`、`waiting_main_checks` 與 `verifying_production` 沒有——但新建的工作過不到那裡。）pending 的 delivery 會寫下 metadata 卻不推進 step，所以這個判準量的是「有沒有東西跑過」，不是「有沒有階段完成」；區分從未被 dispatch 的工作與遠端產物已經釘住的工作，要的正是前者。**step 不能拿來判斷**：核准流程建立的 job 落在 `preparing_data`，舊的建立路徑落在 `assemble`，而 retry 保留上次失敗的那一步，同一個名字同時涵蓋兩種情形。只有從未完成任何階段的才說發布沒有開始；其餘沿用既有 retryable 措辭，因為 UI 四階段對它已經顯示出已完成的階段，說「沒有開始」會與同一畫面互相矛盾。
 
@@ -151,8 +153,8 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 目前 production gate：
 
-1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。github 注入真實 data／main driver，每次呼叫只推進一個 bounded transition；持續交付由 #246 接線。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
-2. `POST /api/integrations/github/webhook` 仍未連接 executor，非 github 或缺 secret 回 503，否則 processing fail closed，不能宣稱已完成 GitHub publication。
+1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。github 注入真實 data／main driver，每次呼叫只推進一個 bounded transition；独立 Worker 依上一段持續推進，設定仍為 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
+2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
 3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求 fresh-admin session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 
 GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 60s`、`exp = iat + 600s`），接受 PKCS#8 與 PKCS#1 RSA private key。每個 provider／job 只有一份記憶體 cache；token 剩餘 60 秒內更新，進行中的 mint 共用同一個 pending promise。請求遭遇 `401` 時，每個 request 最多 invalidate 並重試一次，而且只有被拒絕的 token 仍是目前 cache 才能 invalidate；`403` 不刷新 token。缺少 App ID、installation ID 或 private key，以及 import/sign/fetch/JSON 例外，都轉成固定 `PublicationFailure`，不保存或回傳 raw exception、request body、Authorization、key、JWT 或 token。
@@ -182,7 +184,7 @@ Deployment seam 缺少實作時回 `publication_deployment_unavailable`，不能
 - [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
 - webhook 的 HMAC 驗證與以 delivery id 去重。
 
-#245 接上 data／main 的 PR、核准 check、allowlist 與 expected SHA merge；App ownership 沿用 ADR-0058 已接受的 bot 作者邊界。Deployment 與 production origin smoke 仍須接線並實測。既有 approved/queued（包括 ch-20）保留原 snapshot/job，不做一次性資料修正，也不會被自動發布；超過 `queued` 逾時的那幾筆由上述機制轉成 failed + retryable，恢復仍是重試原 job，不要求 Organizer 再按一次 Publish。
+#245 接上 data／main 的 PR、核准 check、allowlist 與 expected SHA merge；#246 接上持久化排程。App ownership 沿用 ADR-0058 已接受的 bot 作者邊界。Deployment 與 production origin smoke 仍須接線並實測。disabled 不自動發布；啟用後僅目前核准版本的 active job 可派送，超時 queued 先轉 failed，failed 舊 job 不自行恢復。CH20 舊內容修正須明確經 UI reopen、重新匯入、validate／submit／approve，不重試錯誤 snapshot。
 
 ## 與地圖貢獻流程的邊界
 

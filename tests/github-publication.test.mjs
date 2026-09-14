@@ -8,7 +8,24 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR environmen
 const github = await environment.runner.import("/app/github-publication.ts");
 const publication = await environment.runner.import("/app/publication-bundle-assembler.ts");
 const failures = await environment.runner.import("/app/organizer-publication.ts");
+const { readPublishedEventAtOrigin, PAGES_PRODUCTION_ORIGIN } = await environment.runner.import("/app/publication-runtime.ts");
 after(() => vite.close());
+
+test("cron published-event lookup uses a fixed anonymous origin and fails closed except on 404", async () => {
+  let seen;
+  const existing = await readPublishedEventAtOrigin("ff47", async (url, init) => {
+    seen = { url, init }; return Response.json({ id: "ff47" });
+  });
+  assert.equal(existing.id, "ff47");
+  assert.equal(seen.url, `${PAGES_PRODUCTION_ORIGIN}/data/events/ff47/event.json`);
+  assert.equal(seen.init.redirect, "error");
+  assert.equal(seen.init.headers, undefined);
+  assert.equal(await readPublishedEventAtOrigin("missing", async () => new Response("Not found", { status: 404 })), null);
+  for (const response of [new Response("bad", { status: 500 }), new Response("html"), Response.json({ id: "different" })]) {
+    await assert.rejects(readPublishedEventAtOrigin("ch-20", async () => response), (error) => error.code === "published_collection_unavailable" && error.retryable);
+  }
+  await assert.rejects(readPublishedEventAtOrigin("../ff47", async () => assert.fail("must not fetch")), (error) => error.code === "publication_identity");
+});
 
 test("webhook handler verifies exact bytes before delivery idempotency", async () => {
   const deliveries = new Set();

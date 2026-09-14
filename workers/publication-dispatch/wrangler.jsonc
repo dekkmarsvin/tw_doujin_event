@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "tw-catalog-publication-dispatch",
+  "main": "./index.ts",
+  "compatibility_date": "2026-05-22",
+  "workers_dev": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": { "ORGANIZER_PUBLICATION_MODE": "disabled" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "tw-catalog-identity",
+    "database_id": "935b605f-6d08-436f-bbf8-f80b8f3bd7e2"
+  }],
+  "env": {
+    "preview": {
+      "triggers": { "crons": ["* * * * *"] },
+      "vars": { "ORGANIZER_PUBLICATION_MODE": "disabled", "PREVIEW_MAIL_SINK": "d1" },
+      "d1_databases": [{
+        "binding": "DB",
+        "database_name": "tw-catalog-identity-preview",
+        "database_id": "88716ee2-4d17-4c93-87aa-bfe9c961a599"
+      }]
+    }
+  }
+}

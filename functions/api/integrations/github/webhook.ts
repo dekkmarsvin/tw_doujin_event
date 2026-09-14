@@ -1,5 +1,6 @@
 import { createGitHubWebhookHandler } from "../../../../app/github-publication";
 import { repositoryFor } from "../../../_portal";
+import { createPublicationWebhookDelivery } from "../../../../app/publication-scheduler";
 
 export const onRequestPost: PagesFunction<PortalEnv> = async (context) => {
   if (context.env.ORGANIZER_PUBLICATION_MODE !== "github") {
@@ -12,8 +13,6 @@ export const onRequestPost: PagesFunction<PortalEnv> = async (context) => {
     secret, now: Date.now,
     recordDelivery: (delivery) => repository.recordGitHubWebhookDelivery(delivery),
     completeDelivery: (delivery) => repository.completeGitHubWebhookDelivery(delivery),
-    // Fail closed until the App installation and rulesets have passed rollout
-    // verification. A failed delivery remains retryable with the same id.
-    onDelivery: async () => { throw new Error("GitHub publication progression is not enabled."); },
+    onDelivery: createPublicationWebhookDelivery(repository),
   })(context.request);
 };

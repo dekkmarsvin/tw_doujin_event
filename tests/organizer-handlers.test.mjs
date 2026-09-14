@@ -617,12 +617,14 @@ test("owner and editor use one validated optimistic workflow while only admin ap
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "尚未登入。" });
   }
-  // Nothing dispatched the job the approval flow just created, so the timeout
-  // is the first thing that happens to it. Reading the workspace is what ends
-  // the wait, and what comes back has to tell the owner publication never
-  // began: the wording used to key on the step, and `preparing_data` — the step
-  // approval writes — is exactly the case that missed.
+  // Workspace reads do not expire jobs. Cron owns the timeout even when no
+  // user opens the workspace; the resulting UI still explains it never began.
   now += QUEUED_PUBLICATION_TIMEOUT_MS;
+  const beforeTimeout = await handlers.getOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
+  ), candidateId);
+  assert.equal((await beforeTimeout.json()).publication.status, "queued");
+  await repository.expireStalledOrganizerPublicationJobs({ now, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS });
   const stalled = await handlers.getOrganizerCandidate(request(
     `/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie,
   ), candidateId);
@@ -653,10 +655,12 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   assert.deepEqual(dispatched, [jobId, jobId, jobId]);
   assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "publishing");
 
-  // Nothing ever picked the job up. The workspace entry itself ends the wait,
-  // so the activity is findable as failed before it is opened, and the retry
-  // the workspace already has takes the same job from there.
+  // Listing also stays read-only. The scheduled timeout makes the failed
+  // activity findable before it is opened, with the same checkpoint for retry.
   now += QUEUED_PUBLICATION_TIMEOUT_MS;
+  const beforeListTimeout = await handlers.listOrganizerCandidates(request("/api/organizer/events", "GET", undefined, ownerCookie));
+  assert.equal((await beforeListTimeout.json()).events.find((event) => event.id === candidateId).status, "publishing");
+  await repository.expireStalledOrganizerPublicationJobs({ now, timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS });
   const listed = await handlers.listOrganizerCandidates(request("/api/organizer/events", "GET", undefined, ownerCookie));
   assert.equal((await listed.json()).events.find((event) => event.id === candidateId).status, "failed");
   const detail = await handlers.getOrganizerCandidate(request(
