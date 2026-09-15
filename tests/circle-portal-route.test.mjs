@@ -296,6 +296,8 @@ test("the session cookie is host-locked, http-only and not readable by script", 
   const header = response.headers.get("set-cookie");
 
   assert.match(header, new RegExp(`^${SESSION_COOKIE}=`));
+  assert.match(header, /Max-Age=604800(?:;|$)/);
+  assert.equal((await response.json()).expiresAt, clock + 7 * 24 * 60 * 60 * 1000);
   assert.match(header, /HttpOnly/);
   assert.match(header, /Secure/);
   assert.match(header, /SameSite=Lax/);
@@ -1104,30 +1106,39 @@ test("the generic public route rejects an event that does not match handler conf
   assert.equal(response.headers.get("cache-control"), "no-store");
 });
 
-test("admin actions require a recently created session", async () => {
+test("login, reads and authorized writes share an absolute seven-day expiry", async () => {
+  const started = clock;
+  const deadline = started + 7 * 24 * 60 * 60 * 1000;
   const admin = await signIn("admin@example.com");
-  clock += 25 * 60 * 60 * 1000;
+  const ordinary = await signIn("ordinary@example.com");
+  const cookies = [admin, ordinary];
+  const rows = await database.prepare("SELECT created_at, expires_at FROM sessions").all();
+  assert.equal(rows.results.length, 2);
+  assert.ok(rows.results.every(row => row.created_at === started && row.expires_at === deadline));
+  const read = cookie => handlers.session(get("/api/auth/session", cookie));
+  const write = email => handlers.adminManageAdmins(post("/api/admin/admins", { email, action: "add" }, admin));
   try {
-    const owner = await signIn("later-claim@example.com");
-    const created = await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, owner));
-    assert.equal(created.status, 201);
-    const claim = await created.json();
-    const refreshed = await handlers.adminListClaims(get("/api/admin/claims", admin));
-    assert.equal(refreshed.status, 200, "an older valid session can still refresh the queue");
-    assert.deepEqual((await refreshed.json()).claims.map((item) => item.id), [claim.id]);
-    const response = await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: claim.id, decision: "approve" }, admin));
-    assert.equal(response.status, 401, "a stale admin session must re-authenticate before deciding");
-    // The panel disables its step-up controls and explains itself beside the
-    // one that was refused, which it can only do by telling this 401 apart
-    // from every other one. Matching on the message would tie that behaviour
-    // to the wording.
-    assert.equal((await response.json()).code, "admin_session_stale");
-    assert.equal((await repository.getClaim(claim.id)).status, "pending");
-    assert.equal((await handlers.adminListClaims(get("/api/admin/claims"))).status, 401);
-    assert.equal((await handlers.adminListClaims(get("/api/admin/claims", owner))).status, 403);
-  } finally {
-    clock -= 25 * 60 * 60 * 1000;
-  }
+    clock = started + 25 * 60 * 60 * 1000;
+    assert.equal((await write("day-two@example.com")).status, 200, "no separate 24-hour gate");
+    clock = deadline - 1;
+    for (const cookie of cookies) {
+      const response = await read(cookie);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).expiresAt, deadline, "activity never renews the deadline");
+    }
+    assert.equal((await write("day-seven@example.com")).status, 200);
+    clock = deadline;
+    for (const cookie of cookies) assert.equal((await read(cookie)).status, 401);
+    assert.equal((await handlers.adminListClaims(get("/api/admin/claims", admin))).status, 401);
+    assert.equal((await write("too-late@example.com")).status, 401);
+    assert.ok(!(await repository.listAdmins()).some(row => row.email === "too-late@example.com"));
+    // Legacy rows with a 30-day expiry must not keep the interface signed in.
+    await database.prepare("UPDATE sessions SET expires_at = ?1").bind(started + 30 * 24 * 60 * 60 * 1000).run();
+    for (const cookie of cookies) assert.equal((await read(cookie)).status, 401);
+    const renewed = await signIn("admin@example.com");
+    assert.equal((await read(renewed)).status, 200);
+    assert.equal((await (await read(renewed)).json()).expiresAt, clock + 7 * 24 * 60 * 60 * 1000);
+  } finally { clock = started; }
 });
 
 test("a takedown removes the content and a second takedown reports nothing to do", async () => {

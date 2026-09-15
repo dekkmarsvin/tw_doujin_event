@@ -18,9 +18,8 @@
 | 常數 | 值 | 管什麼 |
 |---|---|---|
 | `LOGIN_TOKEN_TTL_MS` | 15 分鐘 | 登入連結多久失效 |
-| `SESSION_TTL_MS` | 30 天 | session 與 cookie `Max-Age` |
+| `SESSION_TTL_MS` | 7 天 | session 與 cookie `Max-Age` |
 | `CHALLENGE_TTL_MS` | 24 小時 | 認領驗證碼多久失效 |
-| `ADMIN_FRESH_SESSION_MS` | 24 小時 | 管理者動作要求的 session 新鮮度 |
 | `loginPerEmailPerHour` | 5 | 同一 email 每小時可索取的登入連結 |
 | `loginPerIpPerHour` | 20 | 同一 IP 雜湊每小時可索取的登入連結 |
 | `claimsPerAccountPerDay` | 3 | 每帳號每日認領次數 |
@@ -82,9 +81,9 @@
 
 ### `sessions` — 登入工作階段
 
-`account_id`、`created_at`、`expires_at`（30 天）、`last_seen_at`、`revoked_at`。
+`account_id`、`created_at`、`expires_at`（7 天）、`last_seen_at`、`revoked_at`。
 
-瀏覽器端對應 cookie **`__Host-ff47_session`**，值為 `sessionId.HMAC`，`Max-Age` 同 30 天。登出寫入 `revoked_at` 並以 `Max-Age=0` 清 cookie，該列留到保存期滿。
+瀏覽器端對應 cookie **`__Host-ff47_session`**，值為 `sessionId.HMAC`，`Max-Age` 同 7 天。登出寫入 `revoked_at` 並以 `Max-Age=0` 清 cookie，該列留到保存期滿。
 
 **目的**：維持登入狀態。 **保存期**：到期或撤銷後 7 天。 **到期處置**：由排程 Worker **刪除資料列**。過期的 session 沒有事後價值——它連 IP 欄位都沒有，最後登入時間記在 `accounts.last_login_at`。
 

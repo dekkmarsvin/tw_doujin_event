@@ -144,7 +144,7 @@ async function sessionCookie(sessionId = "session-1") {
   return `__Host-ff47_session=${sessionId}.${await cryptoModule.hmacSign("session-secret", sessionId)}`;
 }
 
-test("admin probe handler gates fresh admin, exact empty body, and safe failures", async () => {
+test("admin probe handler gates valid admin, exact empty body, and safe failures", async () => {
   const adminSession = { accountId: "admin-id", email: "admin@example.test", sessionCreatedAt: now };
   let calls = 0;
   let auditCalls = 0;
@@ -175,7 +175,7 @@ test("admin probe handler preserves ordinary, stale, and unauthenticated gate re
   const ordinaryCookie = await sessionCookie("ordinary");
   assert.equal((await ordinary.adminProbeGitHubInstallation(request("{}", ordinaryCookie))).status, 403);
 
-  const stale = makeHandlers({ probeRun: run, session: { accountId: "admin-id", email: "admin@example.test", sessionCreatedAt: now - 24 * 60 * 60 * 1000 - 1 } });
+  const stale = makeHandlers({ probeRun: run, session: { accountId: "admin-id", email: "admin@example.test", sessionCreatedAt: now - 7 * 24 * 60 * 60 * 1000 } });
   const staleCookie = await sessionCookie("stale");
   assert.equal((await stale.adminProbeGitHubInstallation(request("{}", staleCookie))).status, 401);
   assert.equal((await stale.adminProbeGitHubInstallation(request("{}"))).status, 401);

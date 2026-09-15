@@ -77,6 +77,7 @@ import {
 } from "../organizer-workspace";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
+import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import { MAP_IMAGE_MAX_BYTES } from "../map-contribution-files";
@@ -226,6 +227,11 @@ export default function OrganizerApp() {
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState<Notice>(IDLE);
   const isDesktop = useDesktopViewport();
+  const expireSession = useCallback(() => {
+    setSession(null);
+    setNotice({ kind: "error", message: "登入已到期，請重新登入。" });
+  }, []);
+  useSessionExpiry(session, expireSession);
 
   useEffect(() => {
     const token = takeLoginToken();
@@ -251,6 +257,7 @@ export default function OrganizerApp() {
       <div><h1>主辦單位工作區</h1><p>場刊 Map 活動資料建置</p></div>
       {session && <div className={styles.identity}>
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
+        <SessionDeadline session={session} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
       </div>}
     </header>

@@ -4,7 +4,7 @@
 - 日期：2026-09-13
 - 依據：#212；延續 ADR-0046 的安全邊界
 
-Organizer 負責內容，Maintainer 負責必要審核，System 負責發布。管理者的「核准並發布」同時同意 immutable snapshot 公開並建立唯一 publication；不增加第二個人工 Publish 動作。允許 self approval，沿用 fresh session 與稽核。
+Organizer 負責內容，Maintainer 負責必要審核，System 負責發布。管理者的「核准並發布」同時同意 immutable snapshot 公開並建立唯一 publication；不增加第二個人工 Publish 動作。允許 self approval，沿用有效 session 與稽核。
 
 首次發布是 CREATE：已存在的 eventId 必須拒絕，不能 overwrite 或自動猜成 amendment。#190 的 amendment 需要明確的 published baseline 與重新送審，不由本次 CREATE 自動轉換。
 

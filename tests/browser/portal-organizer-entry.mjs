@@ -53,8 +53,10 @@ try {
   await organizer.getByRole("heading", { name: "送審與發布狀態" }).waitFor();
   readStatus = 401;
   await organizer.clock.runFor(5000);
-  await organizer.getByRole("alert").getByText(/登入已失效/).waitFor();
-  await organizer.getByRole("link", { name: "重新登入並返回活動", exact: true }).waitFor();
+  await organizer.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
+  await organizer.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
+  assert.equal(await organizer.getByRole("button", { name: "登出", exact: true }).count(), 0);
+  assert.equal(await organizer.getByRole("heading", { name: "送審與發布狀態" }).count(), 0);
   const after401 = reads;
   await organizer.clock.runFor(20_000);
   assert.equal(reads, after401, "401 stops polling");

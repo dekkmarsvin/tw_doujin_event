@@ -1,4 +1,4 @@
-import { PortalError } from "./circle-editor-client";
+import { PortalError, reportSessionResponse } from "./circle-editor-client";
 import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
 import type {
   OrganizerCandidateStatus,
@@ -32,6 +32,7 @@ async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
+  reportSessionResponse(response.status);
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
     throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗，請稍後再試。", response.status, body);
@@ -227,6 +228,7 @@ export function uploadOrganizerMapBackground(candidateId: string, draftId: strin
  * instead of a thrown error. */
 export async function readOrganizerMapBackground(candidateId: string, draftId: string) {
   const response = await fetch(organizerMapBackgroundPath(candidateId, draftId), { credentials: "same-origin" });
+  reportSessionResponse(response.status);
   if (response.status === 404) return null;
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;

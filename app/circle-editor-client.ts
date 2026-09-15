@@ -8,7 +8,7 @@ import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } fr
  * anonymous, edge-cacheable read namespace.
  */
 
-export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean; hasOrganizerAccess: boolean };
+export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean; hasOrganizerAccess: boolean; expiresAt?: number };
 
 export type ClaimSummary = {
   id: string;
@@ -37,16 +37,12 @@ export class PortalError extends Error {
   }
 }
 
-/**
- * Whether the refusal was the admin step-up gate rather than a real failure.
- *
- * The panel needs this to say the one thing the message alone cannot: the
- * request was fine, the session is simply older than the step-up window, and
- * signing in again is the whole fix. Matched on the server's code rather than
- * its sentence so the copy stays free to change.
- */
-export function adminSessionStale(error: unknown) {
-  return error instanceof PortalError && error.status === 401 && error.body?.code === "admin_session_stale";
+export const SESSION_EXPIRED_EVENT = "portal-session-expired";
+
+export function reportSessionResponse(status: number) {
+  if (status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
 }
 
 let portalEventId = "";
@@ -87,6 +83,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "same-origin",
     headers: { accept: "application/json", ...(mutating && !multipart ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
+  reportSessionResponse(response.status);
   const text = await response.text();
 
   let body: Record<string, unknown> = {};
