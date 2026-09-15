@@ -1,10 +1,11 @@
+import { useEffect, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
+import { groupCalendarEvents, taipeiDate } from "./event-calendar";
 import styles from "./event-chooser.module.css";
 
 /**
  * The public entry when a URL names no event, or names one this build does not
- * serve (ADR-0042). Deliberately a flat list in published order: grouping by
- * lifecycle is a separate decision (#134) and a list of two does not need it.
+ * serve (ADR-0042), grouped by the event's Taiwan calendar dates (#134).
  */
 export default function EventChooser({ events, unresolved, onSelect }: {
   events: readonly EventDefinition[];
@@ -12,6 +13,14 @@ export default function EventChooser({ events, unresolved, onSelect }: {
   unresolved?: string | null;
   onSelect: (event: EventDefinition) => void;
 }) {
+  const [today, setToday] = useState(() => taipeiDate(Date.now()));
+  useEffect(() => {
+    const refresh = () => setToday(taipeiDate(Date.now()));
+    const timer = window.setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
+  }, []);
+  const groups = groupCalendarEvents(events, today);
   return <div className={styles.shell}>
     <header className={styles.header}>
       <span aria-hidden="true">場</span>
@@ -29,17 +38,21 @@ export default function EventChooser({ events, unresolved, onSelect }: {
         </span>
       </p>}
 
-      <ul className={styles.list}>
-        {events.map((event) => <li key={event.id}>
+      {groups.map((group) => <section key={group.id} className={styles.group} data-event-group={group.id} aria-labelledby={`event-group-${group.id}`}>
+        <h2 id={`event-group-${group.id}`}>{group.label}</h2>
+        <ul className={styles.list}>
+        {group.entries.map(({ event, label }) => <li key={event.id}>
           <button type="button" onClick={() => onSelect(event)}>
             <span>
               <b>{event.name}</b>
-              <small>{event.dateRangeLabel} · {event.venue}</small>
+              <small>{label} · {event.venue}</small>
             </span>
             <span className={styles.arrow} aria-hidden="true">→</span>
           </button>
         </li>)}
-      </ul>
+        </ul>
+      </section>)}
+      {events.length === 0 && <p className={styles.empty} role="status">目前沒有公開活動，請稍後再來查看。</p>}
     </main>
   </div>;
 }

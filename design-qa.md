@@ -1,5 +1,17 @@
 # Reader 介面驗收紀錄
 
+## 2026-09-15：活動選擇頁日期分類與詳細搜尋底色
+
+範圍及設計預設見 [本輪設計紀錄](docs/design/reader-event-chooser-ideas.md)。活動選擇頁採「即將到來 → 舉辦中 → 過往活動」及組內日期遞減；過往活動維持可點擊，名稱改較柔和的灰綠。詳細搜尋移除外層底色及重複縮排，和收藏控制對齊。
+
+- 實際 CH20／FF47 於本機 staged 資料驗證：CH20 顯示 `26.10.09` 在即將到來；FF47 顯示 `26.08.21-23` 在過往活動。桌機 1440×900 與手機 390×900 的選擇頁、詳細搜尋共 4 張截圖與 [matrix.json](docs/design/assets/reader-event-calendar-2026-09-15/matrix.json) 同次執行產生。
+- [桌機選擇頁](docs/design/assets/reader-event-calendar-2026-09-15/published-chooser-1440.png)、[手機選擇頁](docs/design/assets/reader-event-calendar-2026-09-15/published-chooser-390.png)、[桌機搜尋](docs/design/assets/reader-event-calendar-2026-09-15/published-search-1440.png)、[手機搜尋](docs/design/assets/reader-event-calendar-2026-09-15/published-search-390.png)：無水平溢出；搜尋按鈕左右與收藏控制一致，外層透明。
+- Fixture 瀏覽器旅程另驗 1440／360px、5 個日期的狀態與排序、跨午夜更新、過往卡片鍵盤聚焦及開啟地圖，以及桌機／手機搜尋開啟與取消後焦點還原，共 13 項；[報告](docs/design/assets/reader-event-calendar-2026-09-15/fixture-report.json) 與[即將到來／舉辦中畫面](docs/design/assets/reader-event-calendar-2026-09-15/fixture-upcoming-and-ongoing.png) 為該次測試資料證據。
+- 原有活動選擇旅程 5 項通過，包含失效活動連結、Back／Forward 及條件不跨活動。日期與元件測試 8 項通過，含跨月、跨年、閏日、台灣日期界線、空集合與不可辨識日期。
+- TypeScript、doc-map（12 contracts）、本機 lint（排除既有 `.tmp/` 備份生成檔）、Impeccable layout scan 通過。
+
+以上為 Chrome 瀏覽器及模擬尺寸驗收，不代表 iOS／Android 真機。日期分類精度為台灣日曆日，沒有宣稱活動實際開門／閉門時間。
+
 ## 2026-09-15：活動頂部、切換活動與取消選取
 
 受測實作：`aa5e16d`。Chrome 153.0.8010.37，本機 staged 官方 CH20／FF47；以下證據為瀏覽器尺寸測試，不代表 iOS Safari／Android Chrome 真機驗收。

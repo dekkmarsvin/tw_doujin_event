@@ -2,7 +2,7 @@
 
 URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。
 
-**實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec、活動解析與 history intent）、[`app/event-entry.tsx`](../../app/event-entry.tsx)（選擇器與讀者畫面的分流）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）
+**實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec、活動解析與 history intent）、[`app/event-entry.tsx`](../../app/event-entry.tsx)（選擇器與讀者畫面的分流）、[`app/event-chooser.tsx`](../../app/event-chooser.tsx) 與 [`app/event-calendar.ts`](../../app/event-calendar.ts)（活動日期、排序及分組）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）
 **測試**：`tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`
 
 ## 參數
@@ -35,6 +35,9 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 除 `event`、`day`、`area` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件；多場館空間活動的 `venueSpaceId` 是例外，必須寫出以消除 `area` 歸屬歧義。
 
 ## 規則
+
+- **活動選擇頁只呈現已發布活動。** 依「即將到來 → 舉辦中 → 過往活動」分組，各組按開始日期由新到舊排序，同日以活動 ID 固定順序；不顯示空群組，零活動時顯示「目前沒有公開活動」。分類使用 `Asia/Taipei` 日曆日，包含首日與末日及中間的夜間；開著頁面每分鐘及重新可見時更新。這是日期狀態，不代表現場開放入場。
+- **選擇頁日期由已有資料推導。** 使用逐日 ISO 日期，並相容既有「月日・星期」標示；舊標示的年份由 `eventEndsAt` 的台灣結束日期定位，跨年回推。顯示單日 `YY.mm.dd`、同月 `YY.mm.dd-dd`、跨月 `YY.mm.dd-mm.dd`、跨年 `YY.mm.dd-YY.mm.dd`。不修改原始 `dateRangeLabel` 或地圖內日期文案。無法解析的日期保留原文；結束日期已過可歸入過往，否則置於「日期待確認」，不捏造開始日期。分組不新增 URL／schema 欄位，也不攔截原有 deep link。
 
 - **`selectedCircle` 與 `selectedBooth` 必須互相驗證。** 兩者都在時取交集；只有 `selectedCircle` 時取該社團在該日的第一筆配置；無效或已變更的關聯降級為只開啟仍有效的活動與區域，**不顯示錯誤社團**。
 - **攤位範圍 deep link 在 selection seam 解析。** `selectedCircle` 若帶的是攤位範圍 ID（`1-e19`、`1-e19-0`），先從 records 解析為 allocated ID，再與日期／攤位取交集；成功恢復後只會重新序列化 canonical `c-*`。舊的 `ff47-<hash>` ID 已無相容路徑，解析不到就 fail closed（[ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)）。
