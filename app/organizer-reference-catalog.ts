@@ -157,6 +157,14 @@ export async function resolveOrganizerReferences(draft: OrganizerEventDraft, rec
   };
   const paths = [...selection.organizers.map((item) => item.path), selection.categoryCatalog.path,
     ...selection.venues.flatMap((venue) => [venue.path, ...venue.spaces.map((space) => space.path)])].sort();
+  for (const venue of selection.venues) {
+    for (const item of [venue, ...venue.spaces]) {
+      if (!records.some((record) => record.path === item.path)) issues.push({ severity: "error", step: "venue",
+        target: item.id, code: "missing_venue_reference",
+        message: "所選場館或使用空間尚未保存完整來源，請在「場館與使用空間」補齊官方來源。" });
+    }
+  }
+  if (issues.length) return { issues, snapshot: null };
   try {
     const files = await Promise.all(paths.map(async (path) => {
       const selected = records.find((row) => row.path === path);

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
+import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import {
   PortalError,
   readSession,
@@ -1556,6 +1557,9 @@ function DraftForm({
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
       </div>}
     </div> : <div>
+      {detail.missingVenueReferences?.map((entry) => <OrganizerVenueReferencePanel key={entry.id}
+        entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
+        disabled={!editable || dirty} onCreated={onChanged} />)}
       <div className={styles.row}>
         <button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => {
           const used = new Set(next.venue.assignments.map((item) => item.venueSpaceId));
