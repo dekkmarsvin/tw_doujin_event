@@ -33,6 +33,7 @@ beforeEach(async () => {
   const ownerActor = await actor("owner"); owner = ownerActor.cookie; ownerId = ownerActor.id;
   const editorActor = await actor("editor"); editor = editorActor.cookie;
   const adminActor = await actor("admin"); admin = adminActor.cookie;
+  await repo.addAdmin("admin@example.test", "bootstrap", data.now);
   stranger = (await actor("stranger")).cookie;
   await repo.createOrganizerCandidate({ id: "source", tentativeName: "測試活動", ownerEmail: "owner@example.test", createdByAccountId: adminActor.id, draftJson: JSON.stringify(data.baseline.draft), now: data.now });
   await db.prepare("UPDATE organizer_event_candidates SET event_id = 'event-alpha', event_id_locked_at = ?1, status = 'published', published_version = 1, published_at = ?1 WHERE id = 'source'").bind(data.now).run();
@@ -114,4 +115,48 @@ test("revocation while loading published evidence prevents candidate creation an
   for (const table of ["organizer_amendments", "organizer_amendment_changes", "organizer_import_sources", "map_drafts"]) {
     assert.equal((await db.prepare(`SELECT count(*) AS count FROM ${table}`).first()).count, 0);
   }
+});
+
+test("removing an Admin during the remote baseline read prevents creating amendment copies", async () => {
+  await repo.addAdmin("backup@example.test", "admin@example.test", data.now);
+  loadHook = async () => assert.equal(await repo.removeAdmin("admin@example.test"), "removed");
+  const response = await handlers.createOrganizerAmendment(request("POST", { expectedVersion: 1 }, admin), "source");
+  assert.equal(response.status, 409);
+  assert.equal(loadCount, 1);
+  for (const table of ["organizer_amendments", "organizer_amendment_changes", "organizer_import_sources", "map_drafts"]) {
+    assert.equal((await db.prepare(`SELECT count(*) AS count FROM ${table}`).first()).count, 0);
+  }
+});
+
+test("a concurrent save cannot pair old declarations with a newer writable version in GET", async () => {
+  const id = await create();
+  const winner = [{ kind: "released", sources: ["1:S02"], circleName: "新社" }];
+  const original = repo.getOrganizerAmendment;
+  repo.getOrganizerAmendment = async (candidateId) => {
+    const stored = await original(candidateId);
+    repo.getOrganizerAmendment = original;
+    assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1, changes: winner }, editor), id)).status, 200);
+    return stored;
+  };
+  let loaded;
+  try { loaded = await (await handlers.getOrganizerAmendment(request("GET", undefined, owner), id)).json(); }
+  finally { repo.getOrganizerAmendment = original; }
+  assert.equal(loaded.version, 1);
+  assert.deepEqual(loaded.changes, []);
+  assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: loaded.version, changes: loaded.changes }, owner), id)).status, 409);
+  const latest = await (await handlers.getOrganizerAmendment(request("GET", undefined, owner), id)).json();
+  assert.equal(latest.version, 2);
+  assert.deepEqual(latest.changes, winner);
+});
+
+test("map-only edits advance the returned candidate version while retaining the last declarations", async () => {
+  const id = await create();
+  const [map] = await repo.listOrganizerMapDrafts(id);
+  assert.deepEqual(await repo.saveOrganizerMapDraft({ candidateId: id, draftId: map.id, actorAccountId: ownerId,
+    expectedVersion: 1, expectedMapRevision: 1, contentJson: JSON.stringify(data.baseline.maps[0].content), now: data.now + 1 }),
+  { ok: true, version: 2, mapRevision: 2 });
+  const loaded = await (await handlers.getOrganizerAmendment(request("GET", undefined, owner), id)).json();
+  assert.equal(loaded.version, 2);
+  assert.deepEqual(loaded.changes, []);
+  assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 2, changes: [] }, owner), id)).status, 200);
 });

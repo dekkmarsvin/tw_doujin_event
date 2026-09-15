@@ -86,8 +86,8 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 ### 修正候選與基準 API
 
 - `POST /api/organizer/events/:sourceCandidateId/amendments` 只接受 `expectedVersion`。來源 Owner 或 Admin 可以建立；Editor 不行。來源候選、該版本 snapshot 與 publication job 必須一致且已 published。伺服器以既有 GitHub App 的唯讀 token 核對目前 main pin、原 job 的 main pin、固定 data commit 每檔 SHA-256、核准 bytes，以及 Pages 正在提供的 data commit／Reader catalog；錯版、未公開、缺檔、讀取失敗均不建立，客戶端不能指定基準內容。
-- 建立新的候選、鎖定 eventId、immutable baseline、首版空宣告、版本紀錄、匯入列、獨立地圖草稿及 audit 在同一 D1 batch。交易內重新檢查來源版本、published job／snapshot 與 Owner 權限，避免遠端讀取期間撤權後仍寫入。候選複製當下有效的 Owner／Editor grants；之後沿用每候選的協作者管理。Admin 不因建立動作取得 Owner。
-- `GET /api/organizer/events/:candidateId/amendment` 由候選 Owner／Editor／Admin 讀目前宣告、影響與可選來源名單；不回傳 global allocations／evidence 或核准 snapshot。`PUT` 只接受 `expectedVersion` 與完整 `changes[]`，從固定 baseline 重新規劃，不從前一次結果累加或推論。未知來源、錯誤宣告為 422，版本／狀態或交易內撤權衝突為 409。
+- 建立新的候選、鎖定 eventId、immutable baseline、首版空宣告、版本紀錄、匯入列、獨立地圖草稿及 audit 在同一 D1 batch。交易內重新檢查來源版本、published job／snapshot 與 Owner grant 或目前 Admin 名冊；宣告保存同樣重檢 grant／Admin，避免預讀後撤權仍寫入。候選複製當下有效的 Owner／Editor grants；之後沿用每候選的協作者管理。Admin 不因建立動作取得 Owner。
+- `GET /api/organizer/events/:candidateId/amendment` 由候選 Owner／Editor／Admin 讀目前宣告、影響與可選來源名單；以同一 SQL 讀取 candidate 版本與最新宣告，地圖單獨修改後仍回目前候選版本，不能將舊宣告配上並行保存後的新版本。不回傳 global allocations／evidence 或核准 snapshot。`PUT` 只接受 `expectedVersion` 與完整 `changes[]`，從固定 baseline 重新規劃，不從前一次結果累加或推論。未知來源、錯誤宣告為 422，版本／狀態或交易內撤權衝突為 409。
 - 宣告保存以唯一 revision token 串起版本、不可變宣告紀錄、衍生匯入列與 audit；同時保存只成功一份，失敗請求不能把勝出者的匯入列退役。baseline 不隨保存改變。沿用 20,000 列、代碼 80 字、名稱 200 字及 8 MiB 名單限制；宣告本身也限制 8 MiB。匯入列只供既有地圖及驗證接線，身分仍由 baseline／宣告決定，不編造主辦 stable key。
 - 本切片中 AMEND 的一般活動設定儲存／匯入覆蓋均拒絕；地圖沿用原候選版本及權限檢查。送審／核准 AMEND 明確回 `amendment_publication_unavailable`，不產生 snapshot 或 publication job。後續接線才開放，不能用 CREATE 繞過。
 - Runtime schema 新增 `publication_operation`（舊候選預設 CREATE）、`organizer_amendments` 與 `organizer_amendment_changes`。舊 eventId index 以同名在一個交易中替換，避免舊部署的 `CREATE INDEX IF NOT EXISTS` 重建舊規則；CREATE 唯一及 AMEND 活躍唯一各自保留，不需要人工 SQL 遷移。

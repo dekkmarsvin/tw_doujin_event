@@ -30,6 +30,8 @@ const saveInput = (extra = {}) => ({ candidateId: "amendment", expectedVersion: 
   rows: [{ ...rows[0], circleName: "乙社" }], actor: owner, ...extra });
 beforeEach(async () => {
   await repository.clearPreviewData();
+  await db.prepare("INSERT INTO accounts (id,email,created_at) VALUES ('admin','admin@example.test',?1)").bind(now).run();
+  await repository.addAdmin("admin@example.test", "bootstrap", now);
   await repository.createOrganizerCandidate({ id: "source", tentativeName: "活動", ownerEmail: "owner@example.test", createdByAccountId: "admin", draftJson, now });
   await db.prepare("UPDATE organizer_event_candidates SET event_id = 'event-alpha', event_id_locked_at = ?1, status = 'published', published_version = 1, published_at = ?1 WHERE id = 'source'").bind(now).run();
   for (const actor of [owner, editor]) await db.prepare(`INSERT INTO organizer_event_grants (id,candidate_id,account_id,role,granted_by,granted_at)
@@ -81,6 +83,24 @@ test("stale source, approval mismatch and revoked Owner cannot create partial ca
   assert.equal(await count("organizer_event_candidates"), 1);
   assert.equal(await count("organizer_amendments"), 0);
   assert.equal(await count("organizer_amendment_changes"), 0);
+});
+
+test("Admin revocation is rechecked inside both mutation batches without partial copies or saves", async () => {
+  await repository.addAdmin("backup@example.test", "admin@example.test", now);
+  assert.equal(await repository.removeAdmin("admin@example.test"), "removed");
+  assert.deepEqual(await repository.createOrganizerAmendment(createInput({ actor: admin })), { ok: false });
+  for (const table of ["organizer_amendments", "organizer_amendment_changes", "organizer_import_sources", "map_drafts", "audit_log"]) {
+    assert.equal(await count(table), 0);
+  }
+  assert.equal((await repository.createOrganizerAmendment(createInput())).ok, true);
+  const before = await repository.getOrganizerImport("amendment");
+  assert.deepEqual(await repository.saveOrganizerAmendment(saveInput({ actor: admin })), { ok: false });
+  assert.deepEqual(await repository.getOrganizerImport("amendment"), before);
+  assert.equal((await repository.getOrganizerCandidate("amendment")).current_version, 1);
+  assert.equal(await count("organizer_amendment_changes"), 1);
+  assert.equal(await count("audit_log", "action = 'organizer.amendment.save'"), 0);
+  await repository.addAdmin("admin@example.test", "backup@example.test", now);
+  assert.deepEqual(await repository.saveOrganizerAmendment(saveInput({ actor: admin })), { ok: true, version: 2 });
 });
 
 test("concurrent creations keep one active amendment without weakening CREATE collisions", async () => {

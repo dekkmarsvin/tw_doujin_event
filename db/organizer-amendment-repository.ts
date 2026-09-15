@@ -3,7 +3,7 @@ import type { OrganizerNormalizedImportRow } from "../app/organizer-import";
 type Actor = { accountId: string; role: "owner" | "editor" | "admin"; admin: boolean; now: number };
 type AmendmentRow = {
   candidate_id: string; source_candidate_id: string; source_version: number; source_job_id: string;
-  baseline_json: string; baseline_sha256: string; created_at: number; changes_json: string; changes_version: number;
+  baseline_json: string; baseline_sha256: string; created_at: number; changes_json: string; changes_version: number; current_version: number;
 };
 
 /** Candidate writes only. The handler derives the baseline and rows from trusted
@@ -44,8 +44,9 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
 
   async function getOrganizerAmendment(candidateId: string): Promise<AmendmentRow | null> {
     await ensureTables();
-    return database.prepare(`SELECT a.*, changes.changes_json, changes.version AS changes_version
-      FROM organizer_amendments a JOIN organizer_amendment_changes changes ON changes.candidate_id = a.candidate_id
+    return database.prepare(`SELECT a.*, changes.changes_json, changes.version AS changes_version, c.current_version
+      FROM organizer_amendments a JOIN organizer_event_candidates c ON c.id = a.candidate_id
+      JOIN organizer_amendment_changes changes ON changes.candidate_id = a.candidate_id
       WHERE a.candidate_id = ?1 ORDER BY changes.version DESC LIMIT 1`).bind(candidateId).first<AmendmentRow>();
   }
 
@@ -70,8 +71,9 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
         WHERE c.id = ?6 AND c.current_version = ?7 AND c.published_version = ?7 AND c.status = 'published'
           AND c.event_id = ?8 AND j.id = ?9 AND j.status = 'published' AND j.candidate_version = ?7
           AND j.snapshot_id = ?10 AND j.approval_hash = ?11 AND s.sha256 = ?11 AND j.main_merge_sha = ?12
-          AND (?13 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
-            AND g.account_id = ?4 AND g.role = 'owner' AND g.revoked_at IS NULL))`)
+          AND ((?13 = 1 AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?4))
+            OR (?13 = 0 AND EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
+              AND g.account_id = ?4 AND g.role = 'owner' AND g.revoked_at IS NULL)))`)
         .bind(input.id, actor.now, input.draftJson, actor.accountId, actorRole(actor), input.sourceCandidateId,
           input.sourceVersion, input.eventId, input.sourceJobId, input.sourceSnapshotId, input.sourceApprovalHash,
           input.sourceMainCommit, actor.admin ? 1 : 0),
@@ -137,8 +139,9 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
         FROM organizer_event_candidates c JOIN organizer_amendments a ON a.candidate_id = c.id
         WHERE c.id = ?6 AND c.current_version = ?7 AND c.publication_operation = 'AMEND'
           AND c.status IN ('draft', 'changes_requested') AND a.baseline_sha256 = ?8
-          AND (?9 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g
-            WHERE g.candidate_id = c.id AND g.account_id = ?3 AND g.revoked_at IS NULL))`)
+          AND ((?9 = 1 AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?3))
+            OR (?9 = 0 AND EXISTS (SELECT 1 FROM organizer_event_grants g
+              WHERE g.candidate_id = c.id AND g.account_id = ?3 AND g.revoked_at IS NULL)))`)
         .bind(revisionId, version, actor.accountId, actorRole(actor), actor.now, input.candidateId,
           input.expectedVersion, input.baselineSha256, actor.admin ? 1 : 0),
       database.prepare(`UPDATE organizer_event_candidates SET current_version = ?2, updated_at = ?3, last_updated_by = ?4,

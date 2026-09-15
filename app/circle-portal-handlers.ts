@@ -1961,9 +1961,8 @@ export function createCirclePortalHandlers({
     if (!access.ok) return access.response;
     const amendment = await readAmendment(candidateId);
     if (!amendment) return json({ error: "找不到修正候選。" }, 404);
-    const candidate = await repository.getOrganizerCandidate(candidateId);
     const plan = planOrganizerAmendmentCandidate(amendment.baseline, amendment.changes, () => new Date(config.now()).toISOString().slice(0, 10));
-    return json({ version: candidate!.current_version, changes: amendment.changes, impact: plan.impact,
+    return json({ version: amendment.stored.current_version, changes: amendment.changes, impact: plan.impact,
       baseline: { event: amendment.baseline.event, sourceCandidateId: amendment.stored.source_candidate_id,
         sourceVersion: amendment.stored.source_version, publishedAt: amendment.baseline.source.publishedAt,
         official: amendment.baseline.official } });
