@@ -1,4 +1,37 @@
-# 方案 B 手機地圖驗收
+# Reader 介面驗收紀錄
+
+## 2026-09-15：活動頂部、切換活動與取消選取
+
+受測實作：`aa5e16d`。Chrome 153.0.8010.37，本機 staged 官方 CH20／FF47；以下證據為瀏覽器尺寸測試，不代表 iOS Safari／Android Chrome 真機驗收。
+
+### 頂部版面與工具
+
+[本次矩陣](docs/design/assets/reader-header-2026-09-15/matrix.json) 記錄 CH20／FF47 × 1706×898、1440×900、1024×768、761×844、760×844、390×844、360×640 × 三段字級，共 42 組。活動名稱、日期及場館完整可讀；搜尋在窄視窗或放大字級時移至下一列。切換入口至少 44px 高，字級群組及相鄰桌機工具同為 44px 外框、7px 圓角；頁面無水平溢出。
+
+矩陣與保留的 7 張代表截圖來自同一次 `reader-header.mjs` 執行（2026-09-15T03:55:10Z）；未封存的截圖欄位標為 null，完整測量仍保留。
+
+- [CH20 原問題尺寸](docs/design/assets/reader-header-2026-09-15/header-ch-20-1706-898-0.png)
+- [CH20 窄桌機最大字級](docs/design/assets/reader-header-2026-09-15/header-ch-20-761-844-2.png)
+- [CH20 短手機最大字級](docs/design/assets/reader-header-2026-09-15/header-ch-20-360-640-2.png)
+- [FF47 桌機對照](docs/design/assets/reader-header-2026-09-15/header-ff47-1440-900-0.png)
+
+### 地圖與選取流程
+
+`map-viewport.mjs` 最終完整執行（2026-09-15T03:59:56Z）通過 93 項擷取／斷言；[執行報告](docs/design/assets/reader-header-2026-09-15/map-regression/browser-report-full.json)、[手機幾何矩陣](docs/design/assets/reader-header-2026-09-15/map-regression/matrix.json) 與保留的[手機摘要](docs/design/assets/reader-header-2026-09-15/map-regression/390-844-standard-summary.png)、[窄桌機選取](docs/design/assets/reader-header-2026-09-15/map-regression/761-844-extra-selected.png) 同源。完整圖檔留在該次本機輸出，repo 保留代表畫面。
+
+桌機 X／Escape 與手機「取消選取」移除社團、攤位深網址並保留條件及視野。完整資訊 X／Escape／遮罩關閉返回原摘要／詳情，保留選取及網址並還原觸發焦點。手機把手收合及一般工作面板「收起」維持既有視野操作語意。行為依 [ADR-0063](docs/adr/0063-reader-dismissal-clears-selection.md)，下方 2026-09-12 紀錄的「收起保留 URL」是當時版本的歷史證據。
+
+Fixture 旅程另行通過：取消選取 4 項、活動選擇 5 項、攤位異動 3 項、縮圖 3 項、session 到期 10 項。新增旅程涵蓋唯一搜尋結果重新整理、瀏覽器前後頁、SVG 鍵盤焦點、完整資訊三種關閉方式與桌機／手機斷點切換；fixture 證據不冒充官方活動資料。
+
+### 獨立視覺及操作審查
+
+未參與實作的主要 reviewer 已獨立檢查 `aa5e16d` 相對 `22daf8f` 的程式與受影響契約、7 張 header 截圖及 2 張地圖回歸截圖，並實際操作官方 CH20 A01 的桌機及 390×844 手機流程。確認完整資訊 X 返回原面板、選取及 URL 保留、開啟按鈕焦點還原；摘要取消後參數移除，Back 恢復原選取，「切換活動」到乾淨 `/`。未發現本次範圍的阻擋問題，Review Done。
+
+TypeScript noEmit、doc-map（12 contracts）通過。本機 lint 排除既有 `.tmp/` worktree 備份內的生成檔後通過：`npm run lint -- --ignore-pattern '.tmp/**'`；未變更 lint 設定，PR CI 仍執行標準完整 lint。
+
+重現頂部比較：先 `npm run data:fetch -- --published`、`npm run data:stage -- --published`，啟動 `vite --config vite.pages.config.ts`，以該 origin 設定 `MAP_TEST_URL`，再以 `HEADER_TEST_EVENTS=ch-20,ff47` 執行 `node tests/browser/reader-header.mjs`。`npm run test:browser:matrix` 另外涵蓋固定 FF47 矩陣、fixture 旅程及既有 portal 旅程。
+
+## 2026-09-12：方案 B 手機地圖驗收
 
 final result: passed
 
