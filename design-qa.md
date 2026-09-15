@@ -8,6 +8,7 @@
 - CH20／FF47 × 360×640、390×844、760×390、1440×900 × 三種字級，共 24 組、72 項擷取／操作檢查通過；[矩陣](docs/design/assets/reader-mobile-tools-2026-09-15/matrix.json) 與保留的六張截圖來自同次執行，未保留的圖檔欄位標為 null。Fixture 另通過 36 項。
 - [CH20 工具](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-menu.png)、[使用說明](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-help.png)、[資料管理](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-data.png)、[短手機最大字級](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-360-640-extra-help.png)、[橫向最大字級](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ff47-760-390-extra-help.png)、[桌機對照](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ff47-1440-900-standard-help.png)。
 - FF47 representative 地圖回歸 21 項、本機 lint（排除既有 `.tmp/` 備份生成檔）、TypeScript 與 doc-map（12 contracts）通過。
+- 獨立主要 reviewer 檢查 `840ee3b` 相對 `98776f0` 的六張提交截圖及程式，實際操作 CH20 手機探索 → 工具 → 資料管理／使用說明。在 360×640 確認說明位於 x12–348、y56–628，可捲至通用關於文字並關閉，焦點回入口且 URL 不變；沒有本輪重大問題，Review Done。
 
 以上為 Chrome 瀏覽器及模擬尺寸驗收，不代表 iOS／Android 真機。既有活動選擇與搜尋驗證記錄保留於下節。
 
