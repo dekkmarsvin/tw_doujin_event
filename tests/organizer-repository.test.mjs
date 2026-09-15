@@ -269,12 +269,20 @@ test("scheduled Worker entry ignores disabled environments and advances only a p
   }
   assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
   assert.equal(scheduledWorker.fetch, undefined);
-  // Explicit production rollout does not enable the preview Worker.
-  const { readFile } = await import("node:fs/promises");
-  const config = JSON.parse(await readFile("workers/publication-dispatch/wrangler.jsonc", "utf8"));
+  // Explicit production rollout does not enable the preview Worker. Read the
+  // configuration with Wrangler's own reader rather than `JSON.parse`: the file
+  // is JSONC, so a comment added to it would otherwise fail this test with a
+  // parse error that says nothing about publication. Reading it the way a deploy
+  // does also resolves inheritance, so the preview assertion below covers the
+  // value the preview Worker would actually run with, not just the literal text.
+  process.env.WRANGLER_LOG ??= "error";
+  const { unstable_readConfig } = await import("wrangler");
+  const configFile = "workers/publication-dispatch/wrangler.jsonc";
+  const config = unstable_readConfig({ config: configFile });
+  const preview = unstable_readConfig({ config: configFile, env: "preview" });
   assert.deepEqual(config.triggers.crons, [PUBLICATION_CRON]);
   assert.equal(config.vars.ORGANIZER_PUBLICATION_MODE, "github");
-  assert.equal(config.env.preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
+  assert.equal(preview.vars.ORGANIZER_PUBLICATION_MODE, "disabled");
 });
 
 test("Pages runtime exposes publication by mode and a fake retry finishes through real D1", async (t) => {

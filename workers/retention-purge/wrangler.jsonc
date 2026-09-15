@@ -3,6 +3,28 @@
   "name": "tw-catalog-retention-purge",
   "main": "./index.ts",
   "compatibility_date": "2026-05-22",
+  // 這個 Worker 只有 cron 入口，失敗時沒有使用者會回報，所以 logs 與 traces 都
+  // 開著：Workers Logs 留下 7 天內可查的執行紀錄（Workers Paid 的保留期間），
+  // Workers Traces 補上每次清除各花
+  // 在哪一段 D1／R2 操作。兩者各自宣告 `enabled`，因為頂層的
+  // `observability.enabled` 目前只開 logs，beta 階段的 tracing 不會被它帶開。
+  // 一天一次的量級不需要抽樣，`head_sampling_rate` 取 1；`invocation_logs` 保留
+  // Cloudflare 自動寫的 invocation 摘要，否則排程沒被觸發時會看不出差別——這正是
+  // 下面 preview `triggers` 那段註解所擔心的那種靜默失敗。`persist` 是預設的
+  // true，明寫是為了說明資料留在 Dashboard 可查，而不是只轉給外部 destination。
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
   // Daily, at an off-peak minute that is not the top of an hour — cron
   // triggers cluster there, and nothing here needs a particular time of day.
   // UTC, like every Cloudflare cron.

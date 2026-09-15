@@ -10,6 +10,13 @@
   // One binding, named `DB`, because that is what the Functions read. Leaving
   // the binding `wrangler d1 create` generates from the database name would
   // give the same database two names and hide which one the code uses.
+  //
+  // `observability`（Workers Logs／Workers Traces）刻意不在這裡。Pages 專案的設定
+  // 檔有一份封閉的支援欄位清單，`observability` 不在其中，多寫會讓 Wrangler 直接
+  // 報錯 `Configuration file for Pages projects does not support "observability"`
+  // 並中斷部署——不是警告。Pages Functions 本身也沒有 Workers Logs／Traces，只有
+  // 不落地的即時串流（`wrangler pages deployment tail`，見部署 runbook）。要持久化
+  // 的執行紀錄請看 `workers/` 底下兩個真正的 Worker，它們各自宣告了 observability。
   "d1_databases": [
     {
       "binding": "DB",

@@ -8,7 +8,9 @@
 | Pages production origin | <https://tw-catalog.pages.dev/> | 無；只作 deployment smoke 與故障排查，不是對外正式入口 |
 | PR alias／不可變 deployment | `https://pr-<N>.tw-catalog.pages.dev`／`https://<hash>.tw-catalog.pages.dev` | 有；維護者登入或 CI Service Auth |
 
-`map.kotoban.top` 必須在 Pages project 的 **Custom domains** 顯示 Active，並使用 Cloudflare proxy。該 hostname 不啟用 Browser Insights／Web Analytics：專案不使用分析追蹤，既有 CSP 也會阻擋 Cloudflare 注入的 beacon；看到 `static.cloudflareinsights.com` 的 CSP console error 時應關閉 zone 設定，不得為它放寬 `script-src`。
+`map.kotoban.top` 必須在 Pages project 的 **Custom domains** 顯示 Active，並使用 Cloudflare proxy。該 hostname 啟用 zone 的 Web Analytics 自動注入，`public/_headers` 的三份 CSP 都在 `script-src` 放行 `https://static.cloudflareinsights.com`；放行的是 origin 而非官方 FAQ 寫的 `/beacon.min.js` 路徑，因為自動注入載入的是帶版本號的子路徑，路徑型 CSP source 只精確比對自己那一個路徑。自動注入的 beacon 回報到本網域的 `/cdn-cgi/rum`，`connect-src 'self'` 已涵蓋，不需要額外放行 `cloudflareinsights.com`。
+
+同一個 zone 另外還開著 Bot Fight Mode／JS Detections，它注入的是**行內** script（`window.__CF$cv$params`，轉去 `/cdn-cgi/challenge-platform/scripts/jsd/main.js`），內容含每次請求都不同的 ray ID，因此沒有穩定的 `sha256-` 可放行。要嘛在 zone 關掉它，要嘛接受該行 console error——不得為它加 `'unsafe-inline'`，那會把整份 `script-src` 的防護拆掉。
 
 產物邊界與快取策略見[資料傳輸與離線契約](../contracts/delivery-and-offline.md)。為什麼公開閱讀路徑不走 Worker，見 [ADR-0008](../adr/0008-static-public-reading-path.md)；為什麼用 GitHub Actions Direct Upload 而非 Dashboard Git integration，見 [ADR-0009](../adr/0009-single-pages-project-direct-upload.md)。
 
@@ -49,7 +51,9 @@ Pages production 需設定 `GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_A
 
 獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1，每分鐘執行，沒有 HTTP 入口。既有 App／installation ID 是公開識別值，存於 Worker 的 production vars，避免部署覆寫 dashboard 設定；相同 App 的 `GITHUB_APP_PRIVATE_KEY` 另以 Worker secret 設定。依已核准 rollout，用 `wrangler deploy --config workers/publication-dispatch/wrangler.jsonc --env ''` 部署。這與 Pages 部署分開，屬一次性建置及日後工程版本更新，正常新增活動不用手動部署或建立 credentials。
 
-Worker 的 `preview_urls: false` 與啟用的 observability logs 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。執行日誌只記錄 publication tick 的結果與 job ID，不加入 App 憑證。
+Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。`tw-catalog-publication-dispatch` 與 `tw-catalog-retention-purge` 兩個 Worker 都開啟 Workers Logs 與 Workers Traces（`head_sampling_rate: 1`、`invocation_logs: true`、`persist: true`），因為兩者都只有 cron 入口，沒有使用者會替它們回報失敗；`observability` 是可繼承欄位，`env.preview` 不必重寫。執行日誌只記錄 publication tick 的結果與 job ID，不加入 App 憑證。
+
+根目錄 `wrangler.jsonc` 是 Pages 專案設定，**不能**加 `observability`：Pages 的支援欄位清單沒有它，Wrangler 會直接以 `Configuration file for Pages projects does not support "observability"` 中斷部署。Pages Functions 也沒有可查詢的 Workers Logs，只有不落地的即時串流（見下方 `wrangler pages deployment tail`）。
 
 Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JSON／HMAC 必須保留，事件喚醒與 cron 恢復依 [Organizer 發布契約](../contracts/organizer-workspace.md#發布邊界)。需要暫停發布時，將兩份 production mode 改為 disabled 並部署；保留 D1 job、snapshot、lease／checkpoint，不手改 job 狀態。首次 CH20 啟用、內容核准與真實故障操作包依 #212 的既有真人確認執行；合併工程 PR 不代表已完成這些確認。
 
