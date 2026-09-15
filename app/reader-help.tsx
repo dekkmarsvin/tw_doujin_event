@@ -58,7 +58,7 @@ export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLa
       </section>
       <section className={styles.about} aria-labelledby="reader-about-title">
         <h3 id="reader-about-title">關於本頁</h3>
-        <p>本頁是非官方同人展逛攤工具，不代表 Fancy Frontier 主辦單位。</p>
+          <p>本頁是非官方同人展逛攤工具，不代表活動主辦單位。</p>
         <dl><div><dt>資料最後更新</dt><dd>{dataLastUpdatedLabel}</dd></div><div><dt>聯絡</dt><dd>Discord ID <strong>dekkorakki</strong></dd></div></dl>
       </section>
     </section>}

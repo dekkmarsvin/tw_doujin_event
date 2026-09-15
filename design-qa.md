@@ -1,5 +1,16 @@
 # Reader 介面驗收紀錄
 
+## 2026-09-15：手機工具層級與通用使用說明
+
+重現：390×844 的「資料管理」中心命中地圖日期下拉；只修正頁首層級後，使用說明左緣仍在 x=-144.67px。手機頁首現位於地圖控制及工作面板上方、資料管理模態視窗下方；說明面板以視窗定位，左右留 12px，短螢幕可捲動。關於文字改為「不代表活動主辦單位」。
+
+- 新增 `reader-mobile-tools.mjs`：先展開探索工作面板再開工具，以每個入口 9 個命中點確認沒有覆蓋，實際開啟及關閉資料管理／使用說明、捲至關於文字、檢查說明焦點還原、工具 Escape／外部按壓。
+- CH20／FF47 × 360×640、390×844、760×390、1440×900 × 三種字級，共 24 組、72 項擷取／操作檢查通過；[矩陣](docs/design/assets/reader-mobile-tools-2026-09-15/matrix.json) 與保留的六張截圖來自同次執行，未保留的圖檔欄位標為 null。Fixture 另通過 36 項。
+- [CH20 工具](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-menu.png)、[使用說明](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-help.png)、[資料管理](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-data.png)、[短手機最大字級](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-360-640-extra-help.png)、[橫向最大字級](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ff47-760-390-extra-help.png)、[桌機對照](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ff47-1440-900-standard-help.png)。
+- FF47 representative 地圖回歸 21 項、本機 lint（排除既有 `.tmp/` 備份生成檔）、TypeScript 與 doc-map（12 contracts）通過。
+
+以上為 Chrome 瀏覽器及模擬尺寸驗收，不代表 iOS／Android 真機。既有活動選擇與搜尋驗證記錄保留於下節。
+
 ## 2026-09-15：活動選擇頁日期分類與詳細搜尋底色
 
 範圍及設計預設見 [本輪設計紀錄](docs/design/reader-event-chooser-ideas.md)。活動選擇頁採「即將到來 → 舉辦中 → 過往活動」及組內日期遞減；過往活動維持可點擊，名稱改較柔和的灰綠。詳細搜尋移除外層底色及重複縮排，和收藏控制對齊。
