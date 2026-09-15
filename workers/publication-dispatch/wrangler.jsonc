@@ -5,7 +5,29 @@
   "compatibility_date": "2026-05-22",
   "workers_dev": false,
   "preview_urls": false,
-  "observability": { "enabled": true, "logs": { "enabled": true } },
+  // Workers Logs 與 Workers Traces 都開著，兩者各自宣告 `enabled`：頂層的
+  // `observability.enabled` 目前只開 logs，tracing 仍在 beta，不會被它帶開。
+  // 這個 Worker 每分鐘跑一次、沒有 HTTP 入口，唯一能看到它行為的地方就是這裡，
+  // 所以 `head_sampling_rate` 取 1（全量）——1440 次/日的量級不需要抽樣。
+  // `invocation_logs` 保留 Cloudflare 自動寫的那一行 invocation 摘要，沒有它就
+  // 只剩程式自己 `console.*` 的內容，看不出這一次 tick 是否真的被觸發。
+  // `persist` 是預設值 true，寫出來是為了說明資料會留在 Cloudflare Dashboard 供
+  // 查詢，而不是只轉送到外部 destination——本專案沒有設 destinations。本帳號是
+  // Workers Paid，logs 保留 7 天、每月含 2,000 萬則事件；每分鐘一次的量級離
+  // 上限很遠，所以不必為了額度調低取樣。
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "ORGANIZER_PUBLICATION_MODE": "github",

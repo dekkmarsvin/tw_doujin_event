@@ -46,6 +46,40 @@ test("the served CSP admits the same HTTPS images the validator accepts", async 
 });
 
 /**
+ * Cloudflare Web Analytics is injected by the edge, so `script-src` has to admit
+ * the beacon or every page load logs a CSP error and reports nothing.
+ *
+ * The source has to be the bare origin. Automatic injection loads a versioned
+ * path (`/beacon.min.js/v31edd…`) and a CSP source expression whose path does
+ * not end in `/` matches that one path only, so the value the Cloudflare FAQ
+ * prints — `https://static.cloudflareinsights.com/beacon.min.js`, written for
+ * the manually embedded snippet — blocks the injected tag. Assert the absence of
+ * a path, because adding one looks like tightening and is actually a breakage.
+ *
+ * `connect-src` is deliberately not widened: with a `version` in its
+ * `data-cf-beacon` payload the beacon reports to this origin's own
+ * `/cdn-cgi/rum`, which `'self'` already covers. Only the manual snippet talks
+ * to `cloudflareinsights.com`.
+ */
+test("the CSP admits the injected analytics beacon by origin, not by path", async () => {
+  const headers = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
+  const policies = [...headers.matchAll(/Content-Security-Policy: ([^\r\n]+)/g)].map((match) => match[1]);
+  assert.ok(policies.length > 0, "_headers must declare a Content-Security-Policy");
+
+  for (const policy of policies) {
+    const directives = policy.split(";").map((directive) => directive.trim());
+    const scriptSrc = directives.find((directive) => directive.startsWith("script-src "));
+    assert.ok(scriptSrc, "the policy must declare script-src");
+    assert.ok(scriptSrc.split(/\s+/).slice(1).includes("https://static.cloudflareinsights.com"),
+      "script-src must admit the beacon origin; a path-scoped source misses the versioned URL");
+
+    const connectSrc = directives.find((directive) => directive.startsWith("connect-src "));
+    assert.deepEqual(connectSrc?.split(/\s+/).slice(1), ["'self'"],
+      "automatic injection reports to this origin's /cdn-cgi/rum, so connect-src must not be widened");
+  }
+});
+
+/**
  * The portal needs Cloudflare Turnstile; the reader must not carry the widening.
  * Cloudflare combines every matching `_headers` rule rather than letting the
  * more specific one win, so the portal rule has to remove the site-wide policy
