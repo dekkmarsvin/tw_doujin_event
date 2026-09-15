@@ -44,7 +44,7 @@ draft → submitted → approved → publishing → published
 
 - `draft` 與 `changes_requested` 可編輯；其餘狀態一律不可寫入。
 - 每一次寫入都要帶 `expectedVersion`，成功後 `current_version` 遞增並留下一筆 immutable revision。版本落後回 409 並指出目前版本，不靜默覆寫。
-- `eventId` 在**首次送審時鎖定**，之後不得改成別的值；未送審前可以修改。它在候選之間唯一（partial unique index）。首次發布是 CREATE：核准 handler 對目前 published event resolver 預檢，executor 的 preparing_data 再透過 driver 檢查 published collection；同名以 `event_id_collision` 拒絕。amendment 由 #190 的明確 baseline 流程處理，不 silent overwrite 或自動轉換。兩條地圖管線仍靠 `candidate_id` 分離。
+- `eventId` 在 CREATE 的**首次送審時鎖定**，之後不得改成別的值；未送審前可以修改。它在 CREATE 候選之間唯一（partial unique index）；明確 AMEND 候選沿用來源 eventId 並在建立時鎖定，同事件最多一份尚未 published 的 AMEND。首次發布的核准 handler 與 executor 仍以 `event_id_collision` 拒絕同名 published event，不 silent overwrite 或自動轉換。兩條地圖管線仍靠 `candidate_id` 分離。
 
 ## 草稿內容
 
@@ -66,7 +66,7 @@ draft → submitted → approved → publishing → published
 
 ## 已發布名單的明確修正宣告
 
-`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。呼叫端須固定 published baseline 與核准 snapshot；此核心本身不讀寫候選或公開資料。目前尚未接入 UI／API／publication，完整產品驗收仍由 #190 承接，CREATE 的碰撞保護不變。
+`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。UI／AMEND publication 尚未交付，完整產品驗收仍由 #190 承接，CREATE 的碰撞保護不變。
 
 每筆宣告必須明說 `kind`：
 
@@ -82,6 +82,15 @@ draft → submitted → approved → publishing → published
 未知或重複來源、跨社團混選、換手仍為同一名稱、大小寫折疊後重複或原已佔用的目的地，以及未公開配號或缺列的 baseline 均拒絕。目的地不因同批另一筆退出而變可用；同攤換手必須用 `released`。沿用官方資料每個活動日至少一攤的限制。未選資料與其他活動 evidence 保留；空宣告清單為無變動預覽。
 
 planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；baseline 的舊 transitions 已生效，不再重播。保留既有群組與 linkage；部分換手／移動造成群組跨列時，由明確宣告及其來源（未另填時用活動官方來源）產生 linkage。連續修正的退役證據與 Reader 投影依 [circle catalog 契約](./circle-catalog.md)。
+
+### 修正候選與基準 API
+
+- `POST /api/organizer/events/:sourceCandidateId/amendments` 只接受 `expectedVersion`。來源 Owner 或 Admin 可以建立；Editor 不行。來源候選、該版本 snapshot 與 publication job 必須一致且已 published。伺服器以既有 GitHub App 的唯讀 token 核對目前 main pin、原 job 的 main pin、固定 data commit 每檔 SHA-256、核准 bytes，以及 Pages 正在提供的 data commit／Reader catalog；錯版、未公開、缺檔、讀取失敗均不建立，客戶端不能指定基準內容。
+- 建立新的候選、鎖定 eventId、immutable baseline、首版空宣告、版本紀錄、匯入列、獨立地圖草稿及 audit 在同一 D1 batch。交易內重新檢查來源版本、published job／snapshot 與 Owner 權限，避免遠端讀取期間撤權後仍寫入。候選複製當下有效的 Owner／Editor grants；之後沿用每候選的協作者管理。Admin 不因建立動作取得 Owner。
+- `GET /api/organizer/events/:candidateId/amendment` 由候選 Owner／Editor／Admin 讀目前宣告、影響與可選來源名單；不回傳 global allocations／evidence 或核准 snapshot。`PUT` 只接受 `expectedVersion` 與完整 `changes[]`，從固定 baseline 重新規劃，不從前一次結果累加或推論。未知來源、錯誤宣告為 422，版本／狀態或交易內撤權衝突為 409。
+- 宣告保存以唯一 revision token 串起版本、不可變宣告紀錄、衍生匯入列與 audit；同時保存只成功一份，失敗請求不能把勝出者的匯入列退役。baseline 不隨保存改變。沿用 20,000 列、代碼 80 字、名稱 200 字及 8 MiB 名單限制；宣告本身也限制 8 MiB。匯入列只供既有地圖及驗證接線，身分仍由 baseline／宣告決定，不編造主辦 stable key。
+- 本切片中 AMEND 的一般活動設定儲存／匯入覆蓋均拒絕；地圖沿用原候選版本及權限檢查。送審／核准 AMEND 明確回 `amendment_publication_unavailable`，不產生 snapshot 或 publication job。後續接線才開放，不能用 CREATE 繞過。
+- Runtime schema 新增 `publication_operation`（舊候選預設 CREATE）、`organizer_amendments` 與 `organizer_amendment_changes`。舊 eventId index 以同名在一個交易中替換，避免舊部署的 `CREATE INDEX IF NOT EXISTS` 重建舊規則；CREATE 唯一及 AMEND 活躍唯一各自保留，不需要人工 SQL 遷移。
 
 ## 主辦與分類目錄
 
