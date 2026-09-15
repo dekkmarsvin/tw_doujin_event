@@ -149,12 +149,14 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 
 ## 驗證、預覽與送審
 
+AMEND 沿用驗證、Reader 預覽、Owner 送審及 Admin 核准。送審固定 `organizer-submission-snapshot/4`、明確 operation，以及伺服器保存的 baseline JSON／SHA-256／目前修正宣告；衍生名單與地圖須通過相同產檔驗證。核准再次比對 immutable snapshot 與此版本宣告，沿用唯一 publication job 和自動 dispatcher；不新增人工 Publish。snapshot 儲存與送審在 SQL 寫入時檢查有效 Owner，review 交易重新檢查有效 Admin、候選版本與 snapshot，所有核准寫入以唯一 review token 綁定。
+
 - 地圖檢查保留完整 `boothCodes`，檢查與預覽以活動日與場館空間標示每項問題；攤位差異顯示比對的匯入檔名、工作表與該範圍列數，可展開全部代碼，缺少的攤位另顯示社團名稱與來源列號。提示分別引導檢查地圖與匯入欄位，未知攤位維持 warning，缺少攤位維持 error。
 
 - `POST …/validate` 回傳 `issues[]`，每筆帶 `severity`、`step`（`event`／`venue`／`import`／`map`／`preview`）、`code`，必要時帶 `row` 或 `target`。缺任何一份「活動日 × venue-space」地圖是 error，不是 warning。成功時只把 workspace 的 `last_validated_version` 記為目前版本；不增加 candidate version，也不建立內容 revision。任何後續內容寫入使版本前進後，這個完成狀態自然失效；若版本在 validation 與 marker 寫入之間前進，API 回 409 並要求重新驗證，不會對舊版回報成功。
 - `POST …/preview` 回傳 `organizer-reader-preview/1`：草稿、匯入的配置與每份地圖 layout，供 Reader 樣式預覽。它不寫入任何資料。
 - 預覽攤位以可讀底色呈現；滑鼠或鍵盤選取時反白該格，顯示該活動日與場館空間內的攤位代碼及社團名稱。切換預覽地圖清除選取，不沿用另一張地圖的社團資訊。
-- `POST …/submit` 只有 Owner 可以呼叫，且要求有效 session。新送審固定 `organizer-submission-snapshot/3`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2` snapshot bytes/hash 保持不變。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
+- `POST …/submit` 只有 Owner 可以呼叫，且要求有效 session。CREATE 新送審固定 `organizer-submission-snapshot/3`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2` snapshot bytes/hash 保持不變。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
 - `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以有效 session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。

@@ -8,14 +8,14 @@ if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR 
 const runner = vite.environments.ssr.runner;
 const { createIdentityRepository } = await runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers, SESSION_COOKIE } = await runner.import("/app/circle-portal-handlers.ts");
-const { hmacSign } = await runner.import("/app/portal-crypto.ts");
+const { hmacSign, sha256Hex } = await runner.import("/app/portal-crypto.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-handlers" } }));
 const db = await mf.getD1Database("DB");
 const repo = createIdentityRepository(db, { bootstrapAdmins: ["admin@example.test"] });
 const data = await amendmentFixture(runner);
 const secret = "test-session-secret";
 const origin = "https://organizer.example";
-let handlers, owner, editor, admin, stranger, ownerId, loadCount, loadHook;
+let handlers, owner, editor, admin, stranger, ownerId, loadCount, loadHook, dispatched, dispatchHook;
 const request = (method, body, cookie) => new Request(`${origin}/api/organizer/events/source/amendments`, {
   method, headers: { origin, ...(body === undefined ? {} : { "content-type": "application/json" }), ...(cookie ? { cookie } : {}) },
   body: body === undefined ? undefined : JSON.stringify(body),
@@ -45,11 +45,14 @@ beforeEach(async () => {
   await db.prepare(`INSERT INTO organizer_publication_jobs (id,candidate_id,candidate_version,snapshot_id,approval_hash,status,step,data_merge_sha,main_merge_sha,created_at,updated_at)
     VALUES ('published-job','source',1,'published-snapshot',?1,'published','completed',?2,?3,?4,?4)`)
     .bind(data.source.approvalHash, data.source.dataCommit, data.source.mainCommit, data.now).run();
-  loadCount = 0; loadHook = async () => {};
+  for (const row of data.referenceRecords) await db.prepare(`INSERT OR REPLACE INTO organizer_reference_records
+    (path,kind,reference_id,organizer_id,revision,display_name,public_reference_json,source_captured_at,created_by)
+    VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`).bind(row.path,row.kind,row.id,row.organizerId,row.revision,row.displayName,row.publicReferenceJson,row.sourceCapturedAt,adminActor.id).run();
+  loadCount = 0; loadHook = async () => {}; dispatched = []; dispatchHook = async () => {};
   handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true,
     turnstileSitekey: () => "test-sitekey", projectCircle: async () => null,
-    dispatchOrganizerPublication: async () => { throw new Error("AMEND must not publish in this slice"); },
+    dispatchOrganizerPublication: async (jobId) => { dispatched.push(jobId); await dispatchHook(jobId); },
     loadPublishedAmendmentBaseline: async (source) => { loadCount++; assert.deepEqual(source, data.source); await loadHook(); return structuredClone(data.baseline); },
     config: { eventId: "event-alpha", origin, sessionSecret: secret, hashPepper: "test-pepper", adminEmails: ["admin@example.test"],
       dataUpdatedAt: data.baseline.event.dataUpdatedAt, eventEndsAt: data.baseline.event.eventEndsAt, now: () => data.now, organizerPublicationMode: "github" } });
@@ -80,7 +83,7 @@ test("declarations save and reload impact without exposing the registry or chang
   }
   const detail = await (await handlers.getOrganizerCandidate(request("GET", undefined, owner), id)).json();
   assert.equal(detail.event.operation, "AMEND");
-  assert.equal(detail.publicationAvailable, false);
+  assert.equal(detail.publicationAvailable, true);
   const response = await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1,
     changes: [{ kind: "released", sources: ["1:S02"], circleName: "新社" }] }, editor), id);
   assert.equal(response.status, 200, await response.clone().text());
@@ -107,8 +110,7 @@ test("invalid declarations, stale versions and ordinary import/edit paths cannot
   ]) assert.equal((await handlers.saveOrganizerAmendment(request("PUT", body, owner), id)).status, status);
   assert.equal((await handlers.updateOrganizerCandidate(request("PUT", { expectedVersion: 1, draft: data.baseline.draft }, owner), id)).status, 409);
   assert.equal((await handlers.putOrganizerImport(request("PUT", {}, owner), id)).status, 409);
-  assert.equal((await handlers.submitOrganizerCandidate(request("POST", { expectedVersion: 1 }, owner), id)).status, 503);
-  assert.equal((await handlers.adminReviewOrganizerCandidate(request("POST", { expectedVersion: 1, decision: "approve" }, admin), id)).status, 503);
+  assert.equal((await handlers.adminReviewOrganizerCandidate(request("POST", { expectedVersion: 1, decision: "approve" }, admin), id)).status, 409);
   assert.equal((await repo.getOrganizerCandidate(id)).current_version, 1);
   assert.equal((await repo.getOrganizerAmendment(id)).changes_json, "[]");
   assert.equal(await repo.getLatestOrganizerPublicationJob(id), null);
@@ -167,4 +169,151 @@ test("map-only edits advance the returned candidate version while retaining the 
   assert.equal(loaded.version, 2);
   assert.deepEqual(loaded.changes, []);
   assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 2, changes: [] }, owner), id)).status, 200);
+});
+
+const submit = (id, version = 2, cookie = owner) => handlers.submitOrganizerCandidate(request("POST", { expectedVersion: version }, cookie), id);
+const review = (id, version = 2, cookie = admin, decision = "approve") => handlers.adminReviewOrganizerCandidate(request("POST", { expectedVersion: version, decision }, cookie), id);
+async function changed() {
+  const id = await create();
+  const result = await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1,
+    changes: [{ kind: "released", sources: ["1:S02"], circleName: "確認接手社" }] }, owner), id);
+  assert.equal(result.status, 200, await result.clone().text());
+  return id;
+}
+test("AMEND validation, preview, immutable submission and unique approval use the shared publication job", async () => {
+  const id = await changed();
+  const before = await repo.getOrganizerCandidate("source");
+  const validation = await handlers.validateOrganizerCandidate(request("POST", {}, owner), id);
+  assert.equal((await validation.json()).ok, true);
+  const preview = await (await handlers.previewOrganizerCandidate(request("POST", {}, owner), id)).json();
+  assert.deepEqual(preview.preview.placements.map((row) => [row.boothCode, row.circleName]), [["S01", "甲社"], ["S02", "確認接手社"]]);
+  assert.equal(preview.preview.maps.length, 1);
+  assert.equal((await submit(id, 2, editor)).status, 403);
+  assert.equal((await submit(id, 1)).status, 409);
+  const response = await submit(id);
+  assert.equal(response.status, 200, await response.clone().text());
+  const snapshot = await repo.getOrganizerSubmissionSnapshot(id, 2);
+  const content = JSON.parse(snapshot.snapshot_json);
+  const stored = await repo.getOrganizerAmendment(id);
+  assert.equal(content.schema, "organizer-submission-snapshot/4");
+  assert.equal(content.operation, "AMEND");
+  assert.equal(content.amendment.baselineJson, stored.baseline_json);
+  assert.equal(content.amendment.baselineSha256, stored.baseline_sha256);
+  assert.deepEqual(content.amendment.changes, JSON.parse(stored.changes_json));
+  assert.equal(await sha256Hex(snapshot.snapshot_json), snapshot.sha256);
+  assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 2, changes: [] }, owner), id)).status, 409);
+  assert.equal((await review(id, 2, owner)).status, 403);
+  assert.equal((await review(id, 1)).status, 409);
+  dispatchHook = async () => { throw new Error("Controlled local dispatch outage"); };
+  const approval = await review(id);
+  assert.equal(approval.status, 200, await approval.clone().text());
+  const job = await repo.getLatestOrganizerPublicationJob(id);
+  assert.equal(job.status, "failed"); assert.equal(job.failure_code, "dispatch_failed"); assert.equal(job.retryable, 1);
+  assert.equal(job.snapshot_id, snapshot.id); assert.equal(job.approval_hash, snapshot.sha256);
+  assert.equal((await review(id)).status, 200);
+  assert.deepEqual(dispatched, [job.id], "duplicate approval must not dispatch again");
+  dispatchHook = async () => {};
+  assert.equal((await handlers.adminRetryOrganizerPublication(request("POST", {}, editor), job.id)).status, 403);
+  const retried = await handlers.adminRetryOrganizerPublication(request("POST", {}, owner), job.id);
+  assert.equal(retried.status, 200, await retried.clone().text());
+  const same = await repo.getLatestOrganizerPublicationJob(id);
+  assert.equal(same.id, job.id); assert.equal(same.snapshot_id, snapshot.id); assert.equal(same.approval_hash, snapshot.sha256);
+  assert.equal(same.status, "queued"); assert.equal(same.step, job.step);
+  assert.deepEqual(await repo.getOrganizerSubmissionSnapshot(id, 2), snapshot);
+  assert.deepEqual(await repo.getOrganizerCandidate("source"), before);
+});
+
+test("AMEND rejects invalid map coverage before storing a submission", async () => {
+  const id = await create();
+  const saved = await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1,
+    changes: [{ kind: "moved", moves: [{ source: "1:S02", to: { dayId: "1", code: "S03", areaId: "B" } }] }] }, owner), id);
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const response = await submit(id);
+  assert.equal(response.status, 422, await response.clone().text());
+  assert.equal(await repo.getOrganizerSubmissionSnapshot(id, 2), null);
+});
+
+test("AMEND approval rejects a self-consistent hash for snapshot content that diverges from saved declarations", async () => {
+  const id = await changed(); assert.equal((await submit(id)).status, 200);
+  const snapshot = await repo.getOrganizerSubmissionSnapshot(id, 2);
+  const content = JSON.parse(snapshot.snapshot_json);
+  content.amendment.changes[0].circleName = "未送審社";
+  content.import.rows[1].circleName = "未送審社";
+  const text = JSON.stringify(content);
+  await db.prepare("UPDATE organizer_submission_snapshots SET snapshot_json=?1,sha256=?2 WHERE id=?3")
+    .bind(text,await sha256Hex(text),snapshot.id).run();
+  const response = await review(id);
+  assert.equal(response.status, 409); assert.equal((await response.json()).code, "snapshot_mismatch");
+  assert.equal(await repo.getLatestOrganizerPublicationJob(id), null);
+  assert.equal((await repo.getOrganizerCandidate(id)).status, "submitted");
+});
+
+test("Owner revocation between validation and snapshot commit prevents submission", async (t) => {
+  const id = await changed();
+  const original = repo.storeOrganizerSubmissionSnapshot;
+  t.after(() => { repo.storeOrganizerSubmissionSnapshot = original; });
+  repo.storeOrganizerSubmissionSnapshot = async (input) => {
+    await db.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE candidate_id=?2 AND account_id=?3").bind(data.now,id,ownerId).run();
+    return original(input);
+  };
+  assert.equal((await submit(id)).status, 409);
+  assert.equal(await repo.getOrganizerSubmissionSnapshot(id, 2), null);
+  assert.equal((await repo.getOrganizerCandidate(id)).status, "draft");
+});
+
+test("Admin revocation after request authentication prevents approval and every dependent write", async (t) => {
+  const id = await changed(); assert.equal((await submit(id)).status, 200);
+  const original = repo.reviewOrganizerCandidate;
+  t.after(() => { repo.reviewOrganizerCandidate = original; });
+  repo.reviewOrganizerCandidate = async (input) => {
+    await db.prepare("DELETE FROM admins WHERE email='admin@example.test'").run();
+    return original(input);
+  };
+  assert.equal((await review(id)).status, 409);
+  assert.equal(await repo.getLatestOrganizerPublicationJob(id), null);
+  assert.equal((await db.prepare("SELECT count(*) AS count FROM organizer_event_reviews WHERE candidate_id=?1").bind(id).first()).count, 0);
+  assert.equal((await repo.getOrganizerCandidate(id)).status, "submitted");
+});
+
+
+test("Admin revocation at the review transaction boundary leaves no review, job or candidate transition", async () => {
+  const id = await changed(); assert.equal((await submit(id)).status, 200);
+  const snapshot = await repo.getOrganizerSubmissionSnapshot(id,2);
+  let armed = false, intercepted = false;
+  const guarded = createIdentityRepository({ prepare: db.prepare.bind(db), exec: db.exec.bind(db), batch: async (statements) => {
+    if (armed) {
+      armed = false; intercepted = true;
+      await db.prepare("DELETE FROM admins WHERE email='admin@example.test'").run();
+    }
+    return db.batch(statements);
+  } });
+  await guarded.ensureTables(); armed = true;
+  const actor = await db.prepare("SELECT id FROM accounts WHERE email='admin@example.test'").first();
+  const response = await guarded.reviewOrganizerCandidate({ candidateId:id, expectedVersion:2, decision:"approve", actorAccountId:actor.id,
+    publication:{ jobId:"revoked-review", snapshotId:snapshot.id, approvalHash:snapshot.sha256 }, now:data.now });
+  assert.equal(intercepted,true); assert.equal(response.ok,false);
+  assert.equal((await repo.getOrganizerCandidate(id)).status, "submitted");
+  assert.equal(await repo.getLatestOrganizerPublicationJob(id), null);
+  assert.equal((await db.prepare("SELECT count(*) AS count FROM organizer_event_reviews WHERE candidate_id=?1").bind(id).first()).count,0);
+});
+
+test("Owner revocation at snapshot INSERT cannot leave an unauthorized immutable snapshot", async () => {
+  const id = await changed();
+  let intercepted = false;
+  const wrap = (statement, sql) => new Proxy(statement, { get(target,key) {
+    if (key === "bind") return (...values) => wrap(target.bind(...values),sql);
+    if (key === "run" && sql.includes("INSERT INTO organizer_submission_snapshots")) return async () => {
+      intercepted = true;
+      await db.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE candidate_id=?2 AND account_id=?3").bind(data.now,id,ownerId).run();
+      return target.run();
+    };
+    return typeof target[key] === "function" ? target[key].bind(target) : target[key];
+  } });
+  const guarded = createIdentityRepository({ prepare: (sql) => wrap(db.prepare(sql),sql), batch: db.batch.bind(db), exec: db.exec.bind(db) });
+  await guarded.ensureTables();
+  const response = await guarded.storeOrganizerSubmissionSnapshot({ candidateId:id,candidateVersion:2,actorAccountId:ownerId,
+    snapshotJson:"{}",sha256:await sha256Hex("{}"),now:data.now });
+  assert.equal(intercepted,true); assert.equal(response.ok,false);
+  assert.equal(await repo.getOrganizerSubmissionSnapshot(id,2),null);
+  assert.equal((await repo.getOrganizerCandidate(id)).status,"draft");
 });
