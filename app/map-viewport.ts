@@ -8,7 +8,7 @@ export type MapRect = MapSize & MapPoint;
  * strip, so they read this one value — the CSS through the `--mobile-peek-summary`
  * custom property the shell publishes.
  */
-export const MOBILE_SUMMARY_PEEK_HEIGHT = 44;
+export const MOBILE_SUMMARY_PEEK_HEIGHT = 58;
 
 /** All bounds use map-local CSS pixels, never layout or device pixels. */
 export function availableMapRect(viewport: MapSize, obstacles: { top?: MapRect; bottom?: MapRect; detail?: MapRect } = {}): MapRect {

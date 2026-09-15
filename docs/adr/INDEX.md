@@ -14,7 +14,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 
 | 區域 | 要讀的 ADR |
 |---|---|
-| 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051、0055、0056 |
+| 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051、0055、0056、0063、0064 |
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054 |
@@ -87,7 +87,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0053](./0053-the-thumbnail-upload-asks-for-the-picture-only.md) | 代表圖上傳只要圖片，出處與來源標示改為選填，上限 5 MiB | 生效 |
 | [0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md) | 保存期限選項退場，社團只決定公開與否，其餘靠手動刪除 | 生效 |
 | [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | **部分被取代** — 關閉保留選取由 0063 取代；手機邊界由 0056 擴充 |
-| [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | **部分被取代** — 摘要關閉保留選取由 0063 取代 |
+| [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | **部分被取代** — 摘要關閉保留選取由 0063 取代；三階段完整資訊由 0064 擴充 |
 | [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |
 | [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046 |
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
@@ -95,3 +95,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0061](./0061-organizer-snapshot-pins-complete-reference-records.md) | Organizer 送審固定完整 reference 記錄 | 生效 |
 | [0062](./0062-publication-wakes-through-webhooks-and-a-dedicated-cron.md) | Webhook 喚醒，由獨立 cron 持續推進 publication | 生效；延續 0057、0058 |
 | [0063](./0063-reader-dismissal-clears-selection.md) | 關閉社團摘要取消選取，完整資訊關閉返回摘要 | 生效；部分取代 0055、0056 |
+| [0064](./0064-mobile-circle-details-use-three-sheet-levels.md) | 手機社團資訊使用三階段底部面板 | 生效；部分取代 0056 |

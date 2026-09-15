@@ -19,8 +19,15 @@ try {
     const selectedUrl = page.url();
     const selectedView = await view(page);
 
-    for (const method of ["button", "escape", "backdrop"]) {
+    for (const method of desktop ? ["button", "escape", "backdrop"] : ["handle"]) {
       await openFull().click();
+      if (!desktop) {
+        await page.locator('[data-embedded="true"]').waitFor();
+        await page.getByRole("button", { name: "縮小工作面板", exact: true }).press("ArrowDown");
+        await panel.waitFor();
+        assert.equal(page.url(), selectedUrl);
+        continue;
+      }
       const dialog = page.getByRole("dialog");
       await dialog.waitFor();
       if (method === "button") await dialog.getByRole("button", { name: "關閉攤位詳細資訊", exact: true }).click();
