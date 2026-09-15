@@ -1,6 +1,6 @@
 # ADR-0056：手機地圖採探索／行程與獨立社團摘要
 
-- **狀態**：Accepted
+- **狀態**：部分被取代；決策 3 的摘要關閉保留選取由 [ADR-0063](./0063-reader-dismissal-clears-selection.md) 取代，把手收合及完整資訊返回摘要仍適用。
 - **日期**：2026-09-12
 - **取代範圍**：[ADR-0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) 中「手機工作面板維持原行為」；桌機決策保留。
 - **規格**：[手機地圖面板方案 B](../design/mobile-map-panel-plan.md)

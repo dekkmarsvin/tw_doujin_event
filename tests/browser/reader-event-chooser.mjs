@@ -67,6 +67,29 @@ try {
     await page.close();
   }
 
+  for (const width of [1440, 390]) {
+    const page = await journey.mapPage({ viewport: { width, height: 844 }, params: "&query=S01&selectedBooth=S01" });
+    await page.waitForTimeout(250);
+    const original = page.url();
+    const switchBox = await page.getByRole("link", { name: /切換活動/ }).boundingBox();
+    assert.ok(switchBox.height >= 44, "the event name offers a full-height press target");
+    await page.getByRole("link", { name: /切換活動/ }).click();
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
+    assert.equal(new URL(page.url()).search, "", "switching returns to a clean chooser");
+    await page.goBack();
+    await page.locator("[data-slot-code]").first().waitFor();
+    await page.waitForTimeout(250);
+    assert.equal(page.url(), original, "Back restores the original event and selection");
+    await page.goForward();
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
+    await page.getByRole("button", { name: new RegExp(events[1].name) }).click();
+    await page.locator("[data-slot-code]").first().waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("event"), events[1].id);
+    for (const name of ["query", "selectedCircle", "selectedBooth"]) assert.equal(new URL(page.url()).searchParams.get(name), null, `${name} does not cross events`);
+    await journey.capture(page, `chooser-switches-without-stale-state-${width}`);
+    await page.close();
+  }
+
   await journey.finish();
 } catch (error) {
   await journey.abort(error);

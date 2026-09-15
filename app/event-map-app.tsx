@@ -69,7 +69,7 @@ type MapGesture =
  * this event's defaults, and a stale day or area from the previous event would
  * be indistinguishable from a deliberate choice.
  */
-export default function EventMapApp({ event }: { event: EventDefinition }) {
+export default function EventMapApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const eventId = event.id;
   const genres: readonly string[] = event.genres;
   const urlDefaults = defaultEventUrlState(event);
@@ -148,6 +148,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
   const historyIntent = useRef<"replace" | "push">("replace");
   const suppressUrlWrite = useRef(false);
   const lastAutoSelection = useRef("");
+  const autoSelectSearch = useRef(false);
   const pendingRestoreCode = useRef<string | null>(null);
   const pendingSelection = useRef<PendingCircleSelection<EventDay> | null>(null);
   const viewport = useMapViewport({
@@ -202,6 +203,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
 
   useEffect(() => {
     const restore = (fromHistory = false) => {
+      autoSelectSearch.current = false;
       const { state } = parseEventUrlState(event, window.location.href);
       // The catalog snapshot may still be in flight. Filters restore now; the
       // shared circle/booth selection is resolved once records are available.
@@ -415,7 +417,7 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
 
   useEffect(() => {
     const key = `${day}|${hall}|${genre}|${favoriteOnly}|${query.trim()}|${filtered[0]?.recordId ?? ""}`;
-    if (!query.trim() || filtered.length !== 1 || lastAutoSelection.current === key) return;
+    if (!autoSelectSearch.current || !query.trim() || filtered.length !== 1 || lastAutoSelection.current === key) return;
     lastAutoSelection.current = key;
     selectRecord(filtered[0], "details", false);
   }, [day, favoriteOnly, filtered, genre, hall, query, selectRecord]);
@@ -445,15 +447,28 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
     viewport.reset();
   };
   const closeDetails = () => {
-    if (!desktop) { setMobileSheetLevel("peek"); requestAnimationFrame(() => (mobileSummaryRef.current ?? mobileNavRef.current?.querySelector<HTMLButtonElement>("button[aria-pressed=true]"))?.focus({ preventScroll: true })); }
+    if (selected) historyIntent.current = "push";
+    autoSelectSearch.current = false;
+    pendingSelection.current = null;
+    pendingRestoreCode.current = null;
+    interruptPosition();
+    setSelectedRecordId(null);
+    setFocusedCode(null);
+    if (!desktop) { setMobilePanel(mobileWorkspace === "plan" ? "plan" : "results"); collapseMobilePanel(); }
     setDesktopDetailsOpen(false);
     setShowFullDetail(false);
-    cancelPosition();
     if (desktop) requestAnimationFrame(() => {
       const source = selectionSource.current;
       if ((source instanceof HTMLElement || source instanceof SVGElement) && source.isConnected && source.getClientRects().length) source.focus({ preventScroll: true });
-      else (mapRef.current?.querySelector<SVGElement>('svg [data-slot-code][tabindex="0"]') ?? desktopTabRef.current)?.focus({ preventScroll: true });
+      else (selected && mapRef.current?.querySelector<SVGElement>(`[data-slot-code="${CSS.escape(selected.code)}"]`) || desktopTabRef.current)?.focus({ preventScroll: true });
+      // Restoring a keyboard location must not announce a cancelled selection.
+      // The next deliberate SVG focus move can show its code again.
+      setFocusedCode(null);
     });
+  };
+  const collapseMobilePanel = () => {
+    setMobileSheetLevel("peek");
+    requestAnimationFrame(() => mobileNavRef.current?.querySelector<HTMLButtonElement>("button[aria-pressed=true]")?.focus({ preventScroll: true }));
   };
   const stepZoom = (delta: number) => {
     interruptPosition();
@@ -713,8 +728,20 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
 
   const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
 
+  const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{event.dateRangeLabel}</span><span>{event.venue}</span></div>}</div>;
+  const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href="/" onClick={(click) => {
+    if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+    click.preventDefault();
+    onChooseEvent();
+  }}>{eventInfo}<span className={styles.eventSwitch}>切換活動<UiIcon name="chevron-right" /></span></a> : eventInfo;
+
   return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
-    <header className="topbar"><div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop ? <small>同人展逛攤地圖</small> : <h1 className={styles.mobileEventName}>{event.name}</h1>}</div></div>{desktop && <div className="event"><i>活動</i><div><h1 title={event.name}>{event.name}</h1><small>{event.dateRangeLabel} · {event.venue}</small></div></div>}<label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>{desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}</header>
+    <header className="topbar">
+      <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop ? <small>同人展逛攤地圖</small> : eventIdentity}</div></div>
+      {desktop && <div className="event">{eventIdentity}</div>}
+      <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
+      {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
+    </header>
     <div className={`workspace ${styles.workspace}`}>
       <aside className={`filters ${styles.leftRail}`}>
         <div className={styles.desktopTabs} role="tablist" aria-label="工作區">{(["explore", "plan"] as const).map((panel, index) => <button key={panel} ref={desktopPanel === panel ? desktopTabRef : undefined} id={"desktop-tab-" + panel} role="tab" aria-controls={"desktop-panel-" + panel} aria-selected={desktopPanel === panel} tabIndex={desktopPanel === panel ? 0 : -1} onClick={() => setDesktopPanel(panel)} onKeyDown={(keyEvent) => {
@@ -734,14 +761,14 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
           {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label="已選社團詳情" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{selected.code} · {selected.name} 詳情已更新</span><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
         </div>
       </section>
-      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}>
+      <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); if (mobileSummary) closeDetails(); else collapseMobilePanel(); } }}>
         <div className={styles.mobileHalfMeasure} data-half-measure aria-hidden="true" />
         {mobileSummary && selected && <button ref={mobileSummaryRef} className={styles.mobilePeekSummary} hidden={mobileSheetLevel !== "peek"} onClick={() => setMobileSheetLevel("half")}>{selected.code} · {selected.name}<UiIcon name="arrow-up" /></button>}
         <div className={styles.mobileSheetBody} hidden={mobileSheetLevel === "peek"}>
           <button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} onClick={toggleMobileSheetLevel} onPointerDown={handleMobileSheetPointerDown} onPointerMove={handleMobileSheetPointerMove} onPointerUp={handleMobileSheetPointerEnd} onPointerCancel={handleMobileSheetPointerEnd}><span aria-hidden="true" /></button>
           <div className={styles.mobilePanelHeader}>
             {mobileSummary || mobilePanel === "filters" ? <button onClick={backToResults}><UiIcon name="chevron-left" />回結果</button> : <b>{mobilePanel === "plan" ? "今日行程" : `探索 · ${filtered.length} 個結果`}</b>}
-            <button onClick={closeDetails}>收起<UiIcon name="arrow-down" /></button>
+            {mobileSummary ? <button onClick={closeDetails}>取消選取<UiIcon name="close" /></button> : <button onClick={collapseMobilePanel}>收起<UiIcon name="arrow-down" /></button>}
           </div>
           {mobileSummary && selected && <section className={styles.mobileSummary} aria-label="已選社團摘要">
             <div className={styles.mobileSummaryTitle}><strong>{selected.code}</strong><h2>{selected.name}</h2></div>
@@ -764,6 +791,6 @@ export default function EventMapApp({ event }: { event: EventDefinition }) {
       </aside>
     </div>
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
-    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowFullDetail(false); }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
+    {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }
