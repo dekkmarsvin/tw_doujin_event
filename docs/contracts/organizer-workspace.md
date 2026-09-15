@@ -66,7 +66,7 @@ draft → submitted → approved → publishing → published
 
 ## 已發布名單的明確修正宣告
 
-`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。修正表單已接上候選 API；AMEND publication 尚未交付，完整產品驗收仍由 #190 承接，CREATE 的碰撞保護不變。
+`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。修正表單、送審與核准已接上候選 API 及原 publication engine；完整真實更正驗收仍由 #190 承接，CREATE 的碰撞保護不變。
 
 每筆宣告必須明說 `kind`：
 
@@ -215,7 +215,7 @@ AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核�
 
 依 ADR-0045 的發布產物補充，snapshot 宣告透過既有 planner 生成 transitions，main 只套用一次，退出歷史保存在 evidence；公開 groups/2 存放結果群組及空 transitions，供既有 `identity:generate --check` 驗證已套用的 registry，避免每次 build 再執行歷史退出。已公開 AMEND 可重新載入為下一次 baseline，source 只保留 job／snapshot 識別，不能遞迴嵌入前次 snapshot。
 
-AMEND 送審／核准目前仍關閉。原 executor／driver 已接上以下固定觀測與恢復路徑，獨立 Worker rollout 與 UI snapshot／核准接線完成後才開放使用；工程測試不當作真實更正驗收。
+AMEND 送審／核准與原 executor／driver 已接上以下固定觀測與恢復路徑，沿用既有 publication mode 與 dispatcher 啟用條件。正式 rollout 須先部署支援 AMEND 的獨立 Worker，再開放 Pages UI 核准；工程測試不當作真實更正驗收。
 
 ### GitHub data／main driver
 
