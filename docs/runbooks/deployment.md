@@ -49,6 +49,8 @@ Pages production 需設定 `GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_A
 
 獨立 `tw-catalog-publication-dispatch` Worker 綁同一個 production identity D1，每分鐘執行，沒有 HTTP 入口。既有 App／installation ID 是公開識別值，存於 Worker 的 production vars，避免部署覆寫 dashboard 設定；相同 App 的 `GITHUB_APP_PRIVATE_KEY` 另以 Worker secret 設定。依已核准 rollout，用 `wrangler deploy --config workers/publication-dispatch/wrangler.jsonc --env ''` 部署。這與 Pages 部署分開，屬一次性建置及日後工程版本更新，正常新增活動不用手動部署或建立 credentials。
 
+Worker 的 `preview_urls: false` 與啟用的 observability logs 也納入設定，保留既有 Dashboard 的入口／日誌狀態，避免 Wrangler 預設值在部署時覆寫。執行日誌只記錄 publication tick 的結果與 job ID，不加入 App 憑證。
+
 Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JSON／HMAC 必須保留，事件喚醒與 cron 恢復依 [Organizer 發布契約](../contracts/organizer-workspace.md#發布邊界)。需要暫停發布時，將兩份 production mode 改為 disabled 並部署；保留 D1 job、snapshot、lease／checkpoint，不手改 job 狀態。首次 CH20 啟用、內容核准與真實故障操作包依 #212 的既有真人確認執行；合併工程 PR 不代表已完成這些確認。
 
 ### preview 的兩個信箱
