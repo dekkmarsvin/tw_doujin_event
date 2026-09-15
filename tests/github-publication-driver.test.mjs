@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { amendmentFixture } from "./support/organizer-amendment-fixture.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR unavailable");
@@ -31,7 +32,7 @@ async function snapshotFixture() {
 
 // An in-memory GitHub boundary records real blob hashes and immutable commit /
 // tree objects. Faults happen AFTER a remote side effect, before its response.
-async function remoteFixture() {
+async function remoteFixture(initial = {}) {
   const repos = new Map();
   let checkId = 0;
   const calls = [];
@@ -47,9 +48,9 @@ async function remoteFixture() {
   function filesAt(repo, commitId) { return new Map(repo.trees.get(repo.commits.get(commitId).tree.sha).map((entry) => [entry.path, repo.blobs.get(entry.sha)])); }
   for (const [stage, name] of [["data", "tw_doujin_event-data"], ["main", "tw_doujin_event"]]) {
     const repo = { stage, blobs: new Map(), trees: new Map(), commits: new Map(), refs: new Map(), pulls: new Map(), checks: new Map() };
-    const files = new Map(stage === "data" ? [["events/ff47/event.json", "{\"id\":\"ff47\"}"]] : await Promise.all([
+    const files = new Map(initial[stage] ?? (stage === "data" ? [["events/ff47/event.json", "{\"id\":\"ff47\"}"]] : await Promise.all([
       "data/published-events.json", "data/event-data-pins/ff47.json", "data/circle-identities/allocations.json", "data/circle-identities/evidence.json",
-    ].map(async (path) => [path, await readFile(path, "utf8")])));
+    ].map(async (path) => [path, await readFile(path, "utf8")]))));
     files.set("README.md", "Existing repository file\n");
     repo.refs.set("main", commit(repo, tree(repo, files), [], "Initial")); repos.set(name, repo);
   }
@@ -95,7 +96,15 @@ async function remoteFixture() {
       const checks = repo.checks.get(body.head_sha) ?? []; checks.push({ ...body, id: ++checkId }); repo.checks.set(body.head_sha, checks); output = response(checks.at(-1), 201);
     } else if (method === "PUT" && path.endsWith("/merge")) {
       const pull = repo.pulls.get(Number(path.split("/")[2])); assert.equal(pull.merged, false); assert.equal(body.sha, pull.head.sha);
-      const merged = commit(repo, repo.commits.get(pull.head.sha).tree.sha, [repo.refs.get("main")], "Squash " + pull.head.sha);
+      // Preserve unrelated main changes as GitHub's three-way merge does.
+      const base = filesAt(repo, repo.commits.get(pull.head.sha).parents[0].sha), head = filesAt(repo, pull.head.sha);
+      const mergedFiles = filesAt(repo, repo.refs.get("main"));
+      for (const path of new Set([...base.keys(), ...head.keys()])) {
+        if (base.get(path) === head.get(path)) continue;
+        assert.ok(mergedFiles.get(path) === base.get(path) || mergedFiles.get(path) === head.get(path), "merge conflict must not overwrite current main");
+        if (head.has(path)) mergedFiles.set(path, head.get(path)); else mergedFiles.delete(path);
+      }
+      const merged = commit(repo, tree(repo, mergedFiles), [repo.refs.get("main")], "Squash " + pull.head.sha);
       repo.refs.set("main", merged); pull.merged = true; pull.state = "closed"; pull.merge_commit_sha = merged;
       output = response({ merged: true, sha: merged });
     } else throw new Error(`Unexpected ${method} ${path}`);
@@ -112,11 +121,14 @@ async function remoteFixture() {
 }
 async function setup() {
   const remote = await remoteFixture(); const snapshot = await snapshotFixture();
+  return harness(remote, snapshot);
+}
+function harness(remote, snapshot, served = false) {
   const snapshotJson = JSON.stringify(snapshot, null, 2); // Preserve approved whitespace.
   const job = { id: "abc123", candidate_id: snapshot.candidateId, candidate_version: snapshot.candidateVersion,
     approval_hash: sha(snapshotJson, "sha256"), data_pr_number: null, data_head_sha: null, data_merge_sha: null,
     main_pr_number: null, main_head_sha: null, main_merge_sha: null, workflow_run_id: null };
-  let lease = true; let intent = 0; let served = false;
+  let lease = true; let intent = 0;
   const assertLease = async () => { if (!lease) throw new PublicationFailure("lease_lost", "Expired", true); };
   const driver = createGitHubPublicationDriver({ tokenProvider: { getToken: async () => "test-token", invalidate() {} }, fetch: remote.fetch, publishedEvent: async () => served ? {} : null });
   const run = async (step) => {
@@ -124,8 +136,123 @@ async function setup() {
       assertLease, beginRemoteWrite: async () => { await assertLease(); intent++; } });
     Object.assign(job, result.metadata); return result;
   };
-  return { remote, job, driver, run, loseLease: () => { lease = false; }, setServed: () => { served = true; }, intent: () => intent };
+  return { remote, job, driver, run, snapshot, snapshotJson, loseLease: () => { lease = false; }, setServed: () => { served = true; }, intent: () => intent };
 }
+
+async function setupAmendment() {
+  const fixture = await amendmentFixture(runner);
+  const remote = await remoteFixture({ data: fixture.dataFiles, main: fixture.mainFiles });
+  const dataRepo = remote.repos.get("tw_doujin_event-data"), mainRepo = remote.repos.get("tw_doujin_event");
+  const baseline = fixture.baseline;
+  baseline.source.dataCommit = baseline.pin.commit = dataRepo.refs.get("main");
+  const before = mainRepo.refs.get("main"), files = remote.filesAt(mainRepo, before);
+  files.set("data/event-data-pins/event-alpha.json", JSON.stringify(baseline.pin));
+  const mainCommit = remote.commit(mainRepo, remote.tree(mainRepo, files), [before], "Published baseline");
+  mainRepo.refs.set("main", mainCommit); baseline.mainCommit = baseline.source.mainCommit = mainCommit;
+  const changes = [{ kind: "released", sources: ["1:S02"], circleName: "接手社" }];
+  const { planOrganizerAmendmentCandidate } = await runner.import("/app/organizer-amendment-baseline.ts");
+  const plan = planOrganizerAmendmentCandidate(baseline, changes, () => "2026-09-16");
+  const baselineJson = JSON.stringify(baseline);
+  const snapshot = { ...fixture.snapshot, schema: "organizer-submission-snapshot/4", operation: "AMEND", candidateId: "amendment-candidate", candidateVersion: 4,
+    contentUpdatedAt: "2026-09-16T00:00:00.000Z", import: { ...fixture.snapshot.import, rows: plan.rows },
+    amendment: { baselineJson, baselineSha256: sha(baselineJson, "sha256"), changes } };
+  return harness(remote, snapshot, true);
+}
+async function readyMain(testCase) {
+  await testCase.run("preparing_data"); testCase.remote.green("data", testCase.job.data_head_sha);
+  await testCase.run("merging_data"); await testCase.run("preparing_main");
+  testCase.remote.green("main", testCase.job.main_head_sha);
+}
+function advance(remote, stage, alter) {
+  const repo = remote.repos.get(stage === "data" ? "tw_doujin_event-data" : "tw_doujin_event");
+  const previous = repo.refs.get("main"), files = remote.filesAt(repo, previous); alter(files);
+  repo.refs.set("main", remote.commit(repo, remote.tree(repo, files), [previous], "Intervening change"));
+}
+
+test("AMEND uses the existing two-stage driver and preserves old circles, other files and published order", async () => {
+  const t = await setupAmendment();
+  assert.equal(await t.driver.eventExists(t.snapshot.eventId), true);
+  const main = t.remote.repos.get("tw_doujin_event"), before = t.remote.filesAt(main, main.refs.get("main"));
+  await readyMain(t); await t.run("merging_main");
+  const after = t.remote.filesAt(main, t.job.main_merge_sha);
+  assert.equal(after.get("data/published-events.json"), before.get("data/published-events.json"));
+  assert.equal(after.get("README.md"), before.get("README.md"));
+  const evidence = JSON.parse(after.get("data/circle-identities/evidence.json"));
+  assert.equal(evidence.entries.find((entry) => entry.circleId === "c-000002").currentName, "乙社");
+  assert.equal(evidence.entries.find((entry) => entry.circleId === "c-000003").currentName, "接手社");
+  assert.equal(JSON.parse(after.get("data/event-data-pins/event-alpha.json")).commit, t.job.data_merge_sha);
+  assert.equal(t.intent(), t.remote.calls.filter((call) => call.method !== "GET").length);
+});
+
+test("AMEND response loss resumes original data/main branches, PRs, approval and completed merges", async () => {
+  for (const stage of ["data", "main"]) for (const operation of ["POST /git/refs", "POST /pulls", "POST /check-runs", "PUT /pulls/1/merge"]) {
+    const t = await setupAmendment();
+    if (stage === "main") { await t.run("preparing_data"); t.remote.green("data", t.job.data_head_sha); await t.run("merging_data"); }
+    const merge = operation.startsWith("PUT");
+    if (merge) { await t.run(`preparing_${stage}`); t.remote.green(stage, t.job[`${stage}_head_sha`]); }
+    t.remote.loseNext(operation);
+    const step = `${merge ? "merging" : "preparing"}_${stage}`;
+    await assert.rejects(t.run(step), (error) => error.retryable);
+    await t.run(step); await t.run(step);
+    const name = stage === "data" ? "tw_doujin_event-data" : "tw_doujin_event";
+    assert.equal(t.remote.calls.filter((call) => call.name === name && `${call.method} ${call.path}` === operation).length, 1, `${stage} ${operation}`);
+    assert.equal(t.remote.repos.get(name).pulls.size, 1);
+  }
+});
+
+test("AMEND rejects changed pin or data before any first write, and changed bases before merge", async () => {
+  for (const when of ["preparing", "merging"]) for (const change of ["pin", "event-file", "extra-event-file"]) {
+    const t = await setupAmendment();
+    if (when === "merging") { await t.run("preparing_data"); t.remote.green("data", t.job.data_head_sha); }
+    advance(t.remote, change === "pin" ? "main" : "data", (files) => {
+      if (change === "pin") { const pin = JSON.parse(files.get("data/event-data-pins/event-alpha.json")); pin.commit = "f".repeat(40); files.set("data/event-data-pins/event-alpha.json", JSON.stringify(pin)); }
+      else files.set(`events/event-alpha/${change === "event-file" ? "map" : "extra"}.json`, "{}");
+    });
+    const writes = t.intent();
+    await assert.rejects(t.run(`${when}_data`), (error) => error.code === "amendment_baseline_changed");
+    assert.equal(t.intent(), writes);
+  }
+  for (const change of ["pin", "ledger-format", "published-order"]) {
+    const t = await setupAmendment(); await readyMain(t);
+    advance(t.remote, "main", (files) => {
+      if (change === "pin") { const pin = JSON.parse(files.get("data/event-data-pins/event-alpha.json")); pin.commit = "f".repeat(40); files.set("data/event-data-pins/event-alpha.json", JSON.stringify(pin)); }
+      if (change === "ledger-format") files.set("data/circle-identities/allocations.json", files.get("data/circle-identities/allocations.json") + "\n");
+      if (change === "published-order") files.set("data/published-events.json", '{"schema":"published-events/1","events":["event-alpha","prior-event"]}');
+    });
+    const writes = t.intent();
+    await assert.rejects(t.run("merging_main"), (error) => ["amendment_baseline_changed", "amendment_base_conflict"].includes(error.code));
+    assert.equal(t.intent(), writes);
+    assert.equal(t.remote.repos.get("tw_doujin_event").pulls.get(1).merged, false);
+  }
+});
+
+test("AMEND can merge after unrelated main code changes while changed PR contents and expired lease still stop writes", async () => {
+  const t = await setupAmendment();
+  await t.run("preparing_data"); t.remote.green("data", t.job.data_head_sha);
+  advance(t.remote, "data", (files) => files.set("README.md", "Updated data documentation"));
+  await t.run("merging_data");
+  await t.run("preparing_main"); t.remote.green("main", t.job.main_head_sha);
+  advance(t.remote, "main", (files) => files.set("README.md", "Updated main documentation"));
+  await t.run("merging_main");
+  for (const stage of ["data", "main"]) {
+    const repo = t.remote.repos.get(stage === "data" ? "tw_doujin_event-data" : "tw_doujin_event");
+    assert.equal(t.remote.filesAt(repo, repo.refs.get("main")).get("README.md"), `Updated ${stage} documentation`);
+  }
+  for (const changed of ["lease", "head-tree"]) {
+    const attempt = await setupAmendment(); await readyMain(attempt);
+    if (changed === "lease") attempt.loseLease();
+    else {
+      const repo = attempt.remote.repos.get("tw_doujin_event"), pull = repo.pulls.get(1), old = repo.commits.get(pull.head.sha);
+      const files = attempt.remote.filesAt(repo, pull.head.sha); files.set(".github/unreviewed.yml", "unreviewed");
+      const newHead = attempt.remote.commit(repo, attempt.remote.tree(repo, files), old.parents.map((parent) => parent.sha), old.message);
+      pull.head.sha = newHead; repo.refs.set(pull.head.ref, newHead); attempt.job.main_head_sha = newHead;
+      repo.checks.set(newHead, repo.checks.get(old.sha).map((check) => ({ ...check, head_sha: newHead })));
+    }
+    const writes = attempt.intent();
+    await assert.rejects(attempt.run("merging_main"), (error) => ["lease_lost", "publication_tree_changed"].includes(error.code));
+    assert.equal(attempt.intent(), writes);
+  }
+});
 
 test("real driver stages data then main, pins merged bytes and preserves FF47", async () => {
   const { remote, job, driver, run, intent, setServed } = await setup();

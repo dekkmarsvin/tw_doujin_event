@@ -87,15 +87,18 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
         || !["approved", "publishing"].includes(candidate.status)) {
         throw new PublicationFailure("snapshot_mismatch", "Approved snapshot no longer matches the publication.", false);
       }
-      const input = JSON.parse(snapshot.snapshot_json) as { eventId?: string; candidateId?: string; candidateVersion?: number };
-      if (!input.eventId || input.candidateId !== job.candidate_id || input.candidateVersion !== job.candidate_version) {
+      const input = JSON.parse(snapshot.snapshot_json) as { eventId?: string; candidateId?: string; candidateVersion?: number; schema?: string; operation?: string };
+      const amendment = candidate.publication_operation === "AMEND";
+      if (!input.eventId || input.eventId !== candidate.event_id || input.candidateId !== job.candidate_id || input.candidateVersion !== job.candidate_version
+        || (amendment ? input.schema !== "organizer-submission-snapshot/4" || input.operation !== "AMEND"
+          : input.schema === "organizer-submission-snapshot/4" || (input.operation !== undefined && input.operation !== "CREATE"))) {
         throw new PublicationFailure("snapshot_mismatch", "Snapshot identity does not match the publication.", false);
       }
       const step = job.step === "assemble" ? "preparing_data" : job.step;
       if (!(PUBLICATION_STEPS as readonly string[]).includes(step) || step === "completed") {
         throw new PublicationFailure("unknown_step", "Unknown publication step.", false);
       }
-      if (step === "preparing_data" && await driver.eventExists(input.eventId)) {
+      if (step === "preparing_data" && !amendment && await driver.eventExists(input.eventId)) {
         throw new PublicationFailure("event_id_collision", "CREATE cannot overwrite a published event.", false);
       }
       if (PUBLICATION_STEPS.indexOf(step as PublicationStep) >= 3 && !job.data_merge_sha) {

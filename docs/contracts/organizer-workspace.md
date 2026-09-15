@@ -213,7 +213,7 @@ AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核�
 
 依 ADR-0045 的發布產物補充，snapshot 宣告透過既有 planner 生成 transitions，main 只套用一次，退出歷史保存在 evidence；公開 groups/2 存放結果群組及空 transitions，供既有 `identity:generate --check` 驗證已套用的 registry，避免每次 build 再執行歷史退出。已公開 AMEND 可重新載入為下一次 baseline，source 只保留 job／snapshot 識別，不能遞迴嵌入前次 snapshot。
 
-以上為純產檔契約，AMEND 送審／核准仍關閉。Driver 必須接上實際固定檔案觀測、合併前再次核對基準及既有 lease／checkpoint，Worker rollout 完成後才可啟用；本切片不宣稱自動發布或真實更正驗收完成。
+AMEND 送審／核准目前仍關閉。原 executor／driver 已接上以下固定觀測與恢復路徑，獨立 Worker rollout 與 UI snapshot／核准接線完成後才開放使用；工程測試不當作真實更正驗收。
 
 ### GitHub data／main driver
 
@@ -222,6 +222,10 @@ AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核�
 每次 preparing 先找所有狀態的同分支 PR／branch；已有 commit 時先確認其唯一 parent 是固定 current main 的歷史祖先，再以該 parent 重建預期產物，比對完整 leaf tree（包含保留的舊檔與所有新檔的 Git blob hash），不只比對 PR 本文。不接受分支自行提出、未進入 main 的基準。分支、PR、核准 check 寫入成功但回應遺失時沿用遠端產物；已關閉未合併、換 head、額外檔案或 snapshot 不符時停止，不自動覆寫。每一次 GitHub mutation（含 tree／commit、branch、PR、check、merge）都在發送前持久化 write intent 並重驗 lease。
 
 必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 已加入唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義（#227 A）。
+
+AMEND 沿用同一 executor 的八個步驟，候選 operation、eventId 與 snapshot/4 明確 AMEND 必須一致；CREATE 仍做首次發布碰撞檢查。Driver 每次 preparing 讀固定原目錄／pin，AMEND 不能靠相同 eventId 取得覆寫權。合併前重建原 PR parent 的核准產物、比對完整分支 tree，再查目前 main 的原 pin、活動資料與身份歷史；PR 準備後待寫入檔案有變更時，回不可重試 `amendment_base_conflict`，停止合併以保留介入的發布，交由管理者核對，不能靠反覆按重試覆寫。無關程式／文件前進不阻擋。
+
+AMEND 的分支、PR、核准 check 或 merge 回應遺失，仍以原工作識別與完整 tree 恢復；已合併 PR 不再要求目前 pin 等於舊基準（自己的 merge 已更新它），而是核對原 parent、固定 data merge 與該 PR 的合併 SHA／產物 bytes。原 checkpoint、expected head SHA、lease、sticky write intent 與同 head 必要 checks 全部保留，沒有改用另一个 job 或另一套部署流程。Pages production origin 驗證仍是完成 published 的必要條件。
 
 Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不能完成 published；Pages 與 cron 共用的 runtime 已接上 #212 Phase 4 adapter。只接受 main repository、`deploy-pages.yml`（workflow ID 331570396）、push/main、本 job `main_merge_sha` 的唯一 run。先保存 run ID／attempt，再讀該 attempt 的 jobs；`Deploy to Cloudflare Pages` 成功才進入 verifying，該 attempt 的 `Verify and deploy` 與 `Smoke test production deployment` 均 completed + success 才檢查公開來源。Skipped 不通過，custom domain 結果不影響 blocking gate。
 
