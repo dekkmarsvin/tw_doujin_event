@@ -1,3 +1,5 @@
+import { placementCodeKey } from "../app/official-booth-data.mjs";
+
 export function consumeOrganizerEvidenceKey(consumed, key) {
   if (consumed.has(key)) throw new Error(`Official booth ${key} appears more than once.`);
   consumed.add(key);
@@ -12,6 +14,10 @@ export function assertExactOrganizerEvidenceCoverage(expected, consumed) {
 }
 
 const normalize = (value) => value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase("zh-Hant");
+const locationKey = (source) => {
+  const separator = source.indexOf(":");
+  return source.slice(0, separator + 1) + placementCodeKey(source.slice(separator + 1));
+};
 
 /**
  * The official-only catalog: what the organizer currently lists, plus the
@@ -29,17 +35,22 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
   const dayId = (day) => event.days.find((candidate) => String(candidate.id) === String(day))?.id;
 
   const sourceIndex = new Map();
+  const activeLocations = new Map();
   /** Booths this event allocated and has since retired, in registry order. */
-  const retiredForEvent = [];
+  const retiredForEvent = new Map();
   for (const entry of evidence.entries) {
     for (const source of entry.sources) {
       if (source.eventId !== eventId || source.kind !== "organizer-booth") continue;
       if (sourceIndex.has(source.value)) throw new Error(`Organizer source ${source.value} belongs to more than one circle.`);
       sourceIndex.set(source.value, entry);
+      activeLocations.set(locationKey(source.value), entry);
     }
     for (const source of entry.retiredSources ?? []) {
       if (source.eventId !== eventId || source.kind !== "organizer-booth") continue;
-      retiredForEvent.push({ entry, source });
+      // A circle can return to a booth and move again. Keep its latest
+      // retirement at that location for Reader projection, without deleting
+      // the earlier declarations from the registry.
+      retiredForEvent.set(`${entry.circleId}\0${locationKey(source.value)}`, { entry, source });
     }
   }
 
@@ -78,11 +89,14 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
 
   assertExactOrganizerEvidenceCoverage(new Set(sourceIndex.keys()), consumedSources);
 
-  for (const { entry, source } of retiredForEvent) {
+  for (const { entry, source } of retiredForEvent.values()) {
+    if (activeLocations.get(locationKey(source.value))?.circleId === entry.circleId) continue;
     const separator = source.value.indexOf(":");
     const day = source.value.slice(0, separator);
     const code = source.value.slice(separator + 1);
     if (dayId(day) === undefined) throw new Error(`Retired organizer source ${source.value} names a day the event does not declare.`);
+    const area = source.retirement?.areaId ?? defaultArea;
+    if (!event.areas.some((candidate) => candidate.id === area)) throw new Error(`Retired organizer source ${source.value} names an undeclared area.`);
     // The plain booth id belongs to whoever holds the booth now. After a
     // handover that is someone else, so the departed circle's record takes a
     // qualified id; a booth nobody took keeps the plain one, which is what a
@@ -101,7 +115,7 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
       id,
       circleId: entry.circleId,
       day: dayId(day),
-      area: defaultArea,
+      area,
       boothCode: code,
       // A move leaves the circle reachable at its new booth, so a reader can
       // follow it; a withdrawal or a handover leaves nowhere to go.

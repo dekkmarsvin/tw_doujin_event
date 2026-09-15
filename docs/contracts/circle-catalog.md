@@ -61,6 +61,9 @@ type CircleCatalogPayload = {
 - **已發布名單的變動由人工宣告後套用，不由差異推論**，見 [ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)。`circle-identity-groups/2` 的 `transitions` 宣告 `withdrawn`／`moved`／`released`；未宣告的差異維持 fail closed。
 - **攤位換手時，新的社團拿到新的 ID。** 前一個社團的 `c-xxxxxx` 留在前一個社團身上——收藏與分享連結帶的正是它，讓 ID 跟著攤位走會使讀者收藏的社團某天變成別人。移動則相反：ID 跟著社團到新攤位。
 - 退役的攤位證據保存在 evidence 的 `retiredSources`（`circle-identity-evidence/2`，只在真的有退役時寫入）。
+- 來源的唯一性限制現任歸屬；同一攤位換手後，原社團的退役證據可與新社團的現任來源共存，連續換手可保留多位舊社團。這些已發布結果可以作為下一次明確修正的 baseline，不重播已套用的 transitions。
+- 同一社團移回舊攤位再移出時，evidence 保留歷次退役宣告；Reader 每個社團／攤位只投影最新退役狀態，攤位沿用大小寫不敏感的 location 比對。如果該社團目前仍持有此攤，僅投影 active，不同時呈現其歷史失效 placement。其他舊社團仍保留各自的失效 placement 與 Circle ID。
+- 新修正的 transition 以選填 `areaId` 固定 baseline 來源展區，並保存於 `retirement.areaId`；Reader 依該展區投影，未知展區拒絕。舊宣告未含 `areaId` 時沿用第一展區，不猜補或改寫歷史 pin。
 - 已裁決的 migration 例外保存在 `ff47-official-migration-decisions.json`；它是稽核紀錄，不是執行期 fallback。
 - 舊 `ff47-<hash>` ID 沒有相容路徑，見 [ADR-0013](../adr/0013-drop-the-legacy-circle-id-compatibility-path.md)。攤位 scoped ID 只由當前 records 即時解析。
 
