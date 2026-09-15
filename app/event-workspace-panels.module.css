@@ -236,3 +236,29 @@
 
 .matchReasons { display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; }
 .matchReasons em { padding:2px 5px; border:1px solid #dfe3df; border-radius:4px; background:#f4f6f2; color:#6c756f; font-size:calc(7px * var(--ui-font-scale,1)); font-style:normal; font-weight:700; }
+
+@media (max-width:760px) {
+  .details[data-embedded] { border:0; border-radius:0; }
+  .details[data-embedded] .detailBody { padding:12px 16px 20px; }
+  .details[data-embedded] .title h2 { color:var(--ink); font-weight:700; font-family:inherit; font-size:calc(18px * var(--ui-font-scale)); overflow-wrap:anywhere; }
+  .details[data-embedded] .placementMeta strong { padding:7px 11px; border-radius:6px; background:#deebe6; font-size:calc(16px * var(--ui-font-scale)); }
+  .details[data-embedded] .title p,
+  .details[data-embedded] .work b,
+  .details[data-embedded] .work p,
+  .details[data-embedded] .detailActions button,
+  .details[data-embedded] .favoriteEditor label,
+  .details[data-embedded] .favoriteEditor select,
+  .details[data-embedded] .favoriteEditor textarea,
+  .details[data-embedded] .groupCreator input,
+  .details[data-embedded] .groupCreator button,
+  .details[data-embedded] .externalLinks a span,
+  .details[data-embedded] .sources { font-size:calc(14px * var(--ui-font-scale)); line-height:1.5; }
+  .details[data-embedded] .placementMeta span,
+  .details[data-embedded] .work small,
+  .details[data-embedded] .tags span,
+  .details[data-embedded] .rating,
+  .details[data-embedded] .externalLinks>b,
+  .details[data-embedded] .externalLinks a small,
+  .details[data-embedded] .sources>b { font-size:calc(12px * var(--ui-font-scale)); }
+  .details[data-embedded] .work p { overflow-wrap:anywhere; }
+}

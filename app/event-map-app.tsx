@@ -508,15 +508,16 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     const half = dock?.querySelector<HTMLElement>("[data-half-measure]")?.getBoundingClientRect().height ?? Math.min(window.innerHeight * .44, 420);
     const full = Math.min(window.innerHeight * .82, 760);
     return [
-      { level: "peek" as const, height: nav + (mobilePanel === "details" && selected ? MOBILE_SUMMARY_PEEK_HEIGHT : 0) },
+      { level: "peek" as const, height: nav + (mobilePanel === "details" && selected ? MOBILE_SUMMARY_PEEK_HEIGHT : 14) },
       { level: "half" as const, height: half },
-      ...(mobilePanel === "details" && selected ? [] : [{ level: "full" as const, height: full }]),
+      { level: "full" as const, height: full },
     ];
   };
   const handleMobileSheetPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     mobileSheetWasDragged.current = false;
-    const startHeight = mobileSheetSnapPoints().find((point) => point.level === mobileSheetLevel)?.height ?? 92;
+    const startHeight = mobileDockRef.current?.getBoundingClientRect().height ?? 92;
     mobileSheetGesture.current = { pointerId: event.pointerId, startY: event.clientY, startHeight };
     setMobileSheetDragging(true);
   };
@@ -530,8 +531,9 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const handleMobileSheetPointerEnd = (event: React.PointerEvent<HTMLButtonElement>) => {
     const current = mobileSheetGesture.current;
     if (!current || current.pointerId !== event.pointerId) return;
-    const height = mobileSheetDragHeight ?? current.startHeight;
-    const nearest = mobileSheetSnapPoints().reduce((best, point) => Math.abs(point.height - height) < Math.abs(best.height - height) ? point : best);
+    const points = mobileSheetSnapPoints();
+    const height = event.type === "pointercancel" ? current.startHeight : current.startHeight + current.startY - event.clientY;
+    const nearest = points.reduce((best, point) => Math.abs(point.height - height) < Math.abs(best.height - height) ? point : best);
     mobileSheetGesture.current = null;
     setMobileSheetLevel(nearest.level);
     setMobileSheetDragHeight(null);
@@ -542,7 +544,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       mobileSheetWasDragged.current = false;
       return;
     }
-    setMobileSheetLevel((current) => current === "peek" ? "half" : mobilePanel === "details" ? "peek" : current === "half" ? "full" : "half");
+    setMobileSheetLevel((current) => current === "peek" ? "half" : current === "half" ? "full" : "half");
   };
   const toggleFavoriteSafely = (record: CircleViewRecord) => {
     const existing = favorites.find((item) => item.circleId === record.circle.id);
@@ -666,7 +668,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     "--mobile-peek-summary": `${MOBILE_SUMMARY_PEEK_HEIGHT}px`,
     ...(mobileSheetDragHeight === null ? {} : { "--mobile-sheet-height": `${mobileSheetDragHeight}px` }),
   } as CSSProperties;
-  const mobileSheetActionLabel = mobileSheetLevel === "peek" ? "展開工作面板" : mobileSheetLevel === "half" && mobilePanel !== "details" ? "完整展開工作面板" : "縮小工作面板";
+  const mobileSheetActionLabel = mobileSheetLevel === "peek" ? "展開工作面板" : mobileSheetLevel === "half" ? "完整展開工作面板" : "縮小工作面板";
   const mobileSummary = mobilePanel === "details" && Boolean(selected);
   const backToResults = () => {
     setMobileWorkspace("explore"); setDesktopPanel("explore"); setMobilePanel("results"); setMobileSheetLevel("half");
@@ -763,23 +765,29 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       </section>
       <aside ref={mobileDockRef} className={styles.mobileDock} data-summary={mobileSummary || undefined} data-mobile-sheet-level={mobileSheetLevel} data-dragging={mobileSheetDragging || undefined} aria-label="行動版工作面板" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); if (mobileSummary) closeDetails(); else collapseMobilePanel(); } }}>
         <div className={styles.mobileHalfMeasure} data-half-measure aria-hidden="true" />
-        {mobileSummary && selected && <button ref={mobileSummaryRef} className={styles.mobilePeekSummary} hidden={mobileSheetLevel !== "peek"} onClick={() => setMobileSheetLevel("half")}>{selected.code} · {selected.name}<UiIcon name="arrow-up" /></button>}
+          <button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} aria-expanded={mobileSheetLevel !== "peek"} onKeyDown={(event) => {
+            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+              event.preventDefault();
+              setMobileSheetLevel((current) => event.key === "ArrowUp" ? current === "peek" ? "half" : "full" : current === "full" ? "half" : "peek");
+            }
+          }} onClick={toggleMobileSheetLevel} onPointerDown={handleMobileSheetPointerDown} onPointerMove={handleMobileSheetPointerMove} onPointerUp={handleMobileSheetPointerEnd} onPointerCancel={handleMobileSheetPointerEnd}><span aria-hidden="true" /></button>
+        {mobileSummary && selected && <button ref={mobileSummaryRef} className={styles.mobilePeekSummary} hidden={mobileSheetLevel !== "peek"} onClick={() => setMobileSheetLevel("half")}><span>{selected.code} · {selected.name}</span></button>}
         <div className={styles.mobileSheetBody} hidden={mobileSheetLevel === "peek"}>
-          <button type="button" className={styles.mobileSheetHandle} aria-label={mobileSheetActionLabel} onClick={toggleMobileSheetLevel} onPointerDown={handleMobileSheetPointerDown} onPointerMove={handleMobileSheetPointerMove} onPointerUp={handleMobileSheetPointerEnd} onPointerCancel={handleMobileSheetPointerEnd}><span aria-hidden="true" /></button>
           <div className={styles.mobilePanelHeader}>
             {mobileSummary || mobilePanel === "filters" ? <button onClick={backToResults}><UiIcon name="chevron-left" />回結果</button> : <b>{mobilePanel === "plan" ? "今日行程" : `探索 · ${filtered.length} 個結果`}</b>}
             {mobileSummary ? <button onClick={closeDetails}>取消選取<UiIcon name="close" /></button> : <button onClick={collapseMobilePanel}>收起<UiIcon name="arrow-down" /></button>}
           </div>
-          {mobileSummary && selected && <section className={styles.mobileSummary} aria-label="已選社團摘要">
+          {mobileSummary && selected && mobileSheetLevel !== "full" && <section className={styles.mobileSummary} aria-label="已選社團摘要">
             <div className={styles.mobileSummaryTitle}><strong>{selected.code}</strong><h2>{selected.name}</h2></div>
             <p className={styles.mobileSummaryNotice} role="status">{mobileSummaryNotice}</p>
             <p hidden={Boolean(mobileSummaryNotice)}>{selected.placement.status !== "active" ? "此攤位已異動" : mobileSummaryIntro ? <>{selected.sources.some((source) => source.contentType === "circle") && "由社團填寫 · "}{mobileSummaryIntro}</> : "尚未提供作品與販售介紹"}</p>
             <div className={styles.mobileSummaryActions}>
               <button aria-pressed={Boolean(selectedPlan)} onClick={() => { detailActions.onTogglePlan(); setPlanNotice({ recordId: selected.recordId, text: selectedPlan ? "已移出行程" : "已加入行程" }); }}>{selectedPlan ? "移出行程" : "加入行程"}</button>
               <button aria-pressed={Boolean(selectedFavorite)} onClick={detailActions.onToggleFavorite}>{selectedFavorite ? "已收藏" : "收藏"}</button>
-              <button onClick={() => setShowFullDetail(true)}>{selected.placement.status === "active" ? "查看完整資訊" : `${placementStatusLabel(selected.placement.status)} · 完整資訊`}</button>
+              <button onClick={() => { setMobileSheetLevel("full"); requestAnimationFrame(() => mobileDockRef.current?.querySelector<HTMLButtonElement>(`button.${styles.mobileSheetHandle}`)?.focus({ preventScroll: true })); }}>{selected.placement.status === "active" ? "查看完整資訊" : `${placementStatusLabel(selected.placement.status)} · 完整資訊`}</button>
             </div>
           </section>}
+          {mobileSummary && mobileSheetLevel === "full" && <div className={styles.mobilePanel} onFocusCapture={handleMobilePanelFocus}><CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} embedded onClose={closeDetails} {...detailActions} /></div>}
           <div ref={mobileResultsRef} className={styles.mobilePanel} hidden={mobilePanel !== "results" && !(mobilePanel === "details" && !selected)} tabIndex={-1} aria-label="探索結果" onFocusCapture={handleMobilePanelFocus}><button className={styles.mobileFilterButton} onClick={() => { rememberMobileResultScroll(); setMobilePanel("filters"); }}>篩選攤位{activeResultFilters.length > 0 ? ` · ${activeResultFilters.length}` : ""}</button>{resultsPanel}</div>
           <div className={styles.mobilePanel} hidden={mobilePanel !== "filters"} onFocusCapture={handleMobilePanelFocus}>{mobileFiltersPanel}</div>
           <div key={day} className={styles.mobilePanel} hidden={mobilePanel !== "plan"} onFocusCapture={handleMobilePanelFocus}>{navigationButton}{planningPanel}</div>

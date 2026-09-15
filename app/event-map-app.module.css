@@ -197,8 +197,8 @@
  /* --mobile-peek-summary is published by the shell from MOBILE_SUMMARY_PEEK_HEIGHT
     so the collapsed selection row has one height for CSS, snap points and fit. */
  .shell { --mobile-half-height:min(44dvh,420px); --mobile-sheet-height:var(--mobile-half-height); }
- .shell[data-mobile-summary="true"] { --mobile-half-height:calc(254px * var(--ui-font-scale) + env(safe-area-inset-bottom)); }
- .shell[data-mobile-sheet-level="peek"] { --mobile-sheet-height:calc(64px + env(safe-area-inset-bottom)); }
+ .shell[data-mobile-summary="true"] { --mobile-half-height:calc(286px * var(--ui-font-scale) + env(safe-area-inset-bottom)); }
+ .shell[data-mobile-sheet-level="peek"] { --mobile-sheet-height:calc(78px + env(safe-area-inset-bottom)); }
  .shell[data-mobile-sheet-level="peek"][data-mobile-summary="true"] { --mobile-sheet-height:calc(64px + var(--mobile-peek-summary) + env(safe-area-inset-bottom)); }
  .shell[data-mobile-sheet-level="full"] { --mobile-sheet-height:min(82dvh,760px); }
  .shell :global(.topbar) { grid-template-columns:minmax(0,1fr) auto; gap:0 12px; padding:8px 13px; }
@@ -274,7 +274,7 @@
  .mobileSummaryActions button:first-child { background:var(--ink); color:#fff; border-color:var(--ink); }
  .mobileSummaryActions button[aria-pressed="true"] { background:#e3f1eb; color:#276149; border-color:#8fbba9; }
  .mobilePeekSummary { display:flex; align-items:center; justify-content:center; gap:8px; flex:1; min-height:44px; padding:0 16px; border:0; background:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(14px * var(--ui-font-scale)); cursor:pointer; }
- .mobilePeekSummary svg { flex:none; width:20px; height:20px; }
+ .mobilePeekSummary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
  .shell[data-mobile-sheet-level] :global(.controls) { position:fixed; right:12px; left:auto; bottom:calc(var(--mobile-sheet-height) + 14px); display:flex; flex-direction:column; align-items:flex-end; width:64px; border:0; background:transparent; box-shadow:none; overflow:visible; }
  .shell :global(.controls)>span { display:none; }
  .shell :global(.controls) button { flex:none; width:44px; height:44px; border:1px solid var(--line); font-size:20px; }
@@ -288,8 +288,8 @@
  .vectorFloor { transition:none; }
 }
 @media (max-width:760px) and (max-height:740px) {
- .shell[data-mobile-summary="true"] { --mobile-half-height:calc(210px + env(safe-area-inset-bottom)); }
- .mobileDock[data-summary="true"] .mobileSheetHandle { height:8px; min-height:8px; }
+ .shell[data-mobile-summary="true"] { --mobile-half-height:calc(216px + env(safe-area-inset-bottom)); }
+
  .mobileSummary { padding:0 16px 4px; }
  .mobileSummary p:not(.mobileSummaryNotice) { display:none; }
  .mobileSummaryActions { padding-top:0; border:0; }

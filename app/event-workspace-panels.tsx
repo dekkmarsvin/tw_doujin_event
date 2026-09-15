@@ -181,7 +181,7 @@ function preventLinkActivation(event: MouseEvent<HTMLAnchorElement>) {
   event.preventDefault();
 }
 
-export function CircleDetails({ record, sharedRecords, movedDestination = null, favorite, plan, groups, compact = false, readOnly = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
+export function CircleDetails({ record, sharedRecords, movedDestination = null, favorite, plan, groups, compact = false, readOnly = false, embedded = false, onClose, onOpenFull, onSelectShared, onToggleFavorite, onTogglePlan, onSetNext, onUpdateFavorite, onCreateGroup }: {
   record: CircleViewRecord | null;
   sharedRecords: CircleViewRecord[];
   /** The circle's live booth in this event, when the organizer's data has one. */
@@ -190,6 +190,7 @@ export function CircleDetails({ record, sharedRecords, movedDestination = null, 
   plan: VisitPlanEntry | null;
   groups: FavoriteGroup[];
   compact?: boolean;
+  embedded?: boolean;
   readOnly?: boolean;
   onClose: () => void;
   onOpenFull?: () => void;
@@ -205,10 +206,10 @@ export function CircleDetails({ record, sharedRecords, movedDestination = null, 
   if (!record) return <section className={styles.detailEmpty} aria-label="攤位詳細資訊"><span><UiIcon name="map-pin" /></span><b>選擇一個攤位</b></section>;
   const activeMediaIndex = mediaSelection.circleId === record.circle.id ? mediaSelection.index : 0;
   const visibleLinks = compact ? record.circle.externalLinks.slice(0, 6) : record.circle.externalLinks;
-  return <section className={`${styles.details} ${compact ? styles.compactDetails : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} aria-label="攤位詳細資訊">
+  return <section className={`${styles.details} ${compact ? styles.compactDetails : styles.fullDetails} ${record.circle.media.length > 0 ? styles.detailsWithMedia : ""}`} data-embedded={embedded || undefined} aria-label="攤位詳細資訊">
     <CircleMediaGallery media={record.circle.media} activeIndex={activeMediaIndex} compact={compact} readOnly={readOnly} onActiveIndex={(index) => setMediaSelection({ circleId: record.circle.id, index })} onOpenFull={onOpenFull} />
     <div className={styles.detailBody}>
-      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div><button className={styles.detailClose} disabled={readOnly} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button></div>
+      <div className={styles.detailHeader}><div className={styles.placementMeta} aria-label={`攤位 ${record.code}，DAY ${record.day}，全館`}><strong className={styles[record.tone]}>{record.code}</strong><span>DAY {record.day}</span><span>全館</span></div>{!embedded && <button className={styles.detailClose} disabled={readOnly} onClick={onClose} aria-label="關閉攤位詳細資訊"><UiIcon name="close" /></button>}</div>
       {record.placement.status !== "active" && <div className={styles.retiredNotice} role="status">
         <b>{placementStatusLabel(record.placement.status)}</b>
         <p>{record.placement.status === "cancelled"
