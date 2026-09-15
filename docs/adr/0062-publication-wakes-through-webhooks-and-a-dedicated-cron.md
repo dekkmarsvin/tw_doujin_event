@@ -3,7 +3,9 @@
 - 狀態：Accepted（2026-09-14）
 - 依據：#246，整合 #241、#235、#236；延續 ADR-0057、0058。
 
-核准建立的 job 是持久化工作。Pages 先嘗試一次 bounded transition；後续由獨立 `workers/publication-dispatch` Worker 綁同環境 identity D1，每分鐘執行一次。它與 retention Worker 分開，沒有 HTTP 入口，不新增定時發布的產品功能。
+核准建立的 job 是持久化工作。Pages 的 production 核准／retry 僅提交 due job，由獨立 `workers/publication-dispatch` Worker 綁同環境 identity D1，每分鐘執行一次。它與 retention Worker 分開，沒有 HTTP 入口，不新增定時發布的產品功能。
+
+2026-09-15 CH20 實測補正（#212）：Pages 與 Worker 共用 verifier 的 runtime 缺陷，曾使舊 Pages 在 UI retry 內同步執行並再次 failed，修正獨立 Worker 也無法接手。移除 Pages 的第一次同步 transition，讓 retry 的持久化意圖交由可獨立修復的執行者處理；不改核准、授權、lease、失敗重試或版本驗證邊界。
 
 Webhook 僅接受固定路徑的 JSON POST，豁免該請求的 Origin 檢查，仍驗證 exact bytes HMAC。合法 delivery 以固定 repository 和已釘住的 head／merge SHA 找 job，在同一交易重設 due time 並完成 delivery 紀錄；重送不再重設排程。Webhook 不在 HTTP request 內執行 GitHub 發布。
 

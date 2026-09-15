@@ -13,7 +13,8 @@ export async function verifyPublicationOrigin(input: { mainSha: string; dataSha:
   const requestFetch = input.fetch ?? globalThis.fetch;
   const read = async (path: string) => {
     const response = await requestFetch(`${PAGES_PRODUCTION_ORIGIN}${path}`, {
-      redirect: "error", cache: "no-store", signal: AbortSignal.timeout(8_000),
+      // workerd accepts only follow/manual. Exact status checks reject redirects.
+      redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(8_000),
     });
     if (response.status !== 200) throw new Error("response");
     return response;
@@ -48,7 +49,7 @@ export async function verifyPublicationOrigin(input: { mainSha: string; dataSha:
     }
     const reader = await read(`/?event=${encodeURIComponent(input.eventId)}`);
     if (!(reader.headers.get("content-type") ?? "").includes("text/html")) throw new Error("reader");
-    const session = await requestFetch(`${PAGES_PRODUCTION_ORIGIN}/api/auth/session`, { redirect: "error", cache: "no-store", signal: AbortSignal.timeout(8_000) });
+    const session = await requestFetch(`${PAGES_PRODUCTION_ORIGIN}/api/auth/session`, { redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(8_000) });
     if (session.status !== 401) throw new Error("functions");
     // A deployment switching during verification cannot certify the old bytes.
     if (await (await read(DEPLOYMENT_MANIFEST_PATH)).text() !== text) throw new Error("deployment_changed");

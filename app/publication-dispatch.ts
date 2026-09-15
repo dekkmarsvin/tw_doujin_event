@@ -1,6 +1,5 @@
 import type { IdentityRepository } from "../db/identity-repository";
 import { createOrganizerPublicationExecutor, type PublicationDriver, type PublicationMetadata } from "./organizer-publication";
-import { createScheduledPublicationDispatcher } from "./publication-scheduler";
 
 /** Preview-only driver: it never contacts GitHub or certifies a public origin. */
 export function createFakePublicationDriver(eventExists: PublicationDriver["eventExists"]): PublicationDriver {
@@ -18,12 +17,14 @@ export function createFakePublicationDriver(eventExists: PublicationDriver["even
 
 export function createPublicationDispatcher(input: {
   repository: IdentityRepository; mode: string; allowFake: boolean;
-  github: () => PublicationDriver; eventExists: PublicationDriver["eventExists"]; now?: () => number;
+  eventExists: PublicationDriver["eventExists"]; now?: () => number;
 }) {
   if (input.mode !== "github" && !(input.mode === "fake" && input.allowFake)) return undefined;
   if (input.mode === "github") {
-    const dispatch = createScheduledPublicationDispatcher(input.repository, input.github(), input.now);
-    return async (jobId: string) => { await dispatch(jobId); };
+    // Approval/retry already committed a due job. Only the independent Worker
+    // executes it, so a Pages runtime defect cannot consume a requested retry
+    // before a repaired Worker can resume the pinned publication.
+    return async () => {};
   }
   const execute = createOrganizerPublicationExecutor(input.repository,
     createFakePublicationDriver(input.eventExists), input.now);

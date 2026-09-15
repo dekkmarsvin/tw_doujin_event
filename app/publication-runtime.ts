@@ -21,7 +21,7 @@ export function createRuntimePublicationDriver(env: Credentials, publishedEvent:
 export async function readPublishedEventAtOrigin(id: string, requestFetch = globalThis.fetch) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw new PublicationFailure("publication_identity", "活動識別無效。", false);
   try {
-    const response = await requestFetch(`${PAGES_PRODUCTION_ORIGIN}/data/events/${id}/event.json`, { redirect: "error", signal: AbortSignal.timeout(8_000) });
+    const response = await requestFetch(`${PAGES_PRODUCTION_ORIGIN}/data/events/${id}/event.json`, { redirect: "manual", signal: AbortSignal.timeout(8_000) });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error("unavailable");
     const event = await response.json() as { id?: unknown };

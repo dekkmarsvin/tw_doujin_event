@@ -156,7 +156,7 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 目前 production gate：
 
-1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github，實際啟用依 #212 核准 rollout 執行；每次呼叫只推進一個 bounded transition。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
+1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github，實際啟用依 #212 核准 rollout 執行；Pages 核准／retry 僅提交到期的持久化 job，獨立 Worker 每次只推進一個 bounded transition，避免舊 Pages 程式先消耗修復後的重試。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
 2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
 3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求有效的管理者 session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 
