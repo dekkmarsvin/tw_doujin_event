@@ -73,6 +73,14 @@ test("baseline reads follow authorization; callers cannot supply baseline conten
 
 test("declarations save and reload impact without exposing the registry or changing published data", async () => {
   const id = await create();
+  for (const cookie of [owner, admin]) {
+    const listed = await (await handlers.listOrganizerCandidates(request("GET", undefined, cookie))).json();
+    assert.equal(listed.events.find((event) => event.id === id).operation, "AMEND");
+    assert.equal(listed.events.find((event) => event.id === "source").operation, "CREATE");
+  }
+  const detail = await (await handlers.getOrganizerCandidate(request("GET", undefined, owner), id)).json();
+  assert.equal(detail.event.operation, "AMEND");
+  assert.equal(detail.publicationAvailable, false);
   const response = await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1,
     changes: [{ kind: "released", sources: ["1:S02"], circleName: "新社" }] }, editor), id);
   assert.equal(response.status, 200, await response.clone().text());

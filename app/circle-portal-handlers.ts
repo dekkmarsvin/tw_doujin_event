@@ -1909,6 +1909,7 @@ export function createCirclePortalHandlers({
       updatedAt: event.updated_at,
       updatedByRole: event.last_updated_role,
       role: event.role,
+      operation: event.publication_operation,
       workspaceMode: event.workspace_mode,
     })) });
   }
@@ -2062,7 +2063,7 @@ export function createCirclePortalHandlers({
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
-      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
+      publicationAvailable: candidate.publication_operation !== "AMEND" && config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
       publication: publication ? {
         id: publication.id,
         status: publication.status,

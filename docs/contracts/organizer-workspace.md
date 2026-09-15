@@ -66,7 +66,7 @@ draft → submitted → approved → publishing → published
 
 ## 已發布名單的明確修正宣告
 
-`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。UI／AMEND publication 尚未交付，完整產品驗收仍由 #190 承接，CREATE 的碰撞保護不變。
+`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。修正表單已接上候選 API；AMEND publication 尚未交付，完整產品驗收仍由 #190 承接，CREATE 的碰撞保護不變。
 
 每筆宣告必須明說 `kind`：
 
@@ -77,7 +77,7 @@ draft → submitted → approved → publishing → published
 | `moved` | 同一社團的 `moves[]`，每筆為 `source` 與 `to` | 明確移往另一攤位，包含跨日、展區及重編號，保留原 Circle ID。 |
 | `added` | 新 `circleName` 與 `placements[]` | 明確新增一個社團，可含多日多攤；不因同名連結既有社團。 |
 
-來源是 `<day>:<code>`；目的地及新增攤位是 `{dayId, code, areaId}`，活動日與展區必須已宣告。`reference` 為選填 HTTPS 來源。每次輸出 `impact[]`，逐筆列出種類、前後社團 ID／名稱、活動日／攤位／展區；供後續 UI 使用，不能要求使用者讀寫 evidence。新 ID 是此 baseline 的規劃結果，正式配置仍須受 publication 的版本與資料檢查保護。
+來源是 `<day>:<code>`；目的地及新增攤位是 `{dayId, code, areaId}`，活動日與展區必須已宣告。`reference` 為選填 HTTPS 來源。每次輸出 `impact[]`，逐筆列出種類、前後社團 ID／名稱、活動日／攤位／展區；UI 呈現社團與攤位的變動，不要求使用者讀寫 evidence。新 ID 是此 baseline 的規劃結果，正式配置仍須受 publication 的版本與資料檢查保護。
 
 未知或重複來源、跨社團混選、換手仍為同一名稱、大小寫折疊後重複或原已佔用的目的地，以及未公開配號或缺列的 baseline 均拒絕。目的地不因同批另一筆退出而變可用；同攤換手必須用 `released`。沿用官方資料每個活動日至少一攤的限制。未選資料與其他活動 evidence 保留；空宣告清單為無變動預覽。
 
@@ -91,6 +91,13 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 - 宣告保存以唯一 revision token 串起版本、不可變宣告紀錄、衍生匯入列與 audit；同時保存只成功一份，失敗請求不能把勝出者的匯入列退役。baseline 不隨保存改變。沿用 20,000 列、代碼 80 字、名稱 200 字及 8 MiB 名單限制；宣告本身也限制 8 MiB。匯入列只供既有地圖及驗證接線，身分仍由 baseline／宣告決定，不編造主辦 stable key。
 - 本切片中 AMEND 的一般活動設定儲存／匯入覆蓋均拒絕；地圖沿用原候選版本及權限檢查。送審／核准 AMEND 明確回 `amendment_publication_unavailable`，不產生 snapshot 或 publication job。後續接線才開放，不能用 CREATE 繞過。
 - Runtime schema 新增 `publication_operation`（舊候選預設 CREATE）、`organizer_amendments` 與 `organizer_amendment_changes`。舊 eventId index 以同名在一個交易中替換，避免舊部署的 `CREATE INDEX IF NOT EXISTS` 重建舊規則；CREATE 唯一及 AMEND 活躍唯一各自保留，不需要人工 SQL 遷移。
+
+### 修正操作介面
+
+- 已發布候選的 Owner／Admin 可按「開始修正已發布名單」，核對成功後開啟獨立修正候選。活動列表及工作區標示「發布後修正」；Editor 可編輯既有修正候選，沒有建立入口。
+- AMEND 的「名單修正」取代一般攤位匯入。表單明選變動類型、搜尋／勾選來源攤位，填接手或新增社團名稱，以及逐攤目的活動日、展區、代碼；選填 HTTPS 更正依據。來源每頁最多 50 個，跨頁／搜尋仍保留選取。
+- 宣告可加入清單、修改或取消，再按「儲存修正並檢視影響」。影響區只顯示伺服器已保存版本；未保存時明確標示，切換活動／項目或離開頁面有未儲存提示。「開始修正」的基準核對回應較晚到達時，也檢查目前面板的未儲存輸入，不能直接切走其他候選。取消宣告只撤掉那筆修正，不推論名單缺列。409 保留輸入與舊影響，需明確捨棄後讀取新版本，不能直接重送覆蓋。
+- 活動與場館設定為唯讀；地圖、檢查與 Reader 預覽沿用既有介面。AMEND 發布接線完成前，detail 回 `publicationAvailable: false`，送審按鈕停用，後端送審／核准仍拒絕。此狀態不代表修正產品里程碑完成。
 
 ## 主辦與分類目錄
 
