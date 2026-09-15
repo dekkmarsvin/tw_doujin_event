@@ -1,0 +1,179 @@
+{
+  "recordedAt": "2026-09-15T03:26:17.398Z",
+  "before": {
+    "id": "94812f08-3a56-4d1c-9474-7e52f0ea7414",
+    "candidate_id": "1da921dd-9e1e-4ca3-b117-a31b526f1556",
+    "candidate_version": 15,
+    "snapshot_id": "a78be78e-7c22-41c6-b568-b8d1cf494cf7",
+    "approval_hash": "4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3",
+    "status": "failed",
+    "step": "verifying_production",
+    "data_pr_number": 2,
+    "data_head_sha": "8262ce5f91f6ee28ba5a78af8bfdcc9c49c8d5ca",
+    "data_merge_sha": "65ae92f707381881d0817a577b5e87109e9bfc84",
+    "main_pr_number": 264,
+    "main_head_sha": "df3c2215d2b09da7b50f273717489f15f5f9c439",
+    "main_merge_sha": "8d9eac3b1d62689e1409ba30d5eae0e23929bbfd",
+    "workflow_run_id": 34922029842,
+    "workflow_run_attempt": 1,
+    "workflow_retry_attempt": null,
+    "production_manifest_sha256": null,
+    "failure_code": "production_smoke_failed",
+    "retryable": 1,
+    "next_attempt_at": 0,
+    "pending_attempts": 0,
+    "created_at": 1789438340706,
+    "updated_at": 1789440218684
+  },
+  "queued": {
+    "id": "94812f08-3a56-4d1c-9474-7e52f0ea7414",
+    "candidate_id": "1da921dd-9e1e-4ca3-b117-a31b526f1556",
+    "candidate_version": 15,
+    "snapshot_id": "a78be78e-7c22-41c6-b568-b8d1cf494cf7",
+    "approval_hash": "4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3",
+    "status": "queued",
+    "step": "verifying_production",
+    "data_pr_number": 2,
+    "data_head_sha": "8262ce5f91f6ee28ba5a78af8bfdcc9c49c8d5ca",
+    "data_merge_sha": "65ae92f707381881d0817a577b5e87109e9bfc84",
+    "main_pr_number": 264,
+    "main_head_sha": "df3c2215d2b09da7b50f273717489f15f5f9c439",
+    "main_merge_sha": "8d9eac3b1d62689e1409ba30d5eae0e23929bbfd",
+    "workflow_run_id": 34922029842,
+    "workflow_run_attempt": 1,
+    "workflow_retry_attempt": null,
+    "production_manifest_sha256": null,
+    "failure_code": null,
+    "retryable": 1,
+    "next_attempt_at": 0,
+    "pending_attempts": 0,
+    "created_at": 1789438340706,
+    "updated_at": 1789442107829
+  },
+  "published": {
+    "id": "94812f08-3a56-4d1c-9474-7e52f0ea7414",
+    "candidate_id": "1da921dd-9e1e-4ca3-b117-a31b526f1556",
+    "candidate_version": 15,
+    "snapshot_id": "a78be78e-7c22-41c6-b568-b8d1cf494cf7",
+    "approval_hash": "4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3",
+    "status": "published",
+    "step": "completed",
+    "data_pr_number": 2,
+    "data_head_sha": "8262ce5f91f6ee28ba5a78af8bfdcc9c49c8d5ca",
+    "data_merge_sha": "65ae92f707381881d0817a577b5e87109e9bfc84",
+    "main_pr_number": 264,
+    "main_head_sha": "df3c2215d2b09da7b50f273717489f15f5f9c439",
+    "main_merge_sha": "8d9eac3b1d62689e1409ba30d5eae0e23929bbfd",
+    "workflow_run_id": 34922029842,
+    "workflow_run_attempt": 1,
+    "workflow_retry_attempt": null,
+    "production_manifest_sha256": "f00f09320c9b3c850f17802a687a4e2ac92fe31ea6505967453eb149f608b750",
+    "failure_code": null,
+    "retryable": 1,
+    "next_attempt_at": 1789442199104,
+    "pending_attempts": 0,
+    "created_at": 1789438340706,
+    "updated_at": 1789442199104
+  },
+  "preservedCheckpointFields": [
+    "id",
+    "candidate_id",
+    "candidate_version",
+    "snapshot_id",
+    "approval_hash",
+    "data_pr_number",
+    "data_head_sha",
+    "data_merge_sha",
+    "main_pr_number",
+    "main_head_sha",
+    "main_merge_sha",
+    "workflow_run_id",
+    "workflow_run_attempt",
+    "workflow_retry_attempt"
+  ],
+  "approvalAndRetryAudit": [
+    {
+      "at": "2026-09-15T02:12:21.071Z",
+      "actorRole": "admin",
+      "action": "organizer_event.approved",
+      "detail": {
+        "version": 15,
+        "revisionHash": "4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3",
+        "publicationJobId": "94812f08-3a56-4d1c-9474-7e52f0ea7414",
+        "selfApproval": true
+      }
+    },
+    {
+      "at": "2026-09-15T02:38:55.445Z",
+      "actorRole": "admin",
+      "action": "organizer_publication.retried",
+      "detail": {
+        "step": "waiting_main_checks"
+      }
+    },
+    {
+      "at": "2026-09-15T02:46:29.544Z",
+      "actorRole": "admin",
+      "action": "organizer_publication.retried",
+      "detail": {
+        "step": "verifying_production"
+      }
+    },
+    {
+      "at": "2026-09-15T03:15:08.427Z",
+      "actorRole": "admin",
+      "action": "organizer_publication.retried",
+      "detail": {
+        "step": "verifying_production"
+      }
+    }
+  ],
+  "completedByScheduledWorker": {
+    "wallTime": 16645,
+    "cpuTime": 57,
+    "truncated": false,
+    "executionModel": "stateless",
+    "outcome": "ok",
+    "scriptTags": [
+      "cf:service=tw-catalog-publication-dispatch"
+    ],
+    "scriptVersion": {
+      "id": "9a22e2e4-61fc-42ff-8def-45deca6153ff"
+    },
+    "scriptName": "tw-catalog-publication-dispatch",
+    "diagnosticsChannelEvents": [],
+    "exceptions": [],
+    "logs": [
+      {
+        "message": [
+          "{\"event\":\"publication.tick\",\"expired\":[],\"results\":[{\"jobId\":\"94812f08-3a56-4d1c-9474-7e52f0ea7414\",\"result\":\"advanced\"}]}"
+        ],
+        "level": "log",
+        "timestamp": 1789442199857
+      }
+    ],
+    "eventTimestamp": 1789442183202,
+    "event": {
+      "cron": "* * * * *",
+      "scheduledTime": 1789442173000
+    }
+  },
+  "recovery": {
+    "originalPagesDeployment": "9fc184c5-2339-4cca-b00f-c2d7880a0e92",
+    "repairedPagesDeployment": "dbe965d6-964a-400b-8c74-42989822a892",
+    "repairedMainSha": "22daf8fb949091dc66d2f77a36fffd3c2eef1aa5",
+    "disabledWorkerVersion": "57d0f9f1-0ef0-4bee-9cf9-3b912ca18712",
+    "activeWorkerVersion": "9a22e2e4-61fc-42ff-8def-45deca6153ff",
+    "queuedDurationMs": 91275,
+    "queuedTimeoutMs": 900000,
+    "manualD1Writes": 0,
+    "manualPublishedDataEdits": 0,
+    "manualPublicationPrMerges": 0,
+    "engineeringPrMerges": 2,
+    "ciCloseReopenPairs": 2,
+    "workerRecoveryDeployments": 2,
+    "pagesRecoverySwitches": 2,
+    "workflowCancellations": 0,
+    "workflowReruns": 0
+  }
+}
