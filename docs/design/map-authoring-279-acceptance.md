@@ -33,3 +33,24 @@
 
 ![Organizer 直幅反向雙列](assets/map-authoring-279/organizer-guides.png)
 ![地圖貢獻橫幅、整組與排段吸附](assets/map-authoring-279/contribution-guides.png)
+
+## 切片三：描摹顯示與精準操作
+
+本機合成 API 瀏覽器驗收，Chrome 153、1600×1100，Organizer 與地圖貢獻控制面各走一遍同一個 `MapLayoutEditor`，1000×1000 畫布上一段四格直排。API 為記憶體合成回應，不寫正式資料。
+
+- **底圖**：沒有配置圖時顯示／透明度／重設三個控制項為 disabled。上傳後逐值比對 `opacity` 於 0%、100%、64% 與重設回 30%；隱藏走 `visibility: hidden`（元素仍在，座標不動），配置圖的 `pointer-events` 維持 `none`。整段過程 `saves` 為 0。
+- **描摹模式**：攤位 `fill` 由填色變為 `none`、格內代碼不可見，關閉後兩者都還原。
+- **選取**：選取前後攤位的 `stroke-width` 相同且 ≤ 1.5px，不再改成 4px；另有一個獨立 selection overlay 矩形，線寬 ≤ 1.5px。resize 把手的可見方塊寬度小於其命中半徑。
+- **微移**：步進選單為 0.1／0.5／1／5／10；實測 0.1、0.1+Shift（1）、5、10+Shift（100）四種位移，四次復原完全回到原位。
+- **倍率與平移**：100% 時縮小為 disabled，連按放大到 800% 後放大鍵 disabled。Space + 拖曳與滑鼠中鍵拖曳各驗一次：`scrollLeft`／`scrollTop` 增加，且同一格攤位的四個屬性完全未變。
+- **排段整體調整**：四個外框欄位讀回原座標；改 X 與高後四格同步移動、等高 125 且首尾貼齊外框、相鄰無縫。再按第二步改結束編號為 5、編號起點改由下往上，同一外框重切為五格等高 100，A01 落在最下方；一次復原回到四格。
+- **偏好不進草稿**：開描摹、改步進後 `saves` 仍為 0；儲存後 payload 不含偏好欄位，重新載入頁面兩項偏好仍在。
+
+模組測試新增 `map-editor-preferences`（5 項）與 `map-segment-edit`（7 項），涵蓋偏好逐欄退回、步進白名單、透明度夾限、外框 clamp、無縫等分、跨排段代碼衝突與無效選取。module tier 共 60 檔通過；`npx tsc --noEmit` 與本次改動檔案的 ESLint 通過。三條地圖 journey（placement／guides／trace）同一份伺服器連續執行皆通過，確認前兩切片未被破壞。required CI、獨立 review 與部署結果由本切片 PR 承接。
+
+可重跑 journey：`tests/browser/map-authoring-trace.mjs`，由 `npm run test:browser` 自動發現。[機器報告](assets/map-authoring-279/trace-report.json)。
+
+![Organizer 描摹模式、底圖透明度與微移步進](assets/map-authoring-279/organizer-trace.png)
+![地圖貢獻 800% 與畫布平移](assets/map-authoring-279/contribution-trace.png)
+
+至此 #279 三個切片的驗收條件皆有對應實作與可重跑證據。
