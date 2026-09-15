@@ -16,6 +16,8 @@ const data = await amendmentFixture(runner);
 const secret = "test-session-secret";
 const origin = "https://organizer.example";
 let handlers, owner, editor, admin, stranger, ownerId, loadCount, loadHook, dispatched, dispatchHook;
+const backgroundObjects = new Map();
+const backgroundReads = [];
 const request = (method, body, cookie) => new Request(`${origin}/api/organizer/events/source/amendments`, {
   method, headers: { origin, ...(body === undefined ? {} : { "content-type": "application/json" }), ...(cookie ? { cookie } : {}) },
   body: body === undefined ? undefined : JSON.stringify(body),
@@ -49,9 +51,15 @@ beforeEach(async () => {
     (path,kind,reference_id,organizer_id,revision,display_name,public_reference_json,source_captured_at,created_by)
     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`).bind(row.path,row.kind,row.id,row.organizerId,row.revision,row.displayName,row.publicReferenceJson,row.sourceCapturedAt,adminActor.id).run();
   loadCount = 0; loadHook = async () => {}; dispatched = []; dispatchHook = async () => {};
+  backgroundObjects.clear(); backgroundReads.length = 0;
   handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true,
     turnstileSitekey: () => "test-sitekey", projectCircle: async () => null,
+    mapContributionStore: {
+      async get(key) { backgroundReads.push(key); const object = backgroundObjects.get(key); return object ? { body: new Response(object.bytes).body, contentType: object.contentType } : null; },
+      async put(key, bytes, contentType) { backgroundObjects.set(key,{ bytes: new Uint8Array(bytes), contentType }); },
+      async delete(key) { backgroundObjects.delete(key); },
+    },
     dispatchOrganizerPublication: async (jobId) => { dispatched.push(jobId); await dispatchHook(jobId); },
     loadPublishedAmendmentBaseline: async (source) => { loadCount++; assert.deepEqual(source, data.source); await loadHook(); return structuredClone(data.baseline); },
     config: { eventId: "event-alpha", origin, sessionSecret: secret, hashPepper: "test-pepper", adminEmails: ["admin@example.test"],
@@ -316,4 +324,88 @@ test("Owner revocation at snapshot INSERT cannot leave an unauthorized immutable
   assert.equal(intercepted,true); assert.equal(response.ok,false);
   assert.equal(await repo.getOrganizerSubmissionSnapshot(id,2),null);
   assert.equal((await repo.getOrganizerCandidate(id)).status,"draft");
+});
+
+
+const originalPlan = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+async function sourceBackground() {
+  const map = data.baseline.maps[0];
+  await db.prepare(`INSERT INTO map_drafts (id,event_id,candidate_id,period_key,venue_space_id,owner_account_id,status,current_revision,created_at,updated_at,last_activity_at)
+    VALUES (?1,'event-alpha','source',?2,?3,?4,'draft',1,?5,?5,?5)`).bind(map.id,map.periodKey,map.venueSpaceId,ownerId,data.now).run();
+  await db.prepare("INSERT INTO map_draft_revisions (id,draft_id,revision,content_json,created_by,created_at) VALUES ('source-map-revision',?1,1,?2,?3,?4)")
+    .bind(map.id,JSON.stringify(map.content),ownerId,data.now).run();
+  const key = `organizer-map-backgrounds/source/${map.id}`;
+  backgroundObjects.set(key,{ bytes:originalPlan,contentType:"image/png" });
+  return key;
+}
+const background = (id,map,cookie = owner) => handlers.getOrganizerMapBackground(request("GET",undefined,cookie),id,map);
+
+test("an existing amendment inherits the private source plan; replacement changes only its own plan without revising content", async () => {
+  const id = await create(); // The fix also works for candidates made before source inheritance was implemented.
+  const [map] = await repo.listOrganizerMapDrafts(id);
+  const key = await sourceBackground();
+  const before = await repo.getOrganizerCandidate(id);
+  const mapBefore = await repo.getOrganizerMapDraft(id,map.id);
+  // A new collaborator inherits the source aid through their authorized amendment,
+  // even when they are not a collaborator on the old published candidate.
+  await db.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE candidate_id='source' AND account_id=?2").bind(data.now,ownerId).run();
+  const read = await background(id,map.id);
+  assert.equal(read.status,200);
+  assert.equal(read.headers.get("cache-control"),"private, no-store");
+  assert.equal(read.headers.get("x-content-type-options"),"nosniff");
+  assert.equal(read.headers.get("content-type"),"image/png");
+  assert.deepEqual(Buffer.from(await read.arrayBuffer()),originalPlan);
+  assert.deepEqual([...backgroundObjects.keys()],[key],"GET must not copy bytes or extend source retention");
+  const form = new FormData();
+  const replacement = Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==","base64");
+  form.append("file",new File([replacement],"replacement.webp",{type:"image/webp"}));
+  const upload = await handlers.putOrganizerMapBackground(new Request(`${origin}/api/organizer/events/${id}/maps/${map.id}/background`,{
+    method:"PUT",headers:{origin,cookie:owner},body:form }),id,map.id);
+  assert.equal(upload.status,200,await upload.clone().text());
+  backgroundReads.length = 0;
+  const own = await background(id,map.id);
+  assert.equal(own.headers.get("content-type"),"image/webp");
+  assert.deepEqual(Buffer.from(await own.arrayBuffer()),replacement);
+  assert.deepEqual(backgroundReads,[`organizer-map-backgrounds/${id}/${map.id}`]);
+  assert.deepEqual(backgroundObjects.get(key).bytes,originalPlan);
+  assert.deepEqual(await repo.getOrganizerCandidate(id),before);
+  assert.deepEqual(await repo.getOrganizerMapDraft(id,map.id),mapBefore);
+});
+
+test("background inheritance cannot use unauthorized candidates, another map scope or removed source data", async () => {
+  const id = await create(); const [map] = await repo.listOrganizerMapDrafts(id); const key = await sourceBackground();
+  for (const [cookie,status] of [[null,401],[stranger,404]]) assert.equal((await background(id,map.id,cookie)).status,status);
+  assert.equal((await background(id,data.baseline.maps[0].id)).status,404,"a source map id is not a child map id");
+  assert.equal(backgroundReads.length,0,"authorization and map binding precede every bucket read");
+  await db.prepare("UPDATE map_drafts SET venue_space_id='another-hall' WHERE id=?1").bind(data.baseline.maps[0].id).run();
+  assert.equal((await background(id,map.id)).status,404);
+  assert.ok(!backgroundReads.includes(key),"a source outside the child's approved scope is not read");
+  await db.prepare("UPDATE map_drafts SET venue_space_id=?1 WHERE id=?2").bind(map.venue_space_id,data.baseline.maps[0].id).run();
+  backgroundObjects.get(key).contentType = "text/html";
+  assert.equal((await background(id,map.id)).status,404,"inherited objects retain the image MIME allowlist");
+  backgroundObjects.delete(key);
+  assert.equal((await background(id,map.id)).status,404,"retention-deleted source bytes are not recreated");
+});
+
+test("successive amendments follow published same-scope sources and reject cyclic lineage", async () => {
+  const key = await sourceBackground();
+  const first = await create(); const [firstMap] = await repo.listOrganizerMapDrafts(first);
+  // Isolated historical fixture, not a claim of publication through the UI.
+  await db.prepare("UPDATE organizer_event_candidates SET status='published',published_version=1,published_at=?1 WHERE id=?2").bind(data.now,first).run();
+  const second = await create(); const [secondMap] = await repo.listOrganizerMapDrafts(second);
+  const baseline = structuredClone(data.baseline);
+  baseline.source.candidateId = first;
+  baseline.maps[0].id = firstMap.id;
+  const text = JSON.stringify(baseline);
+  await db.prepare("UPDATE organizer_amendments SET source_candidate_id=?1,baseline_json=?2,baseline_sha256=?3 WHERE candidate_id=?4")
+    .bind(first,text,await sha256Hex(text),second).run();
+  const result = await background(second,secondMap.id);
+  assert.equal(result.status,200);
+  assert.deepEqual(Buffer.from(await result.arrayBuffer()),originalPlan);
+  assert.deepEqual(backgroundReads,[`organizer-map-backgrounds/${second}/${secondMap.id}`,`organizer-map-backgrounds/${first}/${firstMap.id}`,key]);
+  const cycle = structuredClone(baseline); cycle.source.candidateId = second; cycle.maps[0].id = secondMap.id;
+  const cycleText = JSON.stringify(cycle);
+  await db.prepare("UPDATE organizer_amendments SET source_candidate_id=?1,baseline_json=?2,baseline_sha256=?3 WHERE candidate_id=?4")
+    .bind(second,cycleText,await sha256Hex(cycleText),first).run();
+  assert.equal((await background(second,secondMap.id)).status,404);
 });

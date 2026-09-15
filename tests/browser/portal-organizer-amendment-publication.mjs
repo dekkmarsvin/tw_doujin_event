@@ -26,6 +26,9 @@ journey.report.backend = "real handlers and isolated Miniflare D1; synthetic rem
 journey.report.productionWrites = 0;
 const secret = "isolated-browser-session";
 const calls = [];
+const backgroundReads = [];
+const backgroundKey = `organizer-map-backgrounds/source/${data.baseline.maps[0].id}`;
+const backgroundBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 let failOnce = true;
 let publishedBytes = JSON.stringify(data.published.catalog);
 const beforeBytes = publishedBytes;
@@ -52,6 +55,11 @@ try {
   for (const row of data.referenceRecords) await db.prepare(`INSERT OR REPLACE INTO organizer_reference_records
     (path,kind,reference_id,organizer_id,revision,display_name,public_reference_json,source_captured_at,created_by)
     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`).bind(row.path,row.kind,row.id,row.organizerId,row.revision,row.displayName,row.publicReferenceJson,row.sourceCapturedAt,actors.admin.id).run();
+  const sourceMap = data.baseline.maps[0];
+  await db.prepare(`INSERT INTO map_drafts (id,event_id,candidate_id,period_key,venue_space_id,owner_account_id,status,current_revision,created_at,updated_at,last_activity_at)
+    VALUES (?1,'event-alpha','source',?2,?3,?4,'draft',1,?5,?5,?5)`).bind(sourceMap.id,sourceMap.periodKey,sourceMap.venueSpaceId,actors.owner.id,data.now).run();
+  await db.prepare("INSERT INTO map_draft_revisions (id,draft_id,revision,content_json,created_by,created_at) VALUES ('source-map-revision',?1,1,?2,?3,?4)")
+    .bind(sourceMap.id,JSON.stringify(sourceMap.content),actors.owner.id,data.now).run();
   const sourceBefore = await repo.getOrganizerCandidate("source");
   const execute = createOrganizerPublicationExecutor(repo, {
     eventExists: async () => { throw new Error("AMEND must not take CREATE collision path"); },
@@ -79,6 +87,10 @@ try {
   }, () => data.now + 1000);
   const handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test",
+    mapContributionStore: {
+      async get(key) { backgroundReads.push(key); return key === backgroundKey ? { body: new Response(backgroundBytes).body, contentType: "image/png" } : null; },
+      async put() { throw new Error("Reading inherited backgrounds must not write"); }, async delete() { throw new Error("Reading inherited backgrounds must not delete"); },
+    },
     projectCircle: async () => null, loadPublishedAmendmentBaseline: async () => structuredClone(data.baseline),
     dispatchOrganizerPublication: async (jobId) => {
       for (let count = 0; count < 9; count++) {
@@ -99,12 +111,16 @@ try {
     else if (path.match(/^\/api\/organizer\/publications\/[^/]+\/retry$/)) response = await handlers.adminRetryOrganizerPublication(request,path.split("/")[4]);
     else if (match) {
       const [, id, action] = match;
-      const method = ({ amendments: "createOrganizerAmendment", amendment: req.method() === "GET" ? "getOrganizerAmendment" : "saveOrganizerAmendment",
+      const mapAction = action?.match(/^maps\/([^/]+)(?:\/(background))?$/);
+      if (mapAction) response = await handlers[mapAction[2] ? "getOrganizerMapBackground" : "getOrganizerMap"](request,id,mapAction[1]);
+      else {
+      const method = ({ maps: "listOrganizerMaps", amendments: "createOrganizerAmendment", amendment: req.method() === "GET" ? "getOrganizerAmendment" : "saveOrganizerAmendment",
         workspace: "updateOrganizerWorkspacePreference", validate: "validateOrganizerCandidate", preview: "previewOrganizerCandidate",
         submit: "submitOrganizerCandidate", review: "adminReviewOrganizerCandidate" })[action] ?? (!action ? "getOrganizerCandidate" : null);
       assert.ok(method, `Unexpected UI action ${path}`); response = await handlers[method](request,id);
+      }
     } else throw new Error(`Unexpected UI request ${path}`);
-    await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: await response.text() });
+    await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
   });
   const owner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
   await owner.getByRole("button", { name: /送審與發布/ }).first().click();
@@ -118,6 +134,16 @@ try {
   await owner.getByRole("heading", { name: "1. 換手", exact: true }).waitFor();
   await journey.capture(owner,"amendment-real-d1-impact");
   const candidate = (await db.prepare("SELECT id FROM organizer_event_candidates WHERE publication_operation='AMEND'").first()).id;
+  await owner.getByRole("button", { name: /^4 地圖/ }).click();
+  await owner.getByRole("button", { name: "第一天", exact: true }).click();
+  const backgroundImage = owner.locator('svg[aria-label^="可編輯"] image');
+  await backgroundImage.waitFor();
+  assert.equal(await backgroundImage.getAttribute("href"),`data:image/png;base64,${backgroundBytes.toString("base64")}`);
+  assert.equal(await owner.getByText("更換配置圖", { exact: true }).count(),1);
+  assert.equal(backgroundReads.at(-1),backgroundKey);
+  const [amendmentMap] = await repo.listOrganizerMapDrafts(candidate);
+  assert.equal(amendmentMap.current_revision,1,"background inheritance does not save map content");
+  await journey.capture(owner,"amendment-real-d1-inherited-background");
   await owner.getByRole("button", { name: /檢查與預覽/ }).first().click();
   await owner.getByRole("button", { name: "執行檢查", exact: true }).click();
   await owner.getByText("0 項必須修正", { exact: true }).waitFor();
