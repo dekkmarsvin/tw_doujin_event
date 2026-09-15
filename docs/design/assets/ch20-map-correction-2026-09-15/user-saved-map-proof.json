@@ -1,0 +1,32 @@
+{
+  "observedAt": "2026-09-15T08:23:50.865Z",
+  "candidateId": "8b33a05b-aea7-4c96-9129-55de6824a228",
+  "version": 2,
+  "mapId": "28a6ff34-ee39-49c3-b7b3-19f5d5be5af1",
+  "mapRevision": 2,
+  "totalBoothCodes": 202,
+  "boothCodesUnchanged": true,
+  "changedGeometryCodes": [
+    "D21",
+    "D22",
+    "D23",
+    "D24",
+    "D25",
+    "D26",
+    "D27",
+    "D28",
+    "E21",
+    "E22",
+    "E25",
+    "E26",
+    "E23",
+    "E24",
+    "E27",
+    "E28"
+  ],
+  "otherChangedLayoutFields": [
+    "floor",
+    "pillars",
+    "landmarks"
+  ]
+}

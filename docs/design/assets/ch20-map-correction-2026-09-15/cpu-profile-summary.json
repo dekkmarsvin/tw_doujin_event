@@ -1,0 +1,127 @@
+{
+  "observedAt": "2026-09-15T09:33:13.332Z",
+  "runtime": "v24.20.0",
+  "method": "Local Node CPU usage + V8 inspector; warm Vite SSR imports; no network or production writes; not Cloudflare CPU milliseconds.",
+  "snapshotId": "aaa46d7e-d0a5-4a2b-a407-08214bc2210f",
+  "approvalHash": "e353f375077c44f026a3e2b178aa62526285ec53af815f969b75a4280d49e345",
+  "sizes": {
+    "snapshotBytes": 646662,
+    "baselineBytes": 497124,
+    "allocationsBytes": 187403,
+    "evidenceBytes": 555738,
+    "registryEntries": 1510,
+    "boothRows": 170,
+    "mapCodes": 202,
+    "artifactCount": 10
+  },
+  "measurements": [
+    {
+      "name": "snapshotParse",
+      "n": 100,
+      "meanCpuMs": 0.78,
+      "meanWallMs": 0.8097159999999997
+    },
+    {
+      "name": "approvedArtifacts",
+      "n": 20,
+      "meanCpuMs": 29.7,
+      "meanWallMs": 27.841805000000004
+    },
+    {
+      "name": "amendmentPlanner",
+      "n": 20,
+      "meanCpuMs": 20.3,
+      "meanWallMs": 19.262254999999993
+    },
+    {
+      "name": "mainStage",
+      "n": 20,
+      "meanCpuMs": 94.55,
+      "meanWallMs": 91.37889
+    },
+    {
+      "name": "mergingMainPureWork",
+      "n": 20,
+      "meanCpuMs": 218,
+      "meanWallMs": 208.28002
+    }
+  ],
+  "topSelfTimeMs": [
+    {
+      "frame": "normalizedName :23",
+      "ms": 3417.362
+    },
+    {
+      "frame": "structuredClone node:internal/worker/js_transferable:113",
+      "ms": 2293.94
+    },
+    {
+      "frame": "claim :74",
+      "ms": 429.335
+    },
+    {
+      "frame": "buildApprovedPublicationArtifacts app/publication-artifacts.ts:92",
+      "ms": 282.337
+    },
+    {
+      "frame": "validateRegistry app/circle-identity-registry.mjs:36",
+      "ms": 239.839
+    },
+    {
+      "frame": "encode node:internal/encoding:355",
+      "ms": 198.445
+    },
+    {
+      "frame": "serialized app/publication-bundle-assembler.ts:16",
+      "ms": 171.942
+    },
+    {
+      "frame": "normalizedName app/circle-identity-registry.mjs:23",
+      "ms": 168.569
+    },
+    {
+      "frame": "(idle) :0",
+      "ms": 136.675
+    },
+    {
+      "frame": "planCircleIdentityRegistryUpdate :236",
+      "ms": 129.742
+    },
+    {
+      "frame": "buildPublicationMainStage app/publication-artifacts.ts:319",
+      "ms": 124.705
+    },
+    {
+      "frame": "validateRegistry :36",
+      "ms": 122.592
+    },
+    {
+      "frame": "encodeUtf8String :0",
+      "ms": 110.399
+    },
+    {
+      "frame": "(garbage collector) :0",
+      "ms": 109.575
+    },
+    {
+      "frame": "planCircleIdentityRegistryUpdate app/circle-identity-registry.mjs:236",
+      "ms": 78.128
+    },
+    {
+      "frame": "semanticJson :43",
+      "ms": 65.578
+    },
+    {
+      "frame": "(anonymous) app/circle-identity-registry.mjs:200",
+      "ms": 65.291
+    },
+    {
+      "frame": "planOrganizerAmendment app/organizer-amendment.mjs:38",
+      "ms": 64.822
+    }
+  ],
+  "topActiveSamplePercent": {
+    "normalizedName": 40.43528645388456,
+    "structuredClone": 25.98353171925103
+  }
+}
