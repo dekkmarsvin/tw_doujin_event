@@ -44,6 +44,12 @@ Identity evidence has organizer booth sources outside the reviewed <eventId> gro
 
 放在既有檔案而不是新檔案，是因為它與 grouping 是**同一次人工判讀的產物**，由同一個人在同一次審閱中決定；拆成兩份會讓 review 需要來回比對兩個檔案，也會多一個 pin 檔。`circle-identity-groups/1` 仍然有效，只是不能帶 `transitions`——既有 pin 因此不需要重新產生。
 
+### 1a. Organizer publication 的宣告與套用後產物（#190，2026-09-15）
+
+第 1 節描述 CLI migration 的待套用輸入。Organizer 以 immutable approval snapshot 保存固定 published baseline 與 UI 的明確宣告，沿用同一 planner 生成 grouping／transitions，再由同一 publication engine 產出 main ledger。這是第 1 節檔案責任的最小補充：**公開 data pin 指向已套用的 groups/2，transitions 為空；本次宣告保留在核准 snapshot，已套用的退出／移動歷史保留在 evidence/2。**
+
+原因已由真實 staging 路徑重現：main 已套用退出後，若公開 grouping 仍帶待執行 transitions，`identity:generate --check` 會再次退出同一 source，正常 Pages build 因「already retired」失敗。讓公開檔保存結果可繼續使用既有完整 grouping／registry 檢查，不新增忽略錯誤或跳過檢查的分支。這不改變明確宣告、套用前影響預覽、舊 Circle ID／URL 保留或未宣告差異拒絕；CLI migration 格式仍有效，UI 不要求主辦編輯任何檔案。
+
 ### 2. 三種變動，差別在攤位而不在社團
 
 | kind | 主辦名單上的攤位 | 社團 |

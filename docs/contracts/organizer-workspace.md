@@ -201,11 +201,19 @@ GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 6
 
 ### 核准 snapshot 產檔
 
-`app/publication-artifacts.ts` 只消費完整 snapshot/3 與其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；活動與逐日攤位表網址皆取已核准 officialSource.url，統一經 URL canonicalization（合法的大寫 HTTPS scheme 轉小寫），snapshot bytes/hash 不改写。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由使用空間唯一持有；不相容 snapshot 明確拒絕，不取第一個空間猜值。
+`app/publication-artifacts.ts` 消費 CREATE snapshot/3，或明確 `operation: AMEND` 的 snapshot/4，以及其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；活動與逐日攤位表網址皆取已核准 officialSource.url，統一經 URL canonicalization（合法的大寫 HTTPS scheme 轉小寫），snapshot bytes/hash 不改写。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由使用空間唯一持有；不相容 snapshot 明確拒絕，不取第一個空間猜值。
 
 `buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
 
 main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE。沿用同一份 event-local identity 配號器追加 allocations／evidence，不因同名猜 linkage，不動既有活動 pin；身分群組使用 codes[]，只有 snapshot 的 stableKey 能合併多個官方群組。完整產物再經 publication allowlist。這些純函式不建立或合併 PR；GitHub driver 將其結果寫入固定工作分支。
+
+AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha256` 與明確 `changes[]`。產檔核對 baseline、活動設定及 reference，重算宣告後必須與衍生匯入列一致；身分由已核准 grouping／宣告決定，不能以匯入列重新配舊 Circle ID。地圖仍逐範圍驗證，內容時間取此修正版的 immutable revision。
+
+AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核對原 pin hash，含 NOTICE 的存在／內容與檔案集合；缺失、額外或漂移拒絕。Main 產檔要求原 published event／pin 完全一致，保留 published-events 原 bytes／順序，僅更新該活動 pin。使用此 main base 的最新 global ledger 配新 ID，容許其他活動在編輯期間取得配號；原活動的身份與退出歷史不能變更。兩階段仍驗實際合併 bytes 與 allowlist，不影響其他活動 pin。
+
+依 ADR-0045 的發布產物補充，snapshot 宣告透過既有 planner 生成 transitions，main 只套用一次，退出歷史保存在 evidence；公開 groups/2 存放結果群組及空 transitions，供既有 `identity:generate --check` 驗證已套用的 registry，避免每次 build 再執行歷史退出。已公開 AMEND 可重新載入為下一次 baseline，source 只保留 job／snapshot 識別，不能遞迴嵌入前次 snapshot。
+
+以上為純產檔契約，AMEND 送審／核准仍關閉。Driver 必須接上實際固定檔案觀測、合併前再次核對基準及既有 lease／checkpoint，Worker rollout 完成後才可啟用；本切片不宣稱自動發布或真實更正驗收完成。
 
 ### GitHub data／main driver
 
