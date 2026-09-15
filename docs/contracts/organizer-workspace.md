@@ -64,6 +64,25 @@ draft → submitted → approved → publishing → published
 
 `mapTemplate` 的值域是 `listMapTemplateOptions()`，介面以下拉選單呈現並預覽這個選擇的後果（能否自動辨識配置圖、存檔時依什麼檢查）。草稿裡不在清單內的既有值會原樣保留為額外選項，不被靜默改寫。
 
+## 已發布名單的明確修正宣告
+
+`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。呼叫端須固定 published baseline 與核准 snapshot；此核心本身不讀寫候選或公開資料。目前尚未接入 UI／API／publication，完整產品驗收仍由 #190 承接，CREATE 的碰撞保護不變。
+
+每筆宣告必須明說 `kind`：
+
+| kind | 宣告內容 | 身分及預覽結果 |
+| --- | --- | --- |
+| `withdrawn` | 同一社團的既有 `sources[]` | 只退出所選攤位，保留原 Circle ID。 |
+| `released` | 同一社團的既有 `sources[]`、新 `circleName` | 所選攤位交給一個新社團，配置新 Circle ID；原社團及未選攤位保留。 |
+| `moved` | 同一社團的 `moves[]`，每筆為 `source` 與 `to` | 明確移往另一攤位，包含跨日、展區及重編號，保留原 Circle ID。 |
+| `added` | 新 `circleName` 與 `placements[]` | 明確新增一個社團，可含多日多攤；不因同名連結既有社團。 |
+
+來源是 `<day>:<code>`；目的地及新增攤位是 `{dayId, code, areaId}`，活動日與展區必須已宣告。`reference` 為選填 HTTPS 來源。每次輸出 `impact[]`，逐筆列出種類、前後社團 ID／名稱、活動日／攤位／展區；供後續 UI 使用，不能要求使用者讀寫 evidence。新 ID 是此 baseline 的規劃結果，正式配置仍須受 publication 的版本與資料檢查保護。
+
+未知或重複來源、跨社團混選、換手仍為同一名稱、大小寫折疊後重複或原已佔用的目的地，以及未公開配號或缺列的 baseline 均拒絕。目的地不因同批另一筆退出而變可用；同攤換手必須用 `released`。沿用官方資料每個活動日至少一攤的限制。未選資料與其他活動 evidence 保留；空宣告清單為無變動預覽。
+
+planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；baseline 的舊 transitions 已生效，不再重播。保留既有群組與 linkage；部分換手／移動造成群組跨列時，由明確宣告及其來源（未另填時用活動官方來源）產生 linkage。連續修正的退役證據與 Reader 投影依 [circle catalog 契約](./circle-catalog.md)。
+
 ## 主辦與分類目錄
 
 活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。建立及選取共用 Reader 分類驗證，分類名稱不可使用其保留名稱「全部類別」。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。

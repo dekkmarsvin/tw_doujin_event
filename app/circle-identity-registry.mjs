@@ -73,7 +73,10 @@ function validateRegistry(allocations, evidence) {
         throw new Error(`Identity evidence has an invalid ${label} for ${entry.circleId}.`);
       }
       const key = sourceKey(source);
-      if (entriesBySource.has(key) || entriesByRetiredSource.has(key)) {
+      // Only current ownership is exclusive. A handover leaves the previous
+      // occupant's retired evidence at the same source; later amendments must
+      // be able to consume that published registry again.
+      if (target === entriesBySource && entriesBySource.has(key)) {
         throw new Error(`One source is assigned to multiple circles: ${key}.`);
       }
       target.set(key, entry);

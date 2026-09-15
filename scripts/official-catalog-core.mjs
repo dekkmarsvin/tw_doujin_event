@@ -30,7 +30,7 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
 
   const sourceIndex = new Map();
   /** Booths this event allocated and has since retired, in registry order. */
-  const retiredForEvent = [];
+  const retiredForEvent = new Map();
   for (const entry of evidence.entries) {
     for (const source of entry.sources) {
       if (source.eventId !== eventId || source.kind !== "organizer-booth") continue;
@@ -39,7 +39,10 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
     }
     for (const source of entry.retiredSources ?? []) {
       if (source.eventId !== eventId || source.kind !== "organizer-booth") continue;
-      retiredForEvent.push({ entry, source });
+      // A circle can return to a booth and move again. Keep its latest
+      // retirement at that location for Reader projection, without deleting
+      // the earlier declarations from the registry.
+      retiredForEvent.set(`${entry.circleId}\0${source.value}`, { entry, source });
     }
   }
 
@@ -78,7 +81,8 @@ export function buildOfficialCatalogPayload({ eventId, event, official, evidence
 
   assertExactOrganizerEvidenceCoverage(new Set(sourceIndex.keys()), consumedSources);
 
-  for (const { entry, source } of retiredForEvent) {
+  for (const { entry, source } of retiredForEvent.values()) {
+    if (sourceIndex.get(source.value)?.circleId === entry.circleId) continue;
     const separator = source.value.indexOf(":");
     const day = source.value.slice(0, separator);
     const code = source.value.slice(separator + 1);
