@@ -160,6 +160,38 @@ test("mixed declarations are deterministic and never mutate the published baseli
   assert.equal(catalog(result).circles.length, 5);
 });
 
+test("retirements retain the source area through withdrawal, handover and move", () => {
+  for (const change of [
+    { kind: "withdrawn", sources: ["1:B01"] },
+    { kind: "released", sources: ["1:B01"], circleName: "新社" },
+    { kind: "moved", moves: [{ source: "1:B01", to: to("A09", "1", "A") }] },
+  ]) {
+    const result = amend([change]);
+    assert.equal(result.impact[0].before[0].areaId, "B");
+    assert.equal(result.grouping.transitions[0].areaId, "B");
+    const retired = result.evidence.entries.find((entry) => entry.circleId === "c-000003").retiredSources[0];
+    assert.equal(retired.retirement.areaId, "B");
+    const reader = catalog(result);
+    assert.equal(reader.placements.find((placement) => placement.circleId === "c-000003" && placement.boothCode === "B01").area, "B");
+    retired.retirement.areaId = "unknown";
+    assert.throws(() => catalog(result), /undeclared area/);
+  }
+});
+
+test("returning with case-equivalent booth codes does not project a historical duplicate", () => {
+  const first = amend([{ kind: "moved", moves: [{ source: "1:B01", to: to("B09") }] }]);
+  const second = amend([{ kind: "moved", moves: [{ source: "1:B09", to: to("b01") }] }], { ...first, event });
+  const returned = catalog(second).placements.filter((placement) => placement.circleId === "c-000003" && placement.boothCode.toLowerCase() === "b01");
+  assert.deepEqual(returned.map((placement) => placement.status), ["active"]);
+  const third = amend([{ kind: "withdrawn", sources: ["1:b01"] }], { ...second, event });
+  const departed = catalog(third).placements.filter((placement) => placement.circleId === "c-000003" && placement.boothCode.toLowerCase() === "b01");
+  assert.equal(departed.length, 1);
+  assert.equal(departed[0].boothCode, "b01");
+  assert.equal(departed[0].status, "cancelled");
+  assert.equal(departed[0].area, "B");
+  assert.deepEqual(amend([], { ...third, event }).evidence, third.evidence);
+});
+
 test("invalid declarations fail closed without changing baseline data", () => {
   const cases = [
     [null, /list of explicit/],

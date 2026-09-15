@@ -83,7 +83,8 @@ function validateRegistry(allocations, evidence) {
     };
     for (const source of entry.sources) claim(source, entriesBySource, "source");
     for (const source of retired) {
-      if (!isRecord(source.retirement) || !TRANSITION_KINDS.has(source.retirement.kind)) {
+      if (!isRecord(source.retirement) || !TRANSITION_KINDS.has(source.retirement.kind)
+        || (source.retirement.areaId !== undefined && (typeof source.retirement.areaId !== "string" || !source.retirement.areaId))) {
         throw new Error(`Identity evidence has an unrecognised retirement for ${entry.circleId}.`);
       }
       claim(source, entriesByRetiredSource, "retired source");
@@ -143,13 +144,16 @@ function parseTransitions(value, eventId, officialIndex) {
   return value.map((transition, index) => {
     const label = `Circle identity transition ${index}`;
     if (!isRecord(transition)) throw new Error(`${label} is invalid.`);
-    onlyKeys(transition, ["source", "kind", "to", "reference"], label);
+    onlyKeys(transition, ["source", "kind", "to", "reference", "areaId"], label);
     const { source, kind } = transition;
     if (typeof source !== "string" || source === "" || !TRANSITION_KINDS.has(kind)) {
       throw new Error(`${label} must name a booth source and one of withdrawn, moved or released.`);
     }
     if (declared.has(source)) throw new Error(`${label} declares ${source} twice.`);
     declared.add(source);
+    if (transition.areaId !== undefined && (typeof transition.areaId !== "string" || !transition.areaId)) {
+      throw new Error(`${label} has an invalid source area.`);
+    }
 
     // Each kind expects the organizer's list to say something different, and
     // checking that is what stops a declaration from drifting away from the
@@ -171,7 +175,7 @@ function parseTransitions(value, eventId, officialIndex) {
     const officialGroupId = officialIndex.sourceToGroup.get(source);
     return {
       source, kind, to: kind === "moved" ? transition.to : null,
-      reference: transition.reference ?? null, eventId,
+      reference: transition.reference ?? null, eventId, areaId: transition.areaId,
       officialName: officialGroupId ? officialIndex.groups.find(({ id }) => id === officialGroupId).name : null,
     };
   });
@@ -261,6 +265,7 @@ export function planCircleIdentityRegistryUpdate({ eventId, official, grouping, 
         kind: transition.kind,
         ...(transition.to ? { to: transition.to } : {}),
         at: today(),
+        ...(transition.areaId !== undefined ? { areaId: transition.areaId } : {}),
         ...(transition.reference ? { reference: transition.reference } : {}),
       },
     }];

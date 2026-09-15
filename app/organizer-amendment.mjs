@@ -114,7 +114,8 @@ export function planOrganizerAmendment({ event, official, grouping, allocations,
       before.forEach((placement, moveIndex) => {
         const source = sourceOf(placement);
         next.delete(source);
-        const transition = { source, kind: change.kind, ...(reference ? { reference } : {}) };
+        const transition = { source, kind: change.kind, areaId: placement.areaId ?? event.areas[0].id,
+          ...(reference ? { reference } : {}) };
         if (change.kind === "released") after.push({ ...placement, name, group, row: `released/${index}` });
         if (change.kind === "moved") {
           const move = change.moves[moveIndex];
