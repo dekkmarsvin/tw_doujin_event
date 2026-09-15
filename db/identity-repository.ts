@@ -197,7 +197,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         WHERE c.id = ?10 AND c.current_version = ?11 AND c.status IN ('draft', 'changes_requested')
           AND (?12 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
             AND g.account_id = ?9 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
-          AND (?4 IS NULL OR EXISTS (SELECT 1 FROM organizer_reference_records r WHERE r.kind = 'organizer' AND r.reference_id = ?4))`)
+          AND (?4 IS NULL OR EXISTS (SELECT 1 FROM organizer_reference_records r WHERE r.kind = 'organizer' AND r.reference_id = ?4))
+          AND (?2 NOT IN ('venue', 'venue-space') OR EXISTS (
+            SELECT 1 FROM json_each(c.current_draft_json, '$.venue.assignments') a
+            WHERE (?2 = 'venue' AND json_extract(a.value, '$.venueId') = ?3
+              AND EXISTS (SELECT 1 FROM organizer_venues v WHERE v.id = ?3))
+              OR (?2 = 'venue-space' AND json_extract(a.value, '$.venueSpaceId') = ?3
+                AND json_extract(a.value, '$.venueId') = json_extract(?7, '$.venueId')
+                AND EXISTS (SELECT 1 FROM organizer_venue_spaces s WHERE s.id = ?3 AND s.venue_id = json_extract(?7, '$.venueId')))
+          ))
+        ON CONFLICT(path) DO NOTHING`)
         .bind(row.path, row.kind, row.id, row.organizerId, row.revision, row.displayName, row.publicReferenceJson,
           row.sourceCapturedAt, input.actorAccountId, input.candidateId, input.expectedVersion, input.admin ? 1 : 0),
       database.prepare(`INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)

@@ -72,6 +72,8 @@ draft → submitted → approved → publishing → published
 
 `organizer_reference_records` 保存 canonical public_reference_json 與 source_captured_at。場館／空間正常建立在同交易固定 canonical 記錄；seed adoption 依 [ADR-0061](../adr/0061-organizer-snapshot-pins-complete-reference-records.md) 的已核對來源與時間，只補缺少記錄，既有 metadata 不一致時不強行採用。控制面名稱「全館」與公開名稱「爭艷館展區」分開保存。
 
+既有非 seed 場館／空間缺少 canonical 記錄時，「場館與使用空間」列出待補來源。使用者核對並輸入公開名稱與官方 HTTPS 網址後，以同一 references endpoint 的 `venue`／`venue-space` kind 補齊。僅能處理已儲存在該候選的 assignment；同交易檢查角色、可編輯狀態、expectedVersion、場館關係與 path 未存在，建立／audit 原子完成。保存固定本次核對時間，不改目錄友善名稱、candidate revision 或任何既有 snapshot；既有 canonical 記錄不能由此覆寫。之後仍須重新檢查、預覽與送審。
+
 validate／preview／submit 共用 selected-reference resolver。`organizer-reader-preview/1.references` 是所選 canonical 公開記錄，介面呈現主辦、分類與正式場館名稱；選單仍使用原本 venueCatalog 的友善名稱。公開 schema／檔案選取 parser 與 CLI 共用 `app/reference-selection.mjs`。
 
 ## 攤位匯入

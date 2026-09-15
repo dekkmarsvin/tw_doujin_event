@@ -290,6 +290,63 @@ test("an event organizer can list and immediately extend the shared venue catalo
   assert.equal(hidden.status, 404);
 });
 
+test("legacy venue references are explicitly completed without replacing records or bypassing candidate guards", async () => {
+  const cookie = await signIn("admin@example.test", "organizer");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "舊場館來源", ownerEmail: "admin@example.test" }, cookie));
+  const { candidateId } = await created.json();
+  const path = `/api/organizer/events/${candidateId}`;
+  const venueResponse = await handlers.createOrganizerVenue(request(`${path}/venues`, "POST", {
+    name: "舊場館", sourceUrl: "https://venue.example/legacy",
+    initialSpace: { name: "全館", sourceUrl: "https://venue.example/legacy/1f", defaultAreaMode: "none" },
+  }, cookie), candidateId);
+  const { venue, space } = await venueResponse.json();
+  // Reproduce the pre-#248 catalog: metadata exists, canonical records do not.
+  await database.prepare("DELETE FROM organizer_reference_records WHERE reference_id IN (?1, ?2)").bind(venue.id, space.id).run();
+  const references = await createReferenceSelection(candidateId, cookie);
+  const draft = { schema: "organizer-event-draft/1",
+    event: { id: "legacy-venue", name: "舊場館來源", days: [{ id: "1", label: "第 1 日", date: "2026-10-09" }] },
+    venue: { assignments: [{ venueId: venue.id, venueSpaceId: space.id, areaMode: "none", areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/event" }, references };
+  assert.equal((await handlers.updateOrganizerCandidate(request(path, "PATCH", { expectedVersion: 1, draft }, cookie), candidateId)).status, 200);
+  const getDetail = async () => (await handlers.getOrganizerCandidate(request(path, "GET", undefined, cookie), candidateId)).json();
+  const before = await getDetail();
+  assert.deepEqual(before.missingVenueReferences.map(({ id }) => id).sort(), [venue.id, space.id].sort());
+  assert.equal(before.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "needs_attention");
+  const input = { expectedVersion: 2, kind: "venue", referenceId: venue.id, name: "正式場館名稱", sourceUrl: "https://venue.example/official" };
+  const complete = (body = input, session = cookie) => handlers.createOrganizerReferenceEntry(request(`${path}/references`, "POST", body, session), candidateId);
+  assert.equal((await complete(input, "")).status, 401);
+  const stranger = await signIn("stranger@example.test", "organizer");
+  assert.equal((await complete(input, stranger)).status, 404);
+  assert.equal((await complete({ ...input, expectedVersion: 1 })).status, 409);
+  assert.equal((await complete({ ...input, sourceUrl: "http://venue.example/" })).status, 400);
+  for (const status of ["submitted", "approved", "failed", "published"]) {
+    await database.prepare("UPDATE organizer_event_candidates SET status = ?1 WHERE id = ?2").bind(status, candidateId).run();
+    assert.equal((await complete()).status, 409, status);
+  }
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'changes_requested' WHERE id = ?1").bind(candidateId).run();
+  // Even a valid catalog ID is not adoptable through an unrelated activity.
+  await database.prepare("DELETE FROM organizer_reference_records WHERE reference_id = ?1").bind(VENUE_ID).run();
+  assert.equal((await complete({ ...input, referenceId: VENUE_ID })).status, 409);
+  assert.equal((await complete()).status, 201);
+  const canonical = (await repository.listOrganizerReferenceRecords()).find((item) => item.id === venue.id);
+  assert.equal(JSON.parse(canonical.publicReferenceJson).name, input.name);
+  assert.equal(canonical.sourceCapturedAt, now);
+  const auditCount = async () => (await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE subject_id = ?1 AND action = 'organizer_reference.created'").bind(venue.id).first()).total;
+  assert.equal(await auditCount(), 1);
+  assert.equal((await complete({ ...input, name: "不得覆寫" })).status, 409);
+  assert.equal(await auditCount(), 1);
+  assert.equal((await repository.listOrganizerReferenceRecords()).find((item) => item.id === venue.id).publicReferenceJson, canonical.publicReferenceJson);
+  assert.equal((await complete({ ...input, kind: "venue-space", referenceId: space.id, name: "一樓展場" })).status, 201);
+  const after = await getDetail();
+  assert.deepEqual(after.missingVenueReferences, []);
+  assert.equal(after.event.version, before.event.version);
+  assert.deepEqual(after.revisions, before.revisions);
+  assert.deepEqual(after.draft, before.draft);
+  assert.equal(after.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "complete");
+  assert.equal(after.venueCatalog.venues.find((item) => item.id === venue.id).name, "舊場館");
+});
+
 test("candidate updates reject missing and mismatched venue catalog references", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
