@@ -1,5 +1,33 @@
 # Reader 介面驗收紀錄
 
+## 2026-09-15：手機工具層級與通用使用說明
+
+重現：390×844 的「資料管理」中心命中地圖日期下拉；只修正頁首層級後，使用說明左緣仍在 x=-144.67px。工具選單開啟時，手機頁首位於地圖控制及工作面板上方、資料管理模態視窗下方；說明面板以視窗定位，左右留 12px，短螢幕可捲動。關於文字改為「不代表活動主辦單位」。
+
+- 新增 `reader-mobile-tools.mjs`：先完整展開探索工作面板再開工具，以每個入口 9 個命中點確認沒有覆蓋，實際開啟及關閉資料管理／使用說明、捲至關於文字、檢查說明焦點還原、工具 Escape／外部按壓。
+- 聚焦補查發現：若頁首永久提高層級，760×390 完整面板的把手（y71.20–85.20）會命中搜尋 input。最終僅在工具開啟時提高頁首層級，回歸旅程檢查工具開啟前及關閉後的完整面板把手。
+- CH20／FF47 × 360×640、390×844、760×390、1440×900 × 三種字級，共 24 組、72 項擷取／操作檢查通過；[矩陣](docs/design/assets/reader-mobile-tools-2026-09-15/matrix.json) 與保留的六張截圖來自同次執行，未保留的圖檔欄位標為 null。Fixture 另通過 36 項。
+- [CH20 工具](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-menu.png)、[使用說明](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-help.png)、[資料管理](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-390-844-standard-data.png)、[短手機最大字級](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ch-20-360-640-extra-help.png)、[橫向最大字級](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ff47-760-390-extra-help.png)、[桌機對照](docs/design/assets/reader-mobile-tools-2026-09-15/tools-ff47-1440-900-standard-help.png)。
+- 完整本機 `npm test` 764／764、FF47 representative 地圖回歸 21 項、本機 lint（排除既有 `.tmp/` 備份生成檔）、TypeScript 與 doc-map（12 contracts）通過。
+- 獨立主要 reviewer 檢查 `840ee3b` 相對 `98776f0` 的六張提交截圖及程式，實際操作 CH20 手機探索 → 工具 → 資料管理／使用說明。在 360×640 確認說明位於 x12–348、y56–628，可捲至通用關於文字並關閉，焦點回入口且 URL 不變；沒有本輪重大問題，Review Done。
+- 同一 reviewer 聚焦複驗 `d954f82`：760×390 工具關閉前後，把手均 9／9 點可操作；Escape 後頁首恢復 z-index 5，實際點擊把手可縮小面板。開啟工具後的使用說明與資料管理仍正常，沒有剩餘 blocker，Review Done。最終矩陣另完整重跑上述 72 項。
+
+以上為 Chrome 瀏覽器及模擬尺寸驗收，不代表 iOS／Android 真機。既有活動選擇與搜尋驗證記錄保留於下節。
+
+## 2026-09-15：活動選擇頁日期分類與詳細搜尋底色
+
+範圍及設計預設見 [本輪設計紀錄](docs/design/reader-event-chooser-ideas.md)。活動選擇頁採「即將到來 → 舉辦中 → 過往活動」及組內日期遞減；過往活動維持可點擊，名稱改較柔和的灰綠。詳細搜尋移除外層底色及重複縮排，和收藏控制對齊。
+
+- 實際 CH20／FF47 於本機 staged 資料驗證：CH20 顯示 `26.10.09` 在即將到來；FF47 顯示 `26.08.21-23` 在過往活動。桌機 1440×900 與手機 390×900 的選擇頁、詳細搜尋共 4 張截圖與 [matrix.json](docs/design/assets/reader-event-calendar-2026-09-15/matrix.json) 同次執行產生。
+- [桌機選擇頁](docs/design/assets/reader-event-calendar-2026-09-15/published-chooser-1440.png)、[手機選擇頁](docs/design/assets/reader-event-calendar-2026-09-15/published-chooser-390.png)、[桌機搜尋](docs/design/assets/reader-event-calendar-2026-09-15/published-search-1440.png)、[手機搜尋](docs/design/assets/reader-event-calendar-2026-09-15/published-search-390.png)：無水平溢出；搜尋按鈕左右與收藏控制一致，外層透明。
+- Fixture 瀏覽器旅程另驗 1440／360px、5 個日期的狀態與排序、跨午夜更新、過往卡片鍵盤聚焦及開啟地圖，以及桌機／手機搜尋開啟與取消後焦點還原，共 13 項；[報告](docs/design/assets/reader-event-calendar-2026-09-15/fixture-report.json) 與[即將到來／舉辦中畫面](docs/design/assets/reader-event-calendar-2026-09-15/fixture-upcoming-and-ongoing.png) 為該次測試資料證據。
+- 原有活動選擇旅程 5 項通過，包含失效活動連結、Back／Forward 及條件不跨活動。日期與元件測試 8 項通過，含跨月、跨年、閏日、台灣日期界線、空集合與不可辨識日期。
+- TypeScript、doc-map（12 contracts）、本機 lint（排除既有 `.tmp/` 備份生成檔）、Impeccable layout scan 通過。
+- `map-viewport.mjs` representative 模式另通過 21 項既有地圖擷取／操作斷言。
+- 獨立主要 reviewer 檢查 `a1429ed` 相對 `3ce4574` 的程式、日期驗證邊界與 5 張提交截圖，並實際操作 CH20／FF47 桌機及 390px 頁面；確認排序、日期、過往活動可開啟，以及詳細搜尋開啟／取消焦點還原。沒有本輪 blocker，Review Done。
+
+以上為 Chrome 瀏覽器及模擬尺寸驗收，不代表 iOS／Android 真機。日期分類精度為台灣日曆日，沒有宣稱活動實際開門／閉門時間。
+
 ## 2026-09-15：活動頂部、切換活動與取消選取
 
 受測實作：`aa5e16d`。Chrome 153.0.8010.37，本機 staged 官方 CH20／FF47；以下證據為瀏覽器尺寸測試，不代表 iOS Safari／Android Chrome 真機驗收。

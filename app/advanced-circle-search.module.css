@@ -1,5 +1,7 @@
-.wrap { flex:0 0 auto; padding:10px 12px; border-bottom:1px solid var(--line); background:#f9faf8; }
-.trigger { width:100%; min-height:46px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid #d9ddd9; border-radius:9px; background:#f9faf8; color:var(--ink); text-align:left; cursor:pointer; }
+.wrap { flex:0 0 auto; padding-top:12px; }
+.trigger { width:100%; min-height:46px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); text-align:left; cursor:pointer; }
+.trigger:hover { border-color:#b9c2bb; }
+.trigger:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
 .trigger>span { display:flex; align-items:center; gap:7px; font-size:calc(10px * var(--ui-font-scale,1)); font-weight:800; }
 .trigger svg { width:14px; height:14px; color:var(--muted); }
 .trigger small { color:var(--muted); font-size:calc(9px * var(--ui-font-scale,1)); font-weight:600; }

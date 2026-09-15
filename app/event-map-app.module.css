@@ -202,6 +202,8 @@
  .shell[data-mobile-sheet-level="peek"][data-mobile-summary="true"] { --mobile-sheet-height:calc(64px + var(--mobile-peek-summary) + env(safe-area-inset-bottom)); }
  .shell[data-mobile-sheet-level="full"] { --mobile-sheet-height:min(82dvh,760px); }
  .shell :global(.topbar) { grid-template-columns:minmax(0,1fr) auto; gap:0 12px; padding:8px 13px; }
+ /* Raise open tools without covering the full sheet's handle when closed. */
+ .shell :global(.topbar):has(.mobileToolsMenu[open]) { z-index:40; }
  .shell :global(.brand) { grid-column:1; grid-row:1; align-self:start; gap:10px; }
  .shell :global(.brand)>span { flex:none; width:34px; height:34px; }
  .shell :global(.brand)>div { min-width:0; }

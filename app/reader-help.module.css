@@ -29,6 +29,6 @@
 
 @media (max-width:760px) {
   .trigger { min-height:44px; padding-inline:12px; }
-  .panel { top:calc(100% + 8px); max-height:calc(100dvh - 82px); }
+  .panel { position:fixed; top:56px; right:12px; width:calc(100vw - 24px); max-height:calc(100dvh - 68px); }
   .panel header button { width:44px; height:44px; }
 }
