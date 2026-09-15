@@ -45,6 +45,8 @@ test("the served CSP admits the same HTTPS images the validator accepts", async 
   assert.deepEqual(sources.sort(), ["'self'", "data:", "https:"]);
 });
 
+const ANALYTICS_ORIGIN = "https://static.cloudflareinsights.com";
+
 /**
  * Cloudflare Web Analytics is injected by the edge, so `script-src` has to admit
  * the beacon or every page load logs a CSP error and reports nothing.
@@ -70,7 +72,13 @@ test("the CSP admits the injected analytics beacon by origin, not by path", asyn
     const directives = policy.split(";").map((directive) => directive.trim());
     const scriptSrc = directives.find((directive) => directive.startsWith("script-src "));
     assert.ok(scriptSrc, "the policy must declare script-src");
-    assert.ok(scriptSrc.split(/\s+/).slice(1).includes("https://static.cloudflareinsights.com"),
+    // Compared whole-token with `===` rather than by substring: a source that
+    // merely contains the origin (`https://static.cloudflareinsights.com.evil`,
+    // or the path-scoped `…/beacon.min.js`) is a different source expression and
+    // must not satisfy this. Splitting on whitespace first is what makes each
+    // element one complete source.
+    const sources = scriptSrc.split(/\s+/).slice(1);
+    assert.ok(sources.some((source) => source === ANALYTICS_ORIGIN),
       "script-src must admit the beacon origin; a path-scoped source misses the versioned URL");
 
     const connectSrc = directives.find((directive) => directive.startsWith("connect-src "));
