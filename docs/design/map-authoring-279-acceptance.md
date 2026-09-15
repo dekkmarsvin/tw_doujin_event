@@ -27,5 +27,9 @@
 
 [輔助線 browser 報告](assets/map-authoring-279/guides-report.json)。
 
+初審發現只有輔助線的 Organizer 草稿按「空白畫布」會略過清空確認。已將 guides 納入既有內容判斷；journey 核對確認出現、取消保留座標與 undo／redo 歷史。此為本 PR 的 MUST FIX NOW，修正後交同一 reviewer 聚焦確認。
+
+正式啟用 gate：新版私人 snapshot 可含 authoring，舊 production Worker 的 strict parser 會拒絕。需先將通過 review 與 CI 的同 head 部署 publication Worker，確認成功後才合併啟用 Pages。這是一次工程部署順序，不是日常活動發布的人工步驟。
+
 ![Organizer 直幅反向雙列](assets/map-authoring-279/organizer-guides.png)
 ![地圖貢獻橫幅、整組與排段吸附](assets/map-authoring-279/contribution-guides.png)

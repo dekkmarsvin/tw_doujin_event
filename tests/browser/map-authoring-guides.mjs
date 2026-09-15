@@ -31,6 +31,19 @@ try {
     const top = height * .15, bottom = height * .75;
     const firstX = width * .2, rightX = width * .26, secondX = width * .34, secondRight = width * .4;
     const firstGuide = await placeGuide("x", firstX);
+    if (surface === "organizer") {
+      await page.getByRole("button", { name: "空白畫布", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "空白畫布會清掉畫面上的內容" });
+      await dialog.waitFor();
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      assert.equal(await editor.locator("[data-guide-id]").count(), 1);
+      near(Number(await editor.getByRole("spinbutton", { name: "畫布寬", exact: true }).inputValue()), width);
+      assert.equal(await undo.isEnabled(), true);
+      await undo.click();
+      assert.equal(await editor.locator("[data-guide-id]").count(), 0);
+      await editor.getByRole("button", { name: "重做已復原的編輯", exact: true }).click();
+      assert.equal(await editor.locator("[data-guide-id]").count(), 1);
+    }
     await placeGuide("x", rightX); await placeGuide("x", secondX); await placeGuide("x", secondRight);
     await placeGuide("y", top); await placeGuide("y", bottom);
     assert.equal(await editor.locator("[data-guide-id]").count(), 6);

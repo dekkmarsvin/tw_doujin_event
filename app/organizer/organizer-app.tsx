@@ -903,12 +903,12 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       setSelected(null); setPendingBackground(null); setEdited(false); setBackground("");
       setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000)); setAuthoring(EMPTY_MAP_AUTHORING);
     };
-    if (!layoutHasContent(layout) && !background) { blank(); return; }
+    if (!layoutHasContent(layout) && authoring.guides.length === 0 && !background) { blank(); return; }
     setConfirm({
       title: "空白畫布會清掉畫面上的內容",
       description: selected
-        ? "畫面上的地圖與配置圖會清掉，已儲存的那份地圖還在。"
-        : "畫面上的地圖與配置圖會清掉，這張地圖還沒有儲存過。",
+        ? "畫面上的地圖、輔助線與配置圖會清掉，已儲存的那份地圖還在。"
+        : "畫面上的地圖、輔助線與配置圖會清掉，這張地圖還沒有儲存過。",
       confirmLabel: "清空重來",
       run: blank,
     });
