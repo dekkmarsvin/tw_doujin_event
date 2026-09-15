@@ -82,6 +82,37 @@ function checkpoint(step) {
     merging_main: { main_merge_sha: "d".repeat(40) }, waiting_deployment: { workflow_run_id: 3 } })[step] ?? {};
 }
 
+// Isolated pre-approved jobs exercise the executor before AMEND submission is
+// exposed. These are local D1 fixtures, not a claim of UI approval acceptance.
+for (const [name, operation, snapshotOperation, schema, eventId, valid] of [
+  ["explicit AMEND", "AMEND", "AMEND", "organizer-submission-snapshot/4", "second-event", true],
+  ["CREATE cannot impersonate AMEND", "CREATE", "AMEND", "organizer-submission-snapshot/4", "second-event", false],
+  ["AMEND cannot use legacy CREATE snapshot", "AMEND", undefined, "organizer-submission-snapshot/3", "second-event", false],
+  ["AMEND requires explicit operation", "AMEND", "CREATE", "organizer-submission-snapshot/4", "second-event", false],
+  ["AMEND cannot target another event", "AMEND", "AMEND", "organizer-submission-snapshot/4", "other-event", false],
+]) test(`publication operation is bound to candidate and snapshot: ${name}`, async () => {
+  const { id, jobId } = await publicationFixture();
+  const snapshotJson = JSON.stringify({ schema, operation: snapshotOperation, candidateId: id, candidateVersion: 1, eventId });
+  const hash = await sha256Hex(snapshotJson);
+  await database.batch([
+    database.prepare("UPDATE organizer_event_candidates SET publication_operation = ?1 WHERE id = ?2").bind(operation, id),
+    database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE candidate_id = ?3").bind(snapshotJson, hash, id),
+    database.prepare("UPDATE organizer_publication_jobs SET approval_hash = ?1 WHERE id = ?2").bind(hash, jobId),
+  ]);
+  let runs = 0;
+  const execute = createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => { assert.fail("AMEND is not a CREATE collision lookup"); },
+    run: async ({ step, beginRemoteWrite }) => { runs++; await beginRemoteWrite(); return { metadata: checkpoint(step) }; },
+  }, () => NOW + 10);
+  await execute(jobId);
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(runs, valid ? 1 : 0);
+  assert.equal(job.step, valid ? "waiting_data_checks" : "preparing_data");
+  assert.equal(job.status, valid ? "publishing" : "failed");
+  assert.equal(job.failure_code, valid ? null : "snapshot_mismatch");
+  assert.equal(job.remote_write_intent_at !== null, valid);
+});
+
 test("durable ticks resume all waiting stages after runtime recreation without workspace requests", async () => {
   const { jobId } = await publicationFixture();
   let clock = NOW + 10;

@@ -1,6 +1,6 @@
 import { createGitHubPublicationAdapter, type GitHubAdapterOptions, type GitHubCheck, type GitHubPull, type GitHubTreeEntry } from "./github-publication";
 import { GITHUB_PUBLICATION_OWNER, GITHUB_PUBLICATION_REPOSITORIES } from "./github-remote-auditor";
-import { buildApprovedPublicationArtifacts, buildPublicationDataStage, buildPublicationMainStage } from "./publication-artifacts";
+import { assertAmendmentPublishedBaseline, buildApprovedPublicationArtifacts, buildPublicationDataStage, buildPublicationMainStage, type ApprovedArtifactSource } from "./publication-artifacts";
 import { PublicationFailure, type PublicationDriver } from "./organizer-publication";
 import { PUBLICATION_REQUIRED_CHECKS } from "./publication-rollout";
 import { parsePublishedEvents } from "./published-events.mjs";
@@ -33,6 +33,37 @@ async function readBase(adapter: Adapter, repository: string, sha?: string) {
   if (!commit) fail("publication_base_missing", "找不到發布 repository 的 main 分支。");
   const record = await adapter.readCommit(repository, commit);
   return { commit, record, tree: await adapter.readTree(repository, record.tree.sha) };
+}
+type Artifacts = Awaited<ReturnType<typeof buildApprovedPublicationArtifacts>>;
+type Base = Awaited<ReturnType<typeof readBase>>;
+async function amendmentCurrentPin(adapter: Adapter, artifacts: Artifacts) {
+  if (!artifacts.amendment) return;
+  const base = await readBase(adapter, repositories.main);
+  const pinPath = `data/event-data-pins/${artifacts.snapshot.eventId}.json`;
+  const files = await readFiles(adapter, repositories.main, base.tree, [publishedPath, pinPath]);
+  assertAmendmentPublishedBaseline(artifacts.amendment.baseline, required(files, publishedPath), files.get(pinPath) ?? null);
+}
+async function stageFiles(adapter: Adapter, input: Run, stage: Stage, base: Base, source: ApprovedArtifactSource, artifacts: Artifacts) {
+  const repository = repositories[stage];
+  if (stage === "data") {
+    const references = await readFiles(adapter, repository, base.tree, artifacts.files.filter((file) => file.path.startsWith("references/")).map((file) => file.path));
+    const prefix = `events/${artifacts.snapshot.eventId}/`;
+    const leaves = base.tree.filter((entry) => entry.type !== "tree" && entry.path.startsWith(prefix));
+    const eventFiles = artifacts.amendment ? await readFiles(adapter, repository, base.tree, leaves.map((entry) => entry.path)) : null;
+    return (await buildPublicationDataStage(source, { commit: base.commit, references,
+      eventDirectoryExists: base.tree.some((entry) => entry.path === prefix.slice(0, -1) || entry.path.startsWith(prefix)),
+      ...(eventFiles ? { eventFiles: new Map([...eventFiles].map(([path]) => [path, required(eventFiles, path)])) } : {}),
+    })).files;
+  }
+  if (!input.job.data_merge_sha) fail("missing_data_commit", "Main 發布缺少已固定的 data merge commit。");
+  const dataBase = await readBase(adapter, repositories.data, input.job.data_merge_sha);
+  const data = await readFiles(adapter, repositories.data, dataBase.tree, artifacts.files.map((file) => file.path));
+  const pinPath = `data/event-data-pins/${artifacts.snapshot.eventId}.json`;
+  const main = await readFiles(adapter, repository, base.tree, [publishedPath, pinPath, "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"]);
+  return (await buildPublicationMainStage(source, { dataCommit: input.job.data_merge_sha, dataFiles: new Map([...data].filter((entry): entry is [string, string] => entry[1] !== null)),
+    mainCommit: base.commit, publishedEventsJson: required(main, publishedPath), existingPinJson: main.get(pinPath) ?? null,
+    allocationsJson: required(main, "data/circle-identities/allocations.json"), evidenceJson: required(main, "data/circle-identities/evidence.json"),
+  })).files;
 }
 async function assertTree(base: GitHubTreeEntry[], actual: GitHubTreeEntry[], files: readonly { path: string; text: string }[]) {
   const leaves = (entries: GitHubTreeEntry[]) => new Map(entries.filter((entry) => entry.type !== "tree").map((entry) => [entry.path, `${entry.mode}/${entry.type}/${entry.sha}`]));
@@ -114,10 +145,10 @@ export function createGitHubPublicationDriver(options: Pick<GitHubAdapterOptions
       const pinnedHead = job[`${stage}_head_sha`];
       const pinnedPull = job[`${stage}_pr_number`];
       const adapter = adapterFor(async () => { await input.beginRemoteWrite(); await input.assertLease(); });
+      const source = { snapshotJson: input.snapshotJson, approvalHash: job.approval_hash };
+      const artifacts = await buildApprovedPublicationArtifacts(source);
+      if (artifacts.snapshot.candidateId !== job.candidate_id || artifacts.snapshot.candidateVersion !== job.candidate_version) fail("snapshot_mismatch", "核准 snapshot 與工作版本不符。");
       if (step === "preparing_data" || step === "preparing_main") {
-        const source = { snapshotJson: input.snapshotJson, approvalHash: job.approval_hash };
-        const artifacts = await buildApprovedPublicationArtifacts(source);
-        if (artifacts.snapshot.candidateId !== job.candidate_id || artifacts.snapshot.candidateVersion !== job.candidate_version) fail("snapshot_mismatch", "核准 snapshot 與工作版本不符。");
         let pull = await findPull(adapter, repository, branch);
         if (pull) assertPull(pull, input, stage, pinnedHead ?? undefined);
         const ref = await adapter.readRef(repository, branch);
@@ -134,23 +165,8 @@ export function createGitHubPublicationDriver(options: Pick<GitHubAdapterOptions
           }
         }
         const base = await readBase(adapter, repository, existing?.parents[0].sha);
-        let files: Awaited<ReturnType<typeof buildPublicationDataStage>>["files"];
-        if (stage === "data") {
-          const references = await readFiles(adapter, repository, base.tree, artifacts.files.filter((file) => file.path.startsWith("references/")).map((file) => file.path));
-          files = (await buildPublicationDataStage(source, { commit: base.commit, references,
-            eventDirectoryExists: base.tree.some((entry) => entry.path === `events/${artifacts.snapshot.eventId}` || entry.path.startsWith(`events/${artifacts.snapshot.eventId}/`)),
-          })).files;
-        } else {
-          if (!job.data_merge_sha) fail("missing_data_commit", "Main 發布缺少已固定的 data merge commit。");
-          const dataBase = await readBase(adapter, repositories.data, job.data_merge_sha);
-          const data = await readFiles(adapter, repositories.data, dataBase.tree, artifacts.files.map((file) => file.path));
-          const pinPath = `data/event-data-pins/${artifacts.snapshot.eventId}.json`;
-          const main = await readFiles(adapter, repository, base.tree, [publishedPath, pinPath, "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"]);
-          files = (await buildPublicationMainStage(source, { dataCommit: job.data_merge_sha, dataFiles: new Map([...data].filter((entry): entry is [string, string] => entry[1] !== null)),
-            mainCommit: base.commit, publishedEventsJson: required(main, publishedPath), existingPinJson: main.get(pinPath) ?? null,
-            allocationsJson: required(main, "data/circle-identities/allocations.json"), evidenceJson: required(main, "data/circle-identities/evidence.json"),
-          })).files;
-        }
+        if (artifacts.amendment && !pull?.merged) await amendmentCurrentPin(adapter, artifacts);
+        const files = await stageFiles(adapter, input, stage, base, source, artifacts);
         if (!head) {
           const tree = await adapter.createTree(repository, base.record.tree.sha, files);
           head = await adapter.createCommit(repository, base.commit, tree, messageFor(input, stage));
@@ -181,6 +197,29 @@ export function createGitHubPublicationDriver(options: Pick<GitHubAdapterOptions
       if (approval && (approval.external_id !== job.id || approval.output?.summary !== `Approval snapshot ${job.approval_hash}`)) fail("publication_approval_changed", "核准 check 與本次工作不符。");
       if (!checksReady(checks, stage)) return { pending: true };
       if (step === "waiting_data_checks" || step === "waiting_main_checks") return {};
+      let amendmentFiles: Awaited<ReturnType<typeof stageFiles>> | null = null;
+      if (artifacts.amendment) {
+        const head = await adapter.readCommit(repository, pinnedHead);
+        if (head.message !== messageFor(input, stage) || head.parents.length !== 1) fail("publication_commit_changed", "發布 commit 的工作記錄或 parent 不符。");
+        const base = await readBase(adapter, repository, head.parents[0].sha);
+        const current = await readBase(adapter, repository);
+        if (!await adapter.isAncestor(repository, base.commit, current.commit)) fail("publication_base_changed", "修正基準不再屬於 main 歷史。");
+        amendmentFiles = await stageFiles(adapter, input, stage, base, source, artifacts);
+        await assertTree(base.tree, await adapter.readTree(repository, head.tree.sha), amendmentFiles);
+        if (!pull.merged) {
+          await amendmentCurrentPin(adapter, artifacts);
+          // Validate complete current event leaves / target identity history,
+          // then ensure no pending write can discard intervening ledger work.
+          await stageFiles(adapter, input, stage, current, source, artifacts);
+          for (const file of amendmentFiles) {
+            const before = base.tree.find((entry) => entry.path === file.path);
+            const latest = current.tree.find((entry) => entry.path === file.path);
+            if (before?.sha !== latest?.sha || before?.mode !== latest?.mode || before?.type !== latest?.type) {
+              fail("amendment_base_conflict", "修正 PR 準備後，待更新的資料已被其他發布改變；停止合併以保留最新資料。");
+            }
+          }
+        }
+      }
       let mergeSha = pull.merged ? pull.merge_commit_sha : null;
       if (!pull.merged) {
         const result = await adapter.mergeOwnedPullRequest({ repository, pullNumber: pinnedPull, jobId: job.id, stage,
@@ -189,6 +228,11 @@ export function createGitHubPublicationDriver(options: Pick<GitHubAdapterOptions
         mergeSha = result.sha;
       }
       if (!mergeSha || !/^[0-9a-f]{40}$/.test(mergeSha)) fail("publication_merge_invalid", "GitHub 合併結果缺少固定 commit SHA。", true);
+      if (amendmentFiles) {
+        const merged = await readBase(adapter, repository, mergeSha);
+        const actual = await readFiles(adapter, repository, merged.tree, amendmentFiles.map((file) => file.path));
+        if (amendmentFiles.some((file) => actual.get(file.path) !== file.text)) fail("snapshot_mismatch", "修正合併結果與核准產物不符。");
+      }
       return { metadata: stage === "data" ? { data_merge_sha: mergeSha } : { main_merge_sha: mergeSha } };
     },
   };
