@@ -271,6 +271,23 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal(await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token, expectedStep: step, nextStep: step, status: "failed", retryable: true, failureCode: "dispatch_failed", error: "Test dispatch failure", now: NOW + 9 }), true);
   await repository.releaseOrganizerPublicationLease(jobId, lease.token);
   const retryPath = `/api/organizer/publications/${jobId}/retry`;
+  const failed = await repository.getOrganizerPublicationJob(jobId);
+  const productionRuntime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, ORGANIZER_PUBLICATION_MODE: "github" } });
+  const enqueued = await productionRuntime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
+  assert.equal(enqueued.status, 200, await enqueued.clone().text());
+  const queued = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(queued.status, "queued", "Pages never executes the retry with its own runtime or credentials");
+  for (const key of ["id", "snapshot_id", "approval_hash", "candidate_version", "step", "data_merge_sha", "main_merge_sha", "workflow_run_id"]) {
+    assert.equal(queued[key], failed[key], key);
+  }
+  assert.ok((await repository.listDueOrganizerPublicationJobs(NOW + 10)).some((job) => job.id === jobId));
+  // The independent executor owns the next attempt. A fake driver can still
+  // be used only by the explicitly isolated preview runtime below.
+  await createOrganizerPublicationExecutor(repository, {
+    eventExists: async () => false,
+    run: async () => { throw new PublicationFailure("dispatch_failed", "test", true); },
+  }, () => NOW + 10)(jobId);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "failed");
   const runtime = portalHandlers({ request: request(retryPath, "POST"), env: { ...base, PREVIEW_MAIL_SINK: "d1", ORGANIZER_PUBLICATION_MODE: "fake" } });
   const response = await runtime.adminRetryOrganizerPublication(request(retryPath, "POST"), jobId);
   assert.equal(response.status, 200, await response.clone().text());
@@ -279,11 +296,15 @@ test("Pages runtime exposes publication by mode and a fake retry finishes throug
   assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
 });
 
-test("one fake dispatch completes a queued job and disabled mode never creates a GitHub driver", async () => {
+test("Pages github dispatch preserves its durable job for the Worker; fake remains preview-only", async () => {
   const { jobId } = await publicationFixture();
-  const input = { repository, eventExists: async () => false, now: () => NOW + 10, github: () => { throw new Error("No GitHub calls allowed"); } };
+  const input = { repository, eventExists: async () => false, now: () => NOW + 10 };
   assert.equal(createPublicationDispatcher({ ...input, mode: "disabled", allowFake: true }), undefined);
   assert.equal(createPublicationDispatcher({ ...input, mode: "fake", allowFake: false }), undefined);
+  const queued = await repository.getOrganizerPublicationJob(jobId);
+  await createPublicationDispatcher({ ...input, mode: "github", allowFake: false })(jobId);
+  assert.deepEqual(await repository.getOrganizerPublicationJob(jobId), queued);
+  assert.ok((await repository.listDueOrganizerPublicationJobs(NOW + 10)).some((job) => job.id === jobId));
   const dispatch = createPublicationDispatcher({ ...input, mode: "fake", allowFake: true });
   await dispatch(jobId);
   const job = await repository.getOrganizerPublicationJob(jobId);

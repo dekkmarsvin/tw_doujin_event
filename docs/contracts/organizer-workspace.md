@@ -148,7 +148,7 @@ lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 fa
 
 **`queued` 停留超過 15 分鐘就是失敗。** 依 ADR-0062，獨立 publication Worker 每分鐘掃描，把超時 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`；活動列表與候選 GET 不執行掃描或寫入。更新交易再次檢查 live lease，避免掃描與 dispatch 同時開始時錯誤判定逾時。恢復沿用同一筆 job、同一份 snapshot，不新增手動啟動 queued job 的入口。等待 CI 是 `publishing`，不受 queued timeout 影響。
 
-**持續推進不依賴使用者開啟頁面。** 核准／retry 先嘗試一步；cron 每輪最多處理十筆目前核准版本且到期的 queued／publishing job，各推進一步。pending 的 next attempt 與 checkpoint 在同一 lease 下寫入 D1，退避依序 1、2、4、5 分鐘，上限五分鐘，短於 queued timeout。前進後下一輪可續推；failed 不自動 retry，舊版本不派送。Webhook 只重設到期時間，漏送或早於 checkpoint 到達仍由 cron 接手。服務停機時不保證一分鐘執行，恢復後超時 queued 仍按既有失敗／retry 路徑處理。
+**持續推進不依賴使用者開啟頁面。** Pages 核准／retry 僅提交到期的持久化 job；cron 每輪最多處理十筆目前核准版本且到期的 queued／publishing job，各推進一步。pending 的 next attempt 與 checkpoint 在同一 lease 下寫入 D1，退避依序 1、2、4、5 分鐘，上限五分鐘，短於 queued timeout。前進後下一輪可續推；failed 不自動 retry，舊版本不派送。Webhook 只重設到期時間，漏送或早於 checkpoint 到達仍由 cron 接手。服務停機時不保證一分鐘執行，恢復後超時 queued 仍按既有失敗／retry 路徑處理。
 
 **逾時的 job 不一定從未開始，所以失敗訊息看 checkpoint 而不是 step。** retry 會把 job 放回 `queued` 並保留原 step，因此同一個逾時有兩種來源：從未被 dispatch 的 job，以及重試後 dispatch 又沒發生、先前 checkpoint 都還在的 job。判準是這份工作有沒有留下任何 checkpoint。`preparing_data` 是新工作唯一能通過的第一步，而 `missing_checkpoint` 不允許它在缺 `data_pr_number` 與 `data_head_sha` 的情況下前進；其後每一步在它完成前都到不了，`preparing_main` 起另有 `missing_data_commit` 把關。因此七個 checkpoint 欄位全空就代表這份工作什麼都還沒碰到。（並非每個步驟都宣告 required checkpoint——`waiting_data_checks`、`waiting_main_checks` 與 `verifying_production` 沒有——但新建的工作過不到那裡。）pending 的 delivery 會寫下 metadata 卻不推進 step，所以這個判準量的是「有沒有東西跑過」，不是「有沒有階段完成」；區分從未被 dispatch 的工作與遠端產物已經釘住的工作，要的正是前者。**step 不能拿來判斷**：核准流程建立的 job 落在 `preparing_data`，舊的建立路徑落在 `assemble`，而 retry 保留上次失敗的那一步，同一個名字同時涵蓋兩種情形。只有從未完成任何階段的才說發布沒有開始；其餘沿用既有 retryable 措辭，因為 UI 四階段對它已經顯示出已完成的階段，說「沒有開始」會與同一畫面互相矛盾。
 
@@ -156,7 +156,7 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 目前 production gate：
 
-1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github，實際啟用依 #212 核准 rollout 執行；每次呼叫只推進一個 bounded transition。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
+1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github，實際啟用依 #212 核准 rollout 執行；Pages 核准／retry 僅提交到期的持久化 job，獨立 Worker 每次只推進一個 bounded transition，避免舊 Pages 程式先消耗修復後的重試。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
 2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
 3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求有效的管理者 session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 

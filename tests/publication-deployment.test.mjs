@@ -25,7 +25,7 @@ function originFixture() {
   const seen = [];
   const fetch = async (url, init) => {
     assert.equal(new URL(url).origin, PAGES_PRODUCTION_ORIGIN);
-    assert.equal(init.redirect, "error"); assert.equal(init.cache, "no-store");
+    assert.equal(init.redirect, "manual"); assert.equal(init.cache, "no-store");
     assert.equal(init.headers, undefined, "no credentials sent to public origin");
     const path = new URL(url).pathname;
     seen.push(path);

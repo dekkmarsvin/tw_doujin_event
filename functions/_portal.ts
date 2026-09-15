@@ -11,7 +11,6 @@ import { resolvePublishedAuthoringScope } from "../app/event-authoring-scope";
 import { createGitHubInstallationProbe } from "../app/github-installation-probe";
 import { createGitHubRemoteAuditor, GITHUB_PUBLICATION_REPOSITORIES } from "../app/github-remote-auditor";
 import { createGitHubAppTokenProvider } from "../app/github-app-token";
-import { createRuntimePublicationDriver } from "../app/publication-runtime";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
 
 /**
@@ -283,7 +282,6 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
   const dispatchOrganizerPublication = createPublicationDispatcher({
     repository, mode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled", allowFake: env.PREVIEW_MAIL_SINK === "d1",
     eventExists: async (id) => Boolean(await publishedEvent(id)),
-    github: () => createRuntimePublicationDriver(env, publishedEvent),
   });
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
