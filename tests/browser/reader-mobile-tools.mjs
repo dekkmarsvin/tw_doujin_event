@@ -32,6 +32,8 @@ try {
         if (mobile) {
           // The open work panel also shares the map's stacking environment.
           await page.getByRole("button", { name: "探索", exact: true }).click();
+          await page.getByRole("button", { name: "完整展開工作面板", exact: true }).click();
+          await assertReachable(page.getByRole("button", { name: "縮小工作面板", exact: true }));
           await summary.click();
         }
         const name = `tools-${event}-${width}-${height}-${scale}`;
@@ -70,6 +72,7 @@ try {
           await page.keyboard.press("Escape");
           assert.equal(await menu.evaluate((node) => node.open), false);
           assert.equal(await summary.evaluate((node) => node === document.activeElement), true);
+          await assertReachable(page.getByRole("button", { name: "縮小工作面板", exact: true }));
           await summary.click();
           await page.getByRole("button", { name: "探索", exact: true }).click();
           assert.equal(await menu.evaluate((node) => node.open), false);
