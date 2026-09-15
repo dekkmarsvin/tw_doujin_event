@@ -130,6 +130,7 @@ async function setup() {
 test("real driver stages data then main, pins merged bytes and preserves FF47", async () => {
   const { remote, job, driver, run, intent, setServed } = await setup();
   const main = remote.repos.get("tw_doujin_event"); const ff47 = remote.filesAt(main, main.refs.get("main")).get("data/event-data-pins/ff47.json");
+  const publishedBefore = JSON.parse(remote.filesAt(main, main.refs.get("main")).get("data/published-events.json")).events;
   assert.equal(await driver.eventExists("next-event"), false);
   assert.equal(await driver.eventExists("ff47"), true);
   await run("preparing_data"); assert.equal((await run("waiting_data_checks")).pending, true);
@@ -138,7 +139,7 @@ test("real driver stages data then main, pins merged bytes and preserves FF47", 
   remote.green("main", job.main_head_sha); await run("waiting_main_checks"); await run("merging_main");
   const files = remote.filesAt(main, job.main_merge_sha);
   assert.equal(files.get("data/event-data-pins/ff47.json"), ff47);
-  assert.deepEqual(JSON.parse(files.get("data/published-events.json")).events, ["ff47", "next-event"]);
+  assert.deepEqual(JSON.parse(files.get("data/published-events.json")).events, [...publishedBefore, "next-event"]);
   assert.equal(JSON.parse(files.get("data/event-data-pins/next-event.json")).commit, job.data_merge_sha);
   assert.equal(await driver.eventExists("next-event"), true);
   const reads = remote.calls.length; setServed(); assert.equal(await driver.eventExists("already-served"), true); assert.equal(remote.calls.length, reads);
