@@ -2526,7 +2526,32 @@ export function createCirclePortalHandlers({
     if (!mapContributionStore) return json({ error: "暫時無法使用配置圖，請稍後再試。" }, 503);
     const map = await repository.getOrganizerMapDraft(candidateId, draftId);
     if (!map) return json({ error: "找不到地圖草稿。" }, 404);
-    const object = await mapContributionStore.get(organizerMapBackgroundObjectKey({ candidateId, draftId }));
+    let object = await mapContributionStore.get(organizerMapBackgroundObjectKey({ candidateId, draftId }));
+    // A copied map has a new id. Its published baseline authorizes reading the
+    // same scope's source plan without exposing a bucket key to the browser or
+    // writing during GET. An uploaded replacement always belongs to this map.
+    // Follow successive amendments too; retained source bytes keep their
+    // existing lifetime rather than being copied into a new retention window.
+    const visited = new Set([candidateId]);
+    let sourceCandidateId = candidateId;
+    while (!object) {
+      const amendment = await readAmendment(sourceCandidateId);
+      if (!amendment || amendment.baseline.source.candidateId !== amendment.stored.source_candidate_id
+        || amendment.baseline.source.candidateVersion !== amendment.stored.source_version
+        || amendment.baseline.event.id !== map.event_id) break;
+      sourceCandidateId = amendment.stored.source_candidate_id;
+      if (visited.has(sourceCandidateId)) break;
+      visited.add(sourceCandidateId);
+      const sourceMaps = amendment.baseline.maps.filter((source) => source.periodKey === map.period_key && source.venueSpaceId === map.venue_space_id);
+      if (sourceMaps.length !== 1) break;
+      const [sourceCandidate, sourceMap] = await Promise.all([
+        repository.getOrganizerCandidate(sourceCandidateId),
+        repository.getOrganizerMapDraft(sourceCandidateId, sourceMaps[0].id),
+      ]);
+      if (!sourceCandidate || sourceCandidate.status !== "published" || sourceCandidate.published_version !== amendment.stored.source_version
+        || !sourceMap || sourceMap.event_id !== map.event_id || sourceMap.period_key !== map.period_key || sourceMap.venue_space_id !== map.venue_space_id) break;
+      object = await mapContributionStore.get(organizerMapBackgroundObjectKey({ candidateId: sourceCandidateId, draftId: sourceMap.id }));
+    }
     // The bucket answers with whatever was written. Only the three types the
     // upload accepts are served back, so a stray object cannot pick the content
     // type of a private response.
