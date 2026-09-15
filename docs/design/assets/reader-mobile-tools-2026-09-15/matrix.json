@@ -1,7 +1,7 @@
 {
   "journey": "reader-mobile-tools",
   "browser": "153.0.8010.37",
-  "recordedAt": "2026-09-15T06:47:50.195Z",
+  "recordedAt": "2026-09-15T06:59:29.252Z",
   "source": "local staged events: ff47, ch-20, not production",
   "checks": [
     "tools-ff47-360-640-standard-menu",
