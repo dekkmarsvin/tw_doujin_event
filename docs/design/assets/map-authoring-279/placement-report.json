@@ -1,0 +1,15 @@
+{
+  "journey": "map-authoring-placement",
+  "browser": "153.0.8010.37",
+  "recordedAt": "2026-09-15T10:08:49.235Z",
+  "source": "local fixtures, not production",
+  "checks": [
+    "organizer-canvas-facility-placement",
+    "organizer-continuous-row-after-tool-switch",
+    "circle-canvas-facility-placement",
+    "circle-continuous-row-after-tool-switch"
+  ],
+  "errors": [],
+  "synthetic": true,
+  "productionWrites": 0
+}
