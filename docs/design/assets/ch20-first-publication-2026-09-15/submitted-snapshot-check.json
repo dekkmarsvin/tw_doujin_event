@@ -1,0 +1,32 @@
+{
+  "snapshotId": "a78be78e-7c22-41c6-b568-b8d1cf494cf7",
+  "sha256": "4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3",
+  "hashMatches": true,
+  "schema": "organizer-submission-snapshot/3",
+  "candidateId": "1da921dd-9e1e-4ca3-b117-a31b526f1556",
+  "candidateVersion": 15,
+  "event": {
+    "id": "ch-20",
+    "name": "Comic Horizon 20",
+    "days": [
+      {
+        "id": "1",
+        "label": "第 1 日",
+        "date": "2026-10-09"
+      }
+    ]
+  },
+  "submittedAt": "2026-09-15T01:40:08.992Z",
+  "importRows": 170,
+  "boothCodes": 202,
+  "uniqueCodes": 202,
+  "exactMapCoverage": true,
+  "mapRevision": 7,
+  "mapMatchesValidatedContent": true,
+  "referencePaths": [
+    "references/category-catalogs/organizer-d10dc870-2e2a-4f4a-b2e7-3899f860ce54/catalog-a0a3b130-7e76-4af5-8dcc-07152ab3112b/1.json",
+    "references/organizers/organizer-d10dc870-2e2a-4f4a-b2e7-3899f860ce54.json",
+    "references/venue-spaces/venue-space-677b4283-d392-4b83-9d38-5aa81e2df511.json",
+    "references/venues/venue-c2a522f0-e534-4a91-ba1d-b347c112e092.json"
+  ]
+}
