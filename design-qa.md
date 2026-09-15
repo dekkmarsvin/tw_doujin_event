@@ -9,6 +9,8 @@
 - Fixture 瀏覽器旅程另驗 1440／360px、5 個日期的狀態與排序、跨午夜更新、過往卡片鍵盤聚焦及開啟地圖，以及桌機／手機搜尋開啟與取消後焦點還原，共 13 項；[報告](docs/design/assets/reader-event-calendar-2026-09-15/fixture-report.json) 與[即將到來／舉辦中畫面](docs/design/assets/reader-event-calendar-2026-09-15/fixture-upcoming-and-ongoing.png) 為該次測試資料證據。
 - 原有活動選擇旅程 5 項通過，包含失效活動連結、Back／Forward 及條件不跨活動。日期與元件測試 8 項通過，含跨月、跨年、閏日、台灣日期界線、空集合與不可辨識日期。
 - TypeScript、doc-map（12 contracts）、本機 lint（排除既有 `.tmp/` 備份生成檔）、Impeccable layout scan 通過。
+- `map-viewport.mjs` representative 模式另通過 21 項既有地圖擷取／操作斷言。
+- 獨立主要 reviewer 檢查 `a1429ed` 相對 `3ce4574` 的程式、日期驗證邊界與 5 張提交截圖，並實際操作 CH20／FF47 桌機及 390px 頁面；確認排序、日期、過往活動可開啟，以及詳細搜尋開啟／取消焦點還原。沒有本輪 blocker，Review Done。
 
 以上為 Chrome 瀏覽器及模擬尺寸驗收，不代表 iOS／Android 真機。日期分類精度為台灣日曆日，沒有宣稱活動實際開門／閉門時間。
 
