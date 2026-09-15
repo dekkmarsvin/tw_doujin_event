@@ -1,6 +1,6 @@
 {
   "schema": "circle-id-allocations/1",
-  "nextSequence": 1349,
+  "nextSequence": 1519,
   "allocations": [
     {
       "id": "c-000001",
@@ -6741,6 +6741,856 @@
       "id": "c-001348",
       "allocatedAt": "2026-08-21",
       "reason": "FF47 organizer identity split: 幻想布萊梅"
+    },
+    {
+      "id": "c-001349",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001350",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001351",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001352",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001353",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001354",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001355",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001356",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001357",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001358",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001359",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001360",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001361",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001362",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001363",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001364",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001365",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001366",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001367",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001368",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001369",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001370",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001371",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001372",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001373",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001374",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001375",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001376",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001377",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001378",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001379",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001380",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001381",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001382",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001383",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001384",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001385",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001386",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001387",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001388",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001389",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001390",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001391",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001392",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001393",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001394",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001395",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001396",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001397",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001398",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001399",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001400",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001401",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001402",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001403",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001404",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001405",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001406",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001407",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001408",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001409",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001410",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001411",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001412",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001413",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001414",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001415",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001416",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001417",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001418",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001419",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001420",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001421",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001422",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001423",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001424",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001425",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001426",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001427",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001428",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001429",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001430",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001431",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001432",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001433",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001434",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001435",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001436",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001437",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001438",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001439",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001440",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001441",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001442",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001443",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001444",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001445",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001446",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001447",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001448",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001449",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001450",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001451",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001452",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001453",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001454",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001455",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001456",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001457",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001458",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001459",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001460",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001461",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001462",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001463",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001464",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001465",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001466",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001467",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001468",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001469",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001470",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001471",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001472",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001473",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001474",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001475",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001476",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001477",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001478",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001479",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001480",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001481",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001482",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001483",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001484",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001485",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001486",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001487",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001488",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001489",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001490",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001491",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001492",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001493",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001494",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001495",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001496",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001497",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001498",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001499",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001500",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001501",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001502",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001503",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001504",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001505",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001506",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001507",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001508",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001509",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001510",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001511",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001512",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001513",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001514",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001515",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001516",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001517",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001518",
+      "allocatedAt": "2026-09-15",
+      "reason": "New reviewed ch-20 catalog evidence"
     }
   ]
 }

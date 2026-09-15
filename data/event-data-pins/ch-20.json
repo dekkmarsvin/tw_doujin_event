@@ -1,0 +1,44 @@
+{
+  "schema": "event-data-pin/2",
+  "eventId": "ch-20",
+  "repository": "dekkmarsvin/tw_doujin_event-data",
+  "commit": "65ae92f707381881d0817a577b5e87109e9bfc84",
+  "files": [
+    {
+      "path": "events/ch-20/circle-identity-groups.json",
+      "sha256": "f105580ec238230d72a5476712dcad9c8fc4f69a093a2c97029037bec5719135"
+    },
+    {
+      "path": "events/ch-20/event.json",
+      "sha256": "74a194a973044bdd9073be41e0552b5e39aadba9665fc31dc7d2342231e58ee8"
+    },
+    {
+      "path": "events/ch-20/map.json",
+      "sha256": "f20d3515c79ffa5194e7dcb227ae88565ce5a09603ac37ab57296807c4f42d34"
+    },
+    {
+      "path": "events/ch-20/official-booths.json",
+      "sha256": "37fe2547b125dda72b310df01f86d861884dc62586badc5cb59aaa9294f46cfe"
+    },
+    {
+      "path": "events/ch-20/reference-selection.json",
+      "sha256": "339eb33b00496544e2ad6c621251e0b39632f72aee2aaa87e2bd90c0cafb698f"
+    },
+    {
+      "path": "references/category-catalogs/organizer-d10dc870-2e2a-4f4a-b2e7-3899f860ce54/catalog-a0a3b130-7e76-4af5-8dcc-07152ab3112b/1.json",
+      "sha256": "4cdb1bfbda14b7fa4514849dbbf22bc7e85cbcb0261764c44977b86b0fbc0848"
+    },
+    {
+      "path": "references/organizers/organizer-d10dc870-2e2a-4f4a-b2e7-3899f860ce54.json",
+      "sha256": "aa1ac9ba19cfd071c78ab351a4a026d8886764b3ee0d755722860bfea8547469"
+    },
+    {
+      "path": "references/venue-spaces/venue-space-677b4283-d392-4b83-9d38-5aa81e2df511.json",
+      "sha256": "14eb5bf9f411ec577329ee11ca30ed52d273b7d26b643b4ed661fd5eb1c7d49d"
+    },
+    {
+      "path": "references/venues/venue-c2a522f0-e534-4a91-ba1d-b347c112e092.json",
+      "sha256": "1eebe222a834234ac03d0ec6cbc0f4e8e4e6d3373097cb5b5a538f4820698883"
+    }
+  ]
+}

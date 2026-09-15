@@ -24145,6 +24145,2206 @@
           "value": "3:H27"
         }
       ]
+    },
+    {
+      "circleId": "c-001349",
+      "currentName": "仙界大濕快樂攤",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A01"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001350",
+      "currentName": "下空少女",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A03"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001351",
+      "currentName": "壞孤兒",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A05"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001352",
+      "currentName": "日初翱祥-陌千",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A07"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001353",
+      "currentName": "LACC-請問有可以吃的黃藍嗎",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001354",
+      "currentName": "奇魚果大王",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001355",
+      "currentName": "應許之地",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001356",
+      "currentName": "祥初撿到鍛造石〖4〗",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001357",
+      "currentName": "祥初墓地鈴蘭",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A13"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001358",
+      "currentName": "藍黃十七度",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A15"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001359",
+      "currentName": "KARAS押形",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A17"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:A18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001360",
+      "currentName": "YuriSex 百合單細胞",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001361",
+      "currentName": "七味雜陳",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001362",
+      "currentName": "川貝蘋果派",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001363",
+      "currentName": "非黑即白",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001364",
+      "currentName": "TMPB Project",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001365",
+      "currentName": "期間限定",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001366",
+      "currentName": "JELDA",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B07"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001367",
+      "currentName": "犬出沒注意",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001368",
+      "currentName": "金呂",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001369",
+      "currentName": "牛乃與記錄者們",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001370",
+      "currentName": "夜行飛船",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001371",
+      "currentName": "三視圖",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001372",
+      "currentName": "午前2時。",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001373",
+      "currentName": "艾",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B15"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001374",
+      "currentName": "一窩女同汪汪叫",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B17"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001375",
+      "currentName": "發芽的沙發馬鈴薯",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001376",
+      "currentName": "燈無殖物園",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B19"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001377",
+      "currentName": "喃澀",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B20"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001378",
+      "currentName": "角角吉診室",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B21"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001379",
+      "currentName": "包伯尼幼兒園",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B22"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001380",
+      "currentName": "洛洛早餐店",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B23"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001381",
+      "currentName": "日安同學",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B24"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001382",
+      "currentName": "塗鴉與爬格子的星河小築",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B25"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001383",
+      "currentName": "Be Somewhere",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B26"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001384",
+      "currentName": "米家果園",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B27"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001385",
+      "currentName": "阿靡緹柚潔",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B28"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001386",
+      "currentName": "邪惡軸心魔王",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B29"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001387",
+      "currentName": "鳳梨酥沒蛋黃",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:B30"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001388",
+      "currentName": "蘿體西洋劍",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001389",
+      "currentName": "貓專用牛乳",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001390",
+      "currentName": "台灣百合漫畫研究",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001391",
+      "currentName": "芒果汁加珍珠",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001392",
+      "currentName": "布丁杯★",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001393",
+      "currentName": "粉紅泡泡小宇宙★",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001394",
+      "currentName": "甜甜圈王國",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001395",
+      "currentName": "Sailor b-612",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001396",
+      "currentName": "攤主是被隔壁逼來的",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001397",
+      "currentName": "攤主是從二十年前穿越來的",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001398",
+      "currentName": "魔法少女ノ魔法焼酒",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001399",
+      "currentName": "來世想當水母",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001400",
+      "currentName": "不 要 激 動",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001401",
+      "currentName": "西安事變",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001402",
+      "currentName": "星星魚乾",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001403",
+      "currentName": "狐狸與帽子風琴手",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001404",
+      "currentName": "葉荒",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C17"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001405",
+      "currentName": "或許是因為過於沉重不幸追撞弦卷集團快樂!幸運!微笑!耶!高級車",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001406",
+      "currentName": "CHU2大人最後的肉乾保護協會",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C19"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001407",
+      "currentName": "腰痛黃瓜",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C20"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001408",
+      "currentName": "葫蘆夏天hwulusummer",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C21"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C22"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001409",
+      "currentName": "紅藍有同居 我說了算",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C23"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001410",
+      "currentName": "內向的吸血鬼",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C24"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001411",
+      "currentName": "我看世嘉不懂賣馬畫2.0",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C25"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001412",
+      "currentName": "梁刑警電流急摳",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C26"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001413",
+      "currentName": "Derletzte Art",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C27"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001414",
+      "currentName": "觀葉植物的研究室",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C28"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001415",
+      "currentName": "516號牢房",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C29"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001416",
+      "currentName": "思想研究所情感部",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:C30"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001417",
+      "currentName": "Jump Animals",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D01"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001418",
+      "currentName": "紙容你口不容你手",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D03"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001419",
+      "currentName": "一大7早畫雙A",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001420",
+      "currentName": "在學女同追著我跑",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D06"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001421",
+      "currentName": "好米味",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001422",
+      "currentName": "快樂罌粟花自耕農會",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001423",
+      "currentName": "阿農Anon",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001424",
+      "currentName": "哨女",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001425",
+      "currentName": "勝利者的早餐",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001426",
+      "currentName": "工坊•夏至千里",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001427",
+      "currentName": "百元肉肉",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001428",
+      "currentName": "火貓堡",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D15"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001429",
+      "currentName": "塔邦棒棒",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D17"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001430",
+      "currentName": "企鵝PIEN",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001431",
+      "currentName": "生物四人甲子園",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D19"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001432",
+      "currentName": "すしヤ!",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D20"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001433",
+      "currentName": "多多",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D21"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001434",
+      "currentName": "酒鬼百合結婚事務所",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D22"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001435",
+      "currentName": "百合旅行企劃部",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D23"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001436",
+      "currentName": "入浴前後一小時請勿飲酒 by 長鏡頭",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D24"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001437",
+      "currentName": "錯落交織 Interweave",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D25"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001438",
+      "currentName": "不安定星系",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D26"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001439",
+      "currentName": "台北人",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D27"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:D28"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001440",
+      "currentName": "陽台沒午餐",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E01"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001441",
+      "currentName": "小花",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E03"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001442",
+      "currentName": "歐油希歡樂產業",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E05"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001443",
+      "currentName": "你罹患了迴天症候群",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001444",
+      "currentName": "落葉堆裡的翻車魚",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001445",
+      "currentName": "果物一途",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001446",
+      "currentName": "Polaris",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001447",
+      "currentName": "瘋貓食堂",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001448",
+      "currentName": "西宿舍洗衣間",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001449",
+      "currentName": "INSIDE LAB",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001450",
+      "currentName": "いろはに甘い節分",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001451",
+      "currentName": "和牛吃到飽",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001452",
+      "currentName": "被窩ZZ",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001453",
+      "currentName": "白三葉草自耕農",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E17"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001454",
+      "currentName": "絕讚發霉中",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001455",
+      "currentName": "百合車行",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E19"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E20"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001456",
+      "currentName": "烏烏烏大維",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E21"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001457",
+      "currentName": "小菊小花園",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E22"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001458",
+      "currentName": "木子的百合花園",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E23"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E24"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001459",
+      "currentName": "什麼都寫一點的菟子",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E25"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001460",
+      "currentName": "我推會在演唱會上親親",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E26"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001461",
+      "currentName": "Mo子宅屋",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E27"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:E28"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001462",
+      "currentName": "新中和福祉中心",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001463",
+      "currentName": "企鵝冰屋",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001464",
+      "currentName": "夜明曉更前",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001465",
+      "currentName": "口口鳥工作室",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001466",
+      "currentName": "非瑜不能吃",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001467",
+      "currentName": "草莓貝果的貝果工坊",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001468",
+      "currentName": "幻想布萊梅",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001469",
+      "currentName": "Kakela*Hane",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001470",
+      "currentName": "人工降雨",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F09"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001471",
+      "currentName": "勝利早餐店",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001472",
+      "currentName": "幻想失控",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001473",
+      "currentName": "氧寶寶的女同俱樂部",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001474",
+      "currentName": "湖底章魚音樂盒",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001475",
+      "currentName": "裝披風的衣櫃",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001476",
+      "currentName": "阿里阿巴巴阿千千",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001477",
+      "currentName": "No Yuri, No Life.",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F17"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001478",
+      "currentName": "玥炭繪館",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001479",
+      "currentName": "詠櫻堂",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F19"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F20"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001480",
+      "currentName": "七色蘑菇燴飯",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F21"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001481",
+      "currentName": "A.Zu.Na - cra park!",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F22"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001482",
+      "currentName": "鯊魚腳速食",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F23"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F24"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001483",
+      "currentName": "畫冥",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F25"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001484",
+      "currentName": "しろはす",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F26"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001485",
+      "currentName": "飛行熊咪貓商會",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F27"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001486",
+      "currentName": "兔子蛋糕事務所",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F28"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001487",
+      "currentName": "有這樣的喜樂蒂你幾點回家?",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F29"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001488",
+      "currentName": "大金毛很可愛",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:F30"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001489",
+      "currentName": "美栗",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001490",
+      "currentName": "Majuchime",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001491",
+      "currentName": "脖圍脖",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001492",
+      "currentName": "謝罪勞動",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001493",
+      "currentName": "龍師傅雞排攤",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G05"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001494",
+      "currentName": "D呱吃起來真爾新",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001495",
+      "currentName": "Ray的饗食天堂",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001496",
+      "currentName": "有百合人生就不是灰的",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G09"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001497",
+      "currentName": "青雨アメ",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G11"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001498",
+      "currentName": "ゆりりさいくらー",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001499",
+      "currentName": "日照不足",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001500",
+      "currentName": "魚燒字要多",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001501",
+      "currentName": "75吋鴿子捲餅不要醃漬物",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001502",
+      "currentName": "LQ7 - The Last Dance",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G17"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001503",
+      "currentName": "秋季限定香蕉水蜜桃聖代",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G18"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001504",
+      "currentName": "激凍冰的紅茶",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G19"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001505",
+      "currentName": "鴨子塗鴉",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G20"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001506",
+      "currentName": "要樂奈不要已讀我",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G21"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001507",
+      "currentName": "喵祥卉贏喔",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G22"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001508",
+      "currentName": "八雲島",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G23"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001509",
+      "currentName": "老P股",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G24"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001510",
+      "currentName": "狹間閣",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G25"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001511",
+      "currentName": "害羞人Saya",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G26"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001512",
+      "currentName": "廢柴小R",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G27"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G28"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001513",
+      "currentName": "黑黑黑",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G29"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001514",
+      "currentName": "夜触人身",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:G30"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001515",
+      "currentName": "PURE/南方純",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S01"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001516",
+      "currentName": "你也是舞台少女?",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S03"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001517",
+      "currentName": "しおらーめん",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S05"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-001518",
+      "currentName": "そそう支部",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S07"
+        },
+        {
+          "eventId": "ch-20",
+          "kind": "organizer-booth",
+          "value": "1:S08"
+        }
+      ]
     }
   ]
 }
