@@ -20,7 +20,7 @@ import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { TurnstileWidget } from "./turnstile-widget";
 import { AdminMapReviewPanel, MapContributorPanel } from "./map-contribution-panel";
-import { AdminStepUpBanner, AdminStepUpProvider, useAdminStepUp } from "./admin-step-up";
+import { SessionDeadline, useSessionExpiry } from "./session-status";
 import styles from "./portal.module.css";
 
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
@@ -192,9 +192,12 @@ export default function CirclePortalApp() {
   const event = getPublishedEvent(eventId) ?? PUBLISHED_EVENTS[0];
   /** What a late answer is compared against; `claims` lives above the keyed subtree. */
   const maintainedEventId = useRef(event.id);
-  /** Signing out is the whole of the admin step-up remedy, so the panel needs
-   * the same reset the header's own sign-out performs. */
   const forgetSession = useCallback(() => { setSession(null); setClaims([]); }, []);
+  const expireSession = useCallback(() => {
+    forgetSession();
+    setStatus({ kind: "error", message: "登入已到期，請重新登入。" });
+  }, [forgetSession]);
+  useSessionExpiry(session, expireSession);
 
   const refreshClaims = useCallback(async () => {
     // Set here as well as in the effect below: the claim list is the first
@@ -270,6 +273,7 @@ export default function CirclePortalApp() {
         {/* Shows which identity the server resolved, so a mismatch against
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
+        <SessionDeadline session={session} />
         {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
         {session.isAdmin && <a href="#admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
@@ -280,7 +284,7 @@ export default function CirclePortalApp() {
 
     {!ready ? <p className={styles.notice}>載入中…</p>
       : !session ? <SignIn />
-        : <AdminStepUpProvider onSignedOut={forgetSession}>
+        : <>
           {/* One event: no choice to make, so the portal opens straight into it. */}
           {PUBLISHED_EVENTS.length > 1 && <EventPicker
             eventId={event.id}
@@ -298,7 +302,7 @@ export default function CirclePortalApp() {
             <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
             {session.isAdmin && <AdminPanel event={event} />}
           </Fragment>
-        </AdminStepUpProvider>}
+        </>}
 
   </div>;
 }
@@ -1222,10 +1226,6 @@ function AdminPanel({ event }: { event: EventDefinition }) {
   const [takedownStatus, setTakedownStatus] = useState<Status>(IDLE);
   const [takedownId, setTakedownId] = useState("");
   const [reason, setReason] = useState("");
-  // One session state locks every form in this panel, so the banner at the top
-  // is the only place it is said; each form's own line stays free for what only
-  // that form can report.
-  const { blocked, report } = useAdminStepUp();
 
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -1283,16 +1283,11 @@ function AdminPanel({ event }: { event: EventDefinition }) {
     void decideClaim(claimId, decision)
       .then(() => refresh(false))
       .catch((error: unknown) => {
-        // The step-up notice under the queue already says it, next to the
-        // buttons it disabled. A second copy in a status line would only
-        // repeat it further from where it happened.
-        if (report(error)) return;
         setClaimStatus({ kind: "error", message: errorMessage(error) });
       });
   };
 
   return <section className={`${styles.card} ${styles.admin}`} id="admin">
-    <AdminStepUpBanner />
     <h2>管理：待審認領</h2>
     <p className={styles.editorHint}>目前活動：{event.name}。認領逐場活動分開，同名社團在不同活動是不同的認領。</p>
     <button type="button" onClick={() => refresh(true)} disabled={loading}>{loading ? "更新中…" : "重新整理待審認領"}</button>
@@ -1305,8 +1300,8 @@ function AdminPanel({ event }: { event: EventDefinition }) {
           {claim.evidenceUrl && <a href={claim.evidenceUrl} target="_blank" rel="noreferrer">佐證連結</a>}
           {claim.evidenceNote && <small>{claim.evidenceNote}</small>}
         </div>
-        <button type="button" disabled={blocked} onClick={() => decide(claim.id, "approve")}>核准</button>
-        <button type="button" disabled={blocked} onClick={() => decide(claim.id, "reject")}>婉拒</button>
+        <button type="button" onClick={() => decide(claim.id, "approve")}>核准</button>
+        <button type="button" onClick={() => decide(claim.id, "reject")}>婉拒</button>
       </li>)}
     </ul>}
     {/* Under the queue rather than at the foot of the panel: an error about
@@ -1318,11 +1313,10 @@ function AdminPanel({ event }: { event: EventDefinition }) {
     <input id="takedown-circle" value={takedownId} onChange={(event) => setTakedownId(event.target.value)} placeholder="c-000001" />
     <label htmlFor="takedown-reason">原因</label>
     <input id="takedown-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
-    <button type="button" disabled={blocked} onClick={() => {
+    <button type="button" onClick={() => {
       void takedownOverride(takedownId, reason)
         .then(() => { setTakedownStatus({ kind: "ok", message: "已撤下。" }); setTakedownId(""); setReason(""); })
         .catch((error: unknown) => {
-          if (report(error)) return;
           setTakedownStatus({ kind: "error", message: errorMessage(error) });
         });
     }}>撤下</button>
@@ -1339,21 +1333,14 @@ function AdminRoster() {
   const [rosterStatus, setRosterStatus] = useState<Status>(IDLE);
   const [disableStatus, setDisableStatus] = useState<Status>(IDLE);
   const [disableEmail, setDisableEmail] = useState("");
-  // `report` is stable across renders, so the effect below is not re-run — and
-  // the roster not re-read — when some other form reports a refusal.
-  const { blocked, report } = useAdminStepUp();
 
   const refresh = useCallback(() => {
     void listAdmins()
       .then((result) => { setAdmins(result.admins); setSelf(result.self); })
       .catch((error: unknown) => {
-        // Reading the roster is gated exactly like writing it, so a session
-        // past the step-up window lands here before anything has been pressed.
-        // That first refusal is what raises the banner above.
-        if (report(error)) return;
         setRosterStatus({ kind: "error", message: errorMessage(error) });
       });
-  }, [report]);
+  }, []);
 
   useEffect(refresh, [refresh]);
 
@@ -1362,7 +1349,7 @@ function AdminRoster() {
     void manageAdmin(target, action)
       .then(() => { setRosterStatus({ kind: "ok", message: action === "add" ? "已新增管理者。" : "已移除管理者。" }); setEmail(""); refresh(); })
       .catch((error: unknown) => {
-        setRosterStatus(report(error) ? IDLE : { kind: "error", message: errorMessage(error) });
+        setRosterStatus({ kind: "error", message: errorMessage(error) });
       });
   };
 
@@ -1375,13 +1362,13 @@ function AdminRoster() {
           <small>{admin.addedBy === "bootstrap" ? "由設定值建立" : `由 ${admin.addedBy ?? "未知"} 新增`}</small>
         </div>
         {admin.email !== self && admins.length > 1
-          && <button type="button" disabled={blocked} onClick={() => run(admin.email, "remove")}>移除</button>}
+          && <button type="button" onClick={() => run(admin.email, "remove")}>移除</button>}
       </li>)}
     </ul>
 
     <label htmlFor="admin-email">新增管理者 email</label>
     <input id="admin-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="someone@example.com" />
-    <button type="button" disabled={blocked || rosterStatus.kind === "busy"} onClick={() => run(email, "add")}>新增</button>
+    <button type="button" disabled={rosterStatus.kind === "busy"} onClick={() => run(email, "add")}>新增</button>
 
     {rosterStatus.kind !== "idle" && rosterStatus.kind !== "busy" && <p className={rosterStatus.kind === "error" ? styles.error : styles.notice}>{rosterStatus.message}</p>}
 
@@ -1391,13 +1378,13 @@ function AdminRoster() {
     <input id="disable-account-email" type="email" value={disableEmail} onChange={(event) => setDisableEmail(event.target.value)} />
     <button
       type="button"
-      disabled={blocked || !disableEmail || disableStatus.kind === "busy"}
+      disabled={!disableEmail || disableStatus.kind === "busy"}
       onClick={() => {
         setDisableStatus({ kind: "busy", message: "處理中…" });
         void disableAccount(disableEmail)
           .then(() => { setDisableStatus({ kind: "ok", message: "帳號已停用。" }); setDisableEmail(""); })
           .catch((error: unknown) => {
-            setDisableStatus(report(error) ? IDLE : { kind: "error", message: errorMessage(error) });
+            setDisableStatus({ kind: "error", message: errorMessage(error) });
           });
       }}
     >停用</button>

@@ -11,7 +11,7 @@
 ## 入口與登入
 
 - 入口是 `/organizer`，`noindex, nofollow`，不出現在公開導覽，也**不與 `/circle` 或閱讀端共用 bundle**。
-- 登入沿用[社團自助控制面](./circle-portal.md)的 email 一次性連結與 session cookie；`POST /api/auth/request-link` 以 `audience: "organizer"` 決定信件與登入連結指向 `/organizer`。Turnstile、速率上限與 session 規則只寫在該契約，本文不重複。
+- 登入沿用[社團自助控制面](./circle-portal.md)的 email 一次性連結與統一 7 天 session cookie；`POST /api/auth/request-link` 以 `audience: "organizer"` 決定信件與登入連結指向 `/organizer`。Turnstile、速率上限與 session 規則只寫在該契約，本文不重複。
 - **帳號本身沒有 Organizer 權限。** 能看到工作區的條件是持有任一候選活動的 grant，或是全域管理者。
 - 工作區是桌機介面。視窗過窄時顯示「請改用桌機」，不提供縮小版的地圖編輯。
 - 左側活動列表可以收合，收合後把寬度讓給工作區。收合狀態不保存，重新登入回到展開。
@@ -28,9 +28,9 @@
 
 ## 邀請制，不能自助開活動
 
-- 候選活動只能由**全域管理者**以 `POST /api/admin/organizer/events` 建立，必須提供暫定名稱與 Owner email，並要求 fresh session。
+- 候選活動只能由**全域管理者**以 `POST /api/admin/organizer/events` 建立，必須提供暫定名稱與 Owner email，並要求有效 session。
 - 建立成功即寄出 Organizer 邀請信；受邀者以該連結登入後自動接受待處理邀請並取得 grant。
-- **管理者把自己填成負責人時，owner grant 在建立活動的同一個 transaction 內直接成立**，該筆邀請同時標記為建立時即接受，不必先收信。管理者本來就是唯一能增減 Owner 的角色，繞一圈收信不增加任何保證，卻讓建立者停在 `admin` 事件角色、看不到 Owner 專屬的送審控制項。稽核寫的是 `organizer_event.owner_granted_on_create`，與接受邀請分開。信照常寄出（那是一條可用的登入連結），寄信預算與寄送失敗的處理都不變；負責人填別人時行為完全不變，仍由對方收信登入後取得 grant。送審與核准的 fresh session 要求不因此放寬。
+- **管理者把自己填成負責人時，owner grant 在建立活動的同一個 transaction 內直接成立**，該筆邀請同時標記為建立時即接受，不必先收信。管理者本來就是唯一能增減 Owner 的角色，繞一圈收信不增加任何保證，卻讓建立者停在 `admin` 事件角色、看不到 Owner 專屬的送審控制項。稽核寫的是 `organizer_event.owner_granted_on_create`，與接受邀請分開。信照常寄出（那是一條可用的登入連結），寄信預算與寄送失敗的處理都不變；負責人填別人時行為完全不變，仍由對方收信登入後取得 grant。送審與核准的 有效 session 要求不因此放寬。
 - Owner 可邀請或撤銷 Editor；**只有全域管理者可以增減 Owner**。撤銷對尚未登入者同樣有效——撤掉 grant 或撤掉尚未接受的邀請，任一成立即算成功。
 - 邀請會鑄造真正的登入連結，因此受三道獨立預算限制：每小時每收件匣 3 封**他人寄來的**邀請、每小時每邀請人 10 封，另沿用每 IP 每小時 20 封登入連結的上限。收件匣預算刻意不與本人自助索取的登入連結共用計數器，否則邀請人可以花光對方的額度把人鎖在帳號外。
 
@@ -116,9 +116,9 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 
 - `POST …/validate` 回傳 `issues[]`，每筆帶 `severity`、`step`（`event`／`venue`／`import`／`map`／`preview`）、`code`，必要時帶 `row` 或 `target`。缺任何一份「活動日 × venue-space」地圖是 error，不是 warning。成功時只把 workspace 的 `last_validated_version` 記為目前版本；不增加 candidate version，也不建立內容 revision。任何後續內容寫入使版本前進後，這個完成狀態自然失效；若版本在 validation 與 marker 寫入之間前進，API 回 409 並要求重新驗證，不會對舊版回報成功。
 - `POST …/preview` 回傳 `organizer-reader-preview/1`：草稿、匯入的配置與每份地圖 layout，供 Reader 樣式預覽。它不寫入任何資料。
-- `POST …/submit` 只有 Owner 可以呼叫，且要求 fresh session。新送審固定 `organizer-submission-snapshot/3`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2` snapshot bytes/hash 保持不變。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
+- `POST …/submit` 只有 Owner 可以呼叫，且要求有效 session。新送審固定 `organizer-submission-snapshot/3`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2` snapshot bytes/hash 保持不變。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
-- `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以 fresh session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
+- `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以有效 session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。
 
 ## 發布邊界
@@ -137,9 +137,9 @@ driver 第一次 remote mutation 前必須先以目前 job、candidate version�
 
 lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 failed/retryable；不能推進步驟，也不能覆寫新 lease 持有者。失敗記錄遭 fence 拒絕時向 dispatcher 拋出失敗，不把該 delivery 當成成功。
 
-`POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin fresh-session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
+`POST /api/organizer/publications/:jobId/retry` 先驗證登入再查詢 job，與既有 admin route 共用 Owner／Admin 有效 session 檢查，Editor 無權重試。只恢復同一 failed/retryable job 與 snapshot，不建立另一筆 job；不可重試的 collision/hash failure 顯示具體下一步，不表示內容退件。
 
-只有明確的 Owner／Admin 動作可以把「目前版本、已核准、狀態為 `failed`」的候選退回 `changes_requested`：`POST /api/organizer/events/:candidateId/reopen` 需要 fresh session、`expectedVersion` 與必填退回理由。它不受 publication mode disabled 影響，但會先取得既有 global lease，查核固定 data/main repository 中 `organizer/{jobId}/data` 與 `/main` 的分支，以及包含 closed／merged 的完整 PR 分頁；任何 branch、PR、403、網路錯誤、格式錯誤或不完整分頁都拒絕。七個 remote checkpoint 與 `remote_write_intent_at` 都必須為 NULL，且 audit 與提交交易間 lease token 仍有效。
+只有明確的 Owner／Admin 動作可以把「目前版本、已核准、狀態為 `failed`」的候選退回 `changes_requested`：`POST /api/organizer/events/:candidateId/reopen` 需要 有效 session、`expectedVersion` 與必填退回理由。它不受 publication mode disabled 影響，但會先取得既有 global lease，查核固定 data/main repository 中 `organizer/{jobId}/data` 與 `/main` 的分支，以及包含 closed／merged 的完整 PR 分頁；任何 branch、PR、403、網路錯誤、格式錯誤或不完整分頁都拒絕。七個 remote checkpoint 與 `remote_write_intent_at` 都必須為 NULL，且 audit 與提交交易間 lease token 仍有效。
 
 成功退回會遞增 candidate version、保留 `eventId` 鎖定與舊 snapshot／review／job，新增 immutable revision 與含理由的 `changes_requested` review，並令舊 job `retryable = 0`。舊 job 仍會在頁面顯示為上一版本的歷史發布紀錄，不能再 retry；新的版本回到一般編輯、驗證與送審流程。Owner／Admin 以外的 Editor 沒有此動作。
 
@@ -155,7 +155,7 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 1. `ORGANIZER_PUBLICATION_MODE` 預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。github 注入真實 data／main driver，每次呼叫只推進一個 bounded transition；独立 Worker 依上一段持續推進，設定仍為 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
 2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
-3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求 fresh-admin session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
+3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求有效的管理者 session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 
 GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 60s`、`exp = iat + 600s`），接受 PKCS#8 與 PKCS#1 RSA private key。每個 provider／job 只有一份記憶體 cache；token 剩餘 60 秒內更新，進行中的 mint 共用同一個 pending promise。請求遭遇 `401` 時，每個 request 最多 invalidate 並重試一次，而且只有被拒絕的 token 仍是目前 cache 才能 invalidate；`403` 不刷新 token。缺少 App ID、installation ID 或 private key，以及 import/sign/fetch/JSON 例外，都轉成固定 `PublicationFailure`，不保存或回傳 raw exception、request body、Authorization、key、JWT 或 token。
 
@@ -203,12 +203,12 @@ CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部�
 
 - 未登入或無 grant 的帳號拿不到任何候選活動；不存在的候選與無權限的候選都回 404，不區分。
 - 任何寫入帶錯 `expectedVersion` 一律 409，且回應指出目前版本。
-- 送審與核准是兩次獨立動作，各自要求 fresh session；核准自己送出的 revision 會在稽核留下 `selfApproval`。
+- 送審與核准是兩次獨立動作，各自要求有效 session；核准自己送出的 revision 會在稽核留下 `selfApproval`。
 - 匯入 API 拒絕未宣告的活動日、場館空間或展區，並在錯誤訊息指出來源列號。
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場館空間或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
 - `ORGANIZER_PUBLICATION_MODE` 未設定時，核准後的候選停在 `approved`，且 webhook 回 503。
-- 只有 Owner／Admin 以 fresh session、目前版本與非空理由可退回 `failed` 候選；系統先以 global lease 查核固定遠端分支與完整 PR 分頁，任何遠端紀錄或不確定性都拒絕，成功後保留 eventId／歷史並令舊 job 不可重試。
+- 只有 Owner／Admin 以有效 session、目前版本與非空理由可退回 `failed` 候選；系統先以 global lease 查核固定遠端分支與完整 PR 分頁，任何遠端紀錄或不確定性都拒絕，成功後保留 eventId／歷史並令舊 job 不可重試。
 - 退回期間若 lease 過期或版本 CAS 失敗，不新增 revision、review 或 audit；sticky `remote_write_intent_at` 與任一 confirmed checkpoint 也會阻止退回。
 - 停在 `queued` 超過 15 分鐘的發布工作，在活動列表與活動頁都顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
 - 逾時失敗的訊息只有在該 job 一個 checkpoint 都沒有時才說發布沒有開始；已經留下 checkpoint 的工作沿用既有 retryable 措辭，不與四階段清單上的進度互相矛盾。這條對核准流程建立的 job（`preparing_data`）與舊建立路徑（`assemble`）都成立。

@@ -45,18 +45,8 @@ import {
 export const SESSION_COOKIE = "__Host-ff47_session";
 
 const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
-/** Approving or taking down requires a session created recently: cheap step-up. */
-const ADMIN_FRESH_SESSION_MS = 24 * 60 * 60 * 1000;
-/**
- * Names the one refusal a reviewer can clear without help, so the panel can
- * tell "this session is too old" apart from every other 401 without matching
- * on the message text. That lets it disable exactly what the gate will refuse
- * and point at the sign-in that fixes it, instead of leaving a sentence
- * somewhere below the button that produced it.
- */
-export const ADMIN_SESSION_STALE = "admin_session_stale";
 
 const LIMITS = {
   loginPerEmailPerHour: 5,
@@ -234,6 +224,8 @@ export function createCirclePortalHandlers({
     const signature = raw.slice(separator + 1);
     if (!await hmacVerify(config.sessionSecret, sessionId, signature)) return null;
     const session = await repository.getSession(sessionId, config.now(), allowDeleting);
+    // Older 30-day cookies obey the same deadline as new sessions.
+    if (session && config.now() >= session.sessionCreatedAt + SESSION_TTL_MS) return null;
     return session ? { ...session, sessionId } : null;
   }
 
@@ -363,26 +355,31 @@ export function createCirclePortalHandlers({
 
     // A fresh id on every verify, so a leaked earlier value cannot be reused.
     const sessionId = randomToken();
-    await repository.createSession(accountId, now, now + SESSION_TTL_MS, sessionId);
+    const admin = await isAdmin(email);
+    const sessionTtl = SESSION_TTL_MS;
+    await repository.createSession(accountId, now, now + sessionTtl, sessionId);
     const signature = await hmacSign(config.sessionSecret, sessionId);
     await repository.writeAudit({ at: now, actorAccountId: accountId, actorRole: "circle", action: "auth.session_created", subjectType: "account", subjectId: accountId, ipHash: await clientIpHash(request) });
 
     return json({
       email,
-      isAdmin: await isAdmin(email),
+      isAdmin: admin,
+      expiresAt: now + sessionTtl,
       isMapContributor: await repository.hasActiveMapContributor(accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
     }, 200, {
-      "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(SESSION_TTL_MS / 1000)),
+      "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(sessionTtl / 1000)),
     });
   }
 
   async function session(request: Request) {
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
+    const admin = await isAdmin(current.email);
     return json({
       email: current.email,
-      isAdmin: await isAdmin(current.email),
+      isAdmin: admin,
+      expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
       isMapContributor: await repository.hasActiveMapContributor(current.accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
     });
@@ -928,17 +925,8 @@ export function createCirclePortalHandlers({
     return { ok: true, session: current };
   }
 
-  async function requireFreshAdmin(request: Request): Promise<AdminGate> {
-    const gate = await requireAdmin(request);
-    if (!gate.ok) return gate;
-    if (config.now() - gate.session.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
-      return { ok: false, response: json({ error: "管理操作需要重新登入。", code: ADMIN_SESSION_STALE }, 401) };
-    }
-    return gate;
-  }
-
   async function adminProbeGitHubInstallation(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     if (!body || Object.keys(body).length !== 0) {
@@ -958,7 +946,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminManageMapContributor(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
@@ -979,7 +967,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminListStaleMapDrafts(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const daysValue = Number(new URL(request.url).searchParams.get("days") ?? "30");
     if (!Number.isSafeInteger(daysValue) || daysValue < 1 || daysValue > 365) return json({ error: "days 必須介於 1 與 365。" }, 400);
@@ -1262,7 +1250,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminListMapDrafts(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     return json({ drafts: await repository.listMapDraftsForAdmin(config.eventId) });
   }
@@ -1317,7 +1305,7 @@ export function createCirclePortalHandlers({
     // commenting on a draft they own is a contributor here, grant and all.
     const asAdmin = admin && draft.owner_account_id !== current.accountId;
     if (asAdmin) {
-      const gate = await requireFreshAdmin(request);
+      const gate = await requireAdmin(request);
       if (!gate.ok) return gate.response;
     } else if (!await repository.hasActiveMapContributor(current.accountId)) {
       return json({ error: "沒有有效的地圖貢獻者權限。" }, 403);
@@ -1349,7 +1337,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminReviewMapDraft(request: Request, draftId: string) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     const expectedRevision = body?.expectedRevision;
@@ -1446,7 +1434,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminExportMapDraft(request: Request, draftId: string) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     const expectedRevision = body?.expectedRevision;
@@ -1522,8 +1510,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminListClaims(request: Request) {
-    // Reading the live queue must work for the full valid session. Only a
-    // decision requires step-up; polling cannot renew sessionCreatedAt.
+    // Reads and decisions share one session deadline; polling cannot renew it.
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const claims = await repository.listClaimsByStatus(config.eventId, "pending");
@@ -1540,7 +1527,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminDecideClaim(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
 
     const body = await readJson(request);
@@ -1578,7 +1565,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminListAdmins(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const admins = await repository.listAdmins();
     return json({
@@ -1588,7 +1575,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminManageAdmins(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
 
     const body = await readJson(request);
@@ -1622,7 +1609,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminDisableAccount(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
@@ -1642,7 +1629,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminTakedown(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
 
     const body = await readJson(request);
@@ -1833,7 +1820,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminCreateOrganizerCandidate(request: Request) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     const tentativeName = typeof body?.tentativeName === "string" ? body.tentativeName.normalize("NFKC").trim() : "";
@@ -2510,9 +2497,6 @@ export function createCirclePortalHandlers({
     }
     if (role === "owner" && !access.admin) return json({ error: "只有網站管理者可以增減負責人。" }, 403);
     if (role === "editor" && access.role !== "owner") return json({ error: "只有負責人可以管理協作者。" }, 403);
-    if (role === "owner" && config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
-      return json({ error: "變更負責人需要重新登入。" }, 401);
-    }
     const ipHash = await clientIpHash(request);
     if (action === "invite" && !await organizerInvitationAllowed(email, access.current.accountId, ipHash, config.now())) {
       return json({ error: "邀請寄送過於頻繁，請稍後再試。" }, 429);
@@ -2544,9 +2528,6 @@ export function createCirclePortalHandlers({
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
     if (access.role !== "owner") return json({ error: "只有負責人可以送審。" }, 403);
-    if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
-      return json({ error: "送審需要重新登入。" }, 401);
-    }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) return json({ error: "版本資訊無效，請重新載入。" }, 400);
@@ -2609,7 +2590,7 @@ export function createCirclePortalHandlers({
   }
 
   async function adminReviewOrganizerCandidate(request: Request, candidateId: string) {
-    const gate = await requireFreshAdmin(request);
+    const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
@@ -2689,7 +2670,6 @@ export function createCirclePortalHandlers({
     const access = await organizerAccess(request, job.candidate_id);
     if (!access.ok) return access.response;
     if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以重試發布。" }, 403);
-    if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) return json({ error: "重試發布需要重新登入。" }, 401);
     if ((config.organizerPublicationMode ?? "disabled") === "disabled" || !dispatchOrganizerPublication) {
       return json({ error: "發布功能尚未啟用。" }, 503);
     }
@@ -2721,9 +2701,6 @@ export function createCirclePortalHandlers({
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
     if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以退回修改。" }, 403);
-    if (config.now() - access.current.sessionCreatedAt > ADMIN_FRESH_SESSION_MS) {
-      return json({ error: "退回修改需要重新登入。", code: ADMIN_SESSION_STALE }, 401);
-    }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const reason = typeof body?.reason === "string" ? body.reason.normalize("NFKC").trim() : "";

@@ -32,7 +32,7 @@ after(async () => {
 
 const ORIGIN = "https://verify.kotoban.top";
 const NOW = 1_788_000_000_000;
-const ADMIN_SESSION_STALE_MS = 24 * 60 * 60 * 1000;
+const SESSION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const REASON = "資料需要補充";
 const CANDIDATE_ID = "reopen-handler-candidate";
 const JOB_ID = "reopen-handler-job";
@@ -187,7 +187,7 @@ async function ageSession(cookie) {
   const sessionId = value.slice(0, value.lastIndexOf("."));
   const result = await database.prepare(
     "UPDATE sessions SET created_at = ?1 WHERE id = ?2",
-  ).bind(now - ADMIN_SESSION_STALE_MS - 1, sessionId).run();
+  ).bind(now - SESSION_EXPIRY_MS - 1, sessionId).run();
   assert.equal(result.meta.changes, 1);
 }
 
@@ -347,7 +347,7 @@ for (const actor of ["owner", "admin"]) {
 
     const response = await reopen(candidate, cookie, { expectedVersion: 1, reason: REASON });
     assert.equal(response.status, 401);
-    assert.equal((await response.json()).code, "admin_session_stale");
+    assert.match((await response.json()).error, /尚未登入/);
     assert.deepEqual(calls, []);
     assert.deepEqual(await readBusinessState(), before);
     assert.equal(await readGlobalLease(), null);

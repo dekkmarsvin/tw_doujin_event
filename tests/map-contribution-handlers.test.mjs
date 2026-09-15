@@ -671,7 +671,7 @@ test("only the draft owner or an admin can add to its thread", async () => {
   )).status, 403, "commenting needs the same live grant that writing does");
 });
 
-test("speaking as an administrator needs a fresh session, like every other admin write", async () => {
+test("reviewer and contributor comments share the seven-day login deadline", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");
   await grant("mapper@example.test", adminCookie);
@@ -681,14 +681,14 @@ test("speaking as an administrator needs a fresh session, like every other admin
   );
   assert.equal((await comment(adminCookie)).status, 201);
 
-  clock = NOW + 25 * 60 * 60 * 1000;
+  clock = NOW + 7 * 24 * 60 * 60 * 1000;
   assert.equal((await comment(adminCookie)).status, 401,
-    "a still-valid but stale admin session cannot put words in front of a contributor as a reviewer");
+    "an expired login cannot post a review");
   assert.equal((await repository.listMapDraftComments(draft.draftId)).length, 1);
 
-  // The contributor's own path is not an administrative write, so it is not
-  // held to the reauthentication boundary.
-  assert.equal((await comment(mapperCookie)).status, 201);
+  assert.equal((await comment(mapperCookie)).status, 401);
+  const renewed = await signIn("mapper@example.test");
+  assert.equal((await comment(renewed)).status, 201);
   assert.deepEqual((await repository.listMapDraftComments(draft.draftId)).map(({ author_role }) => author_role),
     ["admin", "map_contributor"]);
 });

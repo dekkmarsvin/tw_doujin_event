@@ -33,7 +33,7 @@
 .header h1 { font-size: 20px; line-height: 1.2; letter-spacing: .02em; }
 .header p, .sidebarTitle p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .identity, .row { display: flex; align-items: center; gap: 10px; }
-.identity { color: var(--muted); font-size: 12px; }
+.identity { color: var(--muted); font-size: 12px; flex-wrap: wrap; }
 .secondary, .ghost { border-color: var(--line) !important; background: var(--surface) !important; color: var(--ink) !important; }
 .secondary:hover:not(:disabled), .ghost:hover:not(:disabled) { border-color: #aeb6b3 !important; background: var(--map-paper) !important; }
 .textButton { border-color: transparent !important; padding: 4px 0 !important; background: transparent !important; color: var(--ink) !important; text-decoration: underline; text-underline-offset: 3px; }
