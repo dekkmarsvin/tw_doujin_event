@@ -312,6 +312,7 @@ test("legacy venue references are explicitly completed without replacing records
   const getDetail = async () => (await handlers.getOrganizerCandidate(request(path, "GET", undefined, cookie), candidateId)).json();
   const before = await getDetail();
   assert.deepEqual(before.missingVenueReferences.map(({ id }) => id).sort(), [venue.id, space.id].sort());
+  assert.equal(before.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "needs_attention");
   const input = { expectedVersion: 2, kind: "venue", referenceId: venue.id, name: "正式場館名稱", sourceUrl: "https://venue.example/official" };
   const complete = (body = input, session = cookie) => handlers.createOrganizerReferenceEntry(request(`${path}/references`, "POST", body, session), candidateId);
   assert.equal((await complete(input, "")).status, 401);
@@ -342,7 +343,7 @@ test("legacy venue references are explicitly completed without replacing records
   assert.equal(after.event.version, before.event.version);
   assert.deepEqual(after.revisions, before.revisions);
   assert.deepEqual(after.draft, before.draft);
-  assert.equal(after.workspace.readiness.sections.flatMap((item) => item.issues).some((issue) => issue?.code === "invalid_reference_records"), false);
+  assert.equal(after.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "complete");
   assert.equal(after.venueCatalog.venues.find((item) => item.id === venue.id).name, "舊場館");
 });
 
