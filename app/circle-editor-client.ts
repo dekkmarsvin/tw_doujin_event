@@ -83,6 +83,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "same-origin",
     headers: { accept: "application/json", ...(mutating && !multipart ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
+  reportSessionResponse(response.status);
   const text = await response.text();
 
   let body: Record<string, unknown> = {};
@@ -102,7 +103,6 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
 
-  reportSessionResponse(response.status);
   if (!response.ok) throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗，請稍後再試。", response.status, body);
   return body as T;
 }

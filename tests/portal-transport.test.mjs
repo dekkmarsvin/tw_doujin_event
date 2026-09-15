@@ -15,6 +15,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { onRequest } = await environment.runner.import("/functions/_middleware.ts");
 const client = await environment.runner.import("/app/circle-editor-client.ts");
+const organizerClient = await environment.runner.import("/app/organizer-client.ts");
 const { requestedEventId } = await environment.runner.import("/functions/_portal.ts");
 after(() => vite.close());
 
@@ -130,6 +131,33 @@ beforeEach(() => {
 });
 
 after(() => { globalThis.fetch = originalFetch; });
+
+test("JSON and map background API refusals expire a session only on 401, even without JSON", async () => {
+  const originalWindow = globalThis.window;
+  const window = new EventTarget();
+  globalThis.window = window;
+  let expired = 0;
+  window.addEventListener(client.SESSION_EXPIRED_EVENT, () => { expired += 1; });
+  try {
+    for (const run of [
+      () => client.readSession(),
+      () => organizerClient.listOrganizerEvents(),
+      () => organizerClient.readOrganizerMapBackground("candidate-a", "draft-a"),
+    ]) for (const status of [401, 403]) for (const body of ['{"error":"refused"}', "Unauthorized"]) {
+      globalThis.fetch = async () => new Response(body, { status });
+      expired = 0;
+      await assert.rejects(run, error => error instanceof client.PortalError && error.status === status);
+      assert.equal(expired, status === 401 ? 1 : 0, `${status}: ${body}`);
+    }
+    globalThis.fetch = async () => new Response(null, { status: 404 });
+    expired = 0;
+    assert.equal(await organizerClient.readOrganizerMapBackground("candidate-a", "draft-a"), null);
+    assert.equal(expired, 0, "an absent background does not expire the session");
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
 
 test("the client declares json on every mutation, including bodyless ones", async () => {
   await client.signOut();
