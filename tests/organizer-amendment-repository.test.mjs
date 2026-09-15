@@ -174,11 +174,10 @@ test("the legacy event unique index upgrades atomically and old CREATE IF NOT EX
   await assert.rejects(insert("duplicate-amend", "AMEND"), /UNIQUE/);
 });
 
-test("ordinary candidate saves, imports and approval cannot bypass the amendment-only path", async () => {
+test("ordinary candidate saves and imports cannot bypass the amendment-only path", async () => {
   await repository.createOrganizerAmendment(createInput());
   assert.equal((await repository.saveOrganizerCandidate({ candidateId: "amendment", actorAccountId: "owner", expectedVersion: 1, eventId: "event-alpha", draftJson, now })).ok, false);
   assert.equal((await repository.replaceOrganizerImport({ candidateId: "amendment", actorAccountId: "owner", expectedVersion: 1, source: {}, rows, now })).ok, false);
-  assert.equal((await repository.submitOrganizerCandidate({ candidateId: "amendment", actorAccountId: "owner", expectedVersion: 1, now })).ok, false);
   assert.equal((await repository.reviewOrganizerCandidate({ candidateId: "amendment", actorAccountId: "admin", expectedVersion: 1, decision: "approve", now })).ok, false);
   assert.equal((await repository.getOrganizerCandidate("amendment")).current_version, 1);
   assert.equal((await repository.getOrganizerAmendment("amendment")).changes_json, "[]");

@@ -33,6 +33,7 @@ beforeEach(async () => {
   await repository.ensureTables();
   await repository.clearPreviewData();
   adminId = await repository.upsertAccount("admin@example.test", NOW);
+  await repository.addAdmin("admin@example.test", "bootstrap", NOW);
   ownerId = await repository.upsertAccount("owner@example.test", NOW);
 });
 

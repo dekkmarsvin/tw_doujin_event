@@ -29,6 +29,7 @@ import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import { createOrganizerReference, createCategoryReference, createVenueReference, createVenueSpaceReference, projectReferenceCatalog,
   resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
 import { PublicationFailure, publicationHasStarted } from "./organizer-publication";
+import { buildApprovedPublicationArtifacts } from "./publication-artifacts";
 import { planOrganizerAmendmentCandidate, readOrganizerAmendmentBaseline,
   type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
 import {
@@ -2063,7 +2064,7 @@ export function createCirclePortalHandlers({
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
-      publicationAvailable: candidate.publication_operation !== "AMEND" && config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
+      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
       publication: publication ? {
         id: publication.id,
         status: publication.status,
@@ -2636,9 +2637,6 @@ export function createCirclePortalHandlers({
   async function submitOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
-      return json({ error: "已發布修正的送審與發布尚未開放；目前修正草稿會保留。", code: "amendment_publication_unavailable" }, 503);
-    }
     if (access.role !== "owner") return json({ error: "只有負責人可以送審。" }, 403);
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
@@ -2655,6 +2653,10 @@ export function createCirclePortalHandlers({
     if (!referenceSnapshot) return json({ error: "缺少完整的主辦、分類與場館來源記錄。" }, 422);
     const contentRevision = (await repository.listOrganizerCandidateRevisions(candidateId)).find((revision) => revision.version === expectedVersion);
     if (!contentRevision) return json({ error: "找不到目前內容版本，請重新載入。" }, 409);
+    const amendment = candidate.publication_operation === "AMEND" ? await readAmendment(candidateId) : null;
+    if (candidate.publication_operation === "AMEND" && (!amendment || amendment.stored.current_version !== expectedVersion)) {
+      return json({ error: "修正內容已變更，請重新載入。" }, 409);
+    }
     const mapSnapshots = maps.map((map) => {
       const stored = contents.get(map.id);
       return {
@@ -2664,7 +2666,9 @@ export function createCirclePortalHandlers({
       };
     });
     const snapshotJson = JSON.stringify({
-      schema: "organizer-submission-snapshot/3", candidateId, candidateVersion: expectedVersion,
+      schema: amendment ? "organizer-submission-snapshot/4" : "organizer-submission-snapshot/3", candidateId, candidateVersion: expectedVersion,
+      ...(amendment ? { operation: "AMEND", amendment: { baselineJson: amendment.stored.baseline_json,
+        baselineSha256: amendment.stored.baseline_sha256, changes: amendment.changes } } : {}),
       eventId: draft.event.id, draft,
       contentUpdatedAt: new Date(contentRevision.created_at).toISOString(),
       references: referenceSnapshot,
@@ -2683,6 +2687,13 @@ export function createCirclePortalHandlers({
       maps: mapSnapshots.sort((a, b) => a.periodKey.localeCompare(b.periodKey) || a.venueSpaceId.localeCompare(b.venueSpaceId)),
     });
     const revisionHash = await sha256Hex(snapshotJson);
+    if (amendment) {
+      try { await buildApprovedPublicationArtifacts({ snapshotJson, approvalHash: revisionHash }); }
+      catch (error) {
+        if (!(error instanceof PublicationFailure)) throw error;
+        return json({ error: error.message, code: error.code }, 422);
+      }
+    }
     const snapshot = await repository.storeOrganizerSubmissionSnapshot({
       candidateId, candidateVersion: expectedVersion as number, actorAccountId: access.current.accountId,
       snapshotJson, sha256: revisionHash, now: config.now(),
@@ -2704,9 +2715,6 @@ export function createCirclePortalHandlers({
   async function adminReviewOrganizerCandidate(request: Request, candidateId: string) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
-    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
-      return json({ error: "已發布修正的核准發布尚未開放。", code: "amendment_publication_unavailable" }, 503);
-    }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const decision = body?.decision;
@@ -2726,12 +2734,29 @@ export function createCirclePortalHandlers({
       if (await sha256Hex(snapshot.snapshot_json) !== snapshot.sha256) {
         return json({ error: "送審內容與記錄不一致，無法核准。", code: "snapshot_mismatch" }, 409);
       }
+      if (candidate.publication_operation === "AMEND") {
+        try {
+          const artifacts = await buildApprovedPublicationArtifacts({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256 });
+          const amendment = await readAmendment(candidateId);
+          const approved = artifacts.snapshot.amendment;
+          if (artifacts.operation !== "AMEND" || artifacts.snapshot.candidateId !== candidateId
+            || artifacts.snapshot.candidateVersion !== expectedVersion || artifacts.event.id !== candidate.event_id
+            || !amendment || amendment.stored.current_version !== expectedVersion
+            || approved?.baselineJson !== amendment.stored.baseline_json || approved.baselineSha256 !== amendment.stored.baseline_sha256
+            || JSON.stringify(approved.changes) !== amendment.stored.changes_json) {
+            return json({ error: "修正送審內容與固定基準不一致，無法核准。", code: "snapshot_mismatch" }, 409);
+          }
+        } catch (error) {
+          if (!(error instanceof PublicationFailure)) throw error;
+          return json({ error: error.message, code: error.code }, 409);
+        }
+      }
       if (candidate.status === "submitted") {
         const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
         if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
         const exists = draft.event.id && (config.publishedEvent
           ? await config.publishedEvent(draft.event.id) : draft.event.id === config.eventId);
-        if (exists) return json({ error: "這個活動代碼已存在，首次發布不能覆寫。請使用已發布活動修正流程。", code: "event_id_collision" }, 409);
+        if (exists && candidate.publication_operation !== "AMEND") return json({ error: "這個活動代碼已存在，首次發布不能覆寫。請使用已發布活動修正流程。", code: "event_id_collision" }, 409);
         const { issues } = await validateOrganizerWorkspace(candidateId, draft);
         if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
       }

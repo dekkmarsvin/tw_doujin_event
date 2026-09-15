@@ -59,3 +59,11 @@ test("an active ruleset alone is not rollout approval", () => {
   assert.ok(publicationRolloutProblems("main", [{ ...valid, enforcement: "disabled" }], 1).length);
   assert.ok(publicationRolloutProblems("main", [valid], 0).includes("unverified_app_identity"));
 });
+
+
+test("amendment conflicts explain why blind retry cannot overwrite changed public data", () => {
+  for (const failureCode of ["amendment_baseline_changed", "amendment_base_conflict"]) {
+    assert.match(publicationFailureMessage({ failureCode, retryable: false }), /公開版本或發布資料已變更/);
+    assert.match(publicationFailureMessage({ failureCode, retryable: false }), /不能直接重試覆寫/);
+  }
+});

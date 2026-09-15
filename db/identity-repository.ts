@@ -2485,7 +2485,6 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       getOrganizerCandidate(input.candidateId), organizerRole(input.candidateId, input.actorAccountId),
     ]);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
-    if (candidate.publication_operation === "AMEND") return { ok: false as const, reason: "status" as const, status: candidate.status };
     if (role !== "owner") return { ok: false as const, reason: "forbidden" as const };
     if (candidate.current_version !== input.expectedVersion) {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
@@ -2500,6 +2499,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          AND EXISTS (
            SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = organizer_event_candidates.id
              AND g.account_id = ?2 AND g.role = 'owner' AND g.revoked_at IS NULL
+             AND EXISTS (SELECT 1 FROM accounts actor WHERE actor.id = ?2 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL)
          )`,
     ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion).run();
     return result.meta.changes === 1
@@ -2519,7 +2519,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const candidate = await getOrganizerCandidate(input.candidateId);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
-    if (candidate.publication_operation === "AMEND") return { ok: false as const, reason: "status" as const, status: candidate.status };
+    if (!await database.prepare(`SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?1 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL`)
+      .bind(input.actorAccountId).first()) return { ok: false as const, reason: "forbidden" as const };
     if (candidate.current_version !== input.expectedVersion) {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
     }
@@ -2547,25 +2548,29 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const status = input.decision === "approve" ? "approved" : "changes_requested";
     const transitionToken = crypto.randomUUID();
     const results = await database.batch([
+      // The unique review token anchors every write in this transaction. A
+      // revoked Admin or losing concurrent request cannot reuse a timestamp
+      // from a previous review to create a job or move the candidate.
+      database.prepare(
+        `INSERT INTO organizer_event_reviews (
+           id, candidate_id, version, from_status, to_status, actor_account_id, note, at
+         ) SELECT ?1, id, current_version, 'submitted', ?2, ?3, ?4, ?5
+           FROM organizer_event_candidates
+           WHERE id = ?6 AND current_version = ?7 AND status = 'submitted'
+             AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email WHERE actor.id = ?3 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL)
+             AND (?8 IS NULL OR EXISTS (SELECT 1 FROM organizer_submission_snapshots s
+               WHERE s.id = ?8 AND s.candidate_id = ?6 AND s.candidate_version = ?7 AND s.sha256 = ?9))`,
+      ).bind(transitionToken, status, input.actorAccountId, input.note ?? null, input.now,
+        input.candidateId, input.expectedVersion, publication?.snapshotId ?? null, publication?.approvalHash ?? null),
       database.prepare(
         `UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2,
            last_updated_by = ?3, last_updated_role = 'admin',
            approved_by = CASE WHEN ?1 = 'approved' THEN ?3 ELSE NULL END,
            approved_at = CASE WHEN ?1 = 'approved' THEN ?2 ELSE NULL END
          WHERE id = ?4 AND current_version = ?5 AND status = 'submitted'
-           AND (?6 IS NULL OR EXISTS (SELECT 1 FROM organizer_submission_snapshots s
-             WHERE s.id = ?6 AND s.candidate_id = ?4 AND s.candidate_version = ?5 AND s.sha256 = ?7))`,
+           AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?6 AND r.candidate_id = ?4)`,
       ).bind(status, input.now, input.actorAccountId, input.candidateId, input.expectedVersion,
-        input.publication?.snapshotId ?? null, input.publication?.approvalHash ?? null),
-      database.prepare(
-        `INSERT INTO organizer_event_reviews (
-           id, candidate_id, version, from_status, to_status, actor_account_id, note, at
-         ) SELECT ?1, id, current_version, 'submitted', ?2, ?3, ?4, ?5
-           FROM organizer_event_candidates
-           WHERE id = ?6 AND current_version = ?7 AND status = ?2
-             AND last_updated_by = ?3 AND updated_at = ?5`,
-      ).bind(transitionToken, status, input.actorAccountId, input.note ?? null, input.now,
-        input.candidateId, input.expectedVersion),
+        transitionToken),
       ...(publication ? [
         database.prepare(`INSERT INTO organizer_publication_jobs (
           id, candidate_id, candidate_version, snapshot_id, approval_hash, status, step, created_at, updated_at
@@ -2577,8 +2582,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
             input.now, input.candidateId, transitionToken),
         database.prepare(`UPDATE organizer_event_candidates SET status = 'publishing'
           WHERE id = ?1 AND status = 'approved' AND EXISTS (
-            SELECT 1 FROM organizer_publication_jobs j WHERE j.id = ?2 AND j.candidate_id = ?1)`)
-          .bind(input.candidateId, publication.jobId),
+            SELECT 1 FROM organizer_publication_jobs j WHERE j.id = ?2 AND j.candidate_id = ?1)
+            AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?3 AND r.candidate_id = ?1)`)
+          .bind(input.candidateId, publication.jobId, transitionToken),
       ] : []),
     ]);
     return results.every((result, index) => result.meta.changes === (reuseQueuedJob && index === 2 ? 0 : 1))
@@ -2616,7 +2622,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          id, candidate_id, candidate_version, snapshot_json, sha256, created_by, created_at
        ) SELECT ?1, id, current_version, ?2, ?3, ?4, ?5
          FROM organizer_event_candidates
-         WHERE id = ?6 AND current_version = ?7 AND status IN ('draft', 'changes_requested')`,
+         WHERE id = ?6 AND current_version = ?7 AND status IN ('draft', 'changes_requested')
+           AND EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = ?6
+             AND g.account_id = ?4 AND g.role = 'owner' AND g.revoked_at IS NULL
+             AND EXISTS (SELECT 1 FROM accounts actor WHERE actor.id = ?4 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL))`,
     ).bind(snapshotId, input.snapshotJson, input.sha256, input.actorAccountId, input.now,
       input.candidateId, input.candidateVersion).run();
     return result.meta.changes === 1
