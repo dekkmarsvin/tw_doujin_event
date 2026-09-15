@@ -7,6 +7,7 @@ import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge
 import { overlappingSlotCodes } from "./map-contribution-draft";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { UiIcon } from "./ui-icons";
+import { FACILITY_TOOLS, PLACEMENT_LABELS, resolveFacilityPlacement, type FacilityTool, type PlacementTool } from "./map-placement-tool";
 import styles from "./map-layout-editor.module.css";
 
 /** A gesture holds the box every selected element had when it started, so each
@@ -28,6 +29,7 @@ type ResizeDragState = GestureState & { mode: "resize"; corner: ResizeCorner; or
  * reaches `commit`. `base` is the selection to merge into when Shift is held. */
 type BandDragState = { mode: "band"; pointerId: number; startX: number; startY: number; additive: boolean; base: Selection[] };
 type SlotDrawDragState = { mode: "draw-slot"; pointerId: number; startX: number; startY: number };
+type FacilityDrawState = { mode: "place-facility"; tool: FacilityTool; pointerId: number; startX: number; startY: number; clientX: number; clientY: number };
 /** Drawing and adjusting the rectangle a row segment is about to be cut from.
  * Neither touches the layout, so neither records a history step: only pressing
  * the confirm button places booths, and that is the one step undo goes back to. */
@@ -40,7 +42,7 @@ type RowFrameResizeState = { mode: "resize-row-frame"; pointerId: number; corner
  * the panel does — it is what the corner handles reshape. */
 type ActiveSegment = { rowIndex: number; items: number[]; frame: MapRect; orientation: MapOrientation };
 
-type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState | RowFrameDrawState | RowFrameResizeState;
+type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState | RowFrameDrawState | RowFrameResizeState | FacilityDrawState;
 
 /** A review comment can point at one booth or landmark. `nonce` is what makes
  * the same target requestable twice: after the contributor clicks elsewhere,
@@ -235,6 +237,9 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const [rowForm, setRowForm] = useState<RowFormState | null>(null);
   const [slotDrawForm, setSlotDrawForm] = useState<SlotDrawFormState | null>(null);
   const [slotDraftRect, setSlotDraftRect] = useState<MapRect | null>(null);
+  const [facilityTool, setFacilityTool] = useState<FacilityTool | null>(null);
+  const [facilityDraft, setFacilityDraft] = useState<MapRect | null>(null);
+  const placementTool: PlacementTool | null = facilityTool ?? (slotDrawForm ? "slot" : rowForm && !anchors ? "row" : null);
   // The rectangle drawn around a segment, held outside the layout until it is
   // confirmed, so drawing and redrawing costs nothing and undoes nothing.
   const [rowFrame, setRowFrame] = useState<MapRect | null>(null);
@@ -331,16 +336,39 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     onChange(next.present);
   };
 
+  const cancelPlacement = () => {
+    const active = drag.current;
+    drag.current = null;
+    if (active && svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
+    setFacilityTool(null);
+    setFacilityDraft(null);
+    setRowForm(null);
+    setSlotDrawForm(null);
+    setSlotDraftRect(null);
+    setRowFrame(null);
+    setActiveSegment(null);
+    setAnchors(null);
+    setDraftRow(null);
+    setSnapGuides([]);
+    setRowErrors([]);
+  };
+
   /** Scoped to the editor subtree rather than the canvas, so undo also works
    * while the inspector has focus. Text fields keep their own native undo.
    * Registered every render so the handler closes over the current history. */
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as Element | null;
+      if (!target || !editorRef.current?.contains(target)) return;
+      if (event.key === "Escape" && (placementTool || anchors)) {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelPlacement();
+        return;
+      }
       if (!event.ctrlKey && !event.metaKey) return;
       const key = event.key.toLowerCase();
       if (key !== "z" && key !== "y") return;
-      const target = event.target as Element | null;
-      if (!target || !editorRef.current?.contains(target)) return;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       event.preventDefault();
       if (key === "y" || event.shiftKey) redo();
@@ -398,6 +426,23 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
       x: (event.clientX - bounds.left) * layout.width / bounds.width,
       y: (event.clientY - bounds.top) * layout.height / bounds.height,
     };
+  };
+
+  const activateFacility = (tool: FacilityTool) => {
+    cancelPlacement();
+    setSelections([]);
+    setFacilityTool(facilityTool === tool ? null : tool);
+  };
+
+  const startFacilityPlacement = (event: PointerEvent<SVGElement>, svg: SVGSVGElement) => {
+    if (!facilityTool || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = pointIn(svg, event);
+    svg.setPointerCapture(event.pointerId);
+    svg.focus({ preventScroll: true });
+    drag.current = { mode: "place-facility", tool: facilityTool, pointerId: event.pointerId, startX: point.x, startY: point.y, clientX: event.clientX, clientY: event.clientY };
+    setFacilityDraft(resolveFacilityPlacement(facilityTool, point, point, { x: 0, y: 0 }, layout));
   };
 
   const placeManualSlot = (rect: MapRect) => {
@@ -520,7 +565,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
    * ends there rather than starting a drag, so building a set cannot nudge it. */
   const startDrag = (event: PointerEvent<SVGElement>, target: Selection) => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (!svg || event.button !== 0) return;
+    if (facilityTool) { startFacilityPlacement(event, svg); return; }
     if (slotDrawForm) {
       startSlotDraw(event, svg);
       return;
@@ -568,6 +614,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     const svg = event.currentTarget.ownerSVGElement;
     const corner = event.currentTarget.dataset.resizeCorner as ResizeCorner | undefined;
     if (!svg) return;
+    if (facilityTool) { startFacilityPlacement(event, svg); return; }
     // With the row panel open the handles frame the segment being worked on
     // rather than a selection, so a corner re-cuts it instead of stretching
     // each booth on its own.
@@ -580,6 +627,8 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   /** Pressing blank paper starts a rubber band. Shift keeps what is already
    * selected, so a band can extend a set built by clicking. */
   const startBand = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    if (facilityTool) { startFacilityPlacement(event, event.currentTarget); return; }
     if (slotDrawForm) {
       startSlotDraw(event, event.currentTarget);
       return;
@@ -603,8 +652,16 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
 
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
     const active = drag.current;
-    if (!active || active.pointerId !== event.pointerId) return;
     const point = pointIn(event.currentTarget, event);
+    if (!active) {
+      if (facilityTool) setFacilityDraft(resolveFacilityPlacement(facilityTool, point, point, { x: 0, y: 0 }, layout));
+      return;
+    }
+    if (active.pointerId !== event.pointerId) return;
+    if (active.mode === "place-facility") {
+      setFacilityDraft(resolveFacilityPlacement(active.tool, { x: active.startX, y: active.startY }, point, { x: event.clientX - active.clientX, y: event.clientY - active.clientY }, layout));
+      return;
+    }
     if (active.mode === "band") {
       setBand({ x: Math.min(active.startX, point.x), y: Math.min(active.startY, point.y), width: Math.abs(point.x - active.startX), height: Math.abs(point.y - active.startY) });
       return;
@@ -668,6 +725,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     const active = drag.current;
     if (!active || active.pointerId !== event.pointerId) return;
     drag.current = null;
+    if (active.mode === "place-facility") {
+      setFacilityDraft(null);
+      const rect = event.type === "pointercancel" ? null : resolveFacilityPlacement(active.tool, { x: active.startX, y: active.startY }, pointIn(event.currentTarget, event), { x: event.clientX - active.clientX, y: event.clientY - active.clientY }, layout);
+      if (rect) placeFacility(active.tool, rect);
+    }
     if (active.mode === "band") {
       // A band nobody dragged is a click on blank paper, which clears instead.
       const kept = active.additive ? active.base : [];
@@ -775,21 +837,6 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   const handleKeyUp = (event: KeyboardEvent<SVGSVGElement>) => {
     if (!event.key.startsWith("Arrow")) return;
     setHistory(sealLayoutHistory);
-  };
-
-  const addLandmark = (kind: MapLandmarkKind, label: string) => {
-    setSlotDrawForm(null);
-    setSlotDraftRect(null);
-    const index = layout.landmarks.length;
-    let suffix = index + 1;
-    while (layout.landmarks.some((item) => item.id === `landmark-${suffix}`)) suffix += 1;
-    commit((draft) => draft.landmarks.push({
-      id: `landmark-${suffix}`,
-      kind,
-      label,
-      rect: { x: draft.width * .42, y: draft.height * .42, width: draft.width * .16, height: draft.height * .1 },
-    }));
-    setSelections([{ kind: "landmark", itemIndex: index }]);
   };
 
   const uniqueId = (prefix: string, values: readonly string[]) => {
@@ -903,27 +950,24 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
     commit((draft) => Object.assign(draft.rows[rowIndex], next), coalesceKey);
   };
 
-  const addPillar = () => {
-    setSlotDrawForm(null);
-    setSlotDraftRect(null);
-    const itemIndex = layout.pillars.length;
-    const id = uniqueId("pillar", layout.pillars.map(({ id: value }) => value));
-    commit((draft) => draft.pillars.push({
-      id, x: draft.width * .48, y: draft.height * .48, width: draft.width * .03, height: draft.height * .03,
-    }));
-    setSelections([{ kind: "pillar", itemIndex }]);
-  };
-
-  const addAccess = (kind: "entrance" | "exit") => {
-    setSlotDrawForm(null);
-    setSlotDraftRect(null);
-    const itemIndex = layout.accessPoints.length;
-    const id = uniqueId(kind, layout.accessPoints.map(({ id: value }) => value));
-    commit((draft) => draft.accessPoints.push({
-      id, kind, direction: "north", x: draft.width * .5, y: draft.height * .9,
-      label: kind === "entrance" ? "入口" : "出口",
-    }));
-    setSelections([{ kind: "access", itemIndex }]);
+  const placeFacility = (tool: FacilityTool, rect: MapRect) => {
+    if (tool === "pillar") {
+      const itemIndex = layout.pillars.length;
+      const id = uniqueId("pillar", layout.pillars.map(({ id }) => id));
+      commit((draft) => draft.pillars.push({ id, ...rect }));
+      setSelections([{ kind: "pillar", itemIndex }]);
+    } else if (tool === "entrance" || tool === "exit") {
+      const itemIndex = layout.accessPoints.length;
+      const id = uniqueId(tool, layout.accessPoints.map(({ id }) => id));
+      commit((draft) => draft.accessPoints.push({ id, kind: tool, direction: "north", x: rect.x, y: rect.y, label: PLACEMENT_LABELS[tool] }));
+      setSelections([{ kind: "access", itemIndex }]);
+    } else {
+      const itemIndex = layout.landmarks.length;
+      const id = uniqueId("landmark", layout.landmarks.map(({ id }) => id));
+      commit((draft) => draft.landmarks.push({ id, kind: tool, label: PLACEMENT_LABELS[tool], rect }));
+      setSelections([{ kind: "landmark", itemIndex }]);
+    }
+    setFacilityTool(null);
   };
 
   const removeSelection = () => {
@@ -1056,15 +1100,10 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
    * would keep turning blank-paper presses into anchors with no visible
    * controls, and rubber-band selection would stay unavailable. */
   const toggleRowForm = () => {
-    setRowErrors([]);
-    setAnchors(null);
-    setDraftRow(null);
-    setSlotDrawForm(null);
-    setSlotDraftRect(null);
-    setRowFrame(null);
-    setActiveSegment(null);
+    const next = rowForm ? null : blankRowForm(layout);
+    cancelPlacement();
     setSelections([]);
-    setRowForm((current) => current ? null : blankRowForm(layout));
+    setRowForm(next);
   };
 
   /** Switching axis invalidates the end the numbering starts from, so it falls
@@ -1092,20 +1131,11 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
   };
 
   const toggleSlotDrawForm = () => {
-    setRowErrors([]);
-    setRowForm(null);
-    setAnchors(null);
-    setDraftRow(null);
-    setSlotDraftRect(null);
-    setRowFrame(null);
-    setActiveSegment(null);
-    setSlotDrawForm((current) => {
-      if (current) return null;
-      const rowLabel = selection?.kind === "slot"
-        ? layout.rows[selection.rowIndex]?.label ?? ""
-        : layout.rows.at(-1)?.label ?? "";
-      return { rowLabel, code: initialSlotCode(layout, rowLabel), orientation: "vertical" };
-    });
+    const rowLabel = selection?.kind === "slot" ? layout.rows[selection.rowIndex]?.label ?? "" : layout.rows.at(-1)?.label ?? "";
+    const next: SlotDrawFormState | null = slotDrawForm ? null : { rowLabel, code: initialSlotCode(layout, rowLabel), orientation: "vertical" };
+    cancelPlacement();
+    setSelections([]);
+    setSlotDrawForm(next);
   };
 
   // 打字途中改寫輸入框的值會吃掉空白，也會打斷輸入法的組字；離開欄位時才去頭尾空白。
@@ -1152,13 +1182,14 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
 
   return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
     <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵移動 1 px，Shift + 方向鍵移動 10 px。</p>
-      {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button><button onClick={addPillar}>新增柱子</button><button onClick={() => addAccess("entrance")}>新增入口</button><button onClick={() => addAccess("exit")}>新增出口</button><button onClick={() => addLandmark("enterprise", "企業攤")}>新增企業攤</button><button onClick={() => addLandmark("stage", "舞台")}>新增舞台</button><button onClick={() => addLandmark("other", "其他區域")}>新增其他區域</button></div></header>
+      {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button className={placementTool === "row" ? styles.drawActive : ""} aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button>{FACILITY_TOOLS.map((tool) => <button key={tool} aria-pressed={placementTool === tool} className={placementTool === tool ? styles.drawActive : ""} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}</div></header>
+    {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{facilityTool === "entrance" || facilityTool === "exit" ? "在畫布點一下放置。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${layout.width * renderScale}px`, height: `${layout.height * renderScale}px` }}>
-        <svg ref={svgRef} className={slotDrawForm || (rowForm && !anchors) ? styles.drawing : undefined} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
+        <svg ref={svgRef} className={placementTool ? styles.drawing : undefined} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onPointerLeave={() => { if (!drag.current) setFacilityDraft(null); }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
           <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />
@@ -1173,6 +1204,7 @@ export default function MapLayoutEditor({ layout, backgroundImageUrl, focusTarge
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} className={`${styles.editable} ${overlapping.has(slot.code) ? styles.overlapping : ""} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
           {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "entrance" ? styles.entrance : styles.exit} ${selectedKeys.has(`access:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path transform={mapAccessArrowTransform(point)} d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
+          {facilityTool && facilityDraft && <g className={styles.facilityPreview} aria-hidden="true">{facilityTool === "entrance" || facilityTool === "exit" ? <><circle cx={facilityDraft.x} cy={facilityDraft.y} r={12} /><path transform={mapAccessArrowTransform({ x: facilityDraft.x, y: facilityDraft.y, direction: "north" })} d={`M ${facilityDraft.x} ${facilityDraft.y + 8} V ${facilityDraft.y - 8} M ${facilityDraft.x - 5} ${facilityDraft.y - 3} L ${facilityDraft.x} ${facilityDraft.y - 9} L ${facilityDraft.x + 5} ${facilityDraft.y - 3}`} /></> : <rect {...facilityDraft} />}</g>}
           {snapGuides.map((guide) => guide.axis === "x"
             ? <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.position} x2={guide.position} y1={guide.start} y2={guide.end} aria-hidden="true" />
             : <line key={`${guide.axis}:${guide.targetId}`} className={styles.snapGuide} x1={guide.start} x2={guide.end} y1={guide.position} y2={guide.position} aria-hidden="true" />)}
