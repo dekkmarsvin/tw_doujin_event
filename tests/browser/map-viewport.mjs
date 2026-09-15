@@ -168,11 +168,15 @@ try {
         await page.getByRole("button", { name: "查看完整資訊", exact: true }).click();
         await page.getByRole("dialog").getByRole("button", { name: "關閉攤位詳細資訊", exact: true }).click();
         assert.equal(await page.evaluate(() => document.activeElement.textContent), "查看完整資訊");
-        await page.getByRole("button", { name: "收起", exact: true }).click();
+        assert.equal(page.url(), selectedUrl, "full detail returns to the same selection");
+        await page.getByRole("button", { name: "取消選取", exact: true }).click();
         await pause(page);
-        assert.equal(page.url(), selectedUrl);
+        assert.equal(new URL(page.url()).searchParams.get("selectedBooth"), null);
+        assert.equal(new URL(page.url()).searchParams.get("selectedCircle"), null);
         assert.deepEqual((await state(page)).offset, selected.offset);
-        await page.getByRole("button", { name: "A01 · OriginZero", exact: true }).click();
+        assert.equal(await page.getByRole("button", { name: "A01 · OriginZero", exact: true }).count(), 0);
+        await page.goBack();
+        await page.getByRole("button", { name: "取消選取", exact: true }).waitFor();
         await page.getByRole("button", { name: "回結果", exact: true }).click();
         const list = page.locator('[aria-label="探索結果"] [class*="resultList"]');
         await list.evaluate((node) => { node.scrollTop = 350; });
@@ -205,7 +209,8 @@ try {
   const selectedView = await state(page);
   await detail(page).getByRole("button", { name: "關閉攤位詳細資訊", exact: true }).click();
   await pause(page);
-  assert.equal(page.url(), selectedUrl);
+  assert.equal(new URL(page.url()).searchParams.get("selectedBooth"), null);
+  assert.equal(new URL(page.url()).searchParams.get("selectedCircle"), null);
   assert.equal(await detail(page).count(), 0);
   assert.deepEqual((await state(page)).offset, selectedView.offset);
   assert.equal(await source.evaluate((node) => node === document.activeElement), true);

@@ -42,7 +42,13 @@ export default function EventEntry() {
     setResolved({ kind: "event", event });
   }, []);
 
-  if (resolved.kind === "event") return <EventMapApp key={resolved.event.id} event={resolved.event} />;
+  const chooseEvent = useCallback(() => {
+    // Return to a clean chooser even when arriving through an external deep link.
+    window.history.pushState({}, "", window.location.pathname);
+    setResolved({ kind: "choose" });
+  }, []);
+
+  if (resolved.kind === "event") return <EventMapApp key={resolved.event.id} event={resolved.event} onChooseEvent={PUBLISHED_EVENTS.length > 1 ? chooseEvent : undefined} />;
   return <EventChooser
     events={PUBLISHED_EVENTS}
     unresolved={resolved.kind === "unpublished" ? resolved.requested : null}
