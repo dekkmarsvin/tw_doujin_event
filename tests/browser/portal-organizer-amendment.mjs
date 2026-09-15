@@ -28,15 +28,20 @@ journey.report.productionWrites = 0;
 journey.report.sourceHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 journey.report.sourceDirty = execFileSync("git", ["status", "--short"], { encoding: "utf8" }).trim().length > 0;
 
-function fixtureRoutes(role, existing = false) {
+function fixtureRoutes(role, existing = false, delayStart = false) {
+  let signalStart, releaseStart;
+  const startSeen = new Promise((resolve) => { signalStart = resolve; });
+  const startWait = delayStart ? new Promise((resolve) => { releaseStart = resolve; }) : Promise.resolve();
   const state = { created: existing, version: 1, changes: [], impact: [], conflict: false, starts: 0, saves: 0,
-    sections: { source: "review", amendment: "import" } };
+    otherVersion: 1, otherDraft: { ...baseline.draft, event: { ...baseline.draft.event, id: "other-event", name: "另一場待編輯活動" } },
+    sections: { source: "review", amendment: "import", other: "event" } };
   const plan = () => planOrganizerAmendment({ ...baseline, changes: state.changes, today: () => "2026-09-15" });
-  const summary = (id) => ({ id, tentativeName: "#190 合成修正驗收", eventId: baseline.event.id,
-    operation: id === "source" ? "CREATE" : "AMEND", status: id === "source" ? "published" : "draft",
-    version: id === "source" ? 1 : state.version, updatedAt: fixture.now, updatedByRole: role, role, workspaceMode: "binder" });
+  const summary = (id) => ({ id, tentativeName: id === "other" ? "另一場待編輯活動" : "#190 合成修正驗收", eventId: id === "other" ? "other-event" : baseline.event.id,
+    operation: id === "amendment" ? "AMEND" : "CREATE", status: id === "source" ? "published" : "draft",
+    version: id === "source" ? 1 : id === "other" ? state.otherVersion : state.version, updatedAt: fixture.now, updatedByRole: role, role, workspaceMode: "binder" });
   const detail = (id) => ({ event: { ...summary(id), eventIdLocked: true }, publicationAvailable: false,
-    draft: baseline.draft, venueCatalog: { venues: [] }, revisions: [], publication: null,
+    draft: id === "other" ? state.otherDraft : baseline.draft,
+    venueCatalog: { venues: [] }, revisions: [], publication: null,
     import: { source: { fileName: "已發布名單修正", sourceDescription: "合成驗收", mapping: {}, createdByRole: role, createdAt: fixture.now },
       rows: (id === "source" ? baseline.official : plan().official).days.flatMap((day) => day.booths.map((booth, index) => ({
         sourceRow: index + 1, dayId: String(day.day), venueSpaceId: baseline.draft.venue.assignments[0].venueSpaceId,
@@ -44,15 +49,15 @@ function fixtureRoutes(role, existing = false) {
     workspace: { mode: "binder", onboardingCompletedAt: fixture.now, resume: { guidedTask: "identity_source", section: state.sections[id] },
       readiness: { completed: 3, total: 6, suggestedNextSection: "import", blockers: [],
         sections: ["event", "venue", "import", "map", "validate", "review"].map((id) => ({ id, state: "available" })) } } });
-  return { state, routes: async (page) => {
+  return { state, startSeen, releaseStart: () => releaseStart?.(), routes: async (page) => {
     await page.route("**/api/**", async (route) => {
       const req = route.request(); const path = new URL(req.url()).pathname; const method = req.method();
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/api/auth/session") return reply({ email: `${role}@example.test`, isAdmin: role === "admin", hasOrganizerAccess: true, isMapContributor: false });
-      if (path === "/api/organizer/events") return reply({ events: state.created ? [summary("amendment"), summary("source")] : [summary("source")] });
+      if (path === "/api/organizer/events") return reply({ events: [...(state.created ? [summary("amendment"), summary("source")] : [summary("source")]), ...(delayStart ? [summary("other")] : [])] });
       if (path.endsWith("/source/amendments")) {
         assert.equal(method, "POST"); assert.deepEqual(req.postDataJSON(), { expectedVersion: 1 });
-        assert.ok(role === "owner" || role === "admin"); state.starts++; state.created = true;
+        assert.ok(role === "owner" || role === "admin"); state.starts++; signalStart(); await startWait; state.created = true;
         return reply({ ok: true, candidateId: "amendment", version: 1 }, 201);
       }
       if (path.endsWith("/workspace")) { const id = path.split("/").at(-2); state.sections[id] = req.postDataJSON().lastSection; return reply({ ok: true }); }
@@ -67,7 +72,12 @@ function fixtureRoutes(role, existing = false) {
         state.changes = body.changes; state.impact = result.impact; state.version++; state.saves++;
         return reply({ ok: true, version: state.version, impact: state.impact });
       }
-      if (/\/events\/(source|amendment)$/.test(path)) return reply(detail(path.split("/").at(-1)));
+      if (path.endsWith("/events/other") && method === "PATCH") {
+        const body = req.postDataJSON(); assert.equal(body.expectedVersion, state.otherVersion);
+        state.otherDraft = body.draft; state.otherVersion++;
+        return reply({ ok: true, candidateId: "other", version: state.otherVersion });
+      }
+      if (/\/events\/(source|amendment|other)$/.test(path)) return reply(detail(path.split("/").at(-1)));
       throw new Error(`Unexpected synthetic UI request: ${method} ${path}`);
     });
   } };
@@ -152,5 +162,28 @@ try {
   await editor.getByRole("heading", { name: "1. 換手", exact: true }).waitFor();
   assert.equal(editorRoutes.state.saves, 1);
   await editor.close();
+  const delayed = fixtureRoutes("owner", false, true);
+  const moving = await journey.page({ url: `${base}/organizer`, routes: delayed.routes });
+  await moving.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();
+  await delayed.startSeen;
+  await moving.getByRole("button", { name: /另一場待編輯活動/ }).click();
+  const name = moving.getByRole("textbox", { name: "活動名稱", exact: true });
+  await name.fill("另一場還沒儲存的內容");
+  await moving.getByText("尚有未儲存變更", { exact: true }).waitFor();
+  delayed.releaseStart();
+  const lateDialog = moving.getByRole("dialog", { name: "尚有未儲存變更" });
+  await lateDialog.waitFor();
+  assert.equal(await name.inputValue(), "另一場還沒儲存的內容");
+  assert.match(await lateDialog.innerText(), /開啟已建立的修正候選/);
+  await lateDialog.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await name.inputValue(), "另一場還沒儲存的內容");
+  assert.equal(await moving.getByRole("button", { name: /發布後修正/ }).count(), 1);
+  await journey.capture(moving, "organizer-amendment-late-response-preserves-other-draft");
+  await moving.getByRole("button", { name: /發布後修正/ }).click();
+  await lateDialog.getByRole("button", { name: "儲存並切換", exact: true }).click();
+  await moving.getByRole("heading", { name: "已發布名單修正", exact: true }).waitFor();
+  assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");
+  assert.equal(delayed.state.otherVersion, 2);
+  await moving.close();
   await journey.finish();
 } catch (error) { await journey.abort(error); }
