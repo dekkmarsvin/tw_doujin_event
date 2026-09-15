@@ -1,0 +1,18 @@
+{
+  "verifiedAt": "2026-09-15T03:26:17.399Z",
+  "url": "https://map.kotoban.top/?event=ch-20",
+  "mapButtons": 202,
+  "uniqueLabels": 202,
+  "allMapLabelsMatchPublishedPlacements": true,
+  "checkedInteractions": [
+    "A01 mouse after 查看全場",
+    "A01 → A02 ArrowDown/Enter",
+    "G30 mouse",
+    "FF47 A01 OriginZero mouse"
+  ],
+  "observedLimitations": [
+    "placement count labelled as circles",
+    "all-category count double-counts uncategorized placements",
+    "toolbar intercepts top-row clicks after pan; 查看全場 and keyboard work"
+  ]
+}

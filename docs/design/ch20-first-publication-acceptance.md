@@ -1,33 +1,77 @@
-# CH20 首次發布：送審證據與啟用操作包
+# CH20 首次正式發布驗收
 
-2026-09-15。本文件記錄 #212／#104 本輪首次發布驗收；**尚未核准、啟用或公開**。#259 保持 Draft，最終待核對的 PR head／CI 記在 PR 說明與 #212。
+**首次發布完成。** 2026-09-15T03:16:39.104Z（臺灣 11:16:39），原 publication job 由獨立 cron 完成 `published / completed`；Organizer 顯示 **6/6、已發布**。本次包含真實失敗及工程修復，不宣稱整段觀測旅程零人工補救。#104 仍保留發布後更正，#190 是下一里程碑。
 
-## 已送審內容
+公開結果：[CH20 Reader](https://map.kotoban.top/?event=ch-20)、[Pages production origin](https://tw-catalog.pages.dev/?event=ch-20)、[既有 FF47 Reader](https://map.kotoban.top/?event=ff47)。本紀錄的發布與恢復證據截止 main `22daf8f`；後續純證據提交不改活動資料或 runtime，最新部署核對另記 #212。
 
-- Candidate `1da921dd-9e1e-4ca3-b117-a31b526f1556`，**v15**，event `ch-20`。
-- Comic Horizon 20，2026-10-09，GJ工作室，三重綜合體育館／1F 開放式場地。
-- Snapshot `a78be78e-7c22-41c6-b568-b8d1cf494cf7`，2026-09-15T01:40:08.992Z 透過 UI 送審。
-- SHA-256：`4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3`；以儲存 bytes 重算相符。
-- 170 列、202 個唯一攤位碼，8 排，map revision **7**；snapshot 地圖與已驗證內容完全相同，代碼覆蓋完整。
-- 「艾 B15、B16」及原始 B15B6 差異註記沿用使用者決定，不再主動查證。
+## 核准內容與 UI 旅程
 
-真實 authoring 皆經 Organizer UI：退回 v10、活動／主辦／分類與場館來源整理、CSV 固定 3 字元拆碼、32 個雙攤框拆分、浮點邊界修正、validate、preview、submit。唯讀 D1 查核未寫資料。138 個原單格與所有非 rows layout 保持相同；0 overlaps。底圖沿用既有上傳，沒有重新製造地圖來源。
+| 項目 | 已驗收結果 |
+| --- | --- |
+| 活動 | Comic Horizon 20；2026-10-09；GJ工作室；三重綜合體育館／1F 開放式場地 |
+| Candidate | `1da921dd-9e1e-4ca3-b117-a31b526f1556`，v15，event `ch-20` |
+| Snapshot | `a78be78e-7c22-41c6-b568-b8d1cf494cf7` |
+| 核准 SHA-256 | `4a0a45366caae1d555fbfb4c4f622a8d19de9e6054bbfb651a8c8515386da1e3` |
+| 匯入 | 原 CSV 經 UI 明確選固定 3 字元拆碼，170 列 → 202 個唯一代碼，0 待修正；v13 存檔後可讀完整清單 |
+| 地圖 | UI 處理32組雙攤框→64格，138原單格與非 rows layout不變；revision7，8排、202格、0 overlaps |
+| 檢查／預覽 | 正式 validation 0 errors／warnings；A01 滑鼠、A02 鍵盤與 G30 詳情正確 |
+| 送審／核准 | 01:40:08.992Z 送審；02:12:20.706Z UI「核准並發布」，audit `selfApproval=true` |
+| 最終 Reader | 全部202個地圖按鈕的代碼／名稱符合公開 placements；170 circle IDs、同團多攤身份保留；地圖 layout 與 snapshot 完全一致 |
+| FF47 | 四份公開 JSON SHA-256 與發布前基準完全相同；Reader 日期、花博公園爭艷館及 A01 OriginZero 詳情正確 |
 
-PR #262 修正預覽黑底與選取缺漏，主要 review Done；最終 head `259c25d` 必要 CI [34917476088](https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/34917476088) 全部成功。main `0818db5` 的正式部署 [34917870595](https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/34917870595) 與 Pages origin smoke 成功。真實 CH20 重驗 0 errors／warnings，滑鼠 A01、ArrowDown＋Enter A02 與 G30 選取顯示正確社團。
+「艾 B15、B16」及原始 B15B6 差異註記沿用使用者決定；不宣稱官方原檔已改，也未再主動查證。CSV SHA-256：`dda265180c5e66592ffe421210083aabe050bfd83625f24c9c483a7e62adc9dc`。
 
-證據：[檢查與地圖上段](assets/ch20-first-publication-2026-09-15/check-preview.png)、[地圖下段](assets/ch20-first-publication-2026-09-15/preview-map-bottom.png)、[UI 送審成功](assets/ch20-first-publication-2026-09-15/submitted.png)、[匯入與地圖比對](assets/ch20-first-publication-2026-09-15/map-import-check.json)、[snapshot 核對](assets/ch20-first-publication-2026-09-15/submitted-snapshot-check.json)、[FF47 發布前四份公開 JSON 基準](assets/ch20-first-publication-2026-09-15/ff47-before.json)。
+送審前 authoring 皆经 Organizer UI，未以 SQL／API 寫入替代。底圖沿用原上傳。原核准前操作包在 [PR #259](https://github.com/dekkmarsvin/tw_doujin_event/pull/259) 留存；其預定 workflow cancellation 後來由本次自然發生的 checks failure 承接，沒有執行取消或 workflow rerun。
 
-## 待維護者确认的執行範圍
+## 系統發布與 origin proof
 
-1. 確認上述新 snapshot 及 #259 最終 head 的必要 CI。合併 #259、等待 Pages 正式部署，再部署同 commit 的 `tw-catalog-publication-dispatch` Worker；核對兩端 production mode=github、正確 D1、既有 App credentials、每分鐘 cron。這些是一次性 rollout。
-2. 只在 UI 核准此 snapshot。系統建立唯一 job，完成 data PR／checks／merge、main PR／checks／merge；正常發布不由人代做。
-3. **受控故障只限該 job 固定的 production run／attempt**：執行前核對 job 的 main merge SHA、workflow `331570396`、repository `dekkmarsvin/tw_doujin_event`、`push`／`main` 與唯一 `Verify and deploy` job。僅在 **Deploy to Cloudflare Pages 尚未開始** 時取消整個對應 run。若部署已開始就停止故障操作，不取消其他 run、不修改正式資料或 required checks。
-4. 保存取消前 step 狀態、原 job／snapshot、data/main PR與 merge SHA、run／attempt、取消結果及 UI retryable failure。Candidate 應保留已核准內容，不能回草稿；已完成 checkpoints 不能重建。
-5. 透過 UI「重試發布」一次，由系統恢復同 job／snapshot／checkpoints，重跑原 run 的下一 attempt。此期間不合併其他 main 變更。非預期 failure 先保留證據並依具體原因處理，不建立第二個 CREATE、不重試舊 v10 job。
-6. 只有系統 production verifier 成功且標 published，才進入完成核對：Pages manifest main/data SHA、CH20 全部公開 JSON／地圖、真實 Reader 日期／場館／攤位互動，以及 FF47 bytes 與 Reader 未被覆寫。
+- Job：`94812f08-3a56-4d1c-9474-7e52f0ea7414`。
+- System 建立並合併 [data PR #2](https://github.com/dekkmarsvin/tw_doujin_event-data/pull/2)，data merge `65ae92f707381881d0817a577b5e87109e9bfc84`。
+- System 建立並合併 [main PR #264](https://github.com/dekkmarsvin/tw_doujin_event/pull/264)，main merge `8d9eac3b1d62689e1409ba30d5eae0e23929bbfd`；兩張 publication PR 均非人工 merge。
+- 固定 production [run 34922029842](https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/34922029842)，attempt1，push/main；Verify and deploy、必要 Pages origin smoke 均成功。
+- 原 immutable Pages deployment：`9fc184c5-2339-4cca-b00f-c2d7880a0e92`。
+- 系統保存 manifest SHA-256：`f00f09320c9b3c850f17802a687a4e2ac92fe31ea6505967453eb149f608b750`。獨立唯讀核對同一 main/data SHA、全部8份 JSON bytes、Reader200、匿名 session401與前後manifest一致；公開後才取得完成證據。
+- Worker `9a22e2e4-61fc-42ff-8def-45deca6153ff` 的真實 scheduled invocation 記錄原 job `advanced`，outcome=ok，無 exception。該輪未開 Organizer、未直接呼叫 executor。
 
-第一次取消属于受控故障驗收、一次 UI retry 屬恢復操作，與正常流程分開計數。工程修正／一次性建置／唯讀驗證亦另列；尚未把「沒有人工補完正常發布步驟」勾為完成。
+## 真實失敗與同 job 恢復
 
-## 尚未完成及停止範圍
+1. **必要 checks 真實失敗**：#264 首次 CI `34920517765` 的 driver 測試寫死只有 FF47，加入 CH20 後失敗。Job 留在 `waiting_main_checks / publication_check_failed`。由 [#265](https://github.com/dekkmarsvin/tw_doujin_event/pull/265) 修正測試；未降低 required checks。原 App PR head/body/作者不變。
+2. 人工 close/reopen 兩組觸發原 PR CI。第一次 `34921360072` 實際 checkout仍是舊merge ref，不算修正驗證；第二次 [34921601863](https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/34921601863) 實際checkout `ec6627e`，同 head latest required checks 全成功。02:38:55.445Z **UI retry** 原 job，System 隨後合併並部署，未重做 data／PR。
+3. **Origin runtime 真實失敗**：原 job 在 `verifying_production / production_smoke_failed` 停止。02:46:29.544Z 一次 UI retry 仍失败；停止重試後以真實 workerd 定位 `redirect:error` 不被支援。Node smoke 成功不等於 Worker verifier 成功。
+4. [#266](https://github.com/dekkmarsvin/tw_doujin_event/pull/266) 改用 `manual`＋原精確狀態檢查，Pages github 核准／retry 僅 durable enqueue。主要 Review Done；最終head `1155040` 的 [required CI 34923605612](https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/34923605612) 全通過。合併為 `22daf8fb949091dc66d2f77a36fffd3c2eef1aa5`，其[正式部署34923967485](https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/34923967485)與smoke通過。
+5. 為保留原固定SHA，按已審查操作包短暫部署既有mode=disabled的Worker `57d0f9f1-0ef0-4bee-9cf9-3b912ca18712`；確認真實cron已由該版本接管、無在途工作／live lease，保留原trigger與其他設定。
+6. 03:15:08.427Z **UI retry**，原 job留queued，14個核准／PR／SHA／workflow欄位逐一比對未變。Pages切回原`9fc184c5` deployment，重新驗證原manifest與全部bytes；恢復修正Worker的github mode，cron於03:16:39.104Z完成。queued僅91.275秒，沒有延長15分鐘timeout、手改D1或更換checkpoint。
+7. Published後，Pages切回已成功的修正版`dbe965d6-964a-400b-8c74-42989822a892`（main22daf8f），manifest hash=`5910ec1d62dd6da496205caf0193ce6e98f288f0b8fdece9d2a6b5df06cf1752`。所有event pins／8份bytes與原發布一致。Worker最終github、每分鐘cron、原production D1、URL disabled與logs設定保留。
 
-管理者核准、publication 自動推進、受控失敗／恢復、CH20 Pages origin 與公開 Reader 驗證均尚待執行。完成後結果回填 #212，#246 依正式 cron／webhook 證據更新；#104 保留發布後更正範圍，#190 留下一里程碑，不因其他非阻擋票開啟而擴張本 goal。
+本次有三次真實 UI retry（checks一次、origin兩次）；沒有第二份邏輯 publication、未重試舊v10 job、沒有假driver的production完成紀錄。此證據符合#212「至少一次真實可恢復publication failure」；不宣稱真實deployment rerun或外部同一webhook重送已驗。
+
+## 人工操作與完成邊界
+
+一次性基建：沿用既有GitHub App／installation／secrets；啟用Pages與獨立Worker、正確DB與每分鐘cron，#259／#263保留設定。正常每場活動不需要新增repository、PAT、secret或Worker。
+
+核准v15到published的事故補救如實記錄：
+
+| 操作 | 數量／原因 |
+| --- | --- |
+| Production runtime code修正 | 1張PR（#266，4個程式檔）；另1張測試修正PR #265 |
+| 人工業務JSON／YAML或D1修改 | 0；資料與地圖均由UI及System產檔 |
+| Organizer Git操作 | 0；authoring均經UI |
+| Maintainer人工merge | 2張工程PR（#265、#266）；publication data/main PR人工merge為0 |
+| CLI發布／恢復寫入 | 6次：原PR close/reopen各2次、Worker部署2次；工程Git／PR操作及唯讀驗證另有非零次數，不把它們算成0 |
+| AI agent工程介入 | 有，本任務處理上述2張工程PR與恢復；不宣稱無需工程介入的完整觀測旅程 |
+| 額外人工deployment操作 | Worker暫停／恢復2次＋Pages immutable版本切換2次；工程main push另自動觸發2次部署 |
+| UI retry | 3次，非第二個Publish動作 |
+| 新活動repository／PAT／secret | 均0 |
+
+交付後正常新增路徑是UI核准→durable job→Worker→GitHub→Pages→origin verifier，沒有新增日常手動部署步驟。但本場的零人工補救統計未通過，所以#212的非零維運指標保持未勾選；不能只憑PR合併把它們改為0。
+
+**本次首次發布與可恢復失敗驗收通過；不代表#104或#212所有指標結案。** #104保持開啟，發布後更正／amendment保留#190，未自動展開。#246真實cron與webhook接收已觀測，同一外部delivery真實重送未完成，保留既有票；不因它開啟而擴大首次發布goal。
+
+Reader非阻擋觀察留#104：[placement被標為社團、全部類別重複計數](https://github.com/dekkmarsvin/tw_doujin_event/issues/104#issuecomment-5674076486)、[平移後工具列命中區](https://github.com/dekkmarsvin/tw_doujin_event/issues/104#issuecomment-5674202564)。後者可用「查看全場」再點選或鍵盤操作；資料／地圖完整性未受影響。本輪不處理全部backlog。
+
+## 證據索引
+
+- UI前置：[檢查／預覽](assets/ch20-first-publication-2026-09-15/check-preview.png)、[地圖下段](assets/ch20-first-publication-2026-09-15/preview-map-bottom.png)、[送審](assets/ch20-first-publication-2026-09-15/submitted.png)、[匯入／地圖比對](assets/ch20-first-publication-2026-09-15/map-import-check.json)、[snapshot比對](assets/ch20-first-publication-2026-09-15/submitted-snapshot-check.json)。
+- 完成：[Organizer已發布](assets/ch20-first-publication-2026-09-15/published.png)、[原job／retry audit／cron證據](assets/ch20-first-publication-2026-09-15/publication-recovery.json)、[固定origin proof](assets/ch20-first-publication-2026-09-15/published-origin-proof.json)、[全量公開內容比對](assets/ch20-first-publication-2026-09-15/published-content-proof.json)、[恢復修正版後proof](assets/ch20-first-publication-2026-09-15/runtime-restored-proof.json)。
+- Reader：[A01](assets/ch20-first-publication-2026-09-15/reader-a01.png)、[A02](assets/ch20-first-publication-2026-09-15/reader-a02.png)、[G30](assets/ch20-first-publication-2026-09-15/reader-g30.png)、[202個map labels全量比對](assets/ch20-first-publication-2026-09-15/reader-label-proof.json)。
+- FF47：[發布前四檔基準](assets/ch20-first-publication-2026-09-15/ff47-before.json)、[最終Reader](assets/ch20-first-publication-2026-09-15/ff47-after.png)；四檔不變的逐一hash在固定origin proof內。
