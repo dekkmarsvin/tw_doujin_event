@@ -11,6 +11,7 @@ import {
 } from "../circle-editor-client";
 import { eventUsesScopedMaps, type EventDefinition } from "../event-catalog";
 import type { EventMapLayout, PublishedEventMap } from "../event-map";
+import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-state";
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
 import { loadStaticEventMap } from "../static-event-map-client";
@@ -135,6 +136,8 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [layout, setLayout] = useState<EventMapLayout | null>(null);
+  const [authoring, setAuthoring] = useState<MapAuthoringState>(EMPTY_MAP_AUTHORING);
+  const [savedAuthoringJson, setSavedAuthoringJson] = useState(JSON.stringify(EMPTY_MAP_AUTHORING));
   const [savedLayoutJson, setSavedLayoutJson] = useState("");
   const [periodKey, setPeriodKey] = useState(String(event.days[0]?.id ?? ""));
   const [venueSpaceId, setVenueSpaceId] = useState(event.venueAssignments[0]?.venueSpaceId ?? "");
@@ -151,6 +154,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   const openDraft = useCallback(async (draftId: string) => {
     const next = await readMapDraft(draftId);
     setSelectedId(draftId); setDetail(next); setLayout(next.draft.content.layout);
+    setAuthoring(next.draft.content.authoring ?? EMPTY_MAP_AUTHORING); setSavedAuthoringJson(JSON.stringify(next.draft.content.authoring ?? EMPTY_MAP_AUTHORING));
     setSavedLayoutJson(JSON.stringify(next.draft.content.layout)); setProblems([]);
   }, []);
   /** Opening a different draft resets what was typed against the last one: the
@@ -172,7 +176,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   };
 
   const editable = detail?.draft.status === "draft" || detail?.draft.status === "changes_requested";
-  const hasUnsavedChanges = !!layout && JSON.stringify(layout) !== savedLayoutJson;
+  const hasUnsavedChanges = !!layout && (JSON.stringify(layout) !== savedLayoutJson || JSON.stringify(authoring) !== savedAuthoringJson);
   const previewFile = detail?.files.find((item) => item.revision === detail.draft.current_revision
     && item.raw_deleted_at == null && item.mime.startsWith("image/"));
 
@@ -193,12 +197,12 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
     </div>}
     {detail && layout && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
-      {editable && <MapLayoutEditor layout={layout} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={setLayout} />}
+      {editable && <MapLayoutEditor layout={layout} authoring={authoring} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); }} />}
       <h3>公開地圖預覽</h3><Preview event={event} layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>
           <button type="button" onClick={() => void run(async () => {
-            const saved = await saveMapContributionDraft(detail.draft.id, detail.draft.current_revision, layout);
+            const saved = await saveMapContributionDraft(detail.draft.id, detail.draft.current_revision, layout, authoring);
             await openDraft(detail.draft.id); await refreshList();
             setStatus({ kind: "ok", message: `已儲存版本 ${saved.revision}；請為這個版本上傳來源檔。` });
           }, "草稿已儲存。")}>儲存新版本</button>

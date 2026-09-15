@@ -1,3 +1,4 @@
+import type { MapAuthoringState } from "./map-authoring-state";
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
 import type { EventMapLayout, PublishedEventMap } from "./event-map";
 import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } from "./map-contribution-draft";
@@ -270,7 +271,7 @@ export type MapDraftFile = {
 };
 export type MapDraftDetail = MapDraftSummary & {
   owner_account_id: string;
-  content: { schema: "map-contribution-draft/1"; layout: EventMapLayout };
+  content: { schema: "map-contribution-draft/1"; layout: EventMapLayout; authoring?: MapAuthoringState };
 };
 export type MapDraftReview = {
   revision: number;
@@ -315,10 +316,10 @@ export function createMapContributionDraft(periodKey: string, venueSpaceId: stri
   });
 }
 
-export function saveMapContributionDraft(draftId: string, expectedRevision: number, layout: EventMapLayout) {
+export function saveMapContributionDraft(draftId: string, expectedRevision: number, layout: EventMapLayout, authoring?: MapAuthoringState) {
   return call<{ ok: true; draftId: string; revision: number }>(`/api/map-contributions/drafts/${encodeURIComponent(draftId)}`, {
     method: "PUT",
-    body: JSON.stringify({ expectedRevision, content: { schema: "map-contribution-draft/1", layout } }),
+    body: JSON.stringify({ expectedRevision, content: { schema: "map-contribution-draft/1", layout, authoring } }),
   });
 }
 

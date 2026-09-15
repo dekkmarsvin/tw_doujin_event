@@ -1,4 +1,5 @@
 import type { BoothRow, BoothSlot, MapOrientation, MapRect } from "./event-map";
+import type { MapGuide } from "./map-authoring-state";
 
 export type ResizeCorner = "nw" | "ne" | "se" | "sw";
 
@@ -358,7 +359,7 @@ export type SnapGuide = {
   targetId: string;
 };
 
-type SnapTarget = { id: string; rect: MapRect };
+type SnapTarget = { id: string; rect: MapRect; manual?: boolean };
 type SnapMode = "move" | ResizeCorner;
 type HorizontalEdge = "left" | "right";
 type VerticalEdge = "top" | "bottom";
@@ -440,7 +441,7 @@ function hasRequiredOverlap(start: number, length: number, targetStart: number, 
 function nearestCandidate<Edge extends string>(candidates: AxisCandidate<Edge>[], threshold: number) {
   return candidates
     .filter((candidate) => Math.abs(candidate.delta) <= threshold)
-    .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta) || a.target.id.localeCompare(b.target.id) || a.edge.localeCompare(b.edge))[0];
+    .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta) || Number(!!b.target.manual) - Number(!!a.target.manual) || a.target.id.localeCompare(b.target.id) || a.edge.localeCompare(b.edge))[0];
 }
 
 export function snapRectToAdjacentRects(
@@ -452,6 +453,7 @@ export function snapRectToAdjacentRects(
     threshold: number;
     minimumSize?: number;
     overlapRatio?: number;
+    manualGuides?: readonly MapGuide[];
   },
 ): { rect: MapRect; guides: SnapGuide[] } {
   const minimumSize = options.minimumSize ?? 24;
@@ -471,6 +473,15 @@ export function snapRectToAdjacentRects(
       if (verticalEdges.includes("bottom")) verticalCandidates.push({ delta: target.rect.y - (rect.y + rect.height), edge: "bottom", position: target.rect.y, target });
     }
   });
+
+  // Manual lines extend across the whole canvas and stay targets when locked.
+  for (const guide of options.manualGuides ?? []) {
+    const target: SnapTarget = { id: `guide:${guide.id}`, manual: true, rect: guide.axis === "x"
+      ? { x: guide.position, y: 0, width: 0, height: options.bounds.height }
+      : { x: 0, y: guide.position, width: options.bounds.width, height: 0 } };
+    if (guide.axis === "x") for (const edge of horizontalEdges) horizontalCandidates.push({ delta: guide.position - (edge === "left" ? rect.x : rect.x + rect.width), edge, position: guide.position, target });
+    if (guide.axis === "y") for (const edge of verticalEdges) verticalCandidates.push({ delta: guide.position - (edge === "top" ? rect.y : rect.y + rect.height), edge, position: guide.position, target });
+  }
 
   const horizontal = nearestCandidate(horizontalCandidates, options.threshold);
   const vertical = nearestCandidate(verticalCandidates, options.threshold);

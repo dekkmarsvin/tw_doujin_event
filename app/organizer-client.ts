@@ -1,3 +1,4 @@
+import type { MapAuthoringState } from "./map-authoring-state";
 import { PortalError, reportSessionResponse } from "./circle-editor-client";
 import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
 import type {
@@ -206,7 +207,7 @@ export type OrganizerMapSummary = {
   id: string; periodKey: string; venueSpaceId: string; status: string; mapRevision: number; updatedAt: number;
 };
 
-export type OrganizerMapDetail = OrganizerMapSummary & { layout: EventMapLayout };
+export type OrganizerMapDetail = OrganizerMapSummary & { layout: EventMapLayout; authoring?: MapAuthoringState };
 
 export type OrganizerReaderPreview = {
   schema: "organizer-reader-preview/1";
@@ -231,7 +232,7 @@ export function readOrganizerMap(candidateId: string, draftId: string) {
 }
 
 export function createOrganizerMap(candidateId: string, input: {
-  expectedVersion: number; periodKey: string; venueSpaceId: string; layout: EventMapLayout;
+  expectedVersion: number; periodKey: string; venueSpaceId: string; layout: EventMapLayout; authoring?: MapAuthoringState;
 }) {
   return organizerCall<{ ok: true; draftId: string; version: number; mapRevision: number }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps`, {
     method: "POST", body: JSON.stringify(input),
@@ -239,7 +240,7 @@ export function createOrganizerMap(candidateId: string, input: {
 }
 
 export function saveOrganizerMap(candidateId: string, draftId: string, input: {
-  expectedVersion: number; expectedMapRevision: number; layout: EventMapLayout;
+  expectedVersion: number; expectedMapRevision: number; layout: EventMapLayout; authoring?: MapAuthoringState;
 }) {
   return organizerCall<{ ok: true; version: number; mapRevision: number }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps/${encodeURIComponent(draftId)}`, {
     method: "PATCH", body: JSON.stringify(input),

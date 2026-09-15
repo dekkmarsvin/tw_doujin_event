@@ -189,6 +189,22 @@ test("admin-only grants are audited and revocation immediately blocks writes", a
   ]);
 });
 
+test("private guide metadata round-trips with contributor revision and permission guards", async () => {
+  const mapperCookie = await signIn("mapper@example.test"), adminCookie = await signIn("admin@example.test");
+  await grant("mapper@example.test", adminCookie);
+  const { body } = await newDraft(mapperCookie);
+  const path = `/api/map-contributions/drafts/${body.draftId}`;
+  const content = { ...validContent(), authoring: { guides: [{ id: "vertical", axis: "x", position: 35.25, locked: false }] } };
+  const save = expectedRevision => handlers.updateMapDraft(request(path, "PUT", { expectedRevision, content }, mapperCookie), body.draftId);
+  assert.equal((await save(1)).status, 200);
+  const read = await handlers.getMapDraft(request(path, "GET", undefined, mapperCookie), body.draftId);
+  assert.deepEqual((await read.json()).draft.content, content);
+  assert.equal((await save(1)).status, 409);
+  await grant("mapper@example.test", adminCookie, "revoke");
+  assert.equal((await save(2)).status, 409);
+  assert.deepEqual(JSON.parse((await repository.getMapDraft(body.draftId)).content_json), content);
+});
+
 test("period aliases normalize before persistence and cannot create parallel active scopes", async () => {
   const mapperCookie = await signIn("mapper@example.test");
   const adminCookie = await signIn("admin@example.test");

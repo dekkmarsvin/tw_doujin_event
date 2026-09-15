@@ -85,6 +85,7 @@ import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import { MAP_IMAGE_MAX_BYTES } from "../map-contribution-files";
 import MapLayoutEditor from "../map-layout-editor";
+import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-state";
 import { UiIcon } from "../ui-icons";
 import {
   getMapTemplateMetadata,
@@ -847,6 +848,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const [periodKey, setPeriodKey] = useState(detail.draft.event.days[0]?.id ?? "");
   const [venueSpaceId, setVenueSpaceId] = useState(detail.draft.venue.assignments[0]?.venueSpaceId ?? "");
   const [layout, setLayout] = useState<EventMapLayout | null>(null);
+  const [authoring, setAuthoring] = useState<MapAuthoringState>(EMPTY_MAP_AUTHORING);
   const [background, setBackground] = useState("");
   // A plan picked before the map exists has nowhere to be stored yet, so it
   // waits here and goes up with the first save.
@@ -891,7 +893,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     setSelected(next); setPeriodKey(next.periodKey); setVenueSpaceId(next.venueSpaceId);
     // Cleared before the read, not after: a failed read must not leave the map
     // that was open a moment ago showing its plan behind this one.
-    setLayout(next.layout); setPendingBackground(null); setEdited(false); setBackground("");
+    setLayout(next.layout); setAuthoring(next.authoring ?? EMPTY_MAP_AUTHORING); setPendingBackground(null); setEdited(false); setBackground("");
     const plan = await readOrganizerMapBackground(detail.event.id, map.id);
     if (plan) setBackground(await imageDataUrl(plan));
   };
@@ -899,7 +901,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     if (!assignment) return;
     const blank = () => {
       setSelected(null); setPendingBackground(null); setEdited(false); setBackground("");
-      setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000));
+      setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000)); setAuthoring(EMPTY_MAP_AUTHORING);
     };
     if (!layoutHasContent(layout) && !background) { blank(); return; }
     setConfirm({
@@ -937,7 +939,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       const next = recognizes
         ? recognizeMapTemplate(assignment.mapTemplate, context.getImageData(0, 0, canvas.width, canvas.height)).layout
         : createBlankEventMapLayout(assignment.mapTemplate, canvas.width, canvas.height);
-      setSelected(null); setLayout(next); setEdited(false);
+      setSelected(null); setLayout(next); setAuthoring(EMPTY_MAP_AUTHORING); setEdited(false);
       traced = recognizes ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。";
     }
     // The plan is only put on the canvas once it is somewhere it will survive:
@@ -955,7 +957,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
 
   const closeEditor = () => {
     setConfirmingClose(false); setEdited(false); setPendingBackground(null);
-    setLayout(null); setSelected(null); setBackground("");
+    setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setSelected(null); setBackground("");
   };
 
   /** Saving leaves the editor open, because a map takes several sittings and
@@ -970,11 +972,11 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     try {
       let saved: OrganizerMapDetail;
       if (selected) {
-        const result = await saveOrganizerMap(detail.event.id, selected.id, { expectedVersion, expectedMapRevision: selected.mapRevision, layout });
+        const result = await saveOrganizerMap(detail.event.id, selected.id, { expectedVersion, expectedMapRevision: selected.mapRevision, layout, authoring });
         setExpectedVersion(result.version);
-        saved = { ...selected, mapRevision: result.mapRevision, layout };
+        saved = { ...selected, mapRevision: result.mapRevision, layout, authoring };
       } else {
-        const created = await createOrganizerMap(detail.event.id, { expectedVersion, periodKey, venueSpaceId, layout });
+        const created = await createOrganizerMap(detail.event.id, { expectedVersion, periodKey, venueSpaceId, layout, authoring });
         setExpectedVersion(created.version);
         saved = (await readOrganizerMap(detail.event.id, created.draftId)).map;
       }
@@ -1005,7 +1007,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
       <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
-        discarding(() => { setVenueSpaceId(next); setLayout(null); setPendingBackground(null); setBackground(""); });
+        discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
       }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
       <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
@@ -1031,7 +1033,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         if (!map) return;
         discarding(() => {
           void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
-            setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout));
+            setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setAuthoring(structuredClone(source.authoring ?? EMPTY_MAP_AUTHORING));
             setPendingBackground(null); setBackground(""); setEdited(false);
           }).catch((error) => setNotice({ kind: "error", message: message(error) }));
         });
@@ -1039,7 +1041,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => setNotice({ kind: "error", message: message(error) })); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>
-      <MapLayoutEditor layout={layout} backgroundImageUrl={background || undefined} onChange={(next) => { setLayout(next); setEdited(true); }} />
+      <MapLayoutEditor layout={layout} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step

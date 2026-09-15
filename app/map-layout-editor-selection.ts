@@ -321,6 +321,19 @@ export function snapTargetsFor(layout: EventMapLayout, selection: RectSelection)
   return [];
 }
 
+/** A group snaps as one outer box, excluding every member from its targets. */
+export function snapTargetsOutsideSelection(layout: EventMapLayout, excluded: readonly Selection[]) {
+  const keys = new Set(excluded.map(selectionKey));
+  const all: Selection[] = [
+    { kind: "floor" },
+    ...layout.rows.flatMap((row, rowIndex) => row.slots.map((_, itemIndex): Selection => ({ kind: "slot", rowIndex, itemIndex }))),
+    ...layout.pillars.map((_, itemIndex): Selection => ({ kind: "pillar", itemIndex })),
+    ...layout.landmarks.map((_, itemIndex): Selection => ({ kind: "landmark", itemIndex })),
+    ...layout.accessPoints.map((_, itemIndex): Selection => ({ kind: "access", itemIndex })),
+  ];
+  return all.filter(item => !keys.has(selectionKey(item))).map(item => ({ id: selectionKey(item), rect: boxFor(layout, item)! }));
+}
+
 export function slotSelections(selections: readonly Selection[]): SlotSelection[] {
   return selections.filter((item): item is SlotSelection => item.kind === "slot");
 }
