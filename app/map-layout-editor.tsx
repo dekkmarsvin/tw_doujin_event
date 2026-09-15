@@ -207,7 +207,14 @@ type EditorSnapshot = { layout: EventMapLayout; authoring: MapAuthoringState };
 
 export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, onChange }: Props) {
   const [preferences, setPreferences] = useState(() => readMapEditorPreferences(mapEditorPreferenceStorage()));
+  // Held in a ref as well as in state: the pointer handler below runs on the
+  // capture phase of the same gesture the key started, and React has not
+  // necessarily committed the re-render by then. Reading the state there let a
+  // quick Space-then-press fall through to a marquee or a move instead of a
+  // pan. The state is what paints the cursor; the ref is what decides.
+  const spaceHeldRef = useRef(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const holdSpace = (held: boolean) => { spaceHeldRef.current = held; setSpaceHeld(held); };
   const [panning, setPanning] = useState(false);
   const [segmentForm, setSegmentForm] = useState<SegmentNaming | null>(null);
   const changePreferences = (patch: Partial<MapEditorPreferences>) => {
@@ -408,7 +415,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       if (!target || !editorRef.current?.contains(target)) return;
       if (event.code === "Space" && target === svgRef.current) {
         event.preventDefault();
-        setSpaceHeld(true);
+        holdSpace(true);
         return;
       }
       if (event.key === "Escape" && (placementTool || anchors)) {
@@ -426,8 +433,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       else undo();
     };
     document.addEventListener("keydown", handleShortcut);
-    const releaseSpace = (event: globalThis.KeyboardEvent) => { if (event.code === "Space") setSpaceHeld(false); };
-    const resetSpace = () => setSpaceHeld(false);
+    const releaseSpace = (event: globalThis.KeyboardEvent) => { if (event.code === "Space") holdSpace(false); };
+    const resetSpace = () => holdSpace(false);
     document.addEventListener("keyup", releaseSpace);
     window.addEventListener("blur", resetSpace);
     return () => { document.removeEventListener("keydown", handleShortcut); document.removeEventListener("keyup", releaseSpace); window.removeEventListener("blur", resetSpace); };
@@ -693,7 +700,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
    * resize or placement even when the pointer starts on a booth or handle. */
   const startPan = (event: PointerEvent<SVGSVGElement>) => {
     const viewport = viewportRef.current;
-    if (!viewport || (event.button !== 1 && !(event.button === 0 && spaceHeld))) return;
+    if (!viewport || (event.button !== 1 && !(event.button === 0 && spaceHeldRef.current))) return;
     event.preventDefault(); event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     event.currentTarget.focus({ preventScroll: true });
@@ -1351,7 +1358,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${layout.width * renderScale}px`, height: `${layout.height * renderScale}px` }}>
-        <svg ref={svgRef} className={`${placementTool ? styles.drawing : ""} ${preferences.tracing ? styles.tracing : ""} ${spaceHeld || panning ? styles.panReady : ""} ${panning ? styles.panning : ""}`} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onBlur={() => setSpaceHeld(false)} onPointerDownCapture={startPan} onAuxClick={event => { if (event.button === 1) event.preventDefault(); }} onPointerLeave={() => { if (!drag.current) { setFacilityDraft(null); setGuidePreview(null); } }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
+        <svg ref={svgRef} className={`${placementTool ? styles.drawing : ""} ${preferences.tracing ? styles.tracing : ""} ${spaceHeld || panning ? styles.panReady : ""} ${panning ? styles.panning : ""}`} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onBlur={() => holdSpace(false)} onPointerDownCapture={startPan} onAuxClick={event => { if (event.button === 1) event.preventDefault(); }} onPointerLeave={() => { if (!drag.current) { setFacilityDraft(null); setGuidePreview(null); } }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} style={{ opacity: preferences.backgroundOpacity / 100, visibility: preferences.showBackground ? "visible" : "hidden" }} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
           <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />

@@ -123,8 +123,18 @@ try {
     const scrolled = async () => viewport.evaluate(node => ({ left: node.scrollLeft, top: node.scrollTop }));
     await viewport.evaluate(node => node.scrollTo({ left: 400, top: 400 }));
     const anchored = await scrolled();
-    const box = await svg.boundingBox();
+    // The point has to come from the scroll container, not from the SVG: at
+    // 800% the SVG is several thousand pixels across and its own centre sits
+    // far outside the window, so a drag started there lands on nothing.
+    const box = await viewport.boundingBox();
     const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const window = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    assert.ok(middle.x > 0 && middle.y > 0 && middle.x < window.width && middle.y < window.height,
+      `the drag point must be on screen: ${JSON.stringify(middle)} in ${JSON.stringify(window)}`);
+    assert.equal(await page.evaluate(point => {
+      const element = document.elementFromPoint(point.x, point.y);
+      return !!(element && element.closest("svg[tabindex]"));
+    }, middle), true, "the drag point must land on the editor canvas");
     // Space plus drag, and the middle button, both move the view rather than
     // the elements the pointer happens to start on.
     for (const pan of ["space", "middle"]) {
