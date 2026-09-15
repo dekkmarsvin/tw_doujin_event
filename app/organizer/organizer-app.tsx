@@ -1742,7 +1742,7 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
   const placements = useMemo(() => selected ? preview.placements
     .filter((row) => row.dayId === selected.periodKey && row.venueSpaceId === selected.venueSpaceId) : [], [preview, selected]);
   const slots = useMemo(() => Object.fromEntries(placements.map((row) => [row.boothCode, {
-    tone: "mint" as const, label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}`,
+    tone: "coral" as const, label: row.circleName, ariaLabel: `攤位 ${row.boothCode}，${row.circleName}`,
     selected: row.boothCode === selectedCode,
   }])), [placements, selectedCode]);
   const selectedPlacement = placements.find((row) => row.boothCode === selectedCode);
