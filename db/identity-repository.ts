@@ -1795,7 +1795,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (admin) {
       const rows = await database.prepare(
         `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
-                c.last_updated_role, 'admin' AS role,
+                c.last_updated_role, c.publication_operation, 'admin' AS role,
                 CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                   THEN 'binder' ELSE 'guided' END AS workspace_mode
          FROM organizer_event_candidates c
@@ -1804,13 +1804,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).all<{
         id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
         current_version: number; updated_at: number; last_updated_role: string; role: "admin";
-        workspace_mode: "guided" | "binder";
+        workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND";
       }>();
       return rows.results;
     }
     const rows = await database.prepare(
       `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
-              c.last_updated_role, g.role,
+              c.last_updated_role, c.publication_operation, g.role,
               CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                 THEN 'binder' ELSE 'guided' END AS workspace_mode
        FROM organizer_event_candidates c
@@ -1821,7 +1821,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(accountId).all<{
       id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
       current_version: number; updated_at: number; last_updated_role: string; role: OrganizerRole;
-      workspace_mode: "guided" | "binder";
+      workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND";
     }>();
     return rows.results;
   }

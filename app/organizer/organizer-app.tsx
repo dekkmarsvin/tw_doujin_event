@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
 import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
+import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
 import {
   PortalError,
   readSession,
@@ -35,6 +36,7 @@ import {
   saveOrganizerMap,
   saveOrganizerWorkspacePreference,
   submitOrganizerEvent,
+  startOrganizerAmendment,
   uploadOrganizerMapBackground,
   validateOrganizerEvent,
   type OrganizerEventDetail,
@@ -106,6 +108,8 @@ const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
   validate: "檢查與預覽",
   review: "送審與發布",
 };
+const organizerSectionLabel = (detail: OrganizerEventDetail, section: OrganizerWorkspaceSection) =>
+  detail.event.operation === "AMEND" && section === "import" ? "名單修正" : SECTION_LABEL[section];
 const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
   identity_source: "活動名稱與來源",
   days: "活動日期",
@@ -326,6 +330,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [dirty, setDirty] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const [notice, setNotice] = useState<Notice>(IDLE);
+  const [startingAmendment, setStartingAmendment] = useState(false);
   const draftSave = useRef<(() => Promise<boolean>) | null>(null);
   const navigationDialog = useRef<HTMLElement | null>(null);
   const selectionInitialized = useRef(false);
@@ -465,7 +470,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
         />}
         <nav aria-label="活動列表" className={styles.eventList}>
           {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
-            <span>{item.tentativeName}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
+            <span>{item.tentativeName}{item.operation === "AMEND" ? "（發布後修正）" : ""}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
           </button>)}
           {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
         </nav>
@@ -473,6 +478,17 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
+      {detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
+        <div><strong>修正已發布名單</strong><p>建立修正草稿，原本的公開活動會持續提供，直到新版核准並完成發布。</p></div>
+        <button type="button" disabled={startingAmendment} onClick={() => {
+          setStartingAmendment(true); setNotice({ kind: "busy", message: "正在核對已發布版本…" });
+          void startOrganizerAmendment(detail.event.id, detail.event.version).then(async (result) => {
+            // Select the created candidate even if remembering its initial tab fails.
+            await saveOrganizerWorkspacePreference(result.candidateId, { lastSection: "import", guidedTask: "identity_source" }).catch(() => {});
+            await reloadList(); setSelectedId(result.candidateId); setNotice(IDLE);
+          }).catch((error) => setNotice({ kind: "error", message: message(error) })).finally(() => setStartingAmendment(false));
+        }}>{startingAmendment ? "核對中…" : "開始修正已發布名單"}</button>
+      </div>}
       {publicationReadError?.candidateId === selectedId && publicationReadError && <div role="alert" className={styles.error}>
         <p>{publicationReadError.needsLogin ? "登入已失效，無法更新發布進度。" : "暫時無法讀取發布進度。"}目前顯示的是上次讀取的進度。</p>
         {publicationReadError.needsLogin ? <a href="/organizer?reauth=1">重新登入並返回活動</a>
@@ -541,7 +557,7 @@ function WorkspaceSurface({
   const activeLiveSection = section === "venue" ? "venue" : section === "event" ? "event" : undefined;
   return <>
     <div className={styles.workspaceHead}>
-      <div><p className={styles.contextLine}>{ROLE_LABEL[detail.event.role] ?? detail.event.role}・{STATUS_LABEL[detail.event.status]}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
+      <div><p className={styles.contextLine}>{ROLE_LABEL[detail.event.role] ?? detail.event.role}・{STATUS_LABEL[detail.event.status]}{detail.event.operation === "AMEND" ? "・發布後修正" : ""}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
     </div>
     {guided ? <div className={styles.workspaceGrid}>
       <GuidedTaskStation
@@ -572,7 +588,7 @@ function WorkspaceSurface({
             ? item === activeLiveSection ? "尚未儲存" : index > liveIndex ? "需先儲存" : READINESS_LABEL[state]
             : READINESS_LABEL[state];
           return <li key={item}><button type="button" aria-current={item === section ? "step" : undefined} onClick={() => onSection(item)}>
-            <span className={styles.stepNumber}>{index + 1}</span><span>{SECTION_LABEL[item]}<small>{liveLabel}</small></span>
+            <span className={styles.stepNumber}>{index + 1}</span><span>{organizerSectionLabel(detail, item)}<small>{liveLabel}</small></span>
           </button></li>;
         })}
       </ol>
@@ -705,15 +721,15 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
     <div className={styles.readinessHead}><h3>建置狀態</h3><strong>{completed}/{readiness.total}</strong></div>
     <p>最後儲存 {new Date(detail.event.updatedAt).toLocaleString("zh-TW")}</p>
     <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
-      下一步：{SECTION_LABEL[nextSection]}
+      下一步：{organizerSectionLabel(detail, nextSection)}
     </button>
     <div className={styles.readinessList}>{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
-      <span>{SECTION_LABEL[item.id]}</span><small data-state={item.state}>{liveDirty && liveSection
+      <span>{organizerSectionLabel(detail, item.id)}</span><small data-state={item.state}>{liveDirty && liveSection
         ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
         : READINESS_LABEL[item.state]}</small>
     </button>)}</div>
     <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>目前沒有待修正項目。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
-      <strong>{SECTION_LABEL[blocker.section]}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>
+      <strong>{organizerSectionLabel(detail, blocker.section)}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>
     </button>)}</div>
     {blockers.length > visibleBlockers.length && <p>另有 {blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}
   </aside>;
@@ -757,7 +773,9 @@ function StepContent({ session, detail, section, onChanged, onDirtyChange, onDra
   setNotice: (notice: Notice) => void;
 }) {
   if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} setNotice={setNotice} />;
-  if (section === "import") return <ImportPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
+  if (section === "import") return detail.event.operation === "AMEND"
+    ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
+    : <ImportPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
   if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
   if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} setNotice={setNotice} />;
@@ -1495,7 +1513,7 @@ function DraftForm({
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
   const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
-  const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
+  const editable = detail.event.operation !== "AMEND" && (detail.event.status === "draft" || detail.event.status === "changes_requested");
   useEffect(() => {
     onDirtyChange(dirty);
     const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
@@ -1791,7 +1809,7 @@ function ReviewPanel({ session, detail, onChanged, setNotice }: {
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
     {owner && <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), "協作者邀請已寄出。"); }}><input type="email" required placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit">邀請協作者</button><button type="button" className={styles.dangerText} disabled={!editorEmail} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form></div>}
     {session.isAdmin && <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), "負責人邀請已寄出。"); }}><input type="email" required placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit">新增負責人</button><button type="button" className={styles.dangerText} disabled={!ownerEmail} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form></div>}
-    {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <div className={styles.subpanel}><h4>送審</h4><p>送審後，活動代碼就不能再更改。</p><button type="button" onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出審閱</button></div>}
+    {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <div className={styles.subpanel}><h4>送審</h4><p>{detail.event.operation === "AMEND" ? "此候選是已發布活動的修正。修正發布尚未開放，內容會保留。" : "送審後，活動代碼就不能再更改。"}</p><button type="button" disabled={detail.event.operation === "AMEND" && !detail.publicationAvailable} onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出審閱</button></div>}
     {session.isAdmin && detail.event.status === "submitted" && <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准即同意這一版送審內容公開，系統會自動開始發布。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={!detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "核准已記錄，請查看下方發布進度。")}>核准並發布</button></div></div>}
     {(session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && (reopenBlockedByRemoteState ? <div className={styles.subpanel}><h4>退回修改</h4><p className={styles.warning}>發布儲存庫已有這筆工作的遠端紀錄，無法安全退回修改；請聯絡網站管理者。</p></div> : <div className={styles.subpanel}><h4>退回修改</h4><p>系統會先確認是否可安全退回修改；完成後會保留活動代碼與歷史記錄，讓你繼續編輯。</p><textarea aria-label="退回理由" required maxLength={1000} placeholder="請填寫退回理由" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} /><button type="button" disabled={pending || !reopenReason.trim()} onClick={() => act(reopenOrganizerEvent(detail.event.id, detail.event.version, reopenReason), "已退回修改，現在可以繼續編輯活動內容。")}>退回修改</button></div>)}
     {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>自動發布尚未啟用，活動尚未公開。內容會保留，請聯絡網站管理者完成發布啟用檢查。</p>}
