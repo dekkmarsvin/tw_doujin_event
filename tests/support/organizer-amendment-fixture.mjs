@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { buildOfficialCatalogPayload } from "../../scripts/official-catalog-core.mjs";
 
 export const hash = (text) => createHash("sha256").update(text).digest("hex");
-export async function amendmentFixture(runner) {
+export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
   const builder = await runner.import("/app/publication-artifacts.ts");
   const catalog = await runner.import("/app/organizer-reference-catalog.ts");
   const now = Date.parse("2026-09-15T00:00:00.000Z");
@@ -21,6 +21,7 @@ export async function amendmentFixture(runner) {
     contentUpdatedAt: new Date(now).toISOString(), references, import: { source: { sourceDescription: "主辦名單" }, rows },
     maps: [{ id: "source-map", periodKey: "1", venueSpaceId: "zhengyan-exhibition-area", mapRevision: 1,
       content: { schema: "map-contribution-draft/1", layout: JSON.parse(await readFile("fixtures/events/sample/map.json", "utf8")).layout } }] };
+  adjustSnapshot(snapshot);
   const snapshotJson = JSON.stringify(snapshot);
   const source = { candidateId: "source", candidateVersion: 1, jobId: "published-job", snapshotId: "published-snapshot",
     snapshotJson, approvalHash: hash(snapshotJson), mainCommit: "1".repeat(40), dataCommit: "3".repeat(40), publishedAt: now };
