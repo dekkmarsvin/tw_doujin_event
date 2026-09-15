@@ -29,6 +29,8 @@ import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import { createOrganizerReference, createCategoryReference, createVenueReference, createVenueSpaceReference, projectReferenceCatalog,
   resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
 import { PublicationFailure, publicationHasStarted } from "./organizer-publication";
+import { planOrganizerAmendmentCandidate, readOrganizerAmendmentBaseline,
+  type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
 import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueName,
@@ -93,6 +95,7 @@ type PortalConfig = {
 };
 
 type PortalDependencies = {
+  loadPublishedAmendmentBaseline?: (source: AmendmentPublishedSource) => Promise<OrganizerAmendmentBaseline>;
   /** Durable dispatch only; never wait for checks or deployment in a request.
    * Omitted until the production driver and rollout gates are verified. */
   dispatchOrganizerPublication?: (jobId: string) => Promise<void>;
@@ -192,6 +195,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({
+  loadPublishedAmendmentBaseline,
   dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
   projectCircle, thumbnailStore, mapContributionStore, resolveMapContributionScope, readPublishedEventMap,
@@ -1909,6 +1913,87 @@ export function createCirclePortalHandlers({
     })) });
   }
 
+  async function createOrganizerAmendment(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或管理者可以開始修正。" }, 403);
+    const body = await readJson(request);
+    if (!Number.isSafeInteger(body?.expectedVersion) || Object.keys(body!).some((key) => key !== "expectedVersion")) {
+      return json({ error: "請從目前已發布版本開始修正，不能自行指定基準內容。" }, 400);
+    }
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    const job = await repository.getLatestOrganizerPublicationJob(candidateId);
+    if (!candidate || candidate.status !== "published" || candidate.current_version !== body!.expectedVersion
+      || candidate.published_version !== candidate.current_version || job?.status !== "published"
+      || job.candidate_version !== candidate.current_version || !job.data_merge_sha || !job.main_merge_sha) {
+      return json({ error: "活動尚未發布或版本已變更，請重新載入。" }, 409);
+    }
+    const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, candidate.current_version);
+    if (!snapshot || snapshot.id !== job.snapshot_id || snapshot.sha256 !== job.approval_hash) return json({ error: "已發布核准內容不一致。" }, 409);
+    if (!loadPublishedAmendmentBaseline) return json({ error: "目前無法讀取已發布修正基準。" }, 503);
+    const now = config.now();
+    let baseline: OrganizerAmendmentBaseline;
+    try {
+      baseline = await loadPublishedAmendmentBaseline({ candidateId, candidateVersion: candidate.current_version,
+        jobId: job.id, snapshotId: snapshot.id, approvalHash: snapshot.sha256, snapshotJson: snapshot.snapshot_json,
+        dataCommit: job.data_merge_sha, mainCommit: job.main_merge_sha, publishedAt: candidate.published_at! });
+    } catch (error) { return json({ error: error instanceof Error ? error.message : "目前無法核對已發布基準，請稍後重試。" }, 409); }
+    const baselineJson = JSON.stringify(baseline);
+    const baselineSha256 = await sha256Hex(baselineJson);
+    const plan = planOrganizerAmendmentCandidate(baseline, [], () => new Date(now).toISOString().slice(0, 10));
+    const result = await repository.createOrganizerAmendment({ id: crypto.randomUUID(), sourceCandidateId: candidateId,
+      sourceVersion: candidate.current_version, sourceJobId: job.id, sourceSnapshotId: snapshot.id,
+      sourceApprovalHash: snapshot.sha256, sourceMainCommit: job.main_merge_sha, eventId: baseline.event.id,
+      draftJson: JSON.stringify(baseline.draft), baselineJson, baselineSha256, rows: plan.rows, maps: baseline.maps,
+      actor: { accountId: access.current.accountId, role: access.role, admin: access.admin, now } });
+    return result.ok ? json(result, 201) : json({ error: "已有修正候選，或版本／權限已變更。請重新載入活動清單。" }, 409);
+  }
+
+  async function readAmendment(candidateId: string) {
+    const stored = await repository.getOrganizerAmendment(candidateId);
+    if (!stored) return null;
+    const baseline = await readOrganizerAmendmentBaseline(stored.baseline_json, stored.baseline_sha256);
+    return { stored, baseline, changes: JSON.parse(stored.changes_json) as unknown[] };
+  }
+
+  async function getOrganizerAmendment(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const amendment = await readAmendment(candidateId);
+    if (!amendment) return json({ error: "找不到修正候選。" }, 404);
+    const plan = planOrganizerAmendmentCandidate(amendment.baseline, amendment.changes, () => new Date(config.now()).toISOString().slice(0, 10));
+    return json({ version: amendment.stored.current_version, changes: amendment.changes, impact: plan.impact,
+      baseline: { event: amendment.baseline.event, sourceCandidateId: amendment.stored.source_candidate_id,
+        sourceVersion: amendment.stored.source_version, publishedAt: amendment.baseline.source.publishedAt,
+        official: amendment.baseline.official } });
+  }
+
+  async function saveOrganizerAmendment(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const body = await readJson(request);
+    if (!Number.isSafeInteger(body?.expectedVersion) || (body!.expectedVersion as number) < 1 || !Array.isArray(body?.changes)
+      || body.changes.length > 20_000 || Object.keys(body!).some((key) => !["expectedVersion", "changes"].includes(key))) {
+      return json({ error: "請提供目前版本與明確修正宣告。" }, 400);
+    }
+    const changesJson = JSON.stringify(body.changes);
+    if (new TextEncoder().encode(changesJson).byteLength > 8 * 1024 * 1024) return json({ error: "修正宣告超過 8 MB。" }, 413);
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate || candidate.current_version !== body.expectedVersion || !["draft", "changes_requested"].includes(candidate.status)) {
+      return json({ error: "版本或狀態已變更，請重新載入。" }, 409);
+    }
+    const amendment = await readAmendment(candidateId);
+    if (!amendment) return json({ error: "找不到修正候選。" }, 404);
+    const now = config.now();
+    let plan: ReturnType<typeof planOrganizerAmendmentCandidate>;
+    try { plan = planOrganizerAmendmentCandidate(amendment.baseline, body.changes, () => new Date(now).toISOString().slice(0, 10)); }
+    catch (error) { return json({ error: error instanceof Error ? error.message : "修正宣告無效。" }, 422); }
+    const result = await repository.saveOrganizerAmendment({ candidateId, expectedVersion: candidate.current_version,
+      baselineSha256: amendment.stored.baseline_sha256, changesJson, changesSha256: await sha256Hex(changesJson), rows: plan.rows,
+      actor: { accountId: access.current.accountId, role: access.role, admin: access.admin, now } });
+    return result.ok ? json({ ...result, impact: plan.impact }) : json({ error: "版本或權限已變更，修正未儲存。請重新載入。" }, 409);
+  }
+
   async function getOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -1944,6 +2029,7 @@ export function createCirclePortalHandlers({
         tentativeName: candidate.tentative_name,
         eventId: candidate.event_id,
         eventIdLocked: candidate.event_id_locked_at !== null,
+        operation: candidate.publication_operation,
         status: candidate.status,
         version: candidate.current_version,
         updatedAt: candidate.updated_at,
@@ -2000,6 +2086,9 @@ export function createCirclePortalHandlers({
   async function updateOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
+    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
+      return json({ error: "已發布修正保留基準活動設定，請使用明確修正宣告。", code: "amendment_declaration_required" }, 409);
+    }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const serialized = serializeOrganizerEventDraft(body?.draft);
@@ -2191,6 +2280,9 @@ export function createCirclePortalHandlers({
   async function putOrganizerImport(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
+    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
+      return json({ error: "已發布名單不能以匯入缺列推論變動，請使用明確修正宣告。", code: "amendment_declaration_required" }, 409);
+    }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const source = body?.source && typeof body.source === "object" && !Array.isArray(body.source)
@@ -2543,6 +2635,9 @@ export function createCirclePortalHandlers({
   async function submitOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
+    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
+      return json({ error: "已發布修正的送審與發布尚未開放；目前修正草稿會保留。", code: "amendment_publication_unavailable" }, 503);
+    }
     if (access.role !== "owner") return json({ error: "只有負責人可以送審。" }, 403);
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
@@ -2608,6 +2703,9 @@ export function createCirclePortalHandlers({
   async function adminReviewOrganizerCandidate(request: Request, candidateId: string) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
+    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
+      return json({ error: "已發布修正的核准發布尚未開放。", code: "amendment_publication_unavailable" }, 503);
+    }
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const decision = body?.decision;
@@ -2838,6 +2936,7 @@ export function createCirclePortalHandlers({
     putOrganizerMapBackground, getOrganizerMapBackground,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
     submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate,
+    createOrganizerAmendment, getOrganizerAmendment, saveOrganizerAmendment,
     // Event-scoped: each answers only for the event the request named.
     listClaims: eventScoped(listClaims),
     createClaim: eventScoped(createClaim),

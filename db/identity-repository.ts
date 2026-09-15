@@ -7,6 +7,7 @@ import {
 } from "../app/organizer-venue-catalog";
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
 import { createVenueReference, createVenueSpaceReference, initialVenueReferences, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
+import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -93,6 +94,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (!tablesReady) {
       tablesReady = database.batch(IDENTITY_TABLES.map(({ sql }) => database.prepare(sql)))
         .then(() => addMissingColumns())
+        .then(() => upgradeOrganizerEventIndex())
         .then(() => database.batch(IDENTITY_INDEXES.map(({ sql }) => database.prepare(sql))))
         .then(() => seedAdmins())
         .then(() => seedOrganizerVenueCatalog())
@@ -112,6 +114,19 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         const message = error instanceof Error ? error.message : String(error);
         if (!/duplicate column name/i.test(message)) throw error;
       }
+    }
+  }
+
+  async function upgradeOrganizerEventIndex() {
+    const previous = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'organizer_candidates_event_id_idx'").first<{ sql: string }>();
+    if (previous && !previous.sql.includes("publication_operation")) {
+      const replacement = IDENTITY_INDEXES.find(({ name }) => name === "organizer_candidates_event_id_idx")!;
+      // Keep the same name and replace atomically. Older deployment isolates
+      // using CREATE INDEX IF NOT EXISTS cannot recreate the obsolete rule.
+      await database.batch([
+        database.prepare("DROP INDEX IF EXISTS organizer_candidates_event_id_idx"),
+        database.prepare(replacement.sql),
+      ]);
     }
   }
 
@@ -1531,6 +1546,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     approved_at: number | null;
     published_version: number | null;
     published_at: number | null;
+    publication_operation: "CREATE" | "AMEND";
   };
 
   type OrganizerWorkspaceStateRow = {
@@ -2300,6 +2316,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.admin ? Promise.resolve(null) : organizerRole(input.candidateId, input.actorAccountId),
     ]);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.publication_operation === "AMEND") return { ok: false as const, reason: "status" as const, status: candidate.status };
     if (!input.admin && !grantRole) return { ok: false as const, reason: "forbidden" as const };
     if (candidate.current_version !== input.expectedVersion) {
       return {
@@ -2398,6 +2415,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.admin ? Promise.resolve(null) : organizerRole(input.candidateId, input.actorAccountId),
     ]);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.publication_operation === "AMEND") return { ok: false as const, reason: "status" as const, status: candidate.status };
     if (!input.admin && !grantRole) return { ok: false as const, reason: "forbidden" as const };
     if (candidate.current_version !== input.expectedVersion) {
       return {
@@ -2467,6 +2485,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       getOrganizerCandidate(input.candidateId), organizerRole(input.candidateId, input.actorAccountId),
     ]);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.publication_operation === "AMEND") return { ok: false as const, reason: "status" as const, status: candidate.status };
     if (role !== "owner") return { ok: false as const, reason: "forbidden" as const };
     if (candidate.current_version !== input.expectedVersion) {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
@@ -2500,6 +2519,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const candidate = await getOrganizerCandidate(input.candidateId);
     if (!candidate) return { ok: false as const, reason: "not_found" as const };
+    if (candidate.publication_operation === "AMEND") return { ok: false as const, reason: "status" as const, status: candidate.status };
     if (candidate.current_version !== input.expectedVersion) {
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
     }
@@ -3284,6 +3304,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
+      "organizer_amendment_changes", "organizer_amendments",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
@@ -3292,6 +3313,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   return {
+    ...createOrganizerAmendmentRepository(database, ensureTables),
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,

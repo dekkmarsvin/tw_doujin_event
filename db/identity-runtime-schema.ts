@@ -310,6 +310,23 @@ export const IDENTITY_TABLES = [
     "approved_at INTEGER",
     "published_version INTEGER",
     "published_at INTEGER",
+    "publication_operation TEXT NOT NULL DEFAULT 'CREATE' CHECK (publication_operation IN ('CREATE', 'AMEND'))",
+  ]),
+  table("organizer_amendments", [
+    "candidate_id TEXT PRIMARY KEY NOT NULL",
+    "source_candidate_id TEXT NOT NULL",
+    "source_version INTEGER NOT NULL",
+    "source_job_id TEXT NOT NULL",
+    "baseline_json TEXT NOT NULL",
+    "baseline_sha256 TEXT NOT NULL",
+    "created_at INTEGER NOT NULL",
+  ]),
+  table("organizer_amendment_changes", [
+    "candidate_id TEXT NOT NULL",
+    "version INTEGER NOT NULL",
+    "changes_json TEXT NOT NULL",
+    "revision_id TEXT NOT NULL",
+    "created_at INTEGER NOT NULL",
   ]),
   table("organizer_workspace_state", [
     "candidate_id TEXT PRIMARY KEY NOT NULL",
@@ -487,7 +504,9 @@ export const IDENTITY_INDEXES = [
   index("organizer_venues_name_idx", "organizer_venues", "name_key", { unique: true }),
   index("organizer_venue_spaces_venue_idx", "organizer_venue_spaces", "venue_id, name_key", { unique: true }),
   index("organizer_venue_spaces_id_venue_idx", "organizer_venue_spaces", "id, venue_id", { unique: true }),
-  index("organizer_candidates_event_id_idx", "organizer_event_candidates", "event_id", { unique: true, where: "event_id IS NOT NULL" }),
+  index("organizer_candidates_event_id_idx", "organizer_event_candidates", "event_id", { unique: true, where: "event_id IS NOT NULL AND publication_operation = 'CREATE'" }),
+  index("organizer_candidates_active_amendment_idx", "organizer_event_candidates", "event_id", { unique: true, where: "publication_operation = 'AMEND' AND status <> 'published'" }),
+  index("organizer_amendment_changes_version_idx", "organizer_amendment_changes", "candidate_id, version", { unique: true }),
   index("organizer_candidates_status_idx", "organizer_event_candidates", "status, updated_at"),
   index("organizer_workspace_preferences_key_idx", "organizer_workspace_preferences", "candidate_id, account_id", { unique: true }),
   index("organizer_workspace_preferences_account_idx", "organizer_workspace_preferences", "account_id, updated_at"),
@@ -519,6 +538,7 @@ export const IDENTITY_INDEXES = [
  * NOT EXISTS`, so duplicate-column errors are the idempotent success case.
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
+  { table: "organizer_event_candidates", column: "publication_operation", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN publication_operation TEXT NOT NULL DEFAULT 'CREATE' CHECK (publication_operation IN ('CREATE', 'AMEND'))" },
   { table: "organizer_import_rows", column: "codes_json", sql: "ALTER TABLE organizer_import_rows ADD COLUMN codes_json TEXT" },
   { table: "organizer_publication_jobs", column: "failure_code", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN failure_code TEXT" },
   { table: "organizer_publication_jobs", column: "retryable", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN retryable INTEGER NOT NULL DEFAULT 1" },
