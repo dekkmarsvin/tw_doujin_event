@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { base } from "./journey.mjs";
+import { PIXEL, base } from "./journey.mjs";
 
 export const source = JSON.parse(await readFile("fixtures/events/sample/map.json", "utf8")).layout;
 const now = Date.now();
@@ -11,7 +11,7 @@ const detail = { event: summary, publicationAvailable: false, publication: null,
   workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 6, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } } };
 
 export async function openSurface(journey, surface, initialLayout = source) {
-  const state = { layout: structuredClone(initialLayout), authoring: { guides: [] }, saves: 0 };
+  const state = { layout: structuredClone(initialLayout), authoring: { guides: [] }, saves: 0, background: false };
   const page = await journey.page({ url: `${base}/${surface}`, viewport: { width: 1600, height: 1100 }, routes: async page => {
     await page.route("**/api/**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname, method = request.method();
@@ -24,7 +24,13 @@ export async function openSurface(journey, surface, initialLayout = source) {
       if (path.endsWith("/events/placement")) return reply(detail);
       const map = { id: "test-map", periodKey: "1", venueSpaceId: "test-space", mapRevision: 1, layout: state.layout, authoring: state.authoring };
       if (path.endsWith("/maps")) return reply({ maps: [map] });
-      if (path.endsWith("/background")) return reply({ error: "missing" }, 404);
+      // The traced plan is stored beside the map, so a journey that needs the
+      // background controls uploads one and reads it back the way the app does.
+      if (path.endsWith("/background")) {
+        if (method === "PUT") { state.background = true; return reply({ ok: true, width: 1, height: 1 }); }
+        if (!state.background) return reply({ error: "missing" }, 404);
+        return route.fulfill({ status: 200, contentType: "image/png", body: PIXEL });
+      }
       if (path.endsWith("/maps/test-map")) {
         if (method === "PATCH") { state.layout = request.postDataJSON().layout; state.authoring = request.postDataJSON().authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, version: 1, mapRevision: 1 }); }
         return reply({ map });
