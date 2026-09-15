@@ -26,7 +26,7 @@ import {
   validateOrganizerImportedRowsAgainstDraft,
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
-import { createOrganizerReference, createCategoryReference, projectReferenceCatalog,
+import { createOrganizerReference, createCategoryReference, createVenueReference, createVenueSpaceReference, projectReferenceCatalog,
   resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
 import { PublicationFailure, publicationHasStarted } from "./organizer-publication";
 import {
@@ -1733,6 +1733,16 @@ export function createCirclePortalHandlers({
       if (body?.kind === "organizer") record = createOrganizerReference({ name: body.name, sourceUrl: body.sourceUrl }, now);
       else if (body?.kind === "category-catalog" && typeof body.organizerId === "string") {
         record = createCategoryReference({ name: body.name, sourceUrl: body.sourceUrl, categories: body.categories }, body.organizerId, now);
+      } else if ((body?.kind === "venue" || body?.kind === "venue-space") && typeof body.referenceId === "string") {
+        const name = normalizeOrganizerVenueName(body.name);
+        const sourceUrl = normalizeOrganizerVenueSourceUrl(body.sourceUrl);
+        if (!name || !sourceUrl) return json({ error: "請填寫公開名稱與有效的 HTTPS 官方來源網址。" }, 400);
+        const catalog = await repository.listOrganizerVenueCatalog();
+        const venue = catalog.venues.find((item) => body.kind === "venue" ? item.id === body.referenceId : item.spaces.some((space) => space.id === body.referenceId));
+        if (!venue) return json({ error: "找不到場館或使用空間。" }, 404);
+        record = body.kind === "venue"
+          ? createVenueReference({ id: venue.id, name, sourceUrl }, now)
+          : createVenueSpaceReference({ id: body.referenceId, venueId: venue.id, name, sourceUrl }, now);
       } else return json({ error: "請選擇要建立的主辦或分類目錄。" }, 400);
     } catch (error) { return json({ error: error instanceof Error ? error.message : "主辦或分類資料無效。" }, 400); }
     const created = await repository.createOrganizerReferenceRecord({
@@ -1943,6 +1953,7 @@ export function createCirclePortalHandlers({
       draft,
       venueCatalog,
       referenceCatalog: workspaceValidation.referenceCatalog,
+      missingVenueReferences: workspaceValidation.missingVenueReferences,
       revisions: revisions.map((revision) => ({
         version: revision.version,
         eventId: revision.event_id,
@@ -2169,7 +2180,12 @@ export function createCirclePortalHandlers({
         }
       }
     }
-    return { issues, imported, maps, contents, venueCatalog, referenceCatalog, referenceSnapshot: resolved.snapshot };
+    const missingVenueReferences = venueCatalog.venues.flatMap((venue) => [
+      { kind: "venue" as const, id: venue.id, name: venue.name, sourceUrl: venue.sourceUrl },
+      ...venue.spaces.map((space) => ({ kind: "venue-space" as const, id: space.id, name: `${venue.name}・${space.name}`, sourceUrl: space.sourceUrl })),
+    ]).filter((item) => !referenceRecords.some((record) => record.kind === item.kind && record.id === item.id)
+      && draft.venue.assignments.some((assignment) => item.kind === "venue" ? assignment.venueId === item.id : assignment.venueSpaceId === item.id));
+    return { issues, imported, maps, contents, venueCatalog, referenceCatalog, missingVenueReferences, referenceSnapshot: resolved.snapshot };
   }
 
   async function putOrganizerImport(request: Request, candidateId: string) {

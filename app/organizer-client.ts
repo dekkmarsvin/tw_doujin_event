@@ -58,6 +58,7 @@ export type OrganizerEventDetail = {
   draft: OrganizerEventDraft;
   venueCatalog: OrganizerVenueCatalog;
   referenceCatalog?: OrganizerReferenceCatalog;
+  missingVenueReferences?: Array<{ kind: "venue" | "venue-space"; id: string; name: string; sourceUrl: string | null }>;
   revisions: Array<{ version: number; eventId: string | null; createdByRole: string; createdAt: number }>;
   import: null | {
     source: {
@@ -107,7 +108,7 @@ export function listOrganizerVenues(candidateId: string) {
 }
 
 export function createOrganizerReferenceEntry(candidateId: string, input: {
-  expectedVersion: number; kind: "organizer" | "category-catalog"; name: string; sourceUrl: string;
+  expectedVersion: number; kind: "organizer" | "category-catalog" | "venue" | "venue-space"; name: string; sourceUrl: string; referenceId?: string;
   organizerId?: string; categories?: Array<{ label: string; description: string }>;
 }) {
   return organizerCall<{ created: { id: string; organizerId: string | null; revision: string | null }; catalog: OrganizerReferenceCatalog }>(
