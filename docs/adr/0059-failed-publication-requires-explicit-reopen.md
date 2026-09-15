@@ -14,7 +14,7 @@
 
 ### 1. 退回是人工明確動作
 
-Owner 或 Admin 以 fresh session 呼叫 `POST /api/organizer/events/:candidateId/reopen`，提供目前 `expectedVersion` 與非空、最多 1000 字的理由。Editor、過期 session、版本或狀態不符都拒絕。這是內容恢復操作，不受 `ORGANIZER_PUBLICATION_MODE=disabled` 阻擋。
+Owner 或 Admin 以有效 session 呼叫 `POST /api/organizer/events/:candidateId/reopen`，提供目前 `expectedVersion` 與非空、最多 1000 字的理由。Editor、過期 session、版本或狀態不符都拒絕。這是內容恢復操作，不受 `ORGANIZER_PUBLICATION_MODE=disabled` 阻擋。
 
 ### 2. 先取得既有全域 lease，再查核固定遠端狀態
 

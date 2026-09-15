@@ -135,11 +135,11 @@ async function routeOrganizer(page, { role, reopen = "success", started = false 
     reopenRequests += 1;
     reopenBodies.push(route.request().postDataJSON());
     requestSeenResolve?.();
-    if (reopen === "stale") {
+    if (reopen === "expired") {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
-        body: JSON.stringify({ error: "退回修改需要重新登入。", code: "admin_session_stale" }),
+        body: JSON.stringify({ error: "尚未登入。" }),
       });
       return;
     }
@@ -258,12 +258,11 @@ try {
   await capture(owner, "organizer-reopen-owner-editable");
   await owner.close();
 
-  // Admin: the same visible action reports the existing fresh-login path when
-  // the step-up session is stale; no synthetic response changes the candidate.
+  // An expired login ends the whole session; it does not leave a locked panel.
   const admin = await journey.page({
     url: `${base}/organizer`,
     viewport: { width: 1440, height: 900 },
-    routes: async (page) => { page.__reopen = await routeOrganizer(page, { role: "admin", reopen: "stale" }); },
+    routes: async (page) => { page.__reopen = await routeOrganizer(page, { role: "admin", reopen: "expired" }); },
   });
   const adminRoutes = admin.__reopen;
   await admin.getByRole("button", { name: "登出", exact: true }).waitFor();
@@ -274,10 +273,10 @@ try {
   await adminReason.fill("重新確認候選資料");
   await adminReopen.click();
   await adminRoutes.requestSeen;
-  await admin.getByRole("status").getByText("退回修改需要重新登入。", { exact: true }).waitFor();
-  await admin.getByRole("link", { name: "重新登入並返回這個活動", exact: true }).waitFor();
+  await admin.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
+  await admin.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
   assert.equal(adminRoutes.reopenRequests, 1);
-  await capture(admin, "organizer-reopen-admin-fresh-login-error");
+  await capture(admin, "organizer-reopen-admin-expired-login");
   await admin.close();
 
   // If the fixed remote audit cannot prove a clear state, the candidate stays
@@ -313,7 +312,7 @@ try {
   const editor = await journey.page({
     url: `${base}/organizer`,
     viewport: { width: 1440, height: 900 },
-    routes: async (page) => { await routeOrganizer(page, { role: "editor", reopen: "stale" }); },
+    routes: async (page) => { await routeOrganizer(page, { role: "editor", reopen: "expired" }); },
   });
   await editor.getByRole("button", { name: "登出", exact: true }).waitFor();
   const editorReview = await reviewPanel(editor);

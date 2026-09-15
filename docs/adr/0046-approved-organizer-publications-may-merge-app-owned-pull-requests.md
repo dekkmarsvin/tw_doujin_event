@@ -18,7 +18,7 @@ ADR-0037 禁止控制面合併，是在控制面只有提案資料、沒有 immu
 
 Owner 送審固定 candidate version、正規化匯入來源 metadata、identity grouping／transition、reference 選擇及所有 day × venue-space map revision。全域管理者核准的是該 snapshot hash；後續編輯必須建立新 revision，不能改寫已核准內容。
 
-送審與核准是兩次需要 fresh session 的獨立動作。管理者可以核准自己以 Owner 身分送出的 revision，但 UI 必須警示，audit 必須記錄 actor、snapshot hash、candidate version、時間與 `selfApproval`。
+送審與核准是兩次需要 有效 session 的獨立動作。管理者可以核准自己以 Owner 身分送出的 revision，但 UI 必須警示，audit 必須記錄 actor、snapshot hash、candidate version、時間與 `selfApproval`。
 
 ### 2. GitHub App 只安裝在固定兩個 repository
 
