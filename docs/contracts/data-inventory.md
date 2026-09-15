@@ -135,6 +135,8 @@
 | `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
 | `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場館空間、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
 | `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
+| `organizer_amendments` | 修正候選對應的來源候選／版本／published job、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
+| `organizer_amendment_changes` | 每次明確修正宣告的不可變 JSON、candidate version、對應 revision ID 與時間；社團名稱與攤位變動隨候選保存，不直接公開此控制面紀錄 |
 | `organizer_reference_records` | 主辦／分類／場館／空間的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
 | `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA、workflow run id、錯誤訊息、failure_code、retryable 與 sticky `remote_write_intent_at`；重試保留原 job 與核准 snapshot，退回修改後舊 job 標為不可重試歷史 |
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |

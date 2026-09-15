@@ -9,6 +9,7 @@ const { OrganizerValidationIssueCard } = await vite.environments.ssr.runner.impo
 after(() => vite.close());
 
 const detail = {
+  event: { operation: "CREATE" },
   draft: { event: { days: [{ id: "1", label: "第一日" }] } },
   venueCatalog: { venues: [{ name: "展覽館", spaces: [{ id: "hall", name: "一樓" }] }] },
   import: {
@@ -41,4 +42,13 @@ test("import missing_booth retains its own message instead of map repair advice"
   const html = render({ step: "import", code: "missing_booth", severity: "error", message: "第 2 列缺少攤位代碼。" });
   assert.match(html, /第 2 列缺少攤位代碼/);
   assert.doesNotMatch(html, /比對來源|漏畫/);
+});
+
+test("amendment map advice points to the declaration panel instead of a replacement import", () => {
+  const html = renderToStaticMarkup(React.createElement(OrganizerValidationIssueCard, {
+    detail: { ...detail, event: { operation: "AMEND" } },
+    issue: { step: "map", code: "missing_booth", severity: "error", target: "1/hall", boothCodes: ["A02"] },
+  }));
+  assert.match(html, /「名單修正」調整並儲存/);
+  assert.doesNotMatch(html, /「攤位匯入」/);
 });

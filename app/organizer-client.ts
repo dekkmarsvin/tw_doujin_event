@@ -42,6 +42,7 @@ async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type OrganizerEventSummary = {
   id: string;
+  operation?: "CREATE" | "AMEND";
   tentativeName: string;
   eventId: string | null;
   status: OrganizerCandidateStatus;
@@ -92,6 +93,39 @@ export function listOrganizerEvents() {
 
 export function readOrganizerEvent(candidateId: string) {
   return organizerCall<OrganizerEventDetail>(`/api/organizer/events/${encodeURIComponent(candidateId)}`);
+}
+
+export type OrganizerAmendmentDestination = { dayId: string; code: string; areaId: string };
+export type OrganizerAmendmentChange = (
+  | { kind: "withdrawn"; sources: string[] }
+  | { kind: "released"; sources: string[]; circleName: string }
+  | { kind: "moved"; moves: Array<{ source: string; to: OrganizerAmendmentDestination }> }
+  | { kind: "added"; placements: OrganizerAmendmentDestination[]; circleName: string }
+) & { reference?: string };
+export type OrganizerAmendmentPlacement = OrganizerAmendmentDestination & { source: string; circleId: string; name: string };
+export type OrganizerAmendmentImpact = { kind: OrganizerAmendmentChange["kind"]; before: OrganizerAmendmentPlacement[]; after: OrganizerAmendmentPlacement[] };
+export type OrganizerAmendmentDetail = {
+  version: number;
+  changes: OrganizerAmendmentChange[];
+  impact: OrganizerAmendmentImpact[];
+  baseline: {
+    sourceCandidateId: string; sourceVersion: number; publishedAt: number;
+    event: { id: string; days: Array<{ id: string; label: string }>; areas: Array<{ id: string; label?: string; name?: string }> };
+    official: { days: Array<{ day: string | number; booths: Array<{ codes: string[]; name: string; areaId?: string }> }> };
+  };
+};
+export function startOrganizerAmendment(candidateId: string, expectedVersion: number) {
+  return organizerCall<{ ok: true; candidateId: string; version: number }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/amendments`, {
+    method: "POST", body: JSON.stringify({ expectedVersion }),
+  });
+}
+export function readOrganizerAmendment(candidateId: string) {
+  return organizerCall<OrganizerAmendmentDetail>(`/api/organizer/events/${encodeURIComponent(candidateId)}/amendment`);
+}
+export function saveOrganizerAmendment(candidateId: string, expectedVersion: number, changes: OrganizerAmendmentChange[]) {
+  return organizerCall<{ ok: true; version: number; impact: OrganizerAmendmentImpact[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/amendment`, {
+    method: "PUT", body: JSON.stringify({ expectedVersion, changes }),
+  });
 }
 
 export function saveOrganizerEvent(candidateId: string, expectedVersion: number, draft: OrganizerEventDraft) {
