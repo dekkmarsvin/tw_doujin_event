@@ -4,6 +4,8 @@
   "main": "./index.ts",
   "compatibility_date": "2026-05-22",
   "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true, "logs": { "enabled": true } },
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "ORGANIZER_PUBLICATION_MODE": "github",
