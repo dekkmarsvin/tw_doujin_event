@@ -17,7 +17,7 @@
    own fixed height inside that taller row -- the map scrolled while the
    space it could have used sat empty below it. */
 .workspace { display:grid; grid-template-columns:minmax(0,1fr) 230px; height:clamp(480px,68vh,860px); }
-.canvas { display:grid; min-width:0; min-height:0; grid-template-rows:auto minmax(0,1fr); background-color:#e7e8e1; background-image:linear-gradient(#d7dad2 1px,transparent 1px),linear-gradient(90deg,#d7dad2 1px,transparent 1px); background-size:22px 22px; }
+.canvas { display:grid; min-width:0; min-height:0; grid-template-rows:auto auto minmax(0,1fr); background-color:#e7e8e1; background-image:linear-gradient(#d7dad2 1px,transparent 1px),linear-gradient(90deg,#d7dad2 1px,transparent 1px); background-size:22px 22px; }
 .canvasToolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid #cbd0ca; background:#f8f9f7; }
 .canvasToolbar span { color:#657069; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; letter-spacing:.06em; }
 .canvasToolbar>div { display:flex; align-items:center; gap:5px; }
@@ -145,3 +145,19 @@
 .placementStatus button { margin-left:auto; padding:5px 10px; border:1px solid #8fa899; border-radius:6px; background:white; color:inherit; cursor:pointer; }
 .facilityPreview { pointer-events:none; }
 .facilityPreview rect,.facilityPreview circle,.facilityPreview path { fill:#e9f0ec55; stroke:#3f7a5e; stroke-width:1.5; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; }
+
+.guideToolbar { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:8px 12px; color:#53625a; font-size:11px; }
+.guideToolbar label { display:flex; align-items:center; gap:5px; }
+.manualGuide { stroke:#548d9c; stroke-width:1; stroke-dasharray:5 4; vector-effect:non-scaling-stroke; pointer-events:none; }
+.guideSelected .manualGuide { stroke:#225d71; stroke-width:1.5; }
+.guideHitArea { stroke:transparent; stroke-width:14; vector-effect:non-scaling-stroke; pointer-events:stroke; }
+.guidePanel { padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid #d4dad5; }
+.guidePanel label { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.guidePanel input[type=checkbox] { height:auto; }
+.snapReadout { display:block; color:#225d71; padding:8px 0; font-size:12px; }
+
+.guideToolbar input[type=checkbox] { width:16px; height:16px; flex:none; padding:0; }
+.guideToolbar label { flex:none; white-space:nowrap; }
+
+.editor .guideToolbar label { display:flex; align-items:center; white-space:nowrap; }
+.editor .guideToolbar input[type=checkbox],.editor .guidePanel input[type=checkbox] { width:16px; height:16px; min-height:16px; padding:0; }

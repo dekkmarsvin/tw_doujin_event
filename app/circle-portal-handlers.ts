@@ -2413,7 +2413,7 @@ export function createCirclePortalHandlers({
     return json({ map: {
       id: map.id, periodKey: map.period_key, venueSpaceId: map.venue_space_id,
       status: map.status, mapRevision: map.current_revision, updatedAt: map.updated_at,
-      layout: content.layout,
+      layout: content.layout, ...(content.authoring ? { authoring: content.authoring } : {}),
     } });
   }
 
@@ -2424,7 +2424,7 @@ export function createCirclePortalHandlers({
     const expectedVersion = body?.expectedVersion;
     const periodKey = typeof body?.periodKey === "string" ? body.periodKey.normalize("NFKC").trim() : "";
     const venueSpaceId = typeof body?.venueSpaceId === "string" ? body.venueSpaceId.normalize("NFKC").trim() : "";
-    const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout });
+    const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout, ...(body?.authoring === undefined ? {} : { authoring: body.authoring }) });
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !content) {
       return json({ error: "活動日、場館空間與地圖內容為必填。" }, 400);
     }
@@ -2456,7 +2456,7 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     const expectedMapRevision = body?.expectedMapRevision;
-    const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout });
+    const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout, ...(body?.authoring === undefined ? {} : { authoring: body.authoring }) });
     if (!Number.isSafeInteger(expectedVersion) || !Number.isSafeInteger(expectedMapRevision) || !content) {
       return json({ error: "地圖版本或內容無效，請重新載入。" }, 400);
     }

@@ -7,35 +7,35 @@ import type { EventMapLayout } from "./event-map";
  * way back to where the session started. */
 export const LAYOUT_HISTORY_LIMIT = 50;
 
-export type LayoutHistory = {
-  past: readonly EventMapLayout[];
-  present: EventMapLayout;
-  future: readonly EventMapLayout[];
+export type LayoutHistory<T = EventMapLayout> = {
+  past: readonly T[];
+  present: T;
+  future: readonly T[];
   /** Coalescing key of the push that produced `present`. Consecutive pushes
    * sharing a key replace the entry instead of adding one, so a pointer drag
    * or a typed field is a single undo step rather than one step per event. */
   lastKey: string | null;
 };
 
-export function createLayoutHistory(present: EventMapLayout): LayoutHistory {
+export function createLayoutHistory<T>(present: T): LayoutHistory<T> {
   return { past: [], present, future: [], lastKey: null };
 }
 
-export function canUndoLayoutHistory(history: LayoutHistory) {
+export function canUndoLayoutHistory<T>(history: LayoutHistory<T>) {
   return history.past.length > 0;
 }
 
-export function canRedoLayoutHistory(history: LayoutHistory) {
+export function canRedoLayoutHistory<T>(history: LayoutHistory<T>) {
   return history.future.length > 0;
 }
 
-function trim(past: readonly EventMapLayout[]) {
+function trim<T>(past: readonly T[]) {
   return past.length > LAYOUT_HISTORY_LIMIT ? past.slice(past.length - LAYOUT_HISTORY_LIMIT) : past;
 }
 
 /** Records `next` as the current layout. A redo branch is always discarded:
  * once the maintainer edits after undoing, the abandoned states are gone. */
-export function pushLayoutHistory(history: LayoutHistory, next: EventMapLayout, coalesceKey: string | null = null): LayoutHistory {
+export function pushLayoutHistory<T>(history: LayoutHistory<T>, next: T, coalesceKey: string | null = null): LayoutHistory<T> {
   if (coalesceKey !== null && coalesceKey === history.lastKey) {
     return { past: history.past, present: next, future: [], lastKey: coalesceKey };
   }
@@ -45,11 +45,11 @@ export function pushLayoutHistory(history: LayoutHistory, next: EventMapLayout, 
 /** Ends the current coalescing run so the next push starts its own entry, even
  * when it carries the same key — dragging the same element twice with one
  * pointer would otherwise collapse into a single step. */
-export function sealLayoutHistory(history: LayoutHistory): LayoutHistory {
+export function sealLayoutHistory<T>(history: LayoutHistory<T>): LayoutHistory<T> {
   return history.lastKey === null ? history : { ...history, lastKey: null };
 }
 
-export function undoLayoutHistory(history: LayoutHistory): LayoutHistory {
+export function undoLayoutHistory<T>(history: LayoutHistory<T>): LayoutHistory<T> {
   const previous = history.past.at(-1);
   if (!previous) return history;
   return {
@@ -60,7 +60,7 @@ export function undoLayoutHistory(history: LayoutHistory): LayoutHistory {
   };
 }
 
-export function redoLayoutHistory(history: LayoutHistory): LayoutHistory {
+export function redoLayoutHistory<T>(history: LayoutHistory<T>): LayoutHistory<T> {
   const [next, ...rest] = history.future;
   if (!next) return history;
   return { past: trim([...history.past, history.present]), present: next, future: rest, lastKey: null };

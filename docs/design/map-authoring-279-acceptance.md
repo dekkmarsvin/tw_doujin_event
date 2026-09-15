@@ -16,3 +16,20 @@
 ![地圖貢獻切回連續排段工具](assets/map-authoring-279/contribution-row.png)
 
 輔助線／吸附及底圖／精度仍由 #279 下一切片承接；本切片不代表 #279 全部完成。
+
+切片一正式部署：#281 合併為 `811c7e2edc70e2ef65cefd5f101c78b443211aaf`，production run `34957123251`。main Browser 的 references journey 首次在登入真人驗證前置回 403；地圖 journey 已通過。僅重跑失敗 Browser job 一次，attempt 2 全數成功，未更改檢查。2026-09-15T10:31:55.190Z [origin 核對](assets/map-authoring-279/placement-origin.json)：manifest commit 正確，8 份活動 bytes 及 pins 完全未變，Reader 200／匿名 session 401，manifest 穩定。
+
+## 切片二：私人輔助線與吸附
+
+本機合成 API 瀏覽器驗收使用 1000×1600 直幅（Organizer）及 1600×1000 橫幅（地圖貢獻）：六條共同外緣輔助線、同排 A01–A08 兩列反向編號，以及水平 H 排。保存 payload 驗證幾何、無縫分割、入場點交會吸附；重新載入仍保留座標與鎖定。另實走手動拖動、刪除／復原、Alt、整組外框移動吸附、排段角縮放及畫布／輔助線共同縮放復原。
+
+模組與 D1 共 52 項通過：舊稿相容、metadata 限制、同距離手動線優先、不同 zoom 的螢幕容差、公開 artifacts 不含 authoring、两入口保存及原權限／版本衝突。這是本機接線驗收；required CI、獨立 review 及部署結果由本切片 PR 承接。
+
+[輔助線 browser 報告](assets/map-authoring-279/guides-report.json)。
+
+初審發現只有輔助線的 Organizer 草稿按「空白畫布」會略過清空確認。已將 guides 納入既有內容判斷；journey 核對確認出現、取消保留座標與 undo／redo 歷史。此為本 PR 的 MUST FIX NOW，修正後交同一 reviewer 聚焦確認。
+
+正式啟用 gate：新版私人 snapshot 可含 authoring，舊 production Worker 的 strict parser 會拒絕。需先將通過 review 與 CI 的同 head 部署 publication Worker，確認成功後才合併啟用 Pages。這是一次工程部署順序，不是日常活動發布的人工步驟。
+
+![Organizer 直幅反向雙列](assets/map-authoring-279/organizer-guides.png)
+![地圖貢獻橫幅、整組與排段吸附](assets/map-authoring-279/contribution-guides.png)

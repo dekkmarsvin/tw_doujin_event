@@ -1,11 +1,13 @@
 import { EVENT_MAP_VERSION, validateEventMapLayout, type EventMapLayout, type MapRect, type PublishedEventMap } from "./event-map";
 import { validateMapTemplateLayout } from "./map-template-registry";
+import { validMapAuthoringState, type MapAuthoringState } from "./map-authoring-state";
 
 export const MAP_CONTRIBUTION_DRAFT_SCHEMA = "map-contribution-draft/1" as const;
 
 type MapContributionDraftContent = {
   schema: typeof MAP_CONTRIBUTION_DRAFT_SCHEMA;
   layout: EventMapLayout;
+  authoring?: MapAuthoringState;
 };
 
 export type MapContributionScope = {
@@ -117,7 +119,7 @@ function strictLayoutShape(layout: Record<string, unknown>) {
  */
 export function parseMapContributionDraftContent(value: unknown): MapContributionDraftContent | null {
   if (!record(value) || value.schema !== MAP_CONTRIBUTION_DRAFT_SCHEMA || !record(value.layout)) return null;
-  if (Object.keys(value).some((key) => key !== "schema" && key !== "layout")) return null;
+  if (Object.keys(value).some((key) => key !== "schema" && key !== "layout" && key !== "authoring")) return null;
   if (!strictLayoutShape(value.layout)) return null;
   const layout = value.layout as Partial<EventMapLayout>;
   if (layout.version !== EVENT_MAP_VERSION || typeof layout.template !== "string" || !layout.template.trim()) return null;
@@ -129,6 +131,7 @@ export function parseMapContributionDraftContent(value: unknown): MapContributio
   const slotCount = layout.rows.reduce((total, row) => total + (record(row) && Array.isArray(row.slots) ? row.slots.length : MAX_SLOTS + 1), 0);
   if (slotCount > MAX_SLOTS) return null;
   if (!validateEventMapLayout(layout).ok) return null;
+  if (value.authoring !== undefined && !validMapAuthoringState(value.authoring, layout as EventMapLayout)) return null;
   return value as MapContributionDraftContent;
 }
 

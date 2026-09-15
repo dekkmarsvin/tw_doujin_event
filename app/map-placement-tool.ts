@@ -3,10 +3,11 @@ import { clamp, rectFromDrag } from "./map-layout-editor-geometry";
 
 export const FACILITY_TOOLS = ["pillar", "entrance", "exit", "enterprise", "stage", "other"] as const;
 export type FacilityTool = typeof FACILITY_TOOLS[number];
-export type PlacementTool = "row" | "slot" | FacilityTool;
+export type PlacementTool = "row" | "slot" | "guide-x" | "guide-y" | FacilityTool;
 export const PLACEMENT_LABELS: Record<PlacementTool, string> = {
   row: "排／排段", slot: "手動畫攤位", pillar: "柱子", entrance: "入口", exit: "出口",
   enterprise: "企業攤", stage: "舞台", other: "其他區域",
+  "guide-x": "垂直輔助線", "guide-y": "水平輔助線",
 };
 export const PLACEMENT_DRAG_THRESHOLD_PX = 3;
 type Point = { x: number; y: number };
