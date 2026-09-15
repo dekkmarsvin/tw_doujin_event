@@ -214,6 +214,7 @@
 .preview { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: var(--ink); color: var(--surface); font: 10px/1.5 "Geist Mono", ui-monospace, monospace; }
 .readerPreview { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
 .readerPreview .panelHead select { width: auto; min-width: 230px; }
+.previewSelection { position: sticky; top: 12px; z-index: 1; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
 .readerPreview details { margin-top: 12px; color: var(--muted); }
 .subpanel { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 18px; }
 .subpanel textarea { margin: 10px 0; }
