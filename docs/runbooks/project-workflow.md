@@ -178,7 +178,7 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 
 ### 7.1 訂閱與計費基準（查核日 2026-09-19）
 
-帳號 `b5623999b74ce6acca28e8b923f07172`，來源為 Dashboard「計費 → 訂閱」與「計費 → 計費用量」。
+來源為 Dashboard 的「計費 → 訂閱」與「計費 → 計費用量」兩頁。帳號識別碼不寫入版控，見 [Cloudflare 容量與耗用監控](./cloudflare-usage-monitoring.md)的設定規則。
 
 **訂閱狀態**：`Workers Paid`（使用中，續訂 Sep 22, 2026）、`R2 Paid`（使用中，同續訂日）、`Zero Trust Teams Free Base`、`kotoban.top Free Plan`。
 
