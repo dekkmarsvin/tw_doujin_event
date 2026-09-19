@@ -1,6 +1,6 @@
 # ADR-0022：清除跑在獨立的排程 Worker，不掛在使用者請求上
 
-- 狀態：已定案（2026-08-20）
+- 狀態：已定案（2026-08-20）；成本表的 Workers Free 欄與「5 個 cron 額度」已由 [ADR-0065](./0065-cost-reasoning-uses-the-workers-paid-basis.md) 取代，獨立排程 Worker 的決策不變
 - 相關 ADR：[ADR-0008](./0008-static-public-reading-path.md)、[ADR-0009](./0009-single-pages-project-direct-upload.md)、[ADR-0018](./0018-retention-is-the-circles-choice.md)、[ADR-0021](./0021-credentials-expire-and-are-purged-records-are-kept.md)
 - 相關 issue：[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)、[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)
 

@@ -110,7 +110,7 @@ Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，
 
 ## 官方來源檔
 
-接受的保守 upload profile 是 baseline JPEG、非交錯 PNG（宣告像素資料最多 32 MiB）、靜態 WebP，以及使用 classic xref、未加密且不含 object stream 的 PDF；不接受 progressive JPEG、交錯 PNG、動畫 WebP 或 xref-stream／object-stream PDF。單檔最多 20 MiB，圖片最多 1,600 萬 pixels、單邊最多 8,192 pixels，PDF 最多 20 頁。伺服器以不解碼像素的方式檢查容器邊界、尺寸／頁數與 PDF 禁用項目，避免上傳驗證本身超出 Workers Free CPU 預算；可否正常顯示仍由投稿者與審閱者在私人預覽確認。另要求 HTTPS 官方來源 URL、文件日期及 PDF 頁碼；不符合 profile 時請先由可信工具轉存成上述格式。永久 metadata 是來源 URL、日期、頁碼、SHA-256、MIME、容量、尺寸／頁數與審閱結果。
+接受的保守 upload profile 是 baseline JPEG、非交錯 PNG（宣告像素資料最多 32 MiB）、靜態 WebP，以及使用 classic xref、未加密且不含 object stream 的 PDF；不接受 progressive JPEG、交錯 PNG、動畫 WebP 或 xref-stream／object-stream PDF。單檔最多 20 MiB，圖片最多 1,600 萬 pixels、單邊最多 8,192 pixels，PDF 最多 20 頁。伺服器以不解碼像素的方式檢查容器邊界、尺寸／頁數與 PDF 禁用項目：不把未受信任的位元組交給影像解碼器，並讓驗證成本與檔案內容無關。**這不再是 CPU 額度的限制**——Workers Paid 的 CPU 上限是每次呼叫 5 分鐘（Free 為 10 ms，見 [ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md)），保守 profile 的理由是攻擊面與可預期的驗證成本，不是額度。可否正常顯示仍由投稿者與審閱者在私人預覽確認。另要求 HTTPS 官方來源 URL、文件日期及 PDF 頁碼；不符合 profile 時請先由可信工具轉存成上述格式。永久 metadata 是來源 URL、日期、頁碼、SHA-256、MIME、容量、尺寸／頁數與審閱結果。
 
 原始 bytes 只存於 `MAP_CONTRIBUTIONS` 私人 R2 bucket。它與公開代表圖的 `THUMBNAILS` bucket 分離，不設定 custom domain 或 `r2.dev`。同一個 bucket 也存[主辦候選地圖](./organizer-workspace.md)的配置圖，位址前綴 `organizer-map-backgrounds/`，兩者互不重疊。先寫 R2、再綁 D1；D1 拒絕時立即刪除剛寫入的物件。帳號刪除與排程清除也先刪 bytes，再移除或匿名化 D1 資料，讓失敗保留可重試的 metadata，不留下已宣告刪除但仍可讀的物件。
 
@@ -125,4 +125,4 @@ Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，
 
 刪除帳號時，從未提交的草稿立即刪除；已進入審閱流程的 owner、revision author 與 review actor 去識別化，內容依其狀態期限處理。preview reset 會清空隔離 D1 的地圖貢獻資料與私人 preview bucket。
 
-排程每次先續跑既有清除 claim，沒有既有 claim 才取得新工作；單次最多處理 5 份草稿與 450 個原始物件，D1 更新以 90 個 ID 分批。R2 失敗時保留同一批 claim 供下次重試，不再擴張鎖定集合；測試直接計數 D1 呼叫並要求留在 Workers Free 每次 50 次 service query 的預算內。
+排程每次先續跑既有清除 claim，沒有既有 claim 才取得新工作；單次最多處理 5 份草稿與 450 個原始物件，D1 更新以 90 個 ID 分批。R2 失敗時保留同一批 claim 供下次重試，不再擴張鎖定集合；測試直接計數 D1 呼叫並要求留在每次呼叫 50 次以內。**50 是本專案自訂的保守預算，不是平台限制**：Workers Paid 的實際上限是每次呼叫 10,000 個子請求，且 D1／KV／R2 呼叫均計入子請求。保留這個較緊的數字是為了固定上面的分批設計，使單次清除的工作量不隨資料量成長；要放寬須依[專案工作流程 §7.6](../runbooks/project-workflow.md) 的擴充門檻說明理由。

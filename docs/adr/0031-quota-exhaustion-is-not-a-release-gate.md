@@ -1,6 +1,6 @@
 # ADR-0031：配額耗盡不作發布 gate，Pages Functions 設為 fail-open
 
-- 狀態：已定案（2026-08-24）
+- 狀態：已定案（2026-08-24）；問題陳述所依據的 Workers Free 每日耗盡前提已由 [ADR-0065](./0065-cost-reasoning-uses-the-workers-paid-basis.md) 取代，不作發布 gate 與 `fail_open: true` 兩項決策不變
 - 取代：[ADR-0029](./0029-public-production-gated-preview.md) 的 Error 1027 實測 gate，以及 [ADR-0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md) 對耗盡後果的未實測斷言
 - 相關 issue：[#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)
 
