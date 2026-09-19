@@ -6,7 +6,7 @@ Guidance for coding agents working in this repository.
 
 ### Project workflow
 
-When triaging issues, choosing the next task, scheduling review follow-ups, or accepting a milestone, read `docs/runbooks/project-workflow.md` for goal-based classification, readiness, and completion evidence.
+When triaging issues, choosing the next task, scheduling review follow-ups, or accepting a milestone, read `docs/runbooks/project-workflow.md` for goal-based classification, readiness, and completion evidence. Its section 7 holds the Cloudflare cost baseline, the complexity budget, and the expansion threshold — read it before proposing a cost-motivated change, a new Cloudflare product, or a new scheduled role.
 
 ### Issue tracker
 

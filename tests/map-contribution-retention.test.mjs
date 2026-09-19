@@ -244,7 +244,7 @@ function countedDatabase(inner) {
   };
 }
 
-test("retention stays within the Workers Free D1 invocation budget", async () => {
+test("retention stays within the self-imposed 50-call D1 invocation budget", async () => {
   const inactive = NOW - RETENTION_WINDOWS.mapDraftInactivity - DAY;
   await database.prepare(
     `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 11)
