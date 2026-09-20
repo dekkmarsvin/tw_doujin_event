@@ -74,9 +74,9 @@ export type OrganizerEventDetail = {
     status: string;
     step: string;
     error: string | null;
-    failureCode?: string | null;
-    retryable?: boolean;
-    started?: boolean;
+    failureCode: string | null;
+    retryable: boolean;
+    started: boolean;
     candidateVersion: number;
     updatedAt: number;
   };

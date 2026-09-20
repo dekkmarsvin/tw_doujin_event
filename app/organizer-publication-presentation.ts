@@ -13,7 +13,13 @@ export function publicationProgress(job: { step: string; status: string }) {
   }));
 }
 
-export function publicationFailureMessage(job: { failureCode?: string | null; retryable?: boolean; started?: boolean }) {
+export function publicationFailureMessage(job: { failureCode: string | null; retryable: boolean; started: boolean }) {
+  // Every field here is required. `started` began as optional, and omitting it
+  // made `!job.started` true, so a job with remote artefacts pinned would have
+  // claimed nothing ran -- a wrong assertion, not a cautious one. There is one
+  // producer and one consumer today; a second producer is where that would have
+  // gone wrong silently, so the compiler holds the shape instead.
+  //
   // A job that never started reads as a mid-publication failure unless it says
   // otherwise, and the owner then looks for progress that was never made. The
   // timeout also catches jobs that stalled again after a retry: those really

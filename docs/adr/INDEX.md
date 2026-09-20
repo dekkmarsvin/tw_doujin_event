@@ -1,6 +1,6 @@
 # ADR 索引
 
-要動某個區域之前，只讀那個區域指到的 ADR，不需要掃完 47 份。
+要動某個區域之前，只讀那個區域指到的 ADR，不必從頭掃過整個目錄。
 
 狀態三種：
 
@@ -77,7 +77,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0043](./0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口，claim 逐活動隔離 | 生效 |
 | [0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目，身分等主辦攤位證據 | 生效 |
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
-| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | 部分被取代（0058） |
+| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
 | [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
 | [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |
