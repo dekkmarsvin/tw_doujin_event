@@ -322,14 +322,28 @@ try {
     const tilted = await cellsOf();
     const lefts = [...new Set(tilted.map(cell => cell.x))];
     assert.equal(lefts.length, 2, "two columns to line up");
-    assert.ok(new Set(tilted.map(cell => cell.height.toFixed(3))).size > 1, "and they do not already share a cell height");
+    const spanOf = left => {
+      const cells = tilted.filter(cell => cell.x === left);
+      return { top: Math.min(...cells.map(cell => cell.y)), bottom: Math.max(...cells.map(cell => cell.y + cell.height)) };
+    };
+    const spans = lefts.map(spanOf);
+    assert.ok(Math.abs(spans[0].top - spans[1].top) > 1 || Math.abs(spans[0].bottom - spans[1].bottom) > 1,
+      `the columns must start out misaligned or there is nothing to correct: ${JSON.stringify(spans)}`);
     const edge = {
       left: Math.min(...tilted.map(cell => cell.x)) - 6,
       top: Math.min(...tilted.map(cell => cell.y)) - 6,
       right: Math.max(...tilted.map(cell => cell.x + cell.width)) + 6,
       bottom: Math.max(...tilted.map(cell => cell.y + cell.height)) + 6,
     };
-    const start = await toScreen(edge.left, edge.top), end = await toScreen(edge.right, edge.bottom);
+    await svg.scrollIntoViewIfNeeded();
+    const canvas = await svg.boundingBox();
+    const view = page.viewportSize();
+    const corner = (x, y) => ({ x: canvas.x + x * canvas.width / SIZE, y: canvas.y + y * canvas.height / SIZE });
+    const start = corner(edge.left, edge.top), end = corner(edge.right, edge.bottom);
+    for (const [name, point] of [["start", start], ["end", end]]) {
+      assert.ok(point.x >= 0 && point.y >= 0 && point.x <= view.width && point.y <= view.height,
+        `band ${name} is off screen at ${JSON.stringify(point)} in ${JSON.stringify(view)} (canvas ${JSON.stringify(canvas)})`);
+    }
     await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 8 }); await page.mouse.up();
     const sync = editor.getByRole("button", { name: /同步上下邊界/ });
     assert.match(await sync.textContent(), /2 排 × 16 格/, "the control says what it will correct");
