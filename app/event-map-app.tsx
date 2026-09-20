@@ -35,7 +35,10 @@ import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
 import { calculatePinchMapView, clampMapZoom, mapViewFromWheel, MOBILE_SUMMARY_PEEK_HEIGHT, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
-import { eventUsesAreaSwitcher, eventUsesScopedMaps, venueAssignmentForArea, type EventAreaDefinition, type EventDayDefinition, type EventDefinition } from "./event-catalog";
+import {
+  areaOptionsForVenueSpace, defaultAreaForVenueSpace, eventUsesAreaSwitcher, eventUsesScopedMaps, venueAssignmentForArea,
+  venueAssignmentForVenueSpace, visibleAreaIds, type EventAreaDefinition, type EventDayDefinition, type EventDefinition,
+} from "./event-catalog";
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
@@ -79,6 +82,11 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const catalogReady = catalogStatus === "ready";
   const [day, setDay] = useState<EventDay>(urlDefaults.day);
   const [hall, setHall] = useState<Hall>(urlDefaults.area);
+  // The venue space is held rather than inferred from the area. "All areas" is
+  // the reader's own id and belongs to no space in particular, so deriving the
+  // space from it would put a multi-space reader in the first space whichever
+  // one they were actually looking at.
+  const [venueSpaceId, setVenueSpaceId] = useState<string>(urlDefaults.venueSpaceId);
   const [genre, setGenre] = useState<string>(event.genres[0]);
   const [query, setQuery] = useState("");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
@@ -106,8 +114,9 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   // day's booth data and place — or let a reader select — booths at the wrong
   // coordinates until the fetch lands.
   const [loadedMap, setLoadedMap] = useState<{ scopeKey: string; artifactKey: string; map: PublishedEventMap } | null>(null);
+  const venueAssignment = useMemo(() => venueAssignmentForVenueSpace(event, venueSpaceId), [event, venueSpaceId]);
   const mapScopeKey = eventUsesScopedMaps(event)
-    ? `${String(day)}\0${venueAssignmentForArea(event, hall).venueSpaceId}`
+    ? `${String(day)}\0${venueAssignment.venueSpaceId}`
     : eventId;
   const publishedMap = loadedMap?.scopeKey === mapScopeKey ? loadedMap.map : null;
   const [mapLoading, setMapLoading] = useState(true);
@@ -214,6 +223,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       if (fromHistory) suppressUrlWrite.current = true;
       setDay(state.day);
       setHall(state.area);
+      setVenueSpaceId(state.venueSpaceId);
       setQuery(state.query);
       setGenre(state.genre);
       setFavoriteOnly(state.favoriteOnly);
@@ -253,7 +263,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       if (!cancelled) { setMapLoading(true); setMapError(""); }
     });
     const scope = eventUsesScopedMaps(event)
-      ? { periodKey: String(day), venueSpaceId: venueAssignmentForArea(event, hall).venueSpaceId }
+      ? { periodKey: String(day), venueSpaceId: venueAssignment.venueSpaceId }
       : undefined;
     const scopeKey = mapScopeKey;
     void loadStaticEventMapResource(eventId, scope)
@@ -261,7 +271,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       .catch((error) => { if (!cancelled) { setLoadedMap(null); setMapError(error instanceof Error ? error.message : "讀取活動地圖失敗。"); } })
       .finally(() => { if (!cancelled) setMapLoading(false); });
     return () => { cancelled = true; };
-  }, [day, event, eventId, hall, mapScopeKey, mapRetry]);
+  }, [day, event, eventId, venueAssignment, mapScopeKey, mapRetry]);
 
   useEffect(() => {
     if (!favoriteUndo) return;
@@ -352,7 +362,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     }
     const selected = circleRecordsById.get(selectedRecordId ?? "");
     const url = serializeEventUrlState(event, {
-      eventId: event.id, day, area: hall, venueSpaceId: venueAssignmentForArea(event, hall).venueSpaceId,
+      eventId: event.id, day, area: hall, venueSpaceId: venueAssignment.venueSpaceId,
       query, genre, favoriteOnly, advancedSearch, planningDisplay,
       selection: { day, circleId: selected?.circle.id ?? null, boothCode: selected?.code ?? null },
     }, window.location.href);
@@ -360,7 +370,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     if (method === "none") return;
     window.history[method](null, "", url);
     historyIntent.current = "replace";
-  }, [advancedSearch, catalogStatus, circleRecordsById, day, event, favoriteOnly, genre, hall, planningDisplay, query, selectedRecordId, urlReady]);
+  }, [advancedSearch, catalogStatus, circleRecordsById, day, event, favoriteOnly, genre, hall, planningDisplay, query, selectedRecordId, urlReady, venueAssignment]);
 
   const workspace = useMemo(() => projectEventWorkspace({
     event: event,
@@ -370,6 +380,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     planning,
     day,
     area: hall,
+    venueSpaceId: venueAssignment.venueSpaceId,
     genre,
     query,
     favoriteOnly,
@@ -377,7 +388,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     planningDisplay,
     navigationMode,
     selectedRecordId,
-  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, hall, navigationMode, planning, planningDisplay, query, selectedRecordId]);
+  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, hall, navigationMode, planning, planningDisplay, query, selectedRecordId, venueAssignment]);
   const {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextRecord, navigationTargetRecord,
@@ -410,10 +421,20 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     setMobileSheetLevel("half");
     const destination = venueAssignmentForArea(event, record.hall);
     if (record.day !== day) setDay(record.day);
-    if (destination.venueSpaceId !== venueAssignmentForArea(event, hall).venueSpaceId) setHall(record.hall);
+    // A list reaches further than the area filter does -- the itinerary spans the
+    // whole space, and a shared link names a booth directly -- so a booth outside
+    // the current area would otherwise be selected with no marker to show it.
+    // Widening to the space's default keeps the surrounding results instead of
+    // swapping the list for the destination area's own.
+    if (destination.venueSpaceId !== venueAssignment.venueSpaceId) {
+      setVenueSpaceId(destination.venueSpaceId);
+      setHall(defaultAreaForVenueSpace(event, destination) ?? record.hall);
+    } else if (!visibleAreaIds(venueAssignment, hall).includes(record.hall)) {
+      setHall(defaultAreaForVenueSpace(event, venueAssignment) ?? record.hall);
+    }
     const destinationScope = eventUsesScopedMaps(event) ? `${String(record.day)}\u0000${destination.venueSpaceId}` : eventId;
     focusCode(record.code, destinationScope);
-  }, [day, event, eventId, focusCode, hall, rememberMobileResultScroll, setDay, setHall, setDesktopDetailsOpen, setSelectedRecordId, setMobilePanel, setMobileSheetLevel]);
+  }, [day, event, eventId, focusCode, hall, rememberMobileResultScroll, setDay, setHall, setDesktopDetailsOpen, setSelectedRecordId, setMobilePanel, setMobileSheetLevel, venueAssignment]);
 
   useEffect(() => {
     const key = `${day}|${hall}|${genre}|${favoriteOnly}|${query.trim()}|${filtered[0]?.recordId ?? ""}`;
@@ -422,19 +443,20 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     selectRecord(filtered[0], "details", false);
   }, [day, favoriteOnly, filtered, genre, hall, query, selectRecord]);
 
-  const changeArea = (next: Hall) => {
+  const changeArea = (next: Hall, nextVenueSpaceId = venueAssignment.venueSpaceId) => {
     historyIntent.current = "push";
     cancelPosition();
     pendingSelection.current = null;
     pendingRestoreCode.current = null;
     setHall(next);
+    setVenueSpaceId(nextVenueSpaceId);
     setSelectedRecordId(null);
     if (mobilePanel === "details") { setMobilePanel(mobileWorkspace === "plan" ? "plan" : "results"); setMobileSheetLevel("peek"); }
     setDesktopDetailsOpen(false);
     setShowFullDetail(false);
   };
   const resetAreaFilter = () => {
-    if (venueAssignmentForArea(event, hall).venueSpaceId !== venueAssignmentForArea(event, urlDefaults.area).venueSpaceId) changeArea(urlDefaults.area);
+    if (venueAssignment.venueSpaceId !== urlDefaults.venueSpaceId) changeArea(urlDefaults.area, urlDefaults.venueSpaceId);
     else setHall(urlDefaults.area);
   };
   const clearResultFilters = () => { historyIntent.current = "push"; setGenre(urlDefaults.genre); setFavoriteOnly(false); resetAreaFilter(); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
@@ -490,7 +512,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     setMobileWorkspace("plan");
     setMobilePanel(navigationTarget ? "details" : "plan");
     setMobileSheetLevel("half");
-    if (navigationTarget && venueAssignmentForArea(event, navigationTarget.hall).venueSpaceId === venueAssignmentForArea(event, hall).venueSpaceId) selectRecord(navigationTarget, "details", false);
+    if (navigationTarget && venueAssignmentForArea(event, navigationTarget.hall).venueSpaceId === venueAssignment.venueSpaceId) selectRecord(navigationTarget, "details", false);
   };
   const selectMobilePanel = (panel: "results" | "plan") => {
     setMobileWorkspace(panel === "plan" ? "plan" : "explore");
@@ -686,8 +708,11 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     requestAnimationFrame(() => requestAnimationFrame(() => target.scrollIntoView({ block: "center" })));
   };
 
-  const venueAssignment = venueAssignmentForArea(event, hall);
-  const venueAreas = event.areas.filter((area) => venueAssignment.areaIds.includes(area.id));
+  const venueAreas = areaOptionsForVenueSpace(event, venueAssignment);
+  const changeVenueSpace = (nextVenueSpaceId: string) => {
+    const next = venueAssignmentForVenueSpace(event, nextVenueSpaceId);
+    changeArea(defaultAreaForVenueSpace(event, next) ?? next.areaIds[0], next.venueSpaceId);
+  };
   const changeDay = (next: EventDay) => {
     historyIntent.current = "push";
     cancelPosition();
@@ -719,7 +744,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
         (keyEvent.currentTarget.parentElement?.children[target] as HTMLButtonElement)?.focus();
       }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>
       <label className={styles.dateSelect}>日期<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}<small>{event.days.find((item) => item.id === day)?.dateLabel}</small></span><select aria-label="活動日期" value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.dateLabel}</option>)}</select></label>
-      {event.venueAssignments.length > 1 ? <label>場館空間<select value={venueAssignment.venueSpaceId} onChange={(change) => changeArea(event.venueAssignments.find((item) => item.venueSpaceId === change.target.value)!.areaIds[0])}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
+      {event.venueAssignments.length > 1 ? <label>場館空間<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
       {showAreaSwitcher && (venueAreas.length > 1 ? <label>展區<select value={hall} onChange={(change) => changeArea(change.target.value)}>{venueAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></label> : <span className={styles.venueName}>{venueAreas[0]?.label}</span>)}
 
     </div>

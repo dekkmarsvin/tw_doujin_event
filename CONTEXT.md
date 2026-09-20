@@ -31,6 +31,8 @@
 
 **場館與場館空間屬於 pinned reference data，不寫死在程式或文件裡。** 活動定義只保存 stable ID assignment；production pipeline 先驗證 reference commit／hash／selection，parser 再驗證 staged records 與 assignments 後投影名稱。
 
+展區由主辦的攤位名單推導，所以活動定義裡的 `areas` 只有名單出現過的代碼，**沒有一個代表「全部展區」**。FF47 自行宣告的 `ALL` 是它資料的一部分，不是通例。讀者介面自己補上 `ALL`（全區）作為預設，語意固定是**目前場館空間**的全部展區。
+
 `area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場館空間**。URL codec 已保留多場館空間的 `venueSpaceId` 語意；公開切換能力要等每個場館空間各自的地圖 artifact 完成後才啟用。
 
 **`Booth["hall"]` 的名字說謊**：它存的是展區代碼（`"A" | "B"`），不是場館。名稱是歷史遺留，且已寫進公開快照 schema，改名不是改一個識別字。**文件與新程式碼一律用「展區」／`area`。**
