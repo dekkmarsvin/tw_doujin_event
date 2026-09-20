@@ -312,7 +312,10 @@ try {
     // cell height, which is the state traced columns are in before correction.
     const cellsOf = () => page.evaluate(() => {
       const value = (node, name) => Number(node.getAttribute(name));
-      return [...document.querySelectorAll("[data-slot-code]")]
+      // Scoped to the editable canvas: the contribution surface also renders
+      // a read-only preview of the same booths, so the document as a whole
+      // holds every cell twice.
+      return [...document.querySelector(`svg[aria-label^="可編輯"]`).querySelectorAll("[data-slot-code]")]
         .filter(node => node.dataset.slotCode.startsWith("Z"))
         .map(node => {
           const rect = node.querySelector("rect");
@@ -355,7 +358,9 @@ try {
       near(cell.x, was.get(cell.code).x, `${cell.code} keeps its column`);
       near(cell.width, was.get(cell.code).width, `${cell.code} keeps its width`);
     }
-    const columns = lefts.map(left => after.filter(cell => cell.x === left).sort((a, b) => a.y - b.y));
+    const grouped = new Map();
+    for (const cell of after) grouped.set(cell.x, [...(grouped.get(cell.x) ?? []), cell]);
+    const columns = [...grouped.values()].map(cells => cells.sort((a, b) => a.y - b.y));
     for (const cells of columns) {
       assert.equal(cells.length, 16);
       near(cells[0].y, shared.top, "every column starts on the shared top");
