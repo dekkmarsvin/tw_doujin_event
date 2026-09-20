@@ -500,8 +500,20 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     onChange(scaled.layout, scaled.authoring);
   };
 
+  /** Where the canvas sat when the gesture began.
+   *
+   * A pointer position only means something next to the rectangle it was
+   * measured against, and a drag compares every move with a start recorded at
+   * pointer-down. Re-measuring each frame silently changes that basis when
+   * anything moves the canvas: dragging a copied column over the row it came
+   * from raises the overlap notice above the canvas, which pushed the SVG down
+   * 96px and threw the booths 160 units the other way in a single frame, then
+   * again when the notice grew a line. Measured once per gesture, the notice
+   * can appear, grow and go without touching the drag. */
+  const gestureFrame = useRef<DOMRect | null>(null);
+
   const pointIn = (element: SVGSVGElement, event: { clientX: number; clientY: number }) => {
-    const bounds = element.getBoundingClientRect();
+    const bounds = gestureFrame.current ?? element.getBoundingClientRect();
     return {
       x: (event.clientX - bounds.left) * layout.width / bounds.width,
       y: (event.clientY - bounds.top) * layout.height / bounds.height,
@@ -715,6 +727,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   /** Capture before an element sees the press, so panning cannot start a move,
    * resize or placement even when the pointer starts on a booth or handle. */
   const startPan = (event: PointerEvent<SVGSVGElement>) => {
+    gestureFrame.current = event.currentTarget.getBoundingClientRect();
     const viewport = viewportRef.current;
     if (!viewport || (event.button !== 1 && !(event.button === 0 && spaceHeldRef.current))) return;
     event.preventDefault(); event.stopPropagation();
@@ -883,7 +896,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
 
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
     const active = drag.current;
-    if (!active || active.pointerId !== event.pointerId) return;
+    if (!active || active.pointerId !== event.pointerId) { gestureFrame.current = null; return; }
+    gestureFrame.current = null;
     drag.current = null;
     if (active.mode === "pan") {
       setPanning(false);
@@ -1547,7 +1561,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         {selection && !activeSegment && <>
           <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : selection.kind === "floor" ? "場館外框" : "非一般攤位區"}</small><b>{selection.kind === "floor" ? layout.template : selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
           {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input {...trimmedField(selectedSlot.code, (next) => commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }, `field:${activeKey}:code`))} /></label><label className={styles.wide}><span>所屬排標籤</span><input {...trimmedField(layout.rows[selectedSlotSelection.rowIndex].label, (next) => updateRow(selectedSlotSelection.rowIndex, { label: next }, `row:${selectedSlotSelection.rowIndex}:label`))} /></label><label className={styles.wide}><span>所屬排方向</span><select value={layout.rows[selectedSlotSelection.rowIndex].orientation} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label></>}
-          {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子 ID</span><input {...trimmedField(selectedPillar.id, (next) => commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }, `field:${activeKey}:id`))} /></label>}
+          {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子代號</span><input {...trimmedField(selectedPillar.id, (next) => commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }, `field:${activeKey}:id`))} /></label>}
           {selectedLandmark && selectedLandmarkSelection && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = stableKind; draft.landmarks[selectedLandmarkSelection.itemIndex].label = event.target.value; }, `field:${activeKey}:label`); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
           {selectedAccess && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedAccess.label} onChange={(event) => updateAccess({ label: event.target.value }, `field:${activeKey}:label`)} /></label><label><span>類型</span><select value={selectedAccess.kind} onChange={(event) => updateAccess({ kind: event.target.value as "entrance" | "exit" })}><option value="entrance">入口</option><option value="exit">出口</option></select></label><label><span>方向</span><select value={selectedAccess.direction} onChange={(event) => updateAccess({ direction: event.target.value as MapAccessDirection })}>{MAP_ACCESS_DIRECTIONS.map((direction) => <option key={direction} value={direction}>{ACCESS_DIRECTION_LABELS[direction]}</option>)}</select></label></>}
           <div className={styles.fields}>
