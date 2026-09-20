@@ -182,11 +182,11 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
 
   return <section className={`${styles.card} ${styles.editorCard}`} id="map-contribution">
     <h2>活動地圖貢獻</h2>
-    <p>草稿與來源檔僅供審閱。提交、核准與匯出候選都不會直接變更公開地圖；公開資料仍須進入 event-data repository 審查。</p>
+    <p>草稿與來源檔僅供審閱。提交或核准都不會直接變更公開地圖，公開內容仍須另行審查後才會更新。</p>
     <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
     {!detail && <div className={styles.mapDraftCreate}>
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
-      <label>場地空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
+      <label>使用空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
       <button type="button" onClick={() => void run(async () => {
         const current = await loadStaticEventMap(event.id, eventUsesScopedMaps(event)
           ? { periodKey, venueSpaceId }
@@ -314,7 +314,7 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
       <CommentThread comments={detail.comments} layout={detail.draft.content.layout} onFocus={null} />
       <div className={styles.commentTarget}>
         <label>對象<select value={targetKind} onChange={(event) => setTargetKind(event.target.value as "slot" | "landmark" | "draft")}><option value="draft">整份草稿</option><option value="slot">攤位</option><option value="landmark">區域</option></select></label>
-        <label>{targetKind === "landmark" ? "區域 ID" : "攤位代碼"}<input disabled={targetKind === "draft"} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} /></label>
+        <label>{targetKind === "landmark" ? "區域代號" : "攤位代碼"}<input disabled={targetKind === "draft"} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} /></label>
       </div>
       <label>留言<textarea rows={2} value={targetBody} onChange={(event) => setTargetBody(event.target.value)} /></label>
       <div className={styles.reviewActions}>
