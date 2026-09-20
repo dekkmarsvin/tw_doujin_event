@@ -13,7 +13,7 @@ export function publicationProgress(job: { step: string; status: string }) {
   }));
 }
 
-export function publicationFailureMessage(job: { failureCode: string | null; retryable: boolean; started: boolean }) {
+export function publicationFailureMessage(job: { failureCode: string | null; retryable: boolean; started: boolean }, available: boolean) {
   // Every field here is required. `started` began as optional, and omitting it
   // made `!job.started` true, so a job with remote artefacts pinned would have
   // claimed nothing ran -- a wrong assertion, not a cautious one. There is one
@@ -28,10 +28,15 @@ export function publicationFailureMessage(job: { failureCode: string | null; ret
   // claim that nothing ran. `started` carries that, because the step does not:
   // approval creates a job on `preparing_data` and retry keeps the failed step,
   // so the same name covers both cases.
-  if (job.failureCode === "queued_timeout" && !job.started) return "發布沒有開始，內容沒有被退件。可以重試發布。";
+  // `available` is required for the same reason the job fields are: promising
+  // a retry the owner cannot take is worse than saying less. With publication
+  // switched off the retry button is disabled, and the activity page already
+  // carries one line explaining why, so this one stops at what happened.
+  if (job.failureCode === "queued_timeout" && !job.started) return available ? "發布沒有開始，內容沒有被退件。可以重試發布。" : "發布沒有開始，內容沒有被退件。";
   if (job.failureCode === "event_id_collision") return "這個活動代碼已存在，首次發布不能覆寫。請聯絡網站管理者，透過已發布活動修正流程處理。";
   if (job.failureCode === "amendment_baseline_changed" || job.failureCode === "amendment_base_conflict") return "修正所依據的公開版本或發布資料已變更，系統已停止合併。請聯絡網站管理者核對版本，不能直接重試覆寫。";
   if (job.failureCode === "snapshot_mismatch") return "已核准內容與發布記錄不一致，系統已停止發布。請聯絡網站管理者檢查這一版的送審記錄。";
+  if (!available) return "發布失敗，內容沒有被退件。已完成的進度會保留。";
   return job.retryable ? "發布暫時失敗，內容沒有被退件。可以重試發布，系統會從失敗步驟繼續，保留已完成的進度。"
     : "發布已停止，內容沒有被退件。請聯絡網站管理者排除問題後再繼續。";
 }

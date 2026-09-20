@@ -75,7 +75,7 @@ ADR-0046 第 4 點原本要求三件事，其中兩件在此不再要求：
 
 本決策成立的前提是：repository 目前只有一位維護者、App 是唯一會自動合併的身分、首次真實發布尚未完成，而權限管控的優先序低於把發布閉環走通。
 
-前提改變時——新增維護者，或首次發布與一次可恢復 failure 都已驗收——應重新評估是否把 ruleset 恢復為第二道強制邊界。屆時必須一併解決本 ADR 背景描述的那個問題：一般人類 PR 要如何滿足 `Organizer publication approval`，例如由 workflow 對非 `organizer/**` head 的 PR 直接回報成功。
+前提改變時——新增維護者，或首次發布與一次可恢復 failure 都已驗收——應重新評估是否把 ruleset 恢復為第二道強制邊界。**這次重新評估已於 2026-09-20 完成，見 [ADR-0066](./0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)：結論是不恢復，因為 required check 未綁定 `integration_id` 時擋不住持有 checks 寫入權的 App。**屆時必須一併解決本 ADR 背景描述的那個問題：一般人類 PR 要如何滿足 `Organizer publication approval`，例如由 workflow 對非 `organizer/**` head 的 PR 直接回報成功。
 
 ## 結果
 

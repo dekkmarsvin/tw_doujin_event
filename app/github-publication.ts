@@ -59,7 +59,8 @@ export type GitHubWorkflowJob = { id: number; run_id: number; run_attempt: numbe
 export type GitHubPull = { number: number; state: string; merged: boolean; merge_commit_sha: string | null;
   body: string | null; base: { ref: string; repo: { full_name: string } }; head: { ref: string; sha: string; repo: { full_name: string } }; user: { login: string } };
 export type GitHubCheck = { id: number; name: string; status: string; conclusion: string | null; head_sha: string;
-  external_id?: string | null; output?: { summary?: string | null } };
+  external_id?: string | null; output?: { summary?: string | null }; app?: { id?: number | null; slug?: string | null } | null };
+const approvalCheckName = "Organizer publication approval";
 const GIT_SHA = /^[0-9a-f]{40}$/;
 function invalidGitHubResponse(): never { throw new PublicationFailure("github_api_response", "GitHub API response is invalid.", true); }
 function gitSha(value: unknown): string { if (typeof value !== "string" || !GIT_SHA.test(value)) invalidGitHubResponse(); return value; }
@@ -276,7 +277,7 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
     createApprovalCheck(repository: string, headSha: string, jobId: string, approvalHash: string) {
       return request(repository, "/check-runs", {
         method: "POST", body: JSON.stringify({
-          name: "Organizer publication approval", head_sha: headSha, status: "completed", conclusion: "success",
+          name: approvalCheckName, head_sha: headSha, status: "completed", conclusion: "success",
           external_id: jobId,
           output: { title: "Organizer revision approved", summary: `Approval snapshot ${approvalHash}` },
         }),
@@ -291,9 +292,20 @@ export function createGitHubPublicationAdapter(options: GitHubAdapterOptions) {
       const expectedRef = `organizer/${input.jobId}/${input.stage}`;
       if (pull.state !== "open" || pull.base?.ref !== "main" || pull.head?.ref !== expectedRef) throw new PublicationFailure("publication_pr_changed", "Publication PR identity changed.", false);
       if (pull.head.sha !== input.expectedHeadSha) throw new PublicationFailure("publication_pr_changed", "Publication PR head SHA changed.", false);
-      if (!pull.user?.login?.endsWith("[bot]")) throw new PublicationFailure("publication_pr_changed", "Publication PR is not App-owned.", false);
       const checks = await readChecks(input.repository, input.expectedHeadSha);
-      for (const required of ["Organizer publication approval", ...input.requiredChecks]) {
+      // Ending in "[bot]" only said some App opened this, which is not the
+      // guarantee ADR-0046 decision 3 opens with. Anyone able to install a
+      // second App on the repository could have opened a branch-shaped PR and
+      // had this merge it. The approval check on this head SHA is produced by
+      // the publication App itself, so its author is the identity to match:
+      // a PR opened by any other account no longer qualifies, whatever it is
+      // called. This binds the author to the approval's producer, not to a
+      // statically configured id -- ADR-0066 decision 3 records that boundary.
+      const approval = checks.filter((check) => check.name === approvalCheckName).sort((a, b) => b.id - a.id)[0];
+      const approvalAuthor = approval?.app?.slug;
+      if (!approvalAuthor) throw new PublicationFailure("publication_pr_changed", "Approval check has no App identity to match the PR author against.", false);
+      if (pull.user?.login !== `${approvalAuthor}[bot]`) throw new PublicationFailure("publication_pr_changed", "Publication PR was not opened by the App that approved it.", false);
+      for (const required of [approvalCheckName, ...input.requiredChecks]) {
         const latest = checks.filter((check) => check.name === required).sort((a, b) => b.id - a.id)[0];
         if (!latest || latest.status !== "completed" || latest.conclusion !== "success") {
           throw new PublicationFailure("publication_check_failed", `Required check is not successful: ${required}`, true);

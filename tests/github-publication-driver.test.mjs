@@ -93,7 +93,9 @@ async function remoteFixture(initial = {}) {
     } else if (method === "GET" && /^\/pulls\/\d+$/.test(path)) output = response(repo.pulls.get(Number(path.split("/").at(-1))));
     else if (method === "GET" && path.endsWith("/check-runs")) output = response({ check_runs: repo.checks.get(path.split("/")[2]) ?? [] });
     else if (method === "POST" && path === "/check-runs") {
-      const checks = repo.checks.get(body.head_sha) ?? []; checks.push({ ...body, id: ++checkId }); repo.checks.set(body.head_sha, checks); output = response(checks.at(-1), 201);
+      // GitHub attributes a check run to the App that created it, and the
+      // merge guard matches the PR author against that App (ADR-0066 3).
+      const checks = repo.checks.get(body.head_sha) ?? []; checks.push({ ...body, id: ++checkId, app: { id: 4931208, slug: "publisher" } }); repo.checks.set(body.head_sha, checks); output = response(checks.at(-1), 201);
     } else if (method === "PUT" && path.endsWith("/merge")) {
       const pull = repo.pulls.get(Number(path.split("/")[2])); assert.equal(pull.merged, false); assert.equal(body.sha, pull.head.sha);
       // Preserve unrelated main changes as GitHub's three-way merge does.
