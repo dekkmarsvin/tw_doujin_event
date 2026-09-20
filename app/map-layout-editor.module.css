@@ -48,9 +48,18 @@
 .canvasViewport svg.panning,.canvasViewport svg.panning .editable,.canvasViewport svg.panning.drawing,.canvasViewport svg.panning.drawing .editable { cursor:grabbing; }
 /* Tracing mode: the vector work becomes outlines so the plan underneath reads
    through it. Fills and printed codes are what hide the source lines and the
-   numbers being copied, so both go; the geometry and every hit area stay. */
-.canvasViewport svg.tracing :is(.slot,.landmark,.pillar) { fill:none; }
-.canvasViewport svg.tracing .access circle { fill:none; }
+   numbers being copied, so both go; the geometry stays.
+   The hit area does not follow on its own. An unfilled shape is not painted
+   inside, and the default `visiblePainted` then stops treating its middle as
+   part of it, so pressing the centre of a booth fell through to the paper and
+   started a rubber band instead of picking the booth up. `visible` keeps the
+   whole shape -- interior and perimeter -- taking the pointer whatever it is
+   painted with, and still respects `visibility`, so it cannot revive a hidden
+   element. It is set on the editable shapes only; the background, the
+   selection overlay and the guide preview keep their own `pointer-events:none`
+   and go on ignoring the pointer. */
+.canvasViewport svg.tracing :is(.slot,.landmark,.pillar) { fill:none; pointer-events:visible; }
+.canvasViewport svg.tracing .access circle { fill:none; pointer-events:visible; }
 .canvasViewport svg.tracing :is(.editable text,.rowLabel) { display:none; }
 .canvasViewport svg:focus-visible { outline:3px solid #9fb4aa; outline-offset:2px; }
 .paper { fill:#f8f7f2; pointer-events:none; }
