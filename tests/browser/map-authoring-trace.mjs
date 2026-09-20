@@ -307,7 +307,76 @@ try {
     assert.ok(stalled * 3 <= travel.length, `most frames move: ${stalled} of ${travel.length} stood still`);
     assert.ok(Math.max(...travel) <= step * 2, `no frame leaps after a snap: ${travel.join(",")}`);
     assert.ok(travel.every(moved => moved >= 0), "the copy never backs up against the drag");
-    for (let undone = 0; undone < 2; undone += 1) await undo.click();
+    // --- #286 D: one top, one bottom, one set of dividers ------------------
+    // The copy now sits lower than the column it came from and keeps its own
+    // cell height, which is the state traced columns are in before correction.
+    const cellsOf = () => page.evaluate(() => {
+      const value = (node, name) => Number(node.getAttribute(name));
+      // Scoped to the editable canvas: the contribution surface also renders
+      // a read-only preview of the same booths, so the document as a whole
+      // holds every cell twice.
+      return [...document.querySelector(`svg[aria-label^="可編輯"]`).querySelectorAll("[data-slot-code]")]
+        .filter(node => node.dataset.slotCode.startsWith("Z"))
+        .map(node => {
+          const rect = node.querySelector("rect");
+          return { code: node.dataset.slotCode, x: value(rect, "x"), width: value(rect, "width"), y: value(rect, "y"), height: value(rect, "height") };
+        });
+    });
+    const tilted = await cellsOf();
+    const lefts = [...new Set(tilted.map(cell => cell.x))];
+    assert.equal(lefts.length, 2, "two columns to line up");
+    const spanOf = left => {
+      const cells = tilted.filter(cell => cell.x === left);
+      return { top: Math.min(...cells.map(cell => cell.y)), bottom: Math.max(...cells.map(cell => cell.y + cell.height)) };
+    };
+    const spans = lefts.map(spanOf);
+    assert.ok(Math.abs(spans[0].top - spans[1].top) > 1 || Math.abs(spans[0].bottom - spans[1].bottom) > 1,
+      `the columns must start out misaligned or there is nothing to correct: ${JSON.stringify(spans)}`);
+    const edge = {
+      left: Math.min(...tilted.map(cell => cell.x)) - 6,
+      top: Math.min(...tilted.map(cell => cell.y)) - 6,
+      right: Math.max(...tilted.map(cell => cell.x + cell.width)) + 6,
+      bottom: Math.max(...tilted.map(cell => cell.y + cell.height)) + 6,
+    };
+    await svg.scrollIntoViewIfNeeded();
+    const canvas = await svg.boundingBox();
+    const view = page.viewportSize();
+    const corner = (x, y) => ({ x: canvas.x + x * canvas.width / SIZE, y: canvas.y + y * canvas.height / SIZE });
+    const start = corner(edge.left, edge.top), end = corner(edge.right, edge.bottom);
+    for (const [name, point] of [["start", start], ["end", end]]) {
+      assert.ok(point.x >= 0 && point.y >= 0 && point.x <= view.width && point.y <= view.height,
+        `band ${name} is off screen at ${JSON.stringify(point)} in ${JSON.stringify(view)} (canvas ${JSON.stringify(canvas)})`);
+    }
+    await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 8 }); await page.mouse.up();
+    const sync = editor.getByRole("button", { name: /同步上下邊界/ });
+    assert.match(await sync.textContent(), /2 排 × 16 格/, "the control says what it will correct");
+    await sync.click();
+    const shared = { top: Math.min(...tilted.map(cell => cell.y)), bottom: Math.max(...tilted.map(cell => cell.y + cell.height)) };
+    const after = await cellsOf();
+    const was = new Map(tilted.map(cell => [cell.code, cell]));
+    for (const cell of after) {
+      near(cell.x, was.get(cell.code).x, `${cell.code} keeps its column`);
+      near(cell.width, was.get(cell.code).width, `${cell.code} keeps its width`);
+    }
+    const grouped = new Map();
+    for (const cell of after) grouped.set(cell.x, [...(grouped.get(cell.x) ?? []), cell]);
+    const columns = [...grouped.values()].map(cells => cells.sort((a, b) => a.y - b.y));
+    for (const cells of columns) {
+      assert.equal(cells.length, 16);
+      near(cells[0].y, shared.top, "every column starts on the shared top");
+      near(cells[15].y + cells[15].height, shared.bottom, "and ends on the shared bottom");
+      for (let index = 1; index < cells.length; index += 1) near(cells[index].y, cells[index - 1].y + cells[index - 1].height, "seamless");
+    }
+    for (let index = 0; index < 16; index += 1) near(columns[1][index].y, columns[0][index].y, `divider ${index} is shared`);
+    // One correction across both columns is one history step.
+    await undo.click();
+    const undone = await cellsOf();
+    for (const cell of undone) {
+      near(cell.y, was.get(cell.code).y, `${cell.code} is back where it was`);
+      near(cell.height, was.get(cell.code).height);
+    }
+
+    for (let step = 0; step < 2; step += 1) await undo.click();
     await picker.selectOption("slot:0:0");
 
     // --- Display settings are personal, not part of the draft -------------
