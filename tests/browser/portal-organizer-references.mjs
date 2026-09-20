@@ -52,7 +52,7 @@ try {
   await page.getByRole("button", { name: "建立第一個活動日", exact: true }).click();
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("button", { name: "新增使用空間", exact: true }).click();
-  await page.getByRole("combobox", { name: /^場館 系統/ }).selectOption("taipei-expo-park-zhengyan-hall");
+  await page.getByRole("combobox", { name: /^場館/ }).selectOption("taipei-expo-park-zhengyan-hall");
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
   await page.getByRole("button", { name: "5 檢查與預覽 需先完成前面步驟", exact: true }).click();
   await page.getByRole("button", { name: "建立預覽", exact: true }).click();

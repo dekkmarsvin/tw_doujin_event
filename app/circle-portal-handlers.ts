@@ -1047,7 +1047,7 @@ export function createCirclePortalHandlers({
     if (!resolvedScope.ok) return json({
       error: resolvedScope.reason === "scope_conflict"
         ? "同一活動範圍已有互相衝突的核准稿，請由管理者先處理。"
-        : "活動 period 或場地空間不存在。",
+        : "活動日或使用空間不存在。",
     }, resolvedScope.reason === "scope_conflict" ? 409 : 400);
     const scope = resolvedScope.scope;
     const draftId = crypto.randomUUID();
@@ -1153,7 +1153,7 @@ export function createCirclePortalHandlers({
     const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
     if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
       ? "同一活動範圍有互相衝突的核准稿，請由管理者先處理。"
-      : "活動 period 或場地空間已不存在。" }, 409);
+      : "活動日或使用空間已不存在。" }, 409);
     const scope = resolvedScope.scope;
     const validation = validateMapContributionDraft(
       draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
@@ -1394,7 +1394,7 @@ export function createCirclePortalHandlers({
       const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
       if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
         ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-        : "活動 period 或場地空間已不存在。" }, 409);
+        : "活動日或使用空間已不存在。" }, 409);
       const scope = resolvedScope.scope;
       const validation = validateMapContributionDraft(
         draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
@@ -1464,7 +1464,7 @@ export function createCirclePortalHandlers({
       }
       return json({ error: resolvedScope.reason === "scope_conflict"
         ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-        : "活動 period 或場地空間已不存在。" }, 409);
+        : "活動日或使用空間已不存在。" }, 409);
     }
     const scope = resolvedScope.scope;
 
@@ -1704,8 +1704,13 @@ export function createCirclePortalHandlers({
   async function organizerAccess(request: Request, candidateId: string) {
     const current = await currentSession(request);
     if (!current) return { ok: false as const, response: json({ error: "尚未登入。" }, 401) };
-    const admin = await isAdmin(current.email);
-    const grantRole = await repository.organizerRole(candidateId, current.accountId);
+    // Neither lookup needs the other's answer, and this runs ahead of every
+    // organizer request, so serialising them charged one avoidable round trip
+    // to each of the three calls a single save makes.
+    const [admin, grantRole] = await Promise.all([
+      isAdmin(current.email),
+      repository.organizerRole(candidateId, current.accountId),
+    ]);
     // An admin may also be this event's Owner. Preserve that event role so the
     // submit and approve actions can remain distinct and self-approval can be
     // audited, while an unassigned admin still gets global inspection access.
@@ -2003,14 +2008,18 @@ export function createCirclePortalHandlers({
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
-    const [revisions, publication, workspace, venueCatalog, workspaceValidation] = await Promise.all([
+    const [revisions, publication, workspace, workspaceValidation] = await Promise.all([
       repository.listOrganizerCandidateRevisions(candidateId),
       repository.getLatestOrganizerPublicationJob(candidateId),
       repository.getOrganizerWorkspace(candidateId, access.current.accountId),
-      repository.listOrganizerVenueCatalog(),
       validateOrganizerWorkspace(candidateId, draft),
     ]);
     if (!workspace) return json({ error: "找不到活動工作區。" }, 404);
+    // The validation pass already loaded the venue catalogue to check the
+    // assignments against it. Reading it a second time here billed the same
+    // two queries to every detail read the workspace makes, which is one per
+    // save on top of the save's own.
+    const venueCatalog = workspaceValidation.venueCatalog;
     const { imported, maps, issues: validationIssues } = workspaceValidation;
     const guidedTask = isOrganizerGuidedTask(workspace.preference?.guided_task)
       ? workspace.preference.guided_task : "identity_source";
@@ -2088,7 +2097,16 @@ export function createCirclePortalHandlers({
   async function updateOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if ((await repository.getOrganizerCandidate(candidateId))?.publication_operation === "AMEND") {
+    // Three independent reads the checks below consume in turn. Loading them
+    // together keeps the order the refusals are decided in — the amendment
+    // guard still answers before a malformed body does — while costing one
+    // round trip instead of three on the path a save always takes.
+    const [candidate, venueCatalog, referenceRecords] = await Promise.all([
+      repository.getOrganizerCandidate(candidateId),
+      repository.listOrganizerVenueCatalog(),
+      repository.listOrganizerReferenceRecords(),
+    ]);
+    if (candidate?.publication_operation === "AMEND") {
       return json({ error: "已發布修正保留基準活動設定，請使用明確修正宣告。", code: "amendment_declaration_required" }, 409);
     }
     const body = await readJson(request);
@@ -2097,15 +2115,12 @@ export function createCirclePortalHandlers({
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !serialized) {
       return json({ error: "活動資料格式無效，請重新載入後再試。" }, 400);
     }
-    const venueIssues = validateOrganizerVenueCatalogAssignments(
-      serialized.draft.venue.assignments,
-      await repository.listOrganizerVenueCatalog(),
-    );
+    const venueIssues = validateOrganizerVenueCatalogAssignments(serialized.draft.venue.assignments, venueCatalog);
     if (venueIssues.length > 0) {
       return json({ error: venueIssues[0].message, issues: venueIssues }, 422);
     }
     const referenceIssues = validateOrganizerReferences(serialized.draft,
-      projectReferenceCatalog(await repository.listOrganizerReferenceRecords()), false);
+      projectReferenceCatalog(referenceRecords), false);
     if (referenceIssues.length) return json({ error: referenceIssues[0].message, issues: referenceIssues }, 422);
     const result = await repository.saveOrganizerCandidate({
       candidateId, actorAccountId: access.current.accountId,
@@ -2116,8 +2131,8 @@ export function createCirclePortalHandlers({
     });
     if (!result.ok) {
       if (result.reason === "not_found" || result.reason === "forbidden") return json({ error: "找不到活動。" }, 404);
-      const message = result.reason === "event_id_locked" ? `eventId 已鎖定為 ${result.eventId}。`
-        : result.reason === "event_id_taken" ? "eventId 已被其他活動使用。"
+      const message = result.reason === "event_id_locked" ? `活動代碼已鎖定為 ${result.eventId}。`
+        : result.reason === "event_id_taken" ? "活動代碼已被其他活動使用。"
           : result.reason === "status" ? "目前狀態不可編輯。"
             : "草稿已被其他人更新，請重新載入。";
       return json({ error: message, conflict: result }, 409);
@@ -2202,8 +2217,9 @@ export function createCirclePortalHandlers({
   }
 
   async function validateOrganizerWorkspace(candidateId: string, draft: OrganizerEventDraft) {
-    const [imported, maps] = await Promise.all([
+    const [imported, maps, venueCatalog, referenceRecords] = await Promise.all([
       repository.getOrganizerImport(candidateId), repository.listOrganizerMapDrafts(candidateId),
+      repository.listOrganizerVenueCatalog(), repository.listOrganizerReferenceRecords(),
     ]);
     const issues = getOrganizerWorkspacePrerequisiteIssues({
       draft,
@@ -2211,8 +2227,6 @@ export function createCirclePortalHandlers({
       importedVenueSpaceIds: imported?.rows.map((row) => row.venue_space_id),
       maps: maps.map((map) => ({ periodKey: map.period_key, venueSpaceId: map.venue_space_id })),
     });
-    const venueCatalog = await repository.listOrganizerVenueCatalog();
-    const referenceRecords = await repository.listOrganizerReferenceRecords();
     const referenceCatalog = projectReferenceCatalog(referenceRecords);
     const resolved = await resolveOrganizerReferences(draft, referenceRecords);
     issues.push(...resolved.issues);
@@ -2340,7 +2354,7 @@ export function createCirclePortalHandlers({
         || !assignment || !areaAllowed || codes.length === 0 || codes.some((code) => !code || code.length > 80)
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
         || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
-        return json({ error: `來源列 ${String(sourceRow)} 與活動日、venue-space、area 或 identity mapping 不一致。` }, 422);
+        return json({ error: `來源列 ${String(sourceRow)} 的活動日、使用空間、展區或社團識別對應不一致。` }, 422);
       }
       for (const code of codes) {
         const placement = `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;

@@ -181,7 +181,7 @@ export function validateMapContributionDraft(
   const base = validateEventMapLayout(content.layout);
   if (!base.ok) problems.push(...base.errors.slice(0, 50).map((message) => ({ code: "invalid_layout" as const, message })));
   if (content.layout.template !== scope.mapTemplate) {
-    problems.push({ code: "template_mismatch", message: `layout template ${content.layout.template} 與活動 ${scope.mapTemplate} 不一致。` });
+    problems.push({ code: "template_mismatch", message: `這張地圖使用的版面（${content.layout.template}）與活動指定的版面（${scope.mapTemplate}）不一致。` });
   } else {
     const template = validateMapTemplateLayout(scope.mapTemplate, content.layout);
     if (!template.ok) {
@@ -202,7 +202,7 @@ export function validateMapContributionDraft(
       boothCodes: unknown,
     });
   }
-  if (missing.length) problems.push({ code: "missing_booth", message: `缺少本 period 的 ${missing.length} 個主辦攤位代碼。`, boothCodes: missing });
+  if (missing.length) problems.push({ code: "missing_booth", message: `缺少本活動日的 ${missing.length} 個主辦攤位代碼。`, boothCodes: missing });
 
   const overlaps = base.ok ? overlapProblems(content.layout) : [];
   if (overlaps.length) {

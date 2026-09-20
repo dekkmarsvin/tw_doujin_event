@@ -335,6 +335,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const [notice, setNotice] = useState<Notice>(IDLE);
   const [startingAmendment, setStartingAmendment] = useState(false);
+  const [navigationSaving, setNavigationSaving] = useState(false);
   const draftSave = useRef<(() => Promise<boolean>) | null>(null);
   const navigationDialog = useRef<HTMLElement | null>(null);
   const selectionInitialized = useRef(false);
@@ -394,9 +395,14 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     return () => { active = false; window.clearInterval(timer); };
   }, [selectedId, publicationStatus, pollGeneration]);
 
+  /* The two reads answer different questions and neither needs the other's
+   * result, so they go out together: a save waits for this whole refresh
+   * before it stops reporting itself as busy, and chaining them put a needless
+   * round trip inside that wait. A selection the list no longer carries is
+   * still corrected, because reloadList's own update re-runs the detail
+   * effect. */
   const refresh = useCallback(async () => {
-    await reloadList();
-    if (selectedId) await reloadDetail(selectedId);
+    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId) : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
 
   const persistLocation = useCallback(async (
@@ -421,7 +427,15 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const saveAndNavigate = async () => {
     if (!pendingNavigation || !draftSave.current) return;
     const request = pendingNavigation;
-    if (await draftSave.current()) finishNavigation(request);
+    // The dialog stays up for the whole save; without a busy state its buttons
+    // read as unpressed for the couple of seconds the write and the two reads
+    // behind it take, and a second press would save the same draft twice.
+    setNavigationSaving(true);
+    try {
+      if (await draftSave.current()) finishNavigation(request);
+    } finally {
+      setNavigationSaving(false);
+    }
   };
 
   const chooseEvent = (candidateId: string) => {
@@ -525,9 +539,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           <h3 id="unsaved-title">尚有未儲存變更</h3>
           <p id="unsaved-description">要先儲存目前的修改，再{pendingNavigation.description}嗎？</p>
           <div className={styles.dialogActions}>
-            <button type="button" onClick={() => { void saveAndNavigate(); }}>儲存並切換</button>
-            <button type="button" className={styles.secondary} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
-            <button type="button" className={styles.ghost} onClick={() => setPendingNavigation(null)}>取消</button>
+            <button type="button" disabled={navigationSaving} onClick={() => { void saveAndNavigate(); }}>{navigationSaving ? "儲存中…" : "儲存並切換"}</button>
+            <button type="button" className={styles.secondary} disabled={navigationSaving} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
+            <button type="button" className={styles.ghost} disabled={navigationSaving} onClick={() => setPendingNavigation(null)}>取消</button>
           </div>
         </section>
       </div>}
@@ -723,8 +737,8 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
   const completed = liveDirty && currentSavedState === "complete" ? readiness.completed - 1 : readiness.completed;
   const nextSection = liveDirty && liveSection ? liveSection : readiness.suggestedNextSection;
   const liveSectionIndex = liveSection ? ORGANIZER_WORKSPACE_SECTIONS.indexOf(liveSection) : -1;
-  return <aside className={styles.readiness} aria-label="活動建置狀態">
-    <div className={styles.readinessHead}><h3>建置狀態</h3><strong>{completed}/{readiness.total}</strong></div>
+  return <aside className={styles.readiness} aria-label="活動準備進度">
+    <div className={styles.readinessHead}><h3>準備進度</h3><strong>{completed}/{readiness.total}</strong></div>
     <p>最後儲存 {new Date(detail.event.updatedAt).toLocaleString("zh-TW")}</p>
     <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
       下一步：{organizerSectionLabel(detail, nextSection)}
@@ -858,6 +872,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   // still counts as edited, which errs towards asking.
   const [edited, setEdited] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [savingMap, setSavingMap] = useState(false);
   const [confirm, setConfirm] = useState<
     { title: string; description: string; confirmLabel: string; run: () => void } | null
   >(null);
@@ -968,6 +983,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const saveMap = async (close = false) => {
     if (!layout) return;
     setConfirmingClose(false);
+    setSavingMap(true);
     setNotice({ kind: "busy", message: "儲存地圖…" });
     try {
       let saved: OrganizerMapDetail;
@@ -993,11 +1009,13 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       }
       if (close) closeEditor();
       else { setSelected(saved); setEdited(false); }
-      setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" });
       await onChanged();
       await reload();
+      setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" });
     } catch (error) {
       setNotice({ kind: "error", message: message(error) });
+    } finally {
+      setSavingMap(false);
     }
   };
 
@@ -1048,9 +1066,9 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
           in the history that records nothing. A map that does not exist yet is
           always savable -- there is no revision to compare it against. */}
       <div className={styles.mapActions}>
-        <button type="button" disabled={!editable || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
-        <button type="button" className={styles.ghost} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
-        {selected && <span>{edited ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>}
+        <button type="button" disabled={!editable || savingMap || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
+        <button type="button" className={styles.ghost} disabled={savingMap} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
+        <span aria-live="polite">{savingMap ? "儲存中，請稍候。" : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}</span>
       </div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>
@@ -1058,7 +1076,7 @@ function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         <h3 id="unsaved-map-title">尚有未儲存變更</h3>
         <p id="unsaved-map-description">要先儲存地圖，再關閉編輯器嗎？</p>
         <div className={styles.dialogActions}>
-          <button type="button" disabled={!editable} onClick={() => { void saveMap(true); }}>儲存並關閉</button>
+          <button type="button" disabled={!editable || savingMap} onClick={() => { void saveMap(true); }}>儲存並關閉</button>
           <button type="button" className={styles.secondary} onClick={closeEditor}>放棄</button>
           <button type="button" className={styles.ghost} onClick={() => setConfirmingClose(false)}>取消</button>
         </div>
@@ -1241,7 +1259,7 @@ function ImportPanel({ detail, onChanged, setNotice }: {
   const columns = requiresAreaMapping ? 8 : 7;
 
   return <section className={styles.panel}>
-    <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>檔案只在你的瀏覽器讀取，不會上傳；送出的是你確認過的資料。</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
+    <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>對照欄位後預覽結果，確認無誤再送出名單。</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
     {detail.import && <SavedImportList detail={detail} />}
     <div className={styles.importGrid}>
       <label>來源檔案<input type="file" disabled={!editable} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => {
@@ -1481,7 +1499,7 @@ function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }: {
       onCreated(created, space);
     }).catch((error) => setLocalNotice({ kind: "error", message: message(error) }));
   }}>
-    <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的使用空間` : "建立新場館"}</h4><p>系統會配置內部 ID，建立後立即出現在選單中。</p></div></div>
+    <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的使用空間` : "建立新場館"}</h4><p>建立後會立即出現在下方選單中。</p></div></div>
     <div className={styles.formGrid}>
       {!venue && <>
         <label>場館名稱<input required maxLength={120} value={venueName} onChange={(event) => setVenueName(event.target.value)} /></label>
@@ -1517,6 +1535,7 @@ function DraftForm({
 }) {
   const [draft, setDraft] = useState(detail.draft);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
   const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
@@ -1532,25 +1551,35 @@ function DraftForm({
     setDirty(true);
     setDraft((current) => mutate(structuredClone(current)));
   };
+  /* Writing the draft is only the first of three calls: the answer is followed
+   * by a fresh event list and a fresh detail read, and the panel keeps showing
+   * the old readiness until all three land. That whole wait is what the reader
+   * experiences as the save, so the buttons stay busy for its full length
+   * rather than for the write alone — the shared line at the top of the
+   * workspace is too far from the button to read as a reply to the press. */
   const save = useCallback(async (after?: (version: number) => Promise<void>) => {
+    setSaving(true);
     setNotice({ kind: "busy", message: "儲存中…" });
     let result: Awaited<ReturnType<typeof saveOrganizerEvent>>;
     try {
       result = await saveOrganizerEvent(detail.event.id, expectedVersion, draft);
     } catch (error) {
+      setSaving(false);
       setNotice({ kind: "error", message: message(error) });
       return false;
     }
     setDirty(false);
     setExpectedVersion(result.version);
-    setNotice({ kind: "ok", message: "已儲存。" });
     try {
       await onChanged();
       if (after) await after(result.version);
+      setNotice({ kind: "ok", message: "已儲存。" });
       return true;
     } catch (error) {
       setNotice({ kind: "error", message: `已儲存，但後續動作未完成：${message(error)}` });
       return false;
+    } finally {
+      setSaving(false);
     }
   }, [detail.event.id, draft, expectedVersion, onChanged, setNotice]);
   useEffect(() => {
@@ -1641,7 +1670,7 @@ function DraftForm({
               areaIds: space?.defaultAreaMode === "none" ? ["ALL"] : [], areaMode: space?.defaultAreaMode ?? "imported",
             };
             return next;
-          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select><small>系統會保存內部 ID，不需手動輸入。</small></label>
+          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select><small>從清單選擇即可，不需自行輸入。</small></label>
           <label>使用空間<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => update((next) => {
             const space = spaces.find((item) => item.id === event.target.value);
             next.venue.assignments[index].venueSpaceId = space?.id ?? "";
@@ -1666,9 +1695,9 @@ function DraftForm({
     </div>}
     {taskIssues.length > 0 && <div className={styles.taskIssues} aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
     <div className={styles.formActions}>
-      <button type="button" disabled={!editable} onClick={() => { void save(onSaved); }}>{saveLabel}</button>
-      {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
-      <span>{dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>
+      <button type="button" disabled={!editable || saving} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
+      {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
+      <span aria-live="polite">{saving ? "儲存中，請稍候。" : dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>
     </div>
   </section>;
 }
