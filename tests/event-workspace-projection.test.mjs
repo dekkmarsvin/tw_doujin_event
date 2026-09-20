@@ -289,10 +289,12 @@ test("all areas covers every area of the reader's space and none of another's", 
 });
 
 test("the area chip appears for a chosen area and not for all of them", () => {
+  // Two venue spaces, because that is the only event whose reader can choose an
+  // area at all; a chip for a state nobody can reach would prove nothing.
   const derivedEvent = {
     ...event("event-a"),
-    areas: [{ id: "A", label: "A 區", shortLabel: "A" }, { id: "B", label: "B 區", shortLabel: "B" }],
-    venueAssignments: [{ venueSpaceId: "main", areaIds: ["A", "B"] }],
+    areas: ["A", "B", "S"].map((id) => ({ id, label: `${id} 區`, shortLabel: id })),
+    venueAssignments: [{ venueSpaceId: "main", areaIds: ["A", "B"] }, { venueSpaceId: "annex", areaIds: ["S"] }],
   };
   const project = (area) => projectEventWorkspace({
     event: derivedEvent, records, recordsById, recordsByCircleId, planning, ...defaults, area,

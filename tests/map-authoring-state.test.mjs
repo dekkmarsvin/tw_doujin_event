@@ -9,6 +9,7 @@ const runner = vite.environments.ssr.runner;
 const { validMapAuthoringState, scaleMapAuthoringState } = await runner.import("/app/map-authoring-state.ts");
 const { parseMapContributionDraftContent } = await runner.import("/app/map-contribution-draft.ts");
 const { snapRectToAdjacentRects: snap, segmentSlotRects } = await runner.import("/app/map-layout-editor-geometry.ts");
+const { planSharedSegmentEdges } = await runner.import("/app/map-layout-editor-selection.ts");
 const { createLayoutHistory, pushLayoutHistory, undoLayoutHistory, redoLayoutHistory } = await runner.import("/app/map-editor-history.ts");
 const { buildApprovedPublicationArtifacts } = await runner.import("/app/publication-artifacts.ts");
 after(() => vite.close());
@@ -60,6 +61,63 @@ test("segment resize snaps only the active edge and remains gapless", () => {
   assert.deepEqual(result, { x: 20, y: 10, width: 30, height: 60 });
   const slots = segmentSlotRects(result, "vertical", 7, layout);
   for (let i = 1; i < slots.length; i++) assert.equal(slots[i].y, slots[i - 1].y + slots[i - 1].height);
+});
+
+// #286 D: the maintainer's six traced columns, each ten cells, each a few
+// units off the next at the top and with its own cell height.
+test("shared segment edges line columns up without closing the gangways", () => {
+  const column = (x, top, pitch) => Array.from({ length: 10 }, (unused, index) =>
+    ({ x, y: top + index * pitch, width: 24, height: pitch }));
+  const layouts = [[120, 30, 40], [180, 34, 41], [250, 28, 39.5], [300, 31, 40.5], [370, 33, 40], [430, 29, 41.5]];
+  const boxes = layouts.flatMap(([x, top, pitch]) => column(x, top, pitch));
+  const plan = planSharedSegmentEdges(boxes, { width: 600, height: 700 });
+  assert.equal(plan.ok, true);
+  assert.equal(plan.columns, 6);
+  assert.equal(plan.cells, 10);
+
+  const top = Math.min(...boxes.map(box => box.y));
+  const bottom = Math.max(...boxes.map(box => box.y + box.height));
+  for (let index = 0; index < boxes.length; index += 1) {
+    assert.equal(plan.boxes[index].x, boxes[index].x, "the gangways are untouched");
+    assert.equal(plan.boxes[index].width, boxes[index].width, "so is every width");
+  }
+  const columns = layouts.map((unused, group) => plan.boxes.slice(group * 10, group * 10 + 10));
+  for (const cells of columns) {
+    assert.ok(Math.abs(cells[0].y - top) < 1e-9, "every column starts on the shared top");
+    assert.ok(Math.abs(cells[9].y + cells[9].height - bottom) < 1e-9, "and ends on the shared bottom");
+    for (let index = 1; index < cells.length; index += 1) {
+      assert.ok(cells[index].y >= cells[index - 1].y + cells[index - 1].height - 1e-9, "no overlap inside a column");
+      assert.ok(cells[index].y - (cells[index - 1].y + cells[index - 1].height) < 1e-9, "and no gap either");
+    }
+  }
+  // The point of the shared cut: divider i of every column is the same line.
+  for (let index = 0; index < 10; index += 1) {
+    const line = columns[0][index].y;
+    for (const cells of columns) assert.ok(Math.abs(cells[index].y - line) < 1e-9, `divider ${index} is shared`);
+  }
+});
+
+test("shared segment edges refuse what they would get wrong", () => {
+  const column = (x, count, pitch = 10) => Array.from({ length: count }, (unused, index) =>
+    ({ x, y: 10 + index * pitch, width: 20, height: pitch }));
+  const bounds = { width: 600, height: 700 };
+  const cases = [
+    [[], "請選取至少兩個直排的攤位。"],
+    [column(10, 4), "這些攤位都在同一直排，沒有要對齊的第二排。"],
+    [[...column(10, 4), ...column(50, 3)], "每一排的格數必須相同，目前是 4、3 格。"],
+    // Two cells side by side at the same y are a horizontal run, not a column.
+    [[{ x: 10, y: 10, width: 20, height: 10 }, { x: 10, y: 10, width: 20, height: 10 }, { x: 50, y: 10, width: 20, height: 10 }, { x: 50, y: 10, width: 20, height: 10 }],
+      "同步上下邊界只適用於直排；這個選取裡有橫排的攤位。"],
+  ];
+  for (const [boxes, reason] of cases) {
+    const plan = planSharedSegmentEdges(boxes, bounds);
+    assert.equal(plan.ok, false, reason);
+    assert.equal(plan.errors[0], reason);
+  }
+  // The height is checked once on the shared span, not cell by cell.
+  const tight = [...column(10, 10, 1), ...column(50, 10, 1)];
+  assert.equal(planSharedSegmentEdges(tight, bounds, 5).ok, false);
+  assert.match(planSharedSegmentEdges(tight, bounds, 5).errors[0], /共同高度不足/);
 });
 
 test("approved publication artifacts omit private guides entirely", async () => {
