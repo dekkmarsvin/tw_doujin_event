@@ -1,6 +1,6 @@
 {
   "schema": "circle-id-allocations/1",
-  "nextSequence": 1519,
+  "nextSequence": 2236,
   "allocations": [
     {
       "id": "c-000001",
@@ -7591,6 +7591,3591 @@
       "id": "c-001518",
       "allocatedAt": "2026-09-15",
       "reason": "New reviewed ch-20 catalog evidence"
+    },
+    {
+      "id": "c-001519",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001520",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001521",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001522",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001523",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001524",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001525",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001526",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001527",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001528",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001529",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001530",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001531",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001532",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001533",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001534",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001535",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001536",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001537",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001538",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001539",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001540",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001541",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001542",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001543",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001544",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001545",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001546",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001547",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001548",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001549",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001550",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001551",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001552",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001553",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001554",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001555",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001556",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001557",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001558",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001559",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001560",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001561",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001562",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001563",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001564",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001565",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001566",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001567",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001568",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001569",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001570",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001571",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001572",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001573",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001574",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001575",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001576",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001577",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001578",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001579",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001580",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001581",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001582",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001583",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001584",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001585",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001586",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001587",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001588",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001589",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001590",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001591",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001592",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001593",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001594",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001595",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001596",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001597",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001598",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001599",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001600",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001601",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001602",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001603",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001604",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001605",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001606",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001607",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001608",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001609",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001610",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001611",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001612",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001613",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001614",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001615",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001616",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001617",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001618",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001619",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001620",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001621",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001622",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001623",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001624",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001625",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001626",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001627",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001628",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001629",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001630",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001631",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001632",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001633",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001634",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001635",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001636",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001637",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001638",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001639",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001640",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001641",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001642",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001643",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001644",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001645",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001646",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001647",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001648",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001649",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001650",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001651",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001652",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001653",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001654",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001655",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001656",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001657",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001658",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001659",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001660",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001661",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001662",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001663",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001664",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001665",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001666",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001667",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001668",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001669",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001670",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001671",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001672",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001673",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001674",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001675",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001676",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001677",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001678",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001679",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001680",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001681",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001682",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001683",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001684",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001685",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001686",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001687",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001688",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001689",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001690",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001691",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001692",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001693",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001694",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001695",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001696",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001697",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001698",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001699",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001700",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001701",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001702",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001703",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001704",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001705",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001706",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001707",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001708",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001709",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001710",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001711",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001712",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001713",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001714",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001715",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001716",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001717",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001718",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001719",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001720",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001721",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001722",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001723",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001724",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001725",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001726",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001727",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001728",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001729",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001730",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001731",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001732",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001733",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001734",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001735",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001736",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001737",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001738",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001739",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001740",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001741",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001742",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001743",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001744",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001745",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001746",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001747",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001748",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001749",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001750",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001751",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001752",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001753",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001754",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001755",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001756",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001757",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001758",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001759",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001760",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001761",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001762",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001763",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001764",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001765",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001766",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001767",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001768",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001769",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001770",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001771",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001772",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001773",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001774",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001775",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001776",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001777",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001778",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001779",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001780",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001781",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001782",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001783",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001784",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001785",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001786",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001787",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001788",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001789",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001790",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001791",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001792",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001793",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001794",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001795",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001796",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001797",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001798",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001799",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001800",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001801",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001802",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001803",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001804",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001805",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001806",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001807",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001808",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001809",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001810",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001811",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001812",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001813",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001814",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001815",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001816",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001817",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001818",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001819",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001820",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001821",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001822",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001823",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001824",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001825",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001826",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001827",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001828",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001829",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001830",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001831",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001832",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001833",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001834",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001835",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001836",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001837",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001838",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001839",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001840",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001841",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001842",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001843",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001844",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001845",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001846",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001847",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001848",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001849",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001850",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001851",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001852",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001853",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001854",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001855",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001856",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001857",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001858",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001859",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001860",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001861",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001862",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001863",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001864",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001865",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001866",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001867",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001868",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001869",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001870",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001871",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001872",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001873",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001874",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001875",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001876",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001877",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001878",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001879",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001880",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001881",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001882",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001883",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001884",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001885",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001886",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001887",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001888",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001889",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001890",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001891",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001892",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001893",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001894",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001895",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001896",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001897",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001898",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001899",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001900",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001901",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001902",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001903",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001904",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001905",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001906",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001907",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001908",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001909",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001910",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001911",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001912",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001913",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001914",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001915",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001916",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001917",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001918",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001919",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001920",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001921",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001922",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001923",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001924",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001925",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001926",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001927",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001928",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001929",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001930",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001931",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001932",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001933",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001934",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001935",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001936",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001937",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001938",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001939",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001940",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001941",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001942",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001943",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001944",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001945",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001946",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001947",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001948",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001949",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001950",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001951",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001952",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001953",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001954",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001955",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001956",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001957",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001958",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001959",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001960",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001961",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001962",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001963",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001964",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001965",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001966",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001967",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001968",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001969",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001970",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001971",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001972",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001973",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001974",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001975",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001976",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001977",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001978",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001979",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001980",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001981",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001982",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001983",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001984",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001985",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001986",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001987",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001988",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001989",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001990",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001991",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001992",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001993",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001994",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001995",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001996",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001997",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001998",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-001999",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002000",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002001",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002002",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002003",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002004",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002005",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002006",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002007",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002008",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002009",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002010",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002011",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002012",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002013",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002014",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002015",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002016",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002017",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002018",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002019",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002020",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002021",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002022",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002023",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002024",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002025",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002026",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002027",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002028",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002029",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002030",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002031",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002032",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002033",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002034",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002035",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002036",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002037",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002038",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002039",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002040",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002041",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002042",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002043",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002044",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002045",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002046",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002047",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002048",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002049",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002050",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002051",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002052",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002053",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002054",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002055",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002056",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002057",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002058",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002059",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002060",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002061",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002062",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002063",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002064",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002065",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002066",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002067",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002068",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002069",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002070",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002071",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002072",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002073",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002074",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002075",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002076",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002077",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002078",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002079",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002080",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002081",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002082",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002083",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002084",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002085",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002086",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002087",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002088",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002089",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002090",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002091",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002092",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002093",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002094",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002095",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002096",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002097",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002098",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002099",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002100",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002101",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002102",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002103",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002104",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002105",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002106",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002107",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002108",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002109",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002110",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002111",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002112",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002113",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002114",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002115",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002116",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002117",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002118",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002119",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002120",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002121",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002122",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002123",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002124",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002125",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002126",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002127",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002128",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002129",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002130",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002131",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002132",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002133",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002134",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002135",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002136",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002137",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002138",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002139",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002140",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002141",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002142",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002143",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002144",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002145",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002146",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002147",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002148",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002149",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002150",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002151",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002152",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002153",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002154",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002155",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002156",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002157",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002158",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002159",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002160",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002161",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002162",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002163",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002164",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002165",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002166",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002167",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002168",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002169",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002170",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002171",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002172",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002173",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002174",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002175",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002176",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002177",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002178",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002179",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002180",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002181",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002182",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002183",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002184",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002185",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002186",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002187",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002188",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002189",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002190",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002191",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002192",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002193",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002194",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002195",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002196",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002197",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002198",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002199",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002200",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002201",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002202",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002203",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002204",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002205",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002206",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002207",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002208",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002209",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002210",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002211",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002212",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002213",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002214",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002215",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002216",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002217",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002218",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002219",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002220",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002221",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002222",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002223",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002224",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002225",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002226",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002227",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002228",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002229",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002230",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002231",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002232",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002233",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002234",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002235",
+      "allocatedAt": "2026-09-20",
+      "reason": "New reviewed pf45-rf14 catalog evidence"
     }
   ]
 }

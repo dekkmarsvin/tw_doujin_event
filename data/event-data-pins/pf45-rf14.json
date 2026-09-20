@@ -1,0 +1,52 @@
+{
+  "schema": "event-data-pin/2",
+  "eventId": "pf45-rf14",
+  "repository": "dekkmarsvin/tw_doujin_event-data",
+  "commit": "13723a33166658e97d488372ea9ea3b459d6c338",
+  "files": [
+    {
+      "path": "events/pf45-rf14/circle-identity-groups.json",
+      "sha256": "cd73b9160d6691befa857f2dca968bb766724fd40b4da23bff6171d663869638"
+    },
+    {
+      "path": "events/pf45-rf14/event.json",
+      "sha256": "16612c535a8f5a72036827b8d6720ae6106b207f2fe22cb9a563e92ed17f699a"
+    },
+    {
+      "path": "events/pf45-rf14/map-manifest.json",
+      "sha256": "22d876fa6943dd75b7b676a51587ef3e3c2583edab094a3f4b9494939a8f8c39"
+    },
+    {
+      "path": "events/pf45-rf14/maps/1/zhengyan-exhibition-area.json",
+      "sha256": "087c0ec452af6f2fbf2415dd38c727bcd5f83e9f05808f78935ef5dcd84dddc6"
+    },
+    {
+      "path": "events/pf45-rf14/maps/2/zhengyan-exhibition-area.json",
+      "sha256": "d63ee8e83f757a9a6e4f1ea81af7fe5952836e489b79d4901297589271f1e74a"
+    },
+    {
+      "path": "events/pf45-rf14/official-booths.json",
+      "sha256": "d276aaa3022daa4a235b1907b9a1691711cc230ab6631d0474560d35f5414ef1"
+    },
+    {
+      "path": "events/pf45-rf14/reference-selection.json",
+      "sha256": "688211e590eb598d8ae931e6fc8c6ec2923deb39292c18cb882cf3be5a885daf"
+    },
+    {
+      "path": "references/category-catalogs/organizer-a3f8140a-a946-4ec4-bcf7-321b62849b45/catalog-f9adfbd4-9954-4b5a-83fc-d69cf7fc20f6/1.json",
+      "sha256": "047a454ef1d94a991ef14c9c2c2289a7eab8d4fc49ac5269993b80d7cde2ab8d"
+    },
+    {
+      "path": "references/organizers/organizer-a3f8140a-a946-4ec4-bcf7-321b62849b45.json",
+      "sha256": "f8ec4ad177dbdf97fd28ba50e70d9279a72def37c20276164f858223f41a0401"
+    },
+    {
+      "path": "references/venue-spaces/zhengyan-exhibition-area.json",
+      "sha256": "f90fe419e34852637bee4078cdcb8f009b9602b40ea19273f543c32cce450b1e"
+    },
+    {
+      "path": "references/venues/taipei-expo-park-zhengyan-hall.json",
+      "sha256": "b7a5c3be4758db71a264bbf994b57329c377abcea68f5e7edefd288494c2e244"
+    }
+  ]
+}
