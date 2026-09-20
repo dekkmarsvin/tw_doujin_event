@@ -438,9 +438,46 @@ function hasRequiredOverlap(start: number, length: number, targetStart: number, 
   return overlap >= Math.min(length, targetLength) * ratio;
 }
 
+/** An element edge reaches an eighth of the closest gap, so the band it
+ * captures is a quarter of that gap and at least three quarters of every gap
+ * stays reachable. Measured on the case in #286: at a quarter of the gap the
+ * drag still froze for 6 of 20 frames and overshot by 2.7x, at an eighth it
+ * settles to 2 frames and 1.7x -- ordinary snap-and-continue -- and tightening
+ * it further changes nothing. */
+const CANDIDATE_REACH_RATIO = .125;
+
+/** How far an element edge may reach on this axis.
+ *
+ * A reach wider than the gaps between the edges it can snap to stops being a
+ * nudge and becomes a lattice: every position along the drag is inside some
+ * candidate's reach, so the rectangle stays pinned while the pointer walks on
+ * and then leaps once it escapes. Copying a facing pair of columns is where
+ * this bites. The copy lands flush against the row it came from, so its own
+ * source contributes a full column of edges one booth-pitch apart, and at a
+ * high zoom the fixed screen-pixel reach covers most of that pitch.
+ *
+ * Capping it at a quarter of the closest gap leaves at least half of every gap
+ * reachable. Where the targets are further apart than the reach -- the
+ * ordinary case, including a single facing row -- the closest gap is larger
+ * than the threshold and nothing changes. Hand-placed guides are deliberate
+ * targets and keep the full reach; only the edges that form the lattice are
+ * capped, so a guide in a dense area is still easy to land on. */
+function elementReach<Edge extends string>(candidates: AxisCandidate<Edge>[], threshold: number) {
+  const positions = [...new Set(candidates.filter((candidate) => !candidate.target.manual).map((candidate) => candidate.position))].sort((a, b) => a - b);
+  let closest = Infinity;
+  // Coincident edges are one position, not a zero gap, so they must not
+  // collapse the reach to nothing and switch snapping off altogether.
+  for (let index = 1; index < positions.length; index += 1) {
+    const gap = positions[index] - positions[index - 1];
+    if (gap > 1e-6) closest = Math.min(closest, gap);
+  }
+  return Number.isFinite(closest) ? Math.min(threshold, closest * CANDIDATE_REACH_RATIO) : threshold;
+}
+
 function nearestCandidate<Edge extends string>(candidates: AxisCandidate<Edge>[], threshold: number) {
+  const reach = elementReach(candidates, threshold);
   return candidates
-    .filter((candidate) => Math.abs(candidate.delta) <= threshold)
+    .filter((candidate) => Math.abs(candidate.delta) <= (candidate.target.manual ? threshold : reach))
     .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta) || Number(!!b.target.manual) - Number(!!a.target.manual) || a.target.id.localeCompare(b.target.id) || a.edge.localeCompare(b.edge))[0];
 }
 

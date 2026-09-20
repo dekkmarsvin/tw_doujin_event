@@ -86,6 +86,29 @@ try {
     await tracing.check();
     assert.equal(await styleOf("A01", "fill"), "none", "tracing leaves booths as outlines");
     assert.equal(await booth("A01").locator("text").isVisible(), false, "tracing hides the printed codes");
+    // #286 C: an unfilled shape stops taking the pointer on its interior under
+    // the default `visiblePainted`, so the middle of a booth fell through to
+    // the paper and a press there started a rubber band. Checked by a real
+    // press on the centre, not through the element picker: the picker would go
+    // on selecting the booth no matter what the canvas does with a pointer.
+    const centreOf = async code => {
+      const target = booth(code).locator("rect");
+      await target.scrollIntoViewIfNeeded();
+      const painted = await target.boundingBox();
+      return { x: painted.x + painted.width / 2, y: painted.y + painted.height / 2 };
+    };
+    const centre = await centreOf("A01");
+    assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-slot-code]")?.dataset.slotCode ?? null, [centre.x, centre.y]),
+      "A01", "the centre of a traced booth still belongs to that booth");
+    const beforePress = await boxOf("A01");
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 4; step += 1) { await page.mouse.move(centre.x + step * 6, centre.y + step * 4); }
+    await page.mouse.up();
+    const dragged = await boxOf("A01");
+    assert.ok(dragged.x !== beforePress.x && dragged.y !== beforePress.y, "dragging the centre while tracing moves the booth instead of banding");
+    await undo.click();
+    assert.deepEqual(await boxOf("A01"), beforePress, "one undo takes the traced drag back");
     await tracing.uncheck();
     assert.equal(await styleOf("A01", "fill"), filled);
     await booth("A01").locator("text").waitFor({ state: "visible" });
@@ -175,6 +198,36 @@ try {
     for (const slot of recut) { near(slot.x, 320, "every booth follows the frame"); near(slot.height, 125, "and is cut evenly"); }
     for (let index = 1; index < recut.length; index += 1) near(recut[index].y, recut[index - 1].y + recut[index - 1].height, "seamless");
 
+    // #286 B: the frame used to be a stored copy, which no ordinary drag knew
+    // to update. Dragging the segment and then typing a height re-cut it from
+    // where the segment had been, throwing it back to the old X.
+    const draggedFrom = await boxOf("A01");
+    const grab = await (async () => {
+      const frame = await svg.boundingBox();
+      const scale = frame.width / Number(await svg.getAttribute("viewBox").then(value => value.split(" ")[2]));
+      return { x: frame.x + (draggedFrom.x + draggedFrom.width / 2) * scale, y: frame.y + (draggedFrom.y + draggedFrom.height / 2) * scale, scale };
+    })();
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 6; step += 1) await page.mouse.move(grab.x + step * 10 * grab.scale, grab.y);
+    await page.mouse.up();
+    const movedTo = await boxOf("A01");
+    assert.ok(movedTo.x > draggedFrom.x, "the drag moved the segment");
+    near(Number(await field("排段 X").inputValue()), movedTo.x, "the frame field follows a plain drag");
+    await field("排段高").fill("400");
+    await field("排段高").press("Tab");
+    near((await boxOf("A01")).x, movedTo.x, "re-cutting after a drag keeps the dragged X");
+    // Selecting elsewhere ends the segment rather than leaving a panel aimed at it.
+    await picker.selectOption("slot:0:2");
+    assert.equal(await panel.isVisible().catch(() => false), false, "the segment panel goes with the selection");
+    await picker.selectOption("slot:0:0");
+    await editor.getByRole("button", { name: "編輯整個排段", exact: true }).click();
+    await panel.waitFor();
+    await field("排段 X").fill("320");
+    await field("排段 X").press("Tab");
+    await field("排段高").fill("500");
+    await field("排段高").press("Tab");
+
     // Renumbering is the second, explicit step, and it re-cuts the same frame.
     await editor.getByRole("button", { name: "調整排段編號與方向", exact: true }).click();
     await editor.getByRole("textbox", { name: "排段結束編號", exact: true }).fill("5");
@@ -186,6 +239,76 @@ try {
     await editor.getByRole("button", { name: "結束排段調整", exact: true }).click();
     await undo.click();
     assert.deepEqual((await Promise.all(codes.map(boxOf))).map(slot => Math.round(slot.height)), [125, 125, 125, 125], "one undo takes back the renumbering");
+
+    // --- #286 A: a copy dragged across the lattice it came from -----------
+    // The copy lands flush with its source, so the source's own booth edges are
+    // the targets, one pitch apart. A reach wider than that pitch pinned the
+    // copy for several frames at a time and then made it leap, which is what
+    // the maintainer saw at 350%. Sampled every frame: the final rectangle
+    // alone cannot tell a smooth drag from a stuck one.
+    await picker.selectOption("slot:0:0");
+    await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
+    await editor.getByRole("textbox", { name: "排標籤", exact: true }).fill("Z");
+    await editor.getByRole("textbox", { name: "起始編號", exact: true }).fill("1");
+    await editor.getByRole("textbox", { name: "結束編號", exact: true }).fill("16");
+    // One conversion for the whole block, taken from the painted canvas. The
+    // viewBox is square and so is the element, so a single scale is honest
+    // here; every press is still checked against the window before it is used.
+    const toScreen = async (x, y) => {
+      await svg.scrollIntoViewIfNeeded();
+      const frame = await svg.boundingBox();
+      const scale = frame.width / SIZE;
+      const point = { x: frame.x + x * scale, y: frame.y + y * scale, scale };
+      const view = page.viewportSize();
+      assert.ok(point.x >= 0 && point.y >= 0 && point.x <= view.width && point.y <= view.height,
+        `(${x}, ${y}) is off screen at ${JSON.stringify(point)} in ${JSON.stringify(view)}`);
+      return point;
+    };
+    const dense = { x: 600, y: 150, width: 60, height: 400 };
+    const from = await toScreen(dense.x, dense.y), to = await toScreen(dense.x + dense.width, dense.y + dense.height);
+    await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(to.x, to.y, { steps: 8 }); await page.mouse.up();
+    // Placing a segment leaves the row panel open and its booths selected. The
+    // tool has to be put away before the canvas goes back to moving things:
+    // with it open a press on a booth grabs a segment instead of dragging it.
+    await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
+    const one = await toScreen(dense.x - 10, dense.y - 10), two = await toScreen(dense.x + dense.width + 10, dense.y + dense.height + 10);
+    await page.mouse.move(one.x, one.y); await page.mouse.down(); await page.mouse.move(two.x, two.y, { steps: 8 }); await page.mouse.up();
+    const copy = editor.getByRole("button", { name: /複製選取的 \d+ 格/ });
+    await copy.click();
+    const boundsOf = () => page.evaluate(() => {
+      const picked = [...document.querySelectorAll("[data-slot-code]")].filter(node => node.className.baseVal.includes("selected")).map(node => node.querySelector("rect"));
+      const value = (node, name) => Number(node.getAttribute(name));
+      return picked.reduce((box, node) => ({
+        x: Math.min(box.x, value(node, "x")), y: Math.min(box.y, value(node, "y")),
+      }), { x: Infinity, y: Infinity });
+    });
+    const started = await boundsOf();
+    assert.ok(Number.isFinite(started.x), "the copy lands selected");
+    const grip = await toScreen(started.x + 30, started.y + 200);
+    const step = 4;
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    const travel = [];
+    let previous = started;
+    for (let frame = 1; frame <= 18; frame += 1) {
+      // Dragged back across the column it was copied from. Flush neighbours
+      // share no width, so both the lattice and the overlap notice only come
+      // into play once the two columns start to overlap.
+      await page.mouse.move(grip.x - frame * grip.scale, grip.y + frame * step * grip.scale);
+      const now = await boundsOf();
+      travel.push(Number((now.y - previous.y).toFixed(3)));
+      previous = now;
+    }
+    await page.mouse.up();
+    const stalled = travel.filter(moved => moved === 0).length;
+    let run = 0, longestStall = 0;
+    for (const moved of travel) { run = moved === 0 ? run + 1 : 0; longestStall = Math.max(longestStall, run); }
+    assert.ok(longestStall <= 2, `the copy tracks the pointer instead of sticking: ${travel.join(",")}`);
+    assert.ok(stalled * 3 <= travel.length, `most frames move: ${stalled} of ${travel.length} stood still`);
+    assert.ok(Math.max(...travel) <= step * 2, `no frame leaps after a snap: ${travel.join(",")}`);
+    assert.ok(travel.every(moved => moved >= 0), "the copy never backs up against the drag");
+    for (let undone = 0; undone < 2; undone += 1) await undo.click();
+    await picker.selectOption("slot:0:0");
 
     // --- Display settings are personal, not part of the draft -------------
     await tracing.check();

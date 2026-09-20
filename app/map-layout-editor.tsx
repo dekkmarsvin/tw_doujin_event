@@ -46,7 +46,7 @@ type RowFrameResizeState = { mode: "resize-row-frame"; pointerId: number; corner
  * the order they run along the row, and the rectangle they were cut from. A row
  * stores one flat list of booths and no segments, so this only lives as long as
  * the panel does — it is what the corner handles reshape. */
-type ActiveSegment = { rowIndex: number; items: number[]; frame: MapRect; orientation: MapOrientation };
+type ActiveSegment = { rowIndex: number; items: number[]; orientation: MapOrientation };
 
 type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState | RowFrameDrawState | RowFrameResizeState | FacilityDrawState | GuideDrawState | GuideDragState | PanDragState;
 
@@ -275,6 +275,22 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   // confirmed, so drawing and redrawing costs nothing and undoes nothing.
   const [rowFrame, setRowFrame] = useState<MapRect | null>(null);
   const [activeSegment, setActiveSegment] = useState<ActiveSegment | null>(null);
+  /** The frame is derived, never stored. A stored copy is what went stale when
+   * the booths moved through a path that did not know about the segment -- a
+   * plain drag updates the rects, so the handles and the number fields kept
+   * operating on where the segment used to be. Deriving it also ends the
+   * segment the moment the selection stops being exactly its members, so
+   * clicking elsewhere cannot leave a panel pointing at another row. */
+  const activeSegmentFrame = useMemo(() => {
+    if (!activeSegment) return undefined;
+    const row = layout.rows[activeSegment.rowIndex];
+    if (!row) return undefined;
+    const rects = activeSegment.items.map((item) => row.slots[item]?.rect);
+    if (rects.some((rect) => !rect)) return undefined;
+    const members = new Set(activeSegment.items.map((itemIndex) => selectionKey({ kind: "slot", rowIndex: activeSegment.rowIndex, itemIndex })));
+    if (selections.length !== members.size || !selections.every((item) => members.has(selectionKey(item)))) return undefined;
+    return boundingBox(rects as MapRect[]);
+  }, [activeSegment, layout, selections]);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
   const [copyLabel, setCopyLabel] = useState("");
@@ -484,8 +500,20 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     onChange(scaled.layout, scaled.authoring);
   };
 
+  /** Where the canvas sat when the gesture began.
+   *
+   * A pointer position only means something next to the rectangle it was
+   * measured against, and a drag compares every move with a start recorded at
+   * pointer-down. Re-measuring each frame silently changes that basis when
+   * anything moves the canvas: dragging a copied column over the row it came
+   * from raises the overlap notice above the canvas, which pushed the SVG down
+   * 96px and threw the booths 160 units the other way in a single frame, then
+   * again when the notice grew a line. Measured once per gesture, the notice
+   * can appear, grow and go without touching the drag. */
+  const gestureFrame = useRef<DOMRect | null>(null);
+
   const pointIn = (element: SVGSVGElement, event: { clientX: number; clientY: number }) => {
-    const bounds = element.getBoundingClientRect();
+    const bounds = gestureFrame.current ?? element.getBoundingClientRect();
     return {
       x: (event.clientX - bounds.left) * layout.width / bounds.width,
       y: (event.clientY - bounds.top) * layout.height / bounds.height,
@@ -651,7 +679,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     if (!row) return;
     const { items, orientation } = contiguousSegment(row.slots.map(({ rect }) => rect), itemIndex);
     if (!items.length) return;
-    setActiveSegment({ rowIndex, items, orientation, frame: boundingBox(items.map((item) => row.slots[item].rect)) });
+    setActiveSegment({ rowIndex, items, orientation });
     setSegmentForm(null);
     setSelections(items.map((item) => ({ kind: "slot", rowIndex, itemIndex: item })));
     setRowErrors([]);
@@ -677,21 +705,21 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       const slot = draft.rows[segment.rowIndex]?.slots[item];
       if (slot) slot.rect = rects[position];
     }), coalesceKey);
-    setActiveSegment({ ...segment, frame, orientation });
+    setActiveSegment({ ...segment, orientation });
   };
 
   const updateSegmentFrame = (patch: Partial<MapRect>, key: string) => {
-    if (!activeSegment) return;
-    recutSegment(activeSegment, editSegmentFrame(activeSegment.frame, patch, layout), activeSegment.orientation, `field:segment:${key}`);
+    if (!activeSegment || !activeSegmentFrame) return;
+    recutSegment(activeSegment, editSegmentFrame(activeSegmentFrame, patch, layout), activeSegment.orientation, `field:segment:${key}`);
   };
 
   const applySegmentForm = () => {
-    if (!activeSegment || !segmentForm) return;
-    const result = replaceSegment(layout, activeSegment.rowIndex, activeSegment.items, activeSegment.frame, segmentForm);
+    if (!activeSegment || !segmentForm || !activeSegmentFrame) return;
+    const result = replaceSegment(layout, activeSegment.rowIndex, activeSegment.items, activeSegmentFrame, segmentForm);
     if (!result.ok) { setRowErrors(result.errors); return; }
     setHistory(current => pushLayoutHistory(current, { layout: result.layout, authoring }));
     onChange(result.layout, authoring);
-    setActiveSegment({ ...activeSegment, items: result.items, orientation: segmentForm.orientation });
+    setActiveSegment({ rowIndex: activeSegment.rowIndex, items: result.items, orientation: segmentForm.orientation });
     setSelections(result.items.map(itemIndex => ({ kind: "slot", rowIndex: activeSegment.rowIndex, itemIndex })));
     setRowErrors([]);
   };
@@ -699,6 +727,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   /** Capture before an element sees the press, so panning cannot start a move,
    * resize or placement even when the pointer starts on a booth or handle. */
   const startPan = (event: PointerEvent<SVGSVGElement>) => {
+    gestureFrame.current = event.currentTarget.getBoundingClientRect();
     const viewport = viewportRef.current;
     if (!viewport || (event.button !== 1 && !(event.button === 0 && spaceHeldRef.current))) return;
     event.preventDefault(); event.stopPropagation();
@@ -771,7 +800,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     // With the row panel open the handles frame the segment being worked on
     // rather than a selection, so a corner re-cuts it instead of stretching
     // each booth on its own.
-    if (activeSegment && corner) startRowFrameResize(event, svg, corner, activeSegment.frame);
+    if (activeSegment && activeSegmentFrame && corner) startRowFrameResize(event, svg, corner, activeSegmentFrame);
     else if (slotDrawForm) startSlotDraw(event, svg);
     else if (rowForm && !anchors) startRowFrameDraw(event, svg);
     else if (corner) startResize(event, svg, corner);
@@ -867,7 +896,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
 
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
     const active = drag.current;
-    if (!active || active.pointerId !== event.pointerId) return;
+    if (!active || active.pointerId !== event.pointerId) { gestureFrame.current = null; return; }
+    gestureFrame.current = null;
     drag.current = null;
     if (active.mode === "pan") {
       setPanning(false);
@@ -932,7 +962,6 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     if (!resolved.boxes.length) return;
     const boxes = translateBoxesWithin(resolved.boxes, dx, dy, layout);
     commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `nudge:${selectionSetKey(selections)}:${dx},${dy}`);
-    if (activeSegment) setActiveSegment({ ...activeSegment, frame: boundingBox(boxes) });
   };
 
   const alignSelection = (edge: AlignEdge) => {
@@ -1074,7 +1103,6 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         .map((slot, offset) => ({ item: placement.itemStart + offset, along: orientation === "vertical" ? slot.rect.y : slot.rect.x }))
         .sort((a, b) => a.along - b.along)
         .map(({ item }) => item),
-      frame,
       orientation,
     });
   };
@@ -1174,7 +1202,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   // Handles frame the whole selection, so one corner resizes the group.
   // While the row panel is open the handles belong to the frame being drawn, so
   // there is only ever one set of corners on the canvas.
-  const handleBounds = activeSegment?.frame ?? (rowForm ? undefined : selections.length > 1 ? boundingBox(selectionBoxes) : selectedRect);
+  const handleBounds = activeSegmentFrame ?? (rowForm ? undefined : selections.length > 1 ? boundingBox(selectionBoxes) : selectedRect);
   const canUndo = canUndoLayoutHistory(history);
   const canRedo = canRedoLayoutHistory(history);
   const elementOptions: { key: string; label: string; selection: Selection }[] = [
@@ -1416,13 +1444,13 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         </div>
         <label className={styles.elementPicker}><span>精確選取地圖元素</span><select aria-label="選取地圖元素" value={activeKey} onChange={(event) => selectElement(event.target.value)}><option value="">請選擇攤位或設施</option>{elementOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
         {selection?.kind === "slot" && !activeSegment && <div className={styles.rowFormActions}><button type="button" onClick={() => activateSegment(selection.rowIndex, selection.itemIndex)}>編輯整個排段</button></div>}
-        {activeSegment && <div className={styles.rowPanel} aria-label="排段整體調整">
+        {activeSegment && activeSegmentFrame && <div className={styles.rowPanel} aria-label="排段整體調整">
           <b>{layout.rows[activeSegment.rowIndex]?.label} 排段 · {activeSegment.items.length} 格</b>
           <div className={styles.fields}>
-            {numberField("排段 X", activeSegment.frame.x, value => updateSegmentFrame({ x: value }, "x"))}
-            {numberField("排段 Y", activeSegment.frame.y, value => updateSegmentFrame({ y: value }, "y"))}
-            {numberField("排段寬", activeSegment.frame.width, value => updateSegmentFrame({ width: value }, "width"))}
-            {numberField("排段高", activeSegment.frame.height, value => updateSegmentFrame({ height: value }, "height"))}
+            {numberField("排段 X", activeSegmentFrame.x, value => updateSegmentFrame({ x: value }, "x"))}
+            {numberField("排段 Y", activeSegmentFrame.y, value => updateSegmentFrame({ y: value }, "y"))}
+            {numberField("排段寬", activeSegmentFrame.width, value => updateSegmentFrame({ width: value }, "width"))}
+            {numberField("排段高", activeSegmentFrame.height, value => updateSegmentFrame({ height: value }, "height"))}
           </div>
           {!segmentForm && <div className={styles.rowFormActions}><button type="button" onClick={() => openSegmentForm(activeSegment)}>調整排段編號與方向</button><button type="button" onClick={() => { setActiveSegment(null); setSelections([]); setRowErrors([]); }}>結束排段調整</button></div>}
           {segmentForm && <>
@@ -1533,7 +1561,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         {selection && !activeSegment && <>
           <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : selection.kind === "floor" ? "場館外框" : "非一般攤位區"}</small><b>{selection.kind === "floor" ? layout.template : selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? selectedLandmark?.label ?? "未命名"}</b></div>
           {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input {...trimmedField(selectedSlot.code, (next) => commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }, `field:${activeKey}:code`))} /></label><label className={styles.wide}><span>所屬排標籤</span><input {...trimmedField(layout.rows[selectedSlotSelection.rowIndex].label, (next) => updateRow(selectedSlotSelection.rowIndex, { label: next }, `row:${selectedSlotSelection.rowIndex}:label`))} /></label><label className={styles.wide}><span>所屬排方向</span><select value={layout.rows[selectedSlotSelection.rowIndex].orientation} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label></>}
-          {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子 ID</span><input {...trimmedField(selectedPillar.id, (next) => commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }, `field:${activeKey}:id`))} /></label>}
+          {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子代號</span><input {...trimmedField(selectedPillar.id, (next) => commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }, `field:${activeKey}:id`))} /></label>}
           {selectedLandmark && selectedLandmarkSelection && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = stableKind; draft.landmarks[selectedLandmarkSelection.itemIndex].label = event.target.value; }, `field:${activeKey}:label`); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
           {selectedAccess && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedAccess.label} onChange={(event) => updateAccess({ label: event.target.value }, `field:${activeKey}:label`)} /></label><label><span>類型</span><select value={selectedAccess.kind} onChange={(event) => updateAccess({ kind: event.target.value as "entrance" | "exit" })}><option value="entrance">入口</option><option value="exit">出口</option></select></label><label><span>方向</span><select value={selectedAccess.direction} onChange={(event) => updateAccess({ direction: event.target.value as MapAccessDirection })}>{MAP_ACCESS_DIRECTIONS.map((direction) => <option key={direction} value={direction}>{ACCESS_DIRECTION_LABELS[direction]}</option>)}</select></label></>}
           <div className={styles.fields}>
