@@ -86,6 +86,29 @@ try {
     await tracing.check();
     assert.equal(await styleOf("A01", "fill"), "none", "tracing leaves booths as outlines");
     assert.equal(await booth("A01").locator("text").isVisible(), false, "tracing hides the printed codes");
+    // #286 C: an unfilled shape stops taking the pointer on its interior under
+    // the default `visiblePainted`, so the middle of a booth fell through to
+    // the paper and a press there started a rubber band. Checked by a real
+    // press on the centre, not through the element picker: the picker would go
+    // on selecting the booth no matter what the canvas does with a pointer.
+    const centreOf = async code => {
+      const box = await boxOf(code);
+      const frame = await svg.boundingBox();
+      const scale = frame.width / Number(await svg.getAttribute("viewBox").then(value => value.split(" ")[2]));
+      return { x: frame.x + (box.x + box.width / 2) * scale, y: frame.y + (box.y + box.height / 2) * scale };
+    };
+    const centre = await centreOf("A01");
+    assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-slot-code]")?.dataset.slotCode ?? null, [centre.x, centre.y]),
+      "A01", "the centre of a traced booth still belongs to that booth");
+    const beforePress = await boxOf("A01");
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 4; step += 1) { await page.mouse.move(centre.x + step * 6, centre.y + step * 4); }
+    await page.mouse.up();
+    const dragged = await boxOf("A01");
+    assert.ok(dragged.x !== beforePress.x && dragged.y !== beforePress.y, "dragging the centre while tracing moves the booth instead of banding");
+    await undo.click();
+    assert.deepEqual(await boxOf("A01"), beforePress, "one undo takes the traced drag back");
     await tracing.uncheck();
     assert.equal(await styleOf("A01", "fill"), filled);
     await booth("A01").locator("text").waitFor({ state: "visible" });
@@ -174,6 +197,36 @@ try {
     near(recut[3].y + recut[3].height, column.y + 500, "and now ends at the height typed in");
     for (const slot of recut) { near(slot.x, 320, "every booth follows the frame"); near(slot.height, 125, "and is cut evenly"); }
     for (let index = 1; index < recut.length; index += 1) near(recut[index].y, recut[index - 1].y + recut[index - 1].height, "seamless");
+
+    // #286 B: the frame used to be a stored copy, which no ordinary drag knew
+    // to update. Dragging the segment and then typing a height re-cut it from
+    // where the segment had been, throwing it back to the old X.
+    const draggedFrom = await boxOf("A01");
+    const grab = await (async () => {
+      const frame = await svg.boundingBox();
+      const scale = frame.width / Number(await svg.getAttribute("viewBox").then(value => value.split(" ")[2]));
+      return { x: frame.x + (draggedFrom.x + draggedFrom.width / 2) * scale, y: frame.y + (draggedFrom.y + draggedFrom.height / 2) * scale, scale };
+    })();
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 6; step += 1) await page.mouse.move(grab.x + step * 10 * grab.scale, grab.y);
+    await page.mouse.up();
+    const movedTo = await boxOf("A01");
+    assert.ok(movedTo.x > draggedFrom.x, "the drag moved the segment");
+    near(Number(await field("排段 X").inputValue()), movedTo.x, "the frame field follows a plain drag");
+    await field("排段高").fill("400");
+    await field("排段高").press("Tab");
+    near((await boxOf("A01")).x, movedTo.x, "re-cutting after a drag keeps the dragged X");
+    // Selecting elsewhere ends the segment rather than leaving a panel aimed at it.
+    await picker.selectOption("slot:0:2");
+    assert.equal(await panel.isVisible().catch(() => false), false, "the segment panel goes with the selection");
+    await picker.selectOption("slot:0:0");
+    await editor.getByRole("button", { name: "編輯整個排段", exact: true }).click();
+    await panel.waitFor();
+    await field("排段 X").fill("320");
+    await field("排段 X").press("Tab");
+    await field("排段高").fill("500");
+    await field("排段高").press("Tab");
 
     // Renumbering is the second, explicit step, and it re-cuts the same frame.
     await editor.getByRole("button", { name: "調整排段編號與方向", exact: true }).click();
