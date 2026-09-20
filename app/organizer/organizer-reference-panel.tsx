@@ -47,7 +47,7 @@ export function OrganizerReferencePanel({ candidateId, expectedVersion, catalog:
     <h4>主辦與分類</h4>
     <p>選擇主辦單位與其公布的分類目錄。新建的資料可供日後活動選用；選取後請儲存活動。</p>
     <fieldset disabled={!editable || pending}>
-      {value.organizerAssignments.map((assignment, index) => <div className={styles.row} key={index}>
+      {value.organizerAssignments.map((assignment, index) => <div className={`${styles.row} ${styles.fieldRow}`} key={index}>
         <label>單位 {index + 1}<select aria-label={`主辦單位 ${index + 1}`} value={assignment.organizerId} onChange={(event) => updateAssignments(value.organizerAssignments.map((item, position) => position === index ? { ...item, organizerId: event.target.value } : item))}>
           <option value="">請選擇單位</option>{catalog.organizers.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
         </select></label>
@@ -76,7 +76,7 @@ export function OrganizerReferencePanel({ candidateId, expectedVersion, catalog:
           <label>{action === "organizer" ? "主辦官方網址" : "分類官方來源網址"}<input required type="url" placeholder="https://" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
         </div>
         {action === "category-catalog" && <>
-          {categories.map((category, index) => <div key={index} className={styles.row}>
+          {categories.map((category, index) => <div key={index} className={`${styles.row} ${styles.fieldRow}`}>
             <label>分類名稱 {index + 1}<input required maxLength={120} value={category.label} onChange={(event) => setCategories((rows) => rows.map((row, position) => position === index ? { ...row, label: event.target.value } : row))} /></label>
             <label>分類說明 {index + 1}（選填）<input maxLength={1000} value={category.description} onChange={(event) => setCategories((rows) => rows.map((row, position) => position === index ? { ...row, description: event.target.value } : row))} /></label>
             <button type="button" className={styles.ghost} disabled={categories.length === 1} onClick={() => setCategories((rows) => rows.filter((_, position) => index !== position))}>移除分類 {index + 1}</button>

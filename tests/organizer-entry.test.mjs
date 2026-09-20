@@ -42,6 +42,9 @@ test("venue authoring uses human selections, immediate creation, and no-division
   assert.match(app, /需先儲存/);
   assert.match(app, /organizerIssueMessage/);
   assert.doesNotMatch(app, /<label>場館 ID|<label>場館空間 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
+  // The row's remove button starts level with the selects it removes.
+  const venueCss = await readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8");
+  assert.match(venueCss, /\.venueCard > \.dangerText \{ margin-top: 22px; \}/);
 });
 
 test("organizer ships the ADR-0047 guided station, binder readiness, and the shared light design language", async () => {
@@ -67,6 +70,10 @@ test("organizer ships the ADR-0047 guided station, binder readiness, and the sha
   assert.match(css, /--ink:\s*#202a35/);
   assert.match(css, /color-scheme:\s*light/);
   assert.doesNotMatch(css, /color-scheme:\s*dark|gradient\(/);
+  // A row of labelled fields lines its buttons up with the controls.
+  const referencePanel = await readFile(new URL("../app/organizer/organizer-reference-panel.tsx", import.meta.url), "utf8");
+  assert.match(css, /\.fieldRow \{ align-items: end; \}/);
+  assert.match(referencePanel, /\$\{styles\.row\} \$\{styles\.fieldRow\}/);
 });
 
 test("a successful draft save synchronizes its revision before follow-up navigation", async () => {
@@ -127,6 +134,16 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   assert.match(app, /<label className=\{styles\.subLabel\}>來源欄位/);
   assert.match(app, /<label className=\{styles\.subLabel\}>固定值/);
   assert.match(css, /\.mappingField \{[^}]*display: block/);
+  // Every card in a mapping row starts its title and its value on the same
+  // line: the legend is floated instead of straddling the fieldset border, and
+  // the read-only card repeats the grouped shape rather than inventing one.
+  assert.match(css, /\.mappingField > legend \{[^}]*float: left/);
+  assert.match(css, /\.mappingField \.subLabel select[^{]*\{[^}]*font-size: 12px/);
+  assert.match(app, /<fieldset className=\{`\$\{styles\.derivedField\} \$\{styles\.mappingField\}`\}>/);
+  assert.match(app, /<div className=\{styles\.subLabel\}>固定值<strong>無分區（ALL）<\/strong><\/div>/);
+  // A hint belongs under the control it is about, not in the next grid cell.
+  assert.match(app, /<small>支援空白、逗號、頓號、分號與斜線。<\/small>/);
+  assert.doesNotMatch(app, /<p>支援空白、逗號、頓號、分號與斜線。<\/p>/);
   assert.match(css, /@media \(max-width: 1230px\)[\s\S]*\.mappingGrid \{ grid-template-columns: repeat\(2/);
 
   // The activity day is a fixed value set, so it is picked, not typed.
