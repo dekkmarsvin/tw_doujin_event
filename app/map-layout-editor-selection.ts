@@ -1,5 +1,5 @@
 import { resolveMapLandmarkKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapRect } from "./event-map";
-import { clamp, contiguousSegment, rowOrientationFromEndpoints, seamlessSpans } from "./map-layout-editor-geometry";
+import { clamp, contiguousSegment, rowOrientationFromEndpoints } from "./map-layout-editor-geometry";
 
 export type Selection =
   | { kind: "floor" }
@@ -262,61 +262,6 @@ function columnsOfBoxes(cells: readonly BoxCell[]): BoxCell[][] {
  * size and have no cell in a grid of booths: they stay where they are, and the
  * corner the grid starts from is the booths' own, so an entrance marked off to
  * one side does not drag the whole block over to it. */
-/** Lines several columns up on one top edge, one bottom edge and one set of
- * dividers, without moving them together sideways.
- *
- * Columns traced from a plan end up a few units apart at the top and with
- * slightly different cell heights, and correcting that by hand is the slow
- * part of tracing. This is not `alignBoxesToEdge`, which pushes a selection
- * onto one shared edge, nor `autoArrangeBoxes`, which packs boxes into a
- * grid: the gangways between the columns are the thing that must survive, so
- * every cell keeps the x and width it had.
- *
- * The shared edges are the outside of the whole selection, and each column is
- * cut again between them with the same seamless spans a segment uses, so the
- * dividers of one column land on the dividers of the next instead of drifting
- * apart by a rounded cell height. */
-export function planSharedSegmentEdges(boxes: readonly MapRect[], bounds: Bounds, minimumSize = 1):
-  { ok: true; boxes: MapRect[]; columns: number; cells: number } | { ok: false; errors: string[] } {
-  if (boxes.length < 2) return { ok: false, errors: ["請選取至少兩個直排的攤位。"] };
-  // A column is the cells that share a left edge and a width; the gangways are
-  // the gaps between those columns, which is why grouping is by x at all.
-  const columns = new Map<string, number[]>();
-  boxes.forEach((box, index) => {
-    const key = `${box.x.toFixed(3)}:${box.width.toFixed(3)}`;
-    columns.set(key, [...(columns.get(key) ?? []), index]);
-  });
-  const groups = [...columns.values()];
-  if (groups.length < 2) return { ok: false, errors: ["這些攤位都在同一直排，沒有要對齊的第二排。"] };
-  const cells = groups[0].length;
-  if (groups.some((group) => group.length !== cells)) {
-    return { ok: false, errors: [`每一排的格數必須相同，目前是 ${groups.map((group) => group.length).join("、")} 格。`] };
-  }
-  // Cells stacked left to right are a horizontal segment; a shared top and
-  // bottom would collapse them onto each other rather than line them up.
-  for (const group of groups) {
-    const rows = new Set(group.map((index) => boxes[index].y.toFixed(3)));
-    if (rows.size !== group.length) return { ok: false, errors: ["同步上下邊界只適用於直排；這個選取裡有橫排的攤位。"] };
-  }
-  const top = clamp(Math.min(...boxes.map((box) => box.y)), 0, bounds.height);
-  const bottom = clamp(Math.max(...boxes.map((box) => box.y + box.height)), 0, bounds.height);
-  // Height is checked once, on the shared span. Clamping cell by cell would
-  // push the last one past the bottom edge and reopen the gaps just closed.
-  if (bottom - top < minimumSize * cells) {
-    return { ok: false, errors: [`共同高度不足以放下 ${cells} 格。`] };
-  }
-  const spans = seamlessSpans(top, bottom - top, cells);
-  const next = boxes.map((box) => ({ ...box }));
-  for (const group of groups) {
-    const ordered = [...group].sort((a, b) => boxes[a].y - boxes[b].y);
-    ordered.forEach((index, position) => {
-      next[index].y = spans[position].start;
-      next[index].height = spans[position].size;
-    });
-  }
-  return { ok: true, boxes: next, columns: groups.length, cells };
-}
-
 export function autoArrangeBoxes(boxes: readonly MapRect[], bounds: Bounds): MapRect[] {
   const arranged = resizeBoxesToCommonSize(boxes, bounds);
   const size = commonBoxSize(arranged);

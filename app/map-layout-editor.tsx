@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
-import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSharedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
+import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { EMPTY_MAP_AUTHORING, MAX_MAP_GUIDES, scaleMapAuthoringState, type MapAuthoringState, type MapGuide } from "./map-authoring-state";
@@ -935,16 +935,6 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     if (activeSegment) setActiveSegment({ ...activeSegment, frame: boundingBox(boxes) });
   };
 
-  /** One batch is one history step, so a correction across six columns is
-   * taken back by a single undo. */
-  const synchroniseSegmentEdges = () => {
-    const resolved = resolveSelectionBoxes(layout, selections);
-    const plan = planSharedSegmentEdges(resolved.boxes, layout);
-    if (!plan.ok) { setRowErrors(plan.errors); return; }
-    commit((draft) => applySelectionBoxes(draft, resolved.selections, plan.boxes), null);
-    setRowErrors([]);
-  };
-
   const alignSelection = (edge: AlignEdge) => {
     const resolved = resolveSelectionBoxes(layout, selections);
     if (resolved.boxes.length < 2) return;
@@ -1168,7 +1158,6 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   // Asked on every render rather than on the press, because the answer is what
   // the merge button's own state and the line under it are.
   const slotMerge = planSlotMerge(layout, selections);
-  const sharedEdges = planSharedSegmentEdges(resolveSelectionBoxes(layout, selections).boxes, layout);
   const rectSelection = selection && selection.kind !== "access" ? selection : undefined;
   const selectedRect = rectSelection ? rectFor(layout, rectSelection) : undefined;
   const selectedAccess = selection?.kind === "access" ? layout.accessPoints[selection.itemIndex] : undefined;
@@ -1530,7 +1519,6 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
           <div className={styles.batchTools}>
             <button type="button" className={styles.batchWide} onClick={mergeSelectedSlots} disabled={!slotMerge.ok}>合併為一格{slotMerge.ok ? ` ${slotMerge.plan.slot.code}` : ""}</button>
             <button type="button" className={styles.batchWide} onClick={autoArrangeSelection}>自動對齊</button>
-            <button type="button" className={styles.batchWide} onClick={synchroniseSegmentEdges} disabled={!sharedEdges.ok}>同步上下邊界{sharedEdges.ok ? ` ${sharedEdges.columns} 排 × ${sharedEdges.cells} 格` : ""}</button>
             <button type="button" onClick={() => alignSelection("left")}>靠左對齊</button>
             <button type="button" onClick={() => alignSelection("right")}>靠右對齊</button>
             <button type="button" onClick={() => alignSelection("top")}>靠上對齊</button>
@@ -1540,7 +1528,6 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
             * selected element is a booth: a set that mixes in a pillar is a set
             * nobody meant to merge, and saying so would be noise. */}
           {!slotMerge.ok && copyableSlots === selections.length && <p className={styles.hint}>{slotMerge.errors[0]}</p>}
-          {!sharedEdges.ok && copyableSlots === selections.length && <p className={styles.hint}>同步上下邊界：{sharedEdges.errors[0]}</p>}
           <button className={styles.remove} onClick={removeSelection}>移除選取的元素</button>
         </>}
         {selection && !activeSegment && <>
