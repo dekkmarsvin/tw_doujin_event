@@ -54,7 +54,7 @@ ADR-0058 第 1 點記錄的已知缺口現在補上：`mergeOwnedPullRequest()` 
 
 改為比對**同一個 head SHA 上那筆核准 check 的產生者**：該 check 由 publication App 自己以 `createApprovalCheck()` 建立，其 `app.slug` 就是應有的 PR 作者，要求 `user.login` 等於 `<slug>[bot]`。核准 check 沒有 App 身分時直接失敗關閉，不退回舊的字尾判斷。
 
-這綁定的是「開 PR 的人就是簽核准的那個 App」，不是靜態設定的 app id——後者需要新增設定項或以 JWT 取得 slug，而本綁定不需要新設定就能排除 #232 指名的情境（他人以另一個 bot 帳號開 PR 誘使 App 合併）。若日後 App 的 checks 寫入權被移除（見第 6 點），核准 check 改由 workflow 回報，屆時這個來源也要跟著改。
+這綁定的是「開 PR 的人就是簽核准的那個 App」，不是靜態設定的 app id——後者需要新增設定項或以 JWT 取得 slug，而本綁定不需要新設定就能排除 #232 指名的情境（他人以另一個 bot 帳號開 PR 誘使 App 合併）。若日後 App 的 checks 寫入權被移除（見第 7 點），核准 check 改由 workflow 回報，屆時這個來源也要跟著改。
 
 這道檢查落在**實際承載強制力的那一層**，成本是一次比對。在 ruleset 不提供第二邊界的前提下，第一邊界的完整性比新增第二邊界更值得投資。
 
@@ -68,7 +68,21 @@ ADR-0058 第 3 點已決定偵測範圍擴大到所有 `actor_type`，並拆成 
 
 這兩條規則**確實**約束憑證外洩的 App：它不能刪除 main，也不能改寫歷史。兩個 repository 都已 active 且 bypass 為空，維持不變。這是 ruleset 目前提供的真實價值，與第 1 點不衝突。
 
-### 6. 下一次重新評估的觸發
+### 6. 憑證的保管在平台，帳號才是邊界
+
+金鑰外洩是第 1 點推論的前提，值得寫清楚它實際會從哪裡發生。
+
+**平台側保管。** `GITHUB_APP_PRIVATE_KEY` 與 `GITHUB_WEBHOOK_SECRET` 是 Cloudflare secret，以 `wrangler pages secret put` 及 Worker secret 設定，不進 repo 也不進 `wrangler.jsonc`（見[部署](../runbooks/deployment.md)）。App ID 與 installation ID 則刻意放在版控的 Worker vars 裡——它們是公開識別值，放在那裡是為了不被部署覆寫。金鑰由 GitHub 生成，撤銷與輪替也在 GitHub。靜止狀態的保管，程式碼沒有著力點。
+
+**程式碼側是暴露面。** 金鑰在 runtime 才成為可讀字串，之後能不能外流由程式決定。目前 `app/github-app-token.ts` 沒有任何 `console.*`，`keyFailure()` 與 `safeTokenProviderFailure()` 把所有失敗改寫成固定文案，installation token 快取在 closure 裡而非模組全域，且 `tests/github-app-token.test.mjs` 以 sentinel 私鑰與 sentinel 錯誤訊息斷言四種失敗路徑都不會帶出它。dispatch Worker 的觀測是全量的（`head_sampling_rate: 1`，資料留在 Dashboard），所以這條不變式一旦破掉，破口會被完整保存下來——它靠程式與那支測試維持，不是平台保證。
+
+**帳號即邊界。** 能對這個 Cloudflare 帳號部署程式碼的人**不需要偷金鑰**：直接讓 Worker 用既有 binding 呼叫 GitHub 即可。因此第 1 點所說的「憑證外洩」在實務上等同於「Cloudflare 帳號失守」，而 repository ruleset 位於 GitHub 側，對這件事幾乎沒有作用。
+
+這使第 5 點保留的兩條規則更值得留著：`deletion` 與 `non_fast_forward` 在 GitHub 端生效，不論誰在驅動這個 App，main 都刪不掉、歷史都改不了。它們是少數不隨 Cloudflare 帳號一起失守的東西。
+
+也因此，要降低這一類風險，投資方向是**該帳號的存取控管**（二階段驗證、API token 範圍與壽命、誰能部署），不是 repository 規則。本 ADR 不在此處決定帳號政策，只記錄邊界的位置，避免下一次評估再把力氣放在 ruleset 上。
+
+### 7. 下一次重新評估的觸發
 
 - 新增第二位維護者。
 - App 的 checks 寫入權被移除，或核准狀態改由 workflow 回報。
@@ -77,6 +91,7 @@ ADR-0058 第 3 點已決定偵測範圍擴大到所有 `actor_type`，並拆成 
 ## 結果
 
 - 第二道邊界仍然不存在，且現在知道它在目前設定下**從未存在過**。殘餘風險與 ADR-0058〈結果〉所列相同，但描述更準確：不是「失去」第二邊界，而是該邊界對持有 checks 寫入權的身分本來就無效。
+- 殘餘風險的落點也更明確：由 adapter 檢查、ADR-0046 第 3 點的八項條件、path allowlist 與 audit 承擔的是**誤用**；**帳號失守**由第 6 點說明，程式與 ruleset 都接不住，只有 `deletion`／`non_fast_forward` 例外。兩者不要混為一談。
 - 作者檢查綁定本 App 後，ADR-0046 第 3 點開頭「App 只能合併同一 publication job 自己建立的 PR」首次完整成立。
 - 人類 PR 路徑不受影響，日常開發維持現狀。
 - 不新增 workflow、Cloudflare 產品或排程角色。
