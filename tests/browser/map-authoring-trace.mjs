@@ -92,10 +92,10 @@ try {
     // press on the centre, not through the element picker: the picker would go
     // on selecting the booth no matter what the canvas does with a pointer.
     const centreOf = async code => {
-      const box = await boxOf(code);
-      const frame = await svg.boundingBox();
-      const scale = frame.width / Number(await svg.getAttribute("viewBox").then(value => value.split(" ")[2]));
-      return { x: frame.x + (box.x + box.width / 2) * scale, y: frame.y + (box.y + box.height / 2) * scale };
+      const target = booth(code).locator("rect");
+      await target.scrollIntoViewIfNeeded();
+      const painted = await target.boundingBox();
+      return { x: painted.x + painted.width / 2, y: painted.y + painted.height / 2 };
     };
     const centre = await centreOf("A01");
     assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-slot-code]")?.dataset.slotCode ?? null, [centre.x, centre.y]),
@@ -251,10 +251,18 @@ try {
     await editor.getByRole("textbox", { name: "排標籤", exact: true }).fill("Z");
     await editor.getByRole("textbox", { name: "起始編號", exact: true }).fill("1");
     await editor.getByRole("textbox", { name: "結束編號", exact: true }).fill("16");
+    // One conversion for the whole block, taken from the painted canvas. The
+    // viewBox is square and so is the element, so a single scale is honest
+    // here; every press is still checked against the window before it is used.
     const toScreen = async (x, y) => {
+      await svg.scrollIntoViewIfNeeded();
       const frame = await svg.boundingBox();
       const scale = frame.width / SIZE;
-      return { x: frame.x + x * scale, y: frame.y + y * scale, scale };
+      const point = { x: frame.x + x * scale, y: frame.y + y * scale, scale };
+      const view = page.viewportSize();
+      assert.ok(point.x >= 0 && point.y >= 0 && point.x <= view.width && point.y <= view.height,
+        `(${x}, ${y}) is off screen at ${JSON.stringify(point)} in ${JSON.stringify(view)}`);
+      return point;
     };
     const dense = { x: 600, y: 150, width: 60, height: 400 };
     const from = await toScreen(dense.x, dense.y), to = await toScreen(dense.x + dense.width, dense.y + dense.height);
