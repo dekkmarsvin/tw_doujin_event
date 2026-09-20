@@ -240,6 +240,65 @@ try {
     await undo.click();
     assert.deepEqual((await Promise.all(codes.map(boxOf))).map(slot => Math.round(slot.height)), [125, 125, 125, 125], "one undo takes back the renumbering");
 
+    // --- #286 A: a copy dragged across the lattice it came from -----------
+    // The copy lands flush with its source, so the source's own booth edges are
+    // the targets, one pitch apart. A reach wider than that pitch pinned the
+    // copy for several frames at a time and then made it leap, which is what
+    // the maintainer saw at 350%. Sampled every frame: the final rectangle
+    // alone cannot tell a smooth drag from a stuck one.
+    await picker.selectOption("slot:0:0");
+    await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
+    await editor.getByRole("textbox", { name: "排標籤", exact: true }).fill("Z");
+    await editor.getByRole("textbox", { name: "起始編號", exact: true }).fill("1");
+    await editor.getByRole("textbox", { name: "結束編號", exact: true }).fill("16");
+    const toScreen = async (x, y) => {
+      const frame = await svg.boundingBox();
+      const scale = frame.width / SIZE;
+      return { x: frame.x + x * scale, y: frame.y + y * scale, scale };
+    };
+    const dense = { x: 600, y: 150, width: 60, height: 400 };
+    const from = await toScreen(dense.x, dense.y), to = await toScreen(dense.x + dense.width, dense.y + dense.height);
+    await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(to.x, to.y, { steps: 8 }); await page.mouse.up();
+    // Placing a segment leaves the row panel open and its booths selected. The
+    // tool has to be put away before the canvas goes back to moving things:
+    // with it open a press on a booth grabs a segment instead of dragging it.
+    await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
+    const one = await toScreen(dense.x - 10, dense.y - 10), two = await toScreen(dense.x + dense.width + 10, dense.y + dense.height + 10);
+    await page.mouse.move(one.x, one.y); await page.mouse.down(); await page.mouse.move(two.x, two.y, { steps: 8 }); await page.mouse.up();
+    const copy = editor.getByRole("button", { name: /複製選取的 \d+ 格/ });
+    await copy.click();
+    const boundsOf = () => page.evaluate(() => {
+      const picked = [...document.querySelectorAll("[data-slot-code]")].filter(node => node.className.baseVal.includes("selected")).map(node => node.querySelector("rect"));
+      const value = (node, name) => Number(node.getAttribute(name));
+      return picked.reduce((box, node) => ({
+        x: Math.min(box.x, value(node, "x")), y: Math.min(box.y, value(node, "y")),
+      }), { x: Infinity, y: Infinity });
+    });
+    const started = await boundsOf();
+    assert.ok(Number.isFinite(started.x), "the copy lands selected");
+    const grip = await toScreen(started.x + 30, started.y + 200);
+    const step = 4;
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    const travel = [];
+    let previous = started;
+    for (let frame = 1; frame <= 18; frame += 1) {
+      await page.mouse.move(grip.x, grip.y + frame * step * grip.scale);
+      const now = await boundsOf();
+      travel.push(Number((now.y - previous.y).toFixed(3)));
+      previous = now;
+    }
+    await page.mouse.up();
+    const stalled = travel.filter(moved => moved === 0).length;
+    let run = 0, longestStall = 0;
+    for (const moved of travel) { run = moved === 0 ? run + 1 : 0; longestStall = Math.max(longestStall, run); }
+    assert.ok(longestStall <= 2, `the copy tracks the pointer instead of sticking: ${travel.join(",")}`);
+    assert.ok(stalled * 3 <= travel.length, `most frames move: ${stalled} of ${travel.length} stood still`);
+    assert.ok(Math.max(...travel) <= step * 2, `no frame leaps after a snap: ${travel.join(",")}`);
+    assert.ok(travel.every(moved => moved >= 0), "the copy never backs up against the drag");
+    for (let undone = 0; undone < 2; undone += 1) await undo.click();
+    await picker.selectOption("slot:0:0");
+
     // --- Display settings are personal, not part of the draft -------------
     await tracing.check();
     await nudgeStep.selectOption("5");

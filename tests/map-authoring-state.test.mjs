@@ -54,6 +54,38 @@ test("snap radius stays eight screen pixels at multiple zoom levels", () => {
   }
 });
 
+// #286 A: a reach wider than the gaps it can snap to pins the rectangle for
+// several frames and then makes it leap. A copied facing pair lands flush with
+// the row it came from, so its own source supplies edges one booth-pitch apart.
+test("snap reach is capped by the gap between element edges, never for guides", () => {
+  const column = (x, pitch, count) => Array.from({ length: count }, (_, index) =>
+    ({ id: `booth-${x}-${index}`, rect: { x, y: 10 + index * pitch, width: 20, height: pitch } }));
+  const moving = { x: 60, y: 10, width: 20, height: 40 };
+  const reach = (targets, offset, guides = []) =>
+    snap({ ...moving, y: moving.y + offset }, targets, { bounds: layout, mode: "move", threshold: 8, manualGuides: guides }).rect.y;
+
+  // A lone neighbour is further away than the reach, so nothing is capped and
+  // the full eight units still pull the box onto its edge.
+  const sparse = [{ id: "lone", rect: { x: 60, y: 90, width: 20, height: 40 } }];
+  assert.equal(reach(sparse, 44), 50, "a sparse target keeps the whole reach");
+
+  // Ten booths at a pitch of 10 cap the reach at 1.25, so 4 units off an edge
+  // is left where it is instead of being dragged back.
+  const lattice = column(60, 10, 10);
+  for (const [offset, expected] of [[1, 10], [4, 14], [5, 15], [9, 20], [10, 20]]) {
+    assert.equal(reach(lattice, offset), expected, `offset ${offset} on a 10-unit pitch`);
+  }
+  // Tightening the pitch tightens the cap with it.
+  for (const [pitch, offset, pulledBack] of [[40, 3, true], [40, 7, false], [10, 1, true], [10, 3, false], [4, 1, false]]) {
+    const result = reach(column(60, pitch, 10), offset);
+    assert.equal(result === moving.y, pulledBack, `pitch ${pitch} at offset ${offset}`);
+  }
+  // A hand-placed line is a deliberate target and keeps the full reach even
+  // where the element edges around it are capped.
+  const line = { id: "line", axis: "y", position: 17, locked: false };
+  assert.equal(reach(lattice, 3, [line]), 17, "a guide still captures from four units away, where an element edge no longer would");
+});
+
 test("segment resize snaps only the active edge and remains gapless", () => {
   const frame = { x: 20, y: 10, width: 28, height: 60 };
   const result = snap(frame, [], { bounds: layout, mode: "se", threshold: 8, minimumSize: .1, manualGuides: [guide] }).rect;
