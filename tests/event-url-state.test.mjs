@@ -14,6 +14,15 @@ const eventA = {
   areas: [{ id: "ALL", label: "全部", shortLabel: "全" }, { id: "EAST", label: "東區", shortLabel: "東" }], genres: ["全部", "原創"],
   venueAssignments: [{ venueId: "venue-a", venueSpaceId: "hall-a", areaIds: ["ALL", "EAST"] }],
 };
+/** The only shape with an area switcher: areas a reader can navigate between. */
+const eventMulti = {
+  ...eventA, id: "event-m", name: "M",
+  areas: ["N1", "N2", "S1", "S2"].map((id) => ({ id, label: id, shortLabel: id })),
+  venueAssignments: [
+    { venueId: "venue-m", venueSpaceId: "north-floor", areaIds: ["N1", "N2"] },
+    { venueId: "venue-m", venueSpaceId: "south-floor", areaIds: ["S1", "S2"] },
+  ],
+};
 const eventB = {
   ...eventA, id: "event-b", name: "B", days: [{ id: "sat-am", label: "六上午", dateLabel: "六" }],
   areas: [{ id: "NORTH", label: "北館", shortLabel: "北" }], genres: ["所有類型", "攝影"],
@@ -61,10 +70,12 @@ test("invalid values use event-derived defaults and a foreign event fails closed
 });
 
 test("legacy hall alias parses but serialization emits only area", () => {
-  const parsed = codec.parseEventUrlState(eventA, "https://map.example/?event=event-a&day=7&hall=EAST");
-  assert.equal(parsed.state.area, "EAST");
-  const url = codec.serializeEventUrlState(eventA, parsed.state, "https://map.example/?hall=EAST");
-  assert.equal(url.searchParams.get("area"), "EAST");
+  // Read on an event that offers a choice of areas, so the alias is what the
+  // assertion is about rather than the widening a single-space event applies.
+  const parsed = codec.parseEventUrlState(eventMulti, "https://map.example/?event=event-m&day=7&hall=N2");
+  assert.equal(parsed.state.area, "N2");
+  const url = codec.serializeEventUrlState(eventMulti, parsed.state, "https://map.example/?hall=N2");
+  assert.equal(url.searchParams.get("area"), "N2");
   assert.equal(url.searchParams.has("hall"), false);
 });
 
@@ -171,8 +182,19 @@ test("a URL naming a published event resolves to it, whichever it is", () => {
   const state = codec.parseEventUrlState(resolved.event, shared);
   assert.equal(state.eventMatched, true);
   assert.equal(state.state.day, 8);
-  assert.equal(state.state.area, "EAST");
   assert.equal(state.state.selection.circleId, "c-000001");
+  // The event, the day and the selection are what the link promised, and they
+  // all survive. The area does not: a single-space event offers no way to pick
+  // one, so the filter widens to the whole space. That direction is the point
+  // -- nothing the recipient could see before is missing, and the alternative
+  // is the state this widening exists to escape, a reader held inside one block
+  // with no control to leave it by.
+  assert.equal(state.state.area, "ALL");
+
+  const sharedArea = "https://map.example/?event=event-m&day=8&venueSpaceId=south-floor&area=S2&selectedCircle=c-000001";
+  const multi = codec.parseEventUrlState(eventMulti, sharedArea);
+  assert.deepEqual([multi.state.area, multi.state.venueSpaceId], ["S2", "south-floor"],
+    "where the reader can choose an area, a link naming one still lands on it exactly");
 });
 
 test("only an unpublished event fails closed; naming none is not an error", () => {
@@ -196,4 +218,42 @@ test("only an unpublished event fails closed; naming none is not an error", () =
   const single = codec.resolveUrlEvent([eventA], "https://map.example/");
   assert.equal(single.kind, "event");
   assert.equal(single.event.id, "event-a");
+});
+
+/**
+ * The shape of every event published since areas became derived from the
+ * organizer's booth list: each id is a code that appeared in that list, so none
+ * of them means "all of them". Landing on the first one leaves the reader
+ * filtered to one block of a hall they have chosen nothing about yet.
+ */
+test("an event whose areas are all derived codes still opens on all of them", () => {
+  const derived = {
+    ...eventA,
+    areas: [{ id: "A", label: "A", shortLabel: "A" }, { id: "B", label: "B", shortLabel: "B" }],
+    venueAssignments: [{ venueId: "venue-a", venueSpaceId: "hall-a", areaIds: ["A", "B"] }],
+  };
+  const defaults = codec.defaultEventUrlState(derived);
+  assert.equal(defaults.area, "ALL");
+  assert.equal(defaults.venueSpaceId, "hall-a");
+  assert.equal(codec.serializeEventUrlState(derived, defaults, "https://map.example/").search, "?event=event-a&day=7&area=ALL");
+  assert.equal(codec.parseEventUrlState(derived, "https://map.example/?event=event-a&day=7&area=ALL").state.area, "ALL");
+  assert.equal(codec.parseEventUrlState(derived, "https://map.example/?event=event-a&day=7&area=B").state.area, "ALL",
+    "one hall offers no area to pick, so naming one widens rather than filters");
+});
+
+test("a space with one area offers no all-areas state to land in or restore", () => {
+  assert.equal(codec.defaultEventUrlState(eventB).area, "NORTH");
+  const requested = codec.parseEventUrlState(eventB, "https://map.example/?event=event-b&day=sat-am&area=ALL");
+  assert.equal(requested.state.area, "NORTH", "all of one area is that area, not a filter matching nothing");
+});
+
+test("all areas is scoped to the venue space the URL names", () => {
+  const multiSpace = eventMulti;
+  const defaults = codec.defaultEventUrlState(multiSpace);
+  assert.deepEqual([defaults.area, defaults.venueSpaceId], ["ALL", "north-floor"]);
+
+  const south = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-m&day=7&venueSpaceId=south-floor&area=ALL");
+  assert.deepEqual([south.state.area, south.state.venueSpaceId], ["ALL", "south-floor"],
+    "the sentinel names no space of its own, so the one the URL names has to survive");
+  assert.equal(codec.serializeEventUrlState(multiSpace, south.state, "https://map.example/").searchParams.get("venueSpaceId"), "south-floor");
 });

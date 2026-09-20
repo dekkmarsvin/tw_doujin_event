@@ -289,8 +289,24 @@ export function getPublishedEvent(eventId: string) {
 export const ACTIVE_EVENT = PUBLISHED_EVENTS[0];
 export const ACTIVE_EVENT_ID = ACTIVE_EVENT.id;
 
+/**
+ * Whether the reader may choose an area at all, which is only where an event is
+ * spread across more than one venue space.
+ *
+ * Areas are derived from the organizer's booth list, and in practice that
+ * list's area column carries the booth row letter: pf45-rf14 published thirteen
+ * "areas" that were each one row of one hall, every row's code matching the
+ * first character of its booth code. A control offering those is a control
+ * offering nothing, and the project already declines the stronger case -- FF47's
+ * A-K and L-W are real subdivisions of one hall, and the event map contract
+ * still requires the reader not to show a switcher for them.
+ *
+ * `areaMode` is deliberately not consulted. It is derived at publication time
+ * from how many distinct codes appeared in the booth list, which answers how
+ * the data was shaped rather than whether a reader has somewhere to go.
+ */
 export function eventUsesAreaSwitcher(event: EventDefinition) {
-  return event.areaMode === "switchable" && event.areas.length > 1;
+  return eventUsesVenueSpaceSwitcher(event);
 }
 
 export function eventUsesVenueSpaceSwitcher(event: EventDefinition) {
@@ -311,4 +327,69 @@ export function eventUsesScopedMaps(event: Pick<EventDefinition, "days" | "venue
 
 export function venueAssignmentForArea(event: EventDefinition, areaId: string) {
   return event.venueAssignments.find(({ areaIds }) => areaIds.includes(areaId)) ?? event.venueAssignments[0];
+}
+
+/**
+ * The reader's "every area" area.
+ *
+ * It is not a product concept the data carries: areas are derived from the
+ * organizer's booth list, so a published event's `areas` holds exactly the
+ * codes that appeared there and nothing that means "all of them". FF47 happens
+ * to declare a literal `ALL` first in its hand-written definition, which is the
+ * only reason a reader of that event ever sees the whole hall; every event
+ * published from the organizer workspace since would strand the reader in
+ * whichever area sorted first.
+ *
+ * So the reader synthesizes it instead of the publication writing it. Keeping
+ * the id equal to FF47's makes the two coincide rather than compete, and
+ * leaves already-published data untouched.
+ *
+ * It always means *this venue space's* areas, never every area in the event: a
+ * map artifact covers one day in one venue space, so booths from another space
+ * have no coordinates on the map currently on screen.
+ */
+export const ALL_AREAS_ID = "ALL";
+
+type AreaAssignment = Pick<VenueAssignment, "areaIds">;
+
+/**
+ * The areas a reader may choose inside one venue space, "all areas" first.
+ *
+ * The synthetic entry is left out when the space declares its own `ALL` (FF47),
+ * and when the space has a single area, where it would be a second name for the
+ * only choice. An event with one venue space offers no choice at all, so the
+ * list collapses to the whole space.
+ */
+export function areaOptionsForVenueSpace(event: EventDefinition, assignment: AreaAssignment): readonly EventAreaDefinition[] {
+  const areas = event.areas.filter((area) => assignment.areaIds.includes(area.id));
+  const options = areas.length < 2 || areas.some((area) => area.id === ALL_AREAS_ID)
+    ? areas
+    : [{ id: ALL_AREAS_ID, label: "全區", shortLabel: "全區" }, ...areas];
+  // Where no switcher is offered the whole space is the only reachable state,
+  // and this list is what a URL is validated against -- so a stale `?area=` from
+  // an older link widens to the whole space instead of filtering a reader into
+  // a block with no control to leave it by.
+  return eventUsesAreaSwitcher(event) ? options : options.slice(0, 1);
+}
+
+/** The area a venue space opens on: all of it, or its only area. */
+export function defaultAreaForVenueSpace(event: EventDefinition, assignment: AreaAssignment) {
+  return areaOptionsForVenueSpace(event, assignment)[0]?.id;
+}
+
+/**
+ * The areas a filter on `areaId` admits: every area of the space when the
+ * reader asked for all of them, otherwise the one they named.
+ *
+ * `ALL` widens whether the space declares it or not. FF47 declares it and its
+ * booths carry that code, so widening there is the identity; an event that ever
+ * pairs a declared `ALL` with real area codes reads the way its name promises
+ * rather than as a fourth area holding nothing.
+ */
+export function visibleAreaIds(assignment: AreaAssignment, areaId: string): readonly string[] {
+  return areaId === ALL_AREAS_ID ? assignment.areaIds : [areaId];
+}
+
+export function venueAssignmentForVenueSpace(event: EventDefinition, venueSpaceId: string) {
+  return event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId) ?? event.venueAssignments[0];
 }

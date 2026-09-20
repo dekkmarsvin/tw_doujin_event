@@ -1,7 +1,10 @@
 import { normalizeWorkTopics, type AdvancedCircleSearch } from "./circle-search";
 import type { WORK_TYPE_OPTIONS } from "./circle-overrides";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
-import { eventUsesVenueSpaceSwitcher, venueAssignmentForArea, type EventDefinition } from "./event-catalog";
+import {
+  ALL_AREAS_ID, areaOptionsForVenueSpace, defaultAreaForVenueSpace, eventUsesVenueSpaceSwitcher, venueAssignmentForArea,
+  venueAssignmentForVenueSpace, type EventDefinition,
+} from "./event-catalog";
 
 /**
  * 作品類型在 URL 裡走 ASCII 代號。舊的 `original`／`derivative` 沒有對應的取向，
@@ -19,6 +22,8 @@ export type PendingCircleSelection<TDay extends string | number> = {
   boothCode: string | null;
 };
 
+type VenueAssignmentOf<TArea extends string> = EventDefinition<string | number, TArea>["venueAssignments"][number];
+
 type EventUrlState<TDay extends string | number, TArea extends string> = {
   eventId: string;
   day: TDay;
@@ -32,10 +37,23 @@ type EventUrlState<TDay extends string | number, TArea extends string> = {
   selection: PendingCircleSelection<TDay>;
 };
 
+/**
+ * The state a URL that names nothing beyond the event resolves to.
+ *
+ * The first area still picks the venue space, as it always has. What changed is
+ * where inside that space the reader lands: on all of it, not on its first
+ * area. Areas are derived from the organizer's booth list, so "first" is
+ * whichever code happened to sort first, and opening there leaves a reader
+ * filtered to one block of an event they have chosen nothing about yet, with
+ * the rest of the hall drawn and empty.
+ */
 export function defaultEventUrlState<TDay extends string | number, TArea extends string>(event: EventDefinition<TDay, TArea>): EventUrlState<TDay, TArea> {
   const day = event.days[0]?.id;
-  const area = event.areas[0]?.id;
-  const venueAssignment = area === undefined ? undefined : event.venueAssignments.find((assignment) => assignment.areaIds.includes(area));
+  const firstArea = event.areas[0]?.id;
+  const venueAssignment = firstArea === undefined
+    ? undefined
+    : venueAssignmentForArea(event, firstArea) as VenueAssignmentOf<TArea> | undefined;
+  const area = venueAssignment ? defaultAreaForVenueSpace(event, venueAssignment) as TArea | undefined : undefined;
   if (day === undefined || area === undefined || !venueAssignment || event.genres.length === 0) throw new Error(`Event ${event.id} has incomplete URL defaults.`);
   return {
     eventId: event.id,
@@ -88,22 +106,34 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
   const dayValue = url.searchParams.get("day");
   const day = event.days.find(({ id }) => String(id) === dayValue)?.id ?? defaults.day;
   const areaValue = url.searchParams.get("area") ?? url.searchParams.get("hall");
-  const requestedArea = event.areas.find(({ id }) => id === areaValue)?.id;
+  const declaredArea = event.areas.find(({ id }) => id === areaValue)?.id;
+  // `ALL` is the reader's own id for every area of the current space and is
+  // absent from `areas` unless the event declares one of its own, so it has to
+  // be recognised here -- otherwise a shared whole-space link would resolve to
+  // whichever area sorted first, which is the state it was shared to escape.
+  const requestedArea = declaredArea ?? (areaValue === ALL_AREAS_ID ? ALL_AREAS_ID as TArea : undefined);
   const requestedVenueSpaceId = url.searchParams.get("venueSpaceId");
   const requestedAssignment = event.venueAssignments.find(({ venueSpaceId }) => venueSpaceId === requestedVenueSpaceId);
-  const inferredAssignment = requestedArea === undefined ? undefined : venueAssignmentForArea(event, requestedArea);
+  // Only a declared area names a space by itself. The sentinel belongs to every
+  // space equally, so a URL carrying it leans on `venueSpaceId`, and on the
+  // default space when it names none.
+  const inferredAssignment = declaredArea === undefined ? undefined : venueAssignmentForArea(event, declaredArea);
   const invalidRequestedVenueSpace = requestedVenueSpaceId !== null && requestedAssignment === undefined;
   const missingOrInvalidAreaForSpace = requestedVenueSpaceId !== null && requestedArea === undefined;
-  const incompatibleRequestedPair = requestedAssignment !== undefined && requestedArea !== undefined
-    && !requestedAssignment.areaIds.includes(requestedArea);
+  const incompatibleRequestedPair = requestedAssignment !== undefined && declaredArea !== undefined
+    && !requestedAssignment.areaIds.includes(declaredArea);
   const useDefaultAssignment = invalidRequestedVenueSpace || missingOrInvalidAreaForSpace || incompatibleRequestedPair;
-  const defaultAssignment = venueAssignmentForArea(event, defaults.area);
+  const defaultAssignment = venueAssignmentForVenueSpace(event, defaults.venueSpaceId);
   const venueAssignment = useDefaultAssignment
     ? defaultAssignment
     : requestedAssignment ?? inferredAssignment ?? defaultAssignment;
-  const area = !useDefaultAssignment && requestedArea !== undefined && venueAssignment.areaIds.includes(requestedArea)
+  // One list covers both kinds of id, and it is the same list the switcher
+  // offers: a space with a single area has no sentinel to accept, so `?area=ALL`
+  // there normalizes to that area rather than to a filter matching nothing.
+  const areaOptions = areaOptionsForVenueSpace(event, venueAssignment);
+  const area = !useDefaultAssignment && requestedArea !== undefined && areaOptions.some(({ id }) => id === requestedArea)
     ? requestedArea
-    : event.areas.find(({ id }) => venueAssignment.areaIds.includes(id))?.id ?? defaults.area;
+    : (areaOptions[0]?.id as TArea | undefined) ?? defaults.area;
   const genreValue = url.searchParams.get("genre");
   const genre = genreValue && event.genres.includes(genreValue) ? genreValue : defaults.genre;
   const workType = url.searchParams.get("workType") ?? "";
@@ -164,7 +194,10 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   url.searchParams.set("event", event.id);
   url.searchParams.set("day", String(state.day));
   url.searchParams.set("area", state.area);
-  const venueAssignment = venueAssignmentForArea(event, state.area);
+  // From the state's own space, not inferred from the area: the sentinel names
+  // no space, and inferring would silently move a multi-space reader's link to
+  // the first space.
+  const venueAssignment = venueAssignmentForVenueSpace(event, state.venueSpaceId);
   if (eventUsesVenueSpaceSwitcher(event)) url.searchParams.set("venueSpaceId", venueAssignment.venueSpaceId);
   if (state.query.trim()) url.searchParams.set("query", state.query.trim());
   if (state.genre !== defaults.genre) url.searchParams.set("genre", state.genre);

@@ -2,7 +2,7 @@ import type { MapSlotView } from "./accessible-event-map-renderer";
 import { circleSearchText, placementStatusLabel, type CircleViewRecord } from "./circle-records";
 import { buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
-import { venueAssignmentForArea, type EventDefinition } from "./event-catalog";
+import { ALL_AREAS_ID, visibleAreaIds, venueAssignmentForVenueSpace, type EventDefinition } from "./event-catalog";
 import type { PlanningDocument } from "./planning-store";
 
 type WorkspaceFilterKind = "area" | "genre" | "favorite" | "creator" | "work" | "work-exclude" | "work-type" | "adult" | "favorite-group" | "visit";
@@ -24,6 +24,7 @@ type ProjectionInput = {
   planning: PlanningDocument;
   day: CircleViewRecord["day"];
   area: string;
+  venueSpaceId: string;
   genre: string;
   query: string;
   favoriteOnly: boolean;
@@ -44,7 +45,12 @@ function movedDestination(record: CircleViewRecord, eventRecords: CircleViewReco
 }
 
 export function projectEventWorkspace(input: ProjectionInput) {
-  const { event, records, recordsById, recordsByCircleId, planning, day, area, genre, query, favoriteOnly, advancedSearch, planningDisplay, navigationMode, selectedRecordId } = input;
+  const { event, records, recordsById, recordsByCircleId, planning, day, area, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay, navigationMode, selectedRecordId } = input;
+  // The space comes from the reader's state rather than from the area, because
+  // "all areas" names no space of its own -- and because the map on screen is
+  // one day in one venue space, so a booth outside it has no coordinates here.
+  const venueAssignment = venueAssignmentForVenueSpace(event, venueSpaceId);
+  const areaFilter = new Set<string>(visibleAreaIds(venueAssignment, area));
   const eventRecords = records.filter((record) => record.placement.eventId === event.id);
   const favorites = planning.favorites.filter((item) => item.eventId === event.id);
   const favoriteIds = new Set(favorites.map((item) => item.circleId));
@@ -90,7 +96,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
     const visitMatches = planningDisplay.visitStatus === "ALL"
       || (planningDisplay.visitStatus === "not-planned" ? !plan : plan?.status === planningDisplay.visitStatus);
     return record.day === day
-      && (area === "ALL" || record.hall === area)
+      && areaFilter.has(record.hall)
       && (genre === event.genres[0] || record.genre === genre)
       && (!favoriteOnly || favoriteIds.has(record.circle.id))
       && groupMatches && visitMatches
@@ -105,7 +111,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
     }
     return left.code.localeCompare(right.code, undefined, { numeric: true }) || left.name.localeCompare(right.name, "zh-Hant");
   });
-  const visibleSpaceAreas = new Set(venueAssignmentForArea(event, area).areaIds);
+  const visibleSpaceAreas = new Set(venueAssignment.areaIds);
   const mapRecords = navigationMode
     ? dayPlan.flatMap((entry) => (recordsByCircleId.get(entry.circleId) ?? []).filter((record) => record.placement.eventId === event.id && record.day === day && visibleSpaceAreas.has(record.hall)))
     : filtered;
@@ -163,7 +169,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
   // requirement rather than one more alternative.
   const topicPrefix = includedTopics.length > 1 && advancedSearch.workTopicMode === "all" ? "同時包含：" : "作品：";
   const filters: WorkspaceFilterDescriptor[] = [
-    ...(event.areaMode === "switchable" && area !== "ALL" ? [{ id: "area", kind: "area" as const, label: event.areas.find((item) => item.id === area)?.label ?? area }] : []),
+    ...(event.areaMode === "switchable" && area !== ALL_AREAS_ID ? [{ id: "area", kind: "area" as const, label: event.areas.find((item) => item.id === area)?.label ?? area }] : []),
     ...(genre !== event.genres[0] ? [{ id: "genre", kind: "genre" as const, label: genre }] : []),
     ...(favoriteOnly ? [{ id: "favorite", kind: "favorite" as const, label: "只看收藏" }] : []),
     ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", kind: "creator" as const, label: `創作者：${advancedSearch.creatorType}` }] : []),

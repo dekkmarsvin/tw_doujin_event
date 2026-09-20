@@ -44,7 +44,7 @@ const planning = {
 };
 
 const defaults = {
-  day: 1, area: "ALL", genre: "全部類別", query: "", favoriteOnly: false,
+  day: 1, area: "ALL", venueSpaceId: "main", genre: "全部類別", query: "", favoriteOnly: false,
   advancedSearch: { creatorType: "ALL", workTopics: [], workTopicMode: "any", excludedWorkTopics: [], workType: "ALL", adultContent: "ALL" },
   planningDisplay: { favoriteGroupId: "ALL", visitStatus: "ALL", sort: "booth", density: "informative", mediaCount: 0 },
   navigationMode: false, selectedRecordId: null,
@@ -120,7 +120,7 @@ test("navigation covers all areas in the current space without mixing identical 
     ...defaults, navigationMode: true, query: "a filter that excludes everything", favoriteOnly: true,
   };
   assert.deepEqual(projectEventWorkspace(input).markersByCode.get("A02").records.map((item) => item.circle.id), ["c-b"]);
-  assert.deepEqual(projectEventWorkspace({ ...input, area: "B" }).markersByCode.get("A02").records.map((item) => item.circle.id), ["c-other-space"]);
+  assert.deepEqual(projectEventWorkspace({ ...input, area: "B", venueSpaceId: "other" }).markersByCode.get("A02").records.map((item) => item.circle.id), ["c-other-space"]);
   assert.equal(input.query, "a filter that excludes everything");
   assert.equal(input.area, "ALL");
 });
@@ -254,4 +254,52 @@ test("booth resolution skips another day and prefers a live booth over a retired
   const projected = projectPair(pairRecords);
   assert.equal(projected.dayRecordsByCircleId.get("c-pair").day, 1);
   assert.equal(projected.dayRecordsByCircleId.get("c-closed").code, "B02");
+});
+
+/**
+ * Areas are derived from the organizer's booth list, so an event can have a
+ * dozen of them and no id that means all of them. The reader supplies `ALL`
+ * itself, and it has to mean this venue space rather than the whole event: the
+ * map on screen covers one day in one space, so a booth from another space has
+ * no coordinates to be drawn at.
+ */
+test("all areas covers every area of the reader's space and none of another's", () => {
+  const areaOf = (item, area) => { item.hall = item.placement.area = area; return item; };
+  const derivedRecords = [
+    areaOf(record("event-d", "c-a", "A01"), "A"),
+    areaOf(record("event-d", "c-b", "B01"), "B"),
+    areaOf(record("event-d", "c-s", "S01", { suffix: 1 }), "S"),
+  ];
+  const derivedEvent = {
+    ...event("event-d"),
+    areas: ["A", "B", "S"].map((id) => ({ id, label: id, shortLabel: id })),
+    venueAssignments: [{ venueSpaceId: "main", areaIds: ["A", "B"] }, { venueSpaceId: "annex", areaIds: ["S"] }],
+  };
+  const project = (changes) => projectEventWorkspace({
+    event: derivedEvent, records: derivedRecords,
+    recordsById: new Map(derivedRecords.map((item) => [item.recordId, item])),
+    recordsByCircleId: new Map(derivedRecords.map((item) => [item.circle.id, [item]])),
+    planning: { schemaVersion: 3, favoriteGroups: [], favorites: [], visitPlans: [] },
+    ...defaults, ...changes,
+  });
+
+  assert.deepEqual(project({ area: "ALL" }).filtered.map((item) => item.circle.id), ["c-a", "c-b"]);
+  assert.deepEqual(project({ area: "B" }).filtered.map((item) => item.circle.id), ["c-b"]);
+  assert.deepEqual(project({ area: "ALL", venueSpaceId: "annex" }).filtered.map((item) => item.circle.id), ["c-s"]);
+});
+
+test("the area chip appears for a chosen area and not for all of them", () => {
+  // Two venue spaces, because that is the only event whose reader can choose an
+  // area at all; a chip for a state nobody can reach would prove nothing.
+  const derivedEvent = {
+    ...event("event-a"),
+    areas: ["A", "B", "S"].map((id) => ({ id, label: `${id} 區`, shortLabel: id })),
+    venueAssignments: [{ venueSpaceId: "main", areaIds: ["A", "B"] }, { venueSpaceId: "annex", areaIds: ["S"] }],
+  };
+  const project = (area) => projectEventWorkspace({
+    event: derivedEvent, records, recordsById, recordsByCircleId, planning, ...defaults, area,
+  }).activeFilterDescriptors.filter((filter) => filter.kind === "area");
+
+  assert.deepEqual(project("ALL"), []);
+  assert.deepEqual(project("A").map((filter) => filter.label), ["A 區"]);
 });

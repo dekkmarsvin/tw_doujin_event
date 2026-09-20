@@ -44,7 +44,7 @@ try {
     await settle(page);
     for (const name of selectionParams) assert.equal(new URL(page.url()).searchParams.get(name), null);
     assert.equal(new URL(page.url()).searchParams.get("query"), "S01");
-    assert.equal(new URL(page.url()).searchParams.get("area"), "north");
+    assert.equal(new URL(page.url()).searchParams.get("area"), "ALL", "cancelling a selection leaves the area filter where it was — all areas, the default");
     assert.equal(await view(page), selectedView, "cancel does not pan or zoom");
     assert.equal(await panel.count(), 0);
     assert.equal(await page.locator('[data-layer="selected-slots"] [data-slot-code]').count(), 0);
