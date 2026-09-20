@@ -1292,7 +1292,13 @@ function ImportPanel({ detail, onChanged, setNotice }: {
       <div className={styles.mappingGrid}>
         {select("活動日", day, setDay, "活動日代碼", dayOptions)}
         {select("使用空間", venueSpace, setVenueSpace, "使用空間", spaceOptions)}
-        {requiresAreaMapping ? select("展區", area, setArea, "展區代碼") : <div className={`${styles.derivedField} ${styles.mappingField}`}><span>展區</span><strong>無分區（ALL）</strong><small>不需要展區欄，系統會自動帶入。</small></div>}
+        {/* The read-only card carries the same title, sub-label and value line
+            as the pickers beside it, so the row reads as one row. */}
+        {requiresAreaMapping ? select("展區", area, setArea, "展區代碼") : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
+          <legend>展區</legend>
+          <div><div className={styles.subLabel}>固定值<strong>無分區（ALL）</strong></div></div>
+          <small>不需要展區欄，系統會自動帶入。</small>
+        </fieldset>}
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
         <ColumnSelect label="社團名稱" value={circleColumn} header={header} required onChange={setCircleColumn} />
         <ColumnSelect label="主辦內部編號（選填）" value={stableColumn} header={header} onChange={setStableColumn} />
@@ -1300,13 +1306,16 @@ function ImportPanel({ detail, onChanged, setNotice }: {
       <div className={styles.importGrid}>
         <label>攤位代碼格式<select value={boothCodeMode} onChange={(event) => { setBoothCodeMode(event.target.value as typeof boothCodeMode); setBoothCodeWidth(""); }}>
           <option value="single">一列一個代碼</option><option value="delimited">用分隔符號分開（A01、A02）</option><option value="fixed-width">固定字元數連寫（A01A02）</option>
-        </select></label>
+        </select>
+        {/* A hint belongs under the control it is about; as its own grid cell
+            it sat in the next column, level with nothing. */}
+        {boothCodeMode === "delimited" && <small>支援空白、逗號、頓號、分號與斜線。</small>}
+        {boothCodeMode === "single" && suggestedWidth !== null && <small role="status">名單可能含合併攤位；例如每 {suggestedWidth} 個字元為一碼。請核對格式再儲存。</small>}
+        </label>
         {boothCodeMode === "fixed-width" && <label>每個代碼的字元數<input type="number" min={1} max={80} value={boothCodeWidth} onChange={(event) => setBoothCodeWidth(event.target.value)} />
           <small>請核對原始名單後填入；不會自動套用。</small>
           {suggestedWidth !== null && <button type="button" className={styles.ghost} onClick={() => setBoothCodeWidth(String(suggestedWidth))}>確認使用建議的 {suggestedWidth} 個字元</button>}
         </label>}
-        {boothCodeMode === "delimited" && <p>支援空白、逗號、頓號、分號與斜線。</p>}
-        {boothCodeMode === "single" && suggestedWidth !== null && <p role="status">名單可能含合併攤位；例如每 {suggestedWidth} 個字元為一碼。請核對格式再儲存。</p>}
       </div>
       <div className={styles.row}>
         <button type="button" disabled={!mapping} onClick={() => setPreviewRequested(true)}>預覽對應結果</button>

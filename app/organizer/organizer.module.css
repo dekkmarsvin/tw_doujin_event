@@ -33,6 +33,9 @@
 .header h1 { font-size: 20px; line-height: 1.2; letter-spacing: .02em; }
 .header p, .sidebarTitle p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .identity, .row { display: flex; align-items: center; gap: 10px; }
+/* A row that carries labelled fields lines its buttons up with the controls
+   instead of centring them against the label above them. */
+.fieldRow { align-items: end; }
 .identity { color: var(--muted); font-size: 12px; flex-wrap: wrap; }
 .secondary, .ghost { border-color: var(--line) !important; background: var(--surface) !important; color: var(--ink) !important; }
 .secondary:hover:not(:disabled), .ghost:hover:not(:disabled) { border-color: #aeb6b3 !important; background: var(--map-paper) !important; }
@@ -124,6 +127,9 @@
 .inlineEmpty { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 14px; background: var(--paper); }
 .inlineEmpty p { margin: 0; }
 .venueCard { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr 1.7fr auto; gap: 12px; align-items: start; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }
+/* One field-label line plus its gap, so the row's action starts level with the
+   selects it removes rather than with their labels. */
+.venueCard > .dangerText { margin-top: 22px; }
 .catalogCreator { margin: 16px 0; border: 1px solid var(--line); border-radius: 9px; padding: 16px; background: var(--paper); }
 .catalogCreator .formGrid { margin: 12px 0; }
 .derivedField { display: grid; gap: 7px; font-size: 12px; font-weight: 700; }
@@ -170,11 +176,20 @@
    context renders inconsistently across engines, so the grid goes on an inner
    wrapper instead. */
 .mappingField { display: block; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); font-size: 12px; font-weight: 700; }
-.mappingField > legend { padding: 0 5px; color: var(--ink); font-size: 12px; font-weight: 700; }
+/* A legend is drawn across the fieldset's top border, which would put the
+   grouped fields' titles a line higher than the single-control cards beside
+   them. Floating it makes it an ordinary first line, so every card in the row
+   starts its title and its first control at the same height. */
+.mappingField > legend { float: left; width: 100%; margin-bottom: 7px; padding: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+.mappingField > legend + div { clear: left; }
 .mappingField > div { display: grid; gap: 8px; }
 .mappingField .subLabel { display: grid; gap: 4px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
-.derivedField.mappingField { display: grid; }
-.derivedField.mappingField strong { background: var(--surface); }
+/* The small caps belong to the sub-label, not to the value under it: a control
+   inherits its font, so without this the value in a grouped card prints
+   smaller than the same value in a single-control card beside it. */
+.mappingField .subLabel select, .mappingField .subLabel input { color: var(--ink); font-size: 12px; font-weight: 700; letter-spacing: normal; }
+.derivedField.mappingField > small { display: block; margin-top: 7px; }
+.derivedField.mappingField strong { background: var(--surface); font-size: 12px; letter-spacing: normal; }
 .sample { margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 16px; background: var(--paper); }
 .sample h4 { margin: 0 0 4px; font-size: 12px; }
 .sample > p { margin: 0 0 12px; font-size: 11px; }
@@ -227,7 +242,7 @@
   .steps button { gap: 5px; padding: 7px !important; font-size: 10px; }
   .stepNumber { display: none; }
   .venueCard { grid-template-columns: 1fr 1fr; }
-  .venueCard .dangerText { justify-self: start; }
+  .venueCard .dangerText { justify-self: start; margin-top: 0; }
   .mapToolbar { grid-template-columns: 1fr 1fr; }
   .mappingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
