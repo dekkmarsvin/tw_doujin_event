@@ -18,7 +18,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054 |
-| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0062 |
+| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0062、0066 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039 |
 | 保存期限與個資 | 0018、0021、0022、0027、0054 |
@@ -89,7 +89,7 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | **部分被取代** — 關閉保留選取由 0063 取代；手機邊界由 0056 擴充 |
 | [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | **部分被取代** — 摘要關閉保留選取由 0063 取代；三階段完整資訊由 0064 擴充 |
 | [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |
-| [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046 |
+| [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046。第 5 點要求的重新評估已由 0066 完成 |
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
 | [0060](./0060-review-ends-when-scoped-blockers-are-resolved.md) | 範圍內 blocker 解決後，review 必須結束 | 生效；部分取代 0040 |
 | [0061](./0061-organizer-snapshot-pins-complete-reference-records.md) | Organizer 送審固定完整 reference 記錄 | 生效 |
@@ -97,3 +97,4 @@ ADR 的內文不改也不搬動；推翻舊決策時寫新的 ADR，並在舊的
 | [0063](./0063-reader-dismissal-clears-selection.md) | 關閉社團摘要取消選取，完整資訊關閉返回摘要 | 生效；部分取代 0055、0056 |
 | [0064](./0064-mobile-circle-details-use-three-sheet-levels.md) | 手機社團資訊使用三階段底部面板 | 生效；部分取代 0056 |
 | [0065](./0065-cost-reasoning-uses-the-workers-paid-basis.md) | 成本推算以 Workers Paid 的月度計費量為準 | 生效；部分取代 0017、0022、0031 |
+| [0066](./0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md) | required check 不綁定產生者時，ruleset 擋不住持有 checks 寫入權的 App | 生效；延續 0058 |

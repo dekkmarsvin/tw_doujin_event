@@ -94,6 +94,57 @@ test("GitHub adapter refuses a changed PR head before merge", async () => {
   assert.deepEqual(calls.map(([, method]) => method), ["GET"]);
 });
 
+// ADR-0066 decision 3: "some App opened it" was never the guarantee. The PR
+// author has to be the identity that produced the approval on the same head.
+const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+function mergeAdapter({ author, approvalApp, checks = [] }) {
+  const seen = [];
+  const adapter = github.createGitHubPublicationAdapter({
+    owner: "dekkmarsvin", installationToken: "token", fetch: async (url, init) => {
+      const target = String(url);
+      seen.push([target, init?.method ?? "GET"]);
+      const body = target.includes("/check-runs")
+        ? { check_runs: [
+            { id: 2, name: "Organizer publication approval", status: "completed", conclusion: "success", head_sha: HEAD, ...(approvalApp === undefined ? {} : { app: approvalApp }) },
+            ...checks,
+          ] }
+        : target.includes("/merge")
+          ? { merged: true, sha: "merged-sha" }
+          : { number: 12, state: "open", base: { ref: "main" }, head: { ref: "organizer/job-1/data", sha: HEAD }, user: { login: author } };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+  const merge = () => adapter.mergeOwnedPullRequest({
+    repository: "tw_doujin_event-data", pullNumber: 12, jobId: "job-1", stage: "data",
+    expectedHeadSha: HEAD, requiredChecks: ["data / check"],
+  });
+  return { merge, seen };
+}
+
+test("a publication PR must be opened by the App that approved it", async () => {
+  const approvalApp = { id: 4931208, slug: "tw-doujin-map-pilot" };
+  const passing = [{ id: 3, name: "data / check", status: "completed", conclusion: "success", head_sha: HEAD }];
+
+  // Another App on the same repository could open a branch-shaped PR; the old
+  // check accepted it because the login merely ended in "[bot]".
+  const impostor = mergeAdapter({ author: "someone-else[bot]", approvalApp, checks: passing });
+  await assert.rejects(impostor.merge, /not opened by the App that approved it/);
+  assert.equal(impostor.seen.some(([, method]) => method === "PUT"), false, "an unmatched author never reaches the merge");
+
+  // An approval with no App identity fails closed rather than falling back to
+  // the old suffix test.
+  const anonymous = mergeAdapter({ author: "tw-doujin-map-pilot[bot]", approvalApp: null, checks: passing });
+  await assert.rejects(anonymous.merge, /no App identity/);
+
+  // The matching author proceeds, and the required checks still decide.
+  const matched = mergeAdapter({ author: "tw-doujin-map-pilot[bot]", approvalApp, checks: passing });
+  assert.equal((await matched.merge()).merged, true);
+
+  const failing = mergeAdapter({ author: "tw-doujin-map-pilot[bot]", approvalApp,
+    checks: [{ id: 3, name: "data / check", status: "completed", conclusion: "failure", head_sha: HEAD }] });
+  await assert.rejects(failing.merge, /Required check is not successful/);
+});
+
 test("GitHub adapter invalidates and retries one 401 with a provider token", async () => {
   let token = "old-token";
   const invalidated = [];
