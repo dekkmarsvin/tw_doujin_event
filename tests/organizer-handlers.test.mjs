@@ -372,6 +372,22 @@ test("candidate updates reject missing and mismatched venue catalog references",
   const unknownSpace = await save({ venueId: VENUE_ID, venueSpaceId: "missing-space", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" });
   assert.equal(unknownSpace.status, 422);
   assert.equal((await unknownSpace.json()).issues[0].code, "unknown_venue_space");
+
+  // #222: a row nobody has chosen for yet is a pending item, not a deleted
+  // reference. Both refuse the save, and both used to say 已不存在 -- which
+  // described a deletion to an owner who had never chosen anything, and
+  // contradicted the 請選擇場館 the same blank row raised elsewhere.
+  const blankVenue = await save({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" });
+  assert.equal(blankVenue.status, 422);
+  const blankVenueBody = await blankVenue.json();
+  assert.deepEqual(blankVenueBody.issues.map((issue) => issue.code), ["missing_venue_selection", "missing_venue_space_selection"]);
+  assert.equal(blankVenueBody.error, "使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。");
+  for (const issue of blankVenueBody.issues) assert.doesNotMatch(issue.message, /已不存在/);
+  const blankSpace = await save({ venueId: VENUE_ID, venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" });
+  assert.equal(blankSpace.status, 422);
+  const blankSpaceBody = await blankSpace.json();
+  assert.deepEqual(blankSpaceBody.issues.map((issue) => issue.code), ["missing_venue_space_selection"]);
+  assert.equal(blankSpaceBody.error, "使用空間 1：尚未選擇場館內的空間，請從清單選擇或新增使用空間。");
   const mismatch = await save({
     venueId: "taipei-nangang-exhibition-center-hall-1",
     venueSpaceId: "taipei-nangang-exhibition-center-hall-2-1f",

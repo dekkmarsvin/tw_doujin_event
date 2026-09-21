@@ -5,8 +5,8 @@
  */
 import { getMapTemplateShape, listMapTemplateOptions, type MapTemplateShape } from "../map-template-registry";
 import { saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
-import { nextOrganizerEventDay, type OrganizerEventDraft } from "../organizer-event";
-import { type OrganizerVenueCatalog, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
+import { nextOrganizerEventDay, organizerPendingVenueSelections, type OrganizerEventDraft } from "../organizer-event";
+import { validateOrganizerVenueCatalogAssignments, type OrganizerVenueCatalog, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { type OrganizerGuidedTask } from "../organizer-workspace";
 import { VenueCatalogCreator } from "./organizer-import-panel";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
@@ -88,7 +88,13 @@ export function DraftForm({
     onSaveReady?.(() => save());
     return () => onSaveReady?.(null);
   }, [onSaveReady, save]);
-  const taskIssues = guidedTask ? organizerGuidedDraftIssues(draft, guidedTask, venueCatalog) : [];
+  /* Saving refuses an unchosen or dangling assignment with 422, so the venue
+   * section states the refusal beside the button rather than letting the
+   * press earn it. Guided mode already lists these among its task issues. */
+  const venueIssues = section === "venue"
+    ? [...organizerPendingVenueSelections(draft), ...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, venueCatalog)]
+    : [];
+  const taskIssues = guidedTask ? organizerGuidedDraftIssues(draft, guidedTask, venueCatalog) : venueIssues;
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
@@ -117,17 +123,11 @@ export function DraftForm({
         entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
         disabled={!editable || dirty} onCreated={onChanged} />)}
       <div className={styles.row}>
+        {/* A new row is a question, not an answer. Choosing a venue and a
+            space on the owner's behalf made 請選擇場館 an option nobody ever
+            saw, and the event went on carrying a space nobody picked (#222). */}
         <button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => {
-          const used = new Set(next.venue.assignments.map((item) => item.venueSpaceId));
-          const venue = venueCatalog.venues.find((item) => item.spaces.some((space) => !used.has(space.id))) ?? venueCatalog.venues[0];
-          const space = venue?.spaces.find((item) => !used.has(item.id)) ?? venue?.spaces[0];
-          next.venue.assignments.push({
-            venueId: venue?.id ?? "",
-            venueSpaceId: space?.id ?? "",
-            areaIds: space?.defaultAreaMode === "none" ? ["ALL"] : [],
-            mapTemplate: "TAIWAN_GENERIC_V1",
-            areaMode: space?.defaultAreaMode ?? "imported",
-          });
+          next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "imported" });
           return next;
         })}>新增使用空間</button>
         <button type="button" className={styles.ghost} disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button>
@@ -164,12 +164,13 @@ export function DraftForm({
         const selectedSpace = spaces.find((space) => space.id === assignment.venueSpaceId);
         return <div className={styles.venueCard} key={index}>
           <label>場館<select disabled={!editable} value={assignment.venueId} onChange={(event) => update((next) => {
+            // Changing the venue invalidates whatever space sat under it, and
+            // choosing the replacement belongs to the owner for the same
+            // reason the first choice did.
             const venue = venueCatalog.venues.find((item) => item.id === event.target.value);
-            const used = new Set(next.venue.assignments.filter((_, itemIndex) => itemIndex !== index).map((item) => item.venueSpaceId));
-            const space = venue?.spaces.find((item) => !used.has(item.id)) ?? venue?.spaces[0];
             next.venue.assignments[index] = {
-              ...next.venue.assignments[index], venueId: venue?.id ?? "", venueSpaceId: space?.id ?? "",
-              areaIds: space?.defaultAreaMode === "none" ? ["ALL"] : [], areaMode: space?.defaultAreaMode ?? "imported",
+              ...next.venue.assignments[index], venueId: venue?.id ?? "", venueSpaceId: "",
+              areaIds: [], areaMode: "imported",
             };
             return next;
           })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select><small>從清單選擇即可，不需自行輸入。</small></label>
@@ -197,12 +198,14 @@ export function DraftForm({
     </div>}
     {taskIssues.length > 0 && <div className={styles.taskIssues} aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
     <div className={styles.formActions}>
-      <button type="button" disabled={!editable || saving} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
-      {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
+      <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
+      {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
       {/* One line, one truth. The result replaces the dirty state rather than
           sitting beside a contradiction of it. */}
       <span aria-live="polite" className={result && !result.ok ? styles.error : undefined}>
-        {saving ? "儲存中，請稍候。" : result ? result.text : dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}
+        {saving ? "儲存中，請稍候。" : result ? result.text
+          : venueIssues.length > 0 ? "請先處理上方列出的問題，才能儲存。"
+          : dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}
       </span>
     </div>
   </section>;

@@ -124,32 +124,27 @@ export function validateOrganizerVenueCatalogAssignments(
 ) {
   const venues = new Map(catalog.venues.map((venue) => [venue.id, venue]));
   const spaces = new Map(catalog.venues.flatMap((venue) => venue.spaces).map((space) => [space.id, space]));
+  const issue = (row: number, field: "venueId" | "venueSpaceId", code: string, message: string) => [{
+    severity: "error" as const,
+    step: "venue" as const,
+    code,
+    row: row + 1,
+    target: `venue.assignments.${row}.${field}`,
+    message,
+  }];
   return assignments.flatMap((assignment, row) => {
+    /* A blank row has nothing to resolve, and calling it 已不存在 described a
+     * deletion that never happened to an owner who had never chosen anything.
+     * Naming the pending row belongs to validateOrganizerEventDraft, which
+     * says so once; this function answers only for choices already made so
+     * that the two never contradict each other over the same row (#222). */
+    if (!assignment.venueId) return [];
     const venue = venues.get(assignment.venueId);
-    if (!venue) return [{
-      severity: "error" as const,
-      step: "venue" as const,
-      code: "unknown_venue",
-      row: row + 1,
-      target: `venue.assignments.${row}.venueId`,
-      message: "選取的場館已不存在，請重新選擇或建立新場館。",
-    }];
+    if (!venue) return issue(row, "venueId", "unknown_venue", "選取的場館已不存在，請重新選擇或建立新場館。");
+    if (!assignment.venueSpaceId) return [];
     const space = spaces.get(assignment.venueSpaceId);
-    if (!space) return [{
-      severity: "error" as const,
-      step: "venue" as const,
-      code: "unknown_venue_space",
-      row: row + 1,
-      target: `venue.assignments.${row}.venueSpaceId`,
-      message: "選取的使用空間已不存在，請重新選擇或新增使用空間。",
-    }];
-    return space.venueId === venue.id ? [] : [{
-      severity: "error" as const,
-      step: "venue" as const,
-      code: "venue_space_mismatch",
-      row: row + 1,
-      target: `venue.assignments.${row}.venueSpaceId`,
-      message: "選取的使用空間不屬於這個場館，請重新選擇。",
-    }];
+    if (!space) return issue(row, "venueSpaceId", "unknown_venue_space", "選取的使用空間已不存在，請重新選擇或新增使用空間。");
+    return space.venueId === venue.id ? []
+      : issue(row, "venueSpaceId", "venue_space_mismatch", "選取的使用空間不屬於這個場館，請重新選擇。");
   });
 }

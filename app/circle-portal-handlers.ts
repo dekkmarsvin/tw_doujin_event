@@ -14,7 +14,7 @@ import {
 } from "./map-contribution-draft";
 import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
 import {
-  createEmptyOrganizerEventDraft, parseOrganizerEventDraft, serializeOrganizerEventDraft,
+  createEmptyOrganizerEventDraft, organizerPendingVenueSelections, parseOrganizerEventDraft, serializeOrganizerEventDraft,
   type OrganizerEventDraft,
 } from "./organizer-event";
 import {
@@ -2115,7 +2115,12 @@ export function createCirclePortalHandlers({
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !serialized) {
       return json({ error: "活動資料格式無效，請重新載入後再試。" }, 400);
     }
-    const venueIssues = validateOrganizerVenueCatalogAssignments(serialized.draft.venue.assignments, venueCatalog);
+    // Two refusals in one list, and they are not the same refusal: a row still
+    // waiting on a choice, and a row whose choice no longer resolves (#222).
+    const venueIssues = [
+      ...organizerPendingVenueSelections(serialized.draft),
+      ...validateOrganizerVenueCatalogAssignments(serialized.draft.venue.assignments, venueCatalog),
+    ];
     if (venueIssues.length > 0) {
       return json({ error: venueIssues[0].message, issues: venueIssues }, 422);
     }

@@ -52,7 +52,18 @@ try {
   await page.getByRole("button", { name: "建立第一個活動日", exact: true }).click();
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("button", { name: "新增使用空間", exact: true }).click();
+  // #222: a new row is empty, and saving stays refused until both choices are
+  // made. The venue used to be picked for the owner and the space along with
+  // it, so 請選擇場館 was an option the list could never show as chosen.
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).locator("option:checked").textContent(), "請選擇場館");
+  assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
+  await page.getByText("使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。", { exact: true }).waitFor();
+  await journey.capture(page, "references-venue-unselected");
   await page.getByRole("combobox", { name: /^場館/ }).selectOption("taipei-expo-park-zhengyan-hall");
+  // Choosing a venue does not choose a space either.
+  assert.equal(await page.getByRole("combobox", { name: /^使用空間/ }).locator("option:checked").textContent(), "請選擇使用空間");
+  assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
+  await page.getByRole("combobox", { name: /^使用空間/ }).selectOption("zhengyan-exhibition-area");
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
   await page.getByRole("button", { name: "5 檢查與預覽 需先完成前面步驟", exact: true }).click();
   await page.getByRole("button", { name: "建立預覽", exact: true }).click();

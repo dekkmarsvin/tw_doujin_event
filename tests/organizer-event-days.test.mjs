@@ -12,7 +12,7 @@ const vite = await createServer({
 });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { nextOrganizerEventDay, validateOrganizerEventDraft } = await environment.runner.import("/app/organizer-event.ts");
+const { nextOrganizerEventDay, organizerPendingVenueSelections, validateOrganizerEventDraft } = await environment.runner.import("/app/organizer-event.ts");
 after(async () => { await vite.close(); });
 
 test("the first day defaults to the author's own today", () => {
@@ -50,4 +50,36 @@ test("defaulted days pass draft validation without further editing", () => {
     officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
   };
   assert.deepEqual(validateOrganizerEventDraft(draft).filter((issue) => issue.step === "event"), []);
+});
+
+// #222: 「新增使用空間」 used to choose a venue and a space on the owner's
+// behalf, so 請選擇場館 was an option the list could never show as chosen and
+// the event carried a space nobody had picked. A new row is now empty, which
+// means an unfilled row has to name itself rather than be read as a deletion.
+test("an unchosen venue row names itself and is never read as a deleted one", () => {
+  const draft = (assignments) => ({
+    schema: "organizer-event-draft/1",
+    event: { id: "pf45-rf14", name: "PF45 x RF14", days: [{ id: "1", label: "第 1 日", date: "2026-11-07" }] },
+    venue: { assignments },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/pf45" },
+  });
+  const blank = { venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" };
+
+  const pending = organizerPendingVenueSelections(draft([blank]));
+  assert.deepEqual(pending.map((issue) => issue.code), ["missing_venue_selection", "missing_venue_space_selection"]);
+  assert.equal(pending[0].message, "使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。");
+  assert.equal(pending[1].message, "使用空間 1：尚未選擇場館內的空間，請從清單選擇或新增使用空間。");
+  // The row is named, so a second pending row is telling apart from the first.
+  assert.deepEqual(organizerPendingVenueSelections(draft([{ ...blank, venueId: "expo", venueSpaceId: "hall-a" }, blank]))
+    .map((issue) => issue.row), [2, 2]);
+
+  // Two rows waiting on a choice are two pending items, not one space chosen
+  // twice -- blank collides only with blank.
+  assert.equal(validateOrganizerEventDraft(draft([blank, blank])).some((issue) => issue.code === "duplicate_space"), false);
+  const twice = [{ ...blank, venueId: "expo", venueSpaceId: "hall-a" }, { ...blank, venueId: "expo", venueSpaceId: "hall-a" }];
+  assert.equal(validateOrganizerEventDraft(draft(twice)).some((issue) => issue.code === "duplicate_space"), true);
+
+  // A filled row raises nothing, so the pending list is empty once both
+  // choices are made and saving stops being refused.
+  assert.deepEqual(organizerPendingVenueSelections(draft([{ ...blank, venueId: "expo", venueSpaceId: "hall-a" }])), []);
 });

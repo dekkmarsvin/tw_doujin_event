@@ -199,6 +199,15 @@ export function serializeOrganizerEventDraft(value: unknown) {
   return new TextEncoder().encode(json).byteLength <= 1024 * 1024 ? { draft, json } : null;
 }
 
+/** The venue rows waiting on a choice, as opposed to rows carrying a wrong
+ * one. Saving refuses both, so the save handler and the form that leads to it
+ * read the pending rows from here rather than each restating the condition
+ * in its own words (#222). */
+export function organizerPendingVenueSelections(draft: OrganizerEventDraft): OrganizerValidationIssue[] {
+  return validateOrganizerEventDraft(draft).filter((issue) =>
+    issue.code === "missing_venue_selection" || issue.code === "missing_venue_space_selection");
+}
+
 export function validateOrganizerEventDraft(draft: OrganizerEventDraft): OrganizerValidationIssue[] {
   const issues: OrganizerValidationIssue[] = [];
   const add = (issue: OrganizerValidationIssue) => issues.push(issue);
@@ -217,9 +226,9 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
   if (draft.venue.assignments.length === 0) add({ severity: "error", step: "venue", code: "missing_venue", target: "venue.assignments", message: "至少需要一個場館空間。" });
   const spaces = new Set<string>();
   draft.venue.assignments.forEach((assignment, row) => {
-    if (!assignment.venueId) add({ severity: "error", step: "venue", code: "missing_venue_selection", row: row + 1, target: `venue.assignments.${row}.venueId`, message: "請選擇場館。" });
+    if (!assignment.venueId) add({ severity: "error", step: "venue", code: "missing_venue_selection", row: row + 1, target: `venue.assignments.${row}.venueId`, message: `使用空間 ${row + 1}：尚未選擇場館，請從清單選擇或建立新場館。` });
     else if (!ID.test(assignment.venueId)) add({ severity: "error", step: "venue", code: "invalid_venue_selection", row: row + 1, target: `venue.assignments.${row}.venueId`, message: "場館選項格式無效，請重新選擇。" });
-    if (!assignment.venueSpaceId) add({ severity: "error", step: "venue", code: "missing_venue_space_selection", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "請選擇使用空間。" });
+    if (!assignment.venueSpaceId) add({ severity: "error", step: "venue", code: "missing_venue_space_selection", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: `使用空間 ${row + 1}：尚未選擇場館內的空間，請從清單選擇或新增使用空間。` });
     else if (!ID.test(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "invalid_venue_space_selection", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "使用空間選項格式無效，請重新選擇。" });
     if (!assignment.mapTemplate) add({ severity: "error", step: "venue", code: "missing_map_template", row: row + 1, target: `venue.assignments.${row}.mapTemplate`, message: "請選擇地圖模板。" });
     if (assignment.areaMode !== undefined && assignment.areaMode !== "imported" && assignment.areaMode !== "none") {
@@ -231,8 +240,10 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
     if (assignment.areaIds.some((area) => !AREA_ID.test(area))) {
       add({ severity: "error", step: "venue", code: "invalid_area", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "匯入的展區代碼格式無效。" });
     }
-    if (spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "同一個使用空間重複選取。" });
-    spaces.add(assignment.venueSpaceId);
+    // Two rows still waiting on a choice are two pending items, not the same
+    // space chosen twice; blank only collides with blank (#222).
+    if (assignment.venueSpaceId && spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "同一個使用空間重複選取。" });
+    if (assignment.venueSpaceId) spaces.add(assignment.venueSpaceId);
   });
   if (!draft.officialSource.label) add({ severity: "error", step: "event", code: "missing_source", target: "officialSource.label", message: "請說明主辦資料來源。" });
   if (!httpsUrl(draft.officialSource.url)) add({ severity: "error", step: "event", code: "invalid_source_url", target: "officialSource.url", message: "來源網址必須使用 HTTPS。" });
