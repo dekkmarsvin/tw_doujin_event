@@ -12,7 +12,17 @@ import styles from "./organizer.module.css";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 import { useMemo, useRef, useState } from "react";
 
+/* 檢查與預覽 is where the complete list of blocking issues is asked for, so
+ * the heading says which of the three situations the reader is in rather than
+ * repeating that previews are private (#221 4.5, Phase 5). */
+const CHECK_STATE: Record<string, string> = {
+  complete: "這一版已通過檢查。可以建立預覽，或到送審與發布送出。",
+  available: "這一版還沒檢查。執行檢查會列出所有必須修正的項目。",
+  blocked: "前面的項目還沒完成，完成後再執行檢查。",
+};
+
 export function ValidationPanel({ detail, onChanged }: { detail: OrganizerEventDetail; onChanged: () => Promise<void> }) {
+  const validateState = detail.workspace.readiness.sections.find((item) => item.id === "validate")?.state ?? "available";
   const [issues, setIssues] = useState<OrganizerValidationIssue[] | null>(null);
   const [preview, setPreview] = useState<OrganizerReaderPreview | null>(null);
   const checkFeedback = useActionFeedback();
@@ -22,7 +32,7 @@ export function ValidationPanel({ detail, onChanged }: { detail: OrganizerEventD
   const previewRef = useRef<HTMLDivElement | null>(null);
   const grouped = useMemo(() => issues ? { errors: issues.filter((issue) => issue.severity === "error"), warnings: issues.filter((issue) => issue.severity === "warning") } : null, [issues]);
   return <section className={styles.panel}>
-    <div className={styles.panelHead}><div><h3>檢查與預覽</h3><p>預覽只有登入後看得到，不會公開。</p></div><div className={styles.row}>
+    <div className={styles.panelHead}><div><h3>檢查與預覽</h3><p>{CHECK_STATE[validateState]}</p></div><div className={styles.row}>
       <button type="button" disabled={checkFeedback.pending} onClick={() => void checkFeedback.run(validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }), "檢查完成。")}>執行檢查</button>
       <button type="button" className={styles.ghost} disabled={previewFeedback.pending} onClick={() => void previewFeedback.run(previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }), "預覽已產生。").then((ok) => { if (ok) previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); })}>建立預覽</button>
     </div><ActionNotice notice={checkFeedback.notice} /><ActionNotice notice={previewFeedback.notice} /></div>

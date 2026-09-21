@@ -262,3 +262,23 @@ test("the workspace carries one navigation, one progress count, and counts only 
   // is confirmed rather than behind another dialog.
   assert.match(app, /這次匯入會取代目前已儲存的/);
 });
+// #221 4.4／4.5 與 Phase 5: the rail reports what is wrong, and every empty
+// state names a job rather than a condition.
+test("the rail reports problems, not unstarted work, and empty states name an action", async () => {
+  const app = await organizerSource();
+
+  // A section nobody has started is neutral; the complete list of blocking
+  // issues belongs to 檢查與預覽, where it is asked for.
+  assert.ok(app.includes('section.state === "needs_attention"'), "the rail filters to sections with a problem");
+  assert.match(app, /還沒開始的工作看上面的下一步/);
+
+  // A map with no booth list to draw against sends the reader to the section
+  // that has the only useful action.
+  assert.ok(app.includes('onSection("import")'), "the map prerequisite is a button, not a sentence");
+  assert.match(app, /才知道這張地圖要畫哪些攤位/);
+
+  // 檢查與預覽 says which of the three situations the reader is in.
+  assert.match(app, /這一版已通過檢查/);
+  assert.match(app, /這一版還沒檢查/);
+  assert.match(app, /尚未加入攤位名單/);
+});
