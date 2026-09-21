@@ -33,13 +33,20 @@
 # (`/circle.html`). `tests/circle-overrides.test.mjs` asserts this policy is the
 # site-wide one plus exactly the two Turnstile sources, so a host added to
 # either policy alone fails the gate rather than the browser.
+# `X-Robots-Tag` repeats what each entry's `<meta name="robots">` already says,
+# because the meta tag only exists once a crawler has parsed the document — and
+# both entries are empty shells whose content arrives from a bundle. The header
+# travels with every response under the prefix, HTML or not, and needs nothing
+# executed to be read.
 /circle*
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; worker-src 'self'; upgrade-insecure-requests
+  X-Robots-Tag: noindex, nofollow
 
 /organizer*
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; worker-src 'self'; upgrade-insecure-requests
+  X-Robots-Tag: noindex, nofollow
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

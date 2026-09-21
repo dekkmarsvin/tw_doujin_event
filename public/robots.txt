@@ -1,0 +1,5 @@
+# /circle 與 /organizer 不在這裡擋。Disallow 只阻止爬取，不阻止收錄：被擋住的
+# 網址讀不到自己的 noindex，反而會以「無說明」的形式留在搜尋結果裡。兩個控制面
+# 改由 `_headers` 的 X-Robots-Tag 與各自的 meta 宣告 noindex，讓爬蟲讀得到。
+User-agent: *
+Disallow:
