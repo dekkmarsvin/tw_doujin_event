@@ -67,9 +67,10 @@ function loadOrganizerMapImage(source: string) {
   });
 }
 
-export function OrganizerMapPanel({ detail, onChanged }: {
+export function OrganizerMapPanel({ detail, onChanged, onSection }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
+  onSection: (section: "import") => void;
 }) {
   const [maps, setMaps] = useState<OrganizerMapSummary[]>([]);
   const [selected, setSelected] = useState<OrganizerMapDetail | null>(null);
@@ -103,6 +104,8 @@ export function OrganizerMapPanel({ detail, onChanged }: {
   useModalFocus(confirmingClose, closeDialog, () => setConfirmingClose(false));
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   const assignment = detail.draft.venue.assignments.find((item) => item.venueSpaceId === venueSpaceId);
+  // A map is drawn against a booth list; without one there is nothing to draw.
+  const importedRows = detail.import?.rows.filter((row) => row.dayId === periodKey && row.venueSpaceId === venueSpaceId).length ?? 0;
   const reload = useCallback(async () => setMaps((await listOrganizerMaps(detail.event.id)).maps), [detail.event.id]);
   useEffect(() => { queueMicrotask(() => { void reload().catch((error) => loadFailed(message(error))); }); }, [reload, loadFailed]);
 
@@ -300,10 +303,17 @@ export function OrganizerMapPanel({ detail, onChanged }: {
     </> : <div className={styles.placeholder}>
       {/* The next step is a job with a name, not a menu of starting points:
           the reader arrived here because this day and this space have no map
-          yet, so that is what the button says (#221 Phase 5). */}
-      <p>{organizerDayLabel(detail.draft.event.days, periodKey)}・{organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}尚未建立地圖。</p>
-      <button type="button" disabled={!editable || !assignment} onClick={startBlank}>建立這張地圖</button>
-      <p>也可以上傳配置圖，或從同一個場館空間的其他活動日複製。</p>
+          yet, so that is what the button says. When the booth list it would
+          be drawn against is missing, the only useful action is in another
+          section, so the button goes there (#221 Phase 5). */}
+      {importedRows === 0 ? <>
+        <p>先匯入{organizerDayLabel(detail.draft.event.days, periodKey)}的攤位名單，才知道這張地圖要畫哪些攤位。</p>
+        <button type="button" onClick={() => onSection("import")}>前往攤位匯入</button>
+      </> : <>
+        <p>{organizerDayLabel(detail.draft.event.days, periodKey)}・{organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}尚未建立地圖。</p>
+        <button type="button" disabled={!editable || !assignment} onClick={startBlank}>建立這張地圖</button>
+        <p>也可以上傳配置圖，或從同一個場館空間的其他活動日複製。</p>
+      </>}
     </div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>
       <section ref={closeDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-map-title" aria-describedby="unsaved-map-description" tabIndex={-1}>

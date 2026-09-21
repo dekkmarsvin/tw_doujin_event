@@ -424,6 +424,7 @@ function WorkspaceSurface({
           session={session}
           detail={detail}
           section={section}
+          onSection={onSection}
           onChanged={onChanged}
           onDirtyChange={onDirtyChange}
           onDraftSaveReady={onDraftSaveReady}
@@ -530,7 +531,14 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
           message: liveSection === "venue" ? "場館與使用空間已選好，尚未儲存。" : "活動基本資料已修改，尚未儲存。",
         }]),
     ]
-    : readiness.blockers;
+    /* The rail reports what is wrong, not everything that is not yet done. A
+     * section nobody has started is neutral, and the complete list of blocking
+     * issues belongs to 檢查與預覽, where it is asked for rather than carried
+     * alongside every other screen. The live branch above is exempt: it is about
+     * the section being edited right now, which is by definition engaged with
+     * (#221 4.4, 4.5). */
+    : readiness.blockers.filter((blocker) => readiness.sections
+      .some((section) => section.id === blocker.section && section.state === "needs_attention"));
   const visibleBlockers = blockers.slice(0, compact ? 3 : 5);
   const currentSavedState = liveSection
     ? readiness.sections.find((item) => item.id === liveSection)?.state
@@ -552,7 +560,7 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
         ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
         : READINESS_LABEL[item.state]}</small>
     </button>)}</div>
-    <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>目前沒有待修正項目。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
+    <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>沒有需要修正的項目；還沒開始的工作看上面的下一步。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
       <strong>{organizerSectionLabel(detail, blocker.section)}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>
     </button>)}</div>
     {blockers.length > visibleBlockers.length && <p>另有 {blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}
@@ -586,10 +594,14 @@ function CreateEntry({ onCreated, onInvitationFailed }: {
   </form>;
 }
 
-function StepContent({ session, detail, section, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange }: {
+function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   section: OrganizerWorkspaceSection;
+  /* A section whose prerequisite lives in another one has to be able to send
+   * the reader there: 「先匯入這個活動日的攤位名單」 is only useful with a way to
+   * go and do it (#221 Phase 5). */
+  onSection: (section: OrganizerWorkspaceSection) => void;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
@@ -599,7 +611,7 @@ function StepContent({ session, detail, section, onChanged, onDirtyChange, onDra
   if (section === "import") return detail.event.operation === "AMEND"
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
     : <ImportPanel detail={detail} onChanged={onChanged} />;
-  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} />;
+  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
   if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
 }

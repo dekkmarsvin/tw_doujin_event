@@ -193,7 +193,7 @@ export function ImportPanel({ detail, onChanged }: {
 
   return <section className={styles.panel}>
     <ActionNotice notice={loadNotice} />
-    <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>對照欄位後預覽結果，確認無誤再送出名單。</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
+    <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>{detail.import ? "對照欄位後預覽結果，確認無誤再送出名單。" : "尚未加入攤位名單。選一個 CSV 或 Excel 檔，或先下載範本。"}</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
     {detail.import && <SavedImportList detail={detail} />}
     <div className={styles.importGrid}>
       <label>來源檔案<input type="file" disabled={!editable} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => {
