@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
+
+/** The organizer workspace as one body of source.
+ *
+ * These assertions name behaviour, not file boundaries, and #224 split the
+ * workspace across several files. Reading the directory keeps them pointed at
+ * the behaviour: a `doesNotMatch` now covers every panel rather than whichever
+ * file the code used to live in, and the next split does not silently drop an
+ * assertion by moving the line it matched.
+ *
+ * They remain source-level assertions, which #205 is where they get replaced
+ * by browser journeys; this only stops them rotting in the meantime.
+ */
+async function organizerSource() {
+  const directory = new URL("../app/organizer/", import.meta.url);
+  const entries = (await readdir(directory)).filter((name) => name.endsWith(".ts") || name.endsWith(".tsx")).sort();
+  const files = await Promise.all(entries.map((name) => readFile(new URL(name, directory), "utf8")));
+  return files.join("\n");
+}
 
 test("organizer authoring ships as an unlinked, noindex Pages entry", async () => {
   const [config, html, reader, organizerMain] = await Promise.all([
@@ -19,7 +37,7 @@ test("organizer authoring ships as an unlinked, noindex Pages entry", async () =
 
 test("organizer login uses its audience and narrow screens never mount authoring controls", async () => {
   const [app, client] = await Promise.all([
-    readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8"),
+    organizerSource(),
     readFile(new URL("../app/organizer-client.ts", import.meta.url), "utf8"),
   ]);
 
@@ -31,7 +49,7 @@ test("organizer login uses its audience and narrow screens never mount authoring
 });
 
 test("venue authoring uses human selections, immediate creation, and no-division guidance", async () => {
-  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  const app = await organizerSource();
   assert.match(app, /場館與使用空間/);
   assert.match(app, /建立新場館/);
   assert.match(app, /找不到空間？立即新增/);
@@ -49,7 +67,7 @@ test("venue authoring uses human selections, immediate creation, and no-division
 
 test("organizer ships the ADR-0047 guided station, binder readiness, and the shared light design language", async () => {
   const [app, client, css] = await Promise.all([
-    readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8"),
+    organizerSource(),
     readFile(new URL("../app/organizer-client.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
   ]);
@@ -77,7 +95,7 @@ test("organizer ships the ADR-0047 guided station, binder readiness, and the sha
 });
 
 test("a successful draft save synchronizes its revision before follow-up navigation", async () => {
-  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  const app = await organizerSource();
   const saveStart = app.indexOf("result = await saveOrganizerEvent");
   const versionSynced = app.indexOf("setExpectedVersion(result.version)", saveStart);
   const detailReloaded = app.indexOf("await onChanged()", versionSynced);
@@ -90,14 +108,14 @@ test("a successful draft save synchronizes its revision before follow-up navigat
 });
 
 test("organizer save counters stay internal when no revision diff is available", async () => {
-  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  const app = await organizerSource();
 
   assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
   assert.match(app, /setNotice\(\{ kind: "ok", message: "已儲存。" \}\)/);
 });
 
 test("organizer reuses the event source for imports and labels every activity-day field", async () => {
-  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  const app = await organizerSource();
 
   assert.doesNotMatch(app, /<label>來源說明<input/);
   assert.match(app, /const sourceLabel = detail\.draft\.officialSource\.label;/);
@@ -110,7 +128,7 @@ test("organizer reuses the event source for imports and labels every activity-da
 });
 
 test("an explicit save-and-leave selection is not replaced by list refresh", async () => {
-  const app = await readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8");
+  const app = await organizerSource();
   assert.match(app, /const selectionInitialized = useRef\(false\)/);
   assert.match(app, /selectionInitialized\.current\s*=\s*true/);
   assert.match(app, /current === null \? null/);
@@ -119,7 +137,7 @@ test("an explicit save-and-leave selection is not replaced by list refresh", asy
 
 test("booth import shows a worked example, groups each mapping field, and fixes bad rows in place", async () => {
   const [app, css] = await Promise.all([
-    readFile(new URL("../app/organizer/organizer-app.tsx", import.meta.url), "utf8"),
+    organizerSource(),
     readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
   ]);
 
