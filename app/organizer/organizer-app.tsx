@@ -134,6 +134,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [notice, setNotice] = useState<Notice>(IDLE);
   const [startingAmendment, setStartingAmendment] = useState(false);
   const [navigationSaving, setNavigationSaving] = useState(false);
+  const [navigationSaveRefused, setNavigationSaveRefused] = useState(false);
   const draftSave = useRef<(() => Promise<boolean>) | null>(null);
   const navigationDialog = useRef<HTMLElement | null>(null);
   const selectionInitialized = useRef(false);
@@ -219,6 +220,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   };
   const requestNavigation = (description: string, run: () => void) => {
     const request = { description, run };
+    setNavigationSaveRefused(false);
     if (dirty.current) setPendingNavigation(request);
     else finishNavigation(request);
   };
@@ -229,8 +231,13 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     // read as unpressed for the couple of seconds the write and the two reads
     // behind it take, and a second press would save the same draft twice.
     setNavigationSaving(true);
+    setNavigationSaveRefused(false);
     try {
+      // A refused save leaves the dialog covering the panel that says why,
+      // so pressing 儲存並切換 read as nothing happening at all. The reason
+      // lives behind this dialog; the press at least admits it was refused.
       if (await draftSave.current()) finishNavigation(request);
+      else setNavigationSaveRefused(true);
     } finally {
       setNavigationSaving(false);
     }
@@ -341,6 +348,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
             <button type="button" className={styles.secondary} disabled={navigationSaving} onClick={() => finishNavigation(pendingNavigation)}>放棄</button>
             <button type="button" className={styles.ghost} disabled={navigationSaving} onClick={() => setPendingNavigation(null)}>取消</button>
           </div>
+          {navigationSaveRefused && <p role="alert" className={styles.error}>沒有儲存成功。請按「取消」回到表單，照上面列出的說明處理後再試一次。</p>}
         </section>
       </div>}
     </section>
