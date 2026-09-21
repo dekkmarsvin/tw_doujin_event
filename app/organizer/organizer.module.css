@@ -96,6 +96,17 @@
 /* The way out of a required column nobody can fill lives in another section,
    so it is offered where the problem is met (#294). */
 .mappingEscape { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.6; }
+/* Necessary explanation, not decoration: the three words are near-synonyms in
+   everyday Chinese and the glossary that tells them apart is written for
+   developers (#298). */
+.layerGuide { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.layerGuide summary { font-size: 12px; font-weight: 600; cursor: pointer; }
+.layerGuide p, .layerGuide li { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.layerGuide p { margin: 10px 0 0; }
+.layerGuide ul { margin: 8px 0 0; padding-left: 18px; }
+.layerGuide table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 11px; }
+.layerGuide th, .layerGuide td { padding: 5px 7px; border-bottom: 1px solid var(--line); text-align: left; }
+.layerGuide th { color: var(--muted); font-weight: 600; }
 
 .steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0 0 18px; padding: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; list-style: none; background: var(--surface); }
 .steps li + li { border-left: 1px solid var(--line); }

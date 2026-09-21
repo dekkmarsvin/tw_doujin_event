@@ -9,6 +9,7 @@ import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrgani
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerDayLabel, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
+import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
@@ -228,6 +229,9 @@ export function ImportPanel({ detail, onChanged, onSection }: {
               real one maps the nearest thing and ends up with rows as areas.
               The way out is a setting in another section, so it is offered
               where the problem is met rather than left to be discovered (#294). */}
+          {/* Collapsed here: by this point the choice is already made, so this
+              is something to check against rather than the first explanation. */}
+          <div className={styles.mappingEscape}><VenueLayerGuide /></div>
           <p className={styles.mappingEscape}>這場活動沒有分區？把這個使用空間的展區方式改成「沒有分區」，就不需要對應這一欄。<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與使用空間</button></p>
         </> : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
           <legend>展區</legend>

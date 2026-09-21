@@ -54,6 +54,13 @@ try {
   // not pass until someone answers it.
   await page.getByLabel("第一天日期", { exact: true }).fill("2026-11-07");
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
+  // #298: 場館／使用空間／展區 are near-synonyms in everyday Chinese, so the step
+  // that asks for all three opens with two published events answering it. Same
+  // hall, different answers -- 展區 belongs to the event, not to the building.
+  const layers = page.getByRole("group", { name: "場館、使用空間、展區的填寫依據" });
+  await layers.getByText("A–K 區、L–W 區", { exact: true }).waitFor();
+  await layers.getByText("沒有分區", { exact: true }).waitFor();
+  await journey.capture(page, "venue-layer-examples");
   // #219: an organizer usually has one official address, and 「全館」 rarely has
   // a page of its own, so the space URL is optional and the form names what it
   // would inherit instead of leaving it implied. The required fields answer
