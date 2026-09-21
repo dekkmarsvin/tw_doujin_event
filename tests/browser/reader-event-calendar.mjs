@@ -15,8 +15,8 @@ try {
       const page = await journey.page({ event: "", viewport: { width, height: 844 }, routes: (page) => page.clock.setFixedTime(new Date(`${date}T12:00:00+08:00`)) });
       await page.getByRole("heading", { name: "選擇活動" }).waitFor();
       assert.deepEqual(await page.locator("[data-event-group]").evaluateAll((nodes) => nodes.map((node) => node.dataset.eventGroup)), groups);
-      assert.deepEqual(await page.locator("main button b").allTextContents(), ["第二範例活動", "範例創作市集"]);
-      const past = page.locator('[data-event-group="past"] button').first();
+      assert.deepEqual(await page.locator("main a b").allTextContents(), ["第二範例活動", "範例創作市集"]);
+      const past = page.locator('[data-event-group="past"] a').first();
       if (await past.count()) {
         assert.equal(await past.isEnabled(), true);
         await past.focus();

@@ -21,11 +21,11 @@ try {
     const page = await journey.page({ event: "", params: "" });
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
 
-    // One entry per published event, and nothing else to press: an extra button
+    // One entry per published event, and nothing else to press: an extra link
     // here is an unpublished event reaching a reader.
-    assert.equal(await page.getByRole("button").count(), events.length, "one entry per published event");
+    assert.equal(await page.getByRole("link").count(), events.length, "one entry per published event");
     for (const [index, event] of events.entries()) {
-      const entry = page.getByRole("button", { name: new RegExp(event.name) });
+      const entry = page.getByRole("link", { name: new RegExp(event.name) });
       await entry.waitFor();
       const text = await entry.innerText();
       assert.ok(text.includes(["26.09.01-02", "26.10.01-04"][index]), `${event.id} must show its calendar dates`);
@@ -52,7 +52,7 @@ try {
     assert.ok(!(await page.content()).includes(unknown), "the unknown id does not reach the markup either");
 
     // The way forward is still the list, and it is still only the real events.
-    assert.equal(await page.getByRole("button").count(), events.length, "the list survives a dead link");
+    assert.equal(await page.getByRole("link").count(), events.length, "the list survives a dead link");
     await journey.capture(page, "chooser-refuses-unknown-event");
     await page.close();
   }
@@ -60,7 +60,7 @@ try {
   {
     // The point of the chooser: pressing an entry opens that event, not another.
     const page = await journey.page({ event: "" });
-    await page.getByRole("button", { name: new RegExp(events[1].name) }).click();
+    await page.getByRole("link", { name: new RegExp(events[1].name) }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.match(page.url(), new RegExp(`event=${events[1].id}(&|$)`), "the chosen event is the one that opens");
     await journey.capture(page, "chooser-opens-the-chosen-event");
@@ -82,7 +82,7 @@ try {
     assert.equal(page.url(), original, "Back restores the original event and selection");
     await page.goForward();
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
-    await page.getByRole("button", { name: new RegExp(events[1].name) }).click();
+    await page.getByRole("link", { name: new RegExp(events[1].name) }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.equal(new URL(page.url()).searchParams.get("event"), events[1].id);
     for (const name of ["query", "selectedCircle", "selectedBooth"]) assert.equal(new URL(page.url()).searchParams.get(name), null, `${name} does not cross events`);

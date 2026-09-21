@@ -6,6 +6,12 @@ import styles from "./event-chooser.module.css";
 /**
  * The public entry when a URL names no event, or names one this build does not
  * serve (ADR-0042), grouped by the event's Taiwan calendar dates (#134).
+ *
+ * The entries are links, not buttons. This screen is the only address anything
+ * outside the site can reach, so a button leaves every published event with no
+ * way in that is not a script running first: nothing crawls it, nothing
+ * previews it, and no reader can open one in a second tab. The href is what the
+ * press would have produced; the handler still does the pressing.
  */
 export default function EventChooser({ events, unresolved, onSelect }: {
   events: readonly EventDefinition[];
@@ -42,13 +48,19 @@ export default function EventChooser({ events, unresolved, onSelect }: {
         <h2 id={`event-group-${group.id}`}>{group.label}</h2>
         <ul className={styles.list}>
         {group.entries.map(({ event, label }) => <li key={event.id}>
-          <button type="button" onClick={() => onSelect(event)}>
+          <a href={`?event=${encodeURIComponent(event.id)}`} onClick={(pressed) => {
+            // A modified or middle click is the browser's, not ours: it opens
+            // the event in a new tab, which a button could never do.
+            if (pressed.button !== 0 || pressed.metaKey || pressed.ctrlKey || pressed.shiftKey || pressed.altKey) return;
+            pressed.preventDefault();
+            onSelect(event);
+          }}>
             <span>
               <b>{event.name}</b>
               <small>{label} · {event.venue}</small>
             </span>
             <span className={styles.arrow} aria-hidden="true">→</span>
-          </button>
+          </a>
         </li>)}
         </ul>
       </section>)}
