@@ -331,3 +331,55 @@ test("CH20-shaped 170 groups cover all 202 physical booths without invented iden
   assert.deepEqual(result.rows.flatMap((row) => row.codes), codes);
   assert.deepEqual(result.issues, []);
 });
+
+// #294: 展區 is a required column, so an organizer whose list has no real one
+// maps the nearest thing — almost always the row letter at the front of the
+// booth code. pf45-rf14 imported 1434 rows that way and the event ended up
+// declaring 13 "areas" that were 13 rows of one hall.
+const rowLetterImport = (count, letters) => imports.prepareOrganizerImport({
+  rows: [
+    { sourceRow: 1, cells: ["Day", "Area", "Booth", "Circle"] },
+    ...Array.from({ length: count }, (unused, index) => {
+      const letter = letters[index % letters.length];
+      return { sourceRow: index + 2, cells: ["1", letter, `${letter}${String(index + 1).padStart(2, "0")}`, `社團 ${index + 1}`] };
+    }),
+  ],
+  headerRow: 1,
+  mapping: {
+    day: { fixed: "1" }, venueSpace: { fixed: "zhengyan" }, area: { column: 1 },
+    boothCode: { column: 2 }, circleName: { column: 3 },
+  },
+});
+
+test("an area column that is only the booth row letter is called out, not refused", () => {
+  const warned = rowLetterImport(26, ["A", "B", "C", "D"]);
+  const issue = warned.issues.find(({ code }) => code === "area_looks_like_booth_row");
+  assert.equal(issue.severity, "warning", "an organizer really may use whole rows as areas");
+  assert.match(issue.message, /沒有分區/);
+  assert.equal(warned.rows.length, 26, "and every row still imports");
+
+  // One area for the whole space is a deliberate choice, not the shape this
+  // looks for: there is nothing to tell apart.
+  assert.equal(rowLetterImport(26, ["A"]).issues.some(({ code }) => code === "area_looks_like_booth_row"), false);
+
+  // A handful of rows is not evidence of anything.
+  assert.equal(rowLetterImport(8, ["A", "B"]).issues.some(({ code }) => code === "area_looks_like_booth_row"), false);
+});
+
+test("a real area column is left alone", () => {
+  const real = imports.prepareOrganizerImport({
+    rows: [
+      { sourceRow: 1, cells: ["Day", "Area", "Booth", "Circle"] },
+      ...Array.from({ length: 12 }, (unused, index) => ({
+        sourceRow: index + 2,
+        cells: ["1", index < 6 ? "東側" : "西側", `A${String(index + 1).padStart(2, "0")}`, `社團 ${index + 1}`],
+      })),
+    ],
+    headerRow: 1,
+    mapping: {
+      day: { fixed: "1" }, venueSpace: { fixed: "zhengyan" }, area: { column: 1 },
+      boothCode: { column: 2 }, circleName: { column: 3 },
+    },
+  });
+  assert.equal(real.issues.some(({ code }) => code === "area_looks_like_booth_row"), false);
+});

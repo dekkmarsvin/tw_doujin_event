@@ -93,6 +93,9 @@
 .dayAdvanced { grid-column: 1 / -1; }
 .dayAdvanced summary { color: var(--muted); font-size: 11px; cursor: pointer; }
 .dayAdvanced > label { margin-top: 8px; }
+/* The way out of a required column nobody can fill lives in another section,
+   so it is offered where the problem is met (#294). */
+.mappingEscape { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
 .steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0 0 18px; padding: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; list-style: none; background: var(--surface); }
 .steps li + li { border-left: 1px solid var(--line); }
