@@ -282,3 +282,24 @@ test("the rail reports problems, not unstarted work, and empty states name an ac
   assert.match(app, /這一版還沒檢查/);
   assert.match(app, /尚未加入攤位名單/);
 });
+// #298: 場館／使用空間／展區 are near-synonyms in everyday Chinese, and the
+// glossary that tells them apart is written for developers. The explanation
+// uses published events rather than a drawing: no asset to maintain, and the
+// reader recognises them.
+test("the three venue layers are explained by real published events", async () => {
+  const app = await organizerSource();
+
+  // The load-bearing pair: the same hall with two different answers. A single
+  // example teaches the shape but not that 展區 belongs to the event.
+  assert.match(app, /花博公園爭艷館/);
+  assert.match(app, /三重綜合體育館/);
+  assert.match(app, /A–K 區、L–W 區/);
+  assert.match(app, /沒有分區/);
+
+  // The mistake this exists to prevent, said outright.
+  assert.match(app, /，不是展區。/);
+
+  // A <details> takes no accessible name from its own <summary>, so the guide
+  // carries one; without it the block cannot be announced or addressed.
+  assert.ok(app.includes('aria-label="場館、使用空間、展區的填寫依據"'), "the guide is nameable");
+});

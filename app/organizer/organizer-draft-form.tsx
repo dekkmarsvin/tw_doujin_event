@@ -12,6 +12,7 @@ import { VenueCatalogCreator } from "./organizer-import-panel";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
 import { GUIDED_LABEL, TASK_QUESTION, mapTemplatePreview, message, organizerGuidedDraftIssues } from "./organizer-shared";
 import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
+import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
 import { useCallback, useEffect, useState } from "react";
 
@@ -136,6 +137,9 @@ export function DraftForm({
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
       </div>}
     </div> : <div>
+      {/* Open here: this is the moment the three layers are chosen, and the
+          value of the explanation is getting it right the first time (#298). */}
+      <VenueLayerGuide open />
       {detail.missingVenueReferences?.map((entry) => <OrganizerVenueReferencePanel key={entry.id}
         entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
         disabled={!editable || dirty} onCreated={onChanged} />)}
