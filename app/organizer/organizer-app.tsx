@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { publicationProgress, publicationFailureMessage } from "../organizer-publication-presentation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
 import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
+import { ReviewPanel } from "./organizer-review-panel";
 import {
   PortalError,
   readSession,
@@ -22,20 +22,14 @@ import {
   createOrganizerVenueSpace,
   listOrganizerEvents,
   listOrganizerMaps,
-  manageOrganizerEditor,
-  manageOrganizerOwner,
   previewOrganizerEvent,
   putOrganizerImport,
   readOrganizerEvent,
   readOrganizerMap,
   readOrganizerMapBackground,
-  reopenOrganizerEvent,
-  reviewOrganizerEvent,
-  retryOrganizerPublication,
   saveOrganizerEvent,
   saveOrganizerMap,
   saveOrganizerWorkspacePreference,
-  submitOrganizerEvent,
   startOrganizerAmendment,
   uploadOrganizerMapBackground,
   validateOrganizerEvent,
@@ -46,7 +40,6 @@ import {
   type OrganizerReaderPreview,
 } from "../organizer-client";
 import {
-  validateOrganizerVenueCatalogAssignments,
   type OrganizerVenueCatalog,
   type OrganizerVenueCatalogSpace,
   type OrganizerVenueCatalogVenue,
@@ -74,7 +67,6 @@ import {
 import {
   ORGANIZER_GUIDED_TASKS,
   ORGANIZER_WORKSPACE_SECTIONS,
-  organizerGuidedTaskIssues,
   type OrganizerGuidedTask,
   type OrganizerWorkspaceSection,
 } from "../organizer-workspace";
@@ -88,7 +80,6 @@ import MapLayoutEditor from "../map-layout-editor";
 import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-state";
 import { UiIcon } from "../ui-icons";
 import {
-  getMapTemplateMetadata,
   getMapTemplateShape,
   hasMapTemplateRecognizer,
   listMapTemplateOptions,
@@ -98,135 +89,14 @@ import {
 import { useModalFocus } from "../use-modal-focus";
 import styles from "./organizer.module.css";
 
-type Notice = { kind: "idle" | "busy" | "ok" | "error"; message: string };
-type PendingNavigation = { description: string; run: () => void };
-const IDLE: Notice = { kind: "idle", message: "" };
-const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
-  event: "活動",
-  venue: "場館與使用空間",
-  import: "攤位匯入",
-  map: "地圖",
-  validate: "檢查與預覽",
-  review: "送審與發布",
-};
-const organizerSectionLabel = (detail: OrganizerEventDetail, section: OrganizerWorkspaceSection) =>
-  detail.event.operation === "AMEND" && section === "import" ? "名單修正" : SECTION_LABEL[section];
-const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
-  identity_source: "活動名稱與來源",
-  days: "活動日期",
-  venue: "場館與使用空間",
-};
-const READINESS_LABEL = {
-  complete: "已完成",
-  available: "可開始",
-  needs_attention: "需要處理",
-  blocked: "需先完成前面步驟",
-} as const;
-const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
-  draft: "草稿",
-  changes_requested: "要求修改",
-  submitted: "審閱中",
-  approved: "已核准，等待發布",
-  publishing: "發布中",
-  published: "已發布",
-  failed: "發布失敗",
-};
-
-const ROLE_LABEL: Record<string, string> = { owner: "負責人", editor: "協作者", admin: "網站管理者", system: "系統" };
-const STEP_LABEL: Record<OrganizerValidationIssue["step"], string> = {
-  event: "活動",
-  venue: "場館與使用空間",
-  import: "攤位匯入",
-  map: "地圖",
-  preview: "預覽",
-};
-const PUBLICATION_STATUS_LABEL: Record<string, string> = {
-  queued: "等待發布",
-  publishing: "發布中",
-  published: "已發布",
-  failed: "發布失敗",
-};
-
-/** What picking this template actually does, in the two terms the organizer
- * feels: whether an uploaded floor plan can be recognized, and what the saved
- * map is checked against. */
-function mapTemplatePreview(template: string) {
-  const option = listMapTemplateOptions().find((item) => item.id === template);
-  const metadata = getMapTemplateMetadata(template);
-  const shape = metadata.expectedRows === null || metadata.expectedSlots === null
-    ? `${metadata.rowLabel}與${metadata.slotLabel}數量依你畫的版面。`
-    : `${metadata.rowLabel}，共 ${metadata.expectedRows} 排、${metadata.expectedSlots} 個${metadata.slotLabel}。`;
-  return {
-    summary: option?.summary ?? "沿用通用檢查；上傳配置圖後手動編輯攤位。",
-    recognizer: hasMapTemplateRecognizer(template) ? "可自動辨識配置圖" : "需手動編輯配置圖",
-    shape,
-  };
-}
-
-function message(error: unknown) {
-  return error instanceof PortalError || error instanceof Error ? error.message : "操作失敗，請稍後再試。";
-}
-
-function organizerVenueSpaceLabel(catalog: OrganizerVenueCatalog, venueSpaceId: string) {
-  for (const venue of catalog.venues) {
-    const space = venue.spaces.find((item) => item.id === venueSpaceId);
-    if (space) return `${venue.name}・${space.name}`;
-  }
-  return "原使用空間已不存在";
-}
-
-/** Maps are addressed by the day's stable id, which is what the workspace
- * stores and what a map summary comes back with. It is not what the day is
- * called, so nothing showing a map to a person may print it. */
-function organizerDayLabel(days: readonly { id: string; label: string }[], periodKey: string) {
-  return days.find((day) => day.id === periodKey)?.label ?? "原活動日已不存在";
-}
-
-function organizerIssueMessage(
-  issue: { code: string; message: string; target?: string },
-  catalog: OrganizerVenueCatalog,
-  draft: OrganizerEventDraft,
-) {
-  if (issue.code === "missing_space_import" && issue.target) {
-    return `匯入資料沒有包含 ${organizerVenueSpaceLabel(catalog, issue.target)} 的攤位。`;
-  }
-  if (issue.code === "missing_map" && issue.target) {
-    const [dayId, venueSpaceId] = issue.target.split("/");
-    const day = draft.event.days.find((item) => item.id === dayId);
-    return `缺少 ${day?.label ?? "活動日"}・${organizerVenueSpaceLabel(catalog, venueSpaceId)} 的地圖。`;
-  }
-  if (issue.target && issue.code.startsWith("stale_import_")) {
-    return `${organizerVenueSpaceLabel(catalog, issue.target)}：${issue.message}`;
-  }
-  return issue.message;
-}
-
-function organizerGuidedDraftIssues(draft: OrganizerEventDraft, task: OrganizerGuidedTask, catalog: OrganizerVenueCatalog) {
-  const issues = organizerGuidedTaskIssues(draft, task);
-  return task === "venue"
-    ? [...issues, ...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, catalog)]
-    : issues;
-}
-
-function takeLoginToken() {
-  const url = new URL(window.location.href);
-  const token = url.searchParams.get("login");
-  if (!token) return null;
-  url.searchParams.delete("login");
-  window.history.replaceState(null, "", url);
-  return token;
-}
-
-function useDesktopViewport() {
-  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 1040px)").matches);
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 1040px)");
-    const update = () => setIsDesktop(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return isDesktop;
-}
+import {
+  GUIDED_LABEL, IDLE, READINESS_LABEL, ROLE_LABEL, STATUS_LABEL,
+  STEP_LABEL, mapTemplatePreview, message, organizerDayLabel, organizerGuidedDraftIssues,
+  organizerIssueMessage, organizerSectionLabel, organizerVenueSpaceLabel, takeLoginToken,
+  useDesktopViewport,
+  type Notice,
+  type PendingNavigation,
+} from "./organizer-shared";
 
 export default function OrganizerApp() {
   const [session, setSession] = useState<PortalSession | null>(null);
@@ -1823,48 +1693,3 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
   </div>;
 }
 
-function ReviewPanel({ session, detail, onChanged, setNotice }: {
-  session: PortalSession;
-  detail: OrganizerEventDetail;
-  onChanged: () => Promise<void>;
-  setNotice: (notice: Notice) => void;
-}) {
-  const [editorEmail, setEditorEmail] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
-  const [note, setNote] = useState("");
-  const [reopenReason, setReopenReason] = useState("");
-  const [needsLogin, setNeedsLogin] = useState(false);
-  const [pending, setPending] = useState(false);
-  const owner = detail.event.role === "owner";
-  const act = (promise: Promise<unknown>, success: string) => {
-    setPending(true);
-    setNotice({ kind: "busy", message: "處理中…" });
-    void promise.then(async () => { setNotice({ kind: "ok", message: success }); await onChanged(); }).catch((error) => {
-      if (error instanceof PortalError && error.status === 401) setNeedsLogin(true);
-      setNotice({ kind: "error", message: message(error) });
-    }).finally(() => setPending(false));
-  };
-  const historicalPublication = detail.publication !== null
-    && detail.publication.candidateVersion !== detail.event.version;
-  const reopenBlockedByRemoteState = detail.publication?.status === "failed"
-    && detail.publication.candidateVersion === detail.event.version
-    && detail.publication.started === true;
-  return <section className={styles.panel}>
-    <h3>送審與發布狀態</h3>
-    {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
-    <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
-    {owner && <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), "協作者邀請已寄出。"); }}><input type="email" required placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit">邀請協作者</button><button type="button" className={styles.dangerText} disabled={!editorEmail} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form></div>}
-    {session.isAdmin && <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), "負責人邀請已寄出。"); }}><input type="email" required placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit">新增負責人</button><button type="button" className={styles.dangerText} disabled={!ownerEmail} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form></div>}
-    {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <div className={styles.subpanel}><h4>送審</h4><p>{detail.event.operation === "AMEND" ? "送審會固定這一版的修正宣告、名單與地圖。核准後由系統自動發布；原公開版本會保留到修正部署完成。" : "送審後，活動代碼就不能再更改。"}</p><button type="button" disabled={detail.event.operation === "AMEND" && !detail.publicationAvailable} onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出審閱</button></div>}
-    {session.isAdmin && detail.event.status === "submitted" && <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准即同意這一版送審內容公開，系統會自動開始發布。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={!detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "核准已記錄，請查看下方發布進度。")}>核准並發布</button></div></div>}
-    {(session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && (reopenBlockedByRemoteState ? <div className={styles.subpanel}><h4>退回修改</h4><p className={styles.warning}>發布儲存庫已有這筆工作的遠端紀錄，無法安全退回修改；請聯絡網站管理者。</p></div> : <div className={styles.subpanel}><h4>退回修改</h4><p>系統會先確認是否可安全退回修改；完成後會保留活動代碼與歷史記錄，讓你繼續編輯。</p><textarea aria-label="退回理由" required maxLength={1000} placeholder="請填寫退回理由" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} /><button type="button" disabled={pending || !reopenReason.trim()} onClick={() => act(reopenOrganizerEvent(detail.event.id, detail.event.version, reopenReason), "已退回修改，現在可以繼續編輯活動內容。")}>退回修改</button></div>)}
-    {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>自動發布尚未啟用，{detail.event.operation === "AMEND" ? "本次修正" : "活動"}尚未公開。內容會保留，請聯絡網站管理者完成發布啟用檢查。</p>}
-    {detail.publication && <div className={styles.subpanel} aria-live="polite"><h4>{historicalPublication ? `發布狀態（第 ${detail.publication.candidateVersion} 版歷史紀錄）` : "發布狀態"}</h4>{historicalPublication && <p className={styles.warning}>這是舊版本的發布紀錄，目前版本為第 {detail.event.version} 版；舊工作不會再重試，是否可編輯依目前活動狀態決定。</p>}<p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
-      <ol>{publicationProgress(detail.publication).map((stage) => <li key={stage.label}>{stage.label}：{({ complete: "已完成", current: "處理中", failed: "未完成，發布停止", pending: "尚未開始" })[stage.state]}</li>)}</ol>
-      {detail.publication.status !== "published" && !historicalPublication && <p>公開結果確認成功前，活動尚未完成發布。</p>}
-      {detail.publication.status === "failed" && !historicalPublication && <p className={styles.warning}>{publicationFailureMessage(detail.publication, detail.publicationAvailable === true)}</p>}
-      {(session.isAdmin || owner) && !historicalPublication && detail.publication.status === "failed" && detail.publication.retryable && <button type="button" disabled={!detail.publicationAvailable || pending} onClick={() => act(retryOrganizerPublication(detail.publication!.id), "已要求從失敗步驟繼續，請查看發布進度。")}>重試發布</button>}
-      <details><summary>技術詳細資訊</summary><p>工作：{detail.publication.id}</p><p>步驟：{detail.publication.step}</p>{detail.publication.failureCode && <p>錯誤代碼：{detail.publication.failureCode}</p>}{detail.publication.error && <p>{detail.publication.error}</p>}</details>
-    </div>}
-  </section>;
-}
