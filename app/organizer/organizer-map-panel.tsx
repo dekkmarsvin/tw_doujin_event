@@ -297,7 +297,14 @@ export function OrganizerMapPanel({ detail, onChanged }: {
           : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}
       </span>
       </div>
-    </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
+    </> : <div className={styles.placeholder}>
+      {/* The next step is a job with a name, not a menu of starting points:
+          the reader arrived here because this day and this space have no map
+          yet, so that is what the button says (#221 Phase 5). */}
+      <p>{organizerDayLabel(detail.draft.event.days, periodKey)}・{organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}尚未建立地圖。</p>
+      <button type="button" disabled={!editable || !assignment} onClick={startBlank}>建立這張地圖</button>
+      <p>也可以上傳配置圖，或從同一個場館空間的其他活動日複製。</p>
+    </div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>
       <section ref={closeDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-map-title" aria-describedby="unsaved-map-description" tabIndex={-1}>
         <h3 id="unsaved-map-title">尚有未儲存變更</h3>

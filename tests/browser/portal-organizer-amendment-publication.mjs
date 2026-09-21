@@ -16,6 +16,20 @@ const { hmacSign } = await runner.import("/app/portal-crypto.ts");
 const { createOrganizerPublicationExecutor, PublicationFailure } = await runner.import("/app/organizer-publication.ts");
 const { buildApprovedPublicationArtifacts, buildPublicationMainStage } = await runner.import("/app/publication-artifacts.ts");
 const data = await amendmentFixture(runner);
+
+/** Every page here opens /organizer fresh, where an amendment candidate is
+ * still in the guided flow: the six sections live behind 查看全部項目, and the
+ * rail's section list is addressed by name because 待修正清單 holds a button
+ * whose name starts the same way (#221). */
+const openSection = async (page, name) => {
+  const sections = page.getByRole("group", { name: "活動項目" });
+  const showAll = page.getByRole("button", { name: "查看全部項目", exact: true });
+  // count() does not wait, so the workspace has to have rendered one of the two
+  // before asking which it is; the loser of the race times out harmlessly.
+  await Promise.race([sections.waitFor().catch(() => {}), showAll.waitFor().catch(() => {})]);
+  if (await sections.count() === 0) await showAll.click();
+  await sections.getByRole("button", { name }).click();
+};
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-ui-publication" } }));
 const db = await mf.getD1Database("DB");
 const repo = createIdentityRepository(db);
@@ -123,7 +137,7 @@ try {
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
   });
   const owner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
-  await owner.getByRole("button", { name: /送審與發布/ }).first().click();
+  await openSection(owner, /^送審與發布/);
   await owner.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();
   const form = owner.getByRole("form", { name: "修正宣告表單" }); await form.waitFor();
   await form.getByRole("combobox", { name: "變動類型", exact: true }).selectOption("released");
@@ -134,7 +148,7 @@ try {
   await owner.getByRole("heading", { name: "1. 換手", exact: true }).waitFor();
   await journey.capture(owner,"amendment-real-d1-impact");
   const candidate = (await db.prepare("SELECT id FROM organizer_event_candidates WHERE publication_operation='AMEND'").first()).id;
-  await owner.getByRole("button", { name: /^4 地圖/ }).click();
+  await openSection(owner, /^地圖/);
   await owner.getByRole("button", { name: "第一天", exact: true }).click();
   const backgroundImage = owner.locator('svg[aria-label^="可編輯"] image');
   await backgroundImage.waitFor();
@@ -151,7 +165,7 @@ try {
   await owner.locator('[data-slot-code="S02"]').click();
   await owner.getByRole("status").filter({ hasText: "S02 · 確認接手社" }).waitFor();
   await journey.capture(owner,"amendment-real-d1-preview");
-  await owner.getByRole("button", { name: /送審與發布/ }).first().click();
+  await openSection(owner, /^送審與發布/);
   await owner.getByRole("button", { name: "送出審閱", exact: true }).click();
   await owner.getByText("已送交網站管理者審閱。", { exact: true }).waitFor();
   const approvedSnapshot = await repo.getOrganizerSubmissionSnapshot(candidate,2);
@@ -159,7 +173,7 @@ try {
   await journey.capture(owner,"amendment-real-d1-submitted"); await owner.close();
   const admin = await journey.page({ url: `${base}/organizer`, routes: routes("admin") });
   await admin.getByRole("button", { name: /發布後修正/ }).click();
-  await admin.getByRole("button", { name: /送審與發布/ }).first().click();
+  await openSection(admin, /^送審與發布/);
   await admin.getByRole("textbox", { name: "審閱說明", exact: true }).fill("隔離合成資料核准");
   await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
   await admin.getByRole("button", { name: "重試發布", exact: true }).waitFor();
@@ -171,7 +185,7 @@ try {
   await journey.capture(admin,"amendment-real-d1-recoverable-failure"); await admin.close();
   const retryOwner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
   await retryOwner.getByRole("button", { name: /發布後修正/ }).click();
-  await retryOwner.getByRole("button", { name: /送審與發布/ }).first().click();
+  await openSection(retryOwner, /^送審與發布/);
   await retryOwner.getByRole("button", { name: "重試發布", exact: true }).click();
   await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor();
   const completed = await repo.getLatestOrganizerPublicationJob(candidate);

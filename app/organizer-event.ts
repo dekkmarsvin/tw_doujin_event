@@ -86,15 +86,28 @@ function localDate(now: Date) {
 
 /** A new day continues the run: the day after the last dated day, or the
  * author's own today when the draft has no dated day yet. */
+/** 第一天、第二天 rather than 第 1 日: the organizer is answering "which days
+ * is the event on", and the ordinal is a name for the day, not a field they
+ * are being asked to understand (#221 2.2). */
+const DAY_ORDINALS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+function dayOrdinalLabel(ordinal: number) {
+  return `第${DAY_ORDINALS[ordinal - 1] ?? ordinal}天`;
+}
+
 export function nextOrganizerEventDay(days: readonly OrganizerEventDay[], now: Date): OrganizerEventDay {
   const taken = new Set(days.map((day) => day.id));
   let ordinal = 1;
   while (taken.has(String(ordinal))) ordinal += 1;
   const last = days.filter((day) => DATE.test(day.date) && !Number.isNaN(Date.parse(`${day.date}T00:00:00Z`))).at(-1);
+  /* The very first day is a question, not an assumption. Filling it with
+   * today made an unanswered field look answered, and the step counted itself
+   * complete on a date nobody had chosen. Later days still follow the last
+   * dated one, and fall back to today only because something is already there
+   * to follow (#221 2.2). */
   const date = last
     ? new Date(Date.parse(`${last.date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)
-    : localDate(now);
-  return { id: String(ordinal), label: `第 ${ordinal} 日`, date };
+    : days.length === 0 ? "" : localDate(now);
+  return { id: String(ordinal), label: dayOrdinalLabel(ordinal), date };
 }
 
 /** Areas are a fact of the booth list, not something to type before the list

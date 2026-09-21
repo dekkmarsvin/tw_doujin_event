@@ -248,10 +248,14 @@ try {
   await expandTechnicalDetails(owner, ownerReview);
   await capture(owner, "organizer-reopen-owner-history", { panel: ownerReview });
 
-  const steps = owner.locator('ol[aria-label="活動項目"]');
-  await steps.getByRole("button", { name: /活動/ }).click();
+  // #221: the numbered strip is gone and the readiness rail is the only
+  // navigation; it was already carrying the same sections and the same
+  // 尚未儲存 state. The name field now carries a worked example, so it is
+  // matched by prefix.
+  const steps = owner.getByRole("group", { name: "活動項目" });
+  await steps.getByRole("button", { name: /^活動/ }).click();
   await owner.getByRole("heading", { name: "活動基本資料", exact: true }).waitFor();
-  const eventName = owner.getByLabel("活動名稱", { exact: true });
+  const eventName = owner.getByLabel(/^活動名稱/);
   assert.equal(await eventName.isDisabled(), false, "changes_requested reopens the event editor");
   await eventName.fill("#242 可編輯的活動資料");
   assert.match(await steps.innerText(), /尚未儲存/);

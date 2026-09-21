@@ -10,7 +10,7 @@ import { validateOrganizerVenueCatalogAssignments, type OrganizerVenueCatalog, t
 import { type OrganizerGuidedTask } from "../organizer-workspace";
 import { VenueCatalogCreator } from "./organizer-import-panel";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
-import { GUIDED_LABEL, mapTemplatePreview, message, organizerGuidedDraftIssues } from "./organizer-shared";
+import { GUIDED_LABEL, TASK_QUESTION, mapTemplatePreview, message, organizerGuidedDraftIssues } from "./organizer-shared";
 import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import styles from "./organizer.module.css";
 import { useCallback, useEffect, useState } from "react";
@@ -35,6 +35,11 @@ export function DraftForm({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  /* A task opened for the first time is not a task filled in wrongly. The
+   * issue list is what the save says back, so it waits for the press -- except
+   * where it is also the reason the button is disabled, which must never be
+   * unexplained (#221 4.1). */
+  const [attempted, setAttempted] = useState(false);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
   const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
@@ -59,7 +64,16 @@ export function DraftForm({
    * experiences as the save, so the buttons stay busy for its full length
    * rather than for the write alone — the shared line at the top of the
    * workspace is too far from the button to read as a reply to the press. */
-  const save = useCallback(async (after?: (version: number) => Promise<void>) => {
+  const save = useCallback(async (after?: (version: number) => Promise<void>, requireTask = false) => {
+    setAttempted(true);
+    /* 儲存並繼續 checks the task it is standing on, and an incomplete one keeps
+     * what was typed, says what is missing and does not move on. 儲存並離開 and
+     * the leave dialog pass through: a half-finished draft is a legitimate
+     * thing to store and come back to (#221 4.2, 4.3). */
+    if (requireTask && guidedTask && organizerGuidedDraftIssues(draft, guidedTask, venueCatalog).length > 0) {
+      setResult({ ok: false, text: "上方還有沒填完的項目，補齊後才能繼續。" });
+      return false;
+    }
     setSaving(true);
     setResult(null);
     let result: Awaited<ReturnType<typeof saveOrganizerEvent>>;
@@ -83,7 +97,7 @@ export function DraftForm({
     } finally {
       setSaving(false);
     }
-  }, [detail.event.id, draft, expectedVersion, onChanged]);
+  }, [detail.event.id, draft, expectedVersion, guidedTask, onChanged, venueCatalog]);
   useEffect(() => {
     onSaveReady?.(() => save());
     return () => onSaveReady?.(null);
@@ -98,22 +112,25 @@ export function DraftForm({
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
-    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3></div></div>
+    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3>
+      {guidedTask && <p>{TASK_QUESTION[guidedTask]}</p>}</div></div>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
-        <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /></label>
-        <label>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "小寫英數字與連字號"}</small></label>
-        <label>官方來源說明<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /></label>
-        <label>官方來源網址（必填）<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /></label>
+        <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /><small>例如：秋日同人交流會 2026</small></label>
+        <label>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "例如：autumn-doujin-2026。使用小寫英數字與連字號；首次送審後不能修改。"}</small></label>
+        <label>來源名稱<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /><small>例如：秋日同人交流會官方網站</small></label>
+        <label>官方公告網址<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /><small>貼上主辦單位的活動頁或公告貼文網址。</small></label>
         <OrganizerReferencePanel candidateId={detail.event.id} expectedVersion={expectedVersion}
           catalog={detail.referenceCatalog} selection={draft.references} editable={editable}
           onChange={(references) => update((next) => ({ ...next, references }))} />
       </>}
-      {showDays && <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>新增日期</button></div>
+      {showDays && <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>新增一天</button></div>
         {draft.event.days.map((day, index) => <div className={styles.inlineFields} key={`${index}-${day.id}`}>
-          <label>代碼<input disabled={!editable} aria-label={`第 ${index + 1} 日代碼`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} /></label>
-          <label>名稱<input disabled={!editable} aria-label={`第 ${index + 1} 日名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} /></label>
-          <label>日期<input disabled={!editable} aria-label={`第 ${index + 1} 日日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} /></label>
+          <label>{day.label || `第 ${index + 1} 天`}<input disabled={!editable} aria-label={`${day.label || `第 ${index + 1} 天`}日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} /></label>
+          <details className={styles.dayAdvanced}><summary>改這一天的名稱或代碼</summary>
+            <label>名稱<input disabled={!editable} aria-label={`第 ${index + 1} 天名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} /></label>
+            <label>代碼<input disabled={!editable} aria-label={`第 ${index + 1} 天代碼`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} /><small>攤位名單用這個代碼指到這一天，通常不需要改。</small></label>
+          </details>
           <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.event.days.splice(index, 1); return next; })}>移除</button>
         </div>)}
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
@@ -180,17 +197,17 @@ export function DraftForm({
             next.venue.assignments[index].areaMode = space?.defaultAreaMode ?? "imported";
             next.venue.assignments[index].areaIds = space?.defaultAreaMode === "none" ? ["ALL"] : [];
             return next;
-          })}><option value="">請選擇使用空間</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原使用空間已不存在</option>}</select><small>場館內的館別或樓層，一個空間一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到空間？立即新增</button></label>
-          <label>展區方式<select disabled={!editable} value={assignment.areaMode ?? "imported"} onChange={(event) => update((next) => {
+          })}><option value="">請選擇使用空間</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原使用空間已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個空間一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到空間？立即新增</button></label>
+          <label>攤位名單有另外區分展區嗎？<select disabled={!editable} value={assignment.areaMode ?? "imported"} onChange={(event) => update((next) => {
             const areaMode = event.target.value as OrganizerVenueSpaceAreaMode;
             next.venue.assignments[index].areaMode = areaMode;
             next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
             return next;
-          })}><option value="imported">由攤位名單帶入</option><option value="none">無分區</option></select><small>{assignment.areaMode === "none" ? "這個空間沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
-          <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
+          })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個空間沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
+          {!guidedTask && <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
             {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
             {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}
-          </select><MapTemplatePreview template={assignment.mapTemplate} /></label>
+          </select><MapTemplatePreview template={assignment.mapTemplate} /></label>}
           <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>
         </div>;
       })}
@@ -199,9 +216,9 @@ export function DraftForm({
     {/* The same pending item is also listed in 準備進度, so this block carries a
         name: a reader arriving at the announcement needs to know which of the
         two they are hearing, and it is the one beside the controls that fix it. */}
-    {taskIssues.length > 0 && <div className={styles.taskIssues} role="group" aria-label="這個表單尚待完成的項目" aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
+    {(attempted || venueIssues.length > 0) && taskIssues.length > 0 && <div className={styles.taskIssues} role="group" aria-label="這個表單尚待完成的項目" aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
     <div className={styles.formActions}>
-      <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
+      <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved, true); }}>{saving ? "儲存中…" : saveLabel}</button>
       {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
       {/* One line, one truth. The result replaces the dirty state rather than
           sitting beside a contradiction of it. */}

@@ -14,8 +14,8 @@ try {
   await page.getByLabel("負責人 Email", { exact: true }).fill(ADMIN);
   await page.getByRole("button", { name: "建立並邀請", exact: true }).click();
   await page.getByLabel("活動代碼", { exact: false }).fill(`references-${Date.now()}`);
-  await page.getByLabel("官方來源說明", { exact: true }).fill("測試主辦提供");
-  await page.getByLabel("官方來源網址（必填）", { exact: true }).fill("https://organizer.example/event");
+  await page.getByLabel(/^來源名稱/).fill("測試主辦提供");
+  await page.getByLabel(/^官方公告網址/).fill("https://organizer.example/event");
   await page.getByRole("button", { name: "建立主辦單位", exact: true }).click();
   await page.getByLabel("主辦名稱", { exact: true }).fill("測試主辦");
   await page.getByLabel("主辦官方網址", { exact: true }).fill("http://organizer.example/");
@@ -50,6 +50,9 @@ try {
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("lead");
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("button", { name: "建立第一個活動日", exact: true }).click();
+  // #221: the first date is asked for rather than assumed, so the step does
+  // not pass until someone answers it.
+  await page.getByLabel("第一天日期", { exact: true }).fill("2026-11-07");
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   // #219: an organizer usually has one official address, and 「全館」 rarely has
   // a page of its own, so the space URL is optional and the form names what it
@@ -96,7 +99,9 @@ try {
   assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
   await page.getByRole("combobox", { name: /^使用空間/ }).selectOption("zhengyan-exhibition-area");
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
-  await page.getByRole("button", { name: "5 檢查與預覽 需先完成前面步驟", exact: true }).click();
+  // #221: one navigation. The numbered strip above the panel is gone; the
+  // readiness rail was always carrying the same six sections.
+  await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與預覽/ }).click();
   await page.getByRole("button", { name: "建立預覽", exact: true }).click();
   await page.getByText("爭艷館展區・花博公園爭艷館", { exact: true }).waitFor();
   await page.getByText("原創作品、二次創作", { exact: true }).waitFor();

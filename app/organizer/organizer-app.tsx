@@ -394,7 +394,7 @@ function WorkspaceSurface({
     <div className={styles.workspaceHead}>
       <div><p className={styles.contextLine}>{ROLE_LABEL[detail.event.role] ?? detail.event.role}・{STATUS_LABEL[detail.event.status]}{detail.event.operation === "AMEND" ? "・發布後修正" : ""}</p><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
     </div>
-    {guided ? <div className={styles.workspaceGrid}>
+    {guided ? <div className={styles.guidedOnly}>
       <GuidedTaskStation
         detail={detail}
         task={guidedTask}
@@ -409,24 +409,11 @@ function WorkspaceSurface({
         persistLocation={persistLocation}
         setNotice={setNotice}
       />
-      <ReadinessRail detail={detail} onSection={onSection} compact liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={guidedTask === "venue" ? "venue" : "event"} />
     </div> : <>
       {detail.workspace.mode === "guided" && <div className={styles.guideBanner}>
         <div><strong>你正在查看全部項目</strong><p>下次登入仍會回到上次的基本設定步驟。</p></div>
         <button type="button" className={styles.secondary} onClick={onReturnToGuide}>回到基本設定</button>
       </div>}
-      <ol className={styles.steps} aria-label="活動項目">
-        {ORGANIZER_WORKSPACE_SECTIONS.map((item, index) => {
-          const state = detail.workspace.readiness.sections.find((entry) => entry.id === item)?.state ?? "available";
-          const liveIndex = activeLiveSection ? ORGANIZER_WORKSPACE_SECTIONS.indexOf(activeLiveSection) : -1;
-          const liveLabel = liveDirty && activeLiveSection
-            ? item === activeLiveSection ? "尚未儲存" : index > liveIndex ? "需先儲存" : READINESS_LABEL[state]
-            : READINESS_LABEL[state];
-          return <li key={item}><button type="button" aria-current={item === section ? "step" : undefined} onClick={() => onSection(item)}>
-            <span className={styles.stepNumber}>{index + 1}</span><span>{organizerSectionLabel(detail, item)}<small>{liveLabel}</small></span>
-          </button></li>;
-        })}
-      </ol>
       <div className={styles.workspaceGrid}>
         {/* Saving reloads the candidate, and the new version in the key is what
             re-seeds each panel from it. The map is the exception: its save
@@ -464,11 +451,12 @@ function GuidedTaskStation({
   persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
   setNotice: (notice: Notice) => void;
 }) {
-  const [liveDraft, setLiveDraft] = useState(detail.draft);
-  const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
+  /* The station keeps only the dirty flag now that progress is counted from
+   * the stored draft: the live draft still travels up, because the rail the
+   * reader sees after onboarding is built from it. */
   const [liveDirty, setLiveDirty] = useState(false);
   const taskIndex = ORGANIZER_GUIDED_TASKS.indexOf(task);
-  const completed = ORGANIZER_GUIDED_TASKS.filter((item) => organizerGuidedDraftIssues(liveDraft, item, liveVenueCatalog).length === 0).length;
+  const completed = ORGANIZER_GUIDED_TASKS.filter((item) => organizerGuidedDraftIssues(detail.draft, item, detail.venueCatalog).length === 0).length;
   const nextTask = ORGANIZER_GUIDED_TASKS[taskIndex + 1] ?? null;
   const section = task === "venue" ? "venue" : "event";
 
@@ -491,7 +479,7 @@ function GuidedTaskStation({
     </div>
     <ol className={styles.guidedSteps} aria-label="基本設定步驟">
       {ORGANIZER_GUIDED_TASKS.map((item, index) => {
-        const done = organizerGuidedDraftIssues(liveDraft, item, liveVenueCatalog).length === 0;
+        const done = organizerGuidedDraftIssues(detail.draft, item, detail.venueCatalog).length === 0;
         const state = liveDirty && item === task ? "尚未儲存" : done ? "已完成" : item === task ? "目前步驟" : "尚未完成";
         return <li key={item}><button type="button" aria-current={item === task ? "step" : undefined} onClick={() => onTask(item)}>
           <span>{index + 1}</span><span>{GUIDED_LABEL[item]}<small>{state}</small></span>
@@ -509,7 +497,7 @@ function GuidedTaskStation({
       onChanged={onChanged}
       onDirtyChange={onDirtyChange}
       onSaveReady={onDraftSaveReady}
-      onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); onLiveDraftStateChange(nextDraft, dirty, catalog); }}
+      onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDirty(dirty); onLiveDraftStateChange(nextDraft, dirty, catalog); }}
     />
     <div className={styles.exploreRow}><button type="button" className={styles.textButton} onClick={onShowAll}>查看全部項目</button><span>可以先看後面的項目，不會影響目前進度。</span></div>
   </section>;
@@ -556,7 +544,10 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
     <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
       下一步：{organizerSectionLabel(detail, nextSection)}
     </button>
-    <div className={styles.readinessList}>{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
+    {/* Named, because this is now the only way to reach a section: the strip
+        that used to carry 活動項目 above the panel was a second copy of this
+        list, kept in step by hand (#221 1.1). */}
+    <div className={styles.readinessList} role="group" aria-label="活動項目">{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
       <span>{organizerSectionLabel(detail, item.id)}</span><small data-state={item.state}>{liveDirty && liveSection
         ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
         : READINESS_LABEL[item.state]}</small>
