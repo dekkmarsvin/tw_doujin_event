@@ -1773,12 +1773,18 @@ export function createCirclePortalHandlers({
     const name = normalizeOrganizerVenueName(body?.name);
     const sourceUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
     const spaceName = normalizeOrganizerVenueName(initialSpace?.name);
-    const spaceSourceUrl = normalizeOrganizerVenueSourceUrl(initialSpace?.sourceUrl);
+    /* null is blank and undefined is malformed, and the two answer
+     * differently: 「全館」 rarely has a page of its own, so a blank space URL
+     * inherits the venue it is being created under rather than making the
+     * organizer paste the same address twice. Every row still carries an
+     * official HTTPS source (#219). */
+    const requestedSpaceUrl = normalizeOrganizerVenueSourceUrl(initialSpace?.sourceUrl);
     const defaultAreaMode = initialSpace?.defaultAreaMode ?? "imported";
-    if (!name || !spaceName || !sourceUrl || !spaceSourceUrl
+    if (!name || !spaceName || !sourceUrl || requestedSpaceUrl === undefined
       || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
       return json({ error: "請填寫場館名稱、使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
     }
+    const spaceSourceUrl = requestedSpaceUrl ?? sourceUrl;
     const venueId = `venue-${crypto.randomUUID()}`;
     const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
     const now = config.now();
@@ -1810,11 +1816,16 @@ export function createCirclePortalHandlers({
     if (!access.ok) return access.response;
     const body = await readJson(request);
     const name = normalizeOrganizerVenueName(body?.name);
-    const sourceUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
+    const requestedUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
     const defaultAreaMode = body?.defaultAreaMode ?? "imported";
-    if (!name || !sourceUrl || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
+    if (!name || requestedUrl === undefined || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
       return json({ error: "請填寫使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
     }
+    // Blank inherits the venue this space belongs to (#219). The catalog read
+    // also answers the missing venue here rather than leaving it to the write.
+    const parent = (await repository.listOrganizerVenueCatalog()).venues.find((item) => item.id === venueId);
+    if (!parent) return json({ error: "找不到這個場館。" }, 404);
+    const sourceUrl = requestedUrl ?? parent.sourceUrl;
     const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
     const now = config.now();
     const created = await repository.createOrganizerVenueSpace({

@@ -282,24 +282,32 @@ export function OrganizerMapPanel({ detail, onChanged }: {
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step
-          in the history that records nothing. A map that does not exist yet is
-          always savable -- there is no revision to compare it against. */}
-      <div className={styles.mapActions}>
-        <button type="button" disabled={!editable || savingMap || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
+          in the history that records nothing. An empty canvas is the same step
+          through the other door -- a first save of a map with no booths also
+          moves the candidate on and writes a revision recording nothing, and
+          then counts itself as 1 張地圖 (#218). */}
+      <div className={styles.mapActions} role="group" aria-label="地圖儲存動作">
+        <button type="button" disabled={!editable || savingMap || !layoutHasContent(layout) || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
         <button type="button" className={styles.ghost} disabled={savingMap} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
         {/* One line, one truth: the result replaces the dirty state instead of
           standing beside a contradiction of it (#220). */}
       <span aria-live="polite" className={saveResult && !saveResult.ok ? styles.error : undefined}>
-        {savingMap ? "儲存中，請稍候。" : saveResult ? saveResult.text : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}
+        {savingMap ? "儲存中，請稍候。" : saveResult ? saveResult.text
+          : !layoutHasContent(layout) ? "先在畫布上放入至少一個攤位或設施，才能儲存這張地圖。"
+          : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}
       </span>
       </div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>
       <section ref={closeDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-map-title" aria-describedby="unsaved-map-description" tabIndex={-1}>
         <h3 id="unsaved-map-title">尚有未儲存變更</h3>
-        <p id="unsaved-map-description">要先儲存地圖，再關閉編輯器嗎？</p>
+        <p id="unsaved-map-description">{layoutHasContent(layout)
+          ? "要先儲存地圖，再關閉編輯器嗎？"
+          : "這張地圖還沒有任何攤位或設施，不能儲存。關閉就會放棄畫面上的內容。"}</p>
         <div className={styles.dialogActions}>
-          <button type="button" disabled={!editable || savingMap} onClick={() => { void saveMap(true); }}>儲存並關閉</button>
+          {/* The same rule as the panel behind it: a map with nothing on it is
+              not saved on the way out either (#218). */}
+          <button type="button" disabled={!editable || savingMap || !layoutHasContent(layout)} onClick={() => { void saveMap(true); }}>儲存並關閉</button>
           <button type="button" className={styles.secondary} onClick={closeEditor}>放棄</button>
           <button type="button" className={styles.ghost} onClick={() => setConfirmingClose(false)}>取消</button>
         </div>

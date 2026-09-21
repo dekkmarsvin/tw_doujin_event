@@ -6,7 +6,7 @@
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
 import { isOrganizerAreaId, withOrganizerImportedAreaIds } from "../organizer-event";
 import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
-import { type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
+import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerDayLabel, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
 import styles from "./organizer.module.css";
@@ -417,11 +417,32 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
   const [venueName, setVenueName] = useState("");
   const [venueUrl, setVenueUrl] = useState("");
   const [spaceName, setSpaceName] = useState("");
-  const [spaceUrl, setSpaceUrl] = useState(venue?.sourceUrl ?? "");
+  const [spaceUrl, setSpaceUrl] = useState("");
   const [defaultAreaMode, setDefaultAreaMode] = useState<OrganizerVenueSpaceAreaMode>("imported");
   const [notice, setLocalNotice] = useState<Notice>(IDLE);
-  return <form className={styles.catalogCreator} onSubmit={(event) => {
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  /* 「全館」 rarely has a page of its own, and an organizer usually has one
+   * official address. Leaving the space blank inherits the venue's URL
+   * instead of asking for the same thing twice; the row still carries an
+   * official HTTPS source, which is what the contract asks for (#219). */
+  const inheritedUrl = venue?.sourceUrl ?? venueUrl.trim();
+  /* noValidate because the browser bubble is not this app's error surface:
+   * every other field on this page answers inline, under the field it is
+   * about. Owning the check here means owning all four, not two. */
+  return <form className={styles.catalogCreator} noValidate onSubmit={(event) => {
     event.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!venue) {
+      if (!venueName.trim()) errors.venueName = "請填寫場館名稱。";
+      const source = normalizeOrganizerVenueSourceUrl(venueUrl);
+      if (!source) errors.venueUrl = source === undefined ? "場館官方網址必須是 https:// 開頭的網址。" : "請填寫場館官方網址。";
+    }
+    if (!spaceName.trim()) errors.spaceName = "請填寫使用空間名稱。";
+    if (normalizeOrganizerVenueSourceUrl(spaceUrl) === undefined) {
+      errors.spaceUrl = "空間官方網址必須是 https:// 開頭的網址；留空會沿用場館網址。";
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) { setLocalNotice(IDLE); return; }
     setLocalNotice({ kind: "busy", message: "建立中…" });
     const action = venue
       ? createOrganizerVenueSpace(candidateId, venue.id, { name: spaceName, sourceUrl: spaceUrl, defaultAreaMode })
@@ -439,11 +460,14 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
     <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的使用空間` : "建立新場館"}</h4><p>建立後會立即出現在下方選單中。</p></div></div>
     <div className={styles.formGrid}>
       {!venue && <>
-        <label>場館名稱<input required maxLength={120} value={venueName} onChange={(event) => setVenueName(event.target.value)} /></label>
-        <label>場館官方網址<input required type="url" placeholder="https://" value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} /></label>
+        <label>場館名稱<input maxLength={120} aria-invalid={fieldErrors.venueName ? true : undefined} value={venueName} onChange={(event) => setVenueName(event.target.value)} />{fieldErrors.venueName && <small className={styles.fieldError}>{fieldErrors.venueName}</small>}</label>
+        <label>場館官方網址<input type="url" placeholder="https://" aria-invalid={fieldErrors.venueUrl ? true : undefined} value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} />{fieldErrors.venueUrl && <small className={styles.fieldError}>{fieldErrors.venueUrl}</small>}</label>
       </>}
-      <label>使用空間名稱<input required maxLength={120} placeholder="例如：全館、1F 展場" value={spaceName} onChange={(event) => setSpaceName(event.target.value)} /></label>
-      <label>空間來源網址<input required type="url" placeholder="https://" value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} /></label>
+      <label>使用空間名稱<input maxLength={120} placeholder="例如：全館、1F 展場" aria-invalid={fieldErrors.spaceName ? true : undefined} value={spaceName} onChange={(event) => setSpaceName(event.target.value)} />{fieldErrors.spaceName && <small className={styles.fieldError}>{fieldErrors.spaceName}</small>}</label>
+      <label>空間官方網址（選填）<input type="url" placeholder="https://" aria-invalid={fieldErrors.spaceUrl ? true : undefined} value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} />
+        {fieldErrors.spaceUrl
+          ? <small className={styles.fieldError}>{fieldErrors.spaceUrl}</small>
+          : <small>{inheritedUrl ? `留空沿用場館網址：${inheritedUrl}` : "留空沿用場館官方網址，不必重打一次。"}</small>}</label>
       <label>新活動的預設展區方式<select value={defaultAreaMode} onChange={(event) => setDefaultAreaMode(event.target.value as OrganizerVenueSpaceAreaMode)}>
         <option value="imported">由攤位名單帶入展區</option><option value="none">無分區（使用 ALL）</option>
       </select></label>

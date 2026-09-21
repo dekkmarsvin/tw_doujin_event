@@ -51,6 +51,26 @@ try {
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("button", { name: "建立第一個活動日", exact: true }).click();
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
+  // #219: an organizer usually has one official address, and 「全館」 rarely has
+  // a page of its own, so the space URL is optional and the form names what it
+  // would inherit instead of leaving it implied. The required fields answer
+  // inline, under the field, rather than through the browser's own bubble.
+  await page.getByRole("button", { name: "建立新場館", exact: true }).first().click();
+  await page.getByRole("button", { name: "建立並選取", exact: true }).click();
+  await page.getByText("請填寫場館名稱。", { exact: true }).waitFor();
+  await page.getByText("請填寫場館官方網址。", { exact: true }).waitFor();
+  await page.getByText("請填寫使用空間名稱。", { exact: true }).waitFor();
+  await journey.capture(page, "venue-creator-inline-errors");
+  await page.getByLabel(/^場館名稱/).fill("三重體育館");
+  await page.getByLabel(/^場館官方網址/).fill("https://venue.example/sanchong");
+  await page.getByLabel(/^使用空間名稱/).fill("全館");
+  await page.getByText("留空沿用場館網址：https://venue.example/sanchong", { exact: true }).waitFor();
+  await journey.capture(page, "venue-creator-inherited-url");
+  await page.getByRole("button", { name: "建立並選取", exact: true }).click();
+  await page.getByRole("combobox", { name: /^場館/ }).waitFor();
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).locator("option:checked").textContent(), "三重體育館");
+  // Put the step back where the rest of this journey expects it.
+  await page.getByRole("button", { name: "移除此空間", exact: true }).click();
   await page.getByRole("button", { name: "新增使用空間", exact: true }).click();
   // #222: a new row is empty, and saving stays refused until both choices are
   // made. The venue used to be picked for the owner and the space along with
