@@ -59,6 +59,14 @@ try {
   assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
   await page.getByText("使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。", { exact: true }).waitFor();
   await journey.capture(page, "references-venue-unselected");
+  // The dialog covers the panel that names the pending row, so a refused
+  // 儲存並切換 used to read as nothing happening at all.
+  await page.getByRole("button", { name: "查看全部項目", exact: true }).click();
+  const unsaved = page.getByRole("dialog", { name: "尚有未儲存變更" });
+  await unsaved.getByRole("button", { name: "儲存並切換", exact: true }).click();
+  await unsaved.getByText("沒有儲存成功。請按「取消」回到表單，照上面列出的說明處理後再試一次。", { exact: true }).waitFor();
+  await journey.capture(page, "references-venue-save-refused");
+  await unsaved.getByRole("button", { name: "取消", exact: true }).click();
   await page.getByRole("combobox", { name: /^場館/ }).selectOption("taipei-expo-park-zhengyan-hall");
   // Choosing a venue does not choose a space either.
   assert.equal(await page.getByRole("combobox", { name: /^使用空間/ }).locator("option:checked").textContent(), "請選擇使用空間");
