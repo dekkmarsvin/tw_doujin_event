@@ -150,8 +150,15 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   ]);
 
   // An empty panel is replaced by the file this event actually needs.
-  assert.match(app, /\{!sheet && <div className=\{styles\.sample\}>/);
-  assert.match(app, /下載範例 CSV/);
+  // #221 3.3: the sample used to disappear the moment a file was picked, which
+  // is exactly when its columns are being matched against the real ones. It is
+  // now open before a file and collapsible after, never absent.
+  assert.ok(app.includes("{!sheet ? <div className={styles.sample}>"), "the sample opens before a file is chosen");
+  assert.ok(app.includes("<summary>查看填寫範例／下載範本</summary>"), "and stays reachable afterwards");
+  // Two downloads: a blank sheet to fill in and a worked example to read are
+  // different needs.
+  assert.match(app, /下載空白 CSV/);
+  assert.match(app, /下載填寫範例/);
   assert.match(app, /URL\.createObjectURL/);
   assert.match(app, /buildOrganizerImportSample/);
 
@@ -223,4 +230,35 @@ test("the workspace stops saying things the organizer cannot act on", async () =
   // 移除 has one documented use, breaking a duplicated booth's tie, so it
   // belongs on the rows an issue names rather than on 170 correct ones.
   assert.ok(app.includes("flagged.has(row.sourceRow)"), "移除 is conditional on the row being named by an issue");
+});
+// #221: behaviour contracts, not copy. Each of these was two things
+// contradicting each other on one screen.
+test("the workspace carries one navigation, one progress count, and counts only what is stored", async () => {
+  const app = await organizerSource();
+
+  // One navigation. The numbered strip above the panel repeated every section,
+  // state and next step the rail already had, kept in step by hand.
+  assert.ok(!app.includes("className={styles.steps}"), "the numbered strip is gone");
+  assert.ok(app.includes('aria-label="活動項目"'), "the rail's section list is the one that carries that name now");
+
+  // The guided station stands alone: a six-section rail beside three basic
+  // settings answers work nobody has reached, in a second progress vocabulary.
+  assert.ok(app.includes("{guided ? <div className={styles.guidedOnly}>"), "no rail beside the guided station");
+
+  // N/3 counts what is stored. Typing a valid value is not a finished step,
+  // and the list below already says 尚未儲存 for the one being edited.
+  assert.ok(app.includes("organizerGuidedDraftIssues(detail.draft, item, detail.venueCatalog)"), "progress reads the saved draft");
+  // The rail still reads the live draft, but for a different question: what is
+  // outstanding right now, unsaved edits included. That is not progress.
+  assert.ok(app.includes("liveDraft && liveDirty ? organizerGuidedDraftIssues"), "outstanding items still follow the screen");
+
+  // 儲存並繼續 checks the task it stands on and refuses to advance; 儲存並離開
+  // and the leave dialog pass through, because a half-finished draft is a
+  // legitimate thing to store and come back to.
+  assert.ok(app.includes("void save(onSaved, true)"), "the primary save requires the task");
+  assert.ok(app.includes("void save(onSecondarySaved)"), "leaving does not");
+
+  // Re-importing replaces the stored list, so the preview says so before it
+  // is confirmed rather than behind another dialog.
+  assert.match(app, /這次匯入會取代目前已儲存的/);
 });

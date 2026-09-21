@@ -209,18 +209,13 @@ export function ImportPanel({ detail, onChanged }: {
       <label>工作表<select disabled={sheets.length < 2} value={sheetName} onChange={(event) => { setSheetName(event.target.value); forgetPreview(); }}><option value="">尚未選擇</option>{sheets.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
       <label>標題列<input type="number" min={1} max={sheet?.rows.length ?? 1} value={headerRow} onChange={(event) => { setHeaderRow(Number(event.target.value)); forgetPreview(); }} /><small>欄位名稱在第幾列。</small></label>
     </div>
-    {!sheet && <div className={styles.sample}>
+    {!sheet ? <div className={styles.sample}>
       <h4>檔案長這樣</h4>
-      <p>活動日與使用空間用這場活動的值；欄位順序可以不同，選好檔案後再對應。</p>
-      <div className={styles.sampleTable}>
-        <table><thead><tr>{sample.header.map((name) => <th key={name}>{name}</th>)}</tr></thead>
-          <tbody>{sample.rows.map((row) => <tr key={row.join("/")}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table>
-      </div>
-      <div className={styles.sampleActions}>
-        <button type="button" className={styles.secondary} onClick={() => downloadText(`${detail.draft.event.id ?? "event"}-攤位名單範例.csv`, toOrganizerCsv([sample.header, ...sample.rows]), "text/csv;charset=utf-8")}>下載範例 CSV</button>
-        <p>主辦內部編號留空也可以匯入，供主辦自行核對，不代表跨活動社團識別。</p>
-      </div>
-    </div>}
+      <ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} />
+    </div> : <details className={styles.sample}>
+      <summary>查看填寫範例／下載範本</summary>
+      <ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} />
+    </details>}
     {sheet && <>
       <div className={styles.mappingGrid}>
         {select("活動日", day, setDay, "活動日代碼", dayOptions)}
@@ -250,6 +245,11 @@ export function ImportPanel({ detail, onChanged }: {
           {suggestedWidth !== null && <button type="button" className={styles.ghost} onClick={() => setBoothCodeWidth(String(suggestedWidth))}>確認使用建議的 {suggestedWidth} 個字元</button>}
         </label>}
       </div>
+      {/* 3.4: the preview is the confirmation step, so what confirming does is
+          said here rather than behind another dialog. */}
+      <p>{detail.import?.rows.length
+        ? `這次匯入會取代目前已儲存的 ${detail.import.rows.length} 列攤位資料。`
+        : "儲存後會以這次確認的資料取代目前的攤位名單。"}</p>
       <div className={styles.row}>
         <button type="button" disabled={!mapping} onClick={() => setPreviewRequested(true)}>預覽對應結果</button>
         <button type="button" className={styles.ghost} disabled={!result || !metadata || !mapping || result.rows.length === 0 || derivedBlocked || result.rejected.length > 0} onClick={() => {
@@ -414,6 +414,24 @@ function ColumnSelect({ label, value, header, required = false, onChange }: {
   return <label className={styles.mappingField}>{label}<select required={required} value={value === null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}><option value="">尚未選擇</option>{header.map((name, index) => <option value={index} key={index}>{index + 1}. {String(name || "（空白）")}</option>)}</select></label>;
 }
 
+/** What this file is supposed to look like. It used to vanish the moment a
+ * file was picked, which is exactly when the columns are being matched against
+ * it. Two downloads, because a blank sheet to fill in and a worked example to
+ * read are different needs (#221 3.2, 3.3). */
+function ImportSampleCard({ sample, fileBase }: { sample: { header: string[]; rows: string[][] }; fileBase: string }) {
+  return <>
+    <p>每列填一個攤位。主辦內部編號可留空。活動日與使用空間請使用本活動的值；欄位順序可以不同，選好檔案後再對應。</p>
+    <div className={styles.sampleTable}>
+      <table><thead><tr>{sample.header.map((name) => <th key={name}>{name}</th>)}</tr></thead>
+        <tbody>{sample.rows.map((row) => <tr key={row.join("/")}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table>
+    </div>
+    <div className={styles.sampleActions}>
+      <button type="button" className={styles.secondary} onClick={() => downloadText(`${fileBase}-攤位名單.csv`, toOrganizerCsv([sample.header]), "text/csv;charset=utf-8")}>下載空白 CSV</button>
+      <button type="button" className={styles.ghost} onClick={() => downloadText(`${fileBase}-攤位名單填寫範例.csv`, toOrganizerCsv([sample.header, ...sample.rows]), "text/csv;charset=utf-8")}>下載填寫範例</button>
+    </div>
+    <p>主辦內部編號留空也可以匯入，供主辦自行核對，不代表跨活動社團識別。</p>
+  </>;
+}
 export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }: {
   candidateId: string;
   venue: OrganizerVenueCatalogVenue | null;

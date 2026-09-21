@@ -64,8 +64,16 @@ export function DraftForm({
    * experiences as the save, so the buttons stay busy for its full length
    * rather than for the write alone — the shared line at the top of the
    * workspace is too far from the button to read as a reply to the press. */
-  const save = useCallback(async (after?: (version: number) => Promise<void>) => {
+  const save = useCallback(async (after?: (version: number) => Promise<void>, requireTask = false) => {
     setAttempted(true);
+    /* 儲存並繼續 checks the task it is standing on, and an incomplete one keeps
+     * what was typed, says what is missing and does not move on. 儲存並離開 and
+     * the leave dialog pass through: a half-finished draft is a legitimate
+     * thing to store and come back to (#221 4.2, 4.3). */
+    if (requireTask && guidedTask && organizerGuidedDraftIssues(draft, guidedTask, venueCatalog).length > 0) {
+      setResult({ ok: false, text: "上方還有沒填完的項目，補齊後才能繼續。" });
+      return false;
+    }
     setSaving(true);
     setResult(null);
     let result: Awaited<ReturnType<typeof saveOrganizerEvent>>;
@@ -89,7 +97,7 @@ export function DraftForm({
     } finally {
       setSaving(false);
     }
-  }, [detail.event.id, draft, expectedVersion, onChanged]);
+  }, [detail.event.id, draft, expectedVersion, guidedTask, onChanged, venueCatalog]);
   useEffect(() => {
     onSaveReady?.(() => save());
     return () => onSaveReady?.(null);
@@ -210,7 +218,7 @@ export function DraftForm({
         two they are hearing, and it is the one beside the controls that fix it. */}
     {(attempted || venueIssues.length > 0) && taskIssues.length > 0 && <div className={styles.taskIssues} role="group" aria-label="這個表單尚待完成的項目" aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
     <div className={styles.formActions}>
-      <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
+      <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved, true); }}>{saving ? "儲存中…" : saveLabel}</button>
       {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
       {/* One line, one truth. The result replaces the dirty state rather than
           sitting beside a contradiction of it. */}

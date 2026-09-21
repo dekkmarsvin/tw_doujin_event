@@ -167,7 +167,8 @@ try {
   await moving.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();
   await delayed.startSeen;
   await moving.getByRole("button", { name: /另一場待編輯活動/ }).click();
-  const name = moving.getByRole("textbox", { name: "活動名稱", exact: true });
+  // #221: the field now carries a worked example, so it is matched by prefix.
+  const name = moving.getByRole("textbox", { name: /^活動名稱/ });
   await name.fill("另一場還沒儲存的內容");
   await moving.getByText("尚有未儲存變更", { exact: true }).waitFor();
   delayed.releaseStart();

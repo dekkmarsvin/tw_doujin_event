@@ -544,7 +544,10 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
     <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
       下一步：{organizerSectionLabel(detail, nextSection)}
     </button>
-    <div className={styles.readinessList}>{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
+    {/* Named, because this is now the only way to reach a section: the strip
+        that used to carry 活動項目 above the panel was a second copy of this
+        list, kept in step by hand (#221 1.1). */}
+    <div className={styles.readinessList} role="group" aria-label="活動項目">{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
       <span>{organizerSectionLabel(detail, item.id)}</span><small data-state={item.state}>{liveDirty && liveSection
         ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
         : READINESS_LABEL[item.state]}</small>

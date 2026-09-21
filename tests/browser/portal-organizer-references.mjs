@@ -99,7 +99,9 @@ try {
   assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
   await page.getByRole("combobox", { name: /^使用空間/ }).selectOption("zhengyan-exhibition-area");
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
-  await page.getByRole("button", { name: "5 檢查與預覽 需先完成前面步驟", exact: true }).click();
+  // #221: one navigation. The numbered strip above the panel is gone; the
+  // readiness rail was always carrying the same six sections.
+  await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與預覽/ }).click();
   await page.getByRole("button", { name: "建立預覽", exact: true }).click();
   await page.getByText("爭艷館展區・花博公園爭艷館", { exact: true }).waitFor();
   await page.getByText("原創作品、二次創作", { exact: true }).waitFor();
