@@ -253,6 +253,19 @@ test("an event organizer can list and immediately extend the shared venue catalo
   assert.match(createdVenueBody.space.id, /^venue-space-[0-9a-f-]{36}$/u);
   assert.equal(createdVenueBody.space.venueId, createdVenueBody.venue.id);
 
+  // #219: 「全館」 rarely has a page of its own and an organizer usually has
+  // one official address, so a blank space URL inherits the venue rather than
+  // asking for the same address twice -- here within the creating call.
+  const inheritedVenue = await handlers.createOrganizerVenue(request(
+    `/api/organizer/events/${candidateId}/venues`, "POST", {
+      name: "三重體育館",
+      sourceUrl: "https://venue.example/sanchong",
+      initialSpace: { name: "全館", sourceUrl: "", defaultAreaMode: "none" },
+    }, ownerCookie,
+  ), candidateId);
+  assert.equal(inheritedVenue.status, 201);
+  assert.equal((await inheritedVenue.json()).space.sourceUrl, "https://venue.example/sanchong");
+
   const createdSpace = await handlers.createOrganizerVenueSpace(request(
     `/api/organizer/events/${candidateId}/venues/${createdVenueBody.venue.id}/spaces`, "POST", {
       name: "4 號倉庫",
@@ -264,19 +277,40 @@ test("an event organizer can list and immediately extend the shared venue catalo
   const createdSpaceBody = await createdSpace.json();
   assert.equal(createdSpaceBody.space.defaultAreaMode, "none");
 
-  const missingSpaceSource = await handlers.createOrganizerVenueSpace(request(
+  // The same inheritance on the other entry, adding a space to a venue that
+  // already exists.
+  const inheritedSpace = await handlers.createOrganizerVenueSpace(request(
     `/api/organizer/events/${candidateId}/venues/${createdVenueBody.venue.id}/spaces`, "POST", {
-      name: "沒有來源的空間", sourceUrl: "", defaultAreaMode: "none",
+      name: "全區", sourceUrl: "", defaultAreaMode: "none",
     }, ownerCookie,
   ), candidateId, createdVenueBody.venue.id);
-  assert.equal(missingSpaceSource.status, 400);
+  assert.equal(inheritedSpace.status, 201);
+  assert.equal((await inheritedSpace.json()).space.sourceUrl, "https://venue.example/songshan");
+
+  // Inheriting fills the gap; it does not excuse one. A malformed address is
+  // still refused rather than quietly replaced by the venue.
+  const malformedSpaceSource = await handlers.createOrganizerVenueSpace(request(
+    `/api/organizer/events/${candidateId}/venues/${createdVenueBody.venue.id}/spaces`, "POST", {
+      name: "格式錯誤的空間", sourceUrl: "ftp://venue.example/songshan", defaultAreaMode: "none",
+    }, ownerCookie,
+  ), candidateId, createdVenueBody.venue.id);
+  assert.equal(malformedSpaceSource.status, 400);
+
+  // Inheriting needs a venue to inherit from, so an unknown one is answered
+  // before the write rather than by it.
+  const unknownVenueSpace = await handlers.createOrganizerVenueSpace(request(
+    `/api/organizer/events/${candidateId}/venues/venue-missing/spaces`, "POST", {
+      name: "沒有場館的空間", sourceUrl: "", defaultAreaMode: "none",
+    }, ownerCookie,
+  ), candidateId, "venue-missing");
+  assert.equal(unknownVenueSpace.status, 404);
 
   const refreshed = await handlers.listOrganizerVenues(request(
     `/api/organizer/events/${candidateId}/venues`, "GET", undefined, ownerCookie,
   ), candidateId);
   const catalog = await refreshed.json();
   const songshan = catalog.venues.find(({ id }) => id === createdVenueBody.venue.id);
-  assert.deepEqual(songshan.spaces.map(({ name }) => name), ["1 號倉庫", "4 號倉庫"]);
+  assert.deepEqual(songshan.spaces.map(({ name }) => name), ["1 號倉庫", "4 號倉庫", "全區"]);
 
   const audit = await database.prepare(
     "SELECT action FROM audit_log WHERE subject_id IN (?1, ?2) ORDER BY at, action",

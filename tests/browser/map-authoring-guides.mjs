@@ -32,6 +32,14 @@ try {
     const firstX = width * .2, rightX = width * .26, secondX = width * .34, secondRight = width * .4;
     const firstGuide = await placeGuide("x", firstX);
     if (surface === "organizer") {
+      // #218: a guide is not content. The canvas counts as edited by now, so
+      // the older rule about an unchanged map is not what holds the button --
+      // saving this would move the candidate on a version and write a revision
+      // recording no booths, then count itself as 1 張地圖.
+      const mapActions = page.getByRole("group", { name: "地圖儲存動作" });
+      assert.equal(await mapActions.getByRole("button", { name: "儲存地圖變更", exact: true }).isDisabled(), true);
+      await mapActions.getByText("先在畫布上放入至少一個攤位或設施，才能儲存這張地圖。", { exact: true }).waitFor();
+      await journey.capture(page, "organizer-empty-map-blocked");
       await page.getByRole("button", { name: "空白畫布", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "空白畫布會清掉畫面上的內容" });
       await dialog.waitFor();

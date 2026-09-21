@@ -225,6 +225,9 @@
 .statusBoard span { color: var(--muted); }
 .issueError, .issueWarning { border: 1px solid; border-radius: 7px; padding: 8px 10px; }
 .issueError { border-color: #edc5bf; background: var(--danger-soft); color: var(--danger) !important; }
+/* A field answers for itself, under itself: !important because label small
+   is muted by default and this one is not a hint (#219). */
+.fieldError { color: var(--danger) !important; font-weight: 600; }
 .issueWarning { border-color: #e7d4aa; background: #fff9eb; color: #795818 !important; }
 .preview { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: var(--ink); color: var(--surface); font: 10px/1.5 "Geist Mono", ui-monospace, monospace; }
 .readerPreview { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
