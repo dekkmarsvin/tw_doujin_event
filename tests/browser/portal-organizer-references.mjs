@@ -57,7 +57,10 @@ try {
   // it, so 請選擇場館 was an option the list could never show as chosen.
   assert.equal(await page.getByRole("combobox", { name: /^場館/ }).locator("option:checked").textContent(), "請選擇場館");
   assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
-  await page.getByText("使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。", { exact: true }).waitFor();
+  // Scoped, because 準備進度 lists the same blocker: an unscoped match races the
+  // rail, which is fed by an effect and so lands a render later.
+  await page.getByRole("group", { name: "這個表單尚待完成的項目" })
+    .getByText("使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。", { exact: true }).waitFor();
   await journey.capture(page, "references-venue-unselected");
   // The dialog covers the panel that names the pending row, so a refused
   // 儲存並切換 used to read as nothing happening at all.
