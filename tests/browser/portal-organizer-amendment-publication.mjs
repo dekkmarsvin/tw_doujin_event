@@ -30,6 +30,14 @@ const openSection = async (page, name) => {
   if (await sections.count() === 0) await showAll.click();
   await sections.getByRole("button", { name }).click();
 };
+/** 核准與重試回到畫面上之前，要先等一整條發布流程跑完：這支 journey 的
+ * dispatcher 會把 executor 一路驅動到終局，而每一步都要經過十幾次 Miniflare
+ * D1 往返。那些往返的成本是機器的，不是程式的——量過一台開發機是每次查詢約
+ * 78ms，一步約一秒，核准到「重試發布」出現要 10.4 秒，剛好越過 journey 共用的
+ * 10 秒預設值，於是同一份程式在 CI 綠、在本機穩定紅（#303）。
+ * 其餘等待都是「畫面重繪了沒有」，共用預設值仍然正確；只有跨越整條流程的等待
+ * 需要跨越整條流程的預算。這不是固定等待——流程壞掉時它照樣失敗。 */
+const PUBLICATION_TIMEOUT = 60_000;
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-ui-publication" } }));
 const db = await mf.getD1Database("DB");
 const repo = createIdentityRepository(db);
@@ -176,7 +184,7 @@ try {
   await openSection(admin, /^送審與發布/);
   await admin.getByRole("textbox", { name: "審閱說明", exact: true }).fill("隔離合成資料核准");
   await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
-  await admin.getByRole("button", { name: "重試發布", exact: true }).waitFor();
+  await admin.getByRole("button", { name: "重試發布", exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });
   const failed = await repo.getLatestOrganizerPublicationJob(candidate);
   assert.equal(failed.status,"failed"); assert.equal(failed.step,"waiting_deployment"); assert.equal(failed.retryable,1);
   assert.equal(publishedBytes,beforeBytes,"Failed amendment must leave synthetic public view unchanged");
@@ -187,7 +195,7 @@ try {
   await retryOwner.getByRole("button", { name: /發布後修正/ }).click();
   await openSection(retryOwner, /^送審與發布/);
   await retryOwner.getByRole("button", { name: "重試發布", exact: true }).click();
-  await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor();
+  await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });
   const completed = await repo.getLatestOrganizerPublicationJob(candidate);
   assert.equal(completed.status,"published");
   for (const key of ["id","snapshot_id","approval_hash","data_pr_number","data_head_sha","data_merge_sha","main_pr_number","main_head_sha","main_merge_sha"]) assert.equal(completed[key],failed[key],key);
