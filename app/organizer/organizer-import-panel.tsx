@@ -11,6 +11,7 @@ import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer
 import { IDLE, message, organizerDayLabel, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
 import styles from "./organizer.module.css";
 import { useEffect, useMemo, useState } from "react";
+import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 
 type MappingChoice = { column: number | null; fixed: string };
 type ExcludedImportRow = { sourceRow: number; boothCode: string; circleName: string };
@@ -30,12 +31,14 @@ function downloadText(name: string, text: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ImportPanel({ detail, onChanged, setNotice }: {
+export function ImportPanel({ detail, onChanged }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
-  setNotice: (notice: Notice) => void;
 }) {
   const [fileName, setFileName] = useState("");
+  const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
+  const readFeedback = useActionFeedback();
+  const saveFeedback = useActionFeedback();
   const [bytes, setBytes] = useState<Uint8Array | null>(null);
   const [sheets, setSheets] = useState<OrganizerWorkbookSheet[]>([]);
   const [sheetName, setSheetName] = useState("");
@@ -65,9 +68,9 @@ export function ImportPanel({ detail, onChanged, setNotice }: {
     let ignore = false;
     void buildOrganizerImportMetadata({ bytes, fileName, worksheet: sheetName === "CSV" ? null : sheetName, sourceDescription: sourceLabel })
       .then((result) => { if (!ignore) setMetadata(result); })
-      .catch((error) => { if (!ignore) setNotice({ kind: "error", message: message(error) }); });
+      .catch((error) => { if (!ignore) loadFailed(message(error)); });
     return () => { ignore = true; };
-  }, [bytes, fileName, sheetName, sourceLabel, setNotice]);
+  }, [bytes, fileName, sheetName, sourceLabel, loadFailed]);
 
   const sheet = useMemo(() => sheets.find((item) => item.name === sheetName) ?? null, [sheets, sheetName]);
   const header = useMemo(() => sheet?.rows[headerRow - 1]?.cells ?? [], [sheet, headerRow]);
@@ -184,6 +187,7 @@ export function ImportPanel({ detail, onChanged, setNotice }: {
   const columns = requiresAreaMapping ? 8 : 7;
 
   return <section className={styles.panel}>
+    <ActionNotice notice={loadNotice} />
     <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>對照欄位後預覽結果，確認無誤再送出名單。</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
     {detail.import && <SavedImportList detail={detail} />}
     <div className={styles.importGrid}>
@@ -191,13 +195,12 @@ export function ImportPanel({ detail, onChanged, setNotice }: {
         const file = event.target.files?.[0];
         if (!file) return;
         forgetPreview(); setBoothCodeMode("single"); setBoothCodeWidth("");
-        setNotice({ kind: "busy", message: "正在讀取檔案…" });
-        void readOrganizerWorkbook(file).then((workbook) => {
+        void readFeedback.run(readOrganizerWorkbook(file).then((workbook) => {
           setFileName(file.name); setBytes(workbook.bytes); setSheets(workbook.sheets);
           setSheetName(workbook.sheets[0]?.name ?? ""); setHeaderRow(1);
-          setNotice({ kind: "ok", message: `已讀取 ${workbook.sheets.length} 個工作表；尚未上傳。` });
-        }).catch((error) => setNotice({ kind: "error", message: message(error) }));
-      }} /></label>
+          return workbook;
+        }), (workbook) => `已讀取 ${workbook.sheets.length} 個工作表；尚未上傳。`);
+      }} /><ActionNotice notice={readFeedback.notice} /></label>
       <label>工作表<select disabled={sheets.length < 2} value={sheetName} onChange={(event) => { setSheetName(event.target.value); forgetPreview(); }}><option value="">尚未選擇</option>{sheets.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
       <label>標題列<input type="number" min={1} max={sheet?.rows.length ?? 1} value={headerRow} onChange={(event) => { setHeaderRow(Number(event.target.value)); forgetPreview(); }} /><small>欄位名稱在第幾列。</small></label>
     </div>
@@ -246,7 +249,7 @@ export function ImportPanel({ detail, onChanged, setNotice }: {
         <button type="button" disabled={!mapping} onClick={() => setPreviewRequested(true)}>預覽對應結果</button>
         <button type="button" className={styles.ghost} disabled={!result || !metadata || !mapping || result.rows.length === 0 || derivedBlocked || result.rejected.length > 0} onClick={() => {
           if (!result || !metadata || !mapping) return;
-          setNotice({ kind: "busy", message: "儲存匯入資料…" });
+
           // The areas this file names are written to the draft first, because
           // the import API refuses any row whose area the event never declared
           // — and this file is where those areas come from.
@@ -254,11 +257,11 @@ export function ImportPanel({ detail, onChanged, setNotice }: {
           const declared = JSON.stringify(withAreas) === JSON.stringify(detail.draft)
             ? Promise.resolve(detail.event.version)
             : saveOrganizerEvent(detail.event.id, detail.event.version, withAreas).then((saved) => saved.version);
-          void declared.then((expectedVersion) => putOrganizerImport(detail.event.id, {
+          void saveFeedback.run(declared.then((expectedVersion) => putOrganizerImport(detail.event.id, {
             expectedVersion, source: { ...metadata, mapping }, rows: result.rows,
-          })).then(async () => { setNotice({ kind: "ok", message: "匯入資料已儲存；原始檔沒有上傳。" }); await onChanged(); })
-            .catch((error) => setNotice({ kind: "error", message: message(error) }));
+          })), "匯入資料已儲存；原始檔沒有上傳。").then((ok) => (ok ? onChanged() : undefined));
         }}>確認並儲存 {result?.rows.length ?? 0} 列</button>
+        <ActionNotice notice={saveFeedback.notice} />
         {(Object.keys(overrides).length > 0 || excluded.length > 0) && <button type="button" className={styles.textButton} onClick={() => { setOverrides({}); setExcluded([]); }}>清除所有手動修改</button>}
       </div>
       {prepared && !prepared.ok && <p className={styles.issueError}>{prepared.message}</p>}
