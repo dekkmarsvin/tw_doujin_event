@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 
 const vite = await createServer({ configFile: false, server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { OrganizerValidationIssueCard } = await vite.environments.ssr.runner.import("/app/organizer/organizer-app.tsx");
+const { OrganizerValidationIssueCard } = await vite.environments.ssr.runner.import("/app/organizer/organizer-validation-panel.tsx");
 after(() => vite.close());
 
 const detail = {
