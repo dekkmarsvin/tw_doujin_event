@@ -15,33 +15,40 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test envir
 const { nextOrganizerEventDay, organizerPendingVenueSelections, validateOrganizerEventDraft } = await environment.runner.import("/app/organizer-event.ts");
 after(async () => { await vite.close(); });
 
-test("the first day defaults to the author's own today", () => {
+// #221: the first day is a question, not an assumption. Defaulting it to
+// today made an unanswered field look answered and counted the step complete
+// on a date nobody had chosen.
+test("the first day is left for the organizer to answer", () => {
   const now = new Date(2026, 7, 31, 23, 30);
-  assert.deepEqual(nextOrganizerEventDay([], now), { id: "1", label: "第 1 日", date: "2026-08-31" });
+  assert.deepEqual(nextOrganizerEventDay([], now), { id: "1", label: "第一天", date: "" });
 });
 
 test("each further day defaults to the day after the last dated day", () => {
-  const first = nextOrganizerEventDay([], new Date(2026, 10, 7, 9, 0));
+  // The first day has to be answered before a later one can follow it, which
+  // is how the organizer reads these fields anyway.
+  const first = { ...nextOrganizerEventDay([], new Date(2026, 10, 7, 9, 0)), date: "2026-11-07" };
   const second = nextOrganizerEventDay([first], new Date(2026, 10, 7, 9, 0));
   const third = nextOrganizerEventDay([first, second], new Date(2026, 10, 7, 9, 0));
   assert.deepEqual([second.date, third.date], ["2026-11-08", "2026-11-09"]);
-  assert.deepEqual([second.id, third.label], ["2", "第 3 日"]);
+  assert.deepEqual([second.id, third.label], ["2", "第三天"]);
 });
 
 test("a month boundary rolls over instead of overflowing the day number", () => {
-  const day = nextOrganizerEventDay([{ id: "1", label: "第 1 日", date: "2026-11-30" }], new Date(2026, 0, 1));
+  const day = nextOrganizerEventDay([{ id: "1", label: "第一天", date: "2026-11-30" }], new Date(2026, 0, 1));
   assert.equal(day.date, "2026-12-01");
 });
 
 test("an undated day falls back to today and never reuses an existing day id", () => {
   const now = new Date(2026, 7, 31, 6, 0);
-  const day = nextOrganizerEventDay([{ id: "1", label: "第 1 日", date: "" }], now);
-  assert.deepEqual(day, { id: "2", label: "第 2 日", date: "2026-08-31" });
+  const day = nextOrganizerEventDay([{ id: "1", label: "第一天", date: "" }], now);
+  assert.deepEqual(day, { id: "2", label: "第二天", date: "2026-08-31" });
 });
 
-test("defaulted days pass draft validation without further editing", () => {
+// Once the first date is answered the rest need no further editing: the
+// second follows it, and nothing else about a day has to be understood.
+test("only the first date is asked for; the rest of a day needs no editing", () => {
   const days = [];
-  days.push(nextOrganizerEventDay(days, new Date(2026, 10, 7)));
+  days.push({ ...nextOrganizerEventDay(days, new Date(2026, 10, 7)), date: "2026-11-07" });
   days.push(nextOrganizerEventDay(days, new Date(2026, 10, 7)));
   const draft = {
     schema: "organizer-event-draft/1",

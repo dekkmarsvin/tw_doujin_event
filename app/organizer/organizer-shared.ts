@@ -30,6 +30,14 @@ export const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
   days: "活動日期",
   venue: "場館與使用空間",
 };
+/** What each basic setting is actually asking. The heading names the task;
+ * this says what answering it means, so the organizer does not have to infer
+ * the question from the field names (#221 2.1-2.3). */
+export const TASK_QUESTION: Record<OrganizerGuidedTask, string> = {
+  identity_source: "填寫活動名稱，以及主辦單位公告這場活動的頁面。",
+  days: "這場活動辦在哪幾天？每一天各填一個日期。",
+  venue: "選擇活動使用的場館與空間。例如同一場館使用兩層樓，可分別加入 1F 與 2F。",
+};
 export const READINESS_LABEL = {
   complete: "已完成",
   available: "可開始",

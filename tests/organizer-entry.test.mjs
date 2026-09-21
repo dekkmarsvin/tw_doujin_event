@@ -126,7 +126,11 @@ test("organizer reuses the event source for imports and labels every activity-da
   assert.match(app, /sourceDescription: sourceLabel/);
   assert.match(app, /<label>代碼<input/);
   assert.match(app, /<label>名稱<input/);
-  assert.match(app, /<label>日期<input/);
+  // #221: the date is labelled by the day it belongs to （第一天）, because that
+  // is the question being asked; the id and name it does not ask about moved
+  // behind a disclosure and are still labelled there.
+  assert.ok(app.includes("天`}日期"), "the date field is labelled by its own day");
+  assert.doesNotMatch(app, /<label>日期<input/);
   assert.match(app, />自由編輯<\/text>/);
   assert.doesNotMatch(app, /描摹/);
 });
