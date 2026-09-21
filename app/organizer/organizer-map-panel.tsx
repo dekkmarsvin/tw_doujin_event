@@ -11,8 +11,9 @@ import { hasMapTemplateRecognizer, recognizeMapTemplate } from "../map-template-
 import { createOrganizerMap, listOrganizerMaps, readOrganizerMap, readOrganizerMapBackground, saveOrganizerMap, uploadOrganizerMapBackground, type OrganizerEventDetail, type OrganizerMapDetail, type OrganizerMapSummary } from "../organizer-client";
 
 import { useModalFocus } from "../use-modal-focus";
-import { message, organizerDayLabel, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
+import { message, organizerDayLabel, organizerVenueSpaceLabel } from "./organizer-shared";
 import styles from "./organizer.module.css";
+import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 
 const MAP_PLAN_TYPES = ["image/jpeg", "image/png", "image/webp"];
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -66,10 +67,9 @@ function loadOrganizerMapImage(source: string) {
   });
 }
 
-export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
+export function OrganizerMapPanel({ detail, onChanged }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
-  setNotice: (notice: Notice) => void;
 }) {
   const [maps, setMaps] = useState<OrganizerMapSummary[]>([]);
   const [selected, setSelected] = useState<OrganizerMapDetail | null>(null);
@@ -86,6 +86,12 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   // still counts as edited, which errs towards asking.
   const [edited, setEdited] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  // Three actions, three places to answer: loading the panel, taking a plan
+  // image, and saving the map. They used to share one line above the section
+  // switcher, so "地圖已儲存，尚未公開。" was still there two steps later (#220).
+  const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
+  const planFeedback = useActionFeedback();
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingMap, setSavingMap] = useState(false);
   const [confirm, setConfirm] = useState<
     { title: string; description: string; confirmLabel: string; run: () => void } | null
@@ -98,7 +104,7 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   const assignment = detail.draft.venue.assignments.find((item) => item.venueSpaceId === venueSpaceId);
   const reload = useCallback(async () => setMaps((await listOrganizerMaps(detail.event.id)).maps), [detail.event.id]);
-  useEffect(() => { queueMicrotask(() => { void reload().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reload, setNotice]);
+  useEffect(() => { queueMicrotask(() => { void reload().catch((error) => loadFailed(message(error))); }); }, [reload, loadFailed]);
 
   // A map that was never saved is entirely unsaved, edits or not: one built
   // from a plan and not touched since is still only on this screen.
@@ -198,7 +204,6 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
     if (!layout) return;
     setConfirmingClose(false);
     setSavingMap(true);
-    setNotice({ kind: "busy", message: "儲存地圖…" });
     try {
       let saved: OrganizerMapDetail;
       if (selected) {
@@ -225,15 +230,16 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       else { setSelected(saved); setEdited(false); }
       await onChanged();
       await reload();
-      setNotice({ kind: "ok", message: "地圖已儲存，尚未公開。" });
+      setSaveResult({ ok: true, text: "地圖已儲存，尚未公開。" });
     } catch (error) {
-      setNotice({ kind: "error", message: message(error) });
+      setSaveResult({ ok: false, text: message(error) });
     } finally {
       setSavingMap(false);
     }
   };
 
   return <section className={`${styles.panel} ${styles.mapPanel}`}>
+    <ActionNotice notice={loadNotice} />
     <div className={styles.panelHead}><div><h3>各活動日的場館空間地圖</h3><p>每個活動日的每個場館空間各一張地圖。</p></div><span className={styles.version}>{maps.length} 張地圖</span></div>
     <div className={styles.mapToolbar}>
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
@@ -249,8 +255,7 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
         event.target.value = "";
         if (!file) return;
         const load = () => {
-          setNotice({ kind: "busy", message: "正在讀取配置圖…" });
-          void runFile(file).then((done) => setNotice({ kind: "ok", message: done })).catch((error) => setNotice({ kind: "error", message: message(error) }));
+          void planFeedback.run(runFile(file), (done) => done);
         };
         if (!background) { load(); return; }
         setConfirm({
@@ -259,7 +264,7 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
           confirmLabel: "換成新的",
           run: load,
         });
-      }} /></label>
+      }} /><ActionNotice notice={planFeedback.notice} /></label>
       <label>從同場館空間複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
         if (!map) return;
@@ -267,13 +272,13 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
           void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
             setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setAuthoring(structuredClone(source.authoring ?? EMPTY_MAP_AUTHORING));
             setPendingBackground(null); setBackground(""); setEdited(false);
-          }).catch((error) => setNotice({ kind: "error", message: message(error) }));
+          }).catch((error) => loadFailed(message(error)));
         });
       }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{organizerDayLabel(detail.draft.event.days, item.periodKey)}</option>)}</select></label>
     </div>
-    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => setNotice({ kind: "error", message: message(error) })); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
+    <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => loadFailed(message(error))); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>
-      <MapLayoutEditor layout={layout} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); }} />
+      <MapLayoutEditor layout={layout} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step
@@ -282,7 +287,11 @@ export function OrganizerMapPanel({ detail, onChanged, setNotice }: {
       <div className={styles.mapActions}>
         <button type="button" disabled={!editable || savingMap || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
         <button type="button" className={styles.ghost} disabled={savingMap} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
-        <span aria-live="polite">{savingMap ? "儲存中，請稍候。" : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}</span>
+        {/* One line, one truth: the result replaces the dirty state instead of
+          standing beside a contradiction of it (#220). */}
+      <span aria-live="polite" className={saveResult && !saveResult.ok ? styles.error : undefined}>
+        {savingMap ? "儲存中，請稍候。" : saveResult ? saveResult.text : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}
+      </span>
       </div>
     </> : <div className={styles.placeholder}>選擇既有地圖，或從空白畫布、同空間地圖、配置圖開始。</div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>

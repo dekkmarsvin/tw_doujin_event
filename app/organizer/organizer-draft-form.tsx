@@ -10,14 +10,14 @@ import { type OrganizerVenueCatalog, type OrganizerVenueSpaceAreaMode } from "..
 import { type OrganizerGuidedTask } from "../organizer-workspace";
 import { VenueCatalogCreator } from "./organizer-import-panel";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
-import { GUIDED_LABEL, mapTemplatePreview, message, organizerGuidedDraftIssues, type Notice } from "./organizer-shared";
+import { GUIDED_LABEL, mapTemplatePreview, message, organizerGuidedDraftIssues } from "./organizer-shared";
 import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import styles from "./organizer.module.css";
 import { useCallback, useEffect, useState } from "react";
 
 export function DraftForm({
   detail, section, guidedTask, saveLabel = "儲存", secondarySaveLabel,
-  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, onDraftStateChange, setNotice,
+  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, onDraftStateChange,
 }: {
   detail: OrganizerEventDetail;
   section: "event" | "venue";
@@ -30,11 +30,11 @@ export function DraftForm({
   onDirtyChange: (dirty: boolean) => void;
   onSaveReady?: (save: (() => Promise<boolean>) | null) => void;
   onDraftStateChange?: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
-  setNotice: (notice: Notice) => void;
 }) {
   const [draft, setDraft] = useState(detail.draft);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
   const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
@@ -48,6 +48,9 @@ export function DraftForm({
   useEffect(() => { onDraftStateChange?.(draft, dirty, venueCatalog); }, [draft, dirty, onDraftStateChange, venueCatalog]);
   const update = (mutate: (current: OrganizerEventDraft) => OrganizerEventDraft) => {
     setDirty(true);
+    // Editing again makes the last save a description of a different
+    // moment, so it stops being shown rather than sitting beside "尚有未儲存變更".
+    setResult(null);
     setDraft((current) => mutate(structuredClone(current)));
   };
   /* Writing the draft is only the first of three calls: the answer is followed
@@ -58,13 +61,13 @@ export function DraftForm({
    * workspace is too far from the button to read as a reply to the press. */
   const save = useCallback(async (after?: (version: number) => Promise<void>) => {
     setSaving(true);
-    setNotice({ kind: "busy", message: "儲存中…" });
+    setResult(null);
     let result: Awaited<ReturnType<typeof saveOrganizerEvent>>;
     try {
       result = await saveOrganizerEvent(detail.event.id, expectedVersion, draft);
     } catch (error) {
       setSaving(false);
-      setNotice({ kind: "error", message: message(error) });
+      setResult({ ok: false, text: message(error) });
       return false;
     }
     setDirty(false);
@@ -72,15 +75,15 @@ export function DraftForm({
     try {
       await onChanged();
       if (after) await after(result.version);
-      setNotice({ kind: "ok", message: "已儲存。" });
+      setResult({ ok: true, text: "已儲存。" });
       return true;
     } catch (error) {
-      setNotice({ kind: "error", message: `已儲存，但後續動作未完成：${message(error)}` });
+      setResult({ ok: false, text: `已儲存，但後續動作未完成：${message(error)}` });
       return false;
     } finally {
       setSaving(false);
     }
-  }, [detail.event.id, draft, expectedVersion, onChanged, setNotice]);
+  }, [detail.event.id, draft, expectedVersion, onChanged]);
   useEffect(() => {
     onSaveReady?.(() => save());
     return () => onSaveReady?.(null);
@@ -196,7 +199,11 @@ export function DraftForm({
     <div className={styles.formActions}>
       <button type="button" disabled={!editable || saving} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
       {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
-      <span aria-live="polite">{saving ? "儲存中，請稍候。" : dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}</span>
+      {/* One line, one truth. The result replaces the dirty state rather than
+          sitting beside a contradiction of it. */}
+      <span aria-live="polite" className={result && !result.ok ? styles.error : undefined}>
+        {saving ? "儲存中，請稍候。" : result ? result.text : dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}
+      </span>
     </div>
   </section>;
 }

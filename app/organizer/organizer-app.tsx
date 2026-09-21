@@ -424,7 +424,6 @@ function WorkspaceSurface({
           onDirtyChange={onDirtyChange}
           onDraftSaveReady={onDraftSaveReady}
           onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
-          setNotice={setNotice}
         />
         <ReadinessRail detail={detail} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />
       </div>
@@ -494,7 +493,6 @@ function GuidedTaskStation({
       onDirtyChange={onDirtyChange}
       onSaveReady={onDraftSaveReady}
       onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); onLiveDraftStateChange(nextDraft, dirty, catalog); }}
-      setNotice={setNotice}
     />
     <div className={styles.exploreRow}><button type="button" className={styles.textButton} onClick={onShowAll}>查看全部項目</button><span>可以先看後面的項目，不會影響目前進度。</span></div>
   </section>;
@@ -580,7 +578,7 @@ function CreateEntry({ onCreated, onInvitationFailed }: {
   </form>;
 }
 
-function StepContent({ session, detail, section, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange, setNotice }: {
+function StepContent({ session, detail, section, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   section: OrganizerWorkspaceSection;
@@ -588,14 +586,13 @@ function StepContent({ session, detail, section, onChanged, onDirtyChange, onDra
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
   onDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
-  setNotice: (notice: Notice) => void;
 }) {
-  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} setNotice={setNotice} />;
+  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} />;
   if (section === "import") return detail.event.operation === "AMEND"
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
-    : <ImportPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
-  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
-  if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} setNotice={setNotice} />;
-  return <ReviewPanel session={session} detail={detail} onChanged={onChanged} setNotice={setNotice} />;
+    : <ImportPanel detail={detail} onChanged={onChanged} />;
+  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} />;
+  if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} />;
+  return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
 }
 

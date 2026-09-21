@@ -111,7 +111,9 @@ test("organizer save counters stay internal when no revision diff is available",
   const app = await organizerSource();
 
   assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
-  assert.match(app, /setNotice\(\{ kind: "ok", message: "已儲存。" \}\)/);
+  // The confirmation itself, not the call that produces it: #220 moved this
+  // result out of the shared notice and next to the button that earned it.
+  assert.match(app, /"已儲存。"/);
 });
 
 test("organizer reuses the event source for imports and labels every activity-day field", async () => {

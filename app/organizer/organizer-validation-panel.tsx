@@ -7,22 +7,28 @@ import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { previewOrganizerEvent, validateOrganizerEvent, type OrganizerEventDetail, type OrganizerReaderPreview } from "../organizer-client";
 import { type OrganizerValidationIssue } from "../organizer-event";
 import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
-import { STEP_LABEL, message, organizerDayLabel, organizerIssueMessage, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
+import { STEP_LABEL, organizerDayLabel, organizerIssueMessage, organizerVenueSpaceLabel } from "./organizer-shared";
 import styles from "./organizer.module.css";
-import { useMemo, useState } from "react";
+import { ActionNotice, useActionFeedback } from "./organizer-feedback";
+import { useMemo, useRef, useState } from "react";
 
-export function ValidationPanel({ detail, onChanged, setNotice }: { detail: OrganizerEventDetail; onChanged: () => Promise<void>; setNotice: (notice: Notice) => void }) {
+export function ValidationPanel({ detail, onChanged }: { detail: OrganizerEventDetail; onChanged: () => Promise<void> }) {
   const [issues, setIssues] = useState<OrganizerValidationIssue[] | null>(null);
   const [preview, setPreview] = useState<OrganizerReaderPreview | null>(null);
+  const checkFeedback = useActionFeedback();
+  const previewFeedback = useActionFeedback();
+  // The preview renders below a list that is often longer than the screen, so
+  // without this the button looked like it did nothing (#220 decision 4).
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const grouped = useMemo(() => issues ? { errors: issues.filter((issue) => issue.severity === "error"), warnings: issues.filter((issue) => issue.severity === "warning") } : null, [issues]);
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>檢查與預覽</h3><p>預覽只有登入後看得到，不會公開。</p></div><div className={styles.row}>
-      <button type="button" onClick={() => void validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }).catch((error) => setNotice({ kind: "error", message: message(error) }))}>執行檢查</button>
-      <button type="button" className={styles.ghost} onClick={() => void previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }).catch((error) => setNotice({ kind: "error", message: message(error) }))}>建立預覽</button>
-    </div></div>
+      <button type="button" disabled={checkFeedback.pending} onClick={() => void checkFeedback.run(validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }), "檢查完成。")}>執行檢查</button>
+      <button type="button" className={styles.ghost} disabled={previewFeedback.pending} onClick={() => void previewFeedback.run(previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }), "預覽已產生。").then((ok) => { if (ok) previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); })}>建立預覽</button>
+    </div><ActionNotice notice={checkFeedback.notice} /><ActionNotice notice={previewFeedback.notice} /></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
     {issues?.map((issue, index) => <OrganizerValidationIssueCard key={`${issue.code}-${index}`} issue={issue} detail={detail} />)}
-    {preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}
+    <div ref={previewRef}>{preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}</div>
   </section>;
 }
 
