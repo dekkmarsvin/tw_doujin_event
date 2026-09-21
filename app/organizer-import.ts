@@ -226,6 +226,23 @@ export function prepareOrganizerImport(input: {
     rows.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, codes: boothCodes, circleName, stableKey,
       identityGroup: stableKey ? `stable:${stableKey}` : null });
   }
+  /* 展區 is a required column, and an organizer whose list has no real one maps
+   * the nearest thing to it -- which is almost always the row letter at the
+   * front of the booth code. pf45-rf14 imported 1434 rows that way and ended up
+   * with 13 "areas" that were 13 rows of one hall. Every value matching its own
+   * booth code's first character is the shape that says so; it is a warning and
+   * not a refusal, because an organizer really may use whole rows as areas
+   * (#294). */
+  const areaRows = rows.filter((row) => row.areaId && row.areaId !== "ALL" && row.codes.length > 0);
+  if (areaRows.length >= 10 && areaRows.every((row) => row.codes.every((code) => code.startsWith(row.areaId)))
+    && new Set(areaRows.map((row) => row.areaId)).size > 1) {
+    issues.push({
+      severity: "warning", step: "import", code: "area_looks_like_booth_row",
+      message: "每一列的展區值都是該列攤位代碼的開頭，看起來對應到的是攤位排號而不是分區。"
+        + "如果這場活動沒有真正的分區，請把這個使用空間的展區方式改成「沒有分區」；"
+        + "如果有，請把展區對應到名單裡真正的分區欄位。",
+    });
+  }
   return { rows, issues, rejected, suggestedWidth, boothCount: rows.reduce((total, row) => total + row.codes.length, 0) };
 }
 

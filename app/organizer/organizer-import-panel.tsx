@@ -31,9 +31,10 @@ function downloadText(name: string, text: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ImportPanel({ detail, onChanged }: {
+export function ImportPanel({ detail, onChanged, onSection }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
+  onSection: (section: "venue") => void;
 }) {
   const [fileName, setFileName] = useState("");
   const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
@@ -222,7 +223,13 @@ export function ImportPanel({ detail, onChanged }: {
         {select("使用空間", venueSpace, setVenueSpace, "使用空間", spaceOptions)}
         {/* The read-only card carries the same title, sub-label and value line
             as the pickers beside it, so the row reads as one row. */}
-        {requiresAreaMapping ? select("展區", area, setArea, "展區代碼") : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
+        {requiresAreaMapping ? <>{select("展區", area, setArea, "展區代碼")}
+          {/* 展區 is a required column here, so an organizer whose list has no
+              real one maps the nearest thing and ends up with rows as areas.
+              The way out is a setting in another section, so it is offered
+              where the problem is met rather than left to be discovered (#294). */}
+          <p className={styles.mappingEscape}>這場活動沒有分區？把這個使用空間的展區方式改成「沒有分區」，就不需要對應這一欄。<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與使用空間</button></p>
+        </> : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
           <legend>展區</legend>
           <div><div className={styles.subLabel}>固定值<strong>無分區</strong></div></div>
           <small>不需要展區欄，系統會自動帶入。</small>
