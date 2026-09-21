@@ -41,10 +41,10 @@ export function OrganizerValidationIssueCard({ issue, detail }: { issue: Organiz
   const missing = issue.step === "map" && issue.code === "missing_booth";
   const rows = detail.import?.rows.filter((row) => row.dayId === dayId && row.venueSpaceId === venueSpaceId) ?? [];
   const rowsByCode = new Map(rows.flatMap((row) => row.codes.map((code) => [code, row] as const)));
-  const description = unknown
-    ? `地圖有 ${issue.boothCodes?.length ?? "部分"} 個攤位代碼未出現在同一天、同一場館空間的匯入資料。`
-    : missing ? `匯入資料有 ${issue.boothCodes?.length ?? "部分"} 個攤位代碼未出現在這份地圖。`
-      : organizerIssueMessage(issue, detail.venueCatalog, detail.draft);
+  // One translator for both surfaces: this card used to keep its own copy of
+  // the two booth sentences, which is why the sidebar still showed the
+  // validator's poorer one beside it (#223).
+  const description = organizerIssueMessage(issue, detail.venueCatalog, detail.draft);
   return <div className={issue.severity === "error" ? styles.issueError : styles.issueWarning}>
     <p><b>{issue.severity === "error" ? "必須修正" : "建議確認"}・{STEP_LABEL[issue.step]}</b>{scopeLabel && <>・{scopeLabel}</>}<br />{description}</p>
     {(unknown || missing) && <>

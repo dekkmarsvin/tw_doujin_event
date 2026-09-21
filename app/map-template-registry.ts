@@ -37,6 +37,13 @@ export function listMapTemplateOptions() {
   return TEMPLATE_OPTIONS;
 }
 
+/** What to call a template in front of a person. A stored value outside the
+ * list keeps its own name -- that is all anyone has for it -- but a template
+ * the registry knows is never shown by its identifier (#223). */
+export function mapTemplateLabel(template: string) {
+  return TEMPLATE_OPTIONS.find((option) => option.id === template)?.label ?? template;
+}
+
 /** The row structure a template demands, for authoring surfaces that draw it.
  * A template without a fixed structure returns null rather than a made-up
  * shape: nothing about that map is decided until someone traces one. */

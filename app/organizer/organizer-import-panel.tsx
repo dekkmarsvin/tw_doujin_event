@@ -185,6 +185,11 @@ export function ImportPanel({ detail, onChanged }: {
   const dayOptions = days.map((item) => ({ value: item.id, label: `${item.id}・${item.label}` }));
   const spaceOptions = assignedSpaces.map((space) => ({ value: space.id, label: space.label }));
   const columns = requiresAreaMapping ? 8 : 7;
+  /* 移除 exists to break a tie: the contract gives it one use, which is that a
+   * duplicated booth can be resolved by taking the other row out. A row with
+   * nothing wrong with it has no use for it, and 170 destructive buttons beside
+   * 170 correct rows are noise and risk rather than an affordance (#225). */
+  const flagged = new Set((result?.issues ?? []).map((issue) => issue.row).filter((row) => row !== undefined));
 
   return <section className={styles.panel}>
     <ActionNotice notice={loadNotice} />
@@ -199,7 +204,7 @@ export function ImportPanel({ detail, onChanged }: {
           setFileName(file.name); setBytes(workbook.bytes); setSheets(workbook.sheets);
           setSheetName(workbook.sheets[0]?.name ?? ""); setHeaderRow(1);
           return workbook;
-        }), (workbook) => `已讀取 ${workbook.sheets.length} 個工作表；尚未上傳。`);
+        }), (workbook) => `已讀取 ${workbook.sheets.length} 個工作表。`);
       }} /><ActionNotice notice={readFeedback.notice} /></label>
       <label>工作表<select disabled={sheets.length < 2} value={sheetName} onChange={(event) => { setSheetName(event.target.value); forgetPreview(); }}><option value="">尚未選擇</option>{sheets.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
       <label>標題列<input type="number" min={1} max={sheet?.rows.length ?? 1} value={headerRow} onChange={(event) => { setHeaderRow(Number(event.target.value)); forgetPreview(); }} /><small>欄位名稱在第幾列。</small></label>
@@ -224,7 +229,7 @@ export function ImportPanel({ detail, onChanged }: {
             as the pickers beside it, so the row reads as one row. */}
         {requiresAreaMapping ? select("展區", area, setArea, "展區代碼") : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
           <legend>展區</legend>
-          <div><div className={styles.subLabel}>固定值<strong>無分區（ALL）</strong></div></div>
+          <div><div className={styles.subLabel}>固定值<strong>無分區</strong></div></div>
           <small>不需要展區欄，系統會自動帶入。</small>
         </fieldset>}
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
@@ -277,7 +282,7 @@ export function ImportPanel({ detail, onChanged }: {
           </div>)}
           {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}
           {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場館空間會變成沒有攤位。</p>}
-          <p>儲存時會把分區空間的展區寫進活動設定；無分區空間固定使用 ALL。沒出現在檔案裡的使用空間會標示為未匯入。</p>
+          <p>儲存時會把分區空間的展區寫進活動設定；無分區的空間不需要展區欄。沒出現在檔案裡的使用空間會標示為未匯入。</p>
         </div>}
         {result.issues.filter((issue) => issue.severity === "warning").slice(0, 10).map((issue) => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
         <table>
@@ -296,7 +301,8 @@ export function ImportPanel({ detail, onChanged }: {
               <td>{row.sourceRow}</td><td>{row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>
               {requiresAreaMapping && <td>{row.areaId}</td>}
               <td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
-              <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>移除</button></td>
+              <td className={styles.rowAction}>{flagged.has(row.sourceRow)
+                && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>移除</button>}</td>
             </tr>)}
           </tbody>
           {excluded.length > 0 && <tbody>
@@ -469,7 +475,7 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
           ? <small className={styles.fieldError}>{fieldErrors.spaceUrl}</small>
           : <small>{inheritedUrl ? `留空沿用場館網址：${inheritedUrl}` : "留空沿用場館官方網址，不必重打一次。"}</small>}</label>
       <label>新活動的預設展區方式<select value={defaultAreaMode} onChange={(event) => setDefaultAreaMode(event.target.value as OrganizerVenueSpaceAreaMode)}>
-        <option value="imported">由攤位名單帶入展區</option><option value="none">無分區（使用 ALL）</option>
+        <option value="imported">由攤位名單帶入展區</option><option value="none">無分區</option>
       </select></label>
     </div>
     <div className={styles.row}><button type="submit" disabled={notice.kind === "busy"}>{venue ? "新增並選取" : "建立並選取"}</button><button type="button" className={styles.ghost} onClick={onCancel}>取消</button></div>

@@ -96,11 +96,33 @@ export function organizerDayLabel(days: readonly { id: string; label: string }[]
   return days.find((day) => day.id === periodKey)?.label ?? "原活動日已不存在";
 }
 
+/** How the organizer workspace says a validation problem.
+ *
+ * The map validator serves two control surfaces and knows neither: it has
+ * booth codes and nothing else -- no day label, no space name, no import file
+ * -- so the sentence it can write is necessarily the poorer one. The wording
+ * for this surface is built here, where that context exists, and both the
+ * 待修正清單 sidebar and the 檢查與預覽 card read it from one place rather than
+ * showing two descriptions of the same problem side by side (#223). */
 export function organizerIssueMessage(
-  issue: { code: string; message: string; target?: string },
+  issue: { code: string; message: string; target?: string; step?: string; section?: string; boothCodes?: readonly string[]; count?: number },
   catalog: OrganizerVenueCatalog,
   draft: OrganizerEventDraft,
 ) {
+  /* missing_booth is raised by the import step as well, where it means a
+   * source row carries no booth code -- a different problem with a different
+   * repair. The map wording is therefore keyed on the step as well as the
+   * code, never on the code alone. The two shapes the workspace holds a
+   * problem in name that step differently: a validation issue carries `step`,
+   * a readiness blocker carries `section`. */
+  const onMap = (issue.step ?? issue.section) === "map";
+  const booths = issue.count ?? issue.boothCodes?.length;
+  if (onMap && issue.code === "unknown_booth") {
+    return `地圖有 ${booths ?? "部分"} 個攤位代碼未出現在同一天、同一場館空間的匯入資料。`;
+  }
+  if (onMap && issue.code === "missing_booth") {
+    return `匯入資料有 ${booths ?? "部分"} 個攤位代碼未出現在這份地圖。`;
+  }
   if (issue.code === "missing_space_import" && issue.target) {
     return `匯入資料沒有包含 ${organizerVenueSpaceLabel(catalog, issue.target)} 的攤位。`;
   }

@@ -18,7 +18,7 @@ export type OrganizerWorkspaceReadiness = {
   completed: number;
   total: 6;
   suggestedNextSection: OrganizerWorkspaceSection;
-  blockers: Array<{ section: OrganizerWorkspaceSection; code: string; message: string; target?: string }>;
+  blockers: Array<{ section: OrganizerWorkspaceSection; code: string; message: string; target?: string; count?: number }>;
   sections: Array<{ id: OrganizerWorkspaceSection; state: OrganizerWorkspaceSectionState }>;
 };
 
@@ -96,7 +96,7 @@ export function validateOrganizerImportedRowsAgainstDraft(
     if (assignment.areaMode === "none") {
       if (row.areaId !== "ALL") {
         add(`area-mode\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-          ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，既有匯入資料需要重新匯入以套用 ALL。",
+          ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，既有匯入資料需要重新匯入。",
         });
       }
     } else if (!assignment.areaIds.includes(row.areaId)) {
@@ -211,11 +211,16 @@ export function evaluateOrganizerWorkspaceReadiness(input: {
     },
   ];
 
+  /* The count travels, the codes do not. A blocker list carrying every booth
+   * code would be the multi-megabyte response the cap above exists to avoid,
+   * but without the count the sidebar cannot say the same sentence the check
+   * card says, and the organizer reads two descriptions of one problem (#223). */
   const blockers: OrganizerWorkspaceReadiness["blockers"] = issues.map((issue) => ({
     section: issue.step === "preview" ? "validate" : issue.step,
     code: issue.code,
     message: issue.message,
     ...(issue.target ? { target: issue.target } : {}),
+    ...(issue.boothCodes?.length ? { count: issue.boothCodes.length } : {}),
   }));
   if (!validationComplete) {
     blockers.push({

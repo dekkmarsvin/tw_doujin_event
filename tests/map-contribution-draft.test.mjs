@@ -194,3 +194,22 @@ test("candidate diff reports a floor-only geometry change", () => {
   assert.deepEqual(diff.changedAccessPointIds, []);
   assert.deepEqual(diff.changedLandmarkIds, []);
 });
+
+// #223: this module serves the organizer workspace and the contribution panel,
+// and neither reader is a programmer. TAIWAN_GENERIC_V1 is a stored value, not
+// a name anyone was ever shown.
+test("a version mismatch names the template the way a person saw it", () => {
+  const known = structuredClone(layout);
+  known.template = "TAIWAN_GENERIC_V1";
+  const mismatch = validateMapContributionDraft(content(known), scope)
+    .problems.find(({ code }) => code === "template_mismatch");
+  assert.match(mismatch.message, /通用版型/);
+  assert.doesNotMatch(mismatch.message, /TAIWAN_GENERIC_V1/);
+
+  // A stored value the registry does not know keeps its own name: that string
+  // is all anyone has for it, and inventing one would say less, not more.
+  const unknown = structuredClone(layout);
+  unknown.template = "HOUSE_PLAN_2019";
+  assert.match(validateMapContributionDraft(content(unknown), scope)
+    .problems.find(({ code }) => code === "template_mismatch").message, /HOUSE_PLAN_2019/);
+});

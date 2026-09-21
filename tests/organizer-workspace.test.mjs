@@ -137,3 +137,28 @@ test("a stale persisted import reopens import and blocks maps even when rows and
   assert.equal(readiness.suggestedNextSection, "import");
   assert.equal(readiness.completed, 2);
 });
+
+// #223: the sidebar and the check card describe the same problem, and the
+// sidebar used to get the validator's poorer sentence because the structured
+// part never reached it. The codes stay behind -- 170 of them per blocker is
+// the oversized response the issue cap exists to prevent -- but the count is
+// what the wording needs.
+test("a booth blocker carries the count the wording needs, never the codes", () => {
+  const { blockers } = evaluateOrganizerWorkspaceReadiness({
+    draft: base,
+    importedRows: 1,
+    maps: [{ periodKey: "1", venueSpaceId: "hall-a" }],
+    validationIssues: [
+      { severity: "error", step: "map", code: "missing_booth", target: "1/hall-a", message: "地圖缺少必要攤位。", boothCodes: ["A01", "A02", "A03"] },
+      { severity: "error", step: "event", code: "missing_name", message: "活動名稱為必填。" },
+    ],
+    currentVersion: 4,
+    lastValidatedVersion: null,
+    status: "draft",
+  });
+  const missing = blockers.find((blocker) => blocker.code === "missing_booth");
+  assert.equal(missing.count, 3);
+  assert.equal("boothCodes" in missing, false);
+  // A problem with no codes does not gain an empty count to explain away.
+  assert.equal("count" in blockers.find((blocker) => blocker.code === "missing_name"), false);
+});

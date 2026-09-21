@@ -235,7 +235,7 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
       add({ severity: "error", step: "venue", code: "invalid_area_mode", row: row + 1, target: `venue.assignments.${row}.areaMode`, message: "展區方式無效，請重新選擇。" });
     }
     if (assignment.areaMode === "none" && (assignment.areaIds.length !== 1 || assignment.areaIds[0] !== "ALL")) {
-      add({ severity: "error", step: "venue", code: "invalid_no_division_areas", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "無分區的使用空間必須使用 ALL，請重新選擇展區方式。" });
+      add({ severity: "error", step: "venue", code: "invalid_no_division_areas", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "這個使用空間設為無分區，卻帶著展區資料，請重新選擇展區方式。" });
     }
     if (assignment.areaIds.some((area) => !AREA_ID.test(area))) {
       add({ severity: "error", step: "venue", code: "invalid_area", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "匯入的展區代碼格式無效。" });

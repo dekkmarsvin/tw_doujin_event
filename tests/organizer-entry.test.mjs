@@ -53,7 +53,9 @@ test("venue authoring uses human selections, immediate creation, and no-division
   assert.match(app, /場館與使用空間/);
   assert.match(app, /建立新場館/);
   assert.match(app, /找不到空間？立即新增/);
-  assert.match(app, /無分區（ALL）/);
+  assert.match(app, /無分區/);
+  // #225: ALL is a stored value; the organizer never needs to know it exists.
+  assert.doesNotMatch(app, /（ALL）|使用 ALL|套用 ALL/);
   assert.match(app, /尚未儲存/);
   assert.match(app, /onDraftStateChange=.*setLiveDraft/);
   assert.match(app, /liveSection=\{activeLiveSection\}/);
@@ -160,7 +162,7 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   assert.match(css, /\.mappingField > legend \{[^}]*float: left/);
   assert.match(css, /\.mappingField \.subLabel select[^{]*\{[^}]*font-size: 12px/);
   assert.match(app, /<fieldset className=\{`\$\{styles\.derivedField\} \$\{styles\.mappingField\}`\}>/);
-  assert.match(app, /<div className=\{styles\.subLabel\}>固定值<strong>無分區（ALL）<\/strong><\/div>/);
+  assert.match(app, /<div className=\{styles\.subLabel\}>固定值<strong>無分區<\/strong><\/div>/);
   // A hint belongs under the control it is about, not in the next grid cell.
   assert.match(app, /<small>支援空白、逗號、頓號、分號與斜線。<\/small>/);
   assert.doesNotMatch(app, /<p>支援空白、逗號、頓號、分號與斜線。<\/p>/);
@@ -172,7 +174,7 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   assert.match(app, /const dayOptions = days\.map/);
   // The area code is a fact of the source file, so it stays free text.
   assert.match(app, /select\("展區", area, setArea, "展區代碼"\)/);
-  assert.match(app, /無分區（ALL）/);
+  assert.match(app, /無分區/);
 
   // A rejected row is visible, correctable and removable rather than absent.
   assert.match(app, /待修正 \{result\.rejected\.length\} 列/);
@@ -192,4 +194,29 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
 
   // A row keyed by its booth code would remount its input mid-edit.
   assert.doesNotMatch(app, /key=\{`\$\{row\.sourceRow\}-\$\{row\.boothCode\}`\}/);
+});
+
+// #225: each of these failed the Removal Test -- the organizer does not act
+// differently for having read them -- and three described things that are not
+// true of this workspace at all.
+test("the workspace stops saying things the organizer cannot act on", async () => {
+  const app = await organizerSource();
+
+  // The import panel's whole guarantee is that the file never leaves the
+  // browser, so 尚未上傳 promised the one thing that guarantee rules out.
+  assert.doesNotMatch(app, /尚未上傳/);
+  assert.match(app, /個工作表。`/);
+
+  // The organizer is never asked to type an identifier, so saying they need
+  // not type one introduces the idea in order to dismiss it.
+  assert.doesNotMatch(app, /不需自行輸入|內部 ID/);
+
+  // An empty list cannot be opened from, and someone without permission to
+  // create activities is waiting for an invitation, not for a button.
+  assert.match(app, /還沒有活動/);
+  assert.match(app, /收到主辦邀請後，活動會出現在左側。/);
+
+  // 移除 has one documented use, breaking a duplicated booth's tie, so it
+  // belongs on the rows an issue names rather than on 170 correct ones.
+  assert.ok(app.includes("flagged.has(row.sourceRow)"), "移除 is conditional on the row being named by an issue");
 });
