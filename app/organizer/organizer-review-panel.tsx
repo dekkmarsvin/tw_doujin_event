@@ -23,6 +23,10 @@ type SectionProps = {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onUnauthorized: () => void;
+  /** Set when the reader's role withholds this action. The controls stay on
+   * the page and stop working; the reason is stated once at the top of the
+   * panel rather than repeated under each of them (#217, #220). */
+  blocked?: boolean;
 };
 
 /** One action, its own result line, its own busy flag. Reloading the workspace
@@ -39,28 +43,32 @@ function useSectionAction({ onChanged, onUnauthorized }: Pick<SectionProps, "onC
 function CollaboratorSection(props: SectionProps) {
   const [editorEmail, setEditorEmail] = useState("");
   const { detail } = props;
-  const { act, notice, pending } = useSectionAction(props);
-  return <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), "協作者邀請已寄出。"); }}><input type="email" required placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit" disabled={pending}>邀請協作者</button><button type="button" className={styles.dangerText} disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form><ActionNotice notice={notice} /></div>;
+  const { act, notice, pending: busy } = useSectionAction(props);
+  const pending = busy || props.blocked === true;
+  return <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), "協作者邀請已寄出。"); }}><input type="email" required disabled={pending} placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit" disabled={pending}>邀請協作者</button><button type="button" className={styles.dangerText} disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form><ActionNotice notice={notice} /></div>;
 }
 
 function OwnerSection(props: SectionProps) {
   const [ownerEmail, setOwnerEmail] = useState("");
   const { detail } = props;
-  const { act, notice, pending } = useSectionAction(props);
-  return <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), "負責人邀請已寄出。"); }}><input type="email" required placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
+  const { act, notice, pending: busy } = useSectionAction(props);
+  const pending = busy || props.blocked === true;
+  return <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), "負責人邀請已寄出。"); }}><input type="email" required disabled={pending} placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
 }
 
 function SubmitSection(props: SectionProps) {
   const { detail } = props;
-  const { act, notice, pending } = useSectionAction(props);
+  const { act, notice, pending: busy } = useSectionAction(props);
+  const pending = busy || props.blocked === true;
   return <div className={styles.subpanel}><h4>送審</h4><p>{detail.event.operation === "AMEND" ? "送審會固定這一版的修正宣告、名單與地圖。核准後由系統自動發布；原公開版本會保留到修正部署完成。" : "送審後，活動代碼就不能再更改。"}</p><button type="button" disabled={pending || (detail.event.operation === "AMEND" && !detail.publicationAvailable)} onClick={() => act(submitOrganizerEvent(detail.event.id, detail.event.version), "已送交網站管理者審閱。")}>送出審閱</button><ActionNotice notice={notice} /></div>;
 }
 
 function AdminReviewSection(props: SectionProps) {
   const [note, setNote] = useState("");
   const { detail } = props;
-  const { act, notice, pending } = useSectionAction(props);
-  return <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准即同意這一版送審內容公開，系統會自動開始發布。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} disabled={pending} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={pending || !detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "核准已記錄，請查看下方發布進度。")}>核准並發布</button></div><ActionNotice notice={notice} /></div>;
+  const { act, notice, pending: busy } = useSectionAction(props);
+  const pending = busy || props.blocked === true;
+  return <div className={styles.subpanel}><h4>網站管理者審閱</h4><p>核准即同意這一版送審內容公開，系統會自動開始發布。</p><p className={styles.warning}>若送審內容是你自己提交的，系統會另外記錄自我核准。</p><textarea aria-label="審閱說明" disabled={pending} placeholder="審閱說明" value={note} onChange={(event) => setNote(event.target.value)} /><div className={styles.row}><button type="button" className={styles.ghost} disabled={pending} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "changes_requested", note), "已要求修改。")}>要求修改</button><button type="button" disabled={pending || !detail.publicationAvailable} onClick={() => act(reviewOrganizerEvent(detail.event.id, detail.event.version, "approve", note), "核准已記錄，請查看下方發布進度。")}>核准並發布</button></div><ActionNotice notice={notice} /></div>;
 }
 
 function ReopenSection(props: SectionProps & { reopenBlockedByRemoteState: boolean }) {
@@ -101,14 +109,25 @@ export function ReviewPanel({ session, detail, onChanged }: {
     && detail.publication.candidateVersion === detail.event.version
     && detail.publication.started === true;
   const section = { detail, onChanged, onUnauthorized };
+  // One line per cause, not one per blocked control.
+  const stage = detail.event.status;
+  const missingRoles = [
+    !owner && (stage === "draft" || stage === "changes_requested" || stage === "submitted" || stage === "failed")
+      ? "你是這個活動的協作者。管理協作者與送出審閱需要負責人身分，請聯絡網站管理者指派。" : null,
+    !session.isAdmin ? "增減負責人與審閱送審內容只有網站管理者可以做。" : null,
+  ].filter((reason): reason is string => reason !== null);
   return <section className={styles.panel}>
     <h3>送審與發布狀態</h3>
     {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
     <div className={styles.statusBoard}><span>目前狀態</span><strong>{STATUS_LABEL[detail.event.status]}</strong><span>活動代碼</span><strong>{detail.draft.event.id ?? "尚未設定"}</strong></div>
-    {owner && <CollaboratorSection {...section} />}
-    {session.isAdmin && <OwnerSection {...section} />}
-    {owner && (detail.event.status === "draft" || detail.event.status === "changes_requested") && <SubmitSection {...section} />}
-    {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
+    {/* Stated once, above the controls it governs. #216 was this panel going
+        blank on an admin who never got the owner grant: nothing on the page
+        said what was missing, so the work looked finished and stuck. */}
+    {missingRoles.map((reason) => <p key={reason} className={styles.warning}>{reason}</p>)}
+    <CollaboratorSection {...section} blocked={!owner} />
+    <OwnerSection {...section} blocked={!session.isAdmin} />
+    {(detail.event.status === "draft" || detail.event.status === "changes_requested") && <SubmitSection {...section} blocked={!owner} />}
+    {detail.event.status === "submitted" && <AdminReviewSection {...section} blocked={!session.isAdmin} />}
     {(session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}
     {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>自動發布尚未啟用，{detail.event.operation === "AMEND" ? "本次修正" : "活動"}尚未公開。內容會保留，請聯絡網站管理者完成發布啟用檢查。</p>}
     <PublicationSection {...section} session={session} owner={owner} historicalPublication={historicalPublication} />
