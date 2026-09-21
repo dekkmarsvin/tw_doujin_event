@@ -319,7 +319,16 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
         {publicationReadError.needsLogin ? <a href="/organizer?reauth=1">重新登入並返回活動</a>
           : <button type="button" onClick={() => { void refresh().catch((error) => setNotice({ kind: "error", message: message(error) })); }}>重新讀取進度</button>}
       </div>}
-      {!detail ? <div className={styles.empty}><h2>選擇活動</h2><p>從左側開啟活動，開始準備送審資料。</p></div>
+      {/* An empty list used to be told to open something from a list that has
+          nothing in it. The line now names the one thing that can be done from
+          here, and for someone who cannot create activities that is waiting
+          for an invitation, not pressing a button they do not have (#225). */}
+      {!detail ? <div className={styles.empty}>
+        <h2>{events.length === 0 ? "還沒有活動" : "選擇活動"}</h2>
+        <p>{events.length > 0 ? "從左側開啟活動，開始準備送審資料。"
+          : session.isAdmin ? "用左側的「建立新活動」開始第一場。"
+            : "收到主辦邀請後，活動會出現在左側。"}</p>
+      </div>
         : <WorkspaceSurface
           key={detail.event.id}
           session={session}

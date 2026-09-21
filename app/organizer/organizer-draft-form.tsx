@@ -173,7 +173,7 @@ export function DraftForm({
               areaIds: [], areaMode: "imported",
             };
             return next;
-          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select><small>從清單選擇即可，不需自行輸入。</small></label>
+          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select></label>
           <label>使用空間<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => update((next) => {
             const space = spaces.find((item) => item.id === event.target.value);
             next.venue.assignments[index].venueSpaceId = space?.id ?? "";
@@ -186,7 +186,7 @@ export function DraftForm({
             next.venue.assignments[index].areaMode = areaMode;
             next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
             return next;
-          })}><option value="imported">由攤位名單帶入</option><option value="none">無分區</option></select><small>{assignment.areaMode === "none" ? "匯入時自動使用 ALL，不需展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
+          })}><option value="imported">由攤位名單帶入</option><option value="none">無分區</option></select><small>{assignment.areaMode === "none" ? "這個空間沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
           <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
             {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
             {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}

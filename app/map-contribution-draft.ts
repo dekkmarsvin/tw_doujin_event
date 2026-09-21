@@ -1,5 +1,5 @@
 import { EVENT_MAP_VERSION, validateEventMapLayout, type EventMapLayout, type MapRect, type PublishedEventMap } from "./event-map";
-import { validateMapTemplateLayout } from "./map-template-registry";
+import { mapTemplateLabel, validateMapTemplateLayout } from "./map-template-registry";
 import { validMapAuthoringState, type MapAuthoringState } from "./map-authoring-state";
 
 export const MAP_CONTRIBUTION_DRAFT_SCHEMA = "map-contribution-draft/1" as const;
@@ -181,7 +181,10 @@ export function validateMapContributionDraft(
   const base = validateEventMapLayout(content.layout);
   if (!base.ok) problems.push(...base.errors.slice(0, 50).map((message) => ({ code: "invalid_layout" as const, message })));
   if (content.layout.template !== scope.mapTemplate) {
-    problems.push({ code: "template_mismatch", message: `這張地圖使用的版面（${content.layout.template}）與活動指定的版面（${scope.mapTemplate}）不一致。` });
+    // TAIWAN_GENERIC_V1 is a stored value, not a name anyone was ever shown.
+    // This message reaches the organizer workspace as well as the contribution
+    // panel, and neither reader is a programmer (#223).
+    problems.push({ code: "template_mismatch", message: `這張地圖使用的版面（${mapTemplateLabel(content.layout.template)}）與活動指定的版面（${mapTemplateLabel(scope.mapTemplate)}）不一致。` });
   } else {
     const template = validateMapTemplateLayout(scope.mapTemplate, content.layout);
     if (!template.ok) {
