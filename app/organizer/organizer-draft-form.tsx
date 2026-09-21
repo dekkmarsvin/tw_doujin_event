@@ -196,7 +196,10 @@ export function DraftForm({
       })}
       {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未選擇場館與使用空間。</p><button type="button" disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button></div>}
     </div>}
-    {taskIssues.length > 0 && <div className={styles.taskIssues} aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
+    {/* The same pending item is also listed in 準備進度, so this block carries a
+        name: a reader arriving at the announcement needs to know which of the
+        two they are hearing, and it is the one beside the controls that fix it. */}
+    {taskIssues.length > 0 && <div className={styles.taskIssues} role="group" aria-label="這個表單尚待完成的項目" aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
     <div className={styles.formActions}>
       <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved); }}>{saving ? "儲存中…" : saveLabel}</button>
       {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
