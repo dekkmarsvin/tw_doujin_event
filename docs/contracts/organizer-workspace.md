@@ -13,8 +13,23 @@
 - 入口是 `/organizer`，`noindex, nofollow`，不出現在公開導覽，也**不與 `/circle` 或閱讀端共用 bundle**。
 - 登入沿用[社團自助控制面](./circle-portal.md)的 email 一次性連結與統一 7 天 session cookie；`POST /api/auth/request-link` 以 `audience: "organizer"` 決定信件與登入連結指向 `/organizer`。Turnstile、速率上限與 session 規則只寫在該契約，本文不重複。
 - **帳號本身沒有 Organizer 權限。** 能看到工作區的條件是持有任一候選活動的 grant，或是全域管理者。
+- 申請人可在同一 `/organizer` 登入查看自己的申請；送件或待審核不授予候選活動 grant。申請表與結果可在手機使用，活動資料與地圖編輯仍限桌機。
 - 工作區是桌機介面。視窗過窄時顯示「請改用桌機」，不提供縮小版的地圖編輯。
 - 左側活動列表可以收合，收合後把寬度讓給工作區。收合狀態不保存，重新登入回到展開。
+
+## 活動申請
+
+主辦、獲授權人員及提供官方來源的資料整理者沿用 Organizer magic-link 登入。`POST /api/organizer/applications` 收活動名稱、官方 HTTPS 網址、預計開始／結束日期、選填地點、與活動關係及說明；資料整理者須填整理理由。不收另一份聯絡資料，不接受既有 eventId／candidateId 或角色授權欄位。
+
+`GET /api/organizer/applications` 只回傳自己的申請；全域管理者在原工作區「活動申請」查看全部申請、登入帳號及官方來源。私人內容不進 Reader 或匿名 API。拒絕必須填理由，申請人可回此頁更新狀態。送件使用 client UUID，重試同一內容只留一筆，不能以相同 UUID 覆寫或讀取別人的申請。
+
+管理者以 `POST /api/admin/organizer/applications/:id` 核准／拒絕。核准在同一 D1 batch 轉換 pending 狀態、建立新 CREATE 候選、初始 revision／workspace、已接受的邀請及 Owner grant；以唯一 review token 保護所有相依寫入，交易內重查申請者、管理者及 session。重複／併行同決策回原結果，相反決策回 409，不會重新授予已撤銷的 grant。拒絕不建候選。既有活動請由管理者拒絕重複申請並按原協作者流程處理，不因名稱或來源相同而授權原活動。
+
+新候選沿用申請名稱與官方來源，預計日期／地點留在申請供確認；真正活動日與使用空間由既有引導填寫。核准申請僅准許建置，不建立「官方認證」標示；內容送審、核准 snapshot、publication job、恢復與 production smoke 全沿用既有路徑。
+
+公開活動選擇頁的 CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN=true` 控制，送件另由 Pages `ORGANIZER_APPLICATIONS_OPEN=true` 控制，均預設關閉；Reader 不為此呼叫 Function。未通過真實零補救驗收前不得設定為 true。隔離／受控驗收可只把明確帳號加入伺服器的 `ORGANIZER_APPLICATION_ALLOWED_EMAILS`（逗號分隔），不顯示公開 CTA，其他帳號送件仍回 403。既有邀請與已送件結果不受關閉開關影響。實際啟用步驟見部署 runbook，驗收證據集中 #163。
+
+申請與決策不設新的 TTL／排程；帳號刪除時刪除 pending 申請，已審核申請保留去識別的決策與候選連結，清空申請自由內容與理由。帳號／審核者去識別化沿用既有刪除交易；正式活動內容及 sole-owner 刪除保護不變。
 
 ## 引導式任務站與活動建置冊
 

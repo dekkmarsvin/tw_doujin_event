@@ -1,5 +1,6 @@
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
+import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -93,6 +94,8 @@ type PortalConfig = {
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
   /** Merge remains off until the GitHub App and both repository rulesets are verified. */
   organizerPublicationMode?: "disabled" | "fake" | "github";
+  organizerApplicationsOpen?: boolean;
+  organizerApplicationAllowedEmails?: string[];
 };
 
 type PortalDependencies = {
@@ -263,6 +266,58 @@ export function createCirclePortalHandlers({
     return json({ turnstileSitekey: turnstileSitekey() });
   }
 
+  function canApplyForEvent(email: string) {
+    return config.organizerApplicationsOpen === true
+      || (config.organizerApplicationAllowedEmails ?? []).some((allowed) => normalizeEmail(allowed) === email);
+  }
+
+  function applicationResponse(row: NonNullable<Awaited<ReturnType<IdentityRepository["getOrganizerApplication"]>>>, admin: boolean): OrganizerApplication {
+    const data = JSON.parse(row.data_json) as Partial<OrganizerApplicationInput>;
+    return {
+      name: "已刪除帳號的申請", officialUrl: "", startDate: "", endDate: "", location: "", relationship: "curator", note: "",
+      ...data, id: row.id, status: row.status, createdAt: row.created_at, reviewedAt: row.reviewed_at,
+      reason: row.reason, candidateId: admin || row.applicant_role ? row.candidate_id : null,
+      ...(admin ? { applicantEmail: row.applicant_email } : {}),
+    };
+  }
+
+  async function listEventApplications(request: Request) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const admin = await isAdmin(current.email);
+    const applications = await repository.listOrganizerApplications(current.accountId, admin);
+    return json({ applications: applications.map((row) => applicationResponse(row, admin)), canApply: canApplyForEvent(current.email) });
+  }
+
+  async function submitEventApplication(request: Request) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!canApplyForEvent(current.email)) return json({ error: "活動申請尚未開放。" }, 403);
+    const body = await readJson(request);
+    const data = parseOrganizerApplication(body?.application);
+    if (!data || typeof body?.id !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.id)
+      || Object.keys(body).some((key) => !["id", "application"].includes(key))) {
+      return json({ error: "請填寫活動名稱、有效的官方 HTTPS 網址、日期與申請身分；資料整理者請補充整理理由。" }, 400);
+    }
+    const result = await repository.submitOrganizerApplication({ id: body.id, accountId: current.accountId, data, now: config.now() });
+    return result ? json({ application: applicationResponse(result, false) }, 201)
+      : json({ error: "申請內容或帳號狀態已變更，請重新整理後確認送件結果。" }, 409);
+  }
+
+  async function reviewEventApplication(request: Request, applicationId: string) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    if (!body || !["approved", "rejected"].includes(String(body.decision)) || typeof body.reason !== "string"
+      || body.reason.length > 1000 || (body.decision === "rejected" && !body.reason.trim())
+      || Object.keys(body).some((key) => !["decision", "reason"].includes(key))) return json({ error: "請選擇核准或拒絕；拒絕時須填寫理由。" }, 400);
+    const result = await repository.reviewOrganizerApplication({ id: applicationId, decision: body.decision as "approved" | "rejected",
+      reason: body.reason.trim(), reviewerAccountId: gate.session.accountId, sessionId: gate.session.sessionId,
+      now: config.now(), ipHash: await clientIpHash(request) });
+    return result ? json({ application: applicationResponse(result, true) })
+      : json({ error: "申請、帳號或審核權限已變更，請重新讀取申請。" }, 409);
+  }
+
   async function requestLink(request: Request) {
     const body = await readJson(request);
 
@@ -372,6 +427,8 @@ export function createCirclePortalHandlers({
       expiresAt: now + sessionTtl,
       isMapContributor: await repository.hasActiveMapContributor(accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
+      canApplyForEvent: canApplyForEvent(email),
+      hasEventApplications: await repository.hasOrganizerApplications(accountId),
     }, 200, {
       "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(sessionTtl / 1000)),
     });
@@ -387,6 +444,8 @@ export function createCirclePortalHandlers({
       expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
       isMapContributor: await repository.hasActiveMapContributor(current.accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
+      canApplyForEvent: canApplyForEvent(current.email),
+      hasEventApplications: await repository.hasOrganizerApplications(current.accountId),
     });
   }
 
@@ -3016,6 +3075,7 @@ export function createCirclePortalHandlers({
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
+    listEventApplications, submitEventApplication, reviewEventApplication,
     adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
     adminProbeGitHubInstallation,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and

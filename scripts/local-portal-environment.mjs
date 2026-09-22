@@ -49,6 +49,11 @@ export async function readLocalPortalEnvironment(source = DEFAULT_CONFIG) {
   assert.equal(values.TURNSTILE_SECRET, "1x0000000000000000000000000000000AA");
   assert.equal(values.THUMBNAIL_PUBLIC_ORIGIN, "http://127.0.0.1:8788/__local-thumbnail");
   assert.equal(values.ORGANIZER_PUBLICATION_MODE, "disabled");
+  assert.notEqual(values.ORGANIZER_APPLICATIONS_OPEN, "true", "local acceptance must keep public applications closed");
+  for (const email of (values.ORGANIZER_APPLICATION_ALLOWED_EMAILS ?? "").split(",").filter(Boolean)) {
+    assert.match(email, RESERVED_TEST_ADDRESS, "local applicants must use reserved .test addresses");
+    assert.ok(recipients.includes(email), "local applicants must be able to receive a login link");
+  }
   assert.equal(values.MAILGUN_API_KEY, undefined, "local portal must not carry Mailgun credentials");
   assert.equal(values.MAILGUN_DOMAIN, undefined, "local portal must not carry a Mailgun domain");
   return values;

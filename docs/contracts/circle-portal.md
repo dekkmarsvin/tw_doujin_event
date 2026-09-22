@@ -172,6 +172,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **帳號跨活動，授權逐活動。** magic link、session 與帳號刪除都不帶活動；認領、補充資料、代管縮圖與地圖草稿都帶。
 
+同一帳號亦可在 `/organizer` 申請建置活動，資格、送件開關、私人結果與管理審核依[主辦工作區契約](./organizer-workspace.md#活動申請)。Session 的 `canApplyForEvent`／`hasEventApplications` 只決定申請介面可達，不是 Organizer grant；未核准者不能讀寫任何候選。帳號刪除同步清除 pending 申請並去識別化已審核決策，不變更正式活動內容。
+
 - **請求指名活動**：控制面每一條 event-scoped route 讀 `?event=<eventId>`。指名的活動就是這次請求唯一的授權範圍。
 - **沒有指名才用預設**：`env.EVENT_ID` 只是「請求沒帶 `event` 時用哪一場」的 migration fallback。**指名一個服務不到的活動不會退回預設**——那會把針對甲活動的寫入跑在乙活動上——而是 `404`。
 - **服務範圍的定義與公開 overlay 相同**：這次部署有沒有該活動的靜態資料。控制面與閱讀端因此永遠對「有哪些活動」給同一個答案，不另立活動 registry。

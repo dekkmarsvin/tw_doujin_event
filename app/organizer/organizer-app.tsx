@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
+import { OrganizerApplicationsPanel } from "./organizer-applications-panel";
 import { ReviewPanel } from "./organizer-review-panel";
 import { OrganizerMapPanel } from "./organizer-map-panel";
 import { ImportPanel } from "./organizer-import-panel";
@@ -46,7 +47,7 @@ export default function OrganizerApp() {
     }
     void (token ? verifyLoginToken(token) : readSession())
       .then((current) => {
-        if (!current.isAdmin && !current.hasOrganizerAccess) throw new PortalError("此帳號沒有活動工作區權限。", 403);
+        if (!current.isAdmin && !current.hasOrganizerAccess && !current.canApplyForEvent && !current.hasEventApplications) throw new PortalError("此帳號沒有活動工作區權限。", 403);
         setSession(current);
       })
       .catch((error: unknown) => {
@@ -68,16 +69,21 @@ export default function OrganizerApp() {
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
     {!ready ? <main className={styles.centerCard}><p>載入工作區…</p></main>
       : !session ? <OrganizerSignIn />
-        : isDesktop ? <OrganizerWorkspace session={session} /> : <NarrowScreenBlocker onSignedOut={() => setSession(null)} />}
+        : !session.isAdmin && !session.hasOrganizerAccess ? <main className={styles.applicationMain}><OrganizerApplicationsPanel session={session} /></main>
+        : isDesktop ? <OrganizerWorkspace session={session} />
+          : session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
+            <p>活動資料與地圖編輯請改用桌機。</p>
+            <OrganizerApplicationsPanel session={session} />
+          </main> : <main><NarrowScreenBlocker onSignedOut={() => setSession(null)} /></main>}
   </div>;
 }
 
 function NarrowScreenBlocker({ onSignedOut }: { onSignedOut: () => void }) {
-  return <main className={styles.centerCard}>
+  return <section className={styles.centerCard}>
     <h2>請改用桌機</h2>
     <p>活動資料與地圖編輯需要較寬的畫面。</p>
     <button type="button" className={styles.ghost} onClick={() => void signOut().finally(onSignedOut)}>登出</button>
-  </main>;
+  </section>;
 }
 
 function OrganizerSignIn() {
@@ -91,7 +97,7 @@ function OrganizerSignIn() {
 
   return <main className={styles.centerCard}>
     <h2>主辦單位登入</h2>
-    <p>使用受邀的 email 取得 15 分鐘內有效的一次性登入連結。</p>
+    <p>使用 email 取得 15 分鐘內有效的一次性登入連結。</p>
     <form className={styles.stack} onSubmit={(event) => {
       event.preventDefault();
       if (!humanToken) return;
@@ -112,6 +118,7 @@ function OrganizerSignIn() {
 }
 
 function OrganizerWorkspace({ session }: { session: PortalSession }) {
+  const [applicationsOpen, setApplicationsOpen] = useState(false);
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
   const [listLoaded, setListLoaded] = useState(false);
   const resumeKey = `organizer.resumeCandidate:${session.email}`;
@@ -266,7 +273,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   };
 
   const chooseEvent = (candidateId: string) => {
-    requestNavigation("切換活動", () => setSelectedId(candidateId));
+    requestNavigation("切換活動", () => { setApplicationsOpen(false); setSelectedId(candidateId); });
   };
 
   const chooseSection = (nextSection: OrganizerWorkspaceSection) => {
@@ -296,6 +303,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       .catch((error) => setNotice({ kind: "error", message: message(error) }));
   };
 
+  if (applicationsOpen) return <main className={styles.applicationMain}>
+    <button type="button" className={styles.ghost} onClick={() => setApplicationsOpen(false)}>返回活動工作區</button>
+    <OrganizerApplicationsPanel session={session} onReviewed={reloadList} />
+  </main>;
+
   return <main className={eventListOpen ? styles.shell : `${styles.shell} ${styles.shellNarrow}`}>
     <aside className={styles.sidebar}>
       <div className={styles.sidebarHead}>
@@ -310,6 +322,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
         ><UiIcon name={eventListOpen ? "chevron-left" : "chevron-right"} /></button>
       </div>
       <div id="organizer-event-list" hidden={!eventListOpen}>
+        {(session.isAdmin || session.canApplyForEvent || session.hasEventApplications) && <button type="button" className={styles.ghost}
+          onClick={() => requestNavigation("查看活動申請", () => setApplicationsOpen(true))}>活動申請</button>}
         {session.isAdmin && <CreateEntry
           onStarted={() => setNotice(IDLE)}
           onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
