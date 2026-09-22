@@ -14,7 +14,7 @@
 | 4. 建立地圖 | #218、#220 | 空白地圖的建立鍵停用並具名說明；畫入 A01 後可存，顯示成功且編輯器保持開啟。 |
 | 5. 檢查及預覽 | #220、#223 | 執行檢查、產生預覽；另建只有柱子的地圖，重現缺 A01 的錯誤。錯誤卡／側欄使用相同人類用語，列出來源檔、社團、列號與修正路徑。修正檢查與預覽的兩則成功訊息共存。 |
 | 6. 角色及視窗限制 | #217、#224 | 在本機郵件接收器邀請協作者並登入，確認送審／協作者管理等動作仍可見、停用且有角色原因。900px 寬只顯示桌機提示。 |
-| 7. 自動化回歸 | #303 | 沿用完整 browser gate，包含 amendment publication 的重試發布情境；沒有修改 timeout 或削弱檢查。 |
+| 7. 自動化回歸 | #303 | 完整 browser gate 發現固定 9/15 測試資料與真實瀏覽器日期不一致，9/22 起觸發前端登入到期；讓這支 journey 的瀏覽器時鐘與 handler／session fixture 一致。沒有修改 timeout、正式登入期限或削弱檢查。 |
 
 ## 發現、修正與複驗
 
@@ -68,6 +68,7 @@
 - 全部 854 個 Node 測試以 `node --test --test-concurrency=1 --test-reporter=spec tests/*.test.mjs` 通過，0 skipped。首次 `npm test` 的 Windows 多程序執行遇到 `EADDRINUSE`；完整同一集合改為序列執行，CI 仍執行原始 gate。
 - ESLint 全專案通過，僅在本機命令排除既有 `.tmp/**` 及 `workers/publication-dispatch/.tmp/**` 產物；repository lint 規則未更改。`tsc --noEmit --incremental false` 通過。
 - 延伸既有 `portal-organizer-references` 及 `portal-organizer-import` journeys，分別 11／6 個截圖檢查通過、無 page errors；包含儲存期間停用、refresh 失敗後重試、連續儲存、混合空間與合法 ALL。
+- 完整 browser run 中 20 支 journey 通過，唯一失敗為 #303 fixture 日期與瀏覽器時鐘不一致。同步該測試時鐘後，amendment publication 單獨重跑 6 個檢查通過，涵蓋核准、失敗與重試完成。Session expiry 的 10 個檢查也已通過；沒有放寬正式期限。
 - 獨立 reviewer 初審 `f380400`，發現兩個儲存期間編輯／版本回退 blocker；於 `4f8e84c` 聚焦驗證完成，blocker 為零。只進行一輪必要修正。
 - 完整 browser suite 與 required CI 的最終結果記於交付 PR。
 
