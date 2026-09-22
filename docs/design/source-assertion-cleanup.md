@@ -55,4 +55,6 @@
 - `reader-thumbnails` 3、`portal-organizer-entry` 4、`portal-organizer-references` 11、`portal-circle-claim` 10 checks 通過；journey 程式及斷言均未修改。
 - ESLint、`tsc --noEmit --incremental false` 通過。
 - Browser 在獨立 worktree 的 `127.0.0.1:8793` Pages runtime、本機 D1／收信槽執行；原工作區的 8788 portal 未動。僅暫存啟動程式調整本機 port／thumbnail origin，不修改專案 launcher 或設定。
-- 全套 Node 測試與獨立 review：執行中，完成後補記。
+- 全套 89 個 Node 測試檔以 `node --test --test-concurrency=1 --test-reporter=spec` 執行：891/891 通過，零失敗／略過，355.9 秒。採逐檔執行以降低本機連線壓力，不能與先前不同併行設定的耗時直接比較。完整執行開始於 `37120f5`；恢復確認畫面 guard 後，於 `a6fe7e8` 重跑上述 31 個聚焦案例並通過，沿用其他未變內容的驗證。
+- 獨立 review 以 `37120f5` 為第一次受審版本；唯一 blocker 是確認畫面 guard 缺乏等效覆蓋，已於 `a6fe7e8` 恢復。同一 reviewer 聚焦複驗通過，其餘 24 項沿用逐項對照結果，剩餘 blocker 為零，Review Done。
+- 本機執行 log、browser report 與截圖存於忽略版控的 `outputs/source-cleanup/`。這次清理減少實作寫法綁定，不以這組驗證宣稱測試加速。
