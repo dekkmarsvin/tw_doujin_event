@@ -29,7 +29,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
   const [minimum, setMinimum] = useState(0);
   const viewRef = useRef(view);
   const fittedScope = useRef<string | null>(null);
-  const geometry = useRef<{ width: number; height: number; inset: { x: number; y: number }; fit: MapView } | null>(null);
+  const geometry = useRef<{ width: number; height: number; fitWidth: number; inset: { x: number; y: number }; fit: MapView } | null>(null);
   const pending = useRef<{ code: string; scope: string } | null>(null);
   const [request, setRequest] = useState(0);
   const fittedKey = `${artifactKey}|${publishedMap?.revision ?? "pending"}`;
@@ -74,7 +74,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
       bottom: forFit ? { x: 0, y: viewport.height - (mobileNav.current?.getBoundingClientRect().height ?? 64) - MOBILE_SUMMARY_PEEK_HEIGHT, width: viewport.width, height: 0 } : local(mobileDock.current),
       controls: forFit ? { x: fitControlLeft, y: 0, width: 0, height: 0 } : local(controls.current),
     });
-    return { viewport: size, rect };
+    return { viewport, fitWidth: size.width, rect };
   }, [controls, desktop, details, detailsOpen, fitTools, map, mobileDock, mobileNav, tools]);
 
   const getFit = useCallback(() => {
@@ -84,7 +84,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     const size = { width: floorWidth, height: floorHeight };
     const inset = getInset();
     const fit = fitMapInRect(bounds.rect, size, inset);
-    return fit ? { width: bounds.viewport.width, height: bounds.viewport.height, inset, fit } : null;
+    return fit ? { width: bounds.viewport.width, height: bounds.viewport.height, fitWidth: bounds.fitWidth, inset, fit } : null;
   }, [floorWidth, getInset, measure, publishedMap]);
 
   const reset = useCallback(() => {
@@ -105,7 +105,9 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
       if (!next) return;
       const previous = geometry.current;
       const first = fittedScope.current !== fittedKey;
-      const resized = !previous || next.width !== previous.width || next.height !== previous.height || Math.abs(next.fit.zoom - previous.fit.zoom) > .00001;
+      // Ignore the borrowed search-column width when detecting a resize, but
+      // retain the actual viewport below to preserve its center on real resizes.
+      const resized = !previous || next.fitWidth !== previous.fitWidth || next.height !== previous.height || Math.abs(next.fit.zoom - previous.fit.zoom) > .00001;
       geometry.current = next;
       setMinimum(next.fit.zoom);
       if (first || resized) {

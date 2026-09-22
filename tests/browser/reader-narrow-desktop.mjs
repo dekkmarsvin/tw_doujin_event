@@ -6,6 +6,15 @@ const journey = await start("reader-narrow-desktop");
 journey.report.source = "local pinned FF47, not production";
 journey.report.measurements = [];
 const settle = page => page.waitForTimeout(200);
+const manualView = page => page.evaluate(() => {
+  const map = document.querySelector(".map").getBoundingClientRect();
+  const floor = document.querySelector(".floor");
+  const transform = getComputedStyle(floor).transform, matrix = new DOMMatrix(transform);
+  return { transform, zoom: matrix.a, center: {
+    x: (map.width / 2 - floor.offsetLeft - matrix.e) / matrix.a,
+    y: (map.height / 2 - floor.offsetTop - matrix.f) / matrix.a,
+  } };
+});
 const measure = page => page.evaluate(() => {
   const rect = selector => document.querySelector(selector)?.getBoundingClientRect().toJSON();
   const text = selector => {
@@ -94,6 +103,29 @@ try {
       }
       await page.close();
     }
+  }
+  for (const scale of ["standard", "extra"]) {
+    const page = await journey.mapPage({ event: "ff47", viewport: { width: 1024, height: 768 }, routes: async page => {
+      await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), scale);
+    } });
+    await page.locator('#desktop-panel-explore button[class*="resultMain"]').first().click();
+    await page.getByRole("button", { name: "回搜尋", exact: true }).waitFor();
+    for (let step = 0; step < 3; step++) await page.getByRole("button", { name: "放大地圖", exact: true }).click();
+    await settle(page);
+    const before = await manualView(page);
+    for (const [width, height] of [[1440, 900], [1050, 768], [1024, 768]]) {
+      await page.setViewportSize({ width, height });
+      await settle(page);
+      const after = await manualView(page);
+      assert.equal(after.zoom, before.zoom, "manual zoom survives resizing with details open");
+      for (const axis of ["x", "y"]) assert.ok(Math.abs(after.center[axis] - before.center[axis]) < .01, `resize preserves actual viewport center: ${scale} ${width} ${axis}`);
+    }
+    const selected = await manualView(page);
+    await page.getByRole("button", { name: "回搜尋", exact: true }).click();
+    await settle(page);
+    assert.equal((await manualView(page)).transform, selected.transform, "restoring search preserves the manual view");
+    await journey.capture(page, `narrow-desktop-manual-resize-${scale}`);
+    await page.close();
   }
   await journey.finish();
 } catch (error) { await journey.abort(error); }
