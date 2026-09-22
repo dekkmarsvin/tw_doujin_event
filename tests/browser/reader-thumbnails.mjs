@@ -39,7 +39,7 @@ try {
       params: WITH_MEDIA_COLUMN,
       routes: routes(onlyCircle, overridesRoute("sample", scenario.overrides), pictureRoute(scenario.loads)),
     });
-    const card = page.getByRole("button", { name: new RegExp(NAME) }).first();
+    const card = page.getByRole("link", { name: new RegExp(NAME) }).first();
     await card.waitFor();
     widths[scenario.name] = await columns(card);
 
