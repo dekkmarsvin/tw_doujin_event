@@ -20,6 +20,10 @@ The five canonical triage roles, each label string equal to its name. See `docs/
 
 Domain vocabulary, architecture decisions, and behavioral contracts are located through `docs/agents/domain.md`.
 
+### Interface copy
+
+Before changing user-facing interface text, read `docs/design/copy.md`. Apply its audience and task boundary to the surface being changed, and keep actions and states consistent with what the user can actually do. Limit copy work to the affected surface; do not expand a copy change into a site-wide rewrite, a new copy framework, or an extra audit process unless the task explicitly requires it.
+
 ### Review-fix loop
 
 For implementation review, finding disposition, reviewer assignment, verification, and review completion, follow `docs/agents/review-loop.md` as the single rule source.
