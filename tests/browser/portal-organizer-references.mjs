@@ -8,12 +8,23 @@ import { start } from "./support/journey.mjs";
 const journey = await start("portal-organizer-references");
 try {
   await clearMail();
-  const page = await signIn(journey, ADMIN, "organizer");
+  let staleReads = 0;
+  const page = await signIn(journey, ADMIN, "organizer", {
+    routes: async (page) => {
+      await page.addInitScript((email) => localStorage.setItem(`organizer.resumeCandidate:${email}`, "removed-candidate"), ADMIN);
+      await page.route("**/api/organizer/events/removed-candidate", (route) => {
+        staleReads += 1;
+        return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found", message: "找不到活動。" }) });
+      });
+    },
+  });
   await page.getByRole("button", { name: "建立新活動", exact: true }).click();
   await page.getByLabel("暫定名稱", { exact: true }).fill("分類目錄驗收");
   await page.getByLabel("負責人 Email", { exact: true }).fill(ADMIN);
   await page.getByRole("button", { name: "建立並邀請", exact: true }).click();
   await page.getByLabel("活動代碼", { exact: false }).fill(`references-${Date.now()}`);
+  assert.equal(staleReads, 0, "a removed remembered candidate is checked against the event list before reading it");
+  assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await page.getByLabel(/^來源名稱/).fill("測試主辦提供");
   await page.getByLabel(/^官方公告網址/).fill("https://organizer.example/event");
   await page.getByRole("button", { name: "建立主辦單位", exact: true }).click();
@@ -36,6 +47,8 @@ try {
   await page.getByText("原創作品、二次創作", { exact: true }).waitFor();
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("heading", { name: "活動日期", exact: true }).waitFor();
+  assert.equal(await page.getByRole("group", { name: "這個表單尚待完成的項目" }).count(), 0, "an untouched next task does not inherit attempted validation");
+  assert.equal(await page.getByText("已儲存。", { exact: true }).count(), 0, "the previous task's success does not appear on the next task");
   await page.getByRole("button", { name: "1 活動名稱與來源 已完成", exact: true }).click();
   await page.reload();
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
@@ -55,8 +68,8 @@ try {
   await page.getByLabel("第一天日期", { exact: true }).fill("2026-11-07");
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   // #298: 場館／使用空間／展區 are near-synonyms in everyday Chinese, so the step
-  // that asks for all three opens with two published events answering it. Same
-  // hall, different answers -- 展區 belongs to the event, not to the building.
+  // that asks for all three opens with two published events answering it.
+  // 展區 belongs to the event, not to the building.
   const layers = page.getByRole("group", { name: "場館、使用空間、展區的填寫依據" });
   await layers.getByText("A–K 區、L–W 區", { exact: true }).waitFor();
   await layers.getByText("沒有分區", { exact: true }).waitFor();
@@ -106,10 +119,76 @@ try {
   assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
   await page.getByRole("combobox", { name: /^使用空間/ }).selectOption("zhengyan-exhibition-area");
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
+  const sections = page.getByRole("group", { name: "活動項目" });
+  await sections.getByRole("button", { name: /^活動/ }).click();
+  await page.getByLabel(/^活動名稱/).fill("  分類目錄驗收  ");
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await page.getByText("已儲存。", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收", "saved canonical input is adopted without remounting away the success");
+  await page.getByLabel(/^活動名稱/).fill("分類目錄驗收更新");
+  assert.equal(await page.getByText("已儲存。", { exact: true }).count(), 0, "editing clears the earlier save result");
+  // A successful write followed by a failed refresh must remain retryable at
+  // its new version. During that refresh the submitted fields cannot change.
+  let releaseRefresh;
+  const heldRefresh = new Promise((resolve) => { releaseRefresh = resolve; });
+  let refreshReached;
+  const refreshStarted = new Promise((resolve) => { refreshReached = resolve; });
+  const detailRoute = /\/api\/organizer\/events\/[^/]+$/;
+  const refuseRefresh = async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    refreshReached();
+    await heldRefresh;
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable", message: "稍後再試。" }) });
+  };
+  await page.route(detailRoute, refuseRefresh);
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await refreshStarted;
+  assert.equal(await page.getByLabel(/^活動名稱/).isDisabled(), true, "draft fields stay locked until refresh finishes");
+  releaseRefresh();
+  await page.getByText(/^已儲存，但後續動作未完成：/).waitFor();
+  await page.unroute(detailRoute, refuseRefresh);
+  assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收更新", "failed refresh does not revert the saved input");
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await page.getByText("已儲存。", { exact: true }).waitFor();
+  await journey.capture(page, "binder-save-feedback");
+
+  await sections.getByRole("button", { name: /^場館與使用空間/ }).click();
+  await page.getByLabel(/^攤位名單有另外區分展區嗎？/).selectOption("none");
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await page.getByText("已儲存。", { exact: true }).waitFor();
+  await sections.getByRole("button", { name: /^攤位匯入/ }).click();
+  await page.getByLabel("來源檔案", { exact: true }).setInputFiles({ name: "feedback.csv", mimeType: "text/csv", buffer: Buffer.from("攤位,社團\nA01,驗收社團\n") });
+  await page.getByLabel(/^攤位代碼(?!格式)/).selectOption("0");
+  await page.getByLabel(/^社團名稱/).selectOption("1");
+  await page.getByRole("button", { name: "預覽對應結果", exact: true }).click();
+  await page.getByText("無分區（1 列）", { exact: true }).waitFor();
+  let releaseImport;
+  const heldImport = new Promise((resolve) => { releaseImport = resolve; });
+  const delayImport = async (route) => { await heldImport; await route.continue(); };
+  await page.route("**/api/organizer/events/*/imports", delayImport);
+  await page.getByRole("button", { name: "確認並儲存 1 列", exact: true }).click();
+  await page.getByRole("button", { name: "儲存中…", exact: true }).waitFor();
+  assert.equal(await page.getByLabel("來源檔案", { exact: true }).isDisabled(), true, "an import cannot change its file while saving");
+  assert.equal(await page.getByLabel(/^攤位代碼(?!格式)/).isDisabled(), true, "an import cannot change its mapping while saving");
+  releaseImport();
+  const importSaved = page.getByText("匯入資料已儲存；原始檔沒有上傳。", { exact: true });
+  await importSaved.waitFor();
+  await page.unroute("**/api/organizer/events/*/imports", delayImport);
+  assert.equal(await page.getByLabel(/^攤位代碼(?!格式)/).isEnabled(), true);
+  await page.getByRole("region", { name: "已儲存的攤位清單" }).getByRole("cell", { name: "無分區", exact: true }).waitFor();
+  await journey.capture(page, "import-save-feedback");
+  await page.getByLabel(/^攤位代碼格式/).selectOption("delimited");
+  assert.equal(await importSaved.count(), 0, "changing mapping clears the previous import success");
+  await page.getByRole("button", { name: "確認並儲存 1 列", exact: true }).click();
+  await importSaved.waitFor();
   // #221: one navigation. The numbered strip above the panel is gone; the
   // readiness rail was always carrying the same six sections.
   await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與預覽/ }).click();
+  await page.getByRole("button", { name: "執行檢查", exact: true }).click();
+  await page.getByText("檢查完成。", { exact: true }).waitFor();
   await page.getByRole("button", { name: "建立預覽", exact: true }).click();
+  await page.getByText("預覽已產生。", { exact: true }).waitFor();
+  assert.equal(await page.getByText("檢查完成。", { exact: true }).count(), 0, "preview replaces the previous check feedback");
   await page.getByText("爭艷館展區・花博公園爭艷館", { exact: true }).waitFor();
   await page.getByText("原創作品、二次創作", { exact: true }).waitFor();
   await journey.capture(page, "references-canonical-preview");

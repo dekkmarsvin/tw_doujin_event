@@ -23,7 +23,7 @@ function savedRow(index) {
     sourceRow: index + 2,
     dayId,
     venueSpaceId,
-    areaId: venueSpaceId === "space-a" ? "A" : "B",
+    areaId: venueSpaceId === "space-b" || index === 0 ? "ALL" : "A",
     codes,
     circleName: `社團 ${String(index + 1).padStart(5, "0")}`,
     stableKey: `internal-${String(index + 1).padStart(5, "0")}`,
@@ -58,8 +58,8 @@ const detail = {
     },
     venue: {
       assignments: [
-        { venueId: "venue-synthetic", venueSpaceId: "space-a", areaIds: ["A"], areaMode: "imported", mapTemplate: "TAIWAN_GENERIC_V1" },
-        { venueId: "venue-synthetic", venueSpaceId: "space-b", areaIds: ["B"], areaMode: "imported", mapTemplate: "TAIWAN_GENERIC_V1" },
+        { venueId: "venue-synthetic", venueSpaceId: "space-a", areaIds: ["A", "ALL"], areaMode: "imported", mapTemplate: "TAIWAN_GENERIC_V1" },
+        { venueId: "venue-synthetic", venueSpaceId: "space-b", areaIds: ["ALL"], areaMode: "none", mapTemplate: "TAIWAN_GENERIC_V1" },
       ],
     },
     officialSource: { label: "本地合成驗證資料", url: "https://example.test/issue-213" },
@@ -153,6 +153,7 @@ try {
   await status.getByText("符合 20000 列・第 1 / 200 頁", { exact: true }).waitFor();
   assert.equal(await rowsOnPage.count(), 100, "the first page renders no more than 100 rows");
   assert.equal(await rowsOnPage.first().locator("td").nth(4).innerText(), "A00001", "the first page starts at the first natural code");
+  assert.equal(await rowsOnPage.first().locator("td").nth(3).innerText(), "ALL", "a real imported area named ALL keeps its name");
   await journey.capture(organizer, "organizer-import-page-1");
 
   await list.getByRole("button", { name: "下一頁", exact: true }).click();
@@ -193,7 +194,22 @@ try {
   assert.match(filteredRow, /第一天/);
   assert.match(filteredRow, /合成驗證場館・B 空間/);
   assert.match(filteredRow, /B01235、B01235-SECOND/);
+  assert.equal(await rowsOnPage.first().locator("td").nth(3).innerText(), "無分區", "only an undivided space translates the internal ALL value");
   await journey.capture(organizer, "organizer-import-filtered-second-code");
+
+  // An event with both divided and undivided spaces still shows the area
+  // column; the undivided rows, including rejected ones, use its public label.
+  await organizer.getByLabel(/^來源檔案/).setInputFiles({ name: "mixed-spaces.csv", mimeType: "text/csv", buffer: Buffer.from("攤位,社團\nB01,完整社團\nB02,\n") });
+  const form = organizer.getByRole("group", { name: "匯入檔案與欄位對應", exact: true });
+  await form.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("day-1");
+  await form.getByRole("group", { name: "使用空間", exact: true }).getByLabel("固定值").selectOption("space-b");
+  await form.getByLabel(/^攤位代碼(?!格式)/).selectOption("0");
+  await form.getByLabel(/^社團名稱/).selectOption("1");
+  await form.getByRole("button", { name: "預覽對應結果", exact: true }).click();
+  await form.getByText("1 列待修正", { exact: true }).waitFor();
+  assert.equal(await form.getByRole("cell", { name: "無分區", exact: true }).count(), 2);
+  assert.equal(await form.getByLabel("來源列 3 的展區", { exact: true }).count(), 0, "an undivided rejected row does not ask for a meaningless area");
+  await journey.capture(organizer, "organizer-import-mixed-space-labels");
 
   await journey.finish();
 } catch (error) {

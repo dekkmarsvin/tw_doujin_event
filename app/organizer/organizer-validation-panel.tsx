@@ -33,8 +33,15 @@ export function ValidationPanel({ detail, onChanged }: { detail: OrganizerEventD
   const grouped = useMemo(() => issues ? { errors: issues.filter((issue) => issue.severity === "error"), warnings: issues.filter((issue) => issue.severity === "warning") } : null, [issues]);
   return <section className={styles.panel}>
     <div className={styles.panelHead}><div><h3>檢查與預覽</h3><p>{CHECK_STATE[validateState]}</p></div><div className={styles.row}>
-      <button type="button" disabled={checkFeedback.pending} onClick={() => void checkFeedback.run(validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }), "檢查完成。")}>執行檢查</button>
-      <button type="button" className={styles.ghost} disabled={previewFeedback.pending} onClick={() => void previewFeedback.run(previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }), "預覽已產生。").then((ok) => { if (ok) previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); })}>建立預覽</button>
+      <button type="button" disabled={checkFeedback.pending || previewFeedback.pending} onClick={() => {
+        previewFeedback.clear();
+        void checkFeedback.run(validateOrganizerEvent(detail.event.id).then(async (result) => { setIssues(result.issues); await onChanged(); }), "檢查完成。");
+      }}>執行檢查</button>
+      <button type="button" className={styles.ghost} disabled={previewFeedback.pending || checkFeedback.pending} onClick={() => {
+        checkFeedback.clear();
+        void previewFeedback.run(previewOrganizerEvent(detail.event.id).then((result) => { setIssues(result.issues); setPreview(result.preview); }), "預覽已產生。")
+          .then((ok) => { if (ok) previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); });
+      }}>建立預覽</button>
     </div><ActionNotice notice={checkFeedback.notice} /><ActionNotice notice={previewFeedback.notice} /></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
     {issues?.map((issue, index) => <OrganizerValidationIssueCard key={`${issue.code}-${index}`} issue={issue} detail={detail} />)}
