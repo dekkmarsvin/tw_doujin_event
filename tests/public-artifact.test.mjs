@@ -24,7 +24,7 @@ const assetsIn = (html) => [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g
 test("builds the staged application as a Cloudflare Pages SPA", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>場刊 Map｜同人展逛攤地圖<\/title>/i);
-  assert.match(html, /<div id="root"><\/div>/);
+  assert.match(html, /<div id="root"><main class="discovery-summary">/);
   assert.match(html, /\/assets\/index-[^"']+\.js/);
 
   const publicAssets = (await readTextAssets(new URL("../dist/", import.meta.url))).join("\n");

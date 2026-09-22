@@ -11,7 +11,7 @@ function calendarDate(year: number, month: number, day: number): string | null {
 
 /** Publication emits ISO days; older reviewed events use month/day labels.
  * The end date supplies their year, including dates before a New Year wrap. */
-function eventDayDate(label: string, end: string): string | null {
+export function eventDayDate(label: string, end: string): string | null {
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(label);
   if (iso) return calendarDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   const legacy = /^(\d{1,2})月(\d{1,2})日(?:[・（(].*)?$/.exec(label);

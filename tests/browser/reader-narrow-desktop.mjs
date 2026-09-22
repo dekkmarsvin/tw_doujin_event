@@ -50,7 +50,7 @@ try {
       await list.evaluate(node => { node.scrollTop = 350; });
       const scroll = await list.evaluate(node => node.scrollTop);
       assert.ok(scroll > 0);
-      const buttons = list.locator('button[class*="resultMain"]');
+      const buttons = list.locator('a[class*="resultMain"]');
       const index = await buttons.evaluateAll(nodes => nodes.findIndex(node => {
         const box = node.getBoundingClientRect(), list = node.closest('[class*="resultList"]').getBoundingClientRect();
         return box.top >= list.top && box.bottom <= list.bottom;
@@ -108,7 +108,7 @@ try {
     const page = await journey.mapPage({ event: "ff47", viewport: { width: 1024, height: 768 }, routes: async page => {
       await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), scale);
     } });
-    await page.locator('#desktop-panel-explore button[class*="resultMain"]').first().click();
+    await page.locator('#desktop-panel-explore a[class*="resultMain"]').first().click();
     await page.getByRole("button", { name: "回搜尋", exact: true }).waitFor();
     for (let step = 0; step < 3; step++) await page.getByRole("button", { name: "放大地圖", exact: true }).click();
     await settle(page);

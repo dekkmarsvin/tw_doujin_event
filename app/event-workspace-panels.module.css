@@ -20,7 +20,7 @@
   @keyframes resultSkeletonPulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
 }
 .resultList .selectedResult { border-color:#c6cdc7; background:#f3f5f1; box-shadow:inset 3px 0 var(--ink); }
-.resultMain { min-width:0; display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:9px; align-items:center; padding:9px 6px 9px 8px; border:0; background:transparent; text-align:left; cursor:pointer; }
+.resultMain { min-width:0; display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:9px; align-items:center; padding:9px 6px 9px 8px; border:0; background:transparent; color:inherit; text-decoration:none; text-align:left; cursor:pointer; }
 .resultWithMedia { grid-template-columns:58px 40px minmax(0,1fr) auto; }
 .resultMedia { width:58px; aspect-ratio:2/1; overflow:hidden; border:1px solid #dfe3df; border-radius:6px; background:#eef0ec; }
 .resultMedia img { width:100%; height:100%; display:block; object-fit:cover; }

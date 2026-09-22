@@ -196,7 +196,7 @@ try {
     await search.getByRole("button", { name: label, exact: true }).click();
     if (label === "只看 R15") await journey.capture(reader, "reader-r15-search");
     await search.getByRole("button", { name: "套用搜尋", exact: true }).click();
-    const result = reader.locator('#desktop-panel-explore button[class*="resultMain"]').filter({ hasText: CIRCLE_NAME }).first();
+    const result = reader.locator('#desktop-panel-explore a[class*="resultMain"]').filter({ hasText: CIRCLE_NAME }).first();
     await result.waitFor();
     if (label === "只看 R15") {
       await reader.waitForURL(url => url.searchParams.get("r18") === "r15");

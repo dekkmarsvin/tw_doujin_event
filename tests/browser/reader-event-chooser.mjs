@@ -28,12 +28,12 @@ try {
     const page = await journey.page({ event: "", params: "" });
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
 
-    // One entry per published event, and nothing else to press: an extra link
-    // here is an unpublished event reaching a reader.
-    assert.equal(await page.getByRole("link").count(), events.length, "one entry per published event");
+    // Each published event offers its map and its static introduction.
+    assert.equal(await page.getByRole("link").count(), events.length * 2, "two destinations per published event");
     for (const [index, event] of events.entries()) {
       const entry = page.getByRole("link", { name: new RegExp(event.name) });
       await entry.waitFor();
+      assert.equal(await page.locator(`a[href="/events/${event.id}/"]`).count(), 1, `${event.id} has one introduction link`);
       const summary = `${["26.09.01-02", "26.10.01-04"][index]} · ${event.venue}`;
       assert.equal(await entry.getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
       assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
@@ -59,7 +59,8 @@ try {
     assert.ok(!(await page.content()).includes(unknown), "the unknown id does not reach the markup either");
 
     // The way forward is still the list, and it is still only the real events.
-    assert.equal(await page.getByRole("link").count(), events.length, "the list survives a dead link");
+    assert.equal(await page.getByRole("link").count(), events.length * 2, "the list survives a dead link");
+    assert.equal(await page.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     await journey.capture(page, "chooser-refuses-unknown-event");
     await page.close();
   }
@@ -70,6 +71,8 @@ try {
     await page.getByRole("link", { name: new RegExp(events[1].name) }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.match(page.url(), new RegExp(`event=${events[1].id}(&|$)`), "the chosen event is the one that opens");
+    assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), `https://map.kotoban.top/events/${events[1].id}/`);
+    assert.equal(await page.locator('meta[name="robots"]').count(), 0);
     await journey.capture(page, "chooser-opens-the-chosen-event");
     await page.close();
   }

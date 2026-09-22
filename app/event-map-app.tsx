@@ -9,6 +9,7 @@ import type { PublishedEventMap } from "./event-map";
 import { placementStatusLabel, resolveCircleIdAliases, type CircleViewRecord } from "./circle-records";
 import { useCircleCatalog } from "./use-circle-catalog";
 import { CircleDetails, DayItinerary, SearchResults, type ActiveResultFilter } from "./event-workspace-panels";
+import { applyReaderMetadata, pageMetadata } from "./seo";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
 import {
   DEFAULT_ADVANCED_CIRCLE_SEARCH,
@@ -408,6 +409,9 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     visitedCount, sharedRecords, filtered, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
     activeFilterDescriptors,
   } = workspace;
+  useEffect(() => {
+    applyReaderMetadata(pageMetadata(event, selected?.circle));
+  }, [event, selected?.circle]);
   // A circle on two adjacent booths resolves to its first active record. When the
   // reader already has one of them open, navigating keeps that booth rather than
   // moving the selection and the URL to the sibling.
