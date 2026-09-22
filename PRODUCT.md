@@ -20,7 +20,11 @@ web
 
 ## Users
 
-三種使用者與各自的成功樣貌：[使用者](docs/product/users.md)。
+| 使用者 | 任務與成功結果 |
+|---|---|
+| Reader／一般參加者 | 展前搜尋、收藏與規劃，現場以手機定位攤位；不用自行比對社團名單、配置圖與 SNS。P0 不要求登入。 |
+| Circle／參展社團及其管理者 | 找到並認領官方條目，補充代表圖、介紹、作者、連結與標籤；不能改寫主辦的攤位配置。 |
+| Organizer／活動主辦或維運者 | 經 UI 建立活動、設定日期與場館、匯入名單、檢查、預覽及發布；不需要學會 repository 工作流程。 |
 
 ## Positioning
 
@@ -100,7 +104,43 @@ CircleParticipation = Circle + Event + EventDay + Space
 
 ## Scope
 
-P0／P1／P2 與 MVP 完成定義：[交付範圍與完成定義](docs/product/scope.md)。
+以下是產品優先級，不是功能實作狀態表；現行行為與驗收條件見[契約索引](docs/contracts/INDEX.md)，待辦與進度由 GitHub issues 維護。
+
+### P0 — Core Scope
+
+產品成立所需的最小閉環：
+
+| 使用者 | 範圍 |
+|---|---|
+| Reader | 互動地圖拖曳、縮放及攤位點選；日期、樓層／Hall／Area 切換；社團名、作者、攤位號搜尋及 Genre／Tag 篩選；社團卡片、詳情、Circle Cut 與 SNS／Website 連結；收藏及地圖標示；活動／社團／攤位分享 URL；Mobile-first 操作。 |
+| Circle | 認領社團、查看官方活動／日期／攤位；修改 Circle Cut、簡介、作者、SNS／Website／Pixiv、Tag 與成人向標示；預覽公開結果及顯示最後更新時間。 |
+| Organizer | 建立／修改多日活動；選擇與管理 Venue／Floor／Area、建立與維護 Space；CSV／XLSX 匯入、預覽、必要欄位／重複攤位／不存在 Day 或 Space 檢查；錯誤匯入不留下部分正式狀態；草稿、預覽、公開；修正 Organizer-owned data；管理入口、出口、廁所、本部等必要 POI。 |
+
+### P1 — Convenience Scope
+
+P0 穩定後才優先考慮：
+
+| 使用者 | 範圍 |
+|---|---|
+| Reader | 個人 Memo、收藏分類／顏色、已逛／未逛、頒布物名稱搜尋、逛攤清單、收藏依配置排序、分享清單、PWA／離線地圖。 |
+| Circle | 頒布物與圖片、新刊／既刊、完售與暫時離席標示、複製上一場資料、跨活動 Circle Profile、多人共同管理。 |
+| Organizer | 複製活動、視覺化場地 Editor、拖放攤位、匯入欄位 Mapping 與 Diff、版本／回滾、多管理員、活動封存。 |
+
+### P2 — Optional Scope
+
+只有實際需求成立後才考慮：PDF／列印地圖、CSV 收藏匯出、自動路線排序、社團更新通知、收藏跨裝置同步、跨活動追蹤社團、使用／收藏統計、QR Code 分享、公開 API／Open Data Export。
+
+已存在且穩定的能力不因優先級較低而立即刪除，例如行程預算、地圖貢獻、publication workflow 或 CSV 匯出；它們也不自動構成擴充理由。新工作須對應 P0／P1 或明確使用者需求；維護成本過高時可另提簡化或退役，不能為維持內部流程而阻止 Organizer 無程式建立活動。
+
+### MVP Definition of Done
+
+| 使用者 | 完整旅程 |
+|---|---|
+| Reader | 開啟活動 → 搜尋社團／作者／攤位 → 定位地圖 → 查看 Circle Cut 與必要資訊 → 收藏 → 在地圖看見收藏。 |
+| Circle | 找到自己的官方條目 → 認領 → 修改 Circle Cut 與簡介、加入連結及 Tag → 在公開頁看見更新。 |
+| Organizer | 登入 → 建立活動 → 選擇既有 Venue → 設定日期 → 匯入社團資料 → 修正錯誤 → 預覽互動地圖 → 發布。 |
+
+Organizer 的完成目標是正常新增一場活動時，production code 修改、手動 production JSON／YAML、Git／CLI 操作、AI agent 依賴，以及每活動新增 repository／PAT／secret 均為零。內部系統可使用 repository、pin、CI 與 review，但不得要求主辦手動操作它們。這是驗收目標，不代表歷次發布皆已達標；量測方式與證據要求見[專案工作流程](docs/runbooks/project-workflow.md#6-留下完整驗收證據)。
 
 ## Explicit Non-Goals
 

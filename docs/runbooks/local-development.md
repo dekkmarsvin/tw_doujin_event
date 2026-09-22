@@ -4,12 +4,12 @@
 
 - Node.js `24.20.0`（見 `.nvmrc`）
 - npm `11.19.0`
-- 公開 Pages 前台不需要 Cloudflare 帳號或 D1；只有地圖 authoring、portal 或部署操作需要 Cloudflare 資源。
+- 公開 Pages 前台不需要 Cloudflare 帳號或 D1。本機 portal／地圖編輯使用 Wrangler 模擬的 D1／R2，不需要遠端資源；正式部署才需要 Cloudflare 帳號及設定。
 
 ## 啟動 Pages 前台
 
 ```bash
-npm install
+npm ci
 npm run dev:pages
 ```
 
@@ -77,7 +77,7 @@ npm run build:production
 
 ## 共同 gate
 
-[gate](../../CONTEXT.md) 在本機是這四道指令：
+程式改動的完整 [gate](../../CONTEXT.md) 使用以下指令；本機驗證範圍依 [review-fix loop](../agents/review-loop.md#相稱的驗證)判斷，純說明文件檢查內容與連結即可。Required CI 仍照常執行。
 
 ```bash
 npm ci
