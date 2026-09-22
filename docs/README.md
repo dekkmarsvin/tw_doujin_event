@@ -5,14 +5,11 @@
 | 我想知道… | 去哪裡 |
 |---|---|
 | 產品要解決什麼、給誰用、邊界在哪 | [`PRODUCT.md`](../PRODUCT.md) |
-| 三種使用者是誰、做到了長什麼樣 | [使用者](./product/users.md) |
-| 某個功能在 P0 還是 P2、算不算做完 | [交付範圍與完成定義](./product/scope.md) |
+| 使用者、P0／P1／P2 與 MVP 完成定義 | [`PRODUCT.md`](../PRODUCT.md#scope) |
 | 色彩、字體、層級、圓角 | [`DESIGN.md`](../DESIGN.md) |
 | 手機地圖方案 B 的視覺參考與設計取捨 | [手機地圖面板設計參考](./design/mobile-map-panel-plan.md) |
 | **介面上該寫什麼字、不該寫什麼字** | [對外文案](./design/copy.md) |
 | 某個介面表面的元件長什麼樣 | [元件與介面規格](./design/components.md) |
-| 地圖版面與視域接下來要往哪走（**草案，非現況**） | [地圖視域改進方向](./design/map-viewport-direction.md) |
-| 新地圖介面如何落地、有哪些結構圖與驗收條件（**待實作**） | [地圖新介面技術落地規格](./design/map-viewport-implementation.md) |
 | 這個詞在本專案是什麼意思 | [`CONTEXT.md`](../CONTEXT.md) |
 | **我要改這個檔案，是哪份契約在管它** | [契約索引](./contracts/INDEX.md) |
 | **某個模組現在的行為是什麼、怎麼驗收** | [`contracts/`](#契約) |
@@ -34,7 +31,7 @@
 | [搜尋、篩選與顯示設定](./contracts/search.md) | 三組條件的責任切分、詳細搜尋互動、多主題與排除、命中原因 |
 | [URL 檢視狀態](./contracts/url-state.md) | 20 個查詢參數、恢復規則、不寫入 URL 的狀態 |
 | [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
-| [主辦單位工作區](./contracts/organizer-workspace.md) | 邀請制入口、候選活動 revision、攤位匯入、逐 scope 地圖、驗證、送審與核准、發布 fail-closed 邊界 |
+| [主辦單位工作區](./contracts/organizer-workspace.md) | 邀請制入口、候選活動、攤位匯入、地圖、驗證、送審、發布與更正 |
 | [地圖貢獻控制面](./contracts/map-contributions.md) | contributor 授權、私人 revision、官方來源檔、審閱狀態機、留言與局部修改請求、候選匯出與保存期限 |
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
 | [資料匯入](./contracts/data-import.md) | **P2，尚未對外開放**。規劃檔案交換已有底層能力；一般介面與外部服務串接尚未實作 |
@@ -46,7 +43,7 @@
 | 文件 | 何時用 |
 |---|---|
 | [本機開發與驗證](./runbooks/local-development.md) | 啟動、跑 gate、交付前檢查 |
-| [專案工作流程](./runbooks/project-workflow.md) | issue 分類、挑選工作、review 分流與第二場活動發布驗收 |
+| [專案工作流程](./runbooks/project-workflow.md) | issue 分類、挑選工作、驗收證據與成本／複雜度邊界 |
 | [社團資料更新](./runbooks/catalog-data-update.md) | 主辦活動資料或 data pin 有變動時 |
 | [地圖 authoring](./runbooks/map-authoring.md) | 要更新地圖靜態快照時 |
 | [部署](./runbooks/deployment.md) | 改密鑰、看 CI 行為、發布前 gate、回滾 |
@@ -81,6 +78,10 @@
 - [台灣同人展主辦官方攤位頁面盤點](./research/taiwan-organizer-booth-pages.md)（新活動 onboarding 與地圖 authoring 的輸入研究）
 
 ## 維護規則
+
+README 是使用與開發入口；PRODUCT 定義產品；CONTEXT 定義詞彙；DESIGN 與 `design/components.md` 管視覺規格；contracts 管現行行為；runbooks 管操作。Issue／PR 管即時進度，不在這些文件再複製佇列或逐票完成紀錄。
+
+`design/` 的日期化驗收與歷史提案保存當時證據，不是另一層現行規格。例如[桌機視域提案](./design/map-viewport-direction.md)、[落地紀錄](./design/map-viewport-implementation.md)與[9/21 視覺檢查](./design/organizer-2026-09-21-visual-audit.md)；後續行為以對應契約為準。
 
 - **一個契約只有一個家。** 同一條規則不得同時寫在兩份文件裡；需要交叉引用時放連結，不複製內容。
 - **改行為就改契約，同一個 commit。** 契約落後於實作，下一個人就會拿它當真相。

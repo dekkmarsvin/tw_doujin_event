@@ -33,7 +33,7 @@
 
 展區由主辦的攤位名單推導，所以活動定義裡的 `areas` 只有名單出現過的代碼，**沒有一個代表「全部展區」**。FF47 自行宣告的 `ALL` 是它資料的一部分，不是通例。讀者介面自己補上 `ALL`（全區）作為預設，語意固定是**目前場館空間**的全部展區。**展區也不是一定會給讀者篩的維度**：只有跨多個場館空間的活動才出現展區切換。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/event-map.md`](docs/contracts/event-map.md)）。
 
-`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場館空間**。URL codec 已保留多場館空間的 `venueSpaceId` 語意；公開切換能力要等每個場館空間各自的地圖 artifact 完成後才啟用。
+`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場館空間**。公開切換與逐空間地圖的行為見[活動地圖契約](docs/contracts/event-map.md)。
 
 **`Booth["hall"]` 的名字說謊**：它存的是展區代碼（`"A" | "B"`），不是場館。名稱是歷史遺留，且已寫進公開快照 schema，改名不是改一個識別字。**文件與新程式碼一律用「展區」／`area`。**
 
@@ -95,7 +95,7 @@
 ## 社團控制面
 
 **控制面**（control plane）
-與閱讀端分離的受驗證管理能力。目前對外介面是社團自助控制面 `/circle`；具有明確授權的地圖貢獻者與管理者也在這裡使用私人草稿、官方來源檔、審閱、核准替換與 event-data 候選匯出。候選不會直接發布，可信任維護者的本機地圖 authoring 與 event-data repository review 仍是後續工作流。
+與閱讀端分離的受驗證管理能力。社團自助與地圖貢獻使用 `/circle`，主辦活動建立與發布使用 `/organizer`；兩者的角色與發布邊界各見[社團契約](docs/contracts/circle-portal.md)、[地圖貢獻契約](docs/contracts/map-contributions.md)及[主辦契約](docs/contracts/organizer-workspace.md)。
 
 **認領**（claim）
 社團證明自己是某個 `CircleRecord` 的擁有者的流程。email 只證明控制信箱，認領必須另有證據。
@@ -112,19 +112,19 @@
 一格攤位，保存矩形座標。互動元素是 slot 本身，不是圖片上的座標點。
 
 **排**（row）
-A–W。A–V 縱向，W 橫向。
+地圖中一組有共同標籤的攤位格，可由多段組成；排號與方向由活動配置決定，不以 FF47 的 A–W 排為通例。
 
 **landmark**
 非一般攤位區（企業攤、舞台等），保存相對矩形，不自動辨識。
 
 **本機 authoring**
-受信任維護者在本機辨識、微調並匯出地圖 layout 的工具。它不出現在公開 Pages，且自主辦單位工作區上線後**降為離線／事故備援**，不是主辦單位的正式流程。
+歷史上的獨立 `/editor` 工具，已依 [ADR-0049](docs/adr/0049-the-local-authoring-backup-is-withdrawn.md)退場。現在在本機測試地圖編輯時，使用與正式環境相同的主辦工作區，見[本機開發](docs/runbooks/local-development.md#authoring-環境)。
 
 **Organizer authoring**
-Organizer 透過受驗證的 Web UI 建立活動、選擇 Venue／Floor（venue space）、設定 EventDay／Area／Space、匯入主辦社團與攤位資料、檢查、預覽及發布的 P0 產品流程。它修改 Organizer-owned data，不授權 Circle 修改 placement；流程不得要求 Organizer 修改程式、操作 Git／CLI 或依賴 agent。建立到送審已實作於 `/organizer`，發布步驟尚未啟用；現況與邊界見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)，產品邊界見 [`PRODUCT.md`](PRODUCT.md)。
+Organizer 在受驗證的 Web UI 準備活動、場館、攤位及地圖，經檢查、預覽、送審與管理者核准後發布的流程。它修改 Organizer-owned data，不授權 Circle 修改 placement；現行行為見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)，產品完成目標見 [`PRODUCT.md`](PRODUCT.md#mvp-definition-of-done)。
 
 **候選活動**（organizer candidate）
-主辦單位工作區裡尚未公開的一場活動。以 `candidateId` 定址、逐版本累積 immutable revision，狀態依序為 `draft`、`submitted`、`approved`、`published`，並可回到 `changes_requested`。候選內容不進公開快照；它與已發布活動可能共用同一個 `eventId`，因此資料庫層以 `candidate_id` 分離兩條管線。
+主辦單位工作區中用於首次發布或已發布活動更正的版本化內容，以 `candidateId` 定址。候選與公開資料分離，即使共用 `eventId` 也不直接改寫公開快照；狀態轉換見[主辦契約](docs/contracts/organizer-workspace.md#候選活動的狀態)。
 
 **approval snapshot**
 送審當下固定下來的候選內容（草稿、匯入來源 metadata、全部攤位列與每份地圖），以其 SHA-256 作為核准對象。核准的是這個 hash，不是「目前的草稿」；之後的修改只能建立新 revision。
@@ -138,10 +138,10 @@ Organizer 透過受驗證的 Web UI 建立活動、選擇 Venue／Floor（venue 
 ## 工程
 
 **gate**
-交付前必須全數通過的一組檢查，CI 跑同一組。指令見[本機開發與驗證](docs/runbooks/local-development.md)。
+適用於該次交付的必要檢查。指令見[本機開發與驗證](docs/runbooks/local-development.md)，本機驗證範圍依 [review-fix loop](docs/agents/review-loop.md#相稱的驗證)；required CI 不因純文件或局部改動而取消。
 
 **產物邊界**（artifact boundary）
 公開 build 中什麼必須存在、什麼絕不能存在的規則。由測試把關，不靠人工檢查。
 
 **分期**（P0 / P1 / P2）
-P0 是核心流程，P1 是完善，P2 是尚未開放的能力。**P2 不等於待辦**——它是明確被推遲的範圍，解除需要對應的 ADR。
+產品優先級，定義見 [PRODUCT.md](PRODUCT.md#scope)。**P2 不等於待辦，也不代表一律尚未實作**；是否選入依實際需求與既有決策判斷。

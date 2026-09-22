@@ -2,7 +2,7 @@
 
 把配置圖辨識成向量 layout、人工微調，成為候選活動的地圖草稿，經審閱後匯出為公開靜態快照。
 
-**地圖畫在[主辦單位工作區](../contracts/organizer-workspace.md)。** 候選活動的每一組「活動日 × 場館空間」各建立一份地圖草稿，從空白或描摹起點開始。這實現了 [ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 3 點。
+**地圖畫在[主辦單位工作區](../contracts/organizer-workspace.md)。** 候選活動的每一組「活動日 × 場館空間」各建立一份地圖草稿，從空白或描摹起點開始。
 
 本機曾經有一套獨立的 `/editor` authoring 環境，寫入本機 D1 再以 `map:snapshot` 匯出。它已依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除：實際共用的只有 `MapLayoutEditor` 一個 component，其餘是一整套為它獨存的 build 與持久化堆疊，而那條備援路徑從未被驗證過。控制面不可用時的復原路徑改為直接編輯 data repository 中的靜態快照。
 
@@ -112,13 +112,12 @@ npm run dev:portal
 
 ### 7. 發布
 
-核准建立一筆 `queued` 發布工作。**發布尚未啟用**，三處各自 fail closed，見該契約的[發布邊界](../contracts/organizer-workspace.md#發布邊界)。
+在「送審與發布」查看進度。管理者核准後，系統以固定的核准 snapshot 建立發布工作，自動準備資料與程式 repo 的 PR、等待必要檢查、合併、部署並驗證公開結果。失敗時依介面提示處理，可重試的工作沿用原 job 與 snapshot；詳細邊界見[主辦契約](../contracts/organizer-workspace.md#發布邊界)。
 
-在發布啟用前，公開快照仍由人工在 data repository 中 review、提交並推送，再依[社團與活動資料更新](./catalog-data-update.md)更新 pin。
+主辦正常流程不要求操作 Git 或 CLI。維運者手動更新靜態快照的路徑見[社團與活動資料更新](./catalog-data-update.md)，不與主辦發布步驟混用。
 
 **靜態快照是公開資料的唯一真相。** 未經 review 的候選內容不會因 Pages 部署而公開。
 
 ## 現行限制與後續範圍
 
 - 對非一般攤位文字做 OCR。第一階段只保存可可靠辨識的相對矩形。
-- 發布工作尚未前進，見上方第 7 點。

@@ -81,7 +81,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 可編輯範圍
 
-**可編輯，儲存後約一分鐘內公開**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。
+**可編輯，儲存後寫入公開 overlay**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。已開啟頁面的更新時機與尚未達成的一分鐘可見性要求統一見[資料傳輸契約](./delivery-and-offline.md#更新可見性)。
 
 `creatorTypes` 與 `ageRatings`（可複選）、`workTypes`（選一項）也不是自由文字：選項是 `circle-overrides.ts` 的固定清單，公開端搜尋讀同一份。寫入驗證只檢查長度與筆數，不檢查是否屬於清單——同一個驗證函式也是讀取端守門，收緊會讓既有帶舊值的資料列整列從公開文件消失（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`referencedWorks` 與 `specialTags` 仍是自由填寫。
 
@@ -127,7 +127,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 儲存前預覽
 
-編輯會在公開 overlay 下一次 revalidation（最長約一分鐘）生效，**因此預覽更重要而非更不重要**：錯誤會很快對外，社團沒有機會先看到自己寫的內容長什麼樣。
+儲存會更新公開 overlay，讀者重新取得資料時即可讀到，因此送出前必須能預覽實際呈現。
 
 `POST /api/circle/:circleId/preview` 以**閱讀端自己的投影元件**渲染草稿，唯讀、不寫入任何資料。預覽必須重用閱讀端元件，否則預覽會與實際呈現漂移。
 
@@ -212,11 +212,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ### 社團補充資料的保存期限
 
-[ADR-0018](../adr/0018-retention-is-the-circles-choice.md) 在活動後退出**之外再加一個獨立的座標軸**：「保留」（預設）不主動刪除；「活動後清除」在活動結束滿 90 天時刪除該筆補充資料與其代管縮圖，**但在那 90 天內維持公開**。退出管的是活動後還公不公開，期限管的是資料還留多久，四種組合裡三種都有人會用。要更早消失的社團自己在控制面刪即可，不必等期限。
+[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 已撤下保存期限的介面選擇。現行表單只問活動結束後是否繼續公開；要刪除內容使用同頁的自助刪除。既有 API 與資料列的期限機制保留，與活動後是否公開分開判斷。
 
-**選擇存在資料列上**：`circle_overrides.retention_choice`（`keep`／`purge`）與 `circle_overrides.retention_expires_at`。兩欄都可為 NULL 且**沒有 DEFAULT**——NULL 是「尚未表態」，與「已選擇保留」是不同的狀態，控制面靠這個差別決定要不要問。到期時間**自活動結束時間起算**，不是最後編輯時間，並且在寫入時就算好存進資料列，維運端因此能直接查出哪些列在什麼時候會消失，不必讀程式碼推論。90 天的值是 `app/circle-overrides.ts` 的 `OVERRIDE_RETENTION_PURGE_AFTER_MS`。
+欄位為 `circle_overrides.retention_choice`（`keep`／`purge`）與 `retention_expires_at`，皆可為 NULL 且無 DEFAULT。NULL 表示未表態，行為同不主動刪除；`purge` 到期時間自活動結束滿 90 天起算，在寫入時保存，常數是 `app/circle-overrides.ts` 的 `OVERRIDE_RETENTION_PURGE_AFTER_MS`。
 
-- **選擇隨內容一起送出**（`PUT /api/circle/:circleId/overrides` 的 `retention`），因為它是填寫時的決定，不是事後的設定。欄位缺席代表「這次沒有回答」，伺服器保留既有選擇，**永遠不會被解讀成選擇了清除**。
+- **API 保留 `PUT /api/circle/:circleId/overrides` 的 `retention` 欄位**。缺席代表這次沒有回答，伺服器保留既有選擇，不解讀成選擇清除。
 - **控制面不再問這個問題**（[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md)）。編輯頁上只剩「活動結束後：繼續公開／不再公開」，`retention` 一律缺席，因此新資料列的 `retention_choice` 維持 NULL（語意同「保留」）。已經選過 `purge` 的資料列仍照原到期日清除，但社團在介面上看不到也改不回來。API、欄位與排程清除都沒有變動。這是 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 的決定，取代 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)「兩個選項並列、不預選、不得收進摺疊」的介面條款。
 - **選了清除的資料在等待刪除期間維持公開。** `listLiveOverrides` 與公開文件不看這兩個欄位；任何在讀取端過濾它們的作法都是錯的。
 - **選擇改變時寫一筆 `audit_log`**（`action = "override.retention"`，含 `choice` 與到期時間）。清除本身只記錄發生過、不留下內容，所以「當事人要求過、在哪一天」只會留在這裡。
@@ -238,7 +238,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **不得移除自己，也不得移除最後一位管理者**——兩者都是把自己鎖在門外的最短路徑。
 - 名單為空時由 `ADMIN_EMAILS` 設定值重新灌入，作為救援路徑。上面兩道限制讓它不會正常地走到那一步。
 - 管理者位址比對前先做與儲存時相同的正規化。
-- 管理者可撤下任何社團補充資料；D1 公開文件立即移除，讀者端最長約一分鐘 revalidation 後不再顯示，不需額外用戶端內容過濾。
+- 管理者可撤下任何社團補充資料，D1 公開文件立即移除；已開啟讀者頁面的可見性限制見[資料傳輸契約](./delivery-and-offline.md#更新可見性)，不能把伺服器撤下等同用戶端立即更新。
 
 ## 媒體安全
 

@@ -56,19 +56,19 @@
 | `/sw.js` | `no-cache`（另帶 `Service-Worker-Allowed: /`） |
 | `/manifest.webmanifest` | `public, max-age=3600` |
 
-reviewed base 五分鐘 revalidate；dynamic overlay 每分鐘 revalidate，讓社團儲存與管理者 takedown 約一分鐘內可見。Service Worker 不保存 overlay：離線或 freshness 無法確認時使用完整 base，不把可能任意過期的 overlay 描述成即時資料。base 的資料只來自各活動主辦官方說明頁面；overlay 只來自社團本人自填，沒有工作簿或其他資料來源。
+### 更新可見性
+
+上述 `max-age` 是 HTTP 快取有效期，不是輪詢間隔。現行 `app/use-circle-catalog.ts` 在每個活動初次載入時取得資料，沒有定時重新載入；持續開著的頁面不保證在一分鐘內看到儲存或撤下結果。重新載入時依快取標頭驗證資料；Service Worker 不保存 overlay，取得 overlay 失敗時使用完整 reviewed base。
+
+**尚未達成、保留待決策的要求：**社團更新與管理者 takedown 約一分鐘內對已開啟的讀者頁面可見。要維持該要求需提出最小方案及請求成本；在維護者決定前，不把它寫成已實作、不刪除要求，也不默默加入輪詢。此落差的實測見 [#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)。
 
 **overlay 的每一次 revalidation 都是一次 Function 呼叫，包含回 304 的那些。** strong ETag 省的是頻寬，不是請求數：304 的分支在 Function 內部，且在算出 ETag 之前已經讀過一次 D1。Cloudflare 的邊緣不會在 Function 之前擋下這些請求——Workers Cache 是 `wrangler.jsonc` 的 `cache.enabled` 選項，目前沒有開；zone 層的預設快取副檔名清單也不含 `.json`。
 
-計費基準是 **Workers Paid**（[ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md)；訂閱與用量查核見[專案工作流程 §7.1](../runbooks/project-workflow.md)）：每月內含 1,000 萬次請求，超出以每百萬 US$0.30 計，**沒有每日請求上限**。因此這裡的成本語意是「月度請求數的邊際費用」，不是「撞到每日天花板就停止服務」。Pages Functions 與 Workers 共用同一份帳號請求額度。
-
-先前版本把這件事換算成「每天 100,000 個活躍讀者分鐘」。**該換算已不成立**，兩個前提都不對：額度不是每日 100,000 次，且現行 client（`app/use-circle-catalog.ts`）是每活動單次載入，沒有每分鐘輪詢——`max-age=60` 只影響重新整理與重新導覽。實測見 [#48](https://github.com/dekkmarsvin/tw_doujin_event/issues/48)。
-
-**待決策，不在本次變更範圍：**上方「約一分鐘內可見」的 takedown／更新可見性要求，現行單次載入並不提供。要維持該要求需提出最小方案與其請求成本；在取得維護者決策前，不刪除該要求，也不默默加入輪詢（[專案工作流程 §7.5 B](../runbooks/project-workflow.md)）。
+計費方案與用量基準只維護於[專案工作流程第 7 節](../runbooks/project-workflow.md)及 [ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md)，不在此複製費率或從快取有效期推算活躍讀者數。
 
 Cloudflare 沒有提供降低帳號用量上限或模擬 Error 1027 的測試介面，也不以受控實驗消耗正式帳號用量。部署流程以 Pages project API 驗證並設定 production／preview 的 `fail_open: true`；這是可重複驗收的配置契約，與方案層級無關，維持有效。
 
-**與 [ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md) 的前提落差：**該 ADR 的問題陳述建立在「Workers Free 每日請求額度耗盡會觸發 Error 1027」。帳號現為 Workers Paid，超出內含額度是計費而非中斷，Free 的每日耗盡情境不適用。ADR-0031 的兩項決策（不以耗盡實驗作發布 gate、配置收斂為 fail-open）不受影響，但其成本論證是否改寫由維護者決定；本契約不自行覆蓋 ADR。
+不以耗盡配額實驗作發布 gate、部署配置採 fail-open 的決策仍有效（[ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)）；舊有 Free 成本前提的取代關係見 ADR-0065。
 
 由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份帳號請求額度，並計入同一份月度計費量。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
 

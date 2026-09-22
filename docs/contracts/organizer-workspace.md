@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-> **實作狀態（2026-09-14）**：建立 → 匯入 → 地圖 → 驗證 → 預覽 → 送審已有 Web UI。#212 加入核准與 job 的原子建立、可恢復 executor 核心及發布 UX；#248 封入完整 references，#244 提供純產檔，#245 接上 GitHub data／main driver，#246 接上持久化排程，Phase 4 接上固定 deployment／origin verification。**CH20 真實發布／恢復仍待驗收**：production 設定採 github，部署與核准必須先完成 #212 真人啟用確認；缺少 dispatch 或模式 disabled 時，核准 API 回 503 並保留 submitted（見[發布邊界](#發布邊界)）。
+首次發布與發布後更正均已接上 Web UI 與自動發布。真實執行證據見 [CH20 首次發布／恢復](../design/ch20-first-publication-acceptance.md)及[地圖更正](../design/ch20-map-correction-acceptance.md)，其中記錄的人工補救不因功能已上線而抹除。部署模式與缺少 dispatcher 時的處置見[發布邊界](#發布邊界)。
 
 ## 入口與登入
 
@@ -24,7 +24,6 @@
 - **任務第一次打開時是中性的。** 整份任務問題清單是儲存的回答，等按下去再出現；唯一例外是它同時也是儲存鍵被停用的理由——停用不能沒有理由。「儲存並繼續」檢查它所站的那一個任務，未完成就保留輸入、說出缺什麼、不前進；「儲存並離開」與離開對話框不帶這個檢查，半成品草稿是可以存下來回頭再做的東西。
 - 動作回饋遵循 [Action Feedback](../design/components.md#action-feedback)：切換引導任務不沿用前一任務的驗證或儲存訊息；建置冊儲存活動、場館或匯入後，重新取得已存版本仍保留當次成功回饋，再編輯或發動下一動作才清除。已存草稿的正規化值同步回未修改的表單；有未儲存輸入時，不因重新整理而更新它的 `expectedVersion`。首次載入先核對記住的活動是否仍在可見清單；切換活動的讀取 effect 卸載後不再套用其回應。
 - 活動、場館與匯入表單在儲存及其重新讀取期間停用編輯，避免成功回饋對不上提交內容；重新讀取失敗不降低已成功儲存的版本，仍可再儲存。
-- **第一天的日期由主辦回答。** `nextOrganizerEventDay()` 對第一天不填日期：預設今天會讓沒人回答過的欄位看起來已回答，那一步就直接算完成。後續的日期仍沿用上一個已填日期 +1。
 - **匯入範例不會因為選了檔案而消失。** 選檔前展開、選檔後收合；下載分成空白 CSV（拿去填）與填寫範例（拿去讀）兩種，兩者都由 `buildOrganizerImportSample()` 依這場活動的活動日、使用空間與是否需要展區產生。預覽本身就是確認步驟，所以取代語意寫在「確認並儲存」旁，不另外開對話框。
 - 三項基礎設定通過後，`POST /api/organizer/events/:candidateId/workspace/complete-onboarding` 以 `expectedVersion` 再次檢查已保存草稿，成功後永久進入活動建置冊。成功回應遺失後可用任何舊版本重送，仍會冪等回傳既有 binder 狀態；後續資料錯誤只顯示為需要處理，不會退回引導。
 - 「查看全部項目」不完成 onboarding；它只暫時打開六個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
@@ -63,7 +62,7 @@ draft → submitted → approved → publishing → published
 | `venue.assignments` | `venueId`、`venueSpaceId`、`areaMode`、`areaIds[]`、`mapTemplate` | 至少一個場館空間；`venueSpaceId` 不得重複且必須屬於所選場館；`areaMode` 為 `imported` 或 `none`；`none` 必須且只能保存 `areaIds: ["ALL"]` |
 | `officialSource` | `label`、`url` | 來源說明與 HTTPS 網址均必填 |
 
-新增活動日時，表單預設第一日為作者當地的今天，之後每一日為最後一個有日期的活動日加一天；新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
+新增活動日時，第一日的日期留空；之後以最後一個有效日期加一天，若已有列但皆無有效日期才回退為作者當地的今天。新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
 `venueId` 與 `venueSpaceId` 是系統保存的 stable ID，介面不要求主辦輸入。主辦先從共用場館目錄選擇場館，再從該場館的使用空間下拉選擇；找不到時可以立即建立新場館與第一個使用空間，或在既有場館立即新增使用空間。每筆目錄資料都要求官方 HTTPS 來源，但使用空間的來源網址可以留空——留空時沿用它所屬場館的網址，因為「全館」這類空間通常沒有自己的官方頁面，而主辦通常只有一條官方網址。格式錯誤的網址仍然退回；沿用是補齊，不是豁免。建立與 audit 在同一個 D1 transaction；新資料只是候選控制面的來源記錄，不會因此自動成為已發布 reference pin。
 
@@ -205,13 +204,13 @@ UI 四階段保留已完成進度，raw error 與 step 放在「技術詳細資�
 
 目前 production gate：
 
-1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github，實際啟用依 #212 核准 rollout 執行；Pages 核准／retry 僅提交到期的持久化 job，獨立 Worker 每次只推進一個 bounded transition，避免舊 Pages 程式先消耗修復後的重試。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。
+1. 未設定 `ORGANIZER_PUBLICATION_MODE` 仍預設 disabled；該模式不注入 dispatcher，核准／retry 保留 503。production 的 Pages 與獨立 Worker 明確設定 github；Pages 核准／retry 僅提交到期的持久化 job，獨立 Worker 每次只推進一個 bounded transition。Preview Worker 仍 disabled。fake 只在 `PREVIEW_MAIL_SINK=d1` 的隔離測試環境注入，Pages 單次 dispatch 完成八個模擬步驟，不能當作公開結果證據。部署設定見[部署 runbook](../runbooks/deployment.md)。
 2. 僅 `POST /api/integrations/github/webhook` 豁免 Origin 檢查，JSON 與 HMAC 保留；其他 mutating route 不變。非 github 或缺 secret 回 503；已配置時無簽章回 401。合法 delivery 僅喚醒固定兩 repo 中符合已釘住 SHA 的 active job，在同一 D1 transaction 完成 delivery 紀錄；delivery ID 重用但 bytes 或 event 不同回 409，已完成重送回 202 且不再喚醒。未知事件、repo 或 SHA 不推進任何工作，HTTP request 不執行遠端寫入。
 3. `POST /api/admin/integrations/github/probe` 只接受同源 JSON `{}` 且要求有效的管理者 session；伺服器以固定 metadata:read scope 呼叫 GitHub App mint，必須得到精確 `201`，再以 installation token 讀取同一 repository metadata，GET 必須是精確 `200` 且 JSON `full_name` 完全相符才回 `{"ok":true}`。失敗只回固定 503 code；正式啟用仍須在已部署 runtime 實測。
 
 GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 60s`、`exp = iat + 600s`），接受 PKCS#8 與 PKCS#1 RSA private key。每個 provider／job 只有一份記憶體 cache；token 剩餘 60 秒內更新，進行中的 mint 共用同一個 pending promise。請求遭遇 `401` 時，每個 request 最多 invalidate 並重試一次，而且只有被拒絕的 token 仍是目前 cache 才能 invalidate；`403` 不刷新 token。缺少 App ID、installation ID 或 private key，以及 import/sign/fetch/JSON 例外，都轉成固定 `PublicationFailure`，不保存或回傳 raw exception、request body、Authorization、key、JWT 或 token。
 
-`app/publication-rollout.ts` 的 ruleset 評估器**不是 gate**：依 [ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md) §3 它是維運報告，不阻擋任何 publication 步驟，也不是開啟 `ORGANIZER_PUBLICATION_MODE` 的必要條件。它目前的判定仍是 active 不足以通過、必須要求 PR、所有指定 checks、已確認 App id 且無 App bypass；該判定要到 #227 的程式改動落地才改變。它沒有 runtime caller。
+`app/publication-rollout.ts` 的 ruleset 評估器**不是 gate**：它是無 runtime caller 的維運報告，不阻擋 publication 或模式啟用。報告檢查 main 適用規則、PR、指定 checks、check 的 App 綁定及 App／human bypass；不能把報告通過當作 App 受到權限約束，原因與已完成的治理評估見 [ADR-0066](../adr/0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)。
 
 ### 核准 snapshot 產檔
 
@@ -271,7 +270,7 @@ CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部�
 - 匯入 API 拒絕未宣告的活動日、場館空間或展區，並在錯誤訊息指出來源列號。
 - 預覽裡移除的列不會被匯入，也不會產生待修正項目；被它解除的攤位重複不再回報。
 - 手動補正過的列仍要通過與其他列相同的檢查：未宣告的活動日、場館空間或展區照樣被匯入 API 拒絕，介面上的修正不是繞過那道檢查的路。
-- `ORGANIZER_PUBLICATION_MODE` 未設定時，核准後的候選停在 `approved`，且 webhook 回 503。
+- `ORGANIZER_PUBLICATION_MODE` 未設定或缺少 dispatcher 時，核准 API 回 503，候選保留 `submitted`，不建立發布工作；非 github 模式的 webhook 回 503。
 - 只有 Owner／Admin 以有效 session、目前版本與非空理由可退回 `failed` 候選；系統先以 global lease 查核固定遠端分支與完整 PR 分頁，任何遠端紀錄或不確定性都拒絕，成功後保留 eventId／歷史並令舊 job 不可重試。
 - 退回期間若 lease 過期或版本 CAS 失敗，不新增 revision、review 或 audit；sticky `remote_write_intent_at` 與任一 confirmed checkpoint 也會阻止退回。
 - 停在 `queued` 超過 15 分鐘的發布工作，在活動列表與活動頁都顯示為失敗且可重試，重試的是原本那一筆 job；沒有任何介面可以手動啟動一筆 `queued` job。
