@@ -10,7 +10,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { start } from "./support/journey.mjs";
 
-const fixture = async (eventId) => JSON.parse(await readFile(new URL(`../../fixtures/events/${eventId}/event.json`, import.meta.url), "utf8"));
+const fixture = async (eventId) => {
+  const read = async (file) => JSON.parse(await readFile(new URL(`../../fixtures/events/${eventId}/${file}`, import.meta.url), "utf8"));
+  const [event, references] = await Promise.all([read("event.json"), read("reference-records.json")]);
+  const venue = references.find((record) => record.schema === "venue/1" && record.id === event.venueAssignments[0].venueId);
+  assert.ok(venue, `${eventId} must have its own pinned venue reference`);
+  return { ...event, venue: venue.name };
+};
 // Read from the fixtures rather than restated here, so adding a fixture event
 // or renaming one cannot leave this journey asserting a name nobody ships.
 const events = await Promise.all(["sample", "sample-two"].map(fixture));
@@ -29,7 +35,8 @@ try {
       await entry.waitFor();
       const text = await entry.innerText();
       assert.ok(text.includes(["26.09.01-02", "26.10.01-04"][index]), `${event.id} must show its calendar dates`);
-      assert.ok(text.length > event.name.length, `${event.id} must offer more than a bare name`);
+      assert.ok(text.includes(event.venue), `${event.id} must show its pinned venue name`);
+      assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
     }
     await journey.capture(page, "chooser-lists-published-events");
     await page.close();
