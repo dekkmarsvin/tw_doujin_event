@@ -454,7 +454,7 @@ try {
   const beforeZero = await state(zero);
   await zero.locator(".map").evaluate((node) => { node.style.width = "0px"; });
   await zero.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
-  await zero.getByRole("button", { name: "A03 MAI", exact: true }).click();
+  await zero.getByRole("link", { name: "A03 MAI", exact: true }).click();
   await pause(zero);
   assert.deepEqual((await state(zero)).offset, beforeZero.offset, "zero geometry defers positioning");
   await zero.locator(".map").evaluate((node) => { node.style.width = ""; });
