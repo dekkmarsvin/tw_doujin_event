@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 /**
- * A source-level invariant, in the same spirit as `tests/modal-focus.test.mjs`
- * and for the same reason: the repo has no DOM harness, so "does the layout
- * break" cannot be observed directly.
+ * Remaining source-level media guards. browser/reader-thumbnails.mjs now
+ * measures the result card's column count with and without a picture; it does
+ * not yet prove every empty-container and geometry condition below. See
+ * docs/design/source-assertion-cleanup.md for the assertion-level mapping.
  *
  * What it guards is specific. ADR-0012 retired the reviewed thumbnail index, so
  * the common case flipped: a circle with a picture used to be ordinary and is
@@ -21,16 +22,12 @@ import test from "node:test";
 
 const source = async (path) => readFile(new URL(`../app/${path}`, import.meta.url), "utf8");
 
-test("the result card reserves its media column only when there is a picture", async () => {
+test("a pictureless result card does not mount an empty media element", async () => {
   const panels = await source("event-workspace-panels.tsx");
 
-  // The 58px column comes from `resultWithMedia`; without the guard the card
-  // grid keeps the column and the picture slot renders as an empty bordered box.
-  assert.match(panels, /mediaCount > 0 && thumbnail \? styles\.resultWithMedia : ""/);
+  // Counting rendered grid columns does not prove an empty bordered span is
+  // absent. Keep this guard until that distinct condition is observed too.
   assert.match(panels, /\{mediaCount > 0 && thumbnail && <span className=\{styles\.resultMedia\}>/);
-
-  const css = await source("event-workspace-panels.module.css");
-  assert.match(css, /\.resultWithMedia \{ grid-template-columns:58px/);
 });
 
 test("the detail panel drops the gallery column instead of leaving it empty", async () => {

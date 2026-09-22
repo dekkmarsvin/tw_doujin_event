@@ -10,8 +10,9 @@ import test from "node:test";
  * file the code used to live in, and the next split does not silently drop an
  * assertion by moving the line it matched.
  *
- * They remain source-level assertions, which #205 is where they get replaced
- * by browser journeys; this only stops them rotting in the meantime.
+ * Browser-covered entry, navigation and feedback assertions have been removed
+ * individually. The remaining guards do not yet have equivalent behavioural
+ * coverage; see docs/design/source-assertion-cleanup.md for that boundary.
  */
 async function organizerSource() {
   const directory = new URL("../app/organizer/", import.meta.url);
@@ -20,38 +21,23 @@ async function organizerSource() {
   return files.join("\n");
 }
 
-test("organizer authoring ships as an unlinked, noindex Pages entry", async () => {
-  const [config, html, reader, organizerMain] = await Promise.all([
-    readFile(new URL("../vite.pages.config.ts", import.meta.url), "utf8"),
-    readFile(new URL("../organizer.html", import.meta.url), "utf8"),
-    readFile(new URL("../app/event-map-app.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../organizer-main.tsx", import.meta.url), "utf8"),
-  ]);
-
-  assert.match(config, /organizer:\s*resolve\([^\n]+"organizer\.html"\)/);
-  assert.match(html, /<meta name="robots" content="noindex, nofollow"/);
-  assert.match(html, /src="\/organizer-main\.tsx"/);
+// portal-organizer-entry opens the built entry and checks noindex; the
+// public-artifact test also checks its separate entry chunk. Keep this guard:
+// fetching the reader HTML alone does not inspect its client-rendered links.
+test("the reader does not advertise the organizer workspace", async () => {
+  const reader = await readFile(new URL("../app/event-map-app.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(reader, /href=["']\/organizer|前往主辦單位後台/);
-  assert.match(organizerMain, /OrganizerApp/);
 });
 
-test("organizer login uses its audience and narrow screens never mount authoring controls", async () => {
-  const [app, client] = await Promise.all([
-    organizerSource(),
-    readFile(new URL("../app/organizer-client.ts", import.meta.url), "utf8"),
-  ]);
-
+test("the organizer login form requests its own audience", async () => {
+  const app = await organizerSource();
+  // The browser journey mints its login link through an API helper, so it
+  // does not exercise the audience sent by this form.
   assert.match(app, /requestLoginLink\([^\n]+"organizer"\)/);
-  assert.match(app, /請改用桌機/);
-  assert.match(app, /matchMedia\("\(min-width: 1040px\)"\)/);
-  assert.match(app, /isDesktop\s*\?\s*<OrganizerWorkspace/);
-  assert.match(client, /\/api\/organizer\/events/);
 });
 
 test("venue authoring uses human selections, immediate creation, and no-division guidance", async () => {
   const app = await organizerSource();
-  assert.match(app, /場館與使用空間/);
-  assert.match(app, /建立新場館/);
   assert.match(app, /找不到空間？立即新增/);
   assert.match(app, /無分區/);
   // #225: ALL is a stored value; the organizer never needs to know it exists.
@@ -74,15 +60,12 @@ test("organizer ships the ADR-0047 guided station, binder readiness, and the sha
     readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(app, /function GuidedTaskStation/);
   assert.match(app, /identity_source:/);
   assert.match(app, /onClick=\{onShowAll\}/);
   assert.match(app, /已完成 \{completed\}\/3/);
   assert.match(app, /function ReadinessRail/);
   assert.match(app, /readiness\.completed/);
-  assert.match(app, /儲存並切換/);
   assert.match(app, />放棄</);
-  assert.match(app, />取消</);
   assert.doesNotMatch(app, /window\.confirm/);
   assert.match(client, /workspace\/complete-onboarding/);
   assert.match(client, /saveOrganizerWorkspacePreference/);
@@ -113,9 +96,6 @@ test("organizer save counters stay internal when no revision diff is available",
   const app = await organizerSource();
 
   assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
-  // The confirmation itself, not the call that produces it: #220 moved this
-  // result out of the shared notice and next to the button that earned it.
-  assert.match(app, /"已儲存。"/);
 });
 
 test("organizer reuses the event source for imports and labels every activity-day field", async () => {
@@ -239,7 +219,6 @@ test("the workspace carries one navigation, one progress count, and counts only 
   // One navigation. The numbered strip above the panel repeated every section,
   // state and next step the rail already had, kept in step by hand.
   assert.ok(!app.includes("className={styles.steps}"), "the numbered strip is gone");
-  assert.ok(app.includes('aria-label="活動項目"'), "the rail's section list is the one that carries that name now");
 
   // The guided station stands alone: a six-section rail beside three basic
   // settings answers work nobody has reached, in a second progress vocabulary.
@@ -293,13 +272,8 @@ test("the three venue layers are explained by real published events", async () =
   // example teaches the shape but not that 展區 belongs to the event.
   assert.match(app, /花博公園爭艷館/);
   assert.match(app, /三重綜合體育館/);
-  assert.match(app, /A–K 區、L–W 區/);
-  assert.match(app, /沒有分區/);
 
   // The mistake this exists to prevent, said outright.
   assert.match(app, /，不是展區。/);
 
-  // A <details> takes no accessible name from its own <summary>, so the guide
-  // carries one; without it the block cannot be announced or addressed.
-  assert.ok(app.includes('aria-label="場館、使用空間、展區的填寫依據"'), "the guide is nameable");
 });
