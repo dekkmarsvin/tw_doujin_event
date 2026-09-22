@@ -18,6 +18,7 @@ export type OrganizerImportMapping = {
 };
 
 export type OrganizerNormalizedImportRow = {
+  /** Positive values refer to the original workbook; 0 marks a manual group. */
   sourceRow: number;
   dayId: string;
   venueSpaceId: string;

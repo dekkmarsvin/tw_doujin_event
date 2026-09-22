@@ -932,6 +932,27 @@ test("import API persists confirmed normalized rows and rejects stale versions",
     `/api/organizer/events/${candidateId}/validate`, "POST", {}, ownerCookie,
   ), candidateId);
   assert.equal((await revalidated.json()).issues.some((issue) => issue.code === "stale_import_area_mode"), true);
+  const editedRows = [{ ...payload.rows[0], circleName: "修正社", codes: ["A01"] },
+    { ...payload.rows[0], sourceRow: 0, circleName: "手動新增社", codes: ["NEW01"] }];
+  const edited = await handlers.putOrganizerImport(request(
+    `/api/organizer/events/${candidateId}/imports`, "PUT", { ...payload, expectedVersion: 4, rows: editedRows }, ownerCookie,
+  ), candidateId);
+  assert.equal(edited.status, 200);
+  const reopened = await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, ownerCookie), candidateId);
+  const reopenedImport = (await reopened.json()).import;
+  assert.equal(reopenedImport.source.fileName, payload.source.fileName);
+  assert.equal(reopenedImport.source.sha256, payload.source.sha256, "the original file remains provenance after manual edits");
+  assert.equal(reopenedImport.rows.find(row => row.sourceRow === 0).circleName, "手動新增社");
+  assert.deepEqual(reopenedImport.rows.flatMap(row => row.codes).sort(), ["A01", "NEW01"]);
+  const conflict = await handlers.putOrganizerImport(request(
+    `/api/organizer/events/${candidateId}/imports`, "PUT", { ...payload, expectedVersion: 4 }, ownerCookie,
+  ), candidateId);
+  assert.equal(conflict.status, 409);
+  assert.equal((await repository.getOrganizerImport(candidateId)).rows.length, 2);
+  const invalidSource = await handlers.putOrganizerImport(request(
+    `/api/organizer/events/${candidateId}/imports`, "PUT", { ...payload, expectedVersion: 5, rows: [{ ...editedRows[1], sourceRow: -1 }] }, ownerCookie,
+  ), candidateId);
+  assert.equal(invalidSource.status, 422);
 });
 
 test("import API tells the organizer which limit rejected the batch", async () => {

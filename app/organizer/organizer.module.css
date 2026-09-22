@@ -294,3 +294,7 @@
 .amendmentChanges { display: grid; gap: 16px; padding-left: 24px; overflow-wrap: anywhere; }
 .amendmentImpact { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 12px; overflow-wrap: anywhere; }
 .amendmentImpact h5 { font-size: 14px; margin: 0 0 12px; }
+.rosterForm { margin:16px 0; padding:16px; border:1px solid var(--border,#d4dad5); border-radius:10px; background:var(--surface,#fff); }
+.rosterForm h5 { margin:0 0 12px; font-size:1rem; }
+.rosterChoice { display:flex!important; flex-direction:row!important; align-items:center; gap:6px; }
+.rosterChoice input { width:16px; min-height:16px; height:16px; padding:0; }

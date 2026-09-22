@@ -2356,6 +2356,7 @@ export function createCirclePortalHandlers({
       if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "匯入資料格式無效。" }, 400);
       const row = value as Record<string, unknown>;
       const sourceRow = row.sourceRow;
+      const rowLabel = sourceRow === 0 ? "手動群組" : `來源列 ${String(sourceRow)}`;
       const dayId = typeof row.dayId === "string" ? row.dayId.normalize("NFKC").trim() : "";
       const venueSpaceId = typeof row.venueSpaceId === "string" ? row.venueSpaceId.normalize("NFKC").trim() : "";
       const submittedAreaId = typeof row.areaId === "string" ? row.areaId.normalize("NFKC").trim() : "";
@@ -2367,15 +2368,15 @@ export function createCirclePortalHandlers({
       const assignment = spaces.get(venueSpaceId);
       const areaId = assignment?.areaMode === "none" ? "ALL" : submittedAreaId;
       const areaAllowed = assignment?.areaMode === "none" || assignment?.areaIds.includes(areaId);
-      if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 1 || !days.has(dayId)
+      if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 0 || !days.has(dayId)
         || !assignment || !areaAllowed || codes.length === 0 || codes.some((code) => !code || code.length > 80)
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
         || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
-        return json({ error: `來源列 ${String(sourceRow)} 的活動日、使用空間、展區或社團識別對應不一致。` }, 422);
+        return json({ error: `${rowLabel} 的活動日、使用空間、展區或社團識別對應不一致。` }, 422);
       }
       for (const code of codes) {
         const placement = `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;
-        if (placements.has(placement)) return json({ error: `來源列 ${sourceRow} 的攤位 ${code} 重複。` }, 422);
+        if (placements.has(placement)) return json({ error: `${rowLabel} 的攤位 ${code} 重複。` }, 422);
         placements.add(placement);
       }
       normalized.push({ sourceRow: sourceRow as number, dayId, venueSpaceId, areaId, codes, circleName, stableKey, identityGroup });
