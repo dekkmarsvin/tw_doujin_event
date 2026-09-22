@@ -23,7 +23,7 @@ function savedRow(index) {
     sourceRow: index + 2,
     dayId,
     venueSpaceId,
-    areaId: venueSpaceId === "space-a" ? "A" : "B",
+    areaId: venueSpaceId === "space-b" || index === 0 ? "ALL" : "A",
     codes,
     circleName: `社團 ${String(index + 1).padStart(5, "0")}`,
     stableKey: `internal-${String(index + 1).padStart(5, "0")}`,
@@ -58,8 +58,8 @@ const detail = {
     },
     venue: {
       assignments: [
-        { venueId: "venue-synthetic", venueSpaceId: "space-a", areaIds: ["A"], areaMode: "imported", mapTemplate: "TAIWAN_GENERIC_V1" },
-        { venueId: "venue-synthetic", venueSpaceId: "space-b", areaIds: ["B"], areaMode: "imported", mapTemplate: "TAIWAN_GENERIC_V1" },
+        { venueId: "venue-synthetic", venueSpaceId: "space-a", areaIds: ["A", "ALL"], areaMode: "imported", mapTemplate: "TAIWAN_GENERIC_V1" },
+        { venueId: "venue-synthetic", venueSpaceId: "space-b", areaIds: ["ALL"], areaMode: "none", mapTemplate: "TAIWAN_GENERIC_V1" },
       ],
     },
     officialSource: { label: "本地合成驗證資料", url: "https://example.test/issue-213" },
@@ -153,6 +153,7 @@ try {
   await status.getByText("符合 20000 列・第 1 / 200 頁", { exact: true }).waitFor();
   assert.equal(await rowsOnPage.count(), 100, "the first page renders no more than 100 rows");
   assert.equal(await rowsOnPage.first().locator("td").nth(4).innerText(), "A00001", "the first page starts at the first natural code");
+  assert.equal(await rowsOnPage.first().locator("td").nth(3).innerText(), "ALL", "a real imported area named ALL keeps its name");
   await journey.capture(organizer, "organizer-import-page-1");
 
   await list.getByRole("button", { name: "下一頁", exact: true }).click();
@@ -193,6 +194,7 @@ try {
   assert.match(filteredRow, /第一天/);
   assert.match(filteredRow, /合成驗證場館・B 空間/);
   assert.match(filteredRow, /B01235、B01235-SECOND/);
+  assert.equal(await rowsOnPage.first().locator("td").nth(3).innerText(), "無分區", "only an undivided space translates the internal ALL value");
   await journey.capture(organizer, "organizer-import-filtered-second-code");
 
   await journey.finish();

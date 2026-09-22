@@ -42,9 +42,18 @@ export function DraftForm({
    * unexplained (#221 4.1). */
   const [attempted, setAttempted] = useState(false);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
+  const [loadedVersion, setLoadedVersion] = useState(detail.event.version);
   const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
   const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
   const editable = detail.event.operation !== "AMEND" && (detail.event.status === "draft" || detail.event.status === "changes_requested");
+  // A refresh may normalize saved input. Adopt it without erasing the save
+  // result, but never pair unsaved edits with somebody else's newer version.
+  if (!dirty && loadedVersion !== detail.event.version) {
+    setLoadedVersion(detail.event.version);
+    setExpectedVersion(detail.event.version);
+    setDraft(detail.draft);
+    setVenueCatalog(detail.venueCatalog);
+  }
   useEffect(() => {
     onDirtyChange(dirty);
     const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
