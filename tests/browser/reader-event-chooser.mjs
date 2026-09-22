@@ -33,9 +33,8 @@ try {
     for (const [index, event] of events.entries()) {
       const entry = page.getByRole("link", { name: new RegExp(event.name) });
       await entry.waitFor();
-      const text = await entry.innerText();
-      assert.ok(text.includes(["26.09.01-02", "26.10.01-04"][index]), `${event.id} must show its calendar dates`);
-      assert.ok(text.includes(event.venue), `${event.id} must show its pinned venue name`);
+      const summary = `${["26.09.01-02", "26.10.01-04"][index]} · ${event.venue}`;
+      assert.equal(await entry.getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
       assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
     }
     await journey.capture(page, "chooser-lists-published-events");
