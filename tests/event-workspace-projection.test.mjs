@@ -145,6 +145,54 @@ test("match reasons cover exactly the visible results", () => {
   assert.deepEqual(projected.matchReasonsByRecordId.get("event-a-A01-0").map((reason) => reason.label), ["關鍵字命中社團名"]);
 });
 
+test("result and category counts use circle identity without losing booth records", () => {
+  const countedRecords = [
+    record("event-a", "c-a", "A01", { name: "同名社團", genre: "全部類別" }),
+    record("event-a", "c-a", "A02", { name: "同名社團", genre: "全部類別" }),
+    record("event-a", "c-b", "A03", { name: "同名社團" }),
+    record("event-a", "c-b", "A04", { name: "同名社團" }),
+    record("event-a", "c-a", "A05", { day: 2, genre: "全部類別" }),
+    record("event-a", "c-next-day", "A06", { day: 2 }),
+    record("event-b", "c-other-event", "A07"),
+  ];
+  const countedByCircleId = new Map();
+  countedRecords.forEach((item) => countedByCircleId.set(item.circle.id, [...(countedByCircleId.get(item.circle.id) ?? []), item]));
+  const input = {
+    event: event("event-a"), records: countedRecords,
+    recordsById: new Map(countedRecords.map((item) => [item.recordId, item])),
+    recordsByCircleId: countedByCircleId, planning, ...defaults,
+  };
+  const all = projectEventWorkspace(input);
+  assert.equal(all.resultCircleCount, 2, "same names are not identities; two booths are not two circles");
+  assert.equal(all.filtered.length, 4);
+  assert.deepEqual([...all.markersByCode.keys()], ["A01", "A02", "A03", "A04"]);
+  assert.deepEqual([...all.genreCounts], [["全部類別", 2], ["原創", 1]], "unclassified circles count once in the total");
+
+  const favorite = projectEventWorkspace({ ...input, favoriteOnly: true });
+  assert.equal(favorite.resultCircleCount, 1);
+  assert.equal(favorite.filtered.length, 2);
+  assert.deepEqual([...favorite.genreCounts], [...all.genreCounts], "category availability does not narrow with favorites");
+  const category = projectEventWorkspace({ ...input, genre: "原創" });
+  assert.equal(category.resultCircleCount, 1);
+  assert.deepEqual(category.filtered.map((item) => item.code), ["A03", "A04"]);
+  const singleBooth = projectEventWorkspace({ ...input, query: "A02" });
+  assert.equal(singleBooth.resultCircleCount, 1);
+  assert.equal(singleBooth.filtered.length, 1);
+  const empty = projectEventWorkspace({ ...input, query: "no such circle" });
+  assert.equal(empty.resultCircleCount, 0);
+  assert.equal(empty.filtered.length, 0);
+  const nextDay = projectEventWorkspace({ ...input, day: 2 });
+  assert.equal(nextDay.resultCircleCount, 2);
+  assert.deepEqual([...nextDay.genreCounts], [["全部類別", 2], ["原創", 1]]);
+});
+
+test("retired and shared-booth results still count distinct circles", () => {
+  const projected = projectRetired();
+  assert.equal(projected.resultCircleCount, 5);
+  assert.equal(projected.filtered.length, 6, "the moved circle retains both locations");
+  assert.equal(projected.genreCounts.get("全部類別"), 5);
+});
+
 
 /**
  * #140. A withdrawn or moved circle stays in the catalog so favourites and
@@ -286,6 +334,9 @@ test("all areas covers every area of the reader's space and none of another's", 
   assert.deepEqual(project({ area: "ALL" }).filtered.map((item) => item.circle.id), ["c-a", "c-b"]);
   assert.deepEqual(project({ area: "B" }).filtered.map((item) => item.circle.id), ["c-b"]);
   assert.deepEqual(project({ area: "ALL", venueSpaceId: "annex" }).filtered.map((item) => item.circle.id), ["c-s"]);
+  assert.equal(project({ area: "ALL" }).genreCounts.get("全部類別"), 2);
+  assert.equal(project({ area: "B" }).genreCounts.get("全部類別"), 1);
+  assert.equal(project({ area: "ALL", venueSpaceId: "annex" }).genreCounts.get("全部類別"), 1);
 });
 
 test("the area chip appears for a chosen area and not for all of them", () => {

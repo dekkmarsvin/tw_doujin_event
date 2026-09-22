@@ -121,12 +121,16 @@ export function projectEventWorkspace(input: ProjectionInput) {
   const matchReasonsByRecordId = new Map<string, CircleMatchReason[]>(
     filtered.map((record) => [record.recordId, describeCircleMatch(record, { query, search: advancedSearch })] as const),
   );
-  const genreCounts = new Map<string, number>(event.genres.map((value) => [value, 0]));
+  const resultCircleCount = new Set(filtered.map((record) => record.circle.id)).size;
+  const genreCircleIds = new Map(event.genres.map((value) => [value, new Set<string>()]));
   eventRecords.forEach((record) => {
-    if (record.day !== day) return;
-    genreCounts.set(event.genres[0], (genreCounts.get(event.genres[0]) ?? 0) + 1);
-    if (genreCounts.has(record.genre)) genreCounts.set(record.genre, (genreCounts.get(record.genre) ?? 0) + 1);
+    if (record.day !== day || !areaFilter.has(record.hall)) return;
+    // Category availability counts circles in this map's scope, not placements.
+    // The fallback category can be the total itself; adding to a Set is idempotent.
+    genreCircleIds.get(event.genres[0])?.add(record.circle.id);
+    genreCircleIds.get(record.genre)?.add(record.circle.id);
   });
+  const genreCounts = new Map([...genreCircleIds].map(([genre, ids]) => [genre, ids.size]));
   const markerRecords = new Map<string, CircleViewRecord[]>();
   mapRecords.forEach((record) => markerRecords.set(record.code, [...(markerRecords.get(record.code) ?? []), record]));
   const markers = [...markerRecords].map(([code, markerItems]) => ({ code, records: markerItems }));
@@ -183,7 +187,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
   return {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextEntry, nextRecord, navigationTargetRecord,
-    visitedCount, sharedRecords, filtered, mapRecords, workTopicSuggestions, matchReasonsByRecordId, genreCounts,
+    visitedCount, sharedRecords, filtered, resultCircleCount, mapRecords, workTopicSuggestions, matchReasonsByRecordId, genreCounts,
     markers, markersByCode, slots, activeFilterDescriptors: filters,
   };
 }
