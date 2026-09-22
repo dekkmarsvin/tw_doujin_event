@@ -161,7 +161,7 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
         // otherwise hand an inherited object to the search state and the applied
         // filter chip would try to render it.
         workType: Object.hasOwn(WORK_TYPE_PARAMETERS, workType) ? WORK_TYPE_PARAMETERS[workType] : "ALL",
-        adultContent: adultContent === "include" ? "R18" : adultContent === "general" || adultContent === "exclude" ? "GENERAL" : "ALL",
+        adultContent: adultContent === "include" ? "R18" : adultContent === "r15" ? "R15" : adultContent === "general" || adultContent === "exclude" ? "GENERAL" : "ALL",
       },
       planningDisplay: {
         favoriteGroupId: url.searchParams.get("favoriteGroup") ?? "ALL",
@@ -209,7 +209,7 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   const workTypeParameter = Object.keys(WORK_TYPE_PARAMETERS).find((key) => WORK_TYPE_PARAMETERS[key] === state.advancedSearch.workType);
 
   if (workTypeParameter) url.searchParams.set("workType", workTypeParameter);
-  if (state.advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", state.advancedSearch.adultContent === "R18" ? "include" : "general");
+  if (state.advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", state.advancedSearch.adultContent === "R18" ? "include" : state.advancedSearch.adultContent === "R15" ? "r15" : "general");
   if (state.planningDisplay.favoriteGroupId !== "ALL") url.searchParams.set("favoriteGroup", state.planningDisplay.favoriteGroupId);
   if (state.planningDisplay.visitStatus !== "ALL") url.searchParams.set("visit", state.planningDisplay.visitStatus);
   if (state.planningDisplay.sort !== "booth") url.searchParams.set("sort", state.planningDisplay.sort);

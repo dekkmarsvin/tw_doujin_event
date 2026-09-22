@@ -267,7 +267,8 @@ test("scheduled Worker entry ignores disabled environments and advances only a p
   for (let i = 0; i < 8; i += 1) {
     await scheduledWorker.scheduled({}, { DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" });
   }
-  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
+  const finalJob = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(finalJob.status, "published", JSON.stringify({ step: finalJob.step, failureCode: finalJob.failure_code, error: finalJob.error }));
   assert.equal(scheduledWorker.fetch, undefined);
   // Explicit production rollout does not enable the preview Worker. Read the
   // configuration with Wrangler's own reader rather than `JSON.parse`: the file

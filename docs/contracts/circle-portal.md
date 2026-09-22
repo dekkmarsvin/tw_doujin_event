@@ -22,6 +22,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/public-artifact.test.mjs` 把關。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
 - [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle，也不出現在公開導覽。
+- `/admin` 是獨立且 noindex 的管理入口，沿用同一 session；沒有登入表單，未登入時連向 `/circle`。非管理者不載入管理內容。`/circle` 只保留管理者身分與管理連結，不掛載管理面板或發出其管理 API 呼叫。管理資產不進 Reader precache，Reader 不新增管理導覽。
 - 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。
 
 ## 登入有效期
@@ -48,9 +49,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 | 證據 | 結果 |
 |---|---|
-| 帳號網域與社團官網相符 | 自動通過 |
+| 帳號網域與 provider 為「官方網站」的社團連結 hostname 相符（沿用移除 `www.` 的比對） | 自動通過 |
 | 社團在已登錄於場刊的可抓取連結上公開驗證碼 | 自動通過 |
 | 其餘 | 一律人工審核 |
+
+連結整合頁、社群及其他非「官方網站」provider 不參與 email 網域自動認領，即使網址相同也不例外；無效 URL 略過。可抓取的已登錄連結仍可走驗證碼流程，其他情況沿用人工審核。
 
 **驗證碼只存在於第二層。** 人工審核不發驗證碼：管理者看的是 `evidence_url` 與 `evidence_note`，判斷依據是人工核對。介面在人工審核路徑不得索取驗證碼。
 
@@ -85,7 +88,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 `creatorTypes` 與 `ageRatings`（可複選）、`workTypes`（選一項）也不是自由文字：選項是 `circle-overrides.ts` 的固定清單，公開端搜尋讀同一份。寫入驗證只檢查長度與筆數，不檢查是否屬於清單——同一個驗證函式也是讀取端守門，收緊會讓既有帶舊值的資料列整列從公開文件消失（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`referencedWorks` 與 `specialTags` 仍是自由填寫。
 
-`ageRatings` 可複選不是介面上的方便，是這個欄位的語意：它描述**販售內容**，同時出全年齡本與 R18 本是真的。收成單選會在作者下次動到分級時把另一個值一起換掉，等於替社團改了它沒說要改的事。查「全年齡」與查「R18」都要命中這樣的社團。
+`ageRatings` 提供全年齡、R15、R18，可複選並逐項顯示，不推導最高分級。它描述**販售內容**，同時出不同分級的本子是真的。各個已選分級的搜尋都要命中；儲存與重開保留全部值。未知舊值仍顯示為額外選項，可保留或由社團移除，不因此丟掉整列 overlay；`specialTags` 維持自由填寫。
 
 `circleCategory` 不是自由文字：控制面與寫入驗證共用 active event 的 `circleCategories`。選項集合來自主辦公開分類頁，但某社團選了哪一項仍是社團自述，不得標示為主辦認定。主辦 base 沒有逐社團分類，因此此欄的「繼承」在介面顯示為「尚未提供」。
 
@@ -169,6 +172,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **帳號跨活動，授權逐活動。** magic link、session 與帳號刪除都不帶活動；認領、補充資料、代管縮圖與地圖草稿都帶。
 
+同一帳號亦可在 `/organizer` 申請建置活動，資格、送件開關、私人結果與管理審核依[主辦工作區契約](./organizer-workspace.md#活動申請)。Session 的 `canApplyForEvent`／`hasEventApplications` 只決定申請介面可達，不是 Organizer grant；未核准者不能讀寫任何候選。帳號刪除同步清除 pending 申請並去識別化已審核決策，不變更正式活動內容。
+
 - **請求指名活動**：控制面每一條 event-scoped route 讀 `?event=<eventId>`。指名的活動就是這次請求唯一的授權範圍。
 - **沒有指名才用預設**：`env.EVENT_ID` 只是「請求沒帶 `event` 時用哪一場」的 migration fallback。**指名一個服務不到的活動不會退回預設**——那會把針對甲活動的寫入跑在乙活動上——而是 `404`。
 - **服務範圍的定義與公開 overlay 相同**：這次部署有沒有該活動的靜態資料。控制面與閱讀端因此永遠對「有哪些活動」給同一個答案，不另立活動 registry。
@@ -231,6 +236,8 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 管理者
 
+- 認領審核、撤下補充資料、管理者名單、停用帳號與地圖審閱／候選匯出在 `/admin`。活動選擇沿用逐活動請求範圍，切換時卸載前一場面板與表單；管理者名單及帳號停用仍是帳號層操作。候選活動的 Owner、核准並發布與重試留在 `/organizer`。
+- `/admin` 顯示 session 到期時間，到期或 API 回 401 時移除管理內容並提供 `/circle` 重新登入連結；逐 endpoint 的管理者、CSRF、活動與 revision 檢查不因入口搬移改變。
 - 待審認領在頁面可見時每 30 秒更新，切回頁面時立即更新，也可手動重新整理。更新失敗顯示錯誤，保留上次成功取得的清單。
 - **只有首次載入與手動按下才改變「重新整理待審認領」按鈕的狀態**；背景更新照常換清單、照常回報失敗，但不把按鈕切成「更新中…」。讀者沒有按過的控制項每 30 秒閃一次，只是動作，不是資訊。
 - 讀取待審認領、核准、婉拒與撤銷都要求同一個有效 session 與當下的管理者資格。到期時整個控制面回到登入畫面，不保留「已登入但管理功能因登入時間被鎖定」的第二種狀態。

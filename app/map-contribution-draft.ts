@@ -1,6 +1,7 @@
 import { EVENT_MAP_VERSION, validateEventMapLayout, type EventMapLayout, type MapRect, type PublishedEventMap } from "./event-map";
 import { mapTemplateLabel, validateMapTemplateLayout } from "./map-template-registry";
 import { validMapAuthoringState, type MapAuthoringState } from "./map-authoring-state";
+import type { MapBoothGroup } from "./map-booth-coverage";
 
 export const MAP_CONTRIBUTION_DRAFT_SCHEMA = "map-contribution-draft/1" as const;
 
@@ -19,6 +20,7 @@ export type MapContributionScope = {
   mapTemplate: string;
   allowedBoothCodes: readonly string[];
   requiredBoothCodes: readonly string[];
+  groups?: readonly MapBoothGroup[];
   /** Whether a booth on the floor that no circle occupies is expected here. A
    * venue plan always has some -- the unsold ones -- so the honest question is
    * whether anything else in this scope already accounts for them. For a

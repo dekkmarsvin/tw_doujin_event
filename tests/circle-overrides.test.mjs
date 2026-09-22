@@ -207,6 +207,18 @@ test("an override replaces a list wholesale instead of merging it", () => {
   assert.deepEqual(edited.circlesById.get(placed.id).specialTags, ["只剩這個"]);
 });
 
+test("R15 and unknown legacy ratings preserve the whole overlay and its other fields", () => {
+  const fields = { ageRatings: ["全年齡", "R15", "R18", "舊分級"], specialTags: ["自由題材"], saleInfo: "販售內容", links: [{ kind: "website", provider: "官方網站", url: "https://circle.example/" }], thumbnail: { sourceUrl: "", url: "https://circle.example/image.png", provider: "作者" } };
+  assert.equal(overrides.isCircleOverrideFields(fields), true);
+  const edited = records.buildCircleCatalog(payload, withFields(placed.id, fields));
+  const circle = edited.circlesById.get(placed.id);
+  assert.deepEqual(circle.ageRatings, fields.ageRatings);
+  assert.deepEqual(circle.specialTags, fields.specialTags);
+  assert.equal(circle.saleInfo, fields.saleInfo);
+  assert.equal(circle.externalLinks[0].url, fields.links[0].url);
+  assert.equal(circle.media[0].url, fields.thumbnail.url);
+});
+
 test("one field authority defines inherit, replace and clear encodings", () => {
   assert.deepEqual(overrides.CIRCLE_OVERRIDE_FIELD_KEYS, [
     "pen", "saleInfo", "circleCategory", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail",

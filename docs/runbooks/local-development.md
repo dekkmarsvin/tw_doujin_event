@@ -28,7 +28,7 @@ npm run preview
 
 ## 啟動需要登入的 portal
 
-`/circle` 與 `/organizer` 需要 Pages Functions、session、Turnstile 與收信路徑；只跑 `npm run dev:pages` 會讓 `/api/*` 被 Vite 當成前台 fallback，因此不能用來測登入。完整的本機隔離環境使用：
+`/circle`、`/organizer` 與 `/admin` 需要 Pages Functions、session、Turnstile 與收信路徑；只跑 `npm run dev:pages` 會讓 `/api/*` 被 Vite 當成前台 fallback，因此不能用來測登入。完整的本機隔離環境使用：
 
 ```bash
 npm run dev:portal
@@ -155,6 +155,8 @@ npm run test:browser:install
 它使用 `--no-save`，所以不會動到 `package.json`；下一次 `npm ci` 之後需要重跑。已經有 Playwright 的話，改設 `PLAYWRIGHT_MODULE` 指向它即可。
 
 代表性尺寸是 PR gate（CI 的 `Browser acceptance` job），完整矩陣是 QA／release 前的檢查。要對既有的伺服器或 preview 部署執行，設 `MAP_TEST_URL`；此時資料與伺服器由呼叫者負責，腳本不會 staging，因此**只會執行 `pinned` journey**——部署提供的是已發布活動，不是 fixture。`BROWSER_CHANNEL` 可改用系統安裝的 Chrome 通道。
+
+操作失敗時，共用 journey 的 `browser-report-<journey>.json` 與地圖 viewport 的 `browser-report-<matrix>.json` 都保留原始錯誤，並附最多五個開啟頁面的畫面文字、失敗截圖路徑與最近二十筆請求結果。請求只記 method、path、status／網路錯誤，不記 query、headers 或 body；診斷取不到的項目如實標示，不覆蓋原始失敗。先用當時畫面與狀態判斷等待條件，再決定是否重跑。
 
 **注意**：`npm run test:browser` 會改寫 staging（最後一組是 fixture `sample` + `sample-two`）。之後跑 `npm test` 會自動換回單一 fixture，但開發途中若直接執行 `npm run dev:pages`，看到的會是上一次驗收留下的 staging。
 

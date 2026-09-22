@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { captureFailurePages, observeRequests } from "./support/failure-diagnostics.mjs";
 
 // Which sizes a run covers. `full` is the release matrix: ten sizes across the
 // three text scales, which is thirty page loads and belongs to QA. A PR gate
@@ -34,6 +35,7 @@ const output = path.resolve(process.env.MAP_TEST_OUTPUT || "outputs/map-viewport
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
 const report = { browser: browser.version(), recordedAt: new Date().toISOString(), source: "local pinned FF47, not production", matrixMode, cases: [], matrix: [], errors: [] };
+const observations = new WeakMap();
 const pause = (page) => page.waitForTimeout(180);
 const detail = (page) => page.locator('aside[aria-label="已選社團詳情"]');
 const state = (page) => page.evaluate(() => {
@@ -57,6 +59,7 @@ const state = (page) => page.evaluate(() => {
 });
 async function open(width = 1440, height = 900, scale = "standard", setup) {
   const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
+  observations.set(page, observeRequests(page));
   page.setDefaultTimeout(10000);
   page.on("pageerror", (error) => report.errors.push(error.message));
   await page.addInitScript((value) => localStorage.setItem("event-map-text-scale", value), scale);
@@ -515,6 +518,10 @@ try {
   await storage.close();
   report.cases.push({ name: "synthetic-storage-error", passed: true });
   assert.deepEqual(report.errors, []);
+} catch (error) {
+  report.failure = String(error);
+  report.diagnostics = await captureFailurePages(browser, output, `viewport-${matrixMode}`, observations);
+  throw error;
 } finally {
   await writeFile(path.join(output, `browser-report-${matrixMode}.json`), JSON.stringify(report, null, 2));
   if (report.matrix.length) await writeFile(path.join(output, "matrix.json"), JSON.stringify(report.matrix, null, 2));

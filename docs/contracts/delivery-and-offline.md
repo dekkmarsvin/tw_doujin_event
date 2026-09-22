@@ -86,6 +86,8 @@ Cloudflare 沒有提供降低帳號用量上限或模擬 Error 1027 的測試介
 
 Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.com` 直接落到網路。
 
+`/admin*` 僅增加 `X-Robots-Tag: noindex, nofollow`，沿用全站 CSP；它沒有登入表單，不需放寬 Turnstile 來源。`/circle`、`/organizer`、`/admin` 的專用資產都不進 Reader precache。
+
 ## 驗收條件
 
 - `dist/index.html` 存在；`dist/_worker.js` 與 `dist/server/index.js` 不存在。

@@ -83,36 +83,36 @@ export function validateOrganizerImportedRowsAgainstDraft(
     const issueBase = { severity: "error" as const, step: "import" as const, row: row.sourceRow, target: row.venueSpaceId };
     if (!days.has(row.dayId)) {
       add(`day\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-        ...issueBase, code: "stale_import_day", message: "既有匯入資料的活動日已不在活動設定中，請重新匯入。",
+        ...issueBase, code: "stale_import_day", message: "既有清單的活動日已不在活動設定中，請修正清單並儲存。",
       });
     }
     const assignment = spaces.get(row.venueSpaceId);
     if (!assignment) {
       add(`space\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-        ...issueBase, code: "stale_import_space", message: "既有匯入資料的使用空間已不在活動設定中，請重新匯入。",
+        ...issueBase, code: "stale_import_space", message: "既有清單的使用空間已不在活動設定中，請修正清單並儲存。",
       });
       continue;
     }
     if (assignment.areaMode === "none") {
       if (row.areaId !== "ALL") {
         add(`area-mode\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-          ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，既有匯入資料需要重新匯入。",
+          ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，請重新儲存清單以套用無分區設定。",
         });
       }
     } else if (!assignment.areaIds.includes(row.areaId)) {
       add(`area\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-        ...issueBase, code: "stale_import_area", message: "既有匯入資料的展區已不在目前的活動設定中，請重新匯入。",
+        ...issueBase, code: "stale_import_area", message: "既有清單的展區已不在目前的活動設定中，請修正清單並儲存。",
       });
     }
   }
   const issues = [...groups.values()].map(({ issue, count }) => ({
     ...issue,
-    message: count > 1 ? `${issue.message}（影響 ${count} 列；代表來源列 ${issue.row ?? "未知"}。）` : issue.message,
+    message: count > 1 ? `${issue.message}（影響 ${count} 列；${issue.row === 0 ? "含手動群組" : `代表來源列 ${issue.row ?? "未知"}`}。）` : issue.message,
   }));
   if (omitted > 0) {
     issues.push({
       severity: "error", step: "import", code: "stale_import_more",
-      message: `另有 ${omitted} 項匯入資料不一致未逐項列出；請重新匯入完整名單。`,
+      message: `另有 ${omitted} 項匯入資料不一致未逐項列出；請修正完整清單並儲存。`,
     });
   }
   return issues;

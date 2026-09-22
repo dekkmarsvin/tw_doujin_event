@@ -3,6 +3,8 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   advancedCircleSearchCount,
+  AGE_RATING_OPTIONS,
+  ageRatingFilterLabel,
   CREATOR_TYPE_OPTIONS,
   findWorkTopicSuggestions,
   normalizeWorkTopics,
@@ -217,8 +219,11 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
       </fieldset>
       <fieldset>
         <legend>年齡分級</legend>
-        <div className={styles.segments}>
-          {(["ALL", "R18", "GENERAL"] as const).map((option) => <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{option === "ALL" ? "不限" : option === "R18" ? "只看 R18" : "只看全年齡"}</button>)}
+        <div className={`${styles.segments} ${styles.ratingSegments}`}>
+          {(["ALL", ...AGE_RATING_OPTIONS] as const).map((rating) => {
+            const option = rating === "全年齡" ? "GENERAL" : rating;
+            return <button type="button" key={option} aria-pressed={draft.adultContent === option} className={draft.adultContent === option ? styles.active : ""} onClick={() => setDraft({ ...draft, adultContent: option })}>{ageRatingFilterLabel(option)}</button>;
+          })}
         </div>
       </fieldset>
       <footer>

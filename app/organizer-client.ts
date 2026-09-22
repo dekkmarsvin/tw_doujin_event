@@ -1,4 +1,5 @@
 import type { MapAuthoringState } from "./map-authoring-state";
+import type { OrganizerApplication, OrganizerApplicationInput } from "./organizer-applications";
 import { PortalError, reportSessionResponse } from "./circle-editor-client";
 import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
 import type {
@@ -39,6 +40,18 @@ async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
     throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗，請稍後再試。", response.status, body);
   }
   return body as T;
+}
+
+export function listEventApplications() {
+  return organizerCall<{ applications: OrganizerApplication[]; canApply: boolean }>("/api/organizer/applications");
+}
+
+export function submitEventApplication(id: string, application: OrganizerApplicationInput) {
+  return organizerCall<{ application: OrganizerApplication }>("/api/organizer/applications", { method: "POST", body: JSON.stringify({ id, application }) });
+}
+
+export function reviewEventApplication(id: string, decision: "approved" | "rejected", reason: string) {
+  return organizerCall<{ application: OrganizerApplication }>(`/api/admin/organizer/applications/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ decision, reason }) });
 }
 
 export type OrganizerEventSummary = {
@@ -205,7 +218,10 @@ export function putOrganizerImport(candidateId: string, input: {
 
 export type OrganizerMapSummary = {
   id: string; periodKey: string; venueSpaceId: string; status: string; mapRevision: number; updatedAt: number;
+  boothCodes?: string[] | null;
 };
+
+export type OrganizerMapLocation = { candidateId: string; mapId: string; code: string; nonce: number };
 
 export type OrganizerMapDetail = OrganizerMapSummary & { layout: EventMapLayout; authoring?: MapAuthoringState };
 
@@ -223,8 +239,8 @@ export type OrganizerReaderPreview = {
   maps: Array<{ periodKey: string; venueSpaceId: string; revision: number; layout: EventMapLayout }>;
 };
 
-export function listOrganizerMaps(candidateId: string) {
-  return organizerCall<{ maps: OrganizerMapSummary[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps`);
+export function listOrganizerMaps(candidateId: string, coverage = false) {
+  return organizerCall<{ maps: OrganizerMapSummary[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps${coverage ? "?coverage=1" : ""}`);
 }
 
 export function readOrganizerMap(candidateId: string, draftId: string) {

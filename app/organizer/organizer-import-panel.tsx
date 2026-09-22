@@ -3,15 +3,16 @@
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
-import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
+import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
 import { isOrganizerAreaId, withOrganizerImportedAreaIds } from "../organizer-event";
 import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
-import { IDLE, message, organizerDayLabel, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
+import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
+import { SavedImportList } from "./organizer-roster-editor";
 import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 
 type MappingChoice = { column: number | null; fixed: string };
@@ -32,11 +33,16 @@ function downloadText(name: string, text: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ImportPanel({ detail, onChanged, onSection }: {
+export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSaveReady, onLocate }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onSection: (section: "venue") => void;
+  onDirtyChange: (dirty: boolean) => void;
+  onSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  onLocate: (location: OrganizerMapLocation) => void;
 }) {
+  const [rosterDirty, setRosterDirty] = useState(false);
+  const reportRosterDirty = useCallback((dirty: boolean) => { setRosterDirty(dirty); onDirtyChange(dirty); }, [onDirtyChange]);
   const [fileName, setFileName] = useState("");
   const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
   const readFeedback = useActionFeedback();
@@ -203,8 +209,9 @@ export function ImportPanel({ detail, onChanged, onSection }: {
   return <section className={styles.panel} onChangeCapture={() => saveFeedback.clear()}>
     <ActionNotice notice={loadNotice} />
     <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>{detail.import ? "對照欄位後預覽結果，確認無誤再送出名單。" : "尚未加入攤位名單。選一個 CSV 或 Excel 檔，或先下載範本。"}</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
-    {detail.import && <SavedImportList detail={detail} />}
-    <fieldset className={styles.formFields} disabled={saveFeedback.pending} aria-label="匯入檔案與欄位對應">
+    {detail.import && <SavedImportList detail={detail} onChanged={onChanged} onDirtyChange={reportRosterDirty} onSaveReady={onSaveReady} onLocate={onLocate} />}
+    {rosterDirty && <p role="status">先儲存或放棄清單變更，再以新檔案取代。</p>}
+    <fieldset className={styles.formFields} disabled={saveFeedback.pending || rosterDirty} aria-label="匯入檔案與欄位對應">
     <div className={styles.importGrid}>
       <label>來源檔案<input type="file" disabled={!editable} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => {
         const file = event.target.files?.[0];
@@ -345,41 +352,6 @@ export function ImportPanel({ detail, onChanged, onSection }: {
       </div>}
     </>}
     </fieldset>
-  </section>;
-}
-
-function SavedImportList({ detail }: { detail: OrganizerEventDetail }) {
-  const [query, setQuery] = useState("");
-  const [day, setDay] = useState("");
-  const [space, setSpace] = useState("");
-  const [descending, setDescending] = useState(false);
-  const [page, setPage] = useState(0);
-  const filtered = useMemo(() => {
-    const needle = query.normalize("NFKC").toLocaleLowerCase("zh-Hant");
-    return (detail.import?.rows ?? []).filter((row) => (!day || row.dayId === day) && (!space || row.venueSpaceId === space)
-      && [row.circleName, row.stableKey ?? "", ...row.codes].some((value) => value.toLocaleLowerCase("zh-Hant").includes(needle)))
-      .toSorted((a, b) => (descending ? -1 : 1) * a.codes[0].localeCompare(b.codes[0], "zh-Hant", { numeric: true }));
-  }, [detail.import, query, day, space, descending]);
-  const pages = Math.max(1, Math.ceil(filtered.length / 100));
-  const shownPage = Math.min(page, pages - 1);
-  const savedDays = [...new Set(detail.import?.rows.map((row) => row.dayId))];
-  const savedSpaces = [...new Set(detail.import?.rows.map((row) => row.venueSpaceId))];
-  return <section aria-label="已儲存的攤位清單" className={styles.importPreview}>
-    <h4>已儲存的攤位清單</h4>
-    <p>{detail.import?.rows.length ?? 0} 列・{detail.import?.rows.reduce((total, row) => total + row.codes.length, 0) ?? 0} 個攤位代碼。此處供檢視；更新內容請重新匯入。</p>
-    <div className={styles.importGrid}>
-      <label>搜尋清單<input type="search" value={query} placeholder="社團、攤位或主辦內部編號" onChange={(event) => { setQuery(event.target.value); setPage(0); }} /></label>
-      <label>清單活動日<select value={day} onChange={(event) => { setDay(event.target.value); setPage(0); }}><option value="">全部活動日</option>{savedDays.map((id) => <option key={id} value={id}>{organizerDayLabel(detail.draft.event.days, id)}</option>)}</select></label>
-      <label>清單使用空間<select value={space} onChange={(event) => { setSpace(event.target.value); setPage(0); }}><option value="">全部使用空間</option>{savedSpaces.map((id) => <option key={id} value={id}>{organizerVenueSpaceLabel(detail.venueCatalog, id)}</option>)}</select></label>
-      <label>攤位排序<select value={descending ? "desc" : "asc"} onChange={(event) => { setDescending(event.target.value === "desc"); setPage(0); }}><option value="asc">代碼由小到大</option><option value="desc">代碼由大到小</option></select></label>
-    </div>
-    <p role="status">符合 {filtered.length} 列・第 {shownPage + 1} / {pages} 頁</p>
-    <div className={`${styles.sampleTable} ${styles.savedImportTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th><th>展區</th><th>攤位代碼</th><th>社團名稱</th><th>主辦內部編號</th></tr></thead>
-      <tbody>{filtered.slice(shownPage * 100, (shownPage + 1) * 100).map((row, index) => <tr key={`${row.sourceRow}-${index}`}>
-        <td>{row.sourceRow}</td><td>{organizerDayLabel(detail.draft.event.days, row.dayId)}</td><td>{organizerVenueSpaceLabel(detail.venueCatalog, row.venueSpaceId)}</td><td>{detail.draft.venue.assignments.some((assignment) => assignment.venueSpaceId === row.venueSpaceId && assignment.areaMode === "none") ? "無分區" : row.areaId}</td><td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
-      </tr>)}</tbody></table></div>
-    {filtered.length === 0 && <p>沒有符合條件的攤位。</p>}
-    <div className={styles.row}><button type="button" className={styles.ghost} disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={shownPage + 1 >= pages} onClick={() => setPage(shownPage + 1)}>下一頁</button></div>
   </section>;
 }
 

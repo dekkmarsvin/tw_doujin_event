@@ -33,7 +33,7 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 | `workMode` | 詳細搜尋 | 多枚題材的組合方式；只有 `all` 會寫出，`any` 是預設 |
 | `workExclude` | 詳細搜尋 | 排除的作品名稱／題材。**可重複** |
 | `workType` | 詳細搜尋 | 作品取向；`male`、`female` 或 `general`。退役的 `original`／`derivative` 視為未設定 |
-| `r18` | 詳細搜尋 | 分級；`general` 只匹配明確一般分級 |
+| `r18` | 詳細搜尋 | 分級；`include` 為 R18、`r15` 為 R15、`general`（舊 `exclude` 別名）只匹配明確一般分級；逐值匹配，無最高分級推導 |
 | `favorite` | 規劃篩選 | `1` 代表只看收藏 |
 | `favoriteGroup` | 規劃篩選 | 收藏群組 ID |
 | `visit` | 規劃篩選 | 行程狀態 |

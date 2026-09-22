@@ -6,9 +6,10 @@
 import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
 import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-state";
 import { MAP_IMAGE_MAX_BYTES } from "../map-contribution-files";
-import MapLayoutEditor from "../map-layout-editor";
+import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
+import { resolveCandidateAuthoringScope } from "../event-authoring-scope";
 import { hasMapTemplateRecognizer, recognizeMapTemplate } from "../map-template-registry";
-import { createOrganizerMap, listOrganizerMaps, readOrganizerMap, readOrganizerMapBackground, saveOrganizerMap, uploadOrganizerMapBackground, type OrganizerEventDetail, type OrganizerMapDetail, type OrganizerMapSummary } from "../organizer-client";
+import { createOrganizerMap, listOrganizerMaps, readOrganizerMap, readOrganizerMapBackground, saveOrganizerMap, uploadOrganizerMapBackground, type OrganizerEventDetail, type OrganizerMapDetail, type OrganizerMapSummary, type OrganizerMapLocation } from "../organizer-client";
 
 import { useModalFocus } from "../use-modal-focus";
 import { message, organizerDayLabel, organizerVenueSpaceLabel } from "./organizer-shared";
@@ -16,7 +17,7 @@ import styles from "./organizer.module.css";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 
 const MAP_PLAN_TYPES = ["image/jpeg", "image/png", "image/webp"];
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function layoutHasContent(layout: EventMapLayout | null) {
   return !!layout && (layout.rows.length > 0 || layout.pillars.length > 0
@@ -67,16 +68,18 @@ function loadOrganizerMapImage(source: string) {
   });
 }
 
-export function OrganizerMapPanel({ detail, onChanged, onSection }: {
+export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onSection: (section: "import") => void;
+  location: OrganizerMapLocation | null;
 }) {
   const [maps, setMaps] = useState<OrganizerMapSummary[]>([]);
   const [selected, setSelected] = useState<OrganizerMapDetail | null>(null);
   const [periodKey, setPeriodKey] = useState(detail.draft.event.days[0]?.id ?? "");
   const [venueSpaceId, setVenueSpaceId] = useState(detail.draft.venue.assignments[0]?.venueSpaceId ?? "");
   const [layout, setLayout] = useState<EventMapLayout | null>(null);
+  const [focusTarget, setFocusTarget] = useState<MapEditorFocusTarget | null>(null);
   const [authoring, setAuthoring] = useState<MapAuthoringState>(EMPTY_MAP_AUTHORING);
   const [background, setBackground] = useState("");
   // A plan picked before the map exists has nowhere to be stored yet, so it
@@ -106,6 +109,11 @@ export function OrganizerMapPanel({ detail, onChanged, onSection }: {
   const assignment = detail.draft.venue.assignments.find((item) => item.venueSpaceId === venueSpaceId);
   // A map is drawn against a booth list; without one there is nothing to draw.
   const importedRows = detail.import?.rows.filter((row) => row.dayId === periodKey && row.venueSpaceId === venueSpaceId).length ?? 0;
+  const scope = useMemo(() => {
+    const rows = detail.import?.rows ?? [];
+    const resolved = resolveCandidateAuthoringScope({ candidateId: detail.event.id, draft: detail.draft, importedRows: rows }, periodKey, venueSpaceId);
+    return resolved ? { ...resolved, groups: rows.filter(row => row.dayId === periodKey && row.venueSpaceId === venueSpaceId).map(row => ({ codes: row.codes, circleName: row.circleName })) } : null;
+  }, [detail.event.id, detail.draft, detail.import, periodKey, venueSpaceId]);
   const reload = useCallback(async () => setMaps((await listOrganizerMaps(detail.event.id)).maps), [detail.event.id]);
   useEffect(() => { queueMicrotask(() => { void reload().catch((error) => loadFailed(message(error))); }); }, [reload, loadFailed]);
 
@@ -126,15 +134,27 @@ export function OrganizerMapPanel({ detail, onChanged, onSection }: {
     });
   };
 
-  const open = async (map: OrganizerMapSummary) => {
+  const open = useCallback(async (map: Pick<OrganizerMapSummary, "id">) => {
     const next = (await readOrganizerMap(detail.event.id, map.id)).map;
+    setFocusTarget(null);
     setSelected(next); setPeriodKey(next.periodKey); setVenueSpaceId(next.venueSpaceId);
     // Cleared before the read, not after: a failed read must not leave the map
     // that was open a moment ago showing its plan behind this one.
     setLayout(next.layout); setAuthoring(next.authoring ?? EMPTY_MAP_AUTHORING); setPendingBackground(null); setEdited(false); setBackground("");
     const plan = await readOrganizerMapBackground(detail.event.id, map.id);
     if (plan) setBackground(await imageDataUrl(plan));
-  };
+  }, [detail.event.id]);
+  useEffect(() => {
+    if (!location || location.candidateId !== detail.event.id) return;
+    let ignore = false;
+    queueMicrotask(() => {
+      if (ignore) return;
+      void open({ id: location.mapId }).then(() => {
+        if (!ignore) setFocusTarget({ kind: "slot", ref: location.code, nonce: location.nonce });
+      }).catch(error => { if (!ignore) loadFailed(message(error)); });
+    });
+    return () => { ignore = true; };
+  }, [location, detail.event.id, open, loadFailed]);
   const startBlank = () => {
     if (!assignment) return;
     const blank = () => {
@@ -245,7 +265,10 @@ export function OrganizerMapPanel({ detail, onChanged, onSection }: {
     <ActionNotice notice={loadNotice} />
     <div className={styles.panelHead}><div><h3>各活動日的場館空間地圖</h3><p>每個活動日的每個場館空間各一張地圖。</p></div><span className={styles.version}>{maps.length} 張地圖</span></div>
     <div className={styles.mapToolbar}>
-      <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => setPeriodKey(event.target.value)}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
+      <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => {
+        const next = event.target.value;
+        discarding(() => { setPeriodKey(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
+      }}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
       <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
         discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
@@ -281,7 +304,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection }: {
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => loadFailed(message(error))); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>
-      <MapLayoutEditor layout={layout} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
+      <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout} scope={scope} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step

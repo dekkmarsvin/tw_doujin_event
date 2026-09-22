@@ -3,8 +3,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
-import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSharedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
+import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
+import type { MapBoothScope } from "./map-booth-coverage";
+import { MapBoothList } from "./map-booth-list";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { EMPTY_MAP_AUTHORING, MAX_MAP_GUIDES, scaleMapAuthoringState, type MapAuthoringState, type MapGuide } from "./map-authoring-state";
 import { DEFAULT_BACKGROUND_OPACITY, NUDGE_STEPS, mapEditorPreferenceStorage, readMapEditorPreferences, saveMapEditorPreferences, type MapEditorPreferences } from "./map-editor-preferences";
@@ -60,6 +62,7 @@ type Props = {
   backgroundImageUrl?: string;
   authoring?: MapAuthoringState;
   focusTarget?: MapEditorFocusTarget | null;
+  scope?: MapBoothScope | null;
   onChange: (layout: EventMapLayout, authoring: MapAuthoringState) => void;
 };
 
@@ -205,7 +208,7 @@ function findFocusSelection(layout: EventMapLayout, target: MapEditorFocusTarget
 
 type EditorSnapshot = { layout: EventMapLayout; authoring: MapAuthoringState };
 
-export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, onChange }: Props) {
+export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, scope, onChange }: Props) {
   const [preferences, setPreferences] = useState(() => readMapEditorPreferences(mapEditorPreferenceStorage()));
   // Held in a ref as well as in state: the pointer handler below runs on the
   // capture phase of the same gesture the key started, and React has not
@@ -275,6 +278,12 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   // confirmed, so drawing and redrawing costs nothing and undoes nothing.
   const [rowFrame, setRowFrame] = useState<MapRect | null>(null);
   const [activeSegment, setActiveSegment] = useState<ActiveSegment | null>(null);
+  const [sharedEdgeDraft, setSharedEdgeDraft] = useState<{ layout: EventMapLayout; selectionKey: string; top: string; bottom: string } | null>(null);
+  // A preview belongs to this exact layout and selection, never to a later
+  // edit, undo or replacement that happens to occupy the same array indices.
+  if (sharedEdgeDraft && (sharedEdgeDraft.layout !== layout || sharedEdgeDraft.selectionKey !== selectionSetKey(selections) || activeSegment || rowForm)) {
+    setSharedEdgeDraft(null);
+  }
   /** The frame is derived, never stored. A stored copy is what went stale when
    * the booths moved through a path that did not know about the segment -- a
    * plain drag updates the rects, so the handles and the number fields kept
@@ -432,6 +441,12 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       if (event.code === "Space" && target === svgRef.current) {
         event.preventDefault();
         holdSpace(true);
+        return;
+      }
+      if (event.key === "Escape" && sharedEdgeDraft) {
+        event.preventDefault();
+        event.stopPropagation();
+        setSharedEdgeDraft(null);
         return;
       }
       if (event.key === "Escape" && (placementTool || anchors)) {
@@ -964,13 +979,17 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     commit((draft) => applySelectionBoxes(draft, resolved.selections, boxes), `nudge:${selectionSetKey(selections)}:${dx},${dy}`);
   };
 
-  /** One batch is one history step, so a correction across six columns is
-   * taken back by a single undo. */
-  const synchroniseSegmentEdges = () => {
-    const resolved = resolveSelectionBoxes(layout, selections);
-    const plan = planSharedSegmentEdges(resolved.boxes, layout);
-    if (!plan.ok) { setRowErrors(plan.errors); return; }
-    commit((draft) => applySelectionBoxes(draft, resolved.selections, plan.boxes), null);
+  const previewSegmentEdges = () => {
+    if (!sharedEdges.ok) return;
+    setSharedEdgeDraft({ layout, selectionKey: selectionSetKey(selections), top: String(sharedEdges.top), bottom: String(sharedEdges.bottom) });
+    setRowErrors([]);
+  };
+
+  /** Only confirmation writes geometry, as one history step for every column. */
+  const applySharedSegmentEdges = () => {
+    if (!sharedEdgePreview?.ok) return;
+    commit((draft) => applySelectionBoxes(draft, selections, sharedEdgePreview.boxes), null);
+    setSharedEdgeDraft(null);
     setRowErrors([]);
   };
 
@@ -1196,7 +1215,11 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   // Asked on every render rather than on the press, because the answer is what
   // the merge button's own state and the line under it are.
   const slotMerge = planSlotMerge(layout, selections);
-  const sharedEdges = planSharedSegmentEdges(resolveSelectionBoxes(layout, selections).boxes, layout);
+  const sharedEdges = planSelectedSegmentEdges(layout, selections);
+  const sharedEdgePreview = sharedEdgeDraft ? planSelectedSegmentEdges(layout, selections, {
+    top: sharedEdgeDraft.top.trim() ? Number(sharedEdgeDraft.top) : NaN,
+    bottom: sharedEdgeDraft.bottom.trim() ? Number(sharedEdgeDraft.bottom) : NaN,
+  }) : null;
   const rectSelection = selection && selection.kind !== "access" ? selection : undefined;
   const selectedRect = rectSelection ? rectFor(layout, rectSelection) : undefined;
   const selectedAccess = selection?.kind === "access" ? layout.accessPoints[selection.itemIndex] : undefined;
@@ -1251,6 +1274,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   const focusSlotCode = (code: string) => {
     const match = findFocusSelection(layout, { kind: "slot", ref: code, nonce: 0 });
     if (!match) return;
+    cancelPlacement(); setSelectedGuideId(null); setActiveSegment(null); setSegmentForm(null);
     setSelections([match]);
     focusSelection(match);
   };
@@ -1426,6 +1450,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
               awaiting a decision would hide exactly what the decision is about. */}
           {draftRow?.slots.map((slot, index) => <g key={slot.code} className={draftRow.keep[index] ? styles.draftSlotKept : styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
           {anchors?.map((anchor) => <g key={`${anchor.index}:${anchor.x}:${anchor.y}`} className={styles.anchor} aria-hidden="true"><circle cx={anchor.x} cy={anchor.y} r={7 * layoutUnitsPerPixel} /><text x={anchor.x} y={anchor.y - 12 * layoutUnitsPerPixel}>{anchor.index}</text></g>)}
+          {sharedEdgePreview?.ok && <g className={styles.sharedEdgePreview} aria-hidden="true" data-shared-edge-preview="true">{sharedEdgePreview.boxes.map((box, index) => <rect key={index} {...box} />)}</g>}
           {slotDraftRect && <rect className={styles.manualDraft} {...slotDraftRect} aria-hidden="true" />}
           {rowFrame && <rect className={styles.manualDraft} {...rowFrame} aria-hidden="true" />}
           {framePreview?.ok && framePreview.row.slots.map((slot) => <g key={slot.code} className={styles.framePreview} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
@@ -1445,6 +1470,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         </div>
       </div>
       <aside className={styles.inspector} aria-label="選取元素屬性">
+        {scope && <MapBoothList key={`${scope.periodKey}:${scope.venueSpaceId}`} layout={layout} scope={scope} selectedCode={selectedSlot?.code} onLocate={focusSlotCode} />}
         {!!snapGuides.length && <output className={styles.snapReadout} aria-live="polite">吸附：{snapGuides.map(guide => `${guide.axis.toUpperCase()} ${Number(guide.position.toFixed(2))}`).join("、")}</output>}
         {!!authoring.guides.length && <div className={styles.guidePanel}><label>選取輔助線<select aria-label="選取輔助線" value={selectedGuideId ?? ""} onChange={event => { cancelPlacement(); setSelectedGuideId(event.target.value || null); setSelections([]); setActiveSegment(null); }}><option value="">請選擇</option>{authoring.guides.map(guide => <option key={guide.id} value={guide.id}>{guide.axis === "x" ? "垂直 X" : "水平 Y"} {Number(guide.position.toFixed(2))}{guide.locked ? "（已鎖定）" : ""}</option>)}</select></label>
           {selectedGuide && <><div className={styles.fields}>{numberField(`輔助線 ${selectedGuide.axis.toUpperCase()}`, selectedGuide.position, value => { if (!selectedGuide.locked) updateGuide(selectedGuide, { position: clamp(value, 0, selectedGuide.axis === "x" ? layout.width : layout.height) }, `guide-field:${selectedGuide.id}`); }, selectedGuide.locked)}</div><label><input type="checkbox" checked={selectedGuide.locked} onChange={event => updateGuide(selectedGuide, { locked: event.target.checked })} />鎖定輔助線位置</label><button type="button" className={styles.remove} onClick={deleteGuide}>刪除輔助線</button></>}
@@ -1555,10 +1581,11 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         {!selections.length && <div className={styles.empty}><b>選取地圖元素</b></div>}
         {selections.length > 1 && !activeSegment && <>
           <div className={styles.selectionTitle}><small>已選取</small><b>{selections.length} 個元素</b></div>
+          {!sharedEdgeDraft && <>
           <div className={styles.batchTools}>
             <button type="button" className={styles.batchWide} onClick={mergeSelectedSlots} disabled={!slotMerge.ok}>合併為一格{slotMerge.ok ? ` ${slotMerge.plan.slot.code}` : ""}</button>
             <button type="button" className={styles.batchWide} onClick={autoArrangeSelection}>自動對齊</button>
-            <button type="button" className={styles.batchWide} onClick={synchroniseSegmentEdges} disabled={!sharedEdges.ok}>同步上下邊界{sharedEdges.ok ? ` ${sharedEdges.columns} 排 × ${sharedEdges.cells} 格` : ""}</button>
+            <button type="button" className={styles.batchWide} onClick={previewSegmentEdges} disabled={!sharedEdges.ok}>同步上下邊界{sharedEdges.ok ? ` ${sharedEdges.columns} 排 × ${sharedEdges.cells} 格` : ""}</button>
             <button type="button" onClick={() => alignSelection("left")}>靠左對齊</button>
             <button type="button" onClick={() => alignSelection("right")}>靠右對齊</button>
             <button type="button" onClick={() => alignSelection("top")}>靠上對齊</button>
@@ -1568,7 +1595,19 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
             * selected element is a booth: a set that mixes in a pillar is a set
             * nobody meant to merge, and saying so would be noise. */}
           {!slotMerge.ok && copyableSlots === selections.length && <p className={styles.hint}>{slotMerge.errors[0]}</p>}
-          {!sharedEdges.ok && copyableSlots === selections.length && <p className={styles.hint}>同步上下邊界：{sharedEdges.errors[0]}</p>}
+          {!sharedEdges.ok && <p className={styles.hint}>同步上下邊界：{sharedEdges.errors[0]}</p>}
+          </>}
+          {sharedEdgeDraft && <section className={styles.sharedEdgePanel} aria-label="同步上下邊界預覽">
+            <b>同步上下邊界</b>
+            <p role="status">{sharedEdges.ok ? `${sharedEdges.columns} 排 × ${sharedEdges.cells} 格。` : ""}綠色外框為預覽，尚未套用。</p>
+            <div className={styles.fields}>{(["top", "bottom"] as const).map(edge => <label key={edge}>
+              <span>{edge === "top" ? "上界 Y" : "下界 Y"}</span>
+              <input type="number" step="any" min="0" max={layout.height} value={sharedEdgeDraft[edge]} aria-invalid={!sharedEdgePreview?.ok} aria-describedby={!sharedEdgePreview?.ok ? "shared-edge-errors" : undefined} onChange={event => setSharedEdgeDraft({ ...sharedEdgeDraft, [edge]: event.target.value })} />
+            </label>)}</div>
+            {sharedEdgePreview && !sharedEdgePreview.ok && <p id="shared-edge-errors" className={styles.rowErrors} role="alert">{sharedEdgePreview.errors[0]}</p>}
+            <p>保留左右位置、寬度與攤位代碼。</p>
+            <div className={styles.rowFormActions}><button type="button" onClick={() => setSharedEdgeDraft(null)}>取消預覽</button><button type="button" className={styles.rowConfirm} disabled={!sharedEdgePreview?.ok} onClick={applySharedSegmentEdges}>套用上下邊界</button></div>
+          </section>}
           <button className={styles.remove} onClick={removeSelection}>移除選取的元素</button>
         </>}
         {selection && !activeSegment && <>

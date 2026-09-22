@@ -36,6 +36,7 @@ export default function EventChooser({ events, unresolved, onSelect }: {
     <main className={styles.main}>
       <h1>選擇活動</h1>
       <p>選一場活動後即可搜尋社團、查看攤位並收藏。</p>
+      {import.meta.env.VITE_ORGANIZER_APPLICATIONS_OPEN === "true" && <p><a href="/organizer">申請建置活動</a></p>}
 
       {unresolved && <p className={styles.notice} role="status">
         <span className={styles.mark} aria-hidden="true">!</span>

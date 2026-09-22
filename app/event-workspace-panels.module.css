@@ -262,3 +262,9 @@
   .details[data-embedded] .sources>b { font-size:calc(12px * var(--ui-font-scale)); }
   .details[data-embedded] .work p { overflow-wrap:anywhere; }
 }
+
+@media (min-width:761px) {
+  .placementMeta { font-size:calc(12px * var(--ui-font-scale,1)); color:#5c666d; }
+  .sourceSummary { font-size:calc(12px * var(--ui-font-scale,1)); }
+  .sourceSummary span { color:#6f665f; }
+}

@@ -2,6 +2,7 @@
  * Vite replaces these flags at build time; only the ones we read are declared.
  */
 interface ImportMetaEnv {
+  readonly VITE_ORGANIZER_APPLICATIONS_OPEN?: string;
   readonly PROD: boolean;
   readonly DEV: boolean;
 }

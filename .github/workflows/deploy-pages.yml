@@ -47,6 +47,8 @@ jobs:
         run: npx tsc --noEmit --incremental false
 
       - name: Build pinned production event
+        env:
+          VITE_ORGANIZER_APPLICATIONS_OPEN: ${{ vars.ORGANIZER_APPLICATIONS_OPEN == 'true' && 'true' || 'false' }}
         run: npm run build:production
 
       - name: Record deployed commit and event bytes
