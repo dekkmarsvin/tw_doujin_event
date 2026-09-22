@@ -42,9 +42,18 @@ export function DraftForm({
    * unexplained (#221 4.1). */
   const [attempted, setAttempted] = useState(false);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
+  const [loadedVersion, setLoadedVersion] = useState(detail.event.version);
   const [venueCatalog, setVenueCatalog] = useState(detail.venueCatalog);
   const [catalogAction, setCatalogAction] = useState<null | { kind: "venue" } | { kind: "space"; venueId: string; assignmentIndex: number }>(null);
   const editable = detail.event.operation !== "AMEND" && (detail.event.status === "draft" || detail.event.status === "changes_requested");
+  // A refresh may normalize saved input. Adopt it without erasing the save
+  // result, but never pair unsaved edits with somebody else's newer version.
+  if (!dirty && loadedVersion !== detail.event.version && detail.event.version >= expectedVersion) {
+    setLoadedVersion(detail.event.version);
+    setExpectedVersion(detail.event.version);
+    setDraft(detail.draft);
+    setVenueCatalog(detail.venueCatalog);
+  }
   useEffect(() => {
     onDirtyChange(dirty);
     const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
@@ -115,6 +124,7 @@ export function DraftForm({
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
     <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3>
       {guidedTask && <p>{TASK_QUESTION[guidedTask]}</p>}</div></div>
+    <fieldset className={styles.formFields} disabled={saving} aria-label={guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料欄位" : "場館與使用空間欄位"}>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /><small>例如：秋日同人交流會 2026</small></label>
@@ -217,6 +227,7 @@ export function DraftForm({
       })}
       {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未選擇場館與使用空間。</p><button type="button" disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button></div>}
     </div>}
+    </fieldset>
     {/* The same pending item is also listed in 準備進度, so this block carries a
         name: a reader arriving at the announcement needs to know which of the
         two they are hearing, and it is the one beside the controls that fix it. */}

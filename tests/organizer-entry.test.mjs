@@ -140,7 +140,7 @@ test("an explicit save-and-leave selection is not replaced by list refresh", asy
   assert.match(app, /const selectionInitialized = useRef\(false\)/);
   assert.match(app, /selectionInitialized\.current\s*=\s*true/);
   assert.match(app, /current === null \? null/);
-  assert.match(app, /onLeave=\{\(\) => \{ setDirty\(false\); setSelectedId\(null\); \}\}/);
+  assert.match(app, /onLeave=\{\(\) => \{ setNotice\(IDLE\); setDirty\(false\); setSelectedId\(null\); \}\}/);
 });
 
 test("booth import shows a worked example, groups each mapping field, and fixes bad rows in place", async () => {

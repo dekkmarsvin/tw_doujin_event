@@ -123,7 +123,12 @@ try {
     },
     config: { eventId: "event-alpha", origin: base, sessionSecret: secret, hashPepper: "test", adminEmails: ["admin@example.test"],
       dataUpdatedAt: data.baseline.event.dataUpdatedAt, eventEndsAt: data.baseline.event.eventEndsAt, now: () => data.now, organizerPublicationMode: "fake" } });
-  const routes = (role) => async (page) => page.route("**/api/**", async (route) => {
+  const routes = (role) => async (page) => {
+    // The handlers and seeded sessions use the fixture's clock. The browser
+    // must share it or its real date eventually expires a valid test session.
+    // setFixedTime leaves timers running, including publication polling.
+    await page.clock.setFixedTime(data.now);
+    return page.route("**/api/**", async (route) => {
     const req = route.request(); const path = new URL(req.url()).pathname;
     const request = new Request(req.url(), { method: req.method(), headers: { ...req.headers(), cookie: actors[role].cookie }, body: req.postData() ?? undefined });
     const match = path.match(/^\/api\/(?:admin\/)?organizer\/events\/([^/]+)(?:\/(.*))?$/);
@@ -143,7 +148,8 @@ try {
       }
     } else throw new Error(`Unexpected UI request ${path}`);
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-  });
+    });
+  };
   const owner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
   await openSection(owner, /^送審與發布/);
   await owner.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();

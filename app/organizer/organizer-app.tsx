@@ -113,6 +113,7 @@ function OrganizerSignIn() {
 
 function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
+  const [listLoaded, setListLoaded] = useState(false);
   const resumeKey = `organizer.resumeCandidate:${session.email}`;
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try { return localStorage.getItem(resumeKey); } catch { return null; }
@@ -143,6 +144,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const reloadList = useCallback(async () => {
     const next = (await listOrganizerEvents()).events;
     setEvents(next);
+    setListLoaded(true);
     if (!selectionInitialized.current) {
       selectionInitialized.current = true;
       setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
@@ -151,8 +153,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     setSelectedId((current) => current === null ? null
       : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
   }, []);
-  const reloadDetail = useCallback(async (candidateId: string) => {
+  const reloadDetail = useCallback(async (candidateId: string, isCurrent: () => boolean = () => true) => {
     const next = await readOrganizerEvent(candidateId);
+    if (!isCurrent()) return;
     setPublicationReadError(null);
     setPollGeneration((value) => value + 1);
     setDetail(next);
@@ -161,7 +164,20 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     setShowAllTasks(false);
   }, []);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
-  useEffect(() => { queueMicrotask(() => { if (selectedId) void reloadDetail(selectedId).catch((error) => setNotice({ kind: "error", message: message(error) })); else setDetail(null); }); }, [reloadDetail, selectedId]);
+  useEffect(() => {
+    // Validate a remembered selection against the list before reading it. A
+    // response from an activity we have since left must not replace this one.
+    if (!listLoaded) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      if (selectedId) void reloadDetail(selectedId, () => active).catch((error) => {
+        if (active) setNotice({ kind: "error", message: message(error) });
+      });
+      else setDetail(null);
+    });
+    return () => { active = false; };
+  }, [listLoaded, reloadDetail, selectedId]);
   useEffect(() => {
     try {
       if (selectedId) localStorage.setItem(resumeKey, selectedId);
@@ -213,6 +229,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   }, []);
 
   const finishNavigation = (request: PendingNavigation) => {
+    setNotice(IDLE);
     setPendingNavigation(null);
     setDirty(false);
     draftSave.current = null;
@@ -267,6 +284,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   };
   const advanceGuidedTask = (nextTask: OrganizerGuidedTask) => {
     if (!detail) return;
+    setNotice(IDLE);
     setDirty(false);
     setGuidedTask(nextTask);
     void persistLocation(detail.event.id, nextTask, section)
@@ -288,6 +306,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       </div>
       <div id="organizer-event-list" hidden={!eventListOpen}>
         {session.isAdmin && <CreateEntry
+          onStarted={() => setNotice(IDLE)}
           onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
           onInvitationFailed={(email) => setNotice({ kind: "error", message: `活動已建立，但邀請信沒有寄到 ${email}。` })}
         />}
@@ -341,7 +360,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           onGuidedTaskSaved={advanceGuidedTask}
           onShowAll={() => requestNavigation("查看全部項目", () => setShowAllTasks(true))}
           onReturnToGuide={() => requestNavigation("回到基本設定", () => setShowAllTasks(false))}
-          onLeave={() => { setDirty(false); setSelectedId(null); }}
+          onLeave={() => { setNotice(IDLE); setDirty(false); setSelectedId(null); }}
           onChanged={refresh}
           onDirtyChange={setDirty}
           onDraftSaveReady={(save) => { draftSave.current = save; }}
@@ -415,12 +434,10 @@ function WorkspaceSurface({
         <button type="button" className={styles.secondary} onClick={onReturnToGuide}>回到基本設定</button>
       </div>}
       <div className={styles.workspaceGrid}>
-        {/* Saving reloads the candidate, and the new version in the key is what
-            re-seeds each panel from it. The map is the exception: its save
-            keeps the editor open, so it holds the layout across the bump and
-            reads the new version straight from its props. */}
+        {/* Editable panels keep their action feedback across their own saves.
+            Validation and review still reset when the candidate version changes. */}
         <StepContent
-          key={`${detail.event.id}:${section}${section === "map" ? "" : `:${detail.event.version}`}`}
+          key={`${detail.event.id}:${section}${["event", "venue", "map"].includes(section) || (section === "import" && detail.event.operation !== "AMEND") ? "" : `:${detail.event.version}`}`}
           session={session}
           detail={detail}
           section={section}
@@ -488,6 +505,7 @@ function GuidedTaskStation({
       })}
     </ol>
     <DraftForm
+      key={task}
       detail={detail}
       section={section}
       guidedTask={task}
@@ -567,7 +585,8 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
   </aside>;
 }
 
-function CreateEntry({ onCreated, onInvitationFailed }: {
+function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
+  onStarted: () => void;
   onCreated: (id: string) => Promise<void>;
   onInvitationFailed: (email: string) => void;
 }) {
@@ -578,6 +597,7 @@ function CreateEntry({ onCreated, onInvitationFailed }: {
   if (!open) return <button type="button" className={styles.createButton} onClick={() => setOpen(true)}>建立新活動</button>;
   return <form className={styles.createForm} onSubmit={(event) => {
     event.preventDefault();
+    onStarted();
     setNotice({ kind: "busy", message: "建立中…" });
     void createOrganizerEvent(name, email).then(async ({ candidateId, invitationSent }) => {
       setName(""); setEmail(""); setOpen(false);

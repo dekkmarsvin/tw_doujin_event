@@ -4,8 +4,7 @@
  * 的真實活動**當例子，而不是畫一張示意圖：不必維護新資產，而且讀者認得出那
  * 些活動。
  *
- * 例子刻意讓同一個場館出現兩次，答案卻不同——展區是每一場活動自己的決定，
- * 不是場館的屬性。這一點光靠定義說不清楚。
+ * 例子分別展示有分區與沒有分區的活動，讓三層各有可核對的實例。
  *
  * 下面的值取自已發布資料（`data/event-data-pins/*.json` 指向的 commit）：
  * FF47 的展區是 `A：A–K 區`、`B：L–W 區`；CH20 只有一個 `ALL`。已發布的活動
@@ -53,7 +52,7 @@ export function VenueLayerGuide({ open = false }: { open?: boolean }) {
       </tr>)}</tbody>
     </table>
     <ul>{EXAMPLES.map((example) => <li key={example.event}>{example.event}：{example.why}</li>)}</ul>
-    <p>同一個爭艷館，兩場活動的答案可以不一樣——展區是每一場活動自己的決定，不是場館的屬性。
+    <p>是否分區要依這場活動的官方公告決定，不能只從場館名稱判斷。
       <b>大多數單一場地的活動不需要展區。</b></p>
     <p>攤位代碼開頭的字母（<code>A01</code> 的 <code>A</code>）是<b>排</b>，不是展區。
       把排當成展區會讓活動登錄出一堆讀者用不到的名字。</p>
