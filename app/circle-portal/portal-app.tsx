@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createClaim, deleteMyAccount, deleteMyOverride, listMyClaims, PortalError, readMyOverride,
-  previewOverride, readSession, readTurnstileSitekey, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, uploadThumbnail, verifyLoginToken, withdrawClaim,
+  previewOverride, readSession, readTurnstileSitekey, readClaimCircle, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, uploadThumbnail, verifyLoginToken, withdrawClaim,
   setPortalEventId,
   type CircleMatch, type ClaimSummary, type PortalSession,
 } from "../circle-editor-client";
@@ -188,11 +188,18 @@ export default function CirclePortalApp() {
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<Status>(IDLE);
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
+  const [claimsLoadedFor, setClaimsLoadedFor] = useState("");
+  const [claimsFailedFor, setClaimsFailedFor] = useState("");
   const [eventId, setEventId] = useState(initialPortalEventId);
+  const [entry] = useState(() => {
+    const parameters = new URLSearchParams(window.location.search);
+    return { eventId: parameters.get("event"), circleId: parameters.get("circle") ?? "" };
+  });
   const event = getPublishedEvent(eventId) ?? PUBLISHED_EVENTS[0];
+  const targetCircleId = entry.eventId === event.id ? entry.circleId : "";
   /** What a late answer is compared against; `claims` lives above the keyed subtree. */
   const maintainedEventId = useRef(event.id);
-  const forgetSession = useCallback(() => { setSession(null); setClaims([]); }, []);
+  const forgetSession = useCallback(() => { setSession(null); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); }, []);
   const expireSession = useCallback(() => {
     forgetSession();
     setStatus({ kind: "error", message: "登入已到期，請重新登入。" });
@@ -213,8 +220,10 @@ export default function CirclePortalApp() {
       // event now on screen.
       if (requested !== maintainedEventId.current || answer.eventId !== requested) return;
       setClaims(answer.claims);
+      setClaimsLoadedFor(requested);
+      setClaimsFailedFor("");
     } catch {
-      if (requested === maintainedEventId.current) setClaims([]);
+      if (requested === maintainedEventId.current) { setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(requested); }
     }
   }, [event.id]);
 
@@ -229,10 +238,11 @@ export default function CirclePortalApp() {
       // A browser that refuses storage still works; it just forgets the choice.
     }
     const url = new URL(window.location.href);
-    if (url.searchParams.get("event") === event.id) return;
     url.searchParams.set("event", event.id);
+    if (entry.eventId !== event.id) url.searchParams.delete("circle");
+    else if (entry.circleId) url.searchParams.set("circle", entry.circleId);
     window.history.replaceState(null, "", url);
-  }, [event.id]);
+  }, [entry, event.id]);
 
   useEffect(() => {
     const token = takeLoginToken();
@@ -283,20 +293,22 @@ export default function CirclePortalApp() {
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
 
     {!ready ? <p className={styles.notice}>載入中…</p>
-      : !session ? <SignIn />
+      : !session ? <SignIn circleId={targetCircleId} />
         : <>
           {/* One event: no choice to make, so the portal opens straight into it. */}
           {PUBLISHED_EVENTS.length > 1 && <EventPicker
             eventId={event.id}
-            onChoose={(next) => { setEventId(next); setClaims([]); setStatus(IDLE); }}
+            onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />}
           {/* Keyed on the event: claims, drafts and editor drafts all belong to
               one event, and carrying them across a switch would show one
               event's work under another's name. */}
           <Fragment key={event.id}>
             <ClaimList claims={claims} onChanged={refreshClaims} />
-            <ClaimForm onCreated={refreshClaims} />
-            {claims.filter((claim) => claim.status === "verified").map((claim) => <CircleEditor key={claim.circleId} event={event} claim={claim} />)}
+            {targetCircleId
+              ? <ClaimDestination circleId={targetCircleId} claims={claims} ready={claimsLoadedFor === event.id} failed={claimsFailedFor === event.id} onChanged={refreshClaims} />
+              : <ClaimForm onCreated={refreshClaims} />}
+            {claims.filter((claim) => claim.status === "verified").sort((a, b) => Number(b.circleId === targetCircleId) - Number(a.circleId === targetCircleId)).map((claim) => <CircleEditor key={claim.circleId} event={event} claim={claim} />)}
             {session.isMapContributor && <MapContributorPanel event={event} />}
             <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
           </Fragment>
@@ -338,7 +350,7 @@ function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDel
   </section>;
 }
 
-function SignIn() {
+function SignIn({ circleId }: { circleId: string }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
   const [sitekey, setSitekey] = useState<string | null>(null);
@@ -367,7 +379,7 @@ function SignIn() {
       event.preventDefault();
       if (!humanToken) return;
       setStatus({ kind: "busy", message: "寄送中…" });
-      void requestLoginLink(email, humanToken)
+      void requestLoginLink(email, humanToken, "circle", circleId || undefined)
         .then(() => setStatus({ kind: "ok", message: "若這個 email 可以使用，登入連結已寄出。請一併檢查垃圾郵件匣。" }))
         .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }))
         .finally(() => {
@@ -462,9 +474,36 @@ function useCircleSearch(query: string) {
   return active ? matches : [];
 }
 
-function ClaimForm({ onCreated }: { onCreated: () => void }) {
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<CircleMatch | null>(null);
+function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
+  circleId: string; claims: ClaimSummary[]; ready: boolean; failed: boolean; onChanged: () => void;
+}) {
+  const [result, setResult] = useState<{ circle: CircleMatch | null; error?: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [created, setCreated] = useState<Awaited<ReturnType<typeof createClaim>> | null>(null);
+  const claim = claims.find((item) => item.circleId === circleId && (item.status === "verified" || item.status === "pending"));
+  useEffect(() => {
+    if (!ready || claim) return;
+    let active = true;
+    void readClaimCircle(circleId).then((circle) => { if (active) setResult({ circle }); })
+      .catch((error: unknown) => { if (active) setResult({ circle: null, error: errorMessage(error) }); });
+    return () => { active = false; };
+  }, [circleId, ready, claim, attempt]);
+  // A challenge is returned only once. Keep it above the form so the claims
+  // refresh can replace that form with the pending state without losing it.
+  const proof = created?.challenge && <><p>請把驗證碼公開貼在驗證用連結頁面，再到「我的社團」按重新驗證。</p><p className={styles.challenge}><span>驗證碼</span><code>{created.challenge}</code></p></>;
+  if (failed) return <section className={styles.card}>{proof}<p role="status">無法讀取認領資料。</p><button type="button" onClick={onChanged}>重新讀取</button></section>;
+  if (!ready) return <p className={styles.notice} role="status">正在讀取社團…</p>;
+  if (claim) return <section className={styles.card}><h2>{claim.circleName}</h2>{claim.status === "verified"
+    ? <a href={`#circle-editor-${claim.circleId}`}>管理社團資料</a>
+    : created?.id === claim.id && proof ? proof : <p>認領處理中，可在「我的社團」查看或撤回。</p>}</section>;
+  if (!result) return <p className={styles.notice} role="status">正在讀取社團…</p>;
+  if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{result.error}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>重新讀取</button></section>;
+  return <>{!result.circle && <p className={styles.notice}>在這個活動找不到指定社團，請重新搜尋。</p>}<ClaimForm key={result.circle?.id ?? "search"} initialCircle={result.circle} onCreated={(answer) => { setCreated(answer); onChanged(); }} /></>;
+}
+
+function ClaimForm({ onCreated, initialCircle = null }: { onCreated: (answer: Awaited<ReturnType<typeof createClaim>>) => void; initialCircle?: CircleMatch | null }) {
+  const [query, setQuery] = useState(initialCircle?.name ?? "");
+  const [selected, setSelected] = useState<CircleMatch | null>(initialCircle);
   const [targetUrl, setTargetUrl] = useState("");
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
@@ -520,7 +559,7 @@ function ClaimForm({ onCreated }: { onCreated: () => void }) {
                 : result.challenge ? "已建立認領。請把下方驗證碼公開貼在該連結頁面，再回到「我的社團」按重新驗證。"
                   : "已送出，等待管理者人工核對。",
             });
-            onCreated();
+            onCreated(result);
           })
           .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
       }}>送出認領</button>
@@ -568,7 +607,7 @@ function PublicationPreview({ records, compact = false }: { records: CircleViewR
       <CircleDetails
         record={record}
         sharedRecords={records.filter((candidate) => candidate.day === record.day && candidate.code === record.code)}
-        favorite={null} plan={null} groups={[]} compact={compact} readOnly
+        favorite={null} plan={null} groups={[]} compact={compact} floating={compact} readOnly
         onClose={() => undefined} onOpenFull={() => undefined} onSelectShared={() => undefined}
         onToggleFavorite={() => undefined} onTogglePlan={() => undefined} onSetNext={() => undefined}
         onUpdateFavorite={() => undefined} onCreateGroup={() => undefined}
@@ -882,7 +921,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       });
   };
 
-  return <section className={`${styles.card} ${styles.editorCard}`} aria-busy={!hydrated && !hydrationError}>
+  return <section id={`circle-editor-${claim.circleId}`} className={`${styles.card} ${styles.editorCard}`} aria-busy={!hydrated && !hydrationError}>
     <h2>編輯：{claim.circleName}</h2>
     <p>儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。</p>
 

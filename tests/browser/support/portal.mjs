@@ -34,10 +34,10 @@ async function api(path, { method = "GET", body, preview = false } = {}) {
 }
 
 /** The one-time link the mailer just produced for this address. */
-export async function loginLink(email, audience) {
-  const requested = await api("/api/auth/request-link", {
+export async function loginLink(email, audience, { event, circleId } = {}) {
+  const requested = await api(`/api/auth/request-link${event ? `?event=${encodeURIComponent(event)}` : ""}`, {
     method: "POST",
-    body: { email, turnstileToken: "local-dummy-token", audience },
+    body: { email, turnstileToken: "local-dummy-token", audience, circleId },
   });
   if (requested.status !== 202) throw new Error(`request-link answered ${requested.status}: ${await requested.text()}`);
   for (let attempt = 0; attempt < 40; attempt += 1) {

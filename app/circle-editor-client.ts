@@ -115,8 +115,8 @@ export function readTurnstileSitekey() {
   return call<{ turnstileSitekey: string }>("/api/auth/config").then((body) => body.turnstileSitekey);
 }
 
-export function requestLoginLink(email: string, turnstileToken: string, audience: "circle" | "organizer" = "circle") {
-  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience }) });
+export function requestLoginLink(email: string, turnstileToken: string, audience: "circle" | "organizer" = "circle", circleId?: string) {
+  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience, circleId }) });
 }
 
 export function verifyLoginToken(token: string) {
@@ -144,6 +144,11 @@ export type CircleMatch = {
 
 export function searchCircles(query: string) {
   return call<{ circles: CircleMatch[] }>(`/api/circle/search?q=${encodeURIComponent(query)}`);
+}
+
+export function readClaimCircle(circleId: string) {
+  return call<{ circles: CircleMatch[] }>(`/api/circle/search?circle=${encodeURIComponent(circleId)}`)
+    .then((answer) => answer.circles[0] ?? null);
 }
 
 export function listMyClaims() {

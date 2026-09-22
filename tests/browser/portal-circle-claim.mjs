@@ -17,7 +17,7 @@
 // of those guarded invariants — so this journey signs each account in exactly
 // once and reuses the session rather than logging in again.
 import assert from "node:assert/strict";
-import { ADMIN, CIRCLE, clearMail, signIn } from "./support/portal.mjs";
+import { ADMIN, CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
 import { base, start } from "./support/journey.mjs";
 
 const CIRCLE_NAME = "北風畫室";
@@ -31,18 +31,28 @@ const journey = await start("portal-circle-claim");
 try {
   await clearMail();
 
-  // 1. A circle proves who it is with a one-time link, and lands unclaimed.
-  const circle = await signIn(journey, CIRCLE, "circle");
+  // 1. Enter from the selected reader circle. The emailed link carries the
+  // destination even when it is opened in a fresh browser context.
+  const entryPage = await journey.mapPage();
+  await entryPage.getByRole("link", { name: new RegExp(CIRCLE_NAME) }).first().click();
+  await entryPage.getByRole("link", { name: "認領／管理資料" }).click();
+  assert.equal(new URL(entryPage.url()).searchParams.get("circle"), CIRCLE_ID);
+  await entryPage.getByRole("heading", { name: "登入", exact: true }).waitFor();
+  const link = await loginLink(CIRCLE, "circle", { event: "sample", circleId: CIRCLE_ID });
+  const circle = await journey.page({ url: link });
+  await circle.getByRole("button", { name: "登出", exact: true }).waitFor();
+  await entryPage.close();
   assert.match(await circle.locator("body").innerText(), new RegExp(CIRCLE), "the signed-in account is named");
   await journey.capture(circle, "portal-signed-in");
 
   // 2. Finding and claiming the circle. The fixture circle carries no links to
   //    verify against, so this is the manual-review path an admin has to answer.
-  await circle.locator('input[placeholder="輸入至少 2 個字"]').fill(CIRCLE_NAME.slice(0, 2));
-  await circle.getByRole("button", { name: new RegExp(CIRCLE_NAME) }).click();
+  await circle.getByRole("button", { name: "送出認領", exact: true }).waitFor();
+  assert.equal(await circle.locator('#portal-search').inputValue(), CIRCLE_NAME, "the exact reader circle is already selected");
   await circle.getByRole("button", { name: "送出認領", exact: true }).click();
   const mine = circle.locator("body");
   await circle.getByRole("button", { name: "撤回", exact: true }).waitFor();
+  await circle.getByRole("button", { name: "送出認領", exact: true }).waitFor({ state: "hidden" });
   assert.match(await mine.innerText(), /審核中/, "a submitted claim is pending, not granted");
   // Until an admin says yes there is nothing to edit: a claim that let a
   // stranger write immediately is the failure this step exists for.
