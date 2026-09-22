@@ -9,7 +9,7 @@ const runner = vite.environments.ssr.runner;
 const { validMapAuthoringState, scaleMapAuthoringState } = await runner.import("/app/map-authoring-state.ts");
 const { parseMapContributionDraftContent } = await runner.import("/app/map-contribution-draft.ts");
 const { snapRectToAdjacentRects: snap, segmentSlotRects } = await runner.import("/app/map-layout-editor-geometry.ts");
-const { planSharedSegmentEdges } = await runner.import("/app/map-layout-editor-selection.ts");
+const { planSharedSegmentEdges, planSelectedSegmentEdges, applySelectionBoxes } = await runner.import("/app/map-layout-editor-selection.ts");
 const { createLayoutHistory, pushLayoutHistory, undoLayoutHistory, redoLayoutHistory } = await runner.import("/app/map-editor-history.ts");
 const { buildApprovedPublicationArtifacts } = await runner.import("/app/publication-artifacts.ts");
 after(() => vite.close());
@@ -150,6 +150,57 @@ test("shared segment edges refuse what they would get wrong", () => {
   const tight = [...column(10, 10, 1), ...column(50, 10, 1)];
   assert.equal(planSharedSegmentEdges(tight, bounds, 5).ok, false);
   assert.match(planSharedSegmentEdges(tight, bounds, 5).errors[0], /共同高度不足/);
+});
+
+test("custom shared edges preserve row membership, reverse numbering and unselected cells", () => {
+  const columns = Array.from({ length: 6 }, (_, col) => Array.from({ length: 12 }, (_, i) => ({
+    code: `${col}-${12 - i}`, rect: { x: 30 + col * 80, y: 20 + col + i * 30, width: 24, height: 30 },
+  })));
+  // Two columns belong to the same row; the first and last cell in each
+  // column stay outside the partial selection.
+  const map = { ...structuredClone(layout), width: 600, height: 700,
+    rows: [{ label: "A", orientation: "vertical", slots: columns[0].concat(columns[1]) },
+      ...columns.slice(2).map((slots, i) => ({ label: String(i), orientation: "vertical", slots }))] };
+  const selections = map.rows.flatMap((row, rowIndex) => row.slots.flatMap((slot, itemIndex) =>
+    itemIndex % 12 > 0 && itemIndex % 12 < 11 ? [{ kind: "slot", rowIndex, itemIndex }] : []));
+  const before = structuredClone(map);
+  const plan = planSelectedSegmentEdges(map, selections, { top: 51.25, bottom: 349.75 });
+  assert.equal(plan.ok, true);
+  assert.equal(plan.columns, 6);
+  assert.equal(plan.cells, 10);
+  assert.deepEqual(map, before, "planning never mutates the source");
+  applySelectionBoxes(map, selections, plan.boxes);
+  const selected = new Set(selections.map(s => `${s.rowIndex}:${s.itemIndex}`));
+  for (const [r, row] of map.rows.entries()) {
+    assert.equal(row.label, before.rows[r].label);
+    for (const [i, slot] of row.slots.entries()) {
+      const original = before.rows[r].slots[i];
+      assert.equal(slot.code, original.code);
+      assert.equal(slot.rect.x, original.rect.x);
+      assert.equal(slot.rect.width, original.rect.width);
+      if (!selected.has(`${r}:${i}`)) assert.deepEqual(slot, original);
+      else {
+        assert.ok(Math.abs(slot.rect.y - (51.25 + (i % 12 - 1) * 29.85)) < 1e-9);
+        assert.ok(Math.abs(slot.rect.height - 29.85) < 1e-9);
+      }
+    }
+  }
+});
+
+test("shared-edge preview rejects invalid values and non-vertical or mixed selections", () => {
+  const slots = x => [10, 20].map((y, i) => ({ code: `${x}-${i}`, rect: { x, y, width: 10, height: 10 } }));
+  const map = { ...structuredClone(layout), rows: [{ label: "A", orientation: "vertical", slots: slots(10) }, { label: "B", orientation: "vertical", slots: slots(40) }] };
+  const picks = map.rows.flatMap((row, rowIndex) => row.slots.map((_, itemIndex) => ({ kind: "slot", rowIndex, itemIndex })));
+  for (const [top, bottom, reason] of [[NaN, 30, /數值/], [10, Infinity, /數值/], [30, 10, /大於/], [10, 10, /大於/], [-1, 30, /畫布/], [10, 101, /畫布/], [10, 11, /共同高度不足/]]) {
+    const result = planSelectedSegmentEdges(map, picks, { top, bottom });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], reason);
+  }
+  assert.match(planSelectedSegmentEdges(map, [...picks, { kind: "floor" }]).errors[0], /只選取攤位/);
+  assert.match(planSelectedSegmentEdges(map, [{ kind: "slot", rowIndex: 9, itemIndex: 0 }, ...picks]).errors[0], /重新選取/);
+  assert.match(planSelectedSegmentEdges(map, [picks[0], picks[2]]).errors[0], /無法辨識直排/);
+  const horizontal = { ...map, rows: [10, 30].map(y => ({ label: String(y), orientation: "horizontal", slots: [10, 20].map(x => ({ code: `${x}-${y}`, rect: { x, y, width: 10, height: 10 } })) })) };
+  assert.match(planSelectedSegmentEdges(horizontal, picks).errors[0], /橫排/);
 });
 
 test("approved publication artifacts omit private guides entirely", async () => {

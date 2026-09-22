@@ -272,12 +272,12 @@ function columnsOfBoxes(cells: readonly BoxCell[]): BoxCell[][] {
  * grid: the gangways between the columns are the thing that must survive, so
  * every cell keeps the x and width it had.
  *
- * The shared edges are the outside of the whole selection, and each column is
- * cut again between them with the same seamless spans a segment uses, so the
+ * The shared edges default to the outside of the whole selection. Each column
+ * is cut between them with the same seamless spans a segment uses, so the
  * dividers of one column land on the dividers of the next instead of drifting
  * apart by a rounded cell height. */
-export function planSharedSegmentEdges(boxes: readonly MapRect[], bounds: Bounds, minimumSize = 1):
-  { ok: true; boxes: MapRect[]; columns: number; cells: number } | { ok: false; errors: string[] } {
+export function planSharedSegmentEdges(boxes: readonly MapRect[], bounds: Bounds, minimumSize = 1, edges?: { top: number; bottom: number }):
+  { ok: true; boxes: MapRect[]; columns: number; cells: number; top: number; bottom: number } | { ok: false; errors: string[] } {
   if (boxes.length < 2) return { ok: false, errors: ["請選取至少兩個直排的攤位。"] };
   // A column is the cells that share a left edge and a width; the gangways are
   // the gaps between those columns, which is why grouping is by x at all.
@@ -292,14 +292,18 @@ export function planSharedSegmentEdges(boxes: readonly MapRect[], bounds: Bounds
   if (groups.some((group) => group.length !== cells)) {
     return { ok: false, errors: [`每一排的格數必須相同，目前是 ${groups.map((group) => group.length).join("、")} 格。`] };
   }
+  if (cells < 2) return { ok: false, errors: ["無法辨識直排；請每排連續選取至少兩格，且左右邊緣須一致。"] };
   // Cells stacked left to right are a horizontal segment; a shared top and
   // bottom would collapse them onto each other rather than line them up.
   for (const group of groups) {
     const rows = new Set(group.map((index) => boxes[index].y.toFixed(3)));
     if (rows.size !== group.length) return { ok: false, errors: ["同步上下邊界只適用於直排；這個選取裡有橫排的攤位。"] };
   }
-  const top = clamp(Math.min(...boxes.map((box) => box.y)), 0, bounds.height);
-  const bottom = clamp(Math.max(...boxes.map((box) => box.y + box.height)), 0, bounds.height);
+  const top = edges?.top ?? Math.min(...boxes.map((box) => box.y));
+  const bottom = edges?.bottom ?? Math.max(...boxes.map((box) => box.y + box.height));
+  if (!Number.isFinite(top) || !Number.isFinite(bottom)) return { ok: false, errors: ["請輸入上界與下界的數值。"] };
+  if (bottom <= top) return { ok: false, errors: ["下界必須大於上界。"] };
+  if (top < 0 || bottom > bounds.height) return { ok: false, errors: [`上下界必須在畫布範圍 0–${bounds.height} 內。`] };
   // Height is checked once, on the shared span. Clamping cell by cell would
   // push the last one past the bottom edge and reopen the gaps just closed.
   if (bottom - top < minimumSize * cells) {
@@ -314,7 +318,24 @@ export function planSharedSegmentEdges(boxes: readonly MapRect[], bounds: Bounds
       next[index].height = spans[position].size;
     });
   }
-  return { ok: true, boxes: next, columns: groups.length, cells };
+  return { ok: true, boxes: next, columns: groups.length, cells, top, bottom };
+}
+
+/** Only booth segments participate. Row labels can contain several segments
+ * with different directions, so direction comes from the actual neighbours. */
+export function planSelectedSegmentEdges(layout: EventMapLayout, selections: readonly Selection[], edges?: { top: number; bottom: number }) {
+  if (selections.some(selection => selection.kind !== "slot")) {
+    return { ok: false as const, errors: ["請只選取攤位；設施不能同步上下邊界。"] };
+  }
+  const resolved = resolveSelectionBoxes(layout, selections);
+  if (resolved.selections.length !== selections.length) return { ok: false as const, errors: ["選取的攤位已變更，請重新選取。"] };
+  for (const selection of slotSelections(selections)) {
+    const rects = layout.rows[selection.rowIndex]?.slots.map(slot => slot.rect) ?? [];
+    if (contiguousSegment(rects, selection.itemIndex).orientation === "horizontal") {
+      return { ok: false as const, errors: ["同步上下邊界只適用於直排；這個選取裡有橫排的攤位。"] };
+    }
+  }
+  return planSharedSegmentEdges(resolved.boxes, layout, 1, edges);
 }
 
 export function autoArrangeBoxes(boxes: readonly MapRect[], bounds: Bounds): MapRect[] {
