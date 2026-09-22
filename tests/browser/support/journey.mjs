@@ -27,6 +27,7 @@ export async function start(name) {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", checks: [], errors: [] };
   const observations = new WeakMap();
+  let aborted = false;
 
   return {
     report,
@@ -70,6 +71,10 @@ export async function start(name) {
       console.log(`Passed ${report.checks.length} checks — ${name}.`);
     },
     async abort(error) {
+      // finish() may already have captured a pageerror before the journey's
+      // outer catch calls abort again. Keep that first, still-open-page evidence.
+      if (aborted) throw error;
+      aborted = true;
       const diagnostics = [];
       for (const page of browser.contexts().flatMap(context => context.pages()).filter(page => !page.isClosed()).slice(0, 5)) {
         const screenshot = `failure-${name}-${diagnostics.length + 1}.png`;
