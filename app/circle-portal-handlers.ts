@@ -300,7 +300,7 @@ export function createCirclePortalHandlers({
       return json({ error: "請填寫活動名稱、有效的官方 HTTPS 網址、日期與申請身分；資料整理者請補充整理理由。" }, 400);
     }
     const result = await repository.submitOrganizerApplication({ id: body.id, accountId: current.accountId, data, now: config.now() });
-    return result ? json({ application: applicationResponse(result, false) }, 201)
+    return result ? json({ application: applicationResponse(result, await isAdmin(current.email)) }, 201)
       : json({ error: "申請內容或帳號狀態已變更，請重新整理後確認送件結果。" }, 409);
   }
 
