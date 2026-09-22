@@ -28,13 +28,12 @@
 | organizer-entry | 三層說明的 `aria-label` JSX 字串 | 同 journey 必須透過該 accessible name 找到 group 才能檢查上述範例 |
 | circle-portal-editor | `setHydrated(true)` 出現一次 | `portal-circle-claim` 延遲讀取時不得編輯，讀取成功後才解鎖；不綁定 state setter 的實作次數 |
 | circle-portal-editor | `setHydrationError(errorMessage(error))` 寫法 | 同 journey 使 GET 回 503，必須出現載入失敗 alert |
-| circle-portal-editor | `disabled={!hydrated || reviewOpen}` 寫法 | 同 journey 在延遲／失敗讀取時檢查欄位與提交停用；確認預覽時另檢查表單不可操作 |
 | circle-portal-editor | 重試載入文案存在於原始碼 | 同 journey 點擊真正的重試按鈕，驗證第三次 GET 與恢復編輯 |
 | circle-portal-editor | 禁止 `.catch(() => setFields({}))` 寫法 | 同 journey 的初次讀取失敗必須持續停用並可重試，不得把空欄位當作已載入而開放編輯 |
 | circle-media-degradation | result card 的 `resultWithMedia` 條件 JSX | `reader-thumbnails` 量測實際 grid：無圖欄數少於有圖，有圖成功／失敗的欄數相同 |
 | circle-media-degradation | `.resultWithMedia { grid-template-columns:58px` 寫法 | 同上；保護是否保留媒體欄，不固定欄寬或 CSS 排版 |
 
-合計：**25 處 assertion**，organizer 18、circle editor 5、media 2。不新增 browser journey，也不改動其斷言來配合刪除。
+合計：**24 處 assertion**，organizer 18、circle editor 4、media 2。不新增 browser journey，也不改動其斷言來配合刪除。
 
 ## 核對後保留的缺口
 
@@ -42,6 +41,7 @@
 - Reader 不宣傳 organizer 入口：現有 journey 只 fetch 首份 HTML，無法攔到 client-rendered 的新連結；保留 source guard。
 - Organizer 未儲存導覽、進度計數、儲存／後續 callback 順序、來源欄位、匯入列修正／排除／換檔清除，以及尚未逐項觀察的文案與 CSS：已有 journey 的部分操作不足以覆蓋每種失敗，維持原斷言。三層場館說明也保留實際場館名稱與「不是展區」的斷言。
 - 社團 autosave：browser 驗證的是明確提交後重讀，沒有模擬 preview 失敗後 local draft 仍保存；保留 hydrated guard 與 effect 依賴保護。
+- 社團確認畫面的 `disabled={!hydrated || reviewOpen}`：review 找到既有 journey 只計算全頁任一 `[inert]`，沒有確認實際編輯表單不可操作。若 `reviewOpen` 分支遺失且 inert 誤放到其他節點，仍可能通過；恢復這一處 source guard，只移除其餘四處 hydration 斷言。
 - 社團 creatorTypes 多選、單選欄位替換、活動後公開狀態與失敗還原、刪除摺疊、圖片欄位、CSS、管理者靜默 refresh：現有 ageRatings／claim 流程不能代表這些獨立保護。
 - 空圖片容器與詳情幾何：browser 只證明 full-details 沒有 img，沒有證明空 gallery frame／result span 不存在、詳情沒有空欄、portal container query 或直幅圖高度正確；這些 source guards 保留。
 - modal-focus、Service Worker cache 策略、portal transport 腳本與 local portal runbook guards 沒有取得等效行為證據，本次不改。授權、資料完整性、pin／snapshot、retention 等整合測試維持。
@@ -50,7 +50,7 @@
 
 ## 驗證
 
-- Node `24.20.0`、npm `11.19.0`；worktree 自行 `npm ci`，使用其 fixture build。
+- 鎖定依賴由 worktree 獨立 `npm ci` 安裝；執行驗證前切到 Node `24.20.0`、npm `11.19.0`，使用其 fixture build。
 - 三個調整檔案與 `public-artifact`：31/31 通過。
 - `reader-thumbnails` 3、`portal-organizer-entry` 4、`portal-organizer-references` 11、`portal-circle-claim` 10 checks 通過；journey 程式及斷言均未修改。
 - ESLint、`tsc --noEmit --incremental false` 通過。

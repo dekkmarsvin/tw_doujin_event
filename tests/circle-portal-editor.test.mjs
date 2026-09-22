@@ -64,6 +64,9 @@ test("the draft is kept as soon as the record loads, not when the preview answer
 
   // The separate record-loading protection is exercised by
   // browser/portal-circle-claim.mjs with delayed, failed and retried reads.
+  // Keep the review-open branch: that journey counts any [inert] element,
+  // which does not prove the editor itself is disabled during confirmation.
+  assert.match(app, /disabled=\{!hydrated \|\| reviewOpen\}/);
 });
 
 test("the post-event question is two outcomes, and staying public is the default", async () => {
