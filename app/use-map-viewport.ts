@@ -60,7 +60,12 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     // full workspace hides them. Sheet height must never change the fit floor.
     const mobileControls = !desktop && controls.current ? getComputedStyle(controls.current) : null;
     const fitControlLeft = viewport.width - (Number.parseFloat(mobileControls?.right ?? "") || 12) - (Number.parseFloat(mobileControls?.width ?? "") || 64);
-    const rect = desktop ? availableMapRect(viewport, {
+    // A narrow desktop temporarily lends the search column to the map.
+    // Fit still uses the search-visible width, so selecting/closing a circle
+    // cannot change zoom or count as a window resize.
+    const reserve = forFit && desktop ? Number.parseFloat(getComputedStyle(map.current!).getPropertyValue("--fit-width-reserve")) || 0 : 0;
+    const size = { width: viewport.width - reserve, height: viewport.height };
+    const rect = desktop ? availableMapRect(size, {
       top: local(forFit ? fitTools.current : tools.current),
       bottom: local(controls.current),
       detail: !forFit && detailsOpen ? local(details.current) : undefined,
@@ -69,7 +74,7 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
       bottom: forFit ? { x: 0, y: viewport.height - (mobileNav.current?.getBoundingClientRect().height ?? 64) - MOBILE_SUMMARY_PEEK_HEIGHT, width: viewport.width, height: 0 } : local(mobileDock.current),
       controls: forFit ? { x: fitControlLeft, y: 0, width: 0, height: 0 } : local(controls.current),
     });
-    return { viewport, rect };
+    return { viewport: size, rect };
   }, [controls, desktop, details, detailsOpen, fitTools, map, mobileDock, mobileNav, tools]);
 
   const getFit = useCallback(() => {
