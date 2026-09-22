@@ -197,6 +197,20 @@ try {
   assert.equal(await rowsOnPage.first().locator("td").nth(3).innerText(), "無分區", "only an undivided space translates the internal ALL value");
   await journey.capture(organizer, "organizer-import-filtered-second-code");
 
+  // An event with both divided and undivided spaces still shows the area
+  // column; the undivided rows, including rejected ones, use its public label.
+  await organizer.getByLabel(/^來源檔案/).setInputFiles({ name: "mixed-spaces.csv", mimeType: "text/csv", buffer: Buffer.from("攤位,社團\nB01,完整社團\nB02,\n") });
+  const form = organizer.getByRole("group", { name: "匯入檔案與欄位對應", exact: true });
+  await form.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("day-1");
+  await form.getByRole("group", { name: "使用空間", exact: true }).getByLabel("固定值").selectOption("space-b");
+  await form.getByLabel(/^攤位代碼(?!格式)/).selectOption("0");
+  await form.getByLabel(/^社團名稱/).selectOption("1");
+  await form.getByRole("button", { name: "預覽對應結果", exact: true }).click();
+  await form.getByText("1 列待修正", { exact: true }).waitFor();
+  assert.equal(await form.getByRole("cell", { name: "無分區", exact: true }).count(), 2);
+  assert.equal(await form.getByLabel("來源列 3 的展區", { exact: true }).count(), 0, "an undivided rejected row does not ask for a meaningless area");
+  await journey.capture(organizer, "organizer-import-mixed-space-labels");
+
   await journey.finish();
 } catch (error) {
   await journey.abort(error);

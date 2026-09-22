@@ -204,6 +204,7 @@ export function ImportPanel({ detail, onChanged, onSection }: {
     <ActionNotice notice={loadNotice} />
     <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>{detail.import ? "對照欄位後預覽結果，確認無誤再送出名單。" : "尚未加入攤位名單。選一個 CSV 或 Excel 檔，或先下載範本。"}</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
     {detail.import && <SavedImportList detail={detail} />}
+    <fieldset className={styles.formFields} disabled={saveFeedback.pending} aria-label="匯入檔案與欄位對應">
     <div className={styles.importGrid}>
       <label>來源檔案<input type="file" disabled={!editable} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => {
         const file = event.target.files?.[0];
@@ -309,7 +310,7 @@ export function ImportPanel({ detail, onChanged, onSection }: {
           {result.rejected.length > 0 && <tbody>
             <tr className={styles.rowGroup}><td colSpan={columns}>待修正 {result.rejected.length} 列<span>填好標記的欄位，這一列就會移到可匯入。</span></td></tr>
             {result.rejected.slice(0, 100).map((row) => <RejectedImportRow key={row.sourceRow} row={row} columns={columns}
-              dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping}
+              dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping} areaModeByVenueSpace={areaModeByVenueSpace}
               overrides={overrides[row.sourceRow]}
               duplicate={result.issues.find((issue) => issue.severity === "error" && issue.row === row.sourceRow)?.message ?? null}
               onCorrect={(field, value) => correct(row.sourceRow, field, value)} onRemove={() => remove(row)} />)}
@@ -318,7 +319,7 @@ export function ImportPanel({ detail, onChanged, onSection }: {
             <tr className={styles.rowGroup}><td colSpan={columns}>可匯入 {result.rows.length} 列</td></tr>
             {result.rows.slice(0, 100).map((row) => <tr key={row.sourceRow}>
               <td>{row.sourceRow}</td><td>{row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>
-              {requiresAreaMapping && <td>{row.areaId}</td>}
+              {requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : row.areaId}</td>}
               <td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
               <td className={styles.rowAction}>{flagged.has(row.sourceRow)
                 && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>移除</button>}</td>
@@ -343,6 +344,7 @@ export function ImportPanel({ detail, onChanged, onSection }: {
         {(result.rows.length > 100 || result.rejected.length > 100) && <p>每一組先顯示 100 列；儲存時會包含全部確認列。</p>}
       </div>}
     </>}
+    </fieldset>
   </section>;
 }
 
@@ -381,12 +383,13 @@ function SavedImportList({ detail }: { detail: OrganizerEventDetail }) {
   </section>;
 }
 
-function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresArea, overrides, duplicate, onCorrect, onRemove }: {
+function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresArea, areaModeByVenueSpace, overrides, duplicate, onCorrect, onRemove }: {
   row: OrganizerRejectedImportRow;
   columns: number;
   dayOptions: Array<{ value: string; label: string }>;
   spaceOptions: Array<{ value: string; label: string }>;
   requiresArea: boolean;
+  areaModeByVenueSpace: Record<string, OrganizerVenueSpaceAreaMode>;
   overrides: Readonly<Partial<Record<OrganizerImportOverrideField, string>>> | undefined;
   duplicate: string | null;
   onCorrect: (field: OrganizerImportOverrideField, value: string) => void;
@@ -417,7 +420,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
       <td>{row.sourceRow}</td>
       {choice("dayId", row.dayId, "活動日", dayOptions)}
       {choice("venueSpaceId", row.venueSpaceId, "使用空間", spaceOptions)}
-      {requiresArea && cell("areaId", row.areaId, "展區")}
+      {requiresArea && (areaModeByVenueSpace[row.venueSpaceId] === "none" ? <td>無分區</td> : cell("areaId", row.areaId, "展區"))}
       {cell("boothCode", row.boothCode, "攤位代碼")}
       {cell("circleName", row.circleName, "社團名稱")}
       <td>{row.stableKey ?? "—"}</td>

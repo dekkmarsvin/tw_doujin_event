@@ -193,6 +193,7 @@
 .blockerList span { color: var(--muted); font-size: 10px; line-height: 1.45; }
 
 .placeholder { min-height: 170px; margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; display: grid; place-items: center; padding: 18px; background: var(--paper); color: var(--muted); font-size: 12px; text-align: center; }
+.formFields { min-width: 0; margin: 0; border: 0; padding: 0; }
 .importGrid, .mappingGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 20px 0; }
 .mappingGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); padding-top: 18px; }
 /* A bordered fieldset keeps `display: block`: a legend inside a grid formatting
