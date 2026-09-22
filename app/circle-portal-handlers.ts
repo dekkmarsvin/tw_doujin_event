@@ -1018,16 +1018,22 @@ export function createCirclePortalHandlers({
     if (admin && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    const [files, reviews, comments] = await Promise.all([
+    const [files, reviews, comments, scope] = await Promise.all([
       repository.listMapDraftFiles(draftId),
       repository.listMapDraftReviews(draftId),
       repository.listMapDraftComments(draftId),
+      resolveMapContributionScope?.({ periodKey: draft.period_key, venueSpaceId: draft.venue_space_id }) ?? null,
     ]);
     return json({
       draft: { ...draft, content: draft.content_json ? JSON.parse(draft.content_json) as unknown : null, content_json: undefined },
       files,
       reviews,
       comments,
+      scope: scope ? {
+        periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
+        allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
+        allowsUnallocatedBooths: scope.allowsUnallocatedBooths, groups: scope.groups,
+      } : null,
     });
   }
 
@@ -2428,10 +2434,14 @@ export function createCirclePortalHandlers({
   async function listOrganizerMaps(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    const maps = await repository.listOrganizerMapDrafts(candidateId);
+    const includeCoverage = new URL(request.url).searchParams.get("coverage") === "1";
+    const maps = await repository.listOrganizerMapDrafts(candidateId, includeCoverage);
     return json({ maps: maps.map((map) => ({
       id: map.id, periodKey: map.period_key, venueSpaceId: map.venue_space_id,
       status: map.status, mapRevision: map.current_revision, updatedAt: map.updated_at,
+      ...(includeCoverage ? { boothCodes: map.content_json
+        ? parseMapContributionDraftContent(JSON.parse(map.content_json))?.layout.rows.flatMap(row => row.slots.map(slot => slot.code)) ?? null
+        : null } : {}),
     })) });
   }
 

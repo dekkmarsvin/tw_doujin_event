@@ -190,6 +190,9 @@ test("admin-only grants are audited and revocation immediately blocks writes", a
 });
 
 test("private guide metadata round-trips with contributor revision and permission guards", async () => {
+  scopeConfig.requiredBoothCodes = ["A07"];
+  scopeConfig.allowsUnallocatedBooths = false;
+  scopeConfig.groups = [{ circleName: "測試社", codes: ["A07"] }];
   const mapperCookie = await signIn("mapper@example.test"), adminCookie = await signIn("admin@example.test");
   await grant("mapper@example.test", adminCookie);
   const { body } = await newDraft(mapperCookie);
@@ -198,7 +201,9 @@ test("private guide metadata round-trips with contributor revision and permissio
   const save = expectedRevision => handlers.updateMapDraft(request(path, "PUT", { expectedRevision, content }, mapperCookie), body.draftId);
   assert.equal((await save(1)).status, 200);
   const read = await handlers.getMapDraft(request(path, "GET", undefined, mapperCookie), body.draftId);
-  assert.deepEqual((await read.json()).draft.content, content);
+  const detail = await read.json();
+  assert.deepEqual(detail.draft.content, content);
+  assert.deepEqual(detail.scope, { periodKey: "1", venueSpaceId: scopeConfig.venueSpaceId, allowedBoothCodes: ["A07"], requiredBoothCodes: ["A07"], allowsUnallocatedBooths: false, groups: scopeConfig.groups });
   assert.equal((await save(1)).status, 409);
   await grant("mapper@example.test", adminCookie, "revoke");
   assert.equal((await save(2)).status, 409);

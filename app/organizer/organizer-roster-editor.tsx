@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PortalError } from "../circle-editor-client";
-import { putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
+import { listOrganizerMaps, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation, type OrganizerMapSummary } from "../organizer-client";
+import { boothGroupCoverage } from "../map-booth-coverage";
 import { withOrganizerImportedAreaIds } from "../organizer-event";
 import type { OrganizerNormalizedImportRow } from "../organizer-import";
 import { mergeRosterRows, normalizeRosterRow, rosterIssues, rosterMergeError, splitRosterRow, suspiciousRosterCodes } from "../organizer-roster";
@@ -10,11 +11,12 @@ import styles from "./organizer.module.css";
 type Entry = { key: number; row: OrganizerNormalizedImportRow };
 const entriesOf = (rows: readonly OrganizerNormalizedImportRow[]) => rows.map((row, key) => ({ key, row }));
 
-export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady }: {
+export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady, onLocate }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  onLocate: (location: OrganizerMapLocation) => void;
 }) {
   const [entries, setEntries] = useState(() => entriesOf(detail.import?.rows ?? []));
   const [nextKey, setNextKey] = useState(entries.length);
@@ -36,6 +38,18 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady 
   const [space, setSpace] = useState("");
   const [descending, setDescending] = useState(false);
   const [page, setPage] = useState(0);
+  const [maps, setMaps] = useState<OrganizerMapSummary[] | null>(null);
+  const [coverageError, setCoverageError] = useState("");
+  useEffect(() => {
+    let ignore = false;
+    void listOrganizerMaps(detail.event.id, true).then(result => {
+      if (!ignore) { setMaps(result.maps); setCoverageError(""); }
+    }).catch(error => { if (!ignore) { setMaps(null); setCoverageError(message(error)); } });
+    return () => { ignore = true; };
+  }, [detail.event.id, detail.event.version]);
+  const coverageByScope = useMemo(() => new Map((maps ?? []).map(map => [JSON.stringify([map.periodKey, map.venueSpaceId]), {
+    map, drawn: map.boothCodes ? new Set(map.boothCodes) : null,
+  }])), [maps]);
   const editable = detail.event.operation !== "AMEND" && ["draft", "changes_requested"].includes(detail.event.status);
   // A refreshed version may update a clean view, never lend its newer version
   // to older unsaved rows. A stale draft must still receive the API's 409.
@@ -194,12 +208,22 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady 
       <label>攤位排序<select value={descending ? "desc" : "asc"} onChange={event => { setDescending(event.target.value === "desc"); setPage(0); }}><option value="asc">代碼由小到大</option><option value="desc">代碼由大到小</option></select></label>
     </div>
     <p role="status">符合 {filtered.length} 列・第 {shownPage + 1} / {pages} 頁</p>
-    <div className={`${styles.sampleTable} ${styles.savedImportTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th><th>展區</th><th>攤位代碼</th><th>社團名稱</th><th>主辦內部編號</th>{editing && <th>編輯</th>}</tr></thead>
-      <tbody>{filtered.slice(shownPage * 100, (shownPage + 1) * 100).map(({ key, row }) => <tr key={key}>
+    <p>地圖狀態依已儲存地圖核對。{dirty ? "清單尚有草稿變更，儲存後即可定位。" : "已畫代碼可定位到對應活動日與使用空間。"}</p>
+    {coverageError && <p role="status">無法讀取地圖狀態：{coverageError}</p>}
+    <div className={`${styles.sampleTable} ${styles.savedImportTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th><th>展區</th><th>攤位代碼</th><th>社團名稱</th><th>主辦內部編號</th><th>已儲存地圖</th>{editing && <th>編輯</th>}</tr></thead>
+      <tbody>{filtered.slice(shownPage * 100, (shownPage + 1) * 100).map(({ key, row }) => {
+        const saved = coverageByScope.get(JSON.stringify([row.dayId, row.venueSpaceId]));
+        const drawn = saved?.drawn ?? new Set<string>();
+        const coverage = boothGroupCoverage(row.codes, drawn);
+        return <tr key={key}>
         <td>{row.sourceRow === 0 ? "手動新增／合併" : row.sourceRow}</td><td>{organizerDayLabel(detail.draft.event.days, row.dayId)}</td><td>{organizerVenueSpaceLabel(detail.venueCatalog, row.venueSpaceId)}</td><td>{detail.draft.venue.assignments.some(assignment => assignment.venueSpaceId === row.venueSpaceId && assignment.areaMode === "none") ? "無分區" : row.areaId}</td><td>{row.codes.join("、")}{suspiciousRosterCodes(row) && <small>・請核對連寫代碼</small>}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
+        <td>{maps === null || (saved && !saved.drawn) ? "尚未取得" : <>
+          <span>{coverage.label} {coverage.completed}/{coverage.total}</span>
+          {row.codes.filter(code => drawn.has(code)).map(code => <button type="button" className={styles.ghost} key={code} disabled={dirty || busy || conflict} onClick={() => onLocate({ candidateId: detail.event.id, mapId: saved!.map.id, code, nonce: Date.now() })}>定位 {code}</button>)}
+        </>}</td>
         {editing && <td><label className={styles.rosterChoice}><input type="checkbox" aria-label={`選取群組 ${row.codes.join("、") || "未填代碼"}`} disabled={busy || !editable} checked={selected.includes(key)} onChange={event => { setSelected(event.target.checked ? [...selected, key] : selected.filter(item => item !== key)); setMerging(false); }} />合併</label>
           <button type="button" className={styles.ghost} disabled={busy || !editable} onClick={() => { setActiveKey(key); setSplitCodes(null); }}>編輯</button></td>}
-      </tr>)}</tbody></table></div>
+      </tr>; })}</tbody></table></div>
     {filtered.length === 0 && <p>沒有符合條件的攤位。</p>}
     <div className={styles.row}><button type="button" className={styles.ghost} disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={shownPage + 1 >= pages} onClick={() => setPage(shownPage + 1)}>下一頁</button></div>
   </section>;

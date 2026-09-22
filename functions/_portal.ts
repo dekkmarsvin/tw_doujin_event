@@ -420,7 +420,16 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
         ...input,
         existingBoothCodes: published?.layout.rows.flatMap((row) => row.slots.map(({ code }) => code)) ?? [],
       }, canonicalPeriodKey, venueSpaceId);
-      return resolved ? { ...resolved, periodAliases } : null;
+      if (!resolved) return null;
+      const circles = new Map(payload.circles.map(circle => [circle.id, circle.name]));
+      const groups = new Map<string, { circleName: string; codes: string[] }>();
+      for (const placement of payload.placements) {
+        if (placement.status === "cancelled" || String(placement.day) !== canonicalPeriodKey || !venue.areaIds.includes(placement.area)) continue;
+        const group = groups.get(placement.circleId) ?? { circleName: circles.get(placement.circleId) ?? placement.circleId, codes: [] };
+        group.codes.push(placement.boothCode);
+        groups.set(placement.circleId, group);
+      }
+      return { ...resolved, periodAliases, groups: [...groups.values()] };
     },
     readPublishedEventMap,
     githubInstallationProbe,

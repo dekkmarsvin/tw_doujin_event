@@ -205,7 +205,10 @@ export function putOrganizerImport(candidateId: string, input: {
 
 export type OrganizerMapSummary = {
   id: string; periodKey: string; venueSpaceId: string; status: string; mapRevision: number; updatedAt: number;
+  boothCodes?: string[] | null;
 };
+
+export type OrganizerMapLocation = { candidateId: string; mapId: string; code: string; nonce: number };
 
 export type OrganizerMapDetail = OrganizerMapSummary & { layout: EventMapLayout; authoring?: MapAuthoringState };
 
@@ -223,8 +226,8 @@ export type OrganizerReaderPreview = {
   maps: Array<{ periodKey: string; venueSpaceId: string; revision: number; layout: EventMapLayout }>;
 };
 
-export function listOrganizerMaps(candidateId: string) {
-  return organizerCall<{ maps: OrganizerMapSummary[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps`);
+export function listOrganizerMaps(candidateId: string, coverage = false) {
+  return organizerCall<{ maps: OrganizerMapSummary[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps${coverage ? "?coverage=1" : ""}`);
 }
 
 export function readOrganizerMap(candidateId: string, draftId: string) {

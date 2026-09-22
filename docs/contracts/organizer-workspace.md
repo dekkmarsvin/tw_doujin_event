@@ -149,6 +149,10 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 
 ## 地圖
 
+清單的「已儲存地圖」逐群組顯示待畫、部分已畫或已畫，以該活動日 × 使用空間最新已存地圖的代碼核對，讀取失敗不當作待畫。已有座標可定位到同一範圍的編輯器；清單尚有未保存變更時先儲存再定位。此狀態來自既有 maps 列表的選填 `coverage=1` 投影，不另外保存完成旗標。
+
+編輯器的清單對照則依目前地圖草稿即時更新，清楚標示儲存後才更新清單狀態；畫入、改碼、刪除及復原都參與計算。可搜尋代碼與社團名稱，待畫代碼沒有無效定位，選取已有攤位可核對同範圍的群組。共用行為見[地圖貢獻契約](./map-contributions.md#共用畫布放置)。
+
 - 每一個「活動日 × venue-space」各一份地圖草稿，沿用既有的 `MapLayoutEditor` 與 template 辨識器。
 - 共用的[私人輔助線與吸附](./map-contributions.md#私人輔助線與吸附)隨地圖 revision 保存。API 以 layout 同層的可選 `authoring` 讀寫，公開預覽／publication 只採地圖 layout；畫布個人顯示開關不觸發候選保存。
 - 共用的[描摹顯示與精準操作](./map-contributions.md#描摹顯示與精準操作)與[排段整體調整](./map-contributions.md#排段整體調整)在本工作區與地圖貢獻控制面行為一致。配置圖顯示、透明度、描摹模式與微移步進只留在瀏覽器，不進草稿也不進 revision。
