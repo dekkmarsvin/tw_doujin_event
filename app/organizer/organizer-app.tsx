@@ -153,15 +153,20 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     setSelectedId((current) => current === null ? null
       : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
   }, []);
-  const reloadDetail = useCallback(async (candidateId: string, isCurrent: () => boolean = () => true) => {
+  const reloadDetail = useCallback(async (candidateId: string, isCurrent: () => boolean = () => true, restoreLocation = true) => {
     const next = await readOrganizerEvent(candidateId);
     if (!isCurrent()) return;
     setPublicationReadError(null);
     setPollGeneration((value) => value + 1);
     setDetail(next);
-    setSection(next.workspace.resume.section);
-    setGuidedTask(next.workspace.resume.guidedTask);
-    setShowAllTasks(false);
+    // Resume navigation only when opening an activity. A save refresh may
+    // arrive after the user has moved to another section; its older workspace
+    // preference must not move them back or close the all-tasks view.
+    if (restoreLocation) {
+      setSection(next.workspace.resume.section);
+      setGuidedTask(next.workspace.resume.guidedTask);
+      setShowAllTasks(false);
+    }
   }, []);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => {
@@ -217,7 +222,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * still corrected, because reloadList's own update re-runs the detail
    * effect. */
   const refresh = useCallback(async () => {
-    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId) : Promise.resolve()]);
+    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId, undefined, false) : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
 
   const persistLocation = useCallback(async (

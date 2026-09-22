@@ -38,6 +38,12 @@ const openSection = async (page, name) => {
  * 其餘等待都是「畫面重繪了沒有」，共用預設值仍然正確；只有跨越整條流程的等待
  * 需要跨越整條流程的預算。這不是固定等待——流程壞掉時它照樣失敗。 */
 const PUBLICATION_TIMEOUT = 60_000;
+// Reproduce the main CI failure: an amendment save's detail response captured
+// the import section, but reached the browser after the user opened the map.
+// Hold that response until the map preference has been saved; no timer guess.
+let holdNextDetail = false;
+let releaseDetail;
+const detailGate = new Promise(resolve => { releaseDetail = resolve; });
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-ui-publication" } }));
 const db = await mf.getD1Database("DB");
 const repo = createIdentityRepository(db);
@@ -147,6 +153,12 @@ try {
       assert.ok(method, `Unexpected UI action ${path}`); response = await handlers[method](request,id);
       }
     } else throw new Error(`Unexpected UI request ${path}`);
+    if (role === "owner" && match?.[2] === "amendment" && req.method() === "PUT") holdNextDetail = true;
+    if (role === "owner" && match?.[2] === "workspace" && req.postDataJSON().lastSection === "map") releaseDetail();
+    if (role === "owner" && match && !match[2] && holdNextDetail) {
+      holdNextDetail = false;
+      await detailGate;
+    }
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
     });
   };
@@ -162,7 +174,9 @@ try {
   await owner.getByRole("heading", { name: "1. 換手", exact: true }).waitFor();
   await journey.capture(owner,"amendment-real-d1-impact");
   const candidate = (await db.prepare("SELECT id FROM organizer_event_candidates WHERE publication_operation='AMEND'").first()).id;
+  const lateRead = owner.waitForResponse(response => new URL(response.url()).pathname === `/api/organizer/events/${candidate}` && response.request().method() === "GET");
   await openSection(owner, /^地圖/);
+  await lateRead;
   await owner.getByRole("button", { name: "第一天", exact: true }).click();
   const backgroundImage = owner.locator('svg[aria-label^="可編輯"] image');
   await backgroundImage.waitFor();
@@ -181,7 +195,10 @@ try {
   await journey.capture(owner,"amendment-real-d1-preview");
   await openSection(owner, /^送審與發布/);
   await owner.getByRole("button", { name: "送出審閱", exact: true }).click();
-  await owner.getByText("已送交網站管理者審閱。", { exact: true }).waitFor();
+  // The submit control unmounts when the saved status becomes submitted. Its
+  // brief success notice is not the outcome; the durable status and approved
+  // snapshot below are, and both still have to arrive.
+  await owner.getByText("審閱中", { exact: true }).waitFor();
   const approvedSnapshot = await repo.getOrganizerSubmissionSnapshot(candidate,2);
   assert.equal(JSON.parse(approvedSnapshot.snapshot_json).operation,"AMEND");
   await journey.capture(owner,"amendment-real-d1-submitted"); await owner.close();
@@ -214,4 +231,4 @@ try {
   await journey.capture(retryOwner,"amendment-real-d1-recovered"); await retryOwner.close();
   await journey.finish();
 } catch (error) { await journey.abort(error); }
-finally { await mf.dispose(); await vite.close(); }
+finally { releaseDetail(); await mf.dispose(); await vite.close(); }
