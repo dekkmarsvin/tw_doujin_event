@@ -9,7 +9,7 @@ import { ImportPanel } from "./organizer-import-panel";
 import { DraftForm } from "./organizer-draft-form";
 import { ValidationPanel } from "./organizer-validation-panel";
 import { PortalError, readSession, readTurnstileSitekey, requestLoginLink, signOut, verifyLoginToken, type PortalSession } from "../circle-editor-client";
-import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary } from "../organizer-client";
+import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary, type OrganizerMapLocation } from "../organizer-client";
 import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
 
 import { type OrganizerEventDraft } from "../organizer-event";
@@ -407,6 +407,7 @@ function WorkspaceSurface({
   const guided = detail.workspace.mode === "guided" && !showAllTasks;
   const [liveDraft, setLiveDraft] = useState(detail.draft);
   const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
+  const [mapLocation, setMapLocation] = useState<OrganizerMapLocation | null>(null);
   const [liveDirty, setLiveDirty] = useState(false);
   const activeLiveSection = section === "venue" ? "venue" : section === "event" ? "event" : undefined;
   return <>
@@ -442,6 +443,8 @@ function WorkspaceSurface({
           detail={detail}
           section={section}
           onSection={onSection}
+          mapLocation={mapLocation?.candidateId === detail.event.id ? mapLocation : null}
+          onLocate={location => { setMapLocation(location); onSection("map"); }}
           onChanged={onChanged}
           onDirtyChange={onDirtyChange}
           onDraftSaveReady={onDraftSaveReady}
@@ -614,7 +617,7 @@ function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
   </form>;
 }
 
-function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange }: {
+function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange, mapLocation, onLocate }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   section: OrganizerWorkspaceSection;
@@ -626,12 +629,14 @@ function StepContent({ session, detail, section, onSection, onChanged, onDirtyCh
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
   onDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
+  mapLocation: OrganizerMapLocation | null;
+  onLocate: (location: OrganizerMapLocation) => void;
 }) {
   if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} />;
   if (section === "import") return detail.event.operation === "AMEND"
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
-    : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />;
-  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
+    : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onLocate={onLocate} />;
+  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} location={mapLocation} />;
   if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
 }

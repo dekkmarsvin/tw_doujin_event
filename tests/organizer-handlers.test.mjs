@@ -1041,6 +1041,7 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   assert.deepEqual((await listed.json()).maps.map((item) => [item.periodKey, item.venueSpaceId, item.mapRevision]), [["1", VENUE_SPACE_ID, 1]]);
 
   layout.landmarks.push({ id: "stage", kind: "stage", label: "舞台", rect: { x: 4, y: 4, width: 10, height: 10 } });
+  layout.rows.push({ label: "A", orientation: "vertical", confidence: 1, slots: [{ code: "A01", rect: { x: 30, y: 30, width: 10, height: 10 } }] });
   const authoring = { guides: [{ id: "horizontal", axis: "y", position: 22.5, locked: true }] };
   const saved = await handlers.updateOrganizerMap(request(
     `/api/organizer/events/${candidateId}/maps/${draftId}`, "PATCH",
@@ -1048,6 +1049,10 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   ), candidateId, draftId);
   assert.equal(saved.status, 200);
   assert.deepEqual(await saved.json(), { ok: true, version: 4, mapRevision: 2 });
+  const coverage = await handlers.listOrganizerMaps(request(`/api/organizer/events/${candidateId}/maps?coverage=1`, "GET", undefined, ownerCookie), candidateId);
+  assert.deepEqual((await coverage.json()).maps.map(map => [map.periodKey, map.venueSpaceId, map.mapRevision, map.boothCodes]), [["1", VENUE_SPACE_ID, 2, ["A01"]]]);
+  const anonymousCoverage = await handlers.listOrganizerMaps(request(`/api/organizer/events/${candidateId}/maps?coverage=1`, "GET"), candidateId);
+  assert.equal(anonymousCoverage.status, 401);
   const path = `/api/organizer/events/${candidateId}/maps/${draftId}`;
   const reopened = await handlers.getOrganizerMap(request(path, "GET", undefined, ownerCookie), candidateId, draftId);
   assert.deepEqual((await reopened.json()).map.authoring, authoring);

@@ -133,6 +133,7 @@ try {
     url: link,
     viewport: { width: 1600, height: 1000 },
     routes: async (page) => {
+      await page.route(`**/api/organizer/events/${CANDIDATE_ID}/maps?coverage=1`, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ maps: [] }) }));
       await page.route("**/api/organizer/events", async (route) => {
         if (route.request().method() !== "GET") return route.continue();
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [event] }) });

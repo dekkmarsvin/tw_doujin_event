@@ -3,7 +3,7 @@
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
-import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
+import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
 import { isOrganizerAreaId, withOrganizerImportedAreaIds } from "../organizer-event";
 import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
@@ -33,12 +33,13 @@ function downloadText(name: string, text: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSaveReady }: {
+export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSaveReady, onLocate }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onSection: (section: "venue") => void;
   onDirtyChange: (dirty: boolean) => void;
   onSaveReady: (save: (() => Promise<boolean>) | null) => void;
+  onLocate: (location: OrganizerMapLocation) => void;
 }) {
   const [rosterDirty, setRosterDirty] = useState(false);
   const reportRosterDirty = useCallback((dirty: boolean) => { setRosterDirty(dirty); onDirtyChange(dirty); }, [onDirtyChange]);
@@ -208,7 +209,7 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
   return <section className={styles.panel} onChangeCapture={() => saveFeedback.clear()}>
     <ActionNotice notice={loadNotice} />
     <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>{detail.import ? "對照欄位後預覽結果，確認無誤再送出名單。" : "尚未加入攤位名單。選一個 CSV 或 Excel 檔，或先下載範本。"}</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
-    {detail.import && <SavedImportList detail={detail} onChanged={onChanged} onDirtyChange={reportRosterDirty} onSaveReady={onSaveReady} />}
+    {detail.import && <SavedImportList detail={detail} onChanged={onChanged} onDirtyChange={reportRosterDirty} onSaveReady={onSaveReady} onLocate={onLocate} />}
     {rosterDirty && <p role="status">先儲存或放棄清單變更，再以新檔案取代。</p>}
     <fieldset className={styles.formFields} disabled={saveFeedback.pending || rosterDirty} aria-label="匯入檔案與欄位對應">
     <div className={styles.importGrid}>

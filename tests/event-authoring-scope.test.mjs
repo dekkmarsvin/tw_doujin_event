@@ -6,7 +6,19 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR environment unavailable.");
 const scope = await environment.runner.import("/app/event-authoring-scope.ts");
+const { mapBoothCoverage, boothGroupCoverage } = await environment.runner.import("/app/map-booth-coverage.ts");
 after(() => vite.close());
+
+test("canvas coverage counts required codes once, preserves missing codes and exposes unknown codes", () => {
+  const layout = { rows: [{ slots: [{ code: "A01" }, { code: "A01" }, { code: "EXTRA" }] }] };
+  const coverage = mapBoothCoverage(layout, { requiredBoothCodes: ["A01", "A01", "A02"], allowedBoothCodes: ["A01", "A02"] });
+  assert.equal(coverage.completed, 1);
+  assert.deepEqual(coverage.missing, ["A02"]);
+  assert.deepEqual(coverage.unknown, ["EXTRA"]);
+  assert.deepEqual(boothGroupCoverage(["A01", "A02"], coverage.drawn), { completed: 1, total: 2, label: "部分已畫" });
+  assert.equal(boothGroupCoverage(["A02"], coverage.drawn).label, "待畫");
+  assert.equal(boothGroupCoverage(["A01"], coverage.drawn).label, "已畫");
+});
 
 test("candidate scope resolves one day and venue-space with only its imported booth codes", () => {
   const resolved = scope.resolveCandidateAuthoringScope({

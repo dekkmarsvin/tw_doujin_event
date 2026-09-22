@@ -14,10 +14,11 @@ import type { EventMapLayout, PublishedEventMap } from "../event-map";
 import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-state";
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapCandidateDiff, MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "../map-contribution-draft";
+import type { MapBoothScope } from "../map-booth-coverage";
 import { loadStaticEventMap } from "../static-event-map-client";
 import styles from "./portal.module.css";
 
-type Detail = { draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[] };
+type Detail = { draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[]; scope?: MapBoothScope | null };
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string; conflict?: MapDraftConflict };
 const IDLE: Status = { kind: "idle", message: "" };
 
@@ -197,7 +198,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
     </div>}
     {detail && layout && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
-      {editable && <MapLayoutEditor layout={layout} authoring={authoring} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); }} />}
+      {editable && <MapLayoutEditor key={detail.draft.id} layout={layout} scope={detail.scope} authoring={authoring} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); }} />}
       <h3>公開地圖預覽</h3><Preview event={event} layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>

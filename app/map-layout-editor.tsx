@@ -5,6 +5,8 @@ import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleE
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
+import type { MapBoothScope } from "./map-booth-coverage";
+import { MapBoothList } from "./map-booth-list";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { EMPTY_MAP_AUTHORING, MAX_MAP_GUIDES, scaleMapAuthoringState, type MapAuthoringState, type MapGuide } from "./map-authoring-state";
 import { DEFAULT_BACKGROUND_OPACITY, NUDGE_STEPS, mapEditorPreferenceStorage, readMapEditorPreferences, saveMapEditorPreferences, type MapEditorPreferences } from "./map-editor-preferences";
@@ -60,6 +62,7 @@ type Props = {
   backgroundImageUrl?: string;
   authoring?: MapAuthoringState;
   focusTarget?: MapEditorFocusTarget | null;
+  scope?: MapBoothScope | null;
   onChange: (layout: EventMapLayout, authoring: MapAuthoringState) => void;
 };
 
@@ -205,7 +208,7 @@ function findFocusSelection(layout: EventMapLayout, target: MapEditorFocusTarget
 
 type EditorSnapshot = { layout: EventMapLayout; authoring: MapAuthoringState };
 
-export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, onChange }: Props) {
+export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, scope, onChange }: Props) {
   const [preferences, setPreferences] = useState(() => readMapEditorPreferences(mapEditorPreferenceStorage()));
   // Held in a ref as well as in state: the pointer handler below runs on the
   // capture phase of the same gesture the key started, and React has not
@@ -1271,6 +1274,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   const focusSlotCode = (code: string) => {
     const match = findFocusSelection(layout, { kind: "slot", ref: code, nonce: 0 });
     if (!match) return;
+    cancelPlacement(); setSelectedGuideId(null); setActiveSegment(null); setSegmentForm(null);
     setSelections([match]);
     focusSelection(match);
   };
@@ -1466,6 +1470,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         </div>
       </div>
       <aside className={styles.inspector} aria-label="選取元素屬性">
+        {scope && <MapBoothList key={`${scope.periodKey}:${scope.venueSpaceId}`} layout={layout} scope={scope} selectedCode={selectedSlot?.code} onLocate={focusSlotCode} />}
         {!!snapGuides.length && <output className={styles.snapReadout} aria-live="polite">吸附：{snapGuides.map(guide => `${guide.axis.toUpperCase()} ${Number(guide.position.toFixed(2))}`).join("、")}</output>}
         {!!authoring.guides.length && <div className={styles.guidePanel}><label>選取輔助線<select aria-label="選取輔助線" value={selectedGuideId ?? ""} onChange={event => { cancelPlacement(); setSelectedGuideId(event.target.value || null); setSelections([]); setActiveSegment(null); }}><option value="">請選擇</option>{authoring.guides.map(guide => <option key={guide.id} value={guide.id}>{guide.axis === "x" ? "垂直 X" : "水平 Y"} {Number(guide.position.toFixed(2))}{guide.locked ? "（已鎖定）" : ""}</option>)}</select></label>
           {selectedGuide && <><div className={styles.fields}>{numberField(`輔助線 ${selectedGuide.axis.toUpperCase()}`, selectedGuide.position, value => { if (!selectedGuide.locked) updateGuide(selectedGuide, { position: clamp(value, 0, selectedGuide.axis === "x" ? layout.width : layout.height) }, `guide-field:${selectedGuide.id}`); }, selectedGuide.locked)}</div><label><input type="checkbox" checked={selectedGuide.locked} onChange={event => updateGuide(selectedGuide, { locked: event.target.checked })} />鎖定輔助線位置</label><button type="button" className={styles.remove} onClick={deleteGuide}>刪除輔助線</button></>}

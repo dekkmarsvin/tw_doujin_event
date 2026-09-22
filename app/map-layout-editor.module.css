@@ -1,4 +1,14 @@
 .editor { margin:18px 24px 0; border:1px solid #d4dad5; border-radius:12px; background:#f7f8f5; overflow:hidden; }
+.boothList { padding:10px; margin-bottom:12px; border:1px solid #cdd3ce; border-radius:8px; background:#fff; color:#344039; font-size:calc(11px * var(--ui-font-scale,1)); }
+.boothList h4 { margin:0 0 8px; font-size:calc(13px * var(--ui-font-scale,1)); }
+.boothList p { line-height:1.5; margin:6px 0; }
+.boothList label { display:grid; gap:4px; margin-top:8px; }
+.boothList :is(input,select) { min-width:0; width:100%; box-sizing:border-box; }
+.boothList ul { list-style:none; padding:0; max-height:190px; overflow:auto; }
+.boothList li { display:grid; gap:3px; padding:5px 0; border-bottom:1px solid #e7ebe7; overflow-wrap:anywhere; }
+.boothList button { padding:5px; background:#f7f8f5; color:#344039; border:1px solid #cdd3ce; border-radius:4px; cursor:pointer; font:inherit; }
+.boothList .boothWarning { color:#805611; }
+.boothList .boothError { color:#9b352a; }
 .editor>header { display:flex; justify-content:space-between; gap:18px; align-items:center; padding:13px 14px; border-bottom:1px solid #d4dad5; background:#fff; }
 .editor h3 { margin:0; font-size:calc(13px * var(--ui-font-scale,1)); }
 .editor header p { margin:4px 0 0; color:#748078; font-size:calc(9px * var(--ui-font-scale,1)); line-height:1.5; }

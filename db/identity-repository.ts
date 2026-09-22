@@ -2094,16 +2094,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return invitation.meta.changes === 1 ? { ok: true as const, result: "revoked" as const } : { ok: false as const, reason: "missing" as const };
   }
 
-  async function listOrganizerMapDrafts(candidateId: string) {
+  async function listOrganizerMapDrafts(candidateId: string, includeContent = false) {
     await ensureTables();
     const result = await database.prepare(
-      `SELECT id, event_id, candidate_id, period_key, venue_space_id, status, current_revision,
-              created_at, updated_at, decision_at
-       FROM map_drafts WHERE candidate_id = ?1 AND status <> 'withdrawn'
-       ORDER BY period_key, venue_space_id, updated_at DESC`,
+      `SELECT d.id, d.event_id, d.candidate_id, d.period_key, d.venue_space_id, d.status, d.current_revision,
+              d.created_at, d.updated_at, d.decision_at${includeContent ? ", r.content_json" : ""}
+       FROM map_drafts d ${includeContent ? "LEFT JOIN map_draft_revisions r ON r.draft_id = d.id AND r.revision = d.current_revision" : ""}
+       WHERE d.candidate_id = ?1 AND d.status <> 'withdrawn'
+       ORDER BY d.period_key, d.venue_space_id, d.updated_at DESC`,
     ).bind(candidateId).all<{
       id: string; event_id: string; candidate_id: string; period_key: string; venue_space_id: string;
-      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
+      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number; decision_at: number | null; content_json?: string | null;
     }>();
     return result.results;
   }

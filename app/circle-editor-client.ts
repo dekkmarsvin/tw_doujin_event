@@ -1,5 +1,6 @@
 import type { MapAuthoringState } from "./map-authoring-state";
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
+import type { MapBoothScope } from "./map-booth-coverage";
 import type { EventMapLayout, PublishedEventMap } from "./event-map";
 import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } from "./map-contribution-draft";
 
@@ -306,7 +307,7 @@ export function listMyMapDrafts() {
 
 export function readMapDraft(draftId: string, admin = false) {
   const base = admin ? "/api/admin/map-contributions/drafts" : "/api/map-contributions/drafts";
-  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[] }>(`${base}/${encodeURIComponent(draftId)}`);
+  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[]; scope: MapBoothScope | null }>(`${base}/${encodeURIComponent(draftId)}`);
 }
 
 export function createMapContributionDraft(periodKey: string, venueSpaceId: string, layout: EventMapLayout) {
