@@ -1,7 +1,8 @@
 // staged-data: fixture
 //
-// Replaces the SSR string assertions in `tests/event-chooser-component.test.mjs`
-// with the reader's own first screen. What matters here is not that the markup
+// Exercises published entries and unknown-event handling on the reader's first
+// screen; calendar edge cases and the empty state remain in the component suite.
+// What matters here is not that the markup
 // contains a name, but that a reader arriving from a stale or mistyped link is
 // told the link is dead and is left holding the list — and is never quietly
 // dropped into a different event, which is the failure a catalogue link would

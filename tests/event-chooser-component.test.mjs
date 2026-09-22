@@ -20,37 +20,8 @@ const render = (properties) => renderToStaticMarkup(
   React.createElement(EventChooser, { events, onSelect: () => undefined, ...properties }),
 );
 
-test("every published event is offered with what a reader needs to tell them apart", () => {
-  const html = render({});
-  for (const event of events) {
-    assert.match(html, new RegExp(event.name), `${event.id} must be offered`);
-    assert.match(html, new RegExp(event.venue), `${event.id} must show where it is`);
-  }
-  assert.ok(html.includes("26.11.07-08"));
-  assert.ok(html.includes("27.02.14"));
-  assert.equal(html.match(/<a href/g).length, events.length, "one entry per event, and nothing else to press");
-  // Entries are addressable without running the bundle: the markup alone has to
-  // name where each event lives, or nothing off-site can reach one.
-  for (const event of events) assert.ok(html.includes(`href="?event=${event.id}"`), `${event.id} must be linked, not just pressable`);
-});
-
-test("a link to an event this build does not serve says so instead of opening another one", () => {
-  const html = render({ unresolved: "event-c" });
-  assert.match(html, /目前無法開啟/);
-  // Status, not colour: the reason has to survive a reader who cannot see the
-  // amber panel at all.
-  assert.match(html, /role="status"/);
-  // Naming the missing event would invite reading it as a real event.
-  assert.doesNotMatch(html, /event-c/);
-  // The way forward is still the list.
-  assert.equal(html.match(/<a href/g).length, events.length);
-});
-
-test("nothing is offered that was not published", () => {
-  const html = render({});
-  assert.doesNotMatch(html, /event-c|sample-two/);
-});
-
+// Published entries, links and unknown-event disclosure are exercised by
+// browser/reader-event-chooser.mjs; calendar edge cases and the empty state stay here.
 const dated = (id, dates, end = dates.at(-1)) => ({ ...events[0], id, days: dates.map((dateLabel) => ({ dateLabel })), eventEndsAt: `${end}T23:59:59+08:00` });
 
 test("calendar labels cover single days, month/year changes and legacy dates", () => {
