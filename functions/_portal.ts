@@ -462,6 +462,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       eventEndsAt: async () => (await catalog(env, request, eventId)).event.eventEndsAt,
       now: () => Date.now(),
       organizerPublicationMode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled",
+      organizerApplicationsOpen: env.ORGANIZER_APPLICATIONS_OPEN === "true",
+      organizerApplicationAllowedEmails: (env.ORGANIZER_APPLICATION_ALLOWED_EMAILS ?? "").split(",").map((email) => email.trim()).filter(Boolean),
       // Published means "this deployment actually serves the event's data", so
       // the set is read from what was deployed rather than from a second list
       // that could drift away from it. Ill-formed ids are rejected without a

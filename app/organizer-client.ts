@@ -1,4 +1,5 @@
 import type { MapAuthoringState } from "./map-authoring-state";
+import type { OrganizerApplication, OrganizerApplicationInput } from "./organizer-applications";
 import { PortalError, reportSessionResponse } from "./circle-editor-client";
 import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
 import type {
@@ -39,6 +40,18 @@ async function organizerCall<T>(path: string, init?: RequestInit): Promise<T> {
     throw new PortalError(typeof body.error === "string" ? body.error : "操作失敗，請稍後再試。", response.status, body);
   }
   return body as T;
+}
+
+export function listEventApplications() {
+  return organizerCall<{ applications: OrganizerApplication[]; canApply: boolean }>("/api/organizer/applications");
+}
+
+export function submitEventApplication(id: string, application: OrganizerApplicationInput) {
+  return organizerCall<{ application: OrganizerApplication }>("/api/organizer/applications", { method: "POST", body: JSON.stringify({ id, application }) });
+}
+
+export function reviewEventApplication(id: string, decision: "approved" | "rejected", reason: string) {
+  return organizerCall<{ application: OrganizerApplication }>(`/api/admin/organizer/applications/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ decision, reason }) });
 }
 
 export type OrganizerEventSummary = {
