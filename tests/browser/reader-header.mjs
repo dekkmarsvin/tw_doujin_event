@@ -10,7 +10,7 @@ const events = (process.env.HEADER_TEST_EVENTS || "ff47").split(",");
 const sizes = [[1706, 898], [1440, 900], [1024, 768], [761, 844], [760, 844], [390, 844], [360, 640]];
 const scales = ["標準字級", "較大字級", "最大字級"];
 const journey = await start("reader-header");
-journey.report.source = `pinned events: ${events.join(", ")}`;
+journey.report.source = `local staged events: ${events.join(", ")}, not production`;
 journey.report.matrix = [];
 try {
   for (const event of events) {
@@ -32,6 +32,8 @@ try {
             viewport: { width: innerWidth, height: innerHeight }, height: node.getBoundingClientRect().height,
             title: h1.textContent, titleRect: rect(h1), titleOverflow: h1.scrollWidth - h1.clientWidth,
             link: rect(link), search: rect(search), scale: rect(scale),
+            brandIcon: rect(node.querySelector(".brand>span")), brandTitle: rect(node.querySelector(".brand b")),
+            event: rect(node.querySelector(".event")), toolsMenu: rect(node.querySelector("summary")),
             toolHeights: tools.map((el) => el.getBoundingClientRect().height),
             toolRadii: tools.map((el) => getComputedStyle(el).borderRadius),
             scaleRadius: getComputedStyle(scale).borderRadius,
@@ -39,6 +41,35 @@ try {
           };
         });
         assert.equal(header.titleOverflow, 0, "the event title is not clipped");
+        if (width <= 760) {
+          const centre = (box) => box.top + box.height / 2;
+          assert.ok(Math.abs(centre(header.brandIcon) - centre(header.brandTitle)) < 1, "brand icon aligns with the title independently of event navigation");
+          assert.equal(header.brandIcon.width, 34, "brand icon cannot shrink");
+          assert.ok(header.brandTitle.right <= header.toolsMenu.left, "brand and tools do not overlap");
+          assert.ok(header.event.top >= header.toolsMenu.bottom && header.event.top >= header.brandIcon.bottom, "event owns a row below brand and tools");
+          assert.ok(header.event.bottom <= header.search.top, "search follows the entire event row");
+          // Stress only layout: a wrapped name must not move the brand or
+          // overlap search. Restore the staged name before interaction/screenshots.
+          const wrapped = await page.locator(".topbar").evaluate((node) => {
+            const title = node.querySelector("h1");
+            const original = title.textContent;
+            title.textContent = "長活動名稱換行驗證".repeat(12);
+            const result = {
+              icon: node.querySelector(".brand>span").getBoundingClientRect().toJSON(),
+              title: node.querySelector(".brand b").getBoundingClientRect().toJSON(),
+              event: node.querySelector(".event").getBoundingClientRect().toJSON(),
+              search: node.querySelector(".search").getBoundingClientRect().toJSON(),
+              overflow: document.body.scrollWidth - innerWidth,
+            };
+            title.textContent = original;
+            return result;
+          });
+          assert.equal(wrapped.icon.top, header.brandIcon.top, "wrapping event name does not move icon");
+          assert.equal(wrapped.title.top, header.brandTitle.top, "wrapping event name does not move brand title");
+          assert.ok(wrapped.event.height > header.event.height, "stress name actually wraps");
+          assert.ok(wrapped.event.bottom <= wrapped.search.top, "wrapped event remains above search");
+          assert.equal(wrapped.overflow, 0, "wrapped event fits the viewport");
+        }
         if (header.link) {
           assert.ok(header.link.height >= 44);
           assert.ok(header.link.right <= header.search.left || header.link.bottom <= header.search.top, "the activity and search do not overlap");

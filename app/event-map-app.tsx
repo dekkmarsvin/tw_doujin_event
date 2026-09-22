@@ -781,8 +781,8 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
 
   return <main className={`app-shell ${styles.shell}`} style={mobileShellStyle} data-mobile-summary={mobileSummary || undefined} data-text-scale={textScale} data-mobile-sheet-level={mobileSheetLevel} data-mobile-sheet-dragging={mobileSheetDragging || undefined}>
     <header className="topbar">
-      <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop ? <small>同人展逛攤地圖</small> : eventIdentity}</div></div>
-      {desktop && <div className="event">{eventIdentity}</div>}
+      <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>同人展逛攤地圖</small>}</div></div>
+      <div className="event">{eventIdentity}</div>
       <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
       {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
     </header>

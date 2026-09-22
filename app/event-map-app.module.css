@@ -213,15 +213,16 @@
  .shell :global(.topbar) { grid-template-columns:minmax(0,1fr) auto; gap:0 12px; padding:8px 13px; }
  /* Raise open tools without covering the full sheet's handle when closed. */
  .shell :global(.topbar):has(.mobileToolsMenu[open]) { z-index:40; }
- .shell :global(.brand) { grid-column:1; grid-row:1; align-self:start; gap:10px; }
+ .shell :global(.brand) { grid-column:1; grid-row:1; align-self:center; gap:10px; }
  .shell :global(.brand)>span { flex:none; width:34px; height:34px; }
  .shell :global(.brand)>div { min-width:0; }
  .shell :global(.brand) b { font-size:calc(18px * var(--ui-font-scale)); line-height:1.25; }
  .shell :global(.brand) small { display:none; }
+ .shell :global(.event) { grid-column:1 / -1; grid-row:2; min-width:0; }
  .eventLink { flex-wrap:wrap; gap:0 8px; min-height:44px; padding-block:2px; }
  .eventInfo h1 { font-size:calc(11px * var(--ui-font-scale)); line-height:1.3; font-weight:500; }
  .eventSwitch { font-size:calc(10px * var(--ui-font-scale)); line-height:1.3; }
- .shell :global(.search) { grid-column:1 / -1; grid-row:2; margin-top:5px; }
+ .shell :global(.search) { grid-column:1 / -1; grid-row:3; margin-top:5px; }
  .shell .searchClear { display:grid; place-items:center; width:32px; height:40px; padding:0; border:0; background:transparent; cursor:pointer; }
  .shell :global(.map-region) { padding:0; }
  .shell .mapCanvas { border:0; border-radius:0; }
