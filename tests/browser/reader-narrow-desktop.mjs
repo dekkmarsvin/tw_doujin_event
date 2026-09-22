@@ -113,7 +113,7 @@ try {
     for (let step = 0; step < 3; step++) await page.getByRole("button", { name: "放大地圖", exact: true }).click();
     await settle(page);
     const before = await manualView(page);
-    for (const [width, height] of [[1440, 900], [1050, 768], [1024, 768]]) {
+    for (const [width, height] of [[1072, 768], [1024, 768], [1440, 900], [1050, 768], [1024, 768]]) {
       await page.setViewportSize({ width, height });
       await settle(page);
       const after = await manualView(page);
