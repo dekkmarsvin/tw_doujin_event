@@ -351,6 +351,8 @@ try {
     const sync = editor.getByRole("button", { name: /同步上下邊界/ });
     assert.match(await sync.textContent(), /2 排 × 16 格/, "the control says what it will correct");
     await sync.click();
+    assert.deepEqual(await cellsOf(), tilted, "opening a preview leaves the map alone");
+    await editor.getByRole("button", { name: "套用上下邊界", exact: true }).click();
     const shared = { top: Math.min(...tilted.map(cell => cell.y)), bottom: Math.max(...tilted.map(cell => cell.y + cell.height)) };
     const after = await cellsOf();
     const was = new Map(tilted.map(cell => [cell.code, cell]));
@@ -395,6 +397,118 @@ try {
     assert.equal(await tracing.isChecked(), true, "the tracing view is remembered in this browser");
     assert.equal(await nudgeStep.inputValue(), "5");
     await journey.capture(page, `${surface}-trace-reopened`);
+    await page.close();
+  }
+  // Six independent columns, including two columns in one logical row, with
+  // reverse numbering and untouched booths beyond the marquee.
+  for (const surface of ["organizer", "circle"]) {
+    const columns = Array.from({ length: 6 }, (_, col) => Array.from({ length: 10 }, (_, i) => ({
+      code: `C${col}-${10 - i}`, rect: { x: 80 + col * 110, y: 100 + col * 2 + i * (25 + col), width: 35, height: 25 + col },
+    })));
+    const initial = { ...structuredClone(source), width: SIZE, height: SIZE,
+      floor: { x: 10, y: 10, width: 980, height: 980 }, pillars: [], landmarks: [], accessPoints: [],
+      rows: [{ label: "A", orientation: "vertical", slots: [...columns[0], ...columns[1]] },
+        ...columns.slice(2).map((slots, i) => ({ label: `R${i}`, orientation: "vertical", slots })),
+        { label: "untouched", orientation: "vertical", slots: [{ code: "outside", rect: { x: 850, y: 650, width: 40, height: 40 } }] }] };
+    const { page, editor, state } = await openSurface(journey, surface, initial);
+    const svg = editor.locator("svg[tabindex='0']");
+    const snapshot = () => svg.locator("[data-slot-code]").evaluateAll(nodes => nodes.map(node => ({
+      code: node.dataset.slotCode,
+      ...Object.fromEntries(["x", "y", "width", "height"].map(name => [name, Number(node.querySelector("rect").getAttribute(name))])),
+    })));
+    const selectSix = async () => {
+      await svg.scrollIntoViewIfNeeded();
+      const box = await svg.boundingBox();
+      await page.mouse.move(box.x + 60 * box.width / SIZE, box.y + 80 * box.height / SIZE);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 680 * box.width / SIZE, box.y + 430 * box.height / SIZE, { steps: 8 });
+      await page.mouse.up();
+      assert.match(await editor.getByRole("button", { name: /同步上下邊界/ }).textContent(), /6 排 × 10 格/);
+    };
+    const sync = editor.getByRole("button", { name: /同步上下邊界/ });
+    const panel = editor.getByRole("region", { name: "同步上下邊界預覽" });
+    const top = panel.getByRole("spinbutton", { name: "上界 Y" });
+    const bottom = panel.getByRole("spinbutton", { name: "下界 Y" });
+    const apply = panel.getByRole("button", { name: "套用上下邊界", exact: true });
+    const undo = editor.getByRole("button", { name: "復原上一步編輯" });
+    const redo = editor.getByRole("button", { name: "重做已復原的編輯" });
+    const before = await snapshot();
+    await selectSix();
+    await sync.click();
+    assert.equal(await top.inputValue(), "100");
+    assert.equal(await bottom.inputValue(), "410");
+    await top.fill("70");
+    await bottom.fill("450");
+    assert.deepEqual(await snapshot(), before);
+    assert.equal(await undo.isDisabled(), true, "preview adds no history");
+    assert.equal(await svg.locator("[data-shared-edge-preview]").evaluate(node => getComputedStyle(node).pointerEvents), "none");
+    await panel.getByRole("button", { name: "取消預覽" }).click();
+    assert.equal(await svg.locator("[data-shared-edge-preview]").count(), 0);
+    assert.deepEqual(await snapshot(), before);
+    assert.equal(state.saves, 0);
+
+    await sync.click();
+    for (const [value, reason] of [["", /數值/], ["410", /大於/], ["-1", /畫布/], ["409", /共同高度不足/]]) {
+      await top.fill(value);
+      assert.equal(await apply.isDisabled(), true);
+      assert.match(await panel.getByRole("alert").textContent(), reason);
+      assert.equal(await svg.locator("[data-shared-edge-preview]").count(), 0);
+    }
+    await top.fill("70");
+    await bottom.fill("450");
+    await editor.getByRole("combobox", { name: "選取地圖元素", exact: true }).selectOption("slot:0:0");
+    assert.equal(await panel.count(), 0, "changing selection discards pending values");
+    assert.deepEqual(await snapshot(), before);
+    assert.equal(await undo.isDisabled(), true);
+
+    await selectSix();
+    await sync.click();
+    assert.equal(await top.inputValue(), "100", "the abandoned custom values do not come back");
+    await top.fill("70");
+    await bottom.fill("450");
+    const preview = await svg.locator("[data-shared-edge-preview] rect").evaluateAll(nodes =>
+      nodes.map(node => Object.fromEntries(["x", "y", "width", "height"].map(name => [name, Number(node.getAttribute(name))]))));
+    assert.equal(preview.length, 60);
+    await panel.scrollIntoViewIfNeeded();
+    await journey.capture(page, `${surface}-six-columns-preview`);
+    await apply.click();
+    const applied = await snapshot();
+    assert.deepEqual(applied.slice(0, 60).map(({ x, y, width, height }) => ({ x, y, width, height })), preview, "the applied geometry matches the visible preview");
+    assert.deepEqual(applied.map(cell => cell.code), before.map(cell => cell.code));
+    assert.deepEqual(applied.at(-1), before.at(-1), "unselected booth unchanged");
+    for (let col = 0; col < 6; col++) {
+      for (let i = 0; i < 10; i++) {
+        const index = col * 10 + i, cell = applied[index];
+        near(cell.x, before[index].x);
+        near(cell.width, before[index].width);
+        near(cell.y, 70 + i * 38);
+        near(cell.height, 38);
+      }
+    }
+    await undo.click();
+    assert.deepEqual(await snapshot(), before);
+    assert.equal(await undo.isDisabled(), true, "one apply was exactly one history step");
+    await redo.click();
+    assert.deepEqual(await snapshot(), applied);
+    // Saving while a second preview is open saves only the applied geometry.
+    await selectSix();
+    await sync.click();
+    await top.fill("90");
+    await bottom.fill("480");
+    const save = page.getByRole("button", { name: surface === "organizer" ? "儲存地圖變更" : "儲存新版本", exact: true });
+    await save.click();
+    await page.getByText(surface === "organizer" ? "地圖已儲存，尚未公開。" : "草稿已儲存。", { exact: true }).waitFor();
+    assert.equal(state.saves, 1);
+    const savedCells = state.layout.rows.flatMap(row => row.slots.map(slot => ({ code: slot.code, ...slot.rect })));
+    assert.deepEqual(savedCells, applied);
+    assert.deepEqual(state.layout.rows.map(row => row.label), initial.rows.map(row => row.label));
+    await page.reload();
+    if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
+    else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+    await svg.waitFor();
+    assert.deepEqual(await snapshot(), applied);
+    assert.equal(await panel.count(), 0);
+    await journey.capture(page, `${surface}-six-columns-reopened`);
     await page.close();
   }
   await journey.finish();
