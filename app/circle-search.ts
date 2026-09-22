@@ -1,9 +1,9 @@
 import type { CircleViewRecord } from "./circle-records";
 import { WORK_TOPIC_ALIAS_GROUPS, type WorkTopicAliasGroup } from "./work-topic-aliases";
 // 搜尋選項與社團可填的值是同一份清單，分成兩份就會漂移。
-import { CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS } from "./circle-overrides";
+import { AGE_RATING_OPTIONS, CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS } from "./circle-overrides";
 
-export { CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS };
+export { AGE_RATING_OPTIONS, CREATOR_TYPE_OPTIONS, WORK_TYPE_OPTIONS };
 
 /** `all` narrows to circles carrying every listed topic; `any` widens. The
  * mode only reaches the URL and the UI once a second topic exists, because a
@@ -16,7 +16,7 @@ export type AdvancedCircleSearch = {
   workTopicMode: WorkTopicMode;
   excludedWorkTopics: string[];
   workType: "ALL" | (typeof WORK_TYPE_OPTIONS)[number];
-  adultContent: "ALL" | "R18" | "GENERAL";
+  adultContent: "ALL" | "GENERAL" | Exclude<(typeof AGE_RATING_OPTIONS)[number], "全年齡">;
 };
 
 export const DEFAULT_ADVANCED_CIRCLE_SEARCH: AdvancedCircleSearch = {
@@ -120,8 +120,17 @@ export function circleIncludesR18(record: CircleViewRecord) {
     .some((value) => /(^|\W)r\s*-?\s*18($|\W)/i.test(value.normalize("NFKC")));
 }
 
+export function circleIncludesR15(record: CircleViewRecord) {
+  return record.circle.ageRatings
+    .some((value) => /(^|\W)r\s*-?\s*15($|\W)/i.test(value.normalize("NFKC")));
+}
+
 export function circleIncludesGeneral(record: CircleViewRecord) {
   return record.circle.ageRatings.some((value) => /(^|[\s,，、/／])(?:一般|全年齡|general)(?=$|[\s,，、/／])/i.test(value.normalize("NFKC")));
+}
+
+export function ageRatingFilterLabel(value: AdvancedCircleSearch["adultContent"]) {
+  return value === "ALL" ? "不限" : value === "GENERAL" ? "只看全年齡" : `只看 ${value}`;
 }
 
 export function matchesAdvancedCircleSearch(record: CircleViewRecord, search: AdvancedCircleSearch) {
@@ -143,7 +152,7 @@ export function matchesAdvancedCircleSearch(record: CircleViewRecord, search: Ad
   const includesR18 = circleIncludesR18(record);
   const includesGeneral = circleIncludesGeneral(record);
   const adultMatches = search.adultContent === "ALL"
-    || (search.adultContent === "R18" ? includesR18 : includesGeneral);
+    || (search.adultContent === "R18" ? includesR18 : search.adultContent === "R15" ? circleIncludesR15(record) : includesGeneral);
 
   return creatorMatches && workNameMatches && notExcluded && workTypeMatches && adultMatches;
 }

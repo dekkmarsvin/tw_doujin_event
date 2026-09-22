@@ -124,7 +124,7 @@ export const CREATOR_TYPE_OPTIONS = [
 
 export const WORK_TYPE_OPTIONS = ["男性向", "女性向", "一般向"] as const;
 
-export const AGE_RATING_OPTIONS = ["全年齡", "R18"] as const;
+export const AGE_RATING_OPTIONS = ["全年齡", "R15", "R18"] as const;
 
 const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
 const TEXT_FIELDS = ["pen", "saleInfo"] as const;

@@ -143,8 +143,8 @@ type ChoiceFieldKey = keyof typeof CHOICE_FIELD_OPTIONS;
  *
  * `ageRatings` 講的是**販售內容**：同時出全年齡本與 R18 本是一件真實而且常見
  * 的事，不是資料沒收乾淨。單選會在作者下次編輯任何一個分級時，把另一個值連同
- * 它描述的事實一起刪掉——那是替社團改了它沒改的答案。閱讀端的限制分級要怎麼
- * 從多值推導，另見 #193。
+ * 它描述的事實一起刪掉——那是替社團改了它沒改的答案。閱讀端逐項顯示所有分級，
+ * 不從多值推導最高分級（#193）。
  */
 const MULTI_CHOICE_FIELD_KEYS = ["creatorTypes", "ageRatings"] as const satisfies readonly ChoiceFieldKey[];
 
