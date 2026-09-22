@@ -406,7 +406,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextRecord, navigationTargetRecord,
-    visitedCount, sharedRecords, filtered, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
+    visitedCount, sharedRecords, filtered, resultCircleCount, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
     activeFilterDescriptors,
   } = workspace;
   useEffect(() => {
@@ -681,7 +681,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       if (filter.kind === "visit") setPlanningDisplay((current) => ({ ...current, visitStatus: "ALL" }));
     },
   }));
-  const resultsPanel = <SearchResults key={resultSetKey} records={filtered} catalogStatus={catalogStatus} catalogError={catalogError} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} matchReasons={matchReasonsByRecordId} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
+  const resultsPanel = <SearchResults key={resultSetKey} records={filtered} circleCount={resultCircleCount} catalogStatus={catalogStatus} catalogError={catalogError} selectedId={selectedRecordId} favoriteIds={favoriteIds} favoriteGroupLabels={favoriteGroupLabels} plans={plansById} density={planningDisplay.density} mediaCount={planningDisplay.mediaCount} query={query} activeFilters={activeResultFilters} matchReasons={matchReasonsByRecordId} advancedSearchActive={advancedCircleSearchCount(advancedSearch) > 0} onSelect={selectRecord} onToggleFavorite={toggleFavoriteSafely} onResetAdvancedSearch={resetAdvancedSearch} onClearFilters={clearResultFilters} onClearQuery={() => { historyIntent.current = "push"; setQuery(""); }} />;
   const detailActions = {
     onSelectShared: selectRecord,
     onToggleFavorite: () => selected && toggleFavoriteSafely(selected),

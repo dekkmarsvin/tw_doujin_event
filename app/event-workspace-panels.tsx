@@ -43,8 +43,9 @@ function sourceDateLabel(source: { contentType: SourceContentType; fetchedAt: st
   return `${source.contentType === "circle" ? "最後更新" : "匯入"} ${sourceDate(source.fetchedAt)}`;
 }
 
-export function SearchResults({ records, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, matchReasons, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
+export function SearchResults({ records, circleCount, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, matchReasons, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
   records: CircleViewRecord[];
+  circleCount: number;
   catalogStatus: CircleCatalogStatus;
   catalogError: string;
   selectedId: string | null;
@@ -67,7 +68,7 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
   const [visibleCount, setVisibleCount] = useState(RESULT_LIMIT);
   const loadingCatalog = catalogStatus === "loading";
   return <section className={styles.results} aria-label="搜尋結果" aria-live="polite">
-    <header><div><b>搜尋結果</b><small>{loadingCatalog ? "正在讀取社團資料…" : `${records.length} 個社團`}</small></div><div className={styles.resultHeaderActions}>{records.length > visibleCount && <span>已顯示 {visibleCount} 筆</span>}{advancedSearchActive && <button type="button" onClick={onResetAdvancedSearch} aria-label="重設詳細搜尋">重設</button>}</div></header>
+    <header><div><b>搜尋結果</b><small>{loadingCatalog ? "正在讀取社團資料…" : `${circleCount} 個社團 · ${records.length} 筆結果`}</small></div><div className={styles.resultHeaderActions}>{records.length > visibleCount && <span>已顯示 {visibleCount} 筆</span>}{advancedSearchActive && <button type="button" onClick={onResetAdvancedSearch} aria-label="重設詳細搜尋">重設</button>}</div></header>
     {loadingCatalog ? <div className={styles.resultList} aria-hidden="true">
       {Array.from({ length: 8 }, (unused, index) => <article key={index} className={styles.resultSkeleton}><span /><span /></article>)}
     </div> : catalogStatus === "error" ? <div className={styles.empty}>
