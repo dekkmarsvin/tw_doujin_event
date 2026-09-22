@@ -121,10 +121,11 @@
 
 ### `organizer_*` — 主辦單位工作區
 
-十四張表，行為與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
+相關表與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：
 
 | 表 | 內容 |
 |---|---|
+| `organizer_applications` | 私人活動申請：申請帳號、名稱／官方 URL／預計日期地點／關係及說明 JSON、送件時間、待審／核准／拒絕、審核者／時間／理由、核准候選連結與交易去重 token |
 | `organizer_event_candidates` | 候選活動的暫定名稱、`event_id`、狀態、目前版本與目前草稿 JSON，以及建立／更新／送審／核准者與時間 |
 | `organizer_workspace_state` | 每個候選活動不可逆的 onboarding 完成時間／完成者，以及最近通過完整驗證的 candidate version；不屬於候選內容 revision |
 | `organizer_workspace_preferences` | 每個候選活動 × 帳號的上次引導任務、上次建置冊區段與更新時間；協作者各自保存 |
@@ -142,10 +143,11 @@
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
 | `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
 
-**目的**：讓受邀的主辦單位在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
+**目的**：讓受邀或申請獲准的活動整理者在不接觸 repository 的前提下準備一場可送審的活動。**原始試算表 bytes 不在本站**——它只在瀏覽器裡解析與雜湊，API 只接受正規化後的資料列。
 **保存期**：候選活動與其 workspace state 不設期限；workspace preference 保存至帳號刪除。 **到期處置**：帳號刪除時刪除該帳號的 workspace preference，清空 onboarding 完成者，其他 actor 與 email 依既有塗銷規則去識別化；匯入的攤位資料是主辦提供的活動資料，不隨個別帳號刪除。
 `audit_log` 記的 `organizer_event.*` 只留版本、列數與原始檔 SHA-256，**不留 workbook 檔名或工作表名**——它們是主辦自己的資料，會比所描述的匯入列活得更久。
 可重用 reference 目錄不設期限；帳號刪除時將 `created_by` 去識別化，保留主辦提供的名稱／官方來源。`organizer_reference.created` audit 只記候選 id 與記錄種類，不複製分類內容。
+活動申請與決策不設 TTL，僅本人與管理者可讀。帳號刪除時移除 pending 申請；已審核申請清空 `data_json`、`reason`，`account_id` 去識別化，保留決策／時間及候選連結。審核者刪除帳號時 `reviewed_by` 去識別化且理由清空。已進入候選的官方活動資料沿用候選保存規則。
 
 ### `map_contributor_grants` — 地圖貢獻授權
 
@@ -205,13 +207,18 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 - 管理者名冊：`admin.added`、`admin.removed`
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
 - 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.reject`／`map_draft.approve`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
-- 主辦單位工作區：`organizer_event.created`、`organizer_event.owner_granted_on_create`（建立者即負責人時的直接授予）、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`、`organizer_publication.retried`
+- 主辦單位工作區：`organizer_event.created`、`organizer_event.owner_granted_on_create`（建立者即負責人時的直接授予）、`organizer_event.invitation_failed`、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`／`organizer_event.map_background_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`／`organizer_event.reopened`、`organizer_publication.retried`
+- 場館與 reference：`organizer_venue.created`、`organizer_venue_space.created`、`organizer_reference.created`
+- 已發布活動修正：`organizer.amendment.create`、`organizer.amendment.save`（在修正 revision 的同一 batch 寫入）
+- 活動申請審核：`organizer_application.approved`／`organizer_application.rejected`（同一 batch，只記審核者、申請識別與動作；不複製理由或申請內容）；核准授權沿用 `organizer_event.owner_granted_on_create`。
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）
 
 兩點值得單獨記下：
 
 - `auth.link_requested` 的 `subject_id` 是以 `HASH_PEPPER` 為金鑰、帶 `audit-email-v1` domain separation 的 HMAC；不存明文，也不是可直接字典比對的無金鑰 SHA-256。
 - `shredded_at` 非 NULL 代表該列已塗銷，不應再當成原始稽核內容解讀。
+
+發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
 **保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時把可連結的 account／email 主體改為固定值、清空 actor、IP 與自由內容，並寫入 `shredded_at`。仍保留「何時發生哪個動作」。
 

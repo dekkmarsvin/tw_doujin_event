@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { SESSION_EXPIRED_EVENT, type PortalSession } from "../circle-editor-client";
 
-/** Both entry points use the server's deadline and leave on any session 401. */
+/** Control surfaces use the server's deadline and leave on any session 401. */
 export function useSessionExpiry(session: PortalSession | null, onExpired: () => void) {
   const expiresAt = session?.expiresAt;
   const signedIn = session !== null;

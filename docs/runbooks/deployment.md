@@ -45,6 +45,10 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 ### Organizer 發布
 
+活動申請與 publication 是不同的開關。申請 API 的 `ORGANIZER_APPLICATIONS_OPEN` 預設關閉；靜態 Reader CTA 的 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN` 也預設關閉，不新增讀取 Function。#163 的一場真實零人工技術補救驗收完成前，兩者均不得設為 `true`。受控驗收可用 Pages runtime secret `ORGANIZER_APPLICATION_ALLOWED_EMAILS` 指定申請帳號（逗號分隔），只開放該帳號，名單不進前端或 repository。
+
+正式啟用時先把真實旅程與七項量測記在 #163，再設定 Pages 的 API 開關與 GitHub Actions repository variable `ORGANIZER_APPLICATIONS_OPEN=true`，由既有 production build 傳入 Vite 並部署 CTA；關閉時 API 立即拒絕新的非受控送件，既有申請結果／審核／邀請仍可使用。這些是一次性的功能開放設定，不是每場活動所需的基礎設施設定。
+
 Pages production 需設定 `GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_APP_PRIVATE_KEY`、`GITHUB_APP_INSTALLATION_ID`。Private key 與 webhook secret 不進 repo；App 僅安裝於固定 data／main 兩個 repository，啟用前置以 [ADR-0058 第 4 點](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md#4-開啟-production-publication-的前置) 為準，取代 ADR-0046 的舊 ruleset 前置。
 
 `ORGANIZER_PUBLICATION_MODE` 未設定時預設 disabled，核准／重試與 webhook 回 503；編輯、匯入、地圖、驗證、預覽與送審仍可使用。正式啟用的版本控制設定同時涵蓋根目錄 `wrangler.jsonc` 與 `workers/publication-dispatch/wrangler.jsonc` 的 production vars；不以 dashboard 臨時改值代替。Preview vars 不繼承 production，排程 Worker 的 preview 維持 disabled。

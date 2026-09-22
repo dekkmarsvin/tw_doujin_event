@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
+import { OrganizerApplicationsPanel } from "./organizer-applications-panel";
 import { ReviewPanel } from "./organizer-review-panel";
 import { OrganizerMapPanel } from "./organizer-map-panel";
 import { ImportPanel } from "./organizer-import-panel";
 import { DraftForm } from "./organizer-draft-form";
 import { ValidationPanel } from "./organizer-validation-panel";
 import { PortalError, readSession, readTurnstileSitekey, requestLoginLink, signOut, verifyLoginToken, type PortalSession } from "../circle-editor-client";
-import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary } from "../organizer-client";
+import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary, type OrganizerMapLocation } from "../organizer-client";
 import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
 
 import { type OrganizerEventDraft } from "../organizer-event";
@@ -46,7 +47,7 @@ export default function OrganizerApp() {
     }
     void (token ? verifyLoginToken(token) : readSession())
       .then((current) => {
-        if (!current.isAdmin && !current.hasOrganizerAccess) throw new PortalError("此帳號沒有活動工作區權限。", 403);
+        if (!current.isAdmin && !current.hasOrganizerAccess && !current.canApplyForEvent && !current.hasEventApplications) throw new PortalError("此帳號沒有活動工作區權限。", 403);
         setSession(current);
       })
       .catch((error: unknown) => {
@@ -68,16 +69,21 @@ export default function OrganizerApp() {
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
     {!ready ? <main className={styles.centerCard}><p>載入工作區…</p></main>
       : !session ? <OrganizerSignIn />
-        : isDesktop ? <OrganizerWorkspace session={session} /> : <NarrowScreenBlocker onSignedOut={() => setSession(null)} />}
+        : !session.isAdmin && !session.hasOrganizerAccess ? <main className={styles.applicationMain}><OrganizerApplicationsPanel session={session} /></main>
+        : isDesktop ? <OrganizerWorkspace session={session} />
+          : session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
+            <p>活動資料與地圖編輯請改用桌機。</p>
+            <OrganizerApplicationsPanel session={session} />
+          </main> : <main><NarrowScreenBlocker onSignedOut={() => setSession(null)} /></main>}
   </div>;
 }
 
 function NarrowScreenBlocker({ onSignedOut }: { onSignedOut: () => void }) {
-  return <main className={styles.centerCard}>
+  return <section className={styles.centerCard}>
     <h2>請改用桌機</h2>
     <p>活動資料與地圖編輯需要較寬的畫面。</p>
     <button type="button" className={styles.ghost} onClick={() => void signOut().finally(onSignedOut)}>登出</button>
-  </main>;
+  </section>;
 }
 
 function OrganizerSignIn() {
@@ -91,7 +97,7 @@ function OrganizerSignIn() {
 
   return <main className={styles.centerCard}>
     <h2>主辦單位登入</h2>
-    <p>使用受邀的 email 取得 15 分鐘內有效的一次性登入連結。</p>
+    <p>使用 email 取得 15 分鐘內有效的一次性登入連結。</p>
     <form className={styles.stack} onSubmit={(event) => {
       event.preventDefault();
       if (!humanToken) return;
@@ -112,6 +118,7 @@ function OrganizerSignIn() {
 }
 
 function OrganizerWorkspace({ session }: { session: PortalSession }) {
+  const [applicationsOpen, setApplicationsOpen] = useState(false);
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
   const [listLoaded, setListLoaded] = useState(false);
   const resumeKey = `organizer.resumeCandidate:${session.email}`;
@@ -153,15 +160,20 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     setSelectedId((current) => current === null ? null
       : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
   }, []);
-  const reloadDetail = useCallback(async (candidateId: string, isCurrent: () => boolean = () => true) => {
+  const reloadDetail = useCallback(async (candidateId: string, isCurrent: () => boolean = () => true, restoreLocation = true) => {
     const next = await readOrganizerEvent(candidateId);
     if (!isCurrent()) return;
     setPublicationReadError(null);
     setPollGeneration((value) => value + 1);
     setDetail(next);
-    setSection(next.workspace.resume.section);
-    setGuidedTask(next.workspace.resume.guidedTask);
-    setShowAllTasks(false);
+    // Resume navigation only when opening an activity. A save refresh may
+    // arrive after the user has moved to another section; its older workspace
+    // preference must not move them back or close the all-tasks view.
+    if (restoreLocation) {
+      setSection(next.workspace.resume.section);
+      setGuidedTask(next.workspace.resume.guidedTask);
+      setShowAllTasks(false);
+    }
   }, []);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => {
@@ -217,7 +229,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * still corrected, because reloadList's own update re-runs the detail
    * effect. */
   const refresh = useCallback(async () => {
-    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId) : Promise.resolve()]);
+    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId, undefined, false) : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
 
   const persistLocation = useCallback(async (
@@ -261,7 +273,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   };
 
   const chooseEvent = (candidateId: string) => {
-    requestNavigation("切換活動", () => setSelectedId(candidateId));
+    requestNavigation("切換活動", () => { setApplicationsOpen(false); setSelectedId(candidateId); });
   };
 
   const chooseSection = (nextSection: OrganizerWorkspaceSection) => {
@@ -291,6 +303,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       .catch((error) => setNotice({ kind: "error", message: message(error) }));
   };
 
+  if (applicationsOpen) return <main className={styles.applicationMain}>
+    <button type="button" className={styles.ghost} onClick={() => setApplicationsOpen(false)}>返回活動工作區</button>
+    <OrganizerApplicationsPanel session={session} onReviewed={reloadList} />
+  </main>;
+
   return <main className={eventListOpen ? styles.shell : `${styles.shell} ${styles.shellNarrow}`}>
     <aside className={styles.sidebar}>
       <div className={styles.sidebarHead}>
@@ -305,6 +322,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
         ><UiIcon name={eventListOpen ? "chevron-left" : "chevron-right"} /></button>
       </div>
       <div id="organizer-event-list" hidden={!eventListOpen}>
+        {(session.isAdmin || session.canApplyForEvent || session.hasEventApplications) && <button type="button" className={styles.ghost}
+          onClick={() => requestNavigation("查看活動申請", () => setApplicationsOpen(true))}>活動申請</button>}
         {session.isAdmin && <CreateEntry
           onStarted={() => setNotice(IDLE)}
           onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
@@ -407,6 +426,7 @@ function WorkspaceSurface({
   const guided = detail.workspace.mode === "guided" && !showAllTasks;
   const [liveDraft, setLiveDraft] = useState(detail.draft);
   const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
+  const [mapLocation, setMapLocation] = useState<OrganizerMapLocation | null>(null);
   const [liveDirty, setLiveDirty] = useState(false);
   const activeLiveSection = section === "venue" ? "venue" : section === "event" ? "event" : undefined;
   return <>
@@ -442,6 +462,8 @@ function WorkspaceSurface({
           detail={detail}
           section={section}
           onSection={onSection}
+          mapLocation={mapLocation?.candidateId === detail.event.id ? mapLocation : null}
+          onLocate={location => { setMapLocation(location); onSection("map"); }}
           onChanged={onChanged}
           onDirtyChange={onDirtyChange}
           onDraftSaveReady={onDraftSaveReady}
@@ -614,7 +636,7 @@ function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
   </form>;
 }
 
-function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange }: {
+function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange, mapLocation, onLocate }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   section: OrganizerWorkspaceSection;
@@ -626,12 +648,14 @@ function StepContent({ session, detail, section, onSection, onChanged, onDirtyCh
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
   onDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
+  mapLocation: OrganizerMapLocation | null;
+  onLocate: (location: OrganizerMapLocation) => void;
 }) {
   if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} />;
   if (section === "import") return detail.event.operation === "AMEND"
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
-    : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
-  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
+    : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onLocate={onLocate} />;
+  if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} location={mapLocation} />;
   if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
 }

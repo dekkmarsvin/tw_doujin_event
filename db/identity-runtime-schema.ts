@@ -291,6 +291,18 @@ export const IDENTITY_TABLES = [
     "created_by TEXT NOT NULL",
     "created_at INTEGER NOT NULL",
   ]),
+  table("organizer_applications", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "account_id TEXT NOT NULL",
+    "data_json TEXT NOT NULL",
+    "status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))",
+    "created_at INTEGER NOT NULL",
+    "reviewed_by TEXT",
+    "reviewed_at INTEGER",
+    "reason TEXT NOT NULL DEFAULT ''",
+    "candidate_id TEXT UNIQUE",
+    "review_token TEXT",
+  ]),
   table("organizer_event_candidates", [
     "id TEXT PRIMARY KEY NOT NULL",
     "tentative_name TEXT NOT NULL",
@@ -472,6 +484,9 @@ export const IDENTITY_TABLES = [
 ] as const;
 
 export const IDENTITY_INDEXES = [
+  index("organizer_applications_account_idx", "organizer_applications", "account_id, created_at"),
+  index("organizer_applications_status_idx", "organizer_applications", "status, created_at"),
+  index("organizer_applications_review_idx", "organizer_applications", "review_token", { unique: true }),
   index("accounts_email_idx", "accounts", "email", { unique: true }),
   index("login_tokens_hash_idx", "login_tokens", "token_hash", { unique: true }),
   index("login_tokens_email_idx", "login_tokens", "email, created_at"),

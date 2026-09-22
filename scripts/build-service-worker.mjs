@@ -83,10 +83,12 @@ if (missingAssets.length > 0) throw new Error(`index.html references missing ass
 
 // The portal is a separate entry that readers never load; precaching it would
 // push its bundle onto every visitor.
-const portalHtml = await readFile(resolve(dist, "circle.html"), "utf8").catch(() => "");
-const portalOnly = readerAssets(portalHtml).filter((path) => !reader.includes(path));
-const leaked = precache.filter((path) => portalOnly.includes(path));
-if (leaked.length > 0) throw new Error(`Refusing to precache circle-portal assets: ${leaked.join(", ")}`);
+for (const entry of ["circle", "organizer", "admin"]) {
+  const portalHtml = await readFile(resolve(dist, `${entry}.html`), "utf8").catch(() => "");
+  const portalOnly = readerAssets(portalHtml).filter((path) => !reader.includes(path));
+  const leaked = precache.filter((path) => portalOnly.includes(path));
+  if (leaked.length > 0) throw new Error(`Refusing to precache ${entry} assets: ${leaked.join(", ")}`);
+}
 
 const source = await readFile(sourcePath, "utf8");
 // Hash the strategies as well as the file list: a caching fix must retire the

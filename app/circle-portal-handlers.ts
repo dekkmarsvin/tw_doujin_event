@@ -1,5 +1,6 @@
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
+import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -93,6 +94,8 @@ type PortalConfig = {
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
   /** Merge remains off until the GitHub App and both repository rulesets are verified. */
   organizerPublicationMode?: "disabled" | "fake" | "github";
+  organizerApplicationsOpen?: boolean;
+  organizerApplicationAllowedEmails?: string[];
 };
 
 type PortalDependencies = {
@@ -263,6 +266,58 @@ export function createCirclePortalHandlers({
     return json({ turnstileSitekey: turnstileSitekey() });
   }
 
+  function canApplyForEvent(email: string) {
+    return config.organizerApplicationsOpen === true
+      || (config.organizerApplicationAllowedEmails ?? []).some((allowed) => normalizeEmail(allowed) === email);
+  }
+
+  function applicationResponse(row: NonNullable<Awaited<ReturnType<IdentityRepository["getOrganizerApplication"]>>>, admin: boolean): OrganizerApplication {
+    const data = JSON.parse(row.data_json) as Partial<OrganizerApplicationInput>;
+    return {
+      name: "已刪除帳號的申請", officialUrl: "", startDate: "", endDate: "", location: "", relationship: "curator", note: "",
+      ...data, id: row.id, status: row.status, createdAt: row.created_at, reviewedAt: row.reviewed_at,
+      reason: row.reason, candidateId: admin || row.applicant_role ? row.candidate_id : null,
+      ...(admin ? { applicantEmail: row.applicant_email } : {}),
+    };
+  }
+
+  async function listEventApplications(request: Request) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const admin = await isAdmin(current.email);
+    const applications = await repository.listOrganizerApplications(current.accountId, admin);
+    return json({ applications: applications.map((row) => applicationResponse(row, admin)), canApply: canApplyForEvent(current.email) });
+  }
+
+  async function submitEventApplication(request: Request) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!canApplyForEvent(current.email)) return json({ error: "活動申請尚未開放。" }, 403);
+    const body = await readJson(request);
+    const data = parseOrganizerApplication(body?.application);
+    if (!data || typeof body?.id !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.id)
+      || Object.keys(body).some((key) => !["id", "application"].includes(key))) {
+      return json({ error: "請填寫活動名稱、有效的官方 HTTPS 網址、日期與申請身分；資料整理者請補充整理理由。" }, 400);
+    }
+    const result = await repository.submitOrganizerApplication({ id: body.id, accountId: current.accountId, data, now: config.now() });
+    return result ? json({ application: applicationResponse(result, await isAdmin(current.email)) }, 201)
+      : json({ error: "申請內容或帳號狀態已變更，請重新整理後確認送件結果。" }, 409);
+  }
+
+  async function reviewEventApplication(request: Request, applicationId: string) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    if (!body || !["approved", "rejected"].includes(String(body.decision)) || typeof body.reason !== "string"
+      || body.reason.length > 1000 || (body.decision === "rejected" && !body.reason.trim())
+      || Object.keys(body).some((key) => !["decision", "reason"].includes(key))) return json({ error: "請選擇核准或拒絕；拒絕時須填寫理由。" }, 400);
+    const result = await repository.reviewOrganizerApplication({ id: applicationId, decision: body.decision as "approved" | "rejected",
+      reason: body.reason.trim(), reviewerAccountId: gate.session.accountId, sessionId: gate.session.sessionId,
+      now: config.now(), ipHash: await clientIpHash(request) });
+    return result ? json({ application: applicationResponse(result, true) })
+      : json({ error: "申請、帳號或審核權限已變更，請重新讀取申請。" }, 409);
+  }
+
   async function requestLink(request: Request) {
     const body = await readJson(request);
 
@@ -372,6 +427,8 @@ export function createCirclePortalHandlers({
       expiresAt: now + sessionTtl,
       isMapContributor: await repository.hasActiveMapContributor(accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
+      canApplyForEvent: canApplyForEvent(email),
+      hasEventApplications: await repository.hasOrganizerApplications(accountId),
     }, 200, {
       "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(sessionTtl / 1000)),
     });
@@ -387,6 +444,8 @@ export function createCirclePortalHandlers({
       expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
       isMapContributor: await repository.hasActiveMapContributor(current.accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
+      canApplyForEvent: canApplyForEvent(current.email),
+      hasEventApplications: await repository.hasOrganizerApplications(current.accountId),
     });
   }
 
@@ -539,6 +598,7 @@ export function createCirclePortalHandlers({
     // Tier 0: the account's own domain already appears as this circle's site.
     const emailHost = current.email.split("@")[1] ?? "";
     const domainMatch = circle.links.some((link) => {
+      if (link.provider !== "官方網站") return false;
       try {
         return new URL(link.url).hostname.replace(/^www\./, "") === emailHost;
       } catch {
@@ -1017,16 +1077,22 @@ export function createCirclePortalHandlers({
     if (admin && !await isAdmin(current.email)) return json({ error: "沒有權限。" }, 403);
     const draft = await repository.getMapDraft(draftId, config.eventId);
     if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
-    const [files, reviews, comments] = await Promise.all([
+    const [files, reviews, comments, scope] = await Promise.all([
       repository.listMapDraftFiles(draftId),
       repository.listMapDraftReviews(draftId),
       repository.listMapDraftComments(draftId),
+      resolveMapContributionScope?.({ periodKey: draft.period_key, venueSpaceId: draft.venue_space_id }) ?? null,
     ]);
     return json({
       draft: { ...draft, content: draft.content_json ? JSON.parse(draft.content_json) as unknown : null, content_json: undefined },
       files,
       reviews,
       comments,
+      scope: scope ? {
+        periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
+        allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
+        allowsUnallocatedBooths: scope.allowsUnallocatedBooths, groups: scope.groups,
+      } : null,
     });
   }
 
@@ -2355,6 +2421,7 @@ export function createCirclePortalHandlers({
       if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "匯入資料格式無效。" }, 400);
       const row = value as Record<string, unknown>;
       const sourceRow = row.sourceRow;
+      const rowLabel = sourceRow === 0 ? "手動群組" : `來源列 ${String(sourceRow)}`;
       const dayId = typeof row.dayId === "string" ? row.dayId.normalize("NFKC").trim() : "";
       const venueSpaceId = typeof row.venueSpaceId === "string" ? row.venueSpaceId.normalize("NFKC").trim() : "";
       const submittedAreaId = typeof row.areaId === "string" ? row.areaId.normalize("NFKC").trim() : "";
@@ -2366,15 +2433,15 @@ export function createCirclePortalHandlers({
       const assignment = spaces.get(venueSpaceId);
       const areaId = assignment?.areaMode === "none" ? "ALL" : submittedAreaId;
       const areaAllowed = assignment?.areaMode === "none" || assignment?.areaIds.includes(areaId);
-      if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 1 || !days.has(dayId)
+      if (!Number.isSafeInteger(sourceRow) || (sourceRow as number) < 0 || !days.has(dayId)
         || !assignment || !areaAllowed || codes.length === 0 || codes.some((code) => !code || code.length > 80)
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
         || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
-        return json({ error: `來源列 ${String(sourceRow)} 的活動日、使用空間、展區或社團識別對應不一致。` }, 422);
+        return json({ error: `${rowLabel} 的活動日、使用空間、展區或社團識別對應不一致。` }, 422);
       }
       for (const code of codes) {
         const placement = `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;
-        if (placements.has(placement)) return json({ error: `來源列 ${sourceRow} 的攤位 ${code} 重複。` }, 422);
+        if (placements.has(placement)) return json({ error: `${rowLabel} 的攤位 ${code} 重複。` }, 422);
         placements.add(placement);
       }
       normalized.push({ sourceRow: sourceRow as number, dayId, venueSpaceId, areaId, codes, circleName, stableKey, identityGroup });
@@ -2426,10 +2493,14 @@ export function createCirclePortalHandlers({
   async function listOrganizerMaps(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    const maps = await repository.listOrganizerMapDrafts(candidateId);
+    const includeCoverage = new URL(request.url).searchParams.get("coverage") === "1";
+    const maps = await repository.listOrganizerMapDrafts(candidateId, includeCoverage);
     return json({ maps: maps.map((map) => ({
       id: map.id, periodKey: map.period_key, venueSpaceId: map.venue_space_id,
       status: map.status, mapRevision: map.current_revision, updatedAt: map.updated_at,
+      ...(includeCoverage ? { boothCodes: map.content_json
+        ? parseMapContributionDraftContent(JSON.parse(map.content_json))?.layout.rows.flatMap(row => row.slots.map(slot => slot.code)) ?? null
+        : null } : {}),
     })) });
   }
 
@@ -3004,6 +3075,7 @@ export function createCirclePortalHandlers({
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
+    listEventApplications, submitEventApplication, reviewEventApplication,
     adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
     adminProbeGitHubInstallation,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and

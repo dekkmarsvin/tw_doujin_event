@@ -4,7 +4,7 @@
 - 狀態：**已實作並完成本機驗收**；2026-09-09。證據見第 10 節；尚未部署。
 - 範圍：公開閱讀端桌機介面、視域與攤位文字；不修改資料模型、後端或部署流程。
 - 依據：[原方向提案](./map-viewport-direction.md)、[驗證紀錄](./map-viewport-validation.md)，以及使用者後續確認的版面與初始化取捨。
-- 決策優先序：本文件的目標行為 > 驗證文件中的候選方案 > 原提案與生成概念圖。現況仍以程式、[地圖契約](../contracts/event-map.md)、[URL 契約](../contracts/url-state.md)與 [DESIGN.md](../../DESIGN.md)為準。
+- 決策優先序：本文件的目標行為 > 驗證文件中的候選方案 > 原提案與生成概念圖。2026-09-22 的窄桌機收欄決策見 [ADR-0055](../adr/0055-desktop-map-uses-two-zones-and-overlay-details.md) 的 #204 補充；下方 248px 常駐欄是改版當時基準。現況仍以程式、[地圖契約](../contracts/event-map.md)、[URL 契約](../contracts/url-state.md)與 [DESIGN.md](../../DESIGN.md)為準。
 
 ## 1. 已確認的方向
 

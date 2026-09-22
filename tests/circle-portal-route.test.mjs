@@ -396,12 +396,48 @@ test("a signed-in stranger cannot edit a circle they have not claimed", async ()
   assert.equal(response.status, 403);
 });
 
-test("a matching email domain verifies the claim without review", async () => {
-  const cookie = await signIn("hello@owner.example");
-  const response = await handlers.createClaim(post("/api/claims", { circleId: "ff47-domain" }, cookie));
-  assert.equal(response.status, 201);
-  assert.equal((await response.json()).status, "verified");
-});
+for (const { name, links, verified, challengeable } of [
+  { name: "official website", links: [{ provider: "官方網站", url: "https://owner.example/" }], verified: true },
+  { name: "official website with www", links: [{ provider: "官方網站", url: "https://www.owner.example/home" }], verified: true },
+  { name: "link aggregator", links: [{ provider: "連結整合頁", url: "https://owner.example/" }], verified: false, challengeable: true },
+  { name: "social link", links: [{ provider: "X", url: "https://owner.example/" }], verified: false },
+  { name: "matching aggregator beside a different official domain", links: [
+    { provider: "官方網站", url: "https://circle.example/" },
+    { provider: "連結整合頁", url: "https://owner.example/" },
+  ], verified: false },
+  { name: "invalid official URL beside a matching aggregator", links: [
+    { provider: "官方網站", url: "not a URL" },
+    { provider: "連結整合頁", url: "https://owner.example/" },
+  ], verified: false },
+  { name: "matching official website after other and invalid links", links: [
+    { provider: "連結整合頁", url: "https://elsewhere.example/" },
+    { provider: "官方網站", url: "not a URL" },
+    { provider: "官方網站", url: "https://owner.example/" },
+  ], verified: true },
+]) {
+  test(`email domain verification: ${name}`, async () => {
+    handlers = createCirclePortalHandlers({
+      ...handlerOptions,
+      lookupCircle: async (circleId) => circleId === "ff47-domain" ? { ...CIRCLES[circleId], links } : null,
+    });
+    const cookie = await signIn("hello@owner.example");
+    const response = await handlers.createClaim(post("/api/claims", {
+      circleId: "ff47-domain", ...(challengeable ? { targetUrl: links[0].url } : {}),
+    }, cookie));
+    assert.equal(response.status, 201);
+    const result = await response.json();
+    assert.equal(result.status, verified ? "verified" : "pending");
+    const claim = await repository.getClaim(result.id);
+    assert.equal(claim.method, verified ? "email_domain" : null);
+    assert.equal(await repository.ownsCircle(claim.account_id, "ff47", "ff47-domain"), verified);
+    if (challengeable) {
+      assert.match(result.challenge, /^ff47-[23456789BCDFGHJKLMNPQRSTVWXYZ]{10}$/);
+      evidenceBody = `<html>驗證碼 ${result.challenge}</html>`;
+      const challenged = await handlers.runChallenge(post(`/api/claims/${result.id}/challenge`, {}, cookie), result.id);
+      assert.equal((await challenged.json()).verified, true, "an aggregator still supports proof of page control");
+    }
+  });
+}
 
 test("a challenge is only offered for a recorded, fetchable url", async () => {
   const cookie = await signIn("challenge@example.com");

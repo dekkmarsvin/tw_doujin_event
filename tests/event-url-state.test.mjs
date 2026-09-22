@@ -79,6 +79,18 @@ test("legacy hall alias parses but serialization emits only area", () => {
   assert.equal(url.searchParams.has("hall"), false);
 });
 
+test("R15 shares and reloads while legacy rating links and unrelated state retain their meaning", () => {
+  for (const [parameter, filter, canonical] of [["include", "R18", "include"], ["general", "GENERAL", "general"], ["exclude", "GENERAL", "general"], ["r15", "R15", "r15"]]) {
+    const url = `https://map.example/?event=event-a&day=8&query=book&work=first&work=second&workMode=all&workExclude=third&favorite=1&selectedCircle=c-1&selectedBooth=A01&keep=value&r18=${parameter}`;
+    const parsed = codec.parseEventUrlState(eventA, url);
+    assert.equal(parsed.state.advancedSearch.adultContent, filter);
+    const serialized = codec.serializeEventUrlState(eventA, parsed.state, url);
+    assert.equal(serialized.searchParams.get("r18"), canonical);
+    assert.equal(serialized.searchParams.get("keep"), "value");
+    assert.deepEqual(codec.parseEventUrlState(eventA, serialized).state, parsed.state);
+  }
+});
+
 test("URL defaults follow event area order rather than assignment order", () => {
   const reversedAreas = {
     ...eventA,

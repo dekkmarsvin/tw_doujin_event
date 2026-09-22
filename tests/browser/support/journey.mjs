@@ -9,6 +9,7 @@
 // only the pinned viewport journey needs the network.
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { captureFailurePages, observeRequests } from "./failure-diagnostics.mjs";
 
 const playwright = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const chromium = playwright.chromium ?? playwright.default?.chromium;
@@ -26,12 +27,15 @@ export async function start(name) {
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", checks: [], errors: [] };
+  const observations = new WeakMap();
+  let aborted = false;
 
   return {
     report,
     /** `url` opens an exact address — a one-time login link; otherwise an event. */
     async page({ event = "sample", params = "", url, viewport = { width: 1440, height: 900 }, routes } = {}) {
       const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
+      observations.set(page, observeRequests(page));
       page.setDefaultTimeout(10000);
       page.on("pageerror", (error) => report.errors.push(error.message));
       if (routes) await routes(page);
@@ -54,13 +58,18 @@ export async function start(name) {
       report.checks.push(name);
     },
     async finish() {
+      if (report.errors.length) return this.abort(new Error(`page errors: ${report.errors.join("; ")}`));
       await writeFile(path.join(output, `browser-report-${name}.json`), JSON.stringify(report, null, 2));
       await browser.close();
-      if (report.errors.length) throw new Error(`page errors: ${report.errors.join("; ")}`);
       console.log(`Passed ${report.checks.length} checks — ${name}.`);
     },
     async abort(error) {
-      await writeFile(path.join(output, `browser-report-${name}.json`), JSON.stringify({ ...report, failure: String(error) }, null, 2)).catch(() => {});
+      // finish() may already have captured a pageerror before the journey's
+      // outer catch calls abort again. Keep that first, still-open-page evidence.
+      if (aborted) throw error;
+      aborted = true;
+      const diagnostics = await captureFailurePages(browser, output, name, observations);
+      await writeFile(path.join(output, `browser-report-${name}.json`), JSON.stringify({ ...report, failure: String(error), diagnostics }, null, 2)).catch(() => {});
       await browser.close();
       throw error;
     },

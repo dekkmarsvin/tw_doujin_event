@@ -45,6 +45,7 @@
 .chips svg { width:10px; height:10px; }
 .excluded button { background:#f6ecec; border-color:#e0cfcf; }
 .modeSegments { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.ratingSegments { grid-template-columns:repeat(2,minmax(0,1fr)); }
 
 @media (max-width:760px) {
   .topicRow button { min-height:44px; }

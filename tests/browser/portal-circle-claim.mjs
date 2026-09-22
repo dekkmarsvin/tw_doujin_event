@@ -51,6 +51,7 @@ try {
 
   // 3. The admin is a different person with a different inbox.
   const admin = await signIn(journey, ADMIN, "circle");
+  await admin.getByRole("link", { name: "管理", exact: true }).click();
   const queue = admin.getByRole("button", { name: "核准", exact: true });
   await queue.waitFor();
   assert.match(await admin.locator("body").innerText(), new RegExp(CIRCLE_ID), "the queue names the circle under review");
@@ -129,6 +130,8 @@ try {
   //    were — a keyboard user who looks and cancels must not be dropped at the
   //    top of a long form.
   await penField(circle).fill(PEN_NAME);
+  for (const rating of ["全年齡", "R15", "R18"]) await circle.getByRole("checkbox", { name: rating, exact: true }).check();
+  await circle.locator('input[id^="specialTags-"]').fill("自由題材");
   await submit.focus();
   await submit.click();
 
@@ -139,6 +142,7 @@ try {
   const confirm = review.getByRole("button", { name: "確認儲存", exact: true });
   await confirm.waitFor();
   assert.match(await review.innerText(), new RegExp(PEN_NAME), "the circle sees what it is about to publish");
+  assert.match(await review.innerText(), /分級：全年齡、R15、R18/, "preview lists every selected rating");
   assert.ok(await circle.locator("[inert]").count() > 0, "the form behind the review is inert");
   await journey.capture(circle, "portal-review-open");
 
@@ -166,6 +170,8 @@ try {
   // placeholder.
   await circle.waitForFunction((expected) => document.querySelector('input[id^="pen-"]')?.value === expected, PEN_NAME, { timeout: 10000 })
     .catch(() => { throw new Error(`the saved pen name did not come back from the server (field held "${""}")`); });
+  for (const rating of ["全年齡", "R15", "R18"]) assert.equal(await circle.getByRole("checkbox", { name: rating, exact: true }).isChecked(), true);
+  assert.equal(await circle.locator('input[id^="specialTags-"]').inputValue(), "自由題材");
   await circle.close();
 
   // 8. And it reaches the public overlay every reader downloads.
@@ -175,9 +181,36 @@ try {
   const override = payload.overrides?.find((item) => item.circleId === CIRCLE_ID);
   assert.ok(override, "the saved circle appears in the public overlay");
   assert.equal(override.fields.pen, PEN_NAME, "and carries what the circle wrote");
+  assert.deepEqual(override.fields.ageRatings, ["全年齡", "R15", "R18"]);
+  assert.deepEqual(override.fields.specialTags, ["自由題材"]);
   // The overlay is what every anonymous reader downloads, so it must not carry
   // who wrote it.
   assert.doesNotMatch(JSON.stringify(payload), new RegExp(CIRCLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the public overlay never names the account that wrote it");
+
+  // Anonymous Reader consumes the saved overlay, applies each rating, and
+  // restores the shared R15 condition rather than guessing a highest rating.
+  const reader = await journey.mapPage();
+  for (const label of ["只看全年齡", "只看 R15", "只看 R18"]) {
+    await reader.getByRole("button", { name: /^詳細搜尋/ }).click();
+    const search = reader.getByRole("dialog", { name: "詳細搜尋條件" });
+    await search.getByRole("button", { name: label, exact: true }).click();
+    if (label === "只看 R15") await journey.capture(reader, "reader-r15-search");
+    await search.getByRole("button", { name: "套用搜尋", exact: true }).click();
+    const result = reader.locator('#desktop-panel-explore button[class*="resultMain"]').filter({ hasText: CIRCLE_NAME }).first();
+    await result.waitFor();
+    if (label === "只看 R15") {
+      await reader.waitForURL(url => url.searchParams.get("r18") === "r15");
+      await reader.reload();
+      await result.waitFor();
+      assert.equal(new URL(reader.url()).searchParams.get("r18"), "r15");
+    }
+    await result.click();
+    const details = reader.locator('aside[aria-label="已選社團詳情"]');
+    await details.getByText("分級：全年齡、R15、R18", { exact: true }).waitFor();
+    await details.getByRole("button", { name: "關閉攤位詳細資訊", exact: true }).click();
+  }
+  await journey.capture(reader, "reader-ratings-published");
+  await reader.close();
 
   await journey.finish();
 } catch (error) {

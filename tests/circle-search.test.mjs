@@ -66,6 +66,15 @@ test("advanced circle search normalizes full-width and case variants", () => {
   assert.equal(matchesAdvancedCircleSearch(record({ creatorTypes: ["ＶＴＵＢＥＲ"], work: "ＢＬＵＥ ＡＲＣＨＩＶＥ", referencedWorks: [] }), { ...all, creatorType: "Vtuber", workTopics: ["blue archive"] }), true);
 });
 
+test("every explicit rating matches independently without classifying unknown values", () => {
+  const choices = [["全年齡", "GENERAL"], ["R15", "R15"], ["R18", "R18"]];
+  for (const values of [[], ["未知舊值"], ["R15"], ["全年齡", "R18"], ["全年齡", "R15"], ["R15", "R18"], ["全年齡", "R15", "R18"]]) {
+    for (const [rating, filter] of choices) assert.equal(matchesAdvancedCircleSearch(record({ ageRatings: values }), { ...all, adultContent: filter }), values.includes(rating), `${values}: ${filter}`);
+  }
+  assert.equal(matchesAdvancedCircleSearch(record({ ageRatings: ["Ｒ１５"] }), { ...all, adultContent: "R15" }), true);
+  assert.equal(matchesAdvancedCircleSearch(record({ ageRatings: ["R150"] }), { ...all, adultContent: "R15" }), false);
+});
+
 test("work-topic aliases match the same title across languages", () => {
   const umaMusume = record({ work: "賽馬娘", referencedWorks: ["賽馬娘"] });
   assert.equal(matchesAdvancedCircleSearch(umaMusume, { ...all, workTopics: ["ウマ娘"] }), true);

@@ -1,6 +1,6 @@
 import type { MapSlotView } from "./accessible-event-map-renderer";
 import { circleSearchText, placementStatusLabel, type CircleViewRecord } from "./circle-records";
-import { buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
+import { ageRatingFilterLabel, buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import { ALL_AREAS_ID, visibleAreaIds, venueAssignmentForVenueSpace, type EventDefinition } from "./event-catalog";
 import type { PlanningDocument } from "./planning-store";
@@ -176,7 +176,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
     ...includedTopics.map((topic) => ({ id: `work:${topic}`, kind: "work" as const, label: `${topicPrefix}${topic}`, value: topic })),
     ...normalizeWorkTopics(advancedSearch.excludedWorkTopics).map((topic) => ({ id: `work-exclude:${topic}`, kind: "work-exclude" as const, label: `排除：${topic}`, value: topic })),
     ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type", kind: "work-type" as const, label: advancedSearch.workType }] : []),
-    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", kind: "adult" as const, label: advancedSearch.adultContent === "R18" ? "只看 R18" : "只看全年齡" }] : []),
+    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", kind: "adult" as const, label: ageRatingFilterLabel(advancedSearch.adultContent) }] : []),
     ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", kind: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : groups.get(planningDisplay.favoriteGroupId) ?? "收藏群組" }] : []),
     ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", kind: "visit" as const, label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus] }] : []),
   ];

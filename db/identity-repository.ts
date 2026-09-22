@@ -8,6 +8,7 @@ import {
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
 import { createVenueReference, createVenueSpaceReference, initialVenueReferences, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
+import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -41,6 +42,12 @@ type IdentityAuditEntry = {
 };
 
 type SessionAccount = { accountId: string; email: string; sessionCreatedAt: number };
+
+export type OrganizerCandidateInput = {
+  id: string; tentativeName: string; ownerEmail: string; createdByAccountId: string;
+  draftJson: string; now: number;
+  ownerGrant?: { accountId: string; audit: IdentityAuditEntry } | null;
+};
 
 type ClaimRow = {
   id: string;
@@ -263,7 +270,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
-  function auditStatement(entry: IdentityAuditEntry) {
+  function auditStatement(entry: IdentityAuditEntry, applicationToken: string | null = null) {
     return database.prepare(
       `INSERT INTO audit_log (
          id, at, actor_account_id, actor_role, action, subject_type, subject_id,
@@ -278,11 +285,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          SELECT CASE WHEN ?3 IS NULL OR EXISTS (
            SELECT 1 FROM accounts WHERE id = ?3 AND deletion_started_at IS NULL
          ) THEN 1 ELSE 0 END AS actor_allowed
-       )`,
+       ) WHERE (?10 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?10))`,
     ).bind(
       crypto.randomUUID(), entry.at, entry.actorAccountId ?? null, entry.actorRole,
       entry.action, entry.subjectType, entry.subjectId,
-      entry.detail === undefined ? null : JSON.stringify(entry.detail), entry.ipHash ?? null,
+      entry.detail === undefined ? null : JSON.stringify(entry.detail), entry.ipHash ?? null, applicationToken,
     );
   }
 
@@ -489,6 +496,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       database.prepare(`UPDATE map_contributor_grants SET suspended_by = '[shredded]' WHERE suspended_by = ?1`).bind(input.email),
       database.prepare(`DELETE FROM map_contributor_grants WHERE account_id = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venues SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
+      // Pending requests have no decision to preserve. Reviewed applications
+      // keep the decision and candidate link; erase submitted free text.
+      database.prepare(`DELETE FROM organizer_applications WHERE account_id = ?1 AND status = 'pending'`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_applications SET account_id = '[shredded]', data_json = '{}', reason = '' WHERE account_id = ?1`).bind(input.accountId),
+      database.prepare(`UPDATE organizer_applications SET reviewed_by = '[shredded]', reason = '' WHERE reviewed_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_venue_spaces SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_reference_records SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
       database.prepare(`UPDATE organizer_event_candidates SET created_by = '[shredded]' WHERE created_by = ?1`).bind(input.accountId),
@@ -1701,53 +1713,55 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * later sign-in cannot grant it twice, and its own audit action separates a
    * create-time grant from an accepted invitation.
    */
-  async function createOrganizerCandidate(input: {
-    id: string;
-    tentativeName: string;
-    ownerEmail: string;
-    createdByAccountId: string;
-    draftJson: string;
-    now: number;
-    ownerGrant?: { accountId: string; audit: IdentityAuditEntry } | null;
-  }) {
-    await ensureTables();
+  function organizerCandidateStatements(input: OrganizerCandidateInput, applicationToken: string | null = null) {
     const ownerGrant = input.ownerGrant ?? null;
-    try {
-      const results = await database.batch([
+    return [
         database.prepare(
           `INSERT INTO organizer_event_candidates (
              id, tentative_name, status, current_version, current_draft_json,
              created_by, created_at, updated_at, last_updated_by, last_updated_role
-           ) VALUES (?1, ?2, 'draft', 1, ?3, ?4, ?5, ?5, ?4, 'admin')`,
-        ).bind(input.id, input.tentativeName, input.draftJson, input.createdByAccountId, input.now),
+           ) SELECT ?1, ?2, 'draft', 1, ?3, ?4, ?5, ?5, ?4, 'admin'
+             WHERE (?6 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?6))`,
+        ).bind(input.id, input.tentativeName, input.draftJson, input.createdByAccountId, input.now, applicationToken),
         database.prepare(
           `INSERT INTO organizer_event_revisions (
              id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
-           ) VALUES (?1, ?2, 1, NULL, ?3, ?4, 'admin', ?5)`,
-        ).bind(crypto.randomUUID(), input.id, input.draftJson, input.createdByAccountId, input.now),
+           ) SELECT ?1, ?2, 1, NULL, ?3, ?4, 'admin', ?5
+             WHERE (?6 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?6))`,
+        ).bind(crypto.randomUUID(), input.id, input.draftJson, input.createdByAccountId, input.now, applicationToken),
         database.prepare(
           `INSERT INTO organizer_workspace_state (
              candidate_id, onboarding_completed_at, onboarding_completed_by,
              last_validated_version, created_at, updated_at
-           ) VALUES (?1, NULL, NULL, NULL, ?2, ?2)`,
-        ).bind(input.id, input.now),
+           ) SELECT ?1, NULL, NULL, NULL, ?2, ?2
+             WHERE (?3 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?3))`,
+        ).bind(input.id, input.now, applicationToken),
         database.prepare(
           `INSERT INTO organizer_event_invitations (
              id, candidate_id, email, role, invited_by, created_at, accepted_by, accepted_at
-           ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5, ?6, ?7)`,
+           ) SELECT ?1, ?2, ?3, 'owner', ?4, ?5, ?6, ?7
+             WHERE (?8 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?8))`,
         ).bind(
           crypto.randomUUID(), input.id, input.ownerEmail, input.createdByAccountId, input.now,
           ownerGrant?.accountId ?? null, ownerGrant ? input.now : null,
+          applicationToken,
         ),
         ...(ownerGrant ? [
           database.prepare(
             `INSERT INTO organizer_event_grants (
                id, candidate_id, account_id, role, granted_by, granted_at, revoked_by, revoked_at
-             ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5, NULL, NULL)`,
-          ).bind(crypto.randomUUID(), input.id, ownerGrant.accountId, input.createdByAccountId, input.now),
-          auditStatement(ownerGrant.audit),
+             ) SELECT ?1, ?2, ?3, 'owner', ?4, ?5, NULL, NULL
+               WHERE (?6 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?6))`,
+          ).bind(crypto.randomUUID(), input.id, ownerGrant.accountId, input.createdByAccountId, input.now, applicationToken),
+          auditStatement(ownerGrant.audit, applicationToken),
         ] : []),
-      ]);
+      ];
+  }
+
+  async function createOrganizerCandidate(input: OrganizerCandidateInput) {
+    await ensureTables();
+    try {
+      const results = await database.batch(organizerCandidateStatements(input));
       return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const, version: 1 }
         : { ok: false as const, reason: "conflict" as const };
@@ -2094,16 +2108,17 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return invitation.meta.changes === 1 ? { ok: true as const, result: "revoked" as const } : { ok: false as const, reason: "missing" as const };
   }
 
-  async function listOrganizerMapDrafts(candidateId: string) {
+  async function listOrganizerMapDrafts(candidateId: string, includeContent = false) {
     await ensureTables();
     const result = await database.prepare(
-      `SELECT id, event_id, candidate_id, period_key, venue_space_id, status, current_revision,
-              created_at, updated_at, decision_at
-       FROM map_drafts WHERE candidate_id = ?1 AND status <> 'withdrawn'
-       ORDER BY period_key, venue_space_id, updated_at DESC`,
+      `SELECT d.id, d.event_id, d.candidate_id, d.period_key, d.venue_space_id, d.status, d.current_revision,
+              d.created_at, d.updated_at, d.decision_at${includeContent ? ", r.content_json" : ""}
+       FROM map_drafts d ${includeContent ? "LEFT JOIN map_draft_revisions r ON r.draft_id = d.id AND r.revision = d.current_revision" : ""}
+       WHERE d.candidate_id = ?1 AND d.status <> 'withdrawn'
+       ORDER BY d.period_key, d.venue_space_id, d.updated_at DESC`,
     ).bind(candidateId).all<{
       id: string; event_id: string; candidate_id: string; period_key: string; venue_space_id: string;
-      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number; decision_at: number | null;
+      status: MapDraftStatus; current_revision: number; created_at: number; updated_at: number; decision_at: number | null; content_json?: string | null;
     }>();
     return result.results;
   }
@@ -3313,7 +3328,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
-      "organizer_amendment_changes", "organizer_amendments",
+      "organizer_amendment_changes", "organizer_amendments", "organizer_applications",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
@@ -3323,6 +3338,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   return {
     ...createOrganizerAmendmentRepository(database, ensureTables),
+    ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements),
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,

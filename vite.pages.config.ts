@@ -48,6 +48,8 @@ export default defineConfig({
         // session cookie with /circle, but not either entry's application
         // bundle or navigation.
         organizer: resolve(import.meta.dirname, "organizer.html"),
+        // Existing moderation tools share the session; sign-in stays in /circle.
+        admin: resolve(import.meta.dirname, "admin.html"),
       },
     },
   },
