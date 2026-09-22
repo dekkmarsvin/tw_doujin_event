@@ -539,6 +539,7 @@ export function createCirclePortalHandlers({
     // Tier 0: the account's own domain already appears as this circle's site.
     const emailHost = current.email.split("@")[1] ?? "";
     const domainMatch = circle.links.some((link) => {
+      if (link.provider !== "官方網站") return false;
       try {
         return new URL(link.url).hostname.replace(/^www\./, "") === emailHost;
       } catch {
