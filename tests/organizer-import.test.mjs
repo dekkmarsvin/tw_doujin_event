@@ -6,7 +6,62 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const imports = await environment.runner.import("/app/organizer-import.ts");
+const roster = await environment.runner.import("/app/organizer-roster.ts");
 after(() => vite.close());
+
+const rosterDraft = { event: { days: [{ id: "1" }, { id: "2" }] }, venue: { assignments: [
+  { venueSpaceId: "hall", areaMode: "none", areaIds: ["ALL"] },
+  { venueSpaceId: "other", areaMode: "imported", areaIds: ["A"] },
+] } };
+const rosterRow = { sourceRow: 2, dayId: "1", venueSpaceId: "hall", areaId: "ALL", codes: ["A01", "A02", "A03"], circleName: "甲社", stableKey: "one", identityGroup: "stable:one" };
+
+test("roster split and merge preserve explicit identity, codes and source provenance", () => {
+  const before = structuredClone(rosterRow);
+  const [left, right] = roster.splitRosterRow(rosterRow, ["A02", "A03"]);
+  assert.deepEqual(left.codes, ["A01"]);
+  assert.deepEqual(right.codes, ["A02", "A03"]);
+  for (const row of [left, right]) {
+    assert.equal(row.circleName, "甲社");
+    assert.equal(row.stableKey, "one");
+    assert.equal(row.identityGroup, "stable:one");
+    assert.equal(row.sourceRow, 2);
+  }
+  assert.deepEqual(rosterRow, before);
+  assert.deepEqual(roster.mergeRosterRows([left, right], "甲社"), before);
+  const renamed = { ...right, sourceRow: 3, circleName: "乙社" };
+  assert.equal(roster.mergeRosterRows([left, renamed], ""), null, "different names require an explicit choice");
+  const merged = roster.mergeRosterRows([left, renamed], "乙社");
+  assert.equal(merged.circleName, "乙社");
+  assert.equal(merged.sourceRow, 0, "a new group cannot pretend to be one original workbook row");
+  assert.deepEqual(merged.codes, before.codes);
+  assert.match(roster.rosterMergeError([left, { ...right, stableKey: "different" }]), /社團識別/);
+  assert.match(roster.rosterMergeError([left, { ...right, dayId: "2" }]), /同活動日/);
+  assert.match(roster.rosterMergeError([left, { ...right, venueSpaceId: "other" }]), /同使用空間/);
+  assert.match(roster.rosterMergeError([left, { ...right, areaId: "B" }]), /同一展區/);
+});
+
+test("roster editing normalizes identity and undivided space without guessing concatenated codes", () => {
+  const normalized = roster.normalizeRosterRow({ ...rosterRow, sourceRow: 0, stableKey: "  new-id  ", circleName: "  甲  社 ", areaId: "wrong", codes: [" Ａ０１Ａ０２ "] }, rosterDraft);
+  assert.equal(normalized.identityGroup, "stable:new-id");
+  assert.equal(normalized.circleName, "甲 社");
+  assert.equal(normalized.areaId, "ALL");
+  assert.deepEqual(normalized.codes, ["A01A02"]);
+  assert.equal(roster.suspiciousRosterCodes(normalized), 3);
+  assert.equal(normalized.sourceRow, 0);
+  assert.equal(roster.normalizeRosterRow({ ...normalized, stableKey: " " }, rosterDraft).identityGroup, null);
+});
+
+test("roster duplicate validation is scoped to day and space and marks both groups", () => {
+  const row = { ...rosterRow, codes: ["A01"] };
+  const same = { ...row, sourceRow: 0, codes: ["a01"] };
+  const errors = roster.rosterIssues([row, same], rosterDraft);
+  assert.equal(errors.size, 2);
+  assert.match(errors.get(0)[0], /重複/);
+  assert.equal(roster.rosterIssues([row, { ...same, dayId: "2" }, { ...same, venueSpaceId: "other", areaId: "A" }], rosterDraft).size, 0);
+  const invalid = roster.rosterIssues([{ ...row, dayId: "unknown", venueSpaceId: "missing", circleName: "", codes: [] }], rosterDraft);
+  assert.equal(invalid.get(0).length, 4);
+  assert.equal(roster.rosterIssues([{ ...row, codes: ["A01", "a01"] }], rosterDraft).size, 1);
+});
 
 test("CSV parsing preserves quoted newlines and source row numbers", () => {
   const matrix = imports.parseOrganizerCsv("\uFEFFDay,Booth,Circle\r\n1,A01,甲社\r\n2,A02,\"乙\n社\"\r\n");

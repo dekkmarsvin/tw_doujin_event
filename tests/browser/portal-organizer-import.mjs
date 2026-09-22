@@ -1,8 +1,8 @@
 // staged-data: portal
 //
-// The saved-list surface is read-only after an import.  This journey supplies
-// its detail response with a deterministic 20,000-group synthetic response so
-// pagination and filtering are exercised in the real Organizer UI without
+// The saved-list surface edits an existing import. This journey supplies
+// a deterministic 20,000-group synthetic response so pagination, editing,
+// version conflicts and filtering are exercised in the real Organizer UI without
 // uploading a private workbook or writing a large fixture into D1.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -27,7 +27,7 @@ function savedRow(index) {
     codes,
     circleName: `社團 ${String(index + 1).padStart(5, "0")}`,
     stableKey: `internal-${String(index + 1).padStart(5, "0")}`,
-    identityGroup: null,
+    identityGroup: `stable:internal-${String(index + 1).padStart(5, "0")}`,
   };
 }
 
@@ -118,6 +118,7 @@ const detail = {
 };
 
 const journey = await start("portal-organizer-import");
+let savedImports = 0, rejectNextImport = false;
 journey.report.sourceHead = sourceHead;
 journey.report.fixture = {
   kind: "synthetic-response",
@@ -137,8 +138,31 @@ try {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [event] }) });
       });
       await page.route(`**/api/organizer/events/${CANDIDATE_ID}`, async (route) => {
+        if (route.request().method() === "PATCH") {
+          const body = route.request().postDataJSON();
+          assert.equal(body.expectedVersion, detail.event.version);
+          detail.draft = body.draft;
+          event.version = ++detail.event.version;
+          return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, version: event.version }) });
+        }
         if (route.request().method() !== "GET") return route.continue();
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) });
+      });
+      await page.route(`**/api/organizer/events/${CANDIDATE_ID}/imports`, async route => {
+        assert.equal(route.request().method(), "PUT");
+        const body = route.request().postDataJSON();
+        assert.equal(body.expectedVersion, detail.event.version, "the loaded version accompanies the whole list");
+        if (rejectNextImport) {
+          rejectNextImport = false;
+          event.version = ++detail.event.version;
+          return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "草稿已被其他人更新，請重新載入。", conflict: { currentVersion: event.version } }) });
+        }
+        assert.equal(body.rows.length, GROUP_COUNT);
+        assert.equal(body.source.sha256, "a".repeat(64), "manual editing retains original file provenance");
+        detail.import = { source: body.source, rows: body.rows };
+        event.version = ++detail.event.version;
+        savedImports++;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, version: event.version, importedRows: body.rows.length }) });
       });
     },
   });
@@ -210,6 +234,81 @@ try {
   assert.equal(await form.getByRole("cell", { name: "無分區", exact: true }).count(), 2);
   assert.equal(await form.getByLabel("來源列 3 的展區", { exact: true }).count(), 0, "an undivided rejected row does not ask for a meaningless area");
   await journey.capture(organizer, "organizer-import-mixed-space-labels");
+
+  // Work on the full 20,000-row draft while rendering just its current page.
+  await list.getByRole("button", { name: "編輯清單", exact: true }).click();
+  assert.equal(await list.getByRole("button", { name: "新增群組", exact: true }).isDisabled(), true);
+  await dayFilter.selectOption("");
+  await spaceFilter.selectOption("");
+  await search.fill("A00001");
+  await rowsOnPage.first().getByRole("button", { name: "編輯", exact: true }).click();
+  const group = list.getByRole("group", { name: "編輯攤位群組", exact: true });
+  await group.getByRole("button", { name: "刪除此群組", exact: true }).click();
+  await search.fill("B01235");
+  await rowsOnPage.first().getByRole("button", { name: "編輯", exact: true }).click();
+  await group.getByRole("button", { name: "拆分群組", exact: true }).click();
+  await group.getByRole("checkbox", { name: "B01235-SECOND", exact: true }).check();
+  await group.getByRole("button", { name: "確認拆分", exact: true }).click();
+  assert.equal(await rowsOnPage.count(), 2);
+  await group.getByRole("textbox", { name: "群組社團名稱", exact: true }).fill("修正社");
+  await group.getByRole("button", { name: "關閉群組編輯", exact: true }).click();
+  await list.getByRole("checkbox", { name: "選取群組 B01235", exact: true }).check();
+  await list.getByRole("checkbox", { name: "選取群組 B01235-SECOND", exact: true }).check();
+  await list.getByRole("button", { name: "合併選取的 2 組", exact: true }).click();
+  assert.equal(await list.getByRole("button", { name: "確認合併", exact: true }).isDisabled(), true, "different names require a choice");
+  await list.getByRole("combobox", { name: "合併後保留的社團名稱" }).selectOption("修正社");
+  await list.getByRole("button", { name: "確認合併", exact: true }).click();
+  assert.equal(await rowsOnPage.count(), 1);
+  await list.getByRole("button", { name: "新增群組", exact: true }).click();
+  await group.getByRole("combobox", { name: "群組活動日", exact: true }).selectOption("day-2");
+  await group.getByRole("combobox", { name: "群組使用空間", exact: true }).selectOption("space-b");
+  await group.getByRole("textbox", { name: "群組社團名稱", exact: true }).fill("手動社");
+  const codesInput = group.getByRole("textbox", { name: /^群組攤位代碼/ });
+  await codesInput.fill("b00004");
+  await group.getByRole("alert").filter({ hasText: /重複/ }).waitFor();
+  const save = list.getByRole("button", { name: "儲存清單變更", exact: true });
+  assert.equal(await save.isDisabled(), true);
+  await codesInput.fill("A01A02");
+  await group.getByRole("button", { name: "確認每 3 字拆成一碼", exact: true }).click();
+  assert.equal(await codesInput.inputValue(), "A01、A02");
+  await group.getByRole("button", { name: "關閉群組編輯", exact: true }).click();
+  assert.equal(await organizer.getByLabel(/^來源檔案/).isDisabled(), true, "a file change cannot overwrite unsaved list editing");
+  await search.fill("");
+  await nextPage.click();
+  assert.equal(await rowsOnPage.count(), 100);
+  await search.fill("手動社");
+  assert.match(await rowsOnPage.first().innerText(), /手動新增／合併/);
+  assert.match(await rowsOnPage.first().innerText(), /無分區/);
+  await journey.capture(organizer, "organizer-roster-manual-draft");
+  assert.equal(savedImports, 0, "all five edits have stayed local");
+  await save.click();
+  await list.getByText("清單已儲存；公開活動尚未改變。", { exact: true }).waitFor();
+  assert.equal(savedImports, 1);
+  assert.equal(detail.import.rows.length, GROUP_COUNT);
+  assert.equal(detail.import.rows.some(row => row.codes.includes("A00001")), false);
+  const merged = detail.import.rows.find(row => row.codes.includes("B01235"));
+  assert.deepEqual(merged.codes, ["B01235", "B01235-SECOND"]);
+  assert.equal(merged.circleName, "修正社");
+  assert.equal(merged.identityGroup, "stable:internal-01235");
+  const manual = detail.import.rows.find(row => row.sourceRow === 0);
+  assert.deepEqual(manual.codes, ["A01", "A02"]);
+  assert.equal(manual.areaId, "ALL");
+  assert.equal(manual.identityGroup, null);
+  await organizer.reload();
+  await list.getByRole("heading", { name: "已儲存的攤位清單", exact: true }).waitFor();
+  await search.fill("手動社");
+  assert.match(await rowsOnPage.first().innerText(), /A01、A02/);
+  await list.getByRole("button", { name: "編輯清單", exact: true }).click();
+  await rowsOnPage.first().getByRole("button", { name: "編輯", exact: true }).click();
+  await group.getByRole("textbox", { name: "群組社團名稱", exact: true }).fill("衝突中的本機修改");
+  rejectNextImport = true;
+  await save.click();
+  await list.getByRole("alert").filter({ hasText: /本次草稿仍保留/ }).waitFor();
+  assert.equal(savedImports, 1);
+  assert.equal(detail.import.rows.find(row => row.sourceRow === 0).circleName, "手動社");
+  assert.equal(await group.getByRole("textbox", { name: "群組社團名稱", exact: true }).inputValue(), "衝突中的本機修改");
+  assert.equal(await save.isDisabled(), true);
+  await journey.capture(organizer, "organizer-roster-version-conflict");
 
   await journey.finish();
 } catch (error) {

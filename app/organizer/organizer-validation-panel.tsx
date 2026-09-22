@@ -75,7 +75,7 @@ export function OrganizerValidationIssueCard({ issue, detail }: { issue: Organiz
       <summary>查看全部 {issue.boothCodes.length} 個攤位代碼{missing ? "與匯入資料列" : ""}</summary>
       <div className={styles.validationCodes}><ul>{issue.boothCodes.map((code) => {
         const row = rowsByCode.get(code);
-        return <li key={code}><code>{code}</code>{row && <> — {row.circleName}（來源第 {row.sourceRow} 列）</>}</li>;
+        return <li key={code}><code>{code}</code>{row && <> — {row.circleName}（{row.sourceRow === 0 ? "手動新增／合併" : `來源第 ${row.sourceRow} 列`}）</>}</li>;
       })}</ul></div>
     </details>}
   </div>;

@@ -630,7 +630,7 @@ function StepContent({ session, detail, section, onSection, onChanged, onDirtyCh
   if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} />;
   if (section === "import") return detail.event.operation === "AMEND"
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
-    : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
+    : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />;
   if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
   if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
