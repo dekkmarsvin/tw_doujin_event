@@ -330,8 +330,12 @@ export function planSelectedSegmentEdges(layout: EventMapLayout, selections: rea
   const resolved = resolveSelectionBoxes(layout, selections);
   if (resolved.selections.length !== selections.length) return { ok: false as const, errors: ["選取的攤位已變更，請重新選取。"] };
   for (const selection of slotSelections(selections)) {
-    const rects = layout.rows[selection.rowIndex]?.slots.map(slot => slot.rect) ?? [];
-    if (contiguousSegment(rects, selection.itemIndex).orientation === "horizontal") {
+    const row = layout.rows[selection.rowIndex];
+    const segment = contiguousSegment(row.slots.map(slot => slot.rect), selection.itemIndex);
+    // A detached cell cannot establish direction. Respect its row's declared
+    // direction rather than the segment helper's default for a lone cell.
+    const orientation = segment.items.length > 1 ? segment.orientation : row.orientation;
+    if (orientation === "horizontal") {
       return { ok: false as const, errors: ["同步上下邊界只適用於直排；這個選取裡有橫排的攤位。"] };
     }
   }

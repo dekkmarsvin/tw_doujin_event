@@ -201,6 +201,11 @@ test("shared-edge preview rejects invalid values and non-vertical or mixed selec
   assert.match(planSelectedSegmentEdges(map, [picks[0], picks[2]]).errors[0], /無法辨識直排/);
   const horizontal = { ...map, rows: [10, 30].map(y => ({ label: String(y), orientation: "horizontal", slots: [10, 20].map(x => ({ code: `${x}-${y}`, rect: { x, y, width: 10, height: 10 } })) })) };
   assert.match(planSelectedSegmentEdges(horizontal, picks).errors[0], /橫排/);
+  const spacedHorizontal = { ...map, rows: [10, 40].map(y => ({ label: String(y), orientation: "horizontal", slots: [10, 40].map(x => ({ code: `${x}-${y}`, rect: { x, y, width: 10, height: 10 } })) })) };
+  assert.match(planSelectedSegmentEdges(spacedHorizontal, picks).errors[0], /橫排/, "gaps do not turn horizontal rows into vertical segments");
+  const mixedDirections = structuredClone(map);
+  mixedDirections.rows[0].orientation = "horizontal";
+  assert.equal(planSelectedSegmentEdges(mixedDirections, picks).ok, true, "a proven vertical segment can share a row with another orientation");
 });
 
 test("approved publication artifacts omit private guides entirely", async () => {
