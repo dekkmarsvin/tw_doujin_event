@@ -51,6 +51,7 @@ try {
 
   // 3. The admin is a different person with a different inbox.
   const admin = await signIn(journey, ADMIN, "circle");
+  await admin.getByRole("link", { name: "管理", exact: true }).click();
   const queue = admin.getByRole("button", { name: "核准", exact: true });
   await queue.waitFor();
   assert.match(await admin.locator("body").innerText(), new RegExp(CIRCLE_ID), "the queue names the circle under review");

@@ -28,7 +28,7 @@ npm run preview
 
 ## 啟動需要登入的 portal
 
-`/circle` 與 `/organizer` 需要 Pages Functions、session、Turnstile 與收信路徑；只跑 `npm run dev:pages` 會讓 `/api/*` 被 Vite 當成前台 fallback，因此不能用來測登入。完整的本機隔離環境使用：
+`/circle`、`/organizer` 與 `/admin` 需要 Pages Functions、session、Turnstile 與收信路徑；只跑 `npm run dev:pages` 會讓 `/api/*` 被 Vite 當成前台 fallback，因此不能用來測登入。完整的本機隔離環境使用：
 
 ```bash
 npm run dev:portal

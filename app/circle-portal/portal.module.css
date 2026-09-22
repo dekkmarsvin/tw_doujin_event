@@ -260,7 +260,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .editorActions button { width: 100%; }
 
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }
-.mapReviewPreview { max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.mapReviewPreview { --slot-tone: #5fa695; max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .mapReviewPreview svg { display: block; width: 100%; height: auto; }
 .auditList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
 /* 舊資料留下的多個值。每一個都是可移除的，因此是按鈕而不是純文字。 */

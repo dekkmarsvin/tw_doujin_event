@@ -102,7 +102,7 @@ test("field state is described by what shows, not by inherit/replace/clear", asy
   assert.match(app, /onClick=\{onClear\}>不顯示<\/button>/);
   assert.doesNotMatch(app, /目前：<b>/);
   for (const modelWord of [/沿用場刊/, /社團自填/, /清除此欄/, /補充資料/]) {
-    assert.doesNotMatch(app.slice(0, app.indexOf("function AdminPanel")), modelWord);
+    assert.doesNotMatch(app, modelWord);
   }
 });
 
@@ -145,7 +145,7 @@ test("the age rating group carries no explanation beyond its own checkboxes", as
 });
 
 test("only a load the reader asked for moves the refresh button", async () => {
-  const app = await source("portal-app.tsx");
+  const app = await readFile(new URL("../app/admin/admin-panels.tsx", import.meta.url), "utf8");
 
   // The queue polls every 30 seconds and on every return to the tab. Those
   // used to run the same `refresh` the button ran, so the label flipped to

@@ -83,7 +83,7 @@ test("keeps the reader separate from the control surfaces but linked to them", a
   const html = await readFile(dist("index.html"), "utf8");
   const readerAssets = assetsIn(html);
 
-  for (const entry of ["circle.html", "organizer.html"]) {
+  for (const entry of ["circle.html", "organizer.html", "admin.html"]) {
     const entryAssets = assetsIn(await readFile(dist(entry), "utf8"));
     assert.ok(entryAssets.some((path) => !readerAssets.includes(path)), `${entry} must have its own entry chunk`);
   }
@@ -96,4 +96,19 @@ test("keeps the reader separate from the control surfaces but linked to them", a
   // Entry separation is a code boundary, not concealment: a circle who only
   // ever sees the reader still needs a way in (ADR-0043).
   assert.match(readerJs, /\/circle/, "the reader must link circles to their portal");
+});
+
+test("admin is a noindex entry with no private assets in the reader precache", async () => {
+  const dist = path => new URL(`../dist/${path}`, import.meta.url);
+  const admin = await readFile(dist("admin.html"), "utf8");
+  const reader = await readFile(dist("index.html"), "utf8");
+  assert.match(admin, /<meta name="robots" content="noindex, nofollow"/);
+  assert.match(admin, /網站管理｜場刊 Map/);
+  const manifest = JSON.parse((await readFile(dist("sw.js"), "utf8")).match(/const PRECACHE_MANIFEST = (\[[^\]]*\]);/)[1]);
+  assert.equal(manifest.includes("/admin.html"), false);
+  const privateAssets = assetsIn(admin).filter(asset => !assetsIn(reader).includes(asset));
+  assert.ok(privateAssets.length > 0);
+  for (const asset of privateAssets) assert.equal(manifest.includes(asset), false, `admin-only ${asset} must not be precached`);
+  const headers = await readFile(dist("_headers"), "utf8");
+  assert.match(headers, /\/admin\*\r?\n\s+X-Robots-Tag: noindex, nofollow/);
 });
