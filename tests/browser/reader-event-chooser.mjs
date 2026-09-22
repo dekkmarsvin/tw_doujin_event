@@ -1,7 +1,8 @@
 // staged-data: fixture
 //
-// Replaces the SSR string assertions in `tests/event-chooser-component.test.mjs`
-// with the reader's own first screen. What matters here is not that the markup
+// Exercises published entries and unknown-event handling on the reader's first
+// screen; calendar edge cases and the empty state remain in the component suite.
+// What matters here is not that the markup
 // contains a name, but that a reader arriving from a stale or mistyped link is
 // told the link is dead and is left holding the list — and is never quietly
 // dropped into a different event, which is the failure a catalogue link would
@@ -10,7 +11,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { start } from "./support/journey.mjs";
 
-const fixture = async (eventId) => JSON.parse(await readFile(new URL(`../../fixtures/events/${eventId}/event.json`, import.meta.url), "utf8"));
+const fixture = async (eventId) => {
+  const read = async (file) => JSON.parse(await readFile(new URL(`../../fixtures/events/${eventId}/${file}`, import.meta.url), "utf8"));
+  const [event, references] = await Promise.all([read("event.json"), read("reference-records.json")]);
+  const venue = references.find((record) => record.schema === "venue/1" && record.id === event.venueAssignments[0].venueId);
+  assert.ok(venue, `${eventId} must have its own pinned venue reference`);
+  return { ...event, venue: venue.name };
+};
 // Read from the fixtures rather than restated here, so adding a fixture event
 // or renaming one cannot leave this journey asserting a name nobody ships.
 const events = await Promise.all(["sample", "sample-two"].map(fixture));
@@ -26,10 +33,10 @@ try {
     for (const [index, event] of events.entries()) {
       const entry = page.getByRole("link", { name: new RegExp(event.name) });
       await entry.waitFor();
-      const text = await entry.innerText();
-      assert.ok(text.includes(["26.09.01-02", "26.10.01-04"][index]), `${event.id} must show its calendar dates`);
-      assert.ok(text.length > event.name.length, `${event.id} must offer more than a bare name`);
       assert.equal(await page.locator(`a[href="/events/${event.id}/"]`).count(), 1, `${event.id} has one introduction link`);
+      const summary = `${["26.09.01-02", "26.10.01-04"][index]} · ${event.venue}`;
+      assert.equal(await entry.getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
+      assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
     }
     await journey.capture(page, "chooser-lists-published-events");
     await page.close();

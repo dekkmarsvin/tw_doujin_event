@@ -3,7 +3,7 @@
 URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。
 
 **實作**：[`app/event-url-state.ts`](../../app/event-url-state.ts)（schema、defaults、codec、活動解析與 history intent）、[`app/event-entry.tsx`](../../app/event-entry.tsx)（選擇器與讀者畫面的分流）、[`app/event-chooser.tsx`](../../app/event-chooser.tsx) 與 [`app/event-calendar.ts`](../../app/event-calendar.ts)（活動日期、排序及分組）、[`app/map-view-state.ts`](../../app/map-view-state.ts)（選取解析）、[`app/event-workspace-projection.ts`](../../app/event-workspace-projection.ts)（共享衍生狀態）、[`app/seo.ts`](../../app/seo.ts)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)（搜尋入口與 metadata）
-**測試**：`tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`
+**測試**：`tests/event-url-state.test.mjs`、`tests/event-chooser-component.test.mjs`、[tests/browser/reader-event-chooser.mjs](../../tests/browser/reader-event-chooser.mjs)、`tests/map-view-state.test.mjs`、`tests/event-workspace-projection.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`
 
 Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立會和 Pages `index.html` 正規化衝突的 SPA rewrite。公開介紹頁使用下述真正的靜態目錄，不承載 Reader 互動狀態。
 
