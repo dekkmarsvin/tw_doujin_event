@@ -58,13 +58,14 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady 
     editFormRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>("input,select")?.focus({ preventScroll: true });
   }, [activeKey]);
   const normalized = useMemo(() => entries.map(entry => normalizeRosterRow(entry.row, detail.draft)), [entries, detail.draft]);
+  const needsAreaUpdate = normalized.some((row, index) => row.areaId !== entries[index].row.areaId);
   const errors = useMemo(() => rosterIssues(normalized, detail.draft), [normalized, detail.draft]);
   const limitError = useMemo(() => normalized.length > 20_000 ? "清單最多 20,000 列。"
     : new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024 ? "清單超過 8 MB，請縮短欄位內容或核對活動範圍。" : null, [normalized]);
   const save = useCallback(async () => {
     if (!detail.import || !editable || busy || conflict) return false;
     if (errors.size || limitError) { setNotice("請先修正清單中的問題，再儲存。"); return false; }
-    if (!dirty) return true;
+    if (!dirty && !needsAreaUpdate) return true;
     setBusy(true); setNotice("");
     try {
       const withAreas = withOrganizerImportedAreaIds(detail.draft, normalized);
@@ -86,7 +87,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady 
       if (error instanceof PortalError && error.status === 409) setConflict(true);
       return false;
     } finally { setBusy(false); }
-  }, [detail, editable, busy, conflict, errors.size, limitError, dirty, normalized, expectedVersion, onDirtyChange, onChanged]);
+  }, [detail, editable, busy, conflict, errors.size, limitError, dirty, needsAreaUpdate, normalized, expectedVersion, onDirtyChange, onChanged]);
   useEffect(() => { onSaveReady(save); return () => onSaveReady(null); }, [save, onSaveReady]);
   const change = (next: Entry[]) => { setEntries(next); setDirty(true); setNotice(""); };
   const update = (key: number, patch: Partial<OrganizerNormalizedImportRow>) => {
@@ -125,6 +126,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady 
     {source && <details><summary>匯入出處</summary><p>{source.fileName}{source.worksheet ? `・${source.worksheet}` : ""}・{source.sourceDescription}</p>
       <p style={{ overflowWrap: "anywhere" }}>原檔 SHA-256：{source.sha256}</p><p>此雜湊只識別原始檔，編輯後清單以儲存版本與送審快照為準。來源列只供回查原檔。</p></details>}
     {editable && !editing && <button type="button" onClick={() => setEditing(true)}>編輯清單</button>}
+    {editable && needsAreaUpdate && <p role="status">使用空間已改為無分區，儲存清單即可套用。</p>}
     {editing && <fieldset className={styles.formFields} disabled={!editable || busy} aria-label="清單編輯">
       <div className={styles.row}>
         <button type="button" disabled={entries.length >= 20_000} onClick={() => {
@@ -133,7 +135,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady 
           change([...entries, { key: nextKey, row }]); setActiveKey(nextKey); setNextKey(nextKey + 1); setSplitCodes(null);
         }}>新增群組</button>
         <button type="button" disabled={!!mergeError} onClick={() => { setMerging(true); setMergeName(names.length === 1 ? names[0] : ""); }}>合併選取的 {chosen.length} 組</button>
-        <button type="button" disabled={!dirty || conflict || errors.size > 0 || !!limitError} onClick={() => { void save(); }}>{busy ? "儲存中…" : "儲存清單變更"}</button>
+        <button type="button" disabled={(!dirty && !needsAreaUpdate) || conflict || errors.size > 0 || !!limitError} onClick={() => { void save(); }}>{busy ? "儲存中…" : "儲存清單變更"}</button>
         <button type="button" className={styles.ghost} onClick={() => { void discard(); }}>{dirty || conflict ? "放棄變更並重新載入" : "結束編輯"}</button>
       </div>
       {chosen.length > 1 && mergeError && <p role="alert">{mergeError}</p>}

@@ -310,6 +310,24 @@ try {
   assert.equal(await save.isDisabled(), true);
   await journey.capture(organizer, "organizer-roster-version-conflict");
 
+  await list.getByRole("button", { name: "放棄變更並重新載入", exact: true }).click();
+  await list.getByRole("button", { name: "編輯清單", exact: true }).waitFor();
+  const assignment = detail.draft.venue.assignments.find(space => space.venueSpaceId === "space-a");
+  assignment.areaMode = "none";
+  assignment.areaIds = ["ALL"];
+  event.version = ++detail.event.version;
+  assert.equal(detail.import.rows.some(row => row.venueSpaceId === "space-a" && row.areaId !== "ALL"), true);
+  await organizer.reload();
+  await list.getByRole("button", { name: "編輯清單", exact: true }).click();
+  await list.getByText("使用空間已改為無分區，儲存清單即可套用。", { exact: true }).waitFor();
+  assert.equal(await save.isDisabled(), false, "a changed space mode can be applied without editing an unrelated field");
+  await save.click();
+  await list.getByText("清單已儲存；公開活動尚未改變。", { exact: true }).waitFor();
+  assert.equal(savedImports, 2);
+  assert.equal(detail.import.rows.every(row => row.areaId === "ALL"), true);
+  assert.equal(await save.isDisabled(), true);
+  await journey.capture(organizer, "organizer-roster-undivided-save");
+
   await journey.finish();
 } catch (error) {
   await journey.abort(error);
