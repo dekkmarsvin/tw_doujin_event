@@ -24,7 +24,7 @@ async function routes(page, { isAdmin, failure = 0 }) {
 }
 
 try {
-  for (const entry of ["circle", "organizer"]) for (const isAdmin of [false, true]) {
+  for (const entry of ["circle", "organizer", "admin"]) for (const isAdmin of [false, true]) {
     const name = `${entry}-${isAdmin ? "admin" : "member"}`;
     const page = await journey.page({ url: `${base}/${entry}`, routes: page => routes(page, { isAdmin }) });
     currentPage = page;
@@ -32,8 +32,9 @@ try {
     assert.equal(await page.locator("time").getAttribute("datetime"), new Date(now + week).toISOString());
     await journey.capture(page, `${name}-session-deadline`);
     await page.clock.fastForward(week);
-    await page.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
+    await page.getByText(entry === "admin" ? "登入已到期，請前往社團入口重新登入。" : "登入已到期，請重新登入。", { exact: true }).waitFor();
+    if (entry === "admin") await page.getByRole("link", { name: "前往社團入口登入", exact: true }).waitFor();
+    else await page.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
     assert.equal(await page.getByRole("button", { name: "登出", exact: true }).count(), 0);
     await journey.capture(page, `${name}-expired`);
     await page.close();
