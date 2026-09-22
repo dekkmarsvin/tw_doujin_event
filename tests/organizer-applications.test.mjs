@@ -88,6 +88,23 @@ test("submission retries are idempotent without exposing or overwriting another 
   assert.equal((await review(undefined, id)).status, 401);
 });
 
+test("an admin's own submission immediately carries the same review identity as the list", async () => {
+  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config,
+    organizerApplicationAllowedEmails: ["applicant@example.test", "admin@example.test"] } });
+  const admin = await signIn("admin@example.test");
+  const id = crypto.randomUUID();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await submit(admin, id);
+    assert.equal(response.status, 201);
+    const application = (await response.json()).application;
+    assert.equal(application.applicantEmail, "admin@example.test");
+    const listed = await (await handlers.listEventApplications(request(PATH, "GET", undefined, admin))).json();
+    assert.deepEqual(application, listed.applications[0]);
+  }
+  const applicant = await signIn("applicant@example.test");
+  assert.equal((await created(applicant)).applicantEmail, undefined);
+});
+
 test("concurrent approvals create one draft, revision, invitation and grant; retry cannot restore revoked access", async () => {
   const owner = await signIn("applicant@example.test");
   const admin = await signIn("admin@example.test");
