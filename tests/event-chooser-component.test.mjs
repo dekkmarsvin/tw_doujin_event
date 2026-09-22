@@ -28,7 +28,7 @@ test("every published event is offered with what a reader needs to tell them apa
   }
   assert.ok(html.includes("26.11.07-08"));
   assert.ok(html.includes("27.02.14"));
-  assert.equal(html.match(/<a href/g).length, events.length, "one entry per event, and nothing else to press");
+  assert.equal(html.match(/<a\b[^>]*href=/g).length, events.length * 2, "each event offers its map and static introduction");
   // Entries are addressable without running the bundle: the markup alone has to
   // name where each event lives, or nothing off-site can reach one.
   for (const event of events) assert.ok(html.includes(`href="?event=${event.id}"`), `${event.id} must be linked, not just pressable`);
@@ -43,7 +43,7 @@ test("a link to an event this build does not serve says so instead of opening an
   // Naming the missing event would invite reading it as a real event.
   assert.doesNotMatch(html, /event-c/);
   // The way forward is still the list.
-  assert.equal(html.match(/<a href/g).length, events.length);
+  assert.equal(html.match(/<a\b[^>]*href=/g).length, events.length * 2);
 });
 
 test("nothing is offered that was not published", () => {

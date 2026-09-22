@@ -3,3 +3,4 @@
 # 改由 `_headers` 的 X-Robots-Tag 與各自的 meta 宣告 noindex，讓爬蟲讀得到。
 User-agent: *
 Disallow:
+Sitemap: https://map.kotoban.top/sitemap.xml

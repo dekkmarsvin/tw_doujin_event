@@ -13,7 +13,7 @@ try {
       const level = () => page.locator("main").getAttribute("data-mobile-sheet-level");
       const handle = dock.locator('button[class*="mobileSheetHandle"]');
       await dock.getByRole("button", { name: "探索", exact: true }).click();
-      await page.getByRole("button", { name: "S01 北風畫室", exact: true }).click();
+      await page.getByRole("link", { name: "S01 北風畫室", exact: true }).click();
       assert.equal(await level(), "half");
       const url = page.url();
       const transform = await page.locator(".floor").evaluate((el) => el.style.transform);
@@ -71,7 +71,7 @@ try {
     }
   }
   const desktop = await run.mapPage();
-  await desktop.getByRole("button", { name: "S01 北風畫室", exact: true }).click();
+  await desktop.getByRole("link", { name: "S01 北風畫室", exact: true }).click();
   await desktop.getByRole("button", { name: "開啟完整詳細資訊", exact: true }).click();
   const dialog = desktop.getByRole("dialog");
   await dialog.waitFor();

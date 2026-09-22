@@ -130,7 +130,7 @@ try {
         assert.equal(await page.getByRole("button", { name: "開始導航", exact: true }).getAttribute("aria-pressed"), "false");
         await page.getByRole("tab", { name: "探索", exact: true }).click();
         // The result remains a 44px target even when the map slot is tiny.
-        await page.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+        await page.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
         await pause(page);
         const selected = await capture(page, `${prefix}-selected`);
         assert.equal(selected.zoom, overview.zoom, "selection does not zoom");
@@ -149,7 +149,7 @@ try {
         assert.equal(await page.locator("main").getAttribute("data-mobile-sheet-level"), "full");
         assert.equal((await state(page)).zoom, overview.zoom, "full workspace does not change fit");
         await page.getByRole("button", { name: "縮小工作面板", exact: true }).click();
-        await page.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+        await page.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
         await pause(page);
         const selected = await capture(page, `${prefix}-summary`);
         assert.equal(selected.zoom, overview.zoom, "summary does not change zoom");
@@ -206,7 +206,7 @@ try {
   assert.equal(await page.locator("#desktop-tab-plan").getAttribute("aria-selected"), "true");
   await page.keyboard.press("Home");
   assert.equal(await results.evaluate((node) => node.scrollTop), scrollTop, "explore scroll survives tab switch");
-  const source = results.locator('button[class*="resultMain"]').filter({ hasText: /^A01/ }).first();
+  const source = results.locator('a[class*="resultMain"]').filter({ hasText: /^A01/ }).first();
   await source.click();
   await pause(page);
   const selectedUrl = page.url();
@@ -358,7 +358,7 @@ try {
   loadingMap.setDefaultTimeout(10000);
   await loadingMap.route("**/map.json", async (route) => { await mapGate; await route.continue(); });
   await loadingMap.goto(`${base}/?event=ff47`);
-  await loadingMap.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+  await loadingMap.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
   releaseMap();
   await loadingMap.locator(".floor").waitFor();
   await pause(loadingMap);
@@ -367,7 +367,7 @@ try {
   await loadingMap.close();
 
   const keyboard = await open();
-  await keyboard.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+  await keyboard.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
   await pause(keyboard);
   await keyboard.locator('[data-slot-code="A01"]').focus();
   await keyboard.keyboard.press("ArrowLeft");
@@ -394,7 +394,7 @@ try {
 
   const history = await open();
   await history.getByRole("button", { name: "放大地圖", exact: true }).click();
-  await history.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+  await history.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
   await pause(history);
   const beforeDay = await state(history);
   await history.getByRole("tab", { name: /^DAY 2/ }).click();
@@ -453,7 +453,7 @@ try {
   const zero = await open();
   const beforeZero = await state(zero);
   await zero.locator(".map").evaluate((node) => { node.style.width = "0px"; });
-  await zero.getByRole("button", { name: "A01 OriginZero", exact: true }).click();
+  await zero.getByRole("link", { name: "A01 OriginZero", exact: true }).click();
   await zero.getByRole("button", { name: "A03 MAI", exact: true }).click();
   await pause(zero);
   assert.deepEqual((await state(zero)).offset, beforeZero.offset, "zero geometry defers positioning");

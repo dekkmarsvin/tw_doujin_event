@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { groupCalendarEvents, taipeiDate } from "./event-calendar";
 import styles from "./event-chooser.module.css";
+import { eventPath } from "./seo";
 
 /**
  * The public entry when a URL names no event, or names one this build does not
@@ -61,6 +62,7 @@ export default function EventChooser({ events, unresolved, onSelect }: {
             </span>
             <span className={styles.arrow} aria-hidden="true">→</span>
           </a>
+          <a className={styles.introduction} href={eventPath(event.id)}>活動介紹與社團名單</a>
         </li>)}
         </ul>
       </section>)}

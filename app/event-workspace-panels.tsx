@@ -7,6 +7,7 @@ import type { CircleCatalogStatus, CircleMedia, CircleViewRecord, SourceContentT
 import type { CircleMatchReason } from "./circle-search";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
+import { circlePath } from "./seo";
 import styles from "./event-workspace-panels.module.css";
 
 const RESULT_LIMIT = 80;
@@ -83,14 +84,18 @@ export function SearchResults({ records, catalogStatus, catalogError, selectedId
         // where the reader is asking why a row is here.
         const reasons = density === "informative" ? matchReasons.get(record.recordId) ?? [] : [];
         return <article key={record.recordId} className={`${selectedId === record.recordId ? styles.selectedResult : ""} ${density === "compact" ? styles.compactResult : ""}`}>
-          <button className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={() => onSelect(record)}>
+          <a href={circlePath(record.placement.eventId, record.circle.id)} className={`${styles.resultMain} ${mediaCount > 0 && thumbnail ? styles.resultWithMedia : ""}`} onClick={(click) => {
+            if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+            click.preventDefault();
+            onSelect(record);
+          }}>
             {mediaCount > 0 && thumbnail && <span className={styles.resultMedia}><img src={thumbnail.url} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>}
             <span className={`${styles.boothCode} ${styles[record.tone]}`}>{record.code}</span>
             <span className={styles.resultCopy}><b>{record.name}</b>{density === "informative" && <>{circleSummary.length > 0 && <small>{circleSummary.join(" · ")}</small>}{showsCircleAuthoredContent && <small className={styles.sourceHint}>由社團填寫</small>}{reasons.length > 0 && <span className={styles.matchReasons}>{reasons.map((reason) => <em key={reason.id}>{reason.label}</em>)}</span>}</>}</span>
             {favoriteGroupLabels.has(record.circle.id) && <span className={styles.state}>收藏：{favoriteGroupLabels.get(record.circle.id)}</span>}
             {record.placement.status !== "active" && <span className={styles.retiredState}>{placementStatusLabel(record.placement.status)}</span>}
             {plan && <span className={styles.state}>{plan.status === "visited" ? "已走訪" : plan.status === "next" ? "下一站" : "行程"}</span>}
-          </button>
+          </a>
           <button className={`${styles.heart} ${favoriteIds.has(record.circle.id) ? styles.saved : ""}`} onClick={() => onToggleFavorite(record)} aria-label={favoriteIds.has(record.circle.id) ? `取消收藏 ${record.name}` : `收藏 ${record.name}`}><UiIcon name="heart" /></button>
         </article>;
       })}

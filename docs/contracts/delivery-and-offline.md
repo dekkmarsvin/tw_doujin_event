@@ -1,5 +1,13 @@
 # 資料傳輸與離線契約
 
+## 公開搜尋介紹頁
+
+`scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
+
+介紹頁由 Pages 靜態直送，不經 Function，不新增資料寫入。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址；無資料的地址、售票與開場時間省略，不保證 rich result 資格。
+
+介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。原 query 地圖仍使用既有離線行為。介紹頁及 sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證，避免舊活動／配置長期停留在瀏覽器；這不新增輪詢。
+
 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。
 
 **實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)

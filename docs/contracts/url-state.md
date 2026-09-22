@@ -7,7 +7,20 @@ URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖�
 
 ## 參數
 
-所有可分享狀態都掛在根路徑的 query string，不建立會和 Pages `index.html` 正規化衝突的 SPA rewrite。
+Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立會和 Pages `index.html` 正規化衝突的 SPA rewrite。公開介紹頁使用下述真正的靜態目錄，不承載 Reader 互動狀態。
+
+## 搜尋入口與主要網址
+
+依 #338，公開活動介紹使用 `/events/<eventId>/`，社團在該活動的介紹使用 `/events/<eventId>/circles/<circleId>/`。它們是在 build 時從同一份已發布活動／reviewed base 產生的 `index.html`，不是 SPA fallback。社團頁集中呈現跨日、多攤位與已移動／已取消狀態；每筆配置以既有 query URL 回到正確日期、場館空間與攤位。未知靜態路徑沿用真實 404。
+
+- 首頁提供活動地圖與活動介紹的 href；每個活動介紹列出全部有配置的社團 href，不依賴「載入更多」。Reader 清單的一般點擊保持地圖選取，修改鍵／新分頁可開啟靜態社團頁。
+- 首頁 canonical 為正式網域 `/`；Reader 有效活動指向活動介紹，已解析且有效的社團選取指向該社團介紹。未驗證的 query 值不產生社團 canonical。篩選、排序、收藏及日／攤位選取不另建索引頁，原 URL 與還原語意不變。
+- 不存在或未發布活動仍顯示 fail-closed 提示，渲染後加 noindex；切回有效活動／首頁時清除。控制面的 noindex 不由 Reader 管理。
+- 共用 Reader 原始 HTML 提供品牌 metadata 與活動摘要，不硬寫首頁 canonical／og:url 給所有 query。React 啟動後取代摘要；活動／社團介紹的原始 HTML 則已有專屬 metadata、絕對 canonical 與 OG／Twitter Card。
+- sitemap 僅列首頁、已發布活動及其有配置的社團介紹，不列 Reader 互動變體、控制面或個人資料；隨同一次 build 更新。不捏造 lastmod。
+- Pages production origin 繼續可用於 smoke，canonical 指向正式網域。canonical 是搜尋提示，不保證搜尋引擎收錄或選擇結果。
+
+實作：`app/seo.ts`、`app/static-discovery.ts`、`scripts/build-discovery-pages.mjs`。測試：`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`、既有 Reader 瀏覽器驗收。
 
 | 參數 | 負責模組 | 說明 |
 |---|---|---|

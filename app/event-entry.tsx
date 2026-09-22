@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import EventChooser from "./event-chooser";
 import EventMapApp from "./event-map-app";
+import { applyReaderMetadata, pageMetadata } from "./seo";
 import { PUBLISHED_EVENTS, type EventDefinition } from "./event-catalog";
 import { resolveUrlEvent, type ResolvedUrlEvent } from "./event-url-state";
 
@@ -19,6 +20,11 @@ const resolve = (): ResolvedUrlEvent => resolveUrlEvent(
  */
 export default function EventEntry() {
   const [resolved, setResolved] = useState<ResolvedUrlEvent>(resolve);
+
+  useEffect(() => {
+    // EventMapApp owns valid event/selection metadata after catalog resolution.
+    if (resolved.kind !== "event") applyReaderMetadata(pageMetadata(), resolved.kind === "unpublished");
+  }, [resolved]);
 
   useEffect(() => {
     const onPopState = () => {
