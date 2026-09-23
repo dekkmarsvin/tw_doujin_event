@@ -1668,9 +1668,15 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const method: ClaimMethod = "admin";
+    // Approving and rejecting decide a pending claim. The queue a reviewer
+    // decides from can be seconds old, and a batch can hold many rows: a
+    // rejection that landed on a claim approved meanwhile would withdraw the
+    // owner's content under the name of a rejection. Withdrawing an owner is
+    // what revoke is for.
     const ok = decision === "approve"
       ? await repository.markClaimVerified(claimId, method, now, gate.session.email)
-      : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email);
+      : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email,
+        decision === "reject" ? "pending" : undefined);
 
     // Revoking ownership withdraws that circle's content in the same step. The
     // phase has to be the current one: rebuilding as "during" after the event
@@ -1684,7 +1690,8 @@ export function createCirclePortalHandlers({
       detail: { circleId: claim.circle_id, applied: ok, evidenceUrl: claim.evidence_url },
       ipHash: await clientIpHash(request),
     });
-    return ok ? json({ ok: true }) : json({ error: "此社團已有通過的認領。" }, 409);
+    if (ok) return json({ ok: true });
+    return json({ error: decision !== "revoke" && claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
   }
 
   async function adminListAdmins(request: Request) {

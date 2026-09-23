@@ -6,7 +6,21 @@ import type { MapCandidateDiff, MapDraftProblem } from "../map-contribution-draf
 import { IDLE, STATUS_LABEL, TARGET_LABEL, CommentThread, DraftList, draftScopeLabel, EvidenceList, Preview, Problems, StatusNotice, message, type Detail, type Status } from "../map-contribution-panels";
 import styles from "../circle-portal/portal.module.css";
 
+/**
+ * The picker stays mounted across event changes, so a keyboard change of the
+ * event keeps focus on it; only the review body below is keyed to the event,
+ * which drops every draft-scoped field with the event it was typed against.
+ */
 export function AdminMapReviewPanel({ event, picker }: { event: EventDefinition; picker?: ReactNode }) {
+  return <section className={`${styles.card} ${styles.editorCard} ${styles.admin}`} id="map-review" aria-labelledby="map-review-heading">
+    <h2 id="map-review-heading">地圖草稿審閱</h2>
+    <p>核准與匯出地圖都不會直接發布。</p>
+    {picker}
+    <MapReviewBody key={event.id} event={event} />
+  </section>;
+}
+
+function MapReviewBody({ event }: { event: EventDefinition }) {
   const [drafts, setDrafts] = useState<MapDraftSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -64,10 +78,7 @@ export function AdminMapReviewPanel({ event, picker }: { event: EventDefinition;
     URL.revokeObjectURL(url);
   };
 
-  return <section className={`${styles.card} ${styles.editorCard} ${styles.admin}`} id="map-review" aria-labelledby="map-review-heading">
-    <h2 id="map-review-heading">地圖草稿審閱</h2>
-    <p>核准與匯出地圖都不會直接發布。</p>
-    {picker}
+  return <>
     <DraftList event={event} drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "審閱資料已載入。")} />
     {detail && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{draftScopeLabel(event, detail.draft.period_key, detail.draft.venue_space_id)}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
@@ -131,5 +142,5 @@ export function AdminMapReviewPanel({ event, picker }: { event: EventDefinition;
     </>}
     <Problems problems={problems} />
     <StatusNotice status={status} onReload={detail ? () => void run(() => openDraft(detail.draft.id), "審閱資料已載入。") : null} />
-  </section>;
+  </>;
 }

@@ -819,11 +819,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
   }
 
-  async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null) {
+  /** `from` makes the change conditional on the status the caller decided
+   * against, so a decision made on a stale list cannot rewrite a later one. */
+  async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null, from?: ClaimStatus) {
     await ensureTables();
     const result = await database.prepare(
-      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4`,
-    ).bind(status, reviewedBy, now, id).run();
+      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND (?5 IS NULL OR status = ?5)`,
+    ).bind(status, reviewedBy, now, id, from ?? null).run();
     return result.meta.changes === 1;
   }
 

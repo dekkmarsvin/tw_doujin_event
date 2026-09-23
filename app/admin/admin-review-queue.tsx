@@ -68,6 +68,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
   const busy = useRef(false);
   const mounted = useRef(true);
   const dialog = useRef<HTMLDivElement>(null);
+  const summaryLine = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -161,10 +162,17 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
     return next;
   });
 
+  /** Starts a decision: a background answer already in flight is dropped, so
+   * nothing replaces the list until the decision reloads it itself. */
+  const holdQueue = () => {
+    busy.current = true;
+    ++requestVersion.current.version;
+    setWorking(true);
+  };
+
   const decideOne = (claim: QueuedClaim, decision: ClaimDecision) => {
     if (busy.current) return;
-    busy.current = true;
-    setWorking(true);
+    holdQueue();
     // Row messages report the last action only; one left from an earlier batch
     // would read as a reason for something that has not happened since.
     setSummary(null);
@@ -187,12 +195,16 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
   };
 
   const runBatch = async (batch: ClaimBatchPlan) => {
-    busy.current = true;
-    setWorking(true);
+    holdQueue();
     setSummary(null);
     setMessages({});
     const reasons: Record<string, string> = {};
-    for (const skip of batch.skipped) for (const id of skip.ids) reasons[id] = `${skipReason(skip)}。`;
+    const skippedIds = batch.skipped.flatMap((skip) => skip.ids);
+    // A circle that already has an owner says so on its own row; repeating the
+    // same words underneath would only say it twice.
+    for (const skip of batch.skipped) {
+      if (skip.reason === "duplicate") for (const id of skip.ids) reasons[id] = `${skipReason(skip)}。`;
+    }
     let done = 0;
     for (const [index, claim] of batch.go.entries()) {
       setProgress({ done: index, total: batch.go.length });
@@ -212,15 +224,21 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
     }
     busy.current = false;
     if (!mounted.current) return;
-    const left = Object.keys(reasons).length;
+    const unfinished = new Set([...skippedIds, ...Object.keys(reasons)]);
+    const left = unfinished.size;
     const verb = VERB[batch.decision];
     setMessages(reasons);
+    // A reason on a row the filter hides would be a reason nobody can read.
+    if ([...unfinished].some((id) => !visible.some((claim) => claim.id === id))) setFilter(ALL_EVENTS);
     setSelected(new Set());
     setSummary({ kind: left ? "mixed" : "ok", text: `已${verb} ${done} 筆。${left ? `${left} 筆未${verb}，原因標在各列。` : ""}` });
     setProgress(null);
     setPlan(null);
     setWorking(false);
     refresh(false);
+    // The dialog hands focus back to the button that opened it, which the
+    // cleared selection has just disabled; the outcome is the next thing to read.
+    window.requestAnimationFrame(() => summaryLine.current?.focus());
   };
 
   const openBatch = (decision: ClaimDecision) => {
@@ -291,7 +309,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
             aria-pressed={filter === chip.id} onClick={() => setFilter(chip.id)}>{chip.label} <span>{chip.count}</span></button>)}
         </div>}
       </div>
-      {summary && <p className={summary.kind === "ok" ? styles.notice : styles.warningNotice} role="status">{summary.text}</p>}
+      {summary && <p ref={summaryLine} tabIndex={-1} className={summary.kind === "ok" ? styles.notice : styles.warningNotice} role="status">{summary.text}</p>}
       {!queue ? loading && <p className={styles.notice}>載入中…</p>
         : visible.length === 0 ? <p>目前沒有待審項目。</p>
           : <>

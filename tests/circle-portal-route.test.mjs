@@ -1515,6 +1515,25 @@ test("the review queue gathers every served event's work, and each claim says it
   }
 });
 
+test("a rejection sent from a stale list does not undo an approval", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const id = await approve(owner, "ff47-site", admin);
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { saleInfo: "已公開" } }, owner), "ff47-site")).status, 200);
+
+  // A second reviewer's queue still shows the claim as pending.
+  const stale = await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "reject" }, admin));
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).error, "這筆認領已不在待審中。");
+  assert.equal((await repository.getClaim(id)).status, "verified");
+  const published = await (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json();
+  assert.equal(published.overrides.find((entry) => entry.circleId === "ff47-site").fields.saleInfo, "已公開");
+
+  // Approving it again is refused the same way, not reported as a rival owner.
+  const again = await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin));
+  assert.equal((await again.json()).error, "這筆認領已不在待審中。");
+});
+
 test("an event this deployment does not serve is a 404, not another event's data", async () => {
   const owner = await signIn("owner@example.com");
   const unknown = handlersForEvent("ff99");

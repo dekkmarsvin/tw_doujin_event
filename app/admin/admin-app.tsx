@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { readSession, setPortalEventId, signOut, type PortalSession } from "../circle-editor-client";
 import { getPublishedEvent, PUBLISHED_EVENTS } from "../event-catalog";
 import { nearestEvent, taipeiDate } from "../event-calendar";
@@ -81,9 +81,7 @@ export default function AdminApp() {
               <a href="#overview">待審總覽</a> · <a href="#admin">社團認領</a> · <a href="#map-review">地圖草稿審閱</a> · <a href="#takedown">撤下補充資料</a> · <a href="#accounts">管理者名單</a> · <a href="#review-notifications">待審通知</a>
             </nav>
             <AdminReviewQueue initialEventId={claimFilter} onOpenMaps={openMaps} />
-            <Fragment key={event.id}>
-              <AdminMapReviewPanel event={event} picker={<AdminEventSelect id="map-review-event" value={event.id} onChange={chooseMapEvent} />} />
-            </Fragment>
+            <AdminMapReviewPanel event={event} picker={<AdminEventSelect id="map-review-event" value={event.id} onChange={chooseMapEvent} />} />
             <AdminTakedownPanel initialEventId={event.id} />
             <AdminRoster />
             <AdminNotificationPanel email={session.email} />
