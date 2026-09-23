@@ -153,8 +153,8 @@
   .mapTools .routeMain b { max-width:100%; }
   .mapTools .navigationBanner button { min-height:44px; min-width:44px; }
   .planPanel>.navigationToggle { flex:0 0 auto; align-self:stretch; justify-content:center; min-height:44px; margin:10px; }
-  .mapCanvas>.rightRail { position:absolute; z-index:3; top:16px; bottom:76px; right:16px; width:min(330px,calc(100% - 32px)); display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px #202a3526; cursor:auto; touch-action:auto; }
-  .detailSlot { min-height:0; flex:1; }
+  .mapCanvas>.rightRail { position:absolute; z-index:3; top:16px; right:16px; max-height:calc(100% - 92px); width:min(330px,calc(100% - 32px)); display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px #202a3526; cursor:auto; touch-action:auto; }
+  .detailSlot { min-height:0; flex:0 1 auto; display:flex; overflow:hidden; }
   .mapCanvas :global(button:focus-visible),.desktopTabs button:focus-visible { outline:3px solid #8fac9c; outline-offset:-3px; }
   .rightRail button { min-height:44px; }
   .rightRail button[aria-label="關閉攤位詳細資訊"] { min-width:44px; }

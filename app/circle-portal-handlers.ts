@@ -361,7 +361,20 @@ export function createCirclePortalHandlers({
       return json({ error: "請求過於頻繁，請稍後再試。" }, 429);
     }
 
+    // These parameters select a form after login; ownership still comes only
+    // from the authenticated claim. Never accept an arbitrary redirect URL.
+    const destination = new URL(`${config.origin}/${audience === "organizer" ? "organizer" : "circle"}`);
+    if (audience === "circle" && new URL(request.url).searchParams.has("event")) {
+      if (await servesRequestedEvent()) {
+        destination.searchParams.set("event", config.eventId);
+        if (typeof body?.circleId === "string" && body.circleId.length <= 200) {
+          const circle = await lookupCircle(body.circleId);
+          if (circle) destination.searchParams.set("circle", circle.id);
+        }
+      }
+    }
     const token = randomToken();
+    destination.searchParams.set("login", token);
     await repository.createLoginToken({
       tokenHash: await sha256Hex(token),
       email,
@@ -377,7 +390,7 @@ export function createCirclePortalHandlers({
       await sendMail({
         to: email,
         subject: "場刊 Map 登入連結",
-        text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/${audience === "organizer" ? "organizer" : "circle"}?login=${encodeURIComponent(token)}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
+        text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${destination.href}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
       });
     } catch (error) {
       // The row exists but nobody can ever hold the link, and it counts against
@@ -543,10 +556,13 @@ export function createCirclePortalHandlers({
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
 
-    const query = (new URL(request.url).searchParams.get("q") ?? "").trim();
-    if (query.length < SEARCH_MIN_LENGTH) return json({ circles: [] });
+    const parameters = new URL(request.url).searchParams;
+    const circleId = parameters.get("circle");
+    const query = (parameters.get("q") ?? "").trim();
+    if (circleId === null && query.length < SEARCH_MIN_LENGTH) return json({ circles: [] });
 
-    const matches = await searchCircles(query, SEARCH_LIMIT);
+    const exact = circleId && circleId.length <= 200 ? await lookupCircle(circleId) : null;
+    const matches = circleId === null ? await searchCircles(query, SEARCH_LIMIT) : exact ? [exact] : [];
     return json({
       circles: matches.map((circle) => ({
         id: circle.id,

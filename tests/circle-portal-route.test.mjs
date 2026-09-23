@@ -1225,6 +1225,42 @@ test("circle search requires a session, so the catalog stays gated", async () =>
   assert.ok((await response.json()).circles.length > 0);
 });
 
+test("a reader claim entry survives emailed login without granting ownership", async () => {
+  const response = await handlers.requestLink(post("/api/auth/request-link?event=ff47", {
+    email: "entry@example.com", turnstileToken: "solved", circleId: "ff47-social",
+  }));
+  assert.equal(response.status, 202);
+  const destination = new URL(sent.at(-1).text.match(/https?:\/\/[^\s]+/)[0]);
+  assert.equal(destination.origin, ORIGIN);
+  assert.equal(destination.pathname, "/circle");
+  assert.equal(destination.searchParams.get("event"), "ff47");
+  assert.equal(destination.searchParams.get("circle"), "ff47-social");
+  const verified = await handlers.verify(post("/api/auth/verify", { token: destination.searchParams.get("login") }));
+  const cookie = cookieFrom(verified);
+  assert.equal(verified.status, 200);
+  assert.deepEqual((await (await handlers.listClaims(get("/api/claims", cookie))).json()).claims, []);
+  assert.equal((await handlers.putOverride(post("/api/circle/ff47-social/overrides", { fields: {} }, cookie), "ff47-social")).status, 403);
+});
+
+test("login destinations ignore invalid circles and never redirect to supplied URLs", async () => {
+  await handlers.requestLink(post("/api/auth/request-link?event=ff47", {
+    email: "entry@example.com", turnstileToken: "solved", circleId: "https://other.example/", returnTo: "https://other.example/",
+  }));
+  const destination = new URL(sent.at(-1).text.match(/https?:\/\/[^\s]+/)[0]);
+  assert.equal(destination.origin, ORIGIN);
+  assert.equal(destination.pathname, "/circle");
+  assert.equal(destination.searchParams.get("event"), "ff47");
+  assert.equal(destination.searchParams.has("circle"), false);
+});
+
+test("exact claim entry lookup stays authenticated and returns only the requested circle", async () => {
+  assert.equal((await handlers.searchCatalog(get("/api/circle/search?circle=ff47-social"))).status, 401);
+  const cookie = await signIn("entry@example.com");
+  const response = await handlers.searchCatalog(get("/api/circle/search?circle=ff47-social&q=社團", cookie));
+  assert.deepEqual((await response.json()).circles, [{ id: "ff47-social", name: "只有社群的社團", links: [], linkCount: 1 }]);
+  assert.deepEqual((await (await handlers.searchCatalog(get("/api/circle/search?circle=missing", cookie))).json()).circles, []);
+});
+
 test("search needs two characters and returns only verifiable links", async () => {
   const cookie = await signIn("searcher2@example.com");
 

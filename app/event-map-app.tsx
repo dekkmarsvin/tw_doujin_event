@@ -694,7 +694,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   // Saying "已加入行程" while the write failed would be a lie, so a storage error
   // silences the notice and leaves the error banner to speak.
   const mobileSummaryNotice = selected && planNotice?.recordId === selected.recordId && !planningStorageError ? planNotice.text : "";
-  const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact onClose={closeDetails} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
+  const detailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} compact floating={desktop} onClose={closeDetails} onOpenFull={() => setShowFullDetail(true)} {...detailActions} />;
   const fullDetailsPanel = <CircleDetails record={selected} sharedRecords={sharedRecords} movedDestination={selectedMovedDestination} favorite={selectedFavorite} plan={selectedPlan} groups={planning.favoriteGroups} onClose={() => setShowFullDetail(false)} {...detailActions} />;
   const clearFiltersClassName = `${styles.clearFilters} ${genre !== event.genres[0] ? styles.clearFiltersActive : ""}`;
   const mobileFiltersPanel = <section className={styles.mobileFilters} aria-label="攤位篩選">
