@@ -280,6 +280,6 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 ## 尚未納入政策正文
 
-preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則交給 Mailgun sandbox；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
+preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則經 Mailgun 由 `verify.kotoban.top` 寄出；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
 
 已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第七節）。

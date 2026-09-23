@@ -37,7 +37,7 @@
     "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
     "NOTIFICATION_ORIGIN": "https://map.kotoban.top",
     "MAILGUN_DOMAIN": "verify.kotoban.top",
-    "MAILGUN_SENDER": "noreply@verify.kotoban.top",
+    "MAILGUN_SENDER": "場刊 Map <noreply@verify.kotoban.top>",
     "ORGANIZER_PUBLICATION_MODE": "github",
     "GITHUB_APP_ID": "4931208",
     "GITHUB_APP_INSTALLATION_ID": "161391064"
@@ -57,7 +57,7 @@
         "NOTIFICATION_ORIGIN": "https://review-notifications.tw-catalog.pages.dev",
         "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
         "MAILGUN_DOMAIN": "verify.kotoban.top",
-        "MAILGUN_SENDER": "postmaster@verify.kotoban.top"
+        "MAILGUN_SENDER": "場刊 Map <postmaster@verify.kotoban.top>"
       },
       "d1_databases": [{
         "binding": "DB",
