@@ -6,8 +6,10 @@ import styles from "./portal.module.css";
 /**
  * Cloudflare Turnstile, rendered explicitly.
  *
- * This is the only third-party script the site loads, and it loads on `/circle`
- * alone — `public/_headers` widens the CSP for that path and nowhere else. It is
+ * This is the only third-party script this code loads, and only on `/circle` and
+ * `/organizer` — `public/_headers` widens the CSP for those paths. (The Web
+ * Analytics beacon on the production domain is injected by Cloudflare's edge,
+ * not by this repository; see the note at the top of `public/_headers`.) It is
  * fetched on demand rather than from the document head so the reader's entry
  * cannot pick it up, and so a sign-in page nobody opens costs nothing.
  *

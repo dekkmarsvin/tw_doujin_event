@@ -105,7 +105,7 @@
 | [社團目錄契約](./circle-catalog.md) | 社團身分、活動配置與社團自填內容的權威邊界。 |
 | [社團自助控制面契約](./circle-portal.md) | 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。 |
 | [資料匯入契約（P2，尚未對外開放）](./data-import.md) | 範圍是兩件事：**使用者規劃資料的可攜交換**（CSV／JSON），以及**外部服務內容的匯入**（pixiv 等）。兩者共用同一套預覽與確認流程，但資料權威不同。 |
-| [資料 inventory](./data-inventory.md) | 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 與 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 決定。 |
+| [資料 inventory](./data-inventory.md) | 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。 |
 | [資料傳輸與離線契約](./delivery-and-offline.md) | 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。 |
 | [活動地圖契約](./event-map.md) | 公開閱讀端的向量地圖：資料不變量、renderer 邊界、互動與縮放規則。 |
 | [地圖貢獻控制面契約](./map-contributions.md) | 地圖貢獻讓經管理者授權的維護者，把**活動主辦官方說明頁面中的配置證據**整理成私人草稿。它不新增資料來源：公開快照的基礎仍只來自主辦官方頁面，社團補充則仍只由社團本人自填；工作簿、社群試算表與其他第三方資料不在來源鏈中。 |
