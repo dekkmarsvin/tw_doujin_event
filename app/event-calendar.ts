@@ -40,6 +40,20 @@ export const EVENT_GROUPS = [
   { id: "undated", label: "日期待確認" },
 ] as const;
 
+/**
+ * The event a control surface opens on when nothing names one: the one being
+ * held, else the next to start, else the one that ended last. Published order
+ * says nothing about where the work is, so only the id breaks ties.
+ */
+export function nearestEvent<T extends EventDefinition>(events: readonly T[], today: string): T | undefined {
+  const entries = events.map((event) => ({ event, ...eventCalendar(event) }));
+  const byId = (a: { event: T }, b: { event: T }) => a.event.id.localeCompare(b.event.id);
+  const current = entries.filter((entry) => entry.end >= today)
+    .sort((a, b) => (a.start ?? a.end).localeCompare(b.start ?? b.end) || byId(a, b));
+  if (current.length) return current[0].event;
+  return entries.sort((a, b) => b.end.localeCompare(a.end) || byId(a, b))[0]?.event;
+}
+
 export function groupCalendarEvents(events: readonly EventDefinition[], today: string) {
   const entries = events.map((event) => {
     const calendar = eventCalendar(event);

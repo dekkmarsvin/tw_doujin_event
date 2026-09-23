@@ -8,7 +8,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { default: EventChooser } = await environment.runner.import("/app/event-chooser.tsx");
-const { eventCalendar, groupCalendarEvents, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
+const { eventCalendar, groupCalendarEvents, nearestEvent, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
 after(() => vite.close());
 
 const events = [
@@ -43,6 +43,21 @@ test("lifecycle groups and descending start dates are independent of publication
     ["upcoming", ["event-b", "event-a"]], ["ongoing", ["ongoing"]], ["past", ["recent", "old"]],
   ]);
   assert.deepEqual(source.map((event) => event.id), ids, "source collection is unchanged");
+});
+
+test("control surfaces open on the held, then the next, then the latest ended event", () => {
+  // Published order puts the ended event first on purpose: it must not decide.
+  const ended = dated("ended", ["2026-08-21", "2026-08-23"]);
+  const next = dated("next", ["2026-10-09"]);
+  const later = dated("later", ["2026-11-07", "2026-11-08"]);
+  const held = dated("held", ["2026-09-22", "2026-09-24"]);
+  const undated = dated("undated", ["開幕日"], "2026-10-30");
+  assert.equal(nearestEvent([ended, later, next], "2026-09-23").id, "next");
+  assert.equal(nearestEvent([ended, later, next, held], "2026-09-23").id, "held");
+  assert.equal(nearestEvent([ended, later, next], "2026-10-09").id, "next", "the last day still counts as held");
+  assert.equal(nearestEvent([ended, undated, later], "2026-09-23").id, "undated", "an undated event ranks by its end");
+  assert.equal(nearestEvent([ended, dated("older", ["2026-05-01"])], "2026-09-23").id, "ended");
+  assert.equal(nearestEvent([], "2026-09-23"), undefined);
 });
 
 test("Taiwan calendar boundaries include first/last days and nights between event days", () => {

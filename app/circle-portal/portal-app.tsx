@@ -18,6 +18,7 @@ import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
+import { nearestEvent, taipeiDate } from "../event-calendar";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
@@ -57,11 +58,11 @@ const PORTAL_EVENT_STORAGE_KEY = "circle-portal-event";
  *
  * A link that names an event wins, so a circle can be sent straight to the
  * right one; otherwise the last event maintained here, and only then the
- * default. An unpublished or unknown id falls back rather than showing an
- * event this build does not serve.
+ * nearest event by date. An unpublished or unknown id falls back rather than
+ * showing an event this build does not serve.
  */
 function initialPortalEventId() {
-  const fallback = PUBLISHED_EVENTS[0]?.id ?? "";
+  const fallback = (nearestEvent(PUBLISHED_EVENTS, taipeiDate(Date.now())) ?? PUBLISHED_EVENTS[0])?.id ?? "";
   if (typeof window === "undefined") return fallback;
   const named = new URLSearchParams(window.location.search).get("event") ?? "";
   if (getPublishedEvent(named)) return named;
