@@ -6,7 +6,8 @@ import test from "node:test";
  * Remaining source-level media guards. browser/reader-thumbnails.mjs now
  * measures the result card's column count with and without a picture; it does
  * not yet prove every empty-container and geometry condition below. See
- * docs/design/source-assertion-cleanup.md for the assertion-level mapping.
+ * the assertion-level mapping kept with PR #344:
+ * https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/source-assertion-cleanup.md
  *
  * What it guards is specific. ADR-0012 retired the reviewed thumbnail index, so
  * the common case flipped: a circle with a picture used to be ordinary and is

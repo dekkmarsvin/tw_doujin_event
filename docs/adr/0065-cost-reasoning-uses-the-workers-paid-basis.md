@@ -38,7 +38,7 @@ Free 與 Paid 的差距不是邊際修正：
 - **ADR-0017**：「一頁 30 張 × 3,000 名訪客就是 90,000 次／天，光是圖片就吃掉免費方案每日 100,000 次配額」的論證前提失效。**「代管圖片絕不經 Pages Function 服務、走 R2 custom domain」的決策不變**，理由改為公開讀取路徑不應與 overlay 分食同一份帳號請求額度並計入同一份月度計費量。同 ADR「Function 的免費 CPU 額度是 10 ms／次」也不再適用；不在 Worker 內做影像處理的決策不變，理由是攻擊面與可預期的驗證成本。
 - **ADR-0022**：成本表的 Free 欄不再是本帳號的適用值。**「清除跑在獨立排程 Worker」的決策不變。**「吃掉帳號 5 個 cron 額度中的一個」應讀作 250 個中的一個；cron 槽不再是稀缺資源，但新增排程角色仍受 §7.4 複雜度預算約束。
 - **ADR-0031**：問題陳述「Workers Free 每日請求額度耗盡時會觸發 Error 1027」不適用於本帳號。**該 ADR 的兩項決策不受影響**：不以耗盡實驗作發布 gate，且 production／preview 的 deployment config 必須是 `fail_open: true`。fail-open 是與方案層級無關、可重複驗收的配置契約，維持有效。
-- 先前把發布流程 55 次 GitHub 呼叫視為逼近子請求上限的疑慮不成立。[CH20 地圖更正驗收紀錄](../design/ch20-map-correction-acceptance.md)對該歸因的 DECLINE 維持有效——現有證據仍不足以確診那兩次 GitHub 請求失敗。
+- 先前把發布流程 55 次 GitHub 呼叫視為逼近子請求上限的疑慮不成立。[CH20 地圖更正驗收紀錄](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/ch20-map-correction-acceptance.md)對該歸因的 DECLINE 維持有效——現有證據仍不足以確診那兩次 GitHub 請求失敗。
 - **新的計費維度需要追蹤**：Workers Traces 目前為 beta 免費，自 2026-10-01 起每個 span 計為一個 observability event，與 Workers Logs 共用每月 2,000 萬則的內含額度（超出 US$0.60／百萬，保留 7 天）。兩個排程 Worker 目前均為全量取樣；依 PR #285 後每 tick 約 3 spans 估算約 175k events／月，約內含額度的 0.9%，暫不調整。tick 頻率或 span 數上升時重算。
 - 以 Free 額度換算的「每天 100,000 個活躍讀者分鐘」不再有效，相關敘述已在資料傳輸與離線契約標為不成立。該換算另有一個獨立於方案的錯誤前提（假設 client 每分鐘輪詢，實際是每活動單次載入）；overlay 可見性要求如何維持，留待維護者決策，本 ADR 不變更該要求。
 

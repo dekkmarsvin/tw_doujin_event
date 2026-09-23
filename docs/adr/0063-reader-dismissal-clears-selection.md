@@ -3,7 +3,7 @@
 - **狀態**：Accepted
 - **日期**：2026-09-15
 - **部分取代**：[ADR-0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) 決策 2 的關閉保留選取，以及 [ADR-0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) 決策 3 的摘要關閉語意。
-- **設計依據**：[本次確認紀錄](../design/reader-header-and-selection-ideas.md)
+- **設計依據**：[本次確認紀錄](../design/history/reader-header-and-selection-ideas.md)
 
 ## 脈絡
 

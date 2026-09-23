@@ -7,7 +7,7 @@
 | 產品要解決什麼、給誰用、邊界在哪 | [`PRODUCT.md`](../PRODUCT.md) |
 | 使用者、P0／P1／P2 與 MVP 完成定義 | [`PRODUCT.md`](../PRODUCT.md#scope) |
 | 色彩、字體、層級、圓角 | [`DESIGN.md`](../DESIGN.md) |
-| 手機地圖方案 B 的視覺參考與設計取捨 | [手機地圖面板設計參考](./design/mobile-map-panel-plan.md) |
+| 過去的設計提案與取捨（凍結，非現行規格） | [`design/history/`](./design/history) |
 | **介面上該寫什麼字、不該寫什麼字** | [對外文案](./design/copy.md) |
 | 某個介面表面的元件長什麼樣 | [元件與介面規格](./design/components.md) |
 | 這個詞在本專案是什麼意思 | [`CONTEXT.md`](../CONTEXT.md) |
@@ -18,6 +18,7 @@
 | 外部產品實際長什麼樣 | [`research/`](#研究) |
 | **對外承諾了什麼** | [`policy/`](#對外文件) |
 | 代理人的 issue tracker、標籤設定與 review-fix 迴圈守則 | [`agents/`](./agents) |
+| 某次驗收的截圖、量測與結果 | 主 issue 或 PR（[專案工作流程第 6 節](./runbooks/project-workflow.md#6-留下完整驗收證據)） |
 
 ## 契約
 
@@ -64,7 +65,7 @@
 
 | 文件 | 涵蓋 |
 |---|---|
-| [隱私權與資料使用告知](./policy/privacy-notice.md) | 蒐集哪些資料、目的、保留期限、查詢與刪除、聯絡窗口（**已上線**） |
+| [隱私權與個人資料蒐集告知](./policy/privacy-notice.md) | 蒐集的資料類別、目的與利用方式、個人資料權利、聯絡窗口（**已上線**） |
 
 ## 研究
 
@@ -79,13 +80,13 @@
 
 ## 維護規則
 
-README 是使用與開發入口；PRODUCT 定義產品；CONTEXT 定義詞彙；DESIGN 與 `design/components.md` 管視覺規格；contracts 管現行行為；runbooks 管操作。Issue／PR 管即時進度，不在這些文件再複製佇列或逐票完成紀錄。
+README 是使用與開發入口；PRODUCT 定義產品；CONTEXT 定義詞彙；DESIGN 與 `design/components.md` 管視覺規格，`design/copy.md` 管對外文案；contracts 管現行行為；runbooks 管操作；`agents/` 管 issue tracker、標籤與 review-fix loop。Issue／PR 管即時進度與驗收證據，不在這些文件再複製佇列、逐票完成紀錄或日期化驗收。
 
-`design/` 的日期化驗收與歷史提案保存當時證據，不是另一層現行規格。例如[桌機視域提案](./design/map-viewport-direction.md)、[落地紀錄](./design/map-viewport-implementation.md)與[9/21 視覺檢查](./design/organizer-2026-09-21-visual-audit.md)；後續行為以對應契約為準。
+`design/` 只放現行規格：`components.md` 與 `copy.md`。[`design/history/`](./design/history) 是凍結的歷史設計提案，保存當時的取捨，不再修改也不再新增；後續行為以對應契約為準。日期化的驗收、驗證與視覺檢查紀錄不進 repo，依[專案工作流程第 6 節](./runbooks/project-workflow.md#6-留下完整驗收證據)留在主 issue 或 PR。
 
 - **一個契約只有一個家。** 同一條規則不得同時寫在兩份文件裡；需要交叉引用時放連結，不複製內容。
 - **改行為就改契約，同一個 commit。** 契約落後於實作，下一個人就會拿它當真相。
 - 契約裡的型別必須與 `app/` 的實際型別同步；欄位名稱不一致是 bug，不是措辭差異。
-- **研究文件不改。** 觀察結果是歷史，要更新就重新觀察並註明日期。
+- **研究文件不改寫觀察內容。** 觀察結果是歷史，要更新就重新觀察並註明日期；事後的說明只以日期化註記附加在該段開頭。
 - **對外文件不得落後於行為。** `policy/` 裡的每一句都是對使用者的承諾；改行為卻沒改它，是做了做不到的承諾，不是文件過期。
-- ADR 不改，只新增。推翻舊決策時寫新的 ADR 並在舊的標註被取代。
+- **ADR 的決策不改寫，只新增。** 推翻舊決策時寫新的 ADR，並在舊的那份標註被取代。ADR 內文只允許三種修改：狀態列的取代或暫緩標註；被連結的文件搬移或移出 repo 時，把連結改向新路徑或固定 commit 的永久連結；維護者明確要求的日期化補充段。

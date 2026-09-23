@@ -3,7 +3,7 @@
 - **狀態**：部分被取代；決策 2 的關閉保留選取由 [ADR-0063](./0063-reader-dismissal-clears-selection.md) 取代，「查看全場」保留選取仍適用。
 - **日期**：2026-09-09
 - **擴充**：[ADR-0001](./0001-adopt-webcatalog-patterns-selectively.md) 的版面參考範圍
-- **規格**：[地圖新介面技術落地規格](../design/map-viewport-implementation.md)
+- **規格**：[地圖新介面技術落地規格](../design/history/map-viewport-implementation.md)
 
 ## 脈絡
 

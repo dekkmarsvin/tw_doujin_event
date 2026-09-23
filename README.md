@@ -13,7 +13,7 @@
 
 收藏與行程只存在目前瀏覽器，可匯出 JSON／CSV 備份；一般介面尚未提供匯入或跨裝置同步。已下載的場刊與地圖支援離線閱讀。
 
-已發布活動以 [published-events.json](data/published-events.json) 為準。主辦[首次發布](docs/design/ch20-first-publication-acceptance.md)與[發布後更正](docs/design/ch20-map-correction-acceptance.md)均已有實際交付紀錄；驗收仍保留工程補救與人工操作紀錄。
+已發布活動以 [published-events.json](data/published-events.json) 為準。主辦[首次發布](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)與[發布後更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)均已有實際交付紀錄；驗收仍保留工程補救與人工操作紀錄。
 
 另外授權的地圖貢獻者可在社團入口維護私人草稿，核准匯出後仍需經資料發布流程，見[地圖貢獻契約](docs/contracts/map-contributions.md)。
 

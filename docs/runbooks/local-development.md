@@ -119,7 +119,7 @@ npm test -- --concurrency=1
 node scripts/run-tests.mjs module cli --concurrency=2
 ```
 
-未知選項、拼錯 tier 或非正整數會直接失敗，不會忽略後繼續執行。多個 worktree 共用同一台主機的 TCP port；避免同時啟動多組 D1。若剛發生 `EADDRINUSE`，先等連線壓力回落再重跑，關閉測試行程不會立即清除 TIME_WAIT。[診斷與量測](../design/d1-test-runtime-investigation.md)記錄此限制與改善範圍。
+未知選項、拼錯 tier 或非正整數會直接失敗，不會忽略後繼續執行。多個 worktree 共用同一台主機的 TCP port；避免同時啟動多組 D1。若剛發生 `EADDRINUSE`，先等連線壓力回落再重跑，關閉測試行程不會立即清除 TIME_WAIT。[診斷與量測](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/d1-test-runtime-investigation.md)記錄此限制與改善範圍。
 
 ### 瀏覽器驗收
 

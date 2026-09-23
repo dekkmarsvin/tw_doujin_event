@@ -6,7 +6,7 @@
 **測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
-首次發布與發布後更正均已接上 Web UI 與自動發布。真實執行證據見 [CH20 首次發布／恢復](../design/ch20-first-publication-acceptance.md)及[地圖更正](../design/ch20-map-correction-acceptance.md)，其中記錄的人工補救不因功能已上線而抹除。部署模式與缺少 dispatcher 時的處置見[發布邊界](#發布邊界)。
+首次發布與發布後更正均已接上 Web UI 與自動發布。真實執行證據見 [CH20 首次發布／恢復](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)及[地圖更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)，其中記錄的人工補救不因功能已上線而抹除。部署模式與缺少 dispatcher 時的處置見[發布邊界](#發布邊界)。
 
 ## 入口與登入
 

@@ -88,17 +88,15 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 
 實作順序、依賴與結案原因以主 issue／PR 的最新內容為準，不在 runbook 維護第二份佇列或逐票 changelog。票仍缺決策或驗收條件時，先補齊再開工；等待時可移往前置已滿足的工作。新的正常流程 blocker 需記錄受阻步驟，其他發現依 review-fix loop 處置。
 
-已結束的第二場活動里程碑保留以下證據入口：
-
-- [CH20 首次發布及同 job 恢復](../design/ch20-first-publication-acceptance.md)、[發布後地圖更正](../design/ch20-map-correction-acceptance.md)。文件中的當日狀態是歷史紀錄。
-- [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)／[#212](https://github.com/dekkmarsvin/tw_doujin_event/issues/212) 於 2026-09-20 由維護者決定結案。CH20 的人工技術操作非零；PF45 發布旅程未記錄七項指標，不能視為零補救重測通過。未達成項與原始量測不因結案改寫。
-- [9/21 關閉 issue 的視覺檢查](../design/organizer-2026-09-21-visual-audit.md)記錄檢查範圍、修正與限制。
-
 下一場活動若要驗收零人工補救，沿用第 6 節；不把已結案票重新當成目前目標。發布設定與操作依[部署 runbook](./deployment.md)，fake driver 的 published 只證明測試接線，不能代替真實公開結果。
 
 ## 6. 留下完整驗收證據
 
-驗收結果集中在本輪主票；需要保存截圖或量測時連到既有驗收文件，其他票只引用它。主辦活動發布的完整流程：
+驗收結果與證據集中在本輪主票或對應 PR，其他票只連到那則留言；repo 不新增日期化的驗收、驗證或視覺檢查文件。
+
+需要附圖時，截圖提交在 PR 分支的 `.evidence/<主題>/`，以該 commit 的 `https://raw.githubusercontent.com/dekkmarsvin/tw_doujin_event/<commit SHA>/.evidence/…` 嵌入 PR 本文或主票留言；合併前最後一個 commit 刪除 `.evidence/`，main 不保存證據圖。含證據的 commit 之後不再改寫或 force-push，否則固定連結會失效。含登入帳號、email 或其他個人資料的畫面不上傳。
+
+主辦活動發布的完整流程：
 
 **建立 → 匯入 → 地圖 → 驗證 → Reader 預覽 → 送審 → 核准並發布 → 自動發布 → production smoke → Reader**。
 
@@ -127,7 +125,7 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 
 上述人工技術操作以**系統建置完成後，正常新增這一場活動**為統計區間，目標均為 0。必要 UI 輸入、送審與「核准並發布」不算額外人工發布；系統自動 Git／部署不算人工操作。工程開發、一次性環境建置與故障測試操作另列，不混入正常流程，也不可把為了本場成功而做的人工補救排除。任何非零值先記錄原因再分類，不自動升成 P0。
 
-首次發布後的治理評估已記於 [ADR-0066](../adr/0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)，不再把該次評估列為待辦，也不以本流程追加發布 gate。
+發布治理的邊界見 [ADR-0066](../adr/0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)；本流程不另加發布 gate。
 
 ## 7. 成本與複雜度執行目標
 

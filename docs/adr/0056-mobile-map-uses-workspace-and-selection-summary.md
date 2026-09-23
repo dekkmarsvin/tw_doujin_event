@@ -4,7 +4,7 @@
 - 手機完整資訊的 dialog／禁止 full 限制由 [ADR-0064](./0064-mobile-circle-details-use-three-sheet-levels.md) 取代。
 - **日期**：2026-09-12
 - **取代範圍**：[ADR-0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) 中「手機工作面板維持原行為」；桌機決策保留。
-- **規格**：[手機地圖面板方案 B](../design/mobile-map-panel-plan.md)
+- **規格**：[手機地圖面板方案 B](../design/history/mobile-map-panel-plan.md)
 
 ## 脈絡
 
@@ -22,4 +22,4 @@
 
 ## 驗收與限制
 
-以真實 FF47 靜態資料檢查 360×640、390×844、430×932、760×844、761×844、1440×900 與三種字級。檢查選取、縮放、收起、回結果、完整資訊、收藏、行程、導航、日期及跨斷點。桌面 Chrome 的尺寸測試不等同 iOS Safari／Android Chrome 真機，軟鍵盤、雙指與安全區仍需真機確認。視覺與實測紀錄見[design-qa.md](../../design-qa.md)。
+以真實 FF47 靜態資料檢查 360×640、390×844、430×932、760×844、761×844、1440×900 與三種字級。檢查選取、縮放、收起、回結果、完整資訊、收藏、行程、導航、日期及跨斷點。桌面 Chrome 的尺寸測試不等同 iOS Safari／Android Chrome 真機，軟鍵盤、雙指與安全區仍需真機確認。視覺與實測紀錄見[design-qa.md](https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/design-qa.md)。

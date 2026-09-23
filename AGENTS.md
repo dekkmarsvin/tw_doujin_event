@@ -8,6 +8,8 @@ Guidance for coding agents working in this repository.
 
 When triaging issues, choosing the next task, scheduling review follow-ups, or accepting a milestone, read `docs/runbooks/project-workflow.md` for goal-based classification, readiness, and completion evidence. Its section 7 holds the Cloudflare cost baseline, the complexity budget, and the expansion threshold — read it before proposing a cost-motivated change, a new Cloudflare product, or a new scheduled role.
 
+Acceptance evidence — screenshots, measurements, dated verification or audit notes — goes on the issue or pull request, never into a new repository document. Section 6 of the same runbook says how to attach screenshots without leaving them on `main`. `docs/design/` holds current specs only, and `docs/design/history/` is frozen.
+
 ### Issue tracker
 
 Issues live as GitHub issues in `dekkmarsvin/tw_doujin_event`, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.

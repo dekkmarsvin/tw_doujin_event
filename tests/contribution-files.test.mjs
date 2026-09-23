@@ -74,6 +74,45 @@ test("every relative link between documents resolves, anchors included", async (
   assert.deepEqual(broken, [], `broken document links:\n${broken.join("\n")}`);
 });
 
+// Dated acceptance records kept landing in docs/design/ because nothing said
+// where they belonged. They now stay on the issue or pull request
+// (docs/runbooks/project-workflow.md §6). design/ keeps the current specs, and
+// history/ is frozen, so its file list is fixed here rather than open-ended.
+const DESIGN_FILES = new Set([
+  "components.md",
+  "copy.md",
+  "history/map-viewport-direction.md",
+  "history/map-viewport-validation.md",
+  "history/map-viewport-implementation.md",
+  "history/mobile-map-panel-plan.md",
+  "history/reader-event-chooser-ideas.md",
+  "history/reader-header-and-selection-ideas.md",
+  "history/assets/map-viewport-concept-v1.png",
+  "history/assets/map-viewport-concept-v1.prompt.txt",
+  "history/assets/map-viewport-structure-explore.svg",
+  "history/assets/map-viewport-structure-plan.svg",
+  "history/assets/map-viewport-structure-selected.svg",
+  "history/assets/mobile-panel-implementation-2026-09-12/selected-reference.png",
+]);
+
+async function filesUnder(directory) {
+  const found = [];
+  for (const entry of await readdir(path.join(ROOT, directory), { withFileTypes: true })) {
+    const relative = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) found.push(...(await filesUnder(relative)));
+    else found.push(relative);
+  }
+  return found;
+}
+
+test("docs/design holds only current specs and the frozen history", async () => {
+  const unexpected = (await filesUnder("docs/design"))
+    .map((file) => file.slice("docs/design/".length))
+    .filter((file) => !DESIGN_FILES.has(file));
+  assert.deepEqual(unexpected, [], `acceptance records and evidence belong on the issue or PR, not in docs/design/: ${unexpected.join(", ")}`);
+  assert.equal(await exists("design-qa.md"), false, "acceptance logs belong on the issue or PR, not in the repository");
+});
+
 test("the ADR index accounts for every ADR", async () => {
   const files = (await readdir(path.join(ROOT, "docs/adr")))
     .filter((name) => /^\d{4}-.*\.md$/.test(name)).sort();
