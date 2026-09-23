@@ -33,6 +33,7 @@
 | [URL 檢視狀態](./contracts/url-state.md) | 20 個查詢參數、恢復規則、不寫入 URL 的狀態 |
 | [社團自助控制面](./contracts/circle-portal.md) | 身分、認領、可編輯範圍、預覽、活動後退出、管理者、媒體安全 |
 | [主辦單位工作區](./contracts/organizer-workspace.md) | 邀請制入口、候選活動、攤位匯入、地圖、驗證、送審、發布與更正 |
+| [地圖編輯器](./contracts/map-editor.md) | 主辦工作區與地圖貢獻共用的畫布：放置、排段、選取與批次、輔助線與吸附、描摹顯示、復原 |
 | [地圖貢獻控制面](./contracts/map-contributions.md) | contributor 授權、私人 revision、官方來源檔、審閱狀態機、留言與局部修改請求、候選匯出與保存期限 |
 | [資料傳輸與離線](./contracts/delivery-and-offline.md) | payload 邊界、載入行為、Service Worker、快取標頭 |
 | [資料匯入](./contracts/data-import.md) | **P2，尚未對外開放**。規劃檔案交換已有底層能力；一般介面與外部服務串接尚未實作 |
@@ -56,7 +57,7 @@
 
 已定案且**推翻需要代價**的取捨。每份寫明脈絡、決策與後果。
 
-**[ADR 索引](./adr/INDEX.md)** 依區域列出要讀哪幾份，並標明每一份是生效、部分被取代還是已取代。要動某個區域時只讀那一列指到的 ADR，不必從頭掃過整個目錄。
+**[ADR 索引](./adr/INDEX.md)** 依區域列出要讀哪幾份，並標明每一份是生效、部分被取代、已取代還是草案。要動某個區域時只讀那一列指到的 ADR，不必從頭掃過整個目錄。
 
 
 ## 對外文件

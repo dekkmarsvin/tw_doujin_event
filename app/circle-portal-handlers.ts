@@ -1393,8 +1393,8 @@ export function createCirclePortalHandlers({
     // to be refused, which is why the admin check comes before the gate.
     if (!draft || (!admin && draft.owner_account_id !== current.accountId)) return json({ error: "找不到草稿。" }, 404);
     // Writing under the admin role puts words in front of the contributor that
-    // they read as coming from a reviewer, so it is held to the same
-    // reauthentication boundary as every other administrative write. An admin
+    // they read as coming from a reviewer, so it passes the same admin check
+    // as every other administrative write. An admin
     // commenting on a draft they own is a contributor here, grant and all.
     const asAdmin = admin && draft.owner_account_id !== current.accountId;
     if (asAdmin) {
