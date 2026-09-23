@@ -3,6 +3,7 @@ import { getEventDefinition } from "./event-catalog";
 import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
 import { loginLinkLetter } from "./mail-letter";
+import type { PortalMail } from "./portal-mail";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -106,8 +107,7 @@ type PortalDependencies = {
    * Omitted until the production driver and rollout gates are verified. */
   dispatchOrganizerPublication?: (jobId: string) => Promise<void>;
   repository: IdentityRepository;
-  /** `html`, when present, goes alongside `text`; the text part must stand on its own. */
-  sendMail: (message: { to: string; subject: string; text: string; html?: string }) => Promise<void>;
+  sendMail: (message: PortalMail) => Promise<void>;
   /**
    * Whether this environment can deliver to an address at all, asked before
    * anything is written. Only the preview and local portals set it: they keep a
