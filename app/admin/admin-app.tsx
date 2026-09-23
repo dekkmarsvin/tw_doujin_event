@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { readSession, setPortalEventId, signOut, type PortalSession } from "../circle-editor-client";
 import { getPublishedEvent, PUBLISHED_EVENTS } from "../event-catalog";
+import { nearestEvent, taipeiDate } from "../event-calendar";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
 import { AdminPanel } from "./admin-panels";
 import { AdminMapReviewPanel } from "./admin-map-review-panel";
@@ -9,7 +10,7 @@ import styles from "../circle-portal/portal.module.css";
 
 function initialEventId() {
   const named = new URLSearchParams(window.location.search).get("event") ?? "";
-  return (getPublishedEvent(named) ?? PUBLISHED_EVENTS[0]).id;
+  return (getPublishedEvent(named) ?? nearestEvent(PUBLISHED_EVENTS, taipeiDate(Date.now())) ?? PUBLISHED_EVENTS[0]).id;
 }
 
 export default function AdminApp() {
