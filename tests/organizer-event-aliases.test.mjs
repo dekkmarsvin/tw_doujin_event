@@ -41,6 +41,18 @@ test("alias problems name the row they belong to", () => {
   assert.deepEqual(aliasIssues(["FF47", "x".repeat(40)]), []);
 });
 
+// The form validates its in-memory draft before 儲存並繼續, so a row left blank
+// or typed with spaces must be judged as the save will store it.
+test("an unsaved blank or untrimmed row is not an alias problem, and a real one keeps its form row", () => {
+  const typed = (aliases, name = "下一場活動") => ({ ...parseOrganizerEventDraft(input({})), event: { ...parseOrganizerEventDraft(input({})).event, name, aliases } });
+  const issues = (draft) => validateOrganizerEventDraft(draft).filter((issue) => issue.target?.startsWith("event.aliases"))
+    .map(({ code, row, target }) => ({ code, row, target }));
+  assert.deepEqual(issues(typed(["", "   "])), []);
+  assert.deepEqual(organizerGuidedTaskIssues(typed(["FF47 ", ""]), "identity_source"), []);
+  assert.deepEqual(issues(typed(["", "FF47", " ff47"])), [{ code: "duplicate_alias", row: 3, target: "event.aliases.2" }]);
+  assert.deepEqual(issues(typed(["下一場活動"], " 下一場活動 ")), [{ code: "duplicate_alias", row: 1, target: "event.aliases.0" }]);
+});
+
 test("alias problems belong to the identity task", () => {
   const draft = parseOrganizerEventDraft(input({ aliases: ["FF47", "FF47"] }));
   assert.ok(organizerGuidedTaskIssues(draft, "identity_source").some((issue) => issue.code === "duplicate_alias"));

@@ -232,10 +232,15 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
   const issues: OrganizerValidationIssue[] = [];
   const add = (issue: OrganizerValidationIssue) => issues.push(issue);
   if (!draft.event.name) add({ severity: "error", step: "event", code: "missing_name", target: "event.name", message: "活動名稱為必填。" });
-  for (const problem of eventAliasProblems(draft.event.name, draft.event.aliases ?? [])) {
-    if (problem.code === "too_many_aliases") add({ severity: "error", step: "event", code: problem.code, target: "event.aliases", message: `活動別稱最多 ${EVENT_ALIAS_MAX_COUNT} 個。` });
-    else if (problem.code === "invalid_alias") add({ severity: "error", step: "event", code: problem.code, row: problem.index + 1, target: `event.aliases.${problem.index}`, message: `活動別稱 ${problem.index + 1} 最多 ${EVENT_ALIAS_MAX_LENGTH} 個字。` });
-    else add({ severity: "error", step: "event", code: problem.code, row: problem.index + 1, target: `event.aliases.${problem.index}`, message: `活動別稱 ${problem.index + 1} 和活動名稱或其他別稱重複。` });
+  // The form checks what is typed before it is saved, and saving trims each
+  // alias and drops a row left blank. Judge the aliases as they will be saved,
+  // but name the row the organizer is looking at.
+  const aliasRows = (draft.event.aliases ?? []).flatMap((alias, row) => text(alias) ? [{ alias: text(alias), row }] : []);
+  for (const problem of eventAliasProblems(text(draft.event.name), aliasRows.map(({ alias }) => alias))) {
+    if (problem.code === "too_many_aliases") { add({ severity: "error", step: "event", code: problem.code, target: "event.aliases", message: `活動別稱最多 ${EVENT_ALIAS_MAX_COUNT} 個。` }); continue; }
+    const row = aliasRows[problem.index].row;
+    if (problem.code === "invalid_alias") add({ severity: "error", step: "event", code: problem.code, row: row + 1, target: `event.aliases.${row}`, message: `活動別稱 ${row + 1} 最多 ${EVENT_ALIAS_MAX_LENGTH} 個字。` });
+    else add({ severity: "error", step: "event", code: problem.code, row: row + 1, target: `event.aliases.${row}`, message: `活動別稱 ${row + 1} 和活動名稱或其他別稱重複。` });
   }
   if (!draft.event.id) add({ severity: "error", step: "event", code: "missing_event_id", target: "event.id", message: "活動代碼為必填。" });
   else if (!ID.test(draft.event.id)) add({ severity: "error", step: "event", code: "invalid_event_id", target: "event.id", message: "活動代碼只能使用小寫英數字與連字號。" });
