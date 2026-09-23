@@ -1,6 +1,7 @@
 # ADR-0039：活動與 reference 資料收斂為單一資料 repo，跨活動 identity linkage 延後
 
 - 狀態：已定案（2026-08-28）
+- **部分被取代**（2026-09-23 標註）：決策第 5 點保留的「不得 merge」由 [ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 取代。
 - **取代**：[ADR-0014](./0014-event-data-lives-outside-the-code-repo.md) 決策第 3 點（一活動一資料 repo）、[ADR-0032](./0032-shared-reference-data-is-public-and-pinned.md) 決策第 1 點（獨立 reference repository）與第 5 點的更新順序
 - **修訂**：[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md) 規則一（ID namespace 維持全域唯一，但不再要求跨活動沿用同一 ID）
 - **暫緩**：[ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) 的實施時點，決策不撤銷，見決策第 5 點

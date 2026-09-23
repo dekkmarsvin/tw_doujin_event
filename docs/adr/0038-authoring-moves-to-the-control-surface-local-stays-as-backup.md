@@ -1,6 +1,7 @@
 # ADR-0038：authoring 介面搬到控制面，本機環境降為備援
 
 - 狀態：已定案（2026-08-28）
+- **部分被取代**（2026-09-23 標註）：決策第 3 點（本機環境保留為備援）由 [ADR-0049](./0049-the-local-authoring-backup-is-withdrawn.md) 取代；決策第 4 點沿用的 ADR-0035 第 5 點由 [ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 與 [ADR-0057](./0057-approval-starts-create-publication.md) 取代。其餘各點仍有效。
 - **取代**：[ADR-0035](./0035-new-event-onboarding-is-data-driven.md) 決策第 4 點（選項 B 的優先序與定位），並裁決該 ADR「未決」章最後一項
 - 相關 issue：[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) §4、[#112](https://github.com/dekkmarsvin/tw_doujin_event/issues/112)、[#117](https://github.com/dekkmarsvin/tw_doujin_event/issues/117)
 - 延續：[ADR-0008](./0008-static-public-reading-path.md)、[ADR-0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)

@@ -1,6 +1,7 @@
 # ADR-0023：隱私告知自行撰寫、隨 repo 版控，不送專業審閱
 
 - 狀態：已定案（2026-08-20）
+- **部分被取代**（2026-09-23 標註）：揭露方式由 [ADR-0024](./0024-user-facing-copy-uses-minimum-necessary-disclosure.md) 部分取代。
 - 文件：[隱私權與資料使用告知](../policy/privacy-notice.md)
 - 相關 ADR：[ADR-0015](./0015-access-lifts-when-no-third-party-bytes-remain.md)、[ADR-0019](./0019-personal-data-requests-go-to-the-mailbox-not-the-issue-tracker.md)、[ADR-0021](./0021-credentials-expire-and-are-purged-records-are-kept.md)
 - 相關 issue：[#30](https://github.com/dekkmarsvin/tw_doujin_event/issues/30)

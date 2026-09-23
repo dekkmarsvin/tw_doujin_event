@@ -1,6 +1,7 @@
 # ADR-0062：Webhook 喚醒，由獨立 cron 持續推進 publication
 
 - 狀態：Accepted（2026-09-14）
+- **部分取代**（2026-09-23 標註）：[ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 決策第 5 點的推進方式。
 - 依據：#246，整合 #241、#235、#236；延續 ADR-0057、0058。
 
 核准建立的 job 是持久化工作。Pages 的 production 核准／retry 僅提交 due job，由獨立 `workers/publication-dispatch` Worker 綁同環境 identity D1，每分鐘執行一次。它與 retention Worker 分開，沒有 HTTP 入口，不新增定時發布的產品功能。
