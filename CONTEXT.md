@@ -123,6 +123,9 @@
 **Organizer authoring**
 Organizer 在受驗證的 Web UI 準備活動、場館、攤位及地圖，經檢查、預覽、送審與管理者核准後發布的流程。它修改 Organizer-owned data，不授權 Circle 修改 placement；現行行為見[主辦單位工作區契約](docs/contracts/organizer-workspace.md)，產品完成目標見 [`PRODUCT.md`](PRODUCT.md#mvp-definition-of-done)。
 
+**活動別稱**（`aliases`）
+主辦與讀者用來稱呼這場活動的其他名字，例如「FF47」「CH20 百合ONLY」。屬於活動定義，由主辦在工作區填寫、隨核准發布；第一個是活動簡稱。沒有別稱時活動資料不帶這個欄位（[ADR-0068](docs/adr/0068-published-event-settings-are-declared-amendments.md)）。避免稱為「關鍵字」——它是活動的名字，不是搜尋用的標籤。
+
 **候選活動**（organizer candidate）
 主辦單位工作區中用於首次發布或已發布活動更正的版本化內容，以 `candidateId` 定址。候選與公開資料分離，即使共用 `eventId` 也不直接改寫公開快照；狀態轉換見[主辦契約](docs/contracts/organizer-workspace.md#候選活動的狀態)。
 

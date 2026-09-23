@@ -1,3 +1,5 @@
+import { EVENT_ALIAS_MAX_COUNT, EVENT_ALIAS_MAX_LENGTH, eventAliasProblems } from "./event-aliases";
+
 export type OrganizerRole = "owner" | "editor";
 
 export type OrganizerCandidateStatus =
@@ -34,6 +36,8 @@ export type OrganizerEventDraft = {
   event: {
     id: string | null;
     name: string;
+    /** 活動別稱. Absent when there are none, so older drafts stay byte-identical. */
+    aliases?: string[];
     days: OrganizerEventDay[];
   };
   venue: {
@@ -156,6 +160,9 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
     || !Array.isArray(value.event.days) || !Array.isArray(value.venue.assignments)) return null;
   const eventId = value.event.id === null ? null : text(value.event.id);
   const name = text(value.event.name);
+  if (value.event.aliases !== undefined && !Array.isArray(value.event.aliases)) return null;
+  // A row left blank in the form is not an alias; it drops out on save.
+  const aliases = (value.event.aliases ?? []).map(text).filter(Boolean);
   const days: OrganizerEventDay[] = [];
   for (const day of value.event.days) {
     if (!record(day)) return null;
@@ -198,7 +205,7 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
   }
   return {
     schema: "organizer-event-draft/1",
-    event: { id: eventId, name, days },
+    event: { id: eventId, name, ...(aliases.length > 0 ? { aliases } : {}), days },
     venue: { assignments },
     officialSource: { label: text(value.officialSource.label), url: sourceUrl },
     ...(references ? { references } : {}),
@@ -225,6 +232,11 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
   const issues: OrganizerValidationIssue[] = [];
   const add = (issue: OrganizerValidationIssue) => issues.push(issue);
   if (!draft.event.name) add({ severity: "error", step: "event", code: "missing_name", target: "event.name", message: "活動名稱為必填。" });
+  for (const problem of eventAliasProblems(draft.event.name, draft.event.aliases ?? [])) {
+    if (problem.code === "too_many_aliases") add({ severity: "error", step: "event", code: problem.code, target: "event.aliases", message: `活動別稱最多 ${EVENT_ALIAS_MAX_COUNT} 個。` });
+    else if (problem.code === "invalid_alias") add({ severity: "error", step: "event", code: problem.code, row: problem.index + 1, target: `event.aliases.${problem.index}`, message: `活動別稱 ${problem.index + 1} 最多 ${EVENT_ALIAS_MAX_LENGTH} 個字。` });
+    else add({ severity: "error", step: "event", code: problem.code, row: problem.index + 1, target: `event.aliases.${problem.index}`, message: `活動別稱 ${problem.index + 1} 和活動名稱或其他別稱重複。` });
+  }
   if (!draft.event.id) add({ severity: "error", step: "event", code: "missing_event_id", target: "event.id", message: "活動代碼為必填。" });
   else if (!ID.test(draft.event.id)) add({ severity: "error", step: "event", code: "invalid_event_id", target: "event.id", message: "活動代碼只能使用小寫英數字與連字號。" });
   if (draft.event.days.length === 0) add({ severity: "error", step: "event", code: "missing_days", target: "event.days", message: "至少需要一個活動日。" });

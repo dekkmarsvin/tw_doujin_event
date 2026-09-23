@@ -24,6 +24,9 @@ export type OrganizerWorkspaceReadiness = {
 
 const IDENTITY_SOURCE_CODES = new Set([
   "missing_name",
+  "too_many_aliases",
+  "invalid_alias",
+  "duplicate_alias",
   "missing_event_id",
   "invalid_event_id",
   "missing_source",

@@ -3,6 +3,7 @@
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
+import { EVENT_ALIAS_MAX_COUNT } from "../event-aliases";
 import { getMapTemplateShape, listMapTemplateOptions, type MapTemplateShape } from "../map-template-registry";
 import { saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
 import { nextOrganizerEventDay, organizerPendingVenueSelections, type OrganizerEventDraft } from "../organizer-event";
@@ -128,6 +129,15 @@ export function DraftForm({
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /><small>例如：秋日同人交流會 2026</small></label>
+        <div className={styles.full}><div className={styles.panelHead}><h4>活動別稱</h4><button type="button" className={styles.secondary}
+          disabled={!editable || (draft.event.aliases?.length ?? 0) >= EVENT_ALIAS_MAX_COUNT}
+          onClick={() => update((next) => { next.event.aliases = [...(next.event.aliases ?? []), ""]; return next; })}>新增別稱</button></div>
+          <small>讀者常用的其他稱呼，例如：FF47、開拓動漫祭 47。第一個會當作簡稱。</small>
+          {(draft.event.aliases ?? []).map((alias, index) => <div className={styles.inlineFields} key={index}>
+            <label>別稱 {index + 1}<input disabled={!editable} value={alias} onChange={(event) => update((next) => { next.event.aliases![index] = event.target.value; return next; })} /></label>
+            <button type="button" className={styles.dangerText} disabled={!editable} aria-label={`移除別稱 ${index + 1}`} onClick={() => update((next) => { next.event.aliases!.splice(index, 1); return next; })}>移除</button>
+          </div>)}
+        </div>
         <label>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "例如：autumn-doujin-2026。使用小寫英數字與連字號；首次送審後不能修改。"}</small></label>
         <label>來源名稱<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /><small>例如：秋日同人交流會官方網站</small></label>
         <label>官方公告網址<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /><small>貼上主辦單位的活動頁或公告貼文網址。</small></label>
