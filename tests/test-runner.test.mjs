@@ -15,11 +15,13 @@ async function fixture(t) {
     await rm(root, { recursive: true, force: true });
   });
   await mkdir(path.join(root, "tests"));
+  // Build fixture specifiers so their source text does not reclassify this
+  // CLI regression file itself as D1 or artifact during tier discovery.
   for (const [name, source] of Object.entries({
     "logic.test.mjs": 'import test from "node:test";',
-    "database.test.mjs": 'import { Miniflare } from "miniflare";',
+    "database.test.mjs": `import { Miniflare } from ${JSON.stringify("miniflare")};`,
     "command.test.mjs": 'import { spawnSync } from "node:child_process";',
-    "built.test.mjs": 'const artifact = new URL("../dist/index.html", import.meta.url);',
+    "built.test.mjs": `const artifact = new URL(${JSON.stringify("../dist/index.html")}, import.meta.url);`,
   })) await writeFile(path.join(root, "tests", name), source);
   return root;
 }
