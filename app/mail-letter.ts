@@ -144,7 +144,7 @@ function factsTable(facts: LetterFact[]) {
     const value = escapeHtml(fact.value);
     return `<tr>`
       + `<td width="76" valign="top" style="width:76px;white-space:nowrap;padding:10px 16px 10px 0;border-bottom:1px solid ${LINE};${text(13, 20, `color:${MUTED};`)}">${escapeHtml(fact.label)}</td>`
-      + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
+      + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};overflow-wrap:anywhere;word-break:break-word;font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
       + (fact.href ? `<a href="${escapeHtml(fact.href)}" style="color:${LINK};">${value}</a>` : value)
       + `</td></tr>`;
   }).join("");
