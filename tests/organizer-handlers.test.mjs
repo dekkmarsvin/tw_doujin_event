@@ -1090,7 +1090,7 @@ test("organizer invitations are metered like every other login link", async () =
   assert.equal(statuses.filter((status) => status === 200).length, 10);
   assert.deepEqual([...new Set(statuses.filter((status) => status !== 200))], [429]);
   // Ten editor links, plus the one the admin minted for the Owner itself.
-  assert.equal(sent.filter((mail) => mail.subject.includes("Organizer 邀請")).length, 11);
+  assert.equal(sent.filter((mail) => mail.subject.includes("主辦工作區邀請")).length, 11);
 
   // A refused invitation leaves no row claiming someone was invited.
   const pending = await database.prepare(

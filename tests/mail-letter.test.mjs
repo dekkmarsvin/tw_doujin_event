@@ -5,7 +5,8 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { formatTaipeiTime, loginLinkLetter, renderLetter } = await environment.runner.import("/app/mail-letter.ts");
+const { formatTaipeiTime, loginLinkLetter, organizerInvitationLetter, renderLetter } = await environment.runner.import("/app/mail-letter.ts");
+const { reviewDigest } = await environment.runner.import("/app/review-notifications.ts");
 after(() => vite.close());
 
 const ORIGIN = "https://map.kotoban.top";
@@ -85,4 +86,37 @@ test("the footer points back to the origin the letter was sent from", () => {
   assert.match(mail.html, /href="https:\/\/pr-12\.tw-catalog\.pages\.dev" style="[^"]*">pr-12\.tw-catalog\.pages\.dev<\/a>/);
   assert.match(mail.text, /場刊 Map · https:\/\/pr-12\.tw-catalog\.pages\.dev\n$/);
   assert.match(mail.html, /mailto:circle@kotoban\.top/);
+});
+
+test("an invitation says where to ask for a fresh link once this one expires", () => {
+  const href = `${ORIGIN}/organizer?login=Invite_42`;
+  const mail = organizerInvitationLetter({ href, origin: ORIGIN, requestedAt: REQUESTED_AT, expiresAt: REQUESTED_AT + 15 * 60_000 });
+  assert.equal(mail.subject, "場刊 Map 主辦工作區邀請");
+  assert.equal(mail.text.match(/\/organizer\?login=([^\s]+)/)[1], "Invite_42");
+  assert.ok(mail.text.split("\n").includes(href));
+  assert.match(mail.text, /連結過期後，到 https:\/\/map\.kotoban\.top\/organizer 用這個信箱重新索取登入連結即可。/);
+  assert.doesNotMatch(`${mail.subject}\n${mail.text}`, /Organizer/, "no English word inside the Chinese copy");
+  assert.equal(mail.html.split(`href="${href}"`).length - 1, 2, "button and fallback link");
+});
+
+test("a digest with one kind gets a button; several kinds link row by row", () => {
+  const one = reviewDigest(ORIGIN, [{ kind: "claim", event_id: "ff47", total: 2 }], REQUESTED_AT);
+  assert.equal(one.subject, "場刊 Map：2 筆新增待審項目");
+  assert.match(one.text, /^社團認領（ff47）：2 筆$/m);
+  assert.match(one.text, /前往審核：\nhttps:\/\/map\.kotoban\.top\/admin\?event=ff47#admin/);
+  assert.match(one.html, />前往審核<\/a>/);
+  assert.match(one.html, /2026\.09\.23 14:02/);
+
+  const many = reviewDigest(ORIGIN, [
+    { kind: "application", event_id: null, total: 1 },
+    { kind: "map", event_id: "ff47", total: 3 },
+  ]);
+  assert.equal(many.subject, "場刊 Map：4 筆新增待審項目");
+  assert.doesNotMatch(many.html, /前往審核/);
+  assert.match(many.text, /^活動申請：1 筆\nhttps:\/\/map\.kotoban\.top\/organizer$/m);
+  assert.match(many.text, /^地圖貢獻（ff47）：3 筆\nhttps:\/\/map\.kotoban\.top\/admin\?event=ff47#map-review$/m);
+  assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin\?event=ff47#map-review" style="[^"]*">3 筆<\/a>/);
+  assert.match(many.text, /通知設定：https:\/\/map\.kotoban\.top\/admin#review-notifications/);
+  assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin#review-notifications" style="[^"]*">通知設定<\/a>/);
+  assert.doesNotMatch(many.html, /#fff7df/, "a digest is a general letter, not an urgent one");
 });

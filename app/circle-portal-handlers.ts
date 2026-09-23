@@ -2,7 +2,7 @@ import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoic
 import { getEventDefinition } from "./event-catalog";
 import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
-import { loginLinkLetter } from "./mail-letter";
+import { loginLinkLetter, organizerInvitationLetter } from "./mail-letter";
 import type { PortalMail } from "./portal-mail";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
@@ -1803,14 +1803,17 @@ export function createCirclePortalHandlers({
 
   async function sendOrganizerInvitation(email: string, now: number, ipHash: string | null, mintedBy: string) {
     const token = randomToken();
+    const expiresAt = now + LOGIN_TOKEN_TTL_MS;
     await repository.createLoginToken({
       tokenHash: await sha256Hex(token), email, now,
-      expiresAt: now + LOGIN_TOKEN_TTL_MS, ipHash, audience: "organizer", mintedBy,
+      expiresAt, ipHash, audience: "organizer", mintedBy,
     });
     await sendMail({
       to: email,
-      subject: "場刊 Map Organizer 邀請",
-      text: `你已受邀管理一場活動。請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${config.origin}/organizer?login=${encodeURIComponent(token)}\n\n若你不認識這項邀請，請忽略此信。`,
+      ...organizerInvitationLetter({
+        href: `${config.origin}/organizer?login=${encodeURIComponent(token)}`,
+        origin: config.origin, requestedAt: now, expiresAt,
+      }),
     });
   }
 

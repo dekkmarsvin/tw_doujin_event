@@ -6,7 +6,7 @@
 
 正式 Worker 的 `ADMIN_REVIEW_NOTIFICATIONS_ENABLED` 已設為 `true`，與 `ORGANIZER_PUBLICATION_MODE` 獨立。該 Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER`，及 `NOTIFICATION_ORIGIN=https://map.kotoban.top`；Pages secrets 不會自動變成獨立 Worker 的 secrets。通知與登入／邀請共用 Mailgun 用量，啟用前確認帳號額度。程式中的個人偏好不等於部署總開關已啟用。
 
-Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_TEST_RECIPIENTS` 及 preview 的固定 HTTPS origin，先驗證設定→送審→tick→D1 收信。通知 Worker 的 preview 已啟用，人工收信使用 `verify.kotoban.top` 與 `postmaster@verify.kotoban.top`，確保 SPF／DKIM 與 From 對齊；API key 仍由 preview 自己的 secret 提供。`PREVIEW_SANDBOX_RECIPIENTS` 是人工測試收件白名單，名稱雖含 sandbox，亦適用已驗證自有網域，不放寬任意收件人。Worker 的 `keep_vars: true` 保留 Dashboard 管理的白名單，設定檔明列的 vars 仍會覆寫同名值。preview 環境的 vars 與 secrets 必須各自設定；此調整不變更 Pages 的登入寄信設定。Mailgun `accepted` 後仍須查 `delivered`／`failed` 事件確認交付。
+Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_TEST_RECIPIENTS` 及 preview 的固定 HTTPS origin，先驗證設定→送審→tick→D1 收信。通知 Worker 的 preview 已啟用，人工收信使用 `verify.kotoban.top` 與 `postmaster@verify.kotoban.top`，確保 SPF／DKIM 與 From 對齊；API key 仍由 preview 自己的 secret 提供。`PREVIEW_SANDBOX_RECIPIENTS` 是人工測試收件白名單，名稱雖含 sandbox，亦適用已驗證自有網域，不放寬任意收件人。Worker 的 `keep_vars: true` 保留 Dashboard 管理的白名單，設定檔明列的 vars 仍會覆寫同名值。preview 環境的 vars 與 secrets 必須各自設定。Pages preview 的登入與邀請信同樣由 `verify.kotoban.top` 寄出，見 [preview 的兩個信箱](#preview-的兩個信箱)。Mailgun `accepted` 後仍須查 `delivered`／`failed` 事件確認交付。
 
 首次正式啟用須先完成 preview 實際收信驗收，再把正式 Worker 總開關設為 `true`。總開關關閉屬於維運暫停，已排入的工作會在恢復後續寄；管理者在面板關閉則取消其待寄工作，重新開啟不補寄。需要停止外部寄信時可關閉總開關，不影響送審與 publication。
 
@@ -33,7 +33,7 @@ Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_T
 | Pages project | 需要（`tw-catalog`） |
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
-| Runtime secrets | **需要**——production 六個基本 secret、發布用的四個 GitHub App secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
+| Runtime secrets | **需要**——production 六個基本 secret、發布用的四個 GitHub App secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、`verify.kotoban.top` 寄件網域與 Turnstile dummy 金鑰，見下 |
 | 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge` 與 `tw-catalog-publication-dispatch`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker)與 [Organizer 發布](#organizer-發布) |
 | R2 | **需要**——每個環境各有公開縮圖 bucket（`THUMBNAILS`）與無公開網域的地圖來源 bucket（`MAP_CONTRIBUTIONS`） |
 | KV / Durable Objects | 不需要 |
@@ -80,19 +80,19 @@ preview 永遠不碰 production Mailgun，但它會寄信——只寄給兩份�
 | 收件人在哪份名單 | 信去哪裡 | 誰在用 |
 |---|---|---|
 | `PREVIEW_TEST_RECIPIENTS`（`wrangler.jsonc` 的 `env.preview.vars`，兩個保留的 `.test` 假地址） | 寫進 preview D1 的 `preview_mail_sink`，以 `GET /api/preview/mail` 讀回 | CI 的 E2E |
-| `PREVIEW_SANDBOX_RECIPIENTS`（Pages preview secret） | 由 Mailgun **sandbox** 網域實際寄出 | 人工測試 |
+| `PREVIEW_SANDBOX_RECIPIENTS`（Pages preview secret） | 由 Mailgun 以 `verify.kotoban.top` 實際寄出 | 人工測試 |
 | 兩份都不在 | 兩邊都不碰，直接拒絕 | —— |
 
-**依收件人而不依 branch 是被迫的，也是剛好的。** Pages 只有 `production` 與 `preview` 兩個環境，沒有 per-branch 變數，所以任何「這個 branch 改寄真信」的設定實際上都會套用到全部 preview deployment；而 CI 與人工測試本來就需要在同一批 deployment 上共存。兩份名單不重疊，因此在 sandbox 名單上加一個真實信箱，不會改變 CI 觀察到的任何東西。
+**依收件人而不依 branch 是被迫的，也是剛好的。** Pages 只有 `production` 與 `preview` 兩個環境，沒有 per-branch 變數，所以任何「這個 branch 改寄真信」的設定實際上都會套用到全部 preview deployment；而 CI 與人工測試本來就需要在同一批 deployment 上共存。兩份名單不重疊，因此在 `PREVIEW_SANDBOX_RECIPIENTS` 加一個真實信箱，不會改變 CI 觀察到的任何東西。
 
-`PREVIEW_SANDBOX_RECIPIENTS` 放 secret 而不放 `wrangler.jsonc`，因為它裝的是真實個人信箱，而這個 repository 是公開的。名單上的地址還必須**同時**是 Mailgun sandbox 的 Authorized Recipient——sandbox 網域只寄得到它自己授權過的信箱，兩邊都有才收得到信。
+`PREVIEW_SANDBOX_RECIPIENTS` 放 secret 而不放 `wrangler.jsonc`，因為它裝的是真實個人信箱，而這個 repository 是公開的。寄件網域是已驗證的 `verify.kotoban.top`，Mailgun 不另設收件人白名單，所以這份名單就是 preview 能寄到哪些真實信箱的唯一限制；名稱裡的 sandbox 是沿用舊設定。
 
-preview 因此需要七個與 production 分離的 secret：
+preview 因此需要六個與 production 分離的 secret：
 
 - `SESSION_SECRET`、`HASH_PEPPER`：preview 專用亂數。
 - `ADMIN_EMAILS`：固定設為 `preview-admin@example.test`；使用 secret binding，避免與 Pages 既有 binding 衝突。
 - `PREVIEW_E2E_TOKEN`：只授權 CI 讀取／清空 preview mail sink；同一值同時設定為 Pages preview secret 與 GitHub Actions secret。
-- `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`：**sandbox 的那一組**，不是 production 的。secret 不跨環境繼承，所以 preview 讀到的必然是這裡設的值，沒有誤用正式網域的路徑。
+- `MAILGUN_API_KEY`：能以 `verify.kotoban.top` 寄信的金鑰，用 `--env preview` 另外設定。寄件網域不是機密，寫在 `wrangler.jsonc` 的 `env.preview.vars.MAILGUN_DOMAIN`；不要再另設同名的 `MAILGUN_DOMAIN` secret。
 - `PREVIEW_SANDBOX_RECIPIENTS`：逗號、分號或空白分隔，大小寫與前後空白都會正規化。
 
 ```bash
@@ -135,11 +135,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 
 ## 在 preview 用真實信箱登入
 
-CI 走 D1 mail sink，人不必。把自己的信箱掛上 sandbox 那條路之後，preview 的登入信會像正式站一樣寄到收件匣，**不需要 `PREVIEW_E2E_TOKEN`**——那條路只服務 CI。
+CI 走 D1 mail sink，人不必。把自己的信箱加進 `PREVIEW_SANDBOX_RECIPIENTS` 之後，preview 的登入信會像正式站一樣寄到收件匣，**不需要 `PREVIEW_E2E_TOKEN`**——那條路只服務 CI。
 
-1. Mailgun dashboard → sandbox 網域 → **Authorized Recipients** 加入該信箱，並到信箱點開 Mailgun 寄出的確認信。沒點確認，sandbox 一律拒收。
-2. 把同一個地址加進 `PREVIEW_SANDBOX_RECIPIENTS`（見上節），**然後重新部署一次 preview**——secret 是在建立 deployment 時綁定的。
-3. 到 `https://pr-<N>.tw-catalog.pages.dev/circle` 索取登入連結。Turnstile 在 preview 是永遠通過的 dummy widget，按下去即可。
+1. 把地址加進 `PREVIEW_SANDBOX_RECIPIENTS`（見上節），**然後重新部署一次 preview**——secret 是在建立 deployment 時綁定的。
+2. 到 `https://pr-<N>.tw-catalog.pages.dev/circle` 索取登入連結。Turnstile 在 preview 是永遠通過的 dummy widget，按下去即可。
 
 沒收到信時，寄信端的原因只有一個地方看得到：
 
@@ -147,7 +146,9 @@ CI 走 D1 mail sink，人不必。把自己的信箱掛上 sandbox 那條路之�
 npx wrangler pages deployment tail --project-name=tw-catalog --environment=preview
 ```
 
-Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 preview sandbox 這條路徑會印內文**，因為它的收件人是這個環境自己列的名單；production 只印狀態碼，避免把使用者的地址寫進 log。常見的是 sandbox 未授權該收件人（400）、金鑰或區域不符（401——本專案寫死 `https://api.mailgun.net`，EU 帳號不適用）、網域名稱打錯（404）。
+Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有寄給 `PREVIEW_SANDBOX_RECIPIENTS` 的這條路徑會印內文**，因為它的收件人是這個環境自己列的名單；production 只印狀態碼，避免把使用者的地址寫進 log。常見的是金鑰不能用於 `verify.kotoban.top` 或區域不符（401——本專案寫死 `https://api.mailgun.net`，EU 帳號不適用）、網域名稱打錯（404）。
+
+頁面顯示已寄出只代表 Mailgun 受理；受理後仍可能寄送失敗，要到 Mailgun 的記錄查 `delivered`／`failed`。
 
 瀏覽器端如果連「請查收信件」都沒出現，那就不是寄信問題：503 是該環境缺 secret，500 才是寄信失敗或收件人不在任何一份名單上。
 
@@ -166,7 +167,7 @@ Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 prev
 - 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
 - Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`，它是本 repo 唯一的 Wrangler 設定。
-- **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper 與 E2E token 都必須用 `--env preview` 設定；preview 的 Mailgun 用 sandbox 那一組，永遠不是 production 的。
+- **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper、E2E token 與 Mailgun 金鑰都必須用 `--env preview` 設定；preview 的寄件網域是 `verify.kotoban.top`。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
 - `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
 - E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、地圖貢獻資料、公開文件、audit、captured mail，以及兩個 preview R2 bucket；admins roster 保留供下一次重跑。

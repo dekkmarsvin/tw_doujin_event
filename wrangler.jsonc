@@ -89,6 +89,7 @@
         "EVENT_ID": "ff47",
         "PREVIEW_MAIL_SINK": "d1",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
+        "MAILGUN_DOMAIN": "verify.kotoban.top",
         "TURNSTILE_SITEKEY": "1x00000000000000000000AA",
         "TURNSTILE_SECRET": "1x0000000000000000000000000000000AA",
         "THUMBNAIL_PUBLIC_ORIGIN": "https://media-preview.kotoban.top"

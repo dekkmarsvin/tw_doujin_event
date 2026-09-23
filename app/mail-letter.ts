@@ -23,6 +23,8 @@ export type LetterFact = {
   value: string;
   /** Comparable or positional values — times, booth codes — are set in mono. */
   data?: boolean;
+  /** Makes the value a link; the text part prints the URL on the next line. */
+  href?: string;
 };
 
 export type Letter = {
@@ -47,6 +49,8 @@ export type Letter = {
   showActionUrl?: boolean;
   /** Small print at the foot of the card. */
   notes?: string[];
+  /** A link in the footer, above the support address — e.g. the recipient's settings. */
+  footerLink?: { label: string; href: string };
   /** This site's origin; the footer links back to it. */
   origin: string;
 };
@@ -91,10 +95,13 @@ export function formatTaipeiTime(epochMs: number) {
 
 function renderText(letter: Letter) {
   const blocks = [letter.title, ...letter.paragraphs];
-  if (letter.facts?.length) blocks.push(letter.facts.map((fact) => `${fact.label}：${fact.value}`).join("\n"));
+  if (letter.facts?.length) {
+    blocks.push(letter.facts.map((fact) => `${fact.label}：${fact.value}${fact.href ? `\n${fact.href}` : ""}`).join(letter.facts.some((fact) => fact.href) ? "\n\n" : "\n"));
+  }
   if (letter.action) blocks.push(`${letter.action.label}：\n${letter.action.href}`);
   blocks.push(...(letter.notes ?? []));
-  blocks.push(`-- \n使用問題請寄 ${SUPPORT_ADDRESS}\n場刊 Map · ${letter.origin}`);
+  const footerLink = letter.footerLink ? `${letter.footerLink.label}：${letter.footerLink.href}\n` : "";
+  blocks.push(`-- \n${footerLink}使用問題請寄 ${SUPPORT_ADDRESS}\n場刊 Map · ${letter.origin}`);
   return `${blocks.join("\n\n")}\n`;
 }
 
@@ -131,10 +138,16 @@ function topLine(letter: Letter) {
 }
 
 function factsTable(facts: LetterFact[]) {
-  const rows = facts.map((fact) => `<tr>`
-    + `<td width="76" valign="top" style="width:76px;padding:10px 16px 10px 0;border-bottom:1px solid ${LINE};${text(13, 20, `color:${MUTED};`)}">${escapeHtml(fact.label)}</td>`
-    + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">${escapeHtml(fact.value)}</td>`
-    + `</tr>`).join("");
+  // The label column is at least 76px and grows to its longest label rather
+  // than wrapping one; a digest labels its rows with a kind and an event code.
+  const rows = facts.map((fact) => {
+    const value = escapeHtml(fact.value);
+    return `<tr>`
+      + `<td width="76" valign="top" style="width:76px;white-space:nowrap;padding:10px 16px 10px 0;border-bottom:1px solid ${LINE};${text(13, 20, `color:${MUTED};`)}">${escapeHtml(fact.label)}</td>`
+      + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
+      + (fact.href ? `<a href="${escapeHtml(fact.href)}" style="color:${LINK};">${value}</a>` : value)
+      + `</td></tr>`;
+  }).join("");
   return `<table ${TABLE} width="100%" style="border-top:1px solid ${LINE};">${rows}</table>`;
 }
 
@@ -170,6 +183,9 @@ function renderHtml(letter: Letter, subject: string) {
 
   const origin = escapeHtml(letter.origin);
   const host = escapeHtml(new URL(letter.origin).host);
+  const footerLink = letter.footerLink
+    ? `<a href="${escapeHtml(letter.footerLink.href)}" style="color:${LINK};">${escapeHtml(letter.footerLink.label)}</a><br>`
+    : "";
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -192,7 +208,7 @@ function renderHtml(letter: Letter, subject: string) {
 <tr><td style="padding:24px 24px 28px;"><table ${TABLE} width="100%">${body.join("")}</table></td></tr>
 </table>
 </td></tr>
-<tr><td style="padding:20px 4px 0;${text(12, 20, `color:${MUTED};`)}">使用問題請寄 <a href="mailto:${SUPPORT_ADDRESS}" style="color:${LINK};">${SUPPORT_ADDRESS}</a><br>場刊 Map · <a href="${origin}" style="color:${LINK};">${host}</a></td></tr>
+<tr><td style="padding:20px 4px 0;${text(12, 20, `color:${MUTED};`)}">${footerLink}使用問題請寄 <a href="mailto:${SUPPORT_ADDRESS}" style="color:${LINK};">${SUPPORT_ADDRESS}</a><br>場刊 Map · <a href="${origin}" style="color:${LINK};">${host}</a></td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
 </td></tr>
@@ -227,6 +243,37 @@ export function loginLinkLetter({ href, origin, requestedAt, expiresAt }: {
     action: { label: "登入", href },
     showActionUrl: true,
     notes: ["如果你沒有申請登入，請忽略這封信，不會有任何變更。"],
+    origin,
+  });
+}
+
+/**
+ * A sign-in link someone else minted, for a person who may read it long after
+ * it expires. Any organizer sign-in accepts the address's pending invitations,
+ * so the letter says where to ask for a fresh link instead of leaving a dead one.
+ */
+export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt }: {
+  href: string;
+  origin: string;
+  requestedAt: number;
+  expiresAt: number;
+}) {
+  const minutes = Math.round((expiresAt - requestedAt) / 60_000);
+  return renderLetter({
+    kind: "system",
+    subject: "場刊 Map 主辦工作區邀請",
+    preheader: `你已受邀管理一場活動，連結 ${minutes} 分鐘內有效。`,
+    category: "主辦邀請",
+    stamp: formatTaipeiTime(requestedAt),
+    title: "你已受邀管理一場活動",
+    paragraphs: ["登入後會進入主辦工作區。連結只能使用一次。"],
+    facts: [{ label: "有效至", value: formatTaipeiTime(expiresAt), data: true }],
+    action: { label: "登入主辦工作區", href },
+    showActionUrl: true,
+    notes: [
+      `連結過期後，到 ${new URL("/organizer", origin).href} 用這個信箱重新索取登入連結即可。`,
+      "如果你不認識這項邀請，請忽略這封信。",
+    ],
     origin,
   });
 }
