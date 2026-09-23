@@ -43,6 +43,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **sitekey 由 `GET /api/auth/config` 供給，不編進 bundle。** 因此 preview 與 production 可以持有不同金鑰而共用同一份 build。
 - 請求可帶 `audience`（`circle` 或 `organizer`，預設 `circle`）。它只決定信件內容與連結指向哪個入口，不改變驗證、額度或回應；`audience` 記在 `login_tokens` 上。
 - **登入信同時寄出 HTML 與純文字兩份內容**，由 `app/mail-letter.ts` 產生。純文字版必須能單獨使用：登入連結自成一行，preview 收信槽只存這一份，E2E 從這裡取連結。有效時間以台灣時間寫出。
+- Pages 登入／邀請及排程摘要共用 `sendPortalMail` 收件路由：啟用 D1 preview 時，測試收信槽優先於人工白名單，其餘地址拒絕且不回退 production。只有此模式的人工白名單路徑可記錄最多 300 字的 Mailgun 拒絕本文；production 不記地址或本文，即使殘留白名單設定也不能開啟。
 - **Organizer 邀請是唯一由他人代為鑄造登入連結的路徑**，因此不走本節的 Turnstile，改由三道獨立預算限制，並以 `login_tokens.minted_by` 與本人自助索取分開計數。規則寫在[主辦單位工作區契約](./organizer-workspace.md#邀請制不能自助開活動)。
 - Turnstile 的 script 只在 `/circle` 載入，CSP 也只在該路徑放寬，見[資料傳輸與離線契約](./delivery-and-offline.md#快取標頭)與 `public/_headers`。
 
