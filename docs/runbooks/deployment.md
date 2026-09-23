@@ -142,15 +142,24 @@ CI 走 D1 mail sink，人不必。把自己的信箱加進 `PREVIEW_SANDBOX_RECI
 1. 把地址加進 `PREVIEW_SANDBOX_RECIPIENTS`（見上節），**然後重新部署一次 preview**——secret 是在建立 deployment 時綁定的。
 2. 到 `https://pr-<N>.tw-catalog.pages.dev/circle` 索取登入連結。Turnstile 在 preview 是永遠通過的 dummy widget，按下去即可。
 
-沒收到信時，寄信端的原因只有一個地方看得到：
+要追查登入信或主辦邀請，**先開啟對應 deployment 的串流，再重現寄信**。Pages Functions log 不保存，未事先開啟時無法從 Pages 補回歷史 message ID。指定這次測試的不可變 deployment URL，避免同時有其他 PR 部署時誤看最新 preview：
 
 ```bash
-npx wrangler pages deployment tail --project-name=tw-catalog --environment=preview
+npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev --project-name=tw-catalog --format=json
 ```
 
-Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有寄給 `PREVIEW_SANDBOX_RECIPIENTS` 的這條路徑會印內文**，因為它的收件人是這個環境自己列的名單；production 只印狀態碼，避免把使用者的地址寫進 log。常見的是金鑰不能用於 `verify.kotoban.top` 或區域不符（401——本專案寫死 `https://api.mailgun.net`，EU 帳號不適用）、網域名稱打錯（404）。
+每次 Pages 寄信會有一筆 `portal.mail`：`mailType` 是 `login_link` 或 `organizer_invitation`（含首次及重寄），`result` 如下。
 
-頁面顯示已寄出只代表 Mailgun 受理；受理後仍可能寄送失敗，要到 Mailgun 的記錄查 `delivered`／`failed`。
+| result | 意義與下一步 |
+|---|---|
+| `accepted` | Mailgun 受理。以 `providerId` 到 Mailgun 的 Logs 對照同封信；`providerId: null` 表示受理但未取得 ID，不能判成寄送失敗。 |
+| `preview_sink` | 已寫入 D1 測試收信槽，`providerId: null`，沒有 Mailgun 交付事件。 |
+| `failed` | 供應商明確拒絕、寄信設定缺失或 preview 路由拒絕；依安全的 `errorCode`（如 `mailgun_403`）排查。 |
+| `unknown` | 逾時／網路等不確定結果；`delivery_timeout` 或 `delivery_unknown`，不能假定未寄出。 |
+
+事件不包含收件地址、主旨、正文、登入 URL／權杖、secret 或原始錯誤。`preview-sink`、`accepted` 是傳輸內部保留值，不會被當作 message ID。Mailgun 回非 2xx 時，**只有啟用 D1 preview 且寄給 `PREVIEW_SANDBOX_RECIPIENTS` 的這條路徑另印最多 300 字的拒絕內文**；production 僅有安全錯誤碼，即使殘留白名單亦不印本文。常見的是金鑰不能用於 `verify.kotoban.top` 或區域不符（401——本專案寫死 `https://api.mailgun.net`，EU 帳號不適用）、網域名稱打錯（404）。
+
+頁面顯示已寄出或 log 的 `accepted` 只代表 Mailgun 受理；受理後仍可能寄送失敗。複製 provider ID 到 Mailgun Logs 的 message ID 篩選，查看同封信的 `delivered`／`failed` 事件；`delivered` 只表示收件伺服器接受，不代表使用者讀到信。這次不接 webhook、不存 D1 寄送歷史；供應商記錄可查期間依 Mailgun 帳號方案為準。
 
 瀏覽器端如果連「請查收信件」都沒出現，那就不是寄信問題：503 是該環境缺 secret，500 才是寄信失敗或收件人不在任何一份名單上。
 

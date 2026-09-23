@@ -1,4 +1,4 @@
-import { sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
+import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -319,8 +319,20 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     }) : undefined,
     repository,
     sendMail: async (message) => {
-      await sendPortalMail(env, message,
-        mail => repository.storePreviewMail({ email: mail.to, subject: mail.subject, text: mail.text, now: Date.now() }));
+      const event = { event: "portal.mail", mailType: message.purpose };
+      try {
+        const providerId = await sendPortalMail(env, message,
+          mail => repository.storePreviewMail({ email: mail.to, subject: mail.subject, text: mail.text, now: Date.now() }));
+        // Transport markers are not provider IDs; accepted says nothing about
+        // delivery. Pages logs are live only, not a message-history store.
+        const sink = providerId === "preview-sink";
+        console.log(JSON.stringify({ ...event, result: sink ? "preview_sink" : "accepted",
+          providerId: sink || providerId === "accepted" || !providerId.trim() ? null : providerId }));
+      } catch (error) {
+        const failure = mailFailure(error);
+        console.log(JSON.stringify({ ...event, result: failure.delivery, errorCode: failure.code }));
+        throw error;
+      }
     },
     // Only the environments with a fixed recipient list answer this. Production
     // has none, so it stays undefined and no handler gains a way to report that

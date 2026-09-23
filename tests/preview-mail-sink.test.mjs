@@ -8,6 +8,8 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { portalHandlers, previewE2eAuthorized, previewMailRouteFor, previewSinkRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
 const { onRequestDelete, onRequestGet } = await environment.runner.import("/functions/api/preview/mail.ts");
+const { SESSION_COOKIE } = await environment.runner.import("/app/circle-portal-handlers.ts");
+const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
   script: "export default { fetch() { return new Response('ok'); } }",
@@ -105,7 +107,8 @@ test("preview reset fails before deleting anything when private map storage is m
   previewObjects.clear();
 });
 
-for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-rejected", "production-rejected"]) {
+for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-rejected", "production-rejected",
+  "production-no-id", "production-empty-id", "production-timeout", "production-network"]) {
   test(`Pages mail adapter: ${scenario}`, async (t) => {
     const email = "route-test@example.com";
     const repository = repositoryFor(env);
@@ -117,8 +120,9 @@ for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-reje
       PREVIEW_TEST_RECIPIENTS: scenario === "sink" ? email : "",
       // Intentionally overlap sink and retain a stale allowlist in production.
       PREVIEW_SANDBOX_RECIPIENTS: scenario === "denied" ? "" : email };
-    const errors = [], mail = [];
+    const errors = [], mail = [], logs = [];
     t.mock.method(console, "error", (...args) => errors.push(args.join(" ")));
+    t.mock.method(console, "log", value => logs.push(JSON.parse(value)));
     const rejection = `${email}: rejected ` + "x".repeat(400);
     t.mock.method(globalThis, "fetch", async (url, init) => {
       if (url === "https://challenges.cloudflare.com/turnstile/v0/siteverify") return Response.json({ success: true });
@@ -130,17 +134,76 @@ for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-reje
       assert.ok(link, "plain-text action URL stays alone on its line");
       assert.ok(form.get("html").includes(`href="${link}"`), "the same HTML action URL reaches the transport");
       mail.push(form);
+      if (scenario.endsWith("timeout")) throw new DOMException(`${email} ${link} fixture-key`, "TimeoutError");
+      if (scenario.endsWith("network")) throw new TypeError(`${email} ${link} fixture-key`);
+      if (scenario.endsWith("no-id")) return Response.json({ message: "Queued. private response" });
+      if (scenario.endsWith("empty-id")) return Response.json({ id: " " });
       return scenario.endsWith("rejected") ? new Response(rejection, { status: 403 }) : Response.json({ id: "pages-provider-id" });
     });
     const request = new Request("https://preview.example/api/auth/request-link", { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify({ email, turnstileToken: "fixture" }) });
     const sending = portalHandlers({ env: runtime, request }).requestLink(request);
     if (scenario.endsWith("rejected")) await assert.rejects(sending, error => error.code === "mailgun_403" && error.message === "mailgun_403");
-    else assert.equal((await sending).status, scenario === "denied" ? 400 : 202);
+    else if (scenario.endsWith("timeout") || scenario.endsWith("network")) await assert.rejects(sending);
+    else {
+      const response = await sending;
+      assert.equal(response.status, scenario === "denied" ? 400 : 202);
+      if (scenario !== "denied") assert.deepEqual(await response.json(), { ok: true }, "diagnostics do not enter the anonymous response");
+    }
     assert.equal(mail.length, scenario === "sink" || scenario === "denied" ? 0 : 1);
     const captured = await repository.latestPreviewMail(email);
     if (scenario === "sink") assert.match(captured.text, /^https:\/\/preview.example\/circle\?login=\S+$/m);
     else assert.equal(captured, null);
     assert.deepEqual(errors, scenario === "sandbox-rejected" ? [`Mailgun rejected the message (403). ${rejection.slice(0, 300)}`] : []);
+    const result = scenario === "sink" ? { result: "preview_sink", providerId: null }
+      : scenario.endsWith("rejected") ? { result: "failed", errorCode: "mailgun_403" }
+        : scenario.endsWith("timeout") ? { result: "unknown", errorCode: "delivery_timeout" }
+          : scenario.endsWith("network") ? { result: "unknown", errorCode: "delivery_unknown" }
+            : { result: "accepted", providerId: scenario.endsWith("no-id") || scenario.endsWith("empty-id") ? null : "pages-provider-id" };
+    assert.deepEqual(logs, scenario === "denied" ? [] : [{ event: "portal.mail", mailType: "login_link", ...result }]);
+    assert.doesNotMatch(JSON.stringify(logs), /route-test|login=|登入|private response|fixture-key/);
   });
 }
+
+test("Pages logs one invitation event for creation, each role's invitation and resend", async (t) => {
+  const repository = repositoryFor(env), now = Date.now();
+  const admin = "preview-admin@example.test";
+  const account = await repository.upsertAccount(admin, now);
+  const session = "invitation-log-session";
+  await repository.createSession(account, now, now + 3600000, session);
+  const cookie = `${SESSION_COOKIE}=${session}.${await hmacSign("fixture-session", session)}`;
+  const runtime = { ...env, PREVIEW_MAIL_SINK: undefined, EVENT_ID: "sample", SESSION_SECRET: "fixture-session",
+    HASH_PEPPER: "fixture-pepper", MAILGUN_API_KEY: "fixture-key", MAILGUN_DOMAIN: "fixture.example" };
+  const request = (path, body) => new Request(`https://preview.example${path}`, { method: "POST",
+    headers: { "content-type": "application/json", origin: "https://preview.example", cookie }, body: JSON.stringify(body) });
+  const logs = [], mail = [];
+  t.mock.method(console, "log", value => logs.push(JSON.parse(value)));
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    mail.push(init.body);
+    return Response.json({ id: `invitation-provider-${mail.length}` });
+  });
+  const creation = request("/api/admin/organizer/events", { tentativeName: "Private invitation name", ownerEmail: admin });
+  const handlers = portalHandlers({ request: creation, env: runtime });
+  const created = await handlers.adminCreateOrganizerCandidate(creation);
+  assert.equal(created.status, 201, await created.clone().text());
+  const { candidateId } = await created.json();
+  for (const role of ["editor", "owner"]) {
+    for (const action of ["invite", "resend"]) {
+      const response = await handlers.manageOrganizerCollaborators(request(`/api/organizer/events/${candidateId}/collaborators`, {
+        role, action, email: `invitation-${role}@example.test`,
+      }), candidateId);
+      assert.equal(response.status, 200, await response.clone().text());
+      assert.equal((await response.json()).invitationSent, true);
+    }
+  }
+  assert.equal(mail.length, 5);
+  assert.deepEqual(logs, mail.map((_, index) => ({ event: "portal.mail", mailType: "organizer_invitation",
+    result: "accepted", providerId: `invitation-provider-${index + 1}` })));
+  for (const message of mail) {
+    assert.ok(!JSON.stringify(logs).includes(message.get("to")));
+    assert.ok(!JSON.stringify(logs).includes(message.get("subject")));
+    const token = message.get("text").match(/login=(\S+)/)[1];
+    assert.ok(!JSON.stringify(logs).includes(token));
+  }
+  assert.doesNotMatch(JSON.stringify(logs), /Private invitation name|fixture-key/);
+});

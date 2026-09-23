@@ -19,7 +19,7 @@ export async function runReviewNotificationTick(input: {
         results.push({ batchId: batch.id, result: "cancelled" });
         continue;
       }
-      const providerId = await input.sendMail({ to: recipient, ...reviewDigest(input.origin, groups, now()) });
+      const providerId = await input.sendMail({ purpose: "review_digest", to: recipient, ...reviewDigest(input.origin, groups, now()) });
       await input.repository.completeNotificationBatch(batch, providerId, now());
       results.push({ batchId: batch.id, result: "accepted" });
     } catch (error) {
