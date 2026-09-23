@@ -1,6 +1,7 @@
 import type { OrganizerApplicationInput } from "../app/organizer-applications";
 import { createEmptyOrganizerEventDraft } from "../app/organizer-event";
 import type { OrganizerCandidateInput } from "./identity-repository";
+import { enqueueReviewNotification } from "./review-notification-repository";
 
 type ApplicationRow = {
   id: string; account_id: string; data_json: string;
@@ -39,10 +40,11 @@ export function createOrganizerApplicationRepository(
   async function submitOrganizerApplication(input: { id: string; accountId: string; data: OrganizerApplicationInput; now: number }) {
     await ensureTables();
     const dataJson = JSON.stringify(input.data);
-    await database.prepare(`INSERT INTO organizer_applications (id, account_id, data_json, created_at)
+    await database.batch([database.prepare(`INSERT INTO organizer_applications (id, account_id, data_json, created_at)
       SELECT ?1, id, ?3, ?4 FROM accounts
       WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL
-      ON CONFLICT(id) DO NOTHING`).bind(input.id, input.accountId, dataJson, input.now).run();
+      ON CONFLICT(id) DO NOTHING`).bind(input.id, input.accountId, dataJson, input.now),
+      enqueueReviewNotification(database, "application", input.id, input.now)]);
     const row = await getOrganizerApplication(input.id);
     return row?.account_id === input.accountId && row.data_json === dataJson ? row : null;
   }

@@ -1,3 +1,5 @@
+import { sendMailgun, previewMailRouteFor } from "../app/portal-mail";
+export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
 import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
@@ -110,40 +112,6 @@ async function verifyTurnstile(env: PortalEnv, token: string, remoteIp: string |
   }
 }
 
-async function sendMailgun(
-  env: PortalEnv,
-  message: { to: string; subject: string; text: string },
-  options: { logRejectionBody?: boolean } = {},
-) {
-  const { MAILGUN_API_KEY: key, MAILGUN_DOMAIN: domain } = env;
-  if (!key || !domain) throw new Error("Missing Mailgun configuration.");
-
-  const form = new URLSearchParams({
-    from: env.MAILGUN_SENDER ?? `場刊 Map <noreply@${domain}>`,
-    to: message.to,
-    subject: message.subject,
-    text: message.text,
-  });
-  const response = await fetch(`https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`, {
-    method: "POST",
-    headers: {
-      authorization: `Basic ${btoa(`api:${key}`)}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: form,
-  });
-  if (!response.ok) {
-    // The status alone rarely identifies the mistake — a key from the wrong
-    // region, a domain typo, an address the sandbox has not authorized all
-    // arrive as one number — and nothing else in this Worker records the
-    // attempt. The body names it, but it can echo the recipient address, so it
-    // is only read back for preview sandbox mail, whose recipients this
-    // environment put on its own allowlist. What is thrown stays status-only.
-    const detail = options.logRejectionBody ? ` ${(await response.text()).slice(0, 300)}` : "";
-    console.error(`Mailgun rejected the message (${response.status}).${detail}`);
-    throw new Error(`Mailgun rejected the message (${response.status}).`);
-  }
-}
 
 /**
  * Read a claim-evidence page. Only ever called with a URL already recorded in
@@ -209,10 +177,6 @@ export function repositoryFor(env: PortalEnv) {
   return created;
 }
 
-function addressList(value: string | undefined) {
-  return new Set((value ?? "").split(/[,;\s]+/).map((entry) => entry.normalize("NFKC").trim().toLowerCase()).filter(Boolean));
-}
-
 /**
  * Which mailbox a preview login link for this address goes to, or `null` for
  * "none of them".
@@ -232,13 +196,6 @@ function addressList(value: string | undefined) {
  * falls back to the production mailer: the `MAILGUN_*` secrets it reads are the
  * sandbox pair, because secrets are not inherited between environments.
  */
-export function previewMailRouteFor(env: PortalEnv, email: string): "sink" | "sandbox" | null {
-  if (env.PREVIEW_MAIL_SINK !== "d1") return null;
-  const address = email.normalize("NFKC").trim().toLowerCase();
-  if (addressList(env.PREVIEW_TEST_RECIPIENTS).has(address)) return "sink";
-  if (addressList(env.PREVIEW_SANDBOX_RECIPIENTS).has(address)) return "sandbox";
-  return null;
-}
 
 /** Only captured mail is readable back; sandbox mail lives in a real inbox. */
 export function previewSinkRecipientAllowed(env: PortalEnv, email: string) {

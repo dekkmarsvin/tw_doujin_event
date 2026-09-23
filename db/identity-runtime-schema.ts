@@ -48,6 +48,40 @@ function index(name: string, tableName: string, expression: string, options: { u
 }
 
 export const IDENTITY_TABLES = [
+  table("admin_notification_preferences", [
+    "recipient TEXT PRIMARY KEY NOT NULL",
+    "enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))",
+    "cadence TEXT NOT NULL DEFAULT 'five_minutes' CHECK (cadence IN ('five_minutes', 'hourly', 'daily'))",
+    "version INTEGER NOT NULL DEFAULT 1",
+    "enabled_since INTEGER NOT NULL",
+    "next_digest_at INTEGER NOT NULL",
+    "write_token TEXT",
+  ]),
+  table("review_notification_batches", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "recipient TEXT NOT NULL",
+    "state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'cancelled'))",
+    "attempts INTEGER NOT NULL DEFAULT 0",
+    "retry_at INTEGER NOT NULL",
+    "lease_token TEXT",
+    "lease_until INTEGER NOT NULL DEFAULT 0",
+    "created_at INTEGER NOT NULL",
+    "completed_at INTEGER",
+    "provider_id TEXT",
+    "error_code TEXT",
+  ]),
+  table("review_notification_items", [
+    "id TEXT PRIMARY KEY NOT NULL",
+    "recipient TEXT NOT NULL",
+    "kind TEXT NOT NULL CHECK (kind IN ('application', 'organizer', 'claim', 'map'))",
+    "subject_id TEXT NOT NULL",
+    "submission_id TEXT NOT NULL",
+    "event_id TEXT",
+    "created_at INTEGER NOT NULL",
+    "batch_id TEXT",
+    "state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'cancelled'))",
+    "completed_at INTEGER",
+  ]),
   table("accounts", [
     "id TEXT PRIMARY KEY NOT NULL",
     "email TEXT NOT NULL",
@@ -85,6 +119,7 @@ export const IDENTITY_TABLES = [
     "revoked_at INTEGER",
   ]),
   table("circle_claims", [
+    "notification_submission_id TEXT",
     "id TEXT PRIMARY KEY NOT NULL",
     "account_id TEXT NOT NULL",
     "event_id TEXT NOT NULL",
@@ -304,6 +339,7 @@ export const IDENTITY_TABLES = [
     "review_token TEXT",
   ]),
   table("organizer_event_candidates", [
+    "notification_submission_id TEXT",
     "id TEXT PRIMARY KEY NOT NULL",
     "tentative_name TEXT NOT NULL",
     "event_id TEXT",
@@ -484,6 +520,11 @@ export const IDENTITY_TABLES = [
 ] as const;
 
 export const IDENTITY_INDEXES = [
+  index("review_notification_occurrence_idx", "review_notification_items", "kind, subject_id, submission_id, recipient", { unique: true }),
+  index("review_notification_active_batch_idx", "review_notification_batches", "recipient", { unique: true, where: "state = 'pending'" }),
+  index("review_notification_due_idx", "review_notification_batches", "state, retry_at"),
+  index("review_notification_recipient_idx", "review_notification_items", "recipient, state, batch_id"),
+  index("review_notification_source_idx", "review_notification_items", "kind, subject_id, state"),
   index("organizer_applications_account_idx", "organizer_applications", "account_id, created_at"),
   index("organizer_applications_status_idx", "organizer_applications", "status, created_at"),
   index("organizer_applications_review_idx", "organizer_applications", "review_token", { unique: true }),
@@ -553,6 +594,8 @@ export const IDENTITY_INDEXES = [
  * NOT EXISTS`, so duplicate-column errors are the idempotent success case.
  */
 export const IDENTITY_COLUMN_MIGRATIONS = [
+  { table: "circle_claims", column: "notification_submission_id", sql: "ALTER TABLE circle_claims ADD COLUMN notification_submission_id TEXT" },
+  { table: "organizer_event_candidates", column: "notification_submission_id", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN notification_submission_id TEXT" },
   { table: "organizer_event_candidates", column: "publication_operation", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN publication_operation TEXT NOT NULL DEFAULT 'CREATE' CHECK (publication_operation IN ('CREATE', 'AMEND'))" },
   { table: "organizer_import_rows", column: "codes_json", sql: "ALTER TABLE organizer_import_rows ADD COLUMN codes_json TEXT" },
   { table: "organizer_publication_jobs", column: "failure_code", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN failure_code TEXT" },

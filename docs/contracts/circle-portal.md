@@ -5,6 +5,8 @@
 **實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
 **測試**：`tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
+**實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
+**測試**：`tests/review-notifications.test.mjs`
 
 > **活動範圍**：`/circle` 是跨活動共用入口，寫入面與公開讀取面都支援多活動；帳號跨活動、認領逐活動，`env.EVENT_ID` 只是請求沒有指名活動時的預設值（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
@@ -244,6 +246,22 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 代管縮圖的 R2 位元組會在同一次排程作業中先行刪除；R2 delete 可重複執行，若後續 D1 失敗，下一次仍能安全重試。社團自助刪除、帳號刪除與管理者撤下使用同一個順序。
 
 ## 管理者
+
+### 個人待審通知
+
+`/admin#review-notifications` 提供跨活動的個人收信開關與頻率；不隨活動切換卸載，不修改其他管理者，也不能指定其他收件地址。`GET`／`PUT /api/admin/notification-preferences` 只操作目前有效管理者，PUT 沿用 CSRF 檢查，以 `enabled`、`cadence`、`version` 儲存；過期版本回 409，介面保留輸入並提供重新載入。載入失敗不冒充已保存預設值，重新載入期間不能編輯或儲存。
+
+預設開啟且每 5 分鐘彙整，另可選每小時或每日台北時間 09:00。五分鐘與小時模式採整點時段；每日 09:00 即 UTC 01:00。每位管理者的設定、排程及寄送結果獨立。首次初始化、加入管理者、關閉後重開都不補寄舊件；關閉取消尚未寄出的項目與重試，只變更頻率則保留待寄工作並改排下一時段。已送到 Mailgun 的信件不能撤回。
+
+通知涵蓋活動申請、候選活動（含修訂）送審、人工待審認領及獨立地圖草稿；自動通過的認領與活動工作區內的地圖不另通知。送審與待寄項目寫入同一 D1 batch，按收件者及這次送審識別去重；退回或撤回後再送審是新一次通知，不能只按來源 ID 去重。通知不改變審核、核准快照或發布流程。
+
+摘要只包含類型、活動代碼、筆數及既有審核入口，不附申請內容、證據或登入憑證。寄出前核對同一次送審仍待審、收件者仍為管理者且帳號未停用／刪除。沒有新項目不寄，不重複催辦；排程恢復只寄積欠摘要，不逐時段補信。
+
+寄送由既有 publication-dispatch Worker 的獨立通知 tick 執行，每 tick 最多 10 位管理者。每人只允許一個 pending 摘要，以 120 秒 lease 防併發；新項目不混入正在重試的摘要。失敗由 1 分鐘倍增退避、上限 6 小時，成功記錄為 `accepted`（供應商受理，並非收件匣送達）。外部受理成功、D1 寫回前中斷可能重複寄送；不承諾 exactly-once。寄送總開關與 publication mode 分離，兩項工作互不阻斷。
+
+管理者移除／帳號刪除會清除其通知設定與寄送紀錄；帳號停用取消待寄工作。已完成及取消紀錄由既有 retention Worker 在 30 天後刪除，production 不保存信件全文。Preview 沿用獨立 D1 mail sink／sandbox 白名單，設定錯誤不得回退到 production 寄信。
+
+### 審核與帳號操作
 
 - 認領審核、撤下補充資料、管理者名單、停用帳號與地圖審閱／候選匯出在 `/admin`。活動選擇沿用逐活動請求範圍，切換時卸載前一場面板與表單；管理者名單及帳號停用仍是帳號層操作。候選活動的 Owner、核准並發布與重試留在 `/organizer`。
 - `/admin` 顯示 session 到期時間，到期或 API 回 401 時移除管理內容並提供 `/circle` 重新登入連結；逐 endpoint 的管理者、CSRF、活動與 revision 檢查不因入口搬移改變。
