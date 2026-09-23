@@ -22,6 +22,15 @@ export function eventDayDate(label: string, end: string): string | null {
   return calendarDate(year, month, day);
 }
 
+/** The published date fields, derived from the event's sorted ISO day dates.
+ * A first publication and a corrected date compute them the same way. */
+export function eventDateFields(dates: readonly string[]) {
+  return {
+    dateRangeLabel: dates[0] === dates.at(-1) ? dates[0] : `${dates[0]}–${dates.at(-1)}`,
+    eventEndsAt: `${dates.at(-1)}T23:59:59+08:00`,
+  };
+}
+
 export function eventCalendar(event: EventDefinition) {
   const end = taipeiDate(Date.parse(event.eventEndsAt));
   const days = event.days.map((day) => eventDayDate(day.dateLabel, end));

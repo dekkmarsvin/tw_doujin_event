@@ -36,6 +36,8 @@ import { PublicationFailure, publicationHasStarted } from "./organizer-publicati
 import { buildApprovedPublicationArtifacts } from "./publication-artifacts";
 import { planOrganizerAmendmentCandidate, readOrganizerAmendmentBaseline,
   type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
+import { AmendmentSettingsError, amendmentSettingsImpact, applyAmendmentSettings, normalizeAmendmentSettings,
+  type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
 import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueName,
@@ -2133,7 +2135,8 @@ export function createCirclePortalHandlers({
     const stored = await repository.getOrganizerAmendment(candidateId);
     if (!stored) return null;
     const baseline = await readOrganizerAmendmentBaseline(stored.baseline_json, stored.baseline_sha256);
-    return { stored, baseline, changes: JSON.parse(stored.changes_json) as unknown[] };
+    return { stored, baseline, changes: JSON.parse(stored.changes_json) as unknown[],
+      settings: stored.settings_json ? JSON.parse(stored.settings_json) as OrganizerAmendmentSettings : null };
   }
 
   async function getOrganizerAmendment(request: Request, candidateId: string) {
@@ -2143,6 +2146,7 @@ export function createCirclePortalHandlers({
     if (!amendment) return json({ error: "找不到修正候選。" }, 404);
     const plan = planOrganizerAmendmentCandidate(amendment.baseline, amendment.changes, () => new Date(config.now()).toISOString().slice(0, 10));
     return json({ version: amendment.stored.current_version, changes: amendment.changes, impact: plan.impact,
+      settings: amendment.settings, settingsImpact: amendmentSettingsImpact(amendment.baseline.draft, amendment.settings),
       baseline: { event: amendment.baseline.event, sourceCandidateId: amendment.stored.source_candidate_id,
         sourceVersion: amendment.stored.source_version, publishedAt: amendment.baseline.source.publishedAt,
         official: amendment.baseline.official } });
@@ -2153,7 +2157,7 @@ export function createCirclePortalHandlers({
     if (!access.ok) return access.response;
     const body = await readJson(request);
     if (!Number.isSafeInteger(body?.expectedVersion) || (body!.expectedVersion as number) < 1 || !Array.isArray(body?.changes)
-      || body.changes.length > 20_000 || Object.keys(body!).some((key) => !["expectedVersion", "changes"].includes(key))) {
+      || body.changes.length > 20_000 || Object.keys(body!).some((key) => !["expectedVersion", "changes", "settings"].includes(key))) {
       return json({ error: "請提供目前版本與明確修正宣告。" }, 400);
     }
     const changesJson = JSON.stringify(body.changes);
@@ -2168,10 +2172,18 @@ export function createCirclePortalHandlers({
     let plan: ReturnType<typeof planOrganizerAmendmentCandidate>;
     try { plan = planOrganizerAmendmentCandidate(amendment.baseline, body.changes, () => new Date(now).toISOString().slice(0, 10)); }
     catch (error) { return json({ error: error instanceof Error ? error.message : "修正宣告無效。" }, 422); }
+    // Whole-state like changes[]: an omitted settings key declares none.
+    let settings: OrganizerAmendmentSettings | null;
+    try { settings = normalizeAmendmentSettings(amendment.baseline.draft, body.settings); }
+    catch (error) { return json({ error: error instanceof AmendmentSettingsError ? error.message : "活動設定宣告無效。" }, 422); }
+    const settingsJson = settings ? JSON.stringify(settings) : null;
     const result = await repository.saveOrganizerAmendment({ candidateId, expectedVersion: candidate.current_version,
       baselineSha256: amendment.stored.baseline_sha256, changesJson, changesSha256: await sha256Hex(changesJson), rows: plan.rows,
+      settingsJson, settingsSha256: settingsJson ? await sha256Hex(settingsJson) : null,
       actor: { accountId: access.current.accountId, role: access.role, admin: access.admin, now } });
-    return result.ok ? json({ ...result, impact: plan.impact }) : json({ error: "版本或權限已變更，修正未儲存。請重新載入。" }, 409);
+    return result.ok
+      ? json({ ...result, impact: plan.impact, settings, settingsImpact: amendmentSettingsImpact(amendment.baseline.draft, settings) })
+      : json({ error: "版本或權限已變更，修正未儲存。請重新載入。" }, 409);
   }
 
   async function getOrganizerCandidate(request: Request, candidateId: string) {
@@ -2792,6 +2804,10 @@ export function createCirclePortalHandlers({
     const draft = parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown);
     if (!draft) return json({ error: "活動資料格式無效，請聯絡網站管理者。" }, 500);
     const { issues, imported, maps, contents, referenceSnapshot } = await validateOrganizerWorkspace(candidateId, draft);
+    // A correction's draft stays the published one; readers will see it with
+    // the declared settings applied.
+    const amendment = candidate.publication_operation === "AMEND" ? await readAmendment(candidateId) : null;
+    const shown = amendment ? applyAmendmentSettings(draft, amendment.settings) : draft;
     const mapArtifacts = maps.map((map) => {
       const stored = contents.get(map.id);
       const content = stored ? parseMapContributionDraftContent(JSON.parse(stored) as unknown) : null;
@@ -2805,7 +2821,7 @@ export function createCirclePortalHandlers({
       issues,
       preview: {
         schema: "organizer-reader-preview/1",
-        event: draft.event, venueAssignments: draft.venue.assignments, officialSource: draft.officialSource,
+        event: shown.event, venueAssignments: draft.venue.assignments, officialSource: draft.officialSource,
         references: referenceSnapshot ? referenceSnapshot.files.map((file) => JSON.parse(file.content) as unknown) : [],
         placements: (imported?.rows ?? []).flatMap((row) => row.codes.map((boothCode) => ({
           sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
@@ -2911,7 +2927,8 @@ export function createCirclePortalHandlers({
     const snapshotJson = JSON.stringify({
       schema: amendment ? "organizer-submission-snapshot/4" : "organizer-submission-snapshot/3", candidateId, candidateVersion: expectedVersion,
       ...(amendment ? { operation: "AMEND", amendment: { baselineJson: amendment.stored.baseline_json,
-        baselineSha256: amendment.stored.baseline_sha256, changes: amendment.changes } } : {}),
+        baselineSha256: amendment.stored.baseline_sha256, changes: amendment.changes,
+        ...(amendment.settings ? { settings: amendment.settings } : {}) } } : {}),
       eventId: draft.event.id, draft,
       contentUpdatedAt: new Date(contentRevision.created_at).toISOString(),
       references: referenceSnapshot,
@@ -2986,7 +3003,8 @@ export function createCirclePortalHandlers({
             || artifacts.snapshot.candidateVersion !== expectedVersion || artifacts.event.id !== candidate.event_id
             || !amendment || amendment.stored.current_version !== expectedVersion
             || approved?.baselineJson !== amendment.stored.baseline_json || approved.baselineSha256 !== amendment.stored.baseline_sha256
-            || JSON.stringify(approved.changes) !== amendment.stored.changes_json) {
+            || JSON.stringify(approved.changes) !== amendment.stored.changes_json
+            || JSON.stringify(approved.settings ?? null) !== JSON.stringify(amendment.settings)) {
             return json({ error: "修正送審內容與固定基準不一致，無法核准。", code: "snapshot_mismatch" }, 409);
           }
         } catch (error) {

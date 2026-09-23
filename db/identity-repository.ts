@@ -1,4 +1,4 @@
-import { CIRCLE_OVERRIDES_SCHEMA, type CircleRetentionChoice } from "../app/circle-overrides";
+import { CIRCLE_OVERRIDES_SCHEMA, circleRetentionExpiresAt, type CircleRetentionChoice } from "../app/circle-overrides";
 import {
   INITIAL_ORGANIZER_VENUE_CATALOG,
   organizerVenueNameKey,
@@ -3279,6 +3279,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     nextAttemptAt?: number;
     pendingAttempts?: number;
     metadata?: Partial<Record<"data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id" | "workflow_run_attempt" | "production_manifest_sha256", string | number | null>>;
+    /** The published event's end; on `published`, stored retention deadlines are recounted from it. */
+    eventEndsAt?: string;
     now: number;
   }) {
     await ensureTables();
@@ -3330,6 +3332,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?2)
              AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?2)`,
         ).bind(input.now, input.jobId),
+        // A deadline was counted from the end date live when it was chosen. A
+        // corrected date must move it too, or a postponed event could lose its
+        // circles' content before it has even ended (ADR-0068).
+        ...(input.eventEndsAt ? [database.prepare(
+          `UPDATE circle_overrides SET retention_expires_at = ?1
+           WHERE retention_choice = 'purge' AND event_id = (
+             SELECT c.event_id FROM organizer_event_candidates c
+             JOIN organizer_publication_jobs j ON j.candidate_id = c.id WHERE j.id = ?2)`,
+        ).bind(circleRetentionExpiresAt("purge", Date.parse(input.eventEndsAt)), input.jobId)] : []),
       ]);
     }
     return true;

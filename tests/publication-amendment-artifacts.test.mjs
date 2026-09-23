@@ -21,12 +21,13 @@ function layout(codes) {
     rows: [{ label: "S", orientation: "horizontal", confidence: 1, slots: codes.map((code, index) => ({ code, rect: { x: 10 + index * 70, y: 35, width: 50, height: 30 } })) }],
     pillars: [], accessPoints: [], landmarks: [] };
 }
-async function snapshotFor(fixture, changes, id = "amendment-one") {
+async function snapshotFor(fixture, changes, id = "amendment-one", settings = null) {
   const plan = api.planOrganizerAmendmentCandidate(fixture.baseline, changes, () => "2026-09-16");
   const baselineJson = JSON.stringify(fixture.baseline);
   const snapshot = { schema: "organizer-submission-snapshot/4", operation: "AMEND", candidateId: id, candidateVersion: 5,
     eventId: fixture.baseline.event.id, draft: structuredClone(fixture.baseline.draft), references: fixture.baseline.references,
-    contentUpdatedAt: "2026-09-16T00:00:00.000Z", amendment: { baselineJson, baselineSha256: hash(baselineJson), changes },
+    contentUpdatedAt: "2026-09-16T00:00:00.000Z",
+    amendment: { baselineJson, baselineSha256: hash(baselineJson), changes, ...(settings ? { settings } : {}) },
     import: { source: { sourceDescription: "已確認更正" }, rows: plan.rows },
     maps: fixture.baseline.maps.map((map) => ({ ...map, id: `${id}-${map.periodKey}`, mapRevision: 2,
       content: { schema: "map-contribution-draft/1", layout: layout([...new Set([...fixture.baseline.official.days.find((day) => String(day.day) === map.periodKey).booths.flatMap((booth) => booth.codes),
@@ -138,6 +139,73 @@ test("partial moves preserve reviewed multi-day identity and the next baseline c
   evidence.entries[0].retiredSources[0].retirement.areaId = "B";
   changedHistory.evidenceJson = JSON.stringify(evidence);
   await assert.rejects(builder.buildPublicationMainStage(second.source, changedHistory), (e) => e.code === "amendment_baseline_changed");
+});
+
+// ADR-0068: declared settings change the published event and nothing else, and
+// the next correction starts from the event as it was published.
+test("declared settings publish a renamed, re-dated event and the next baseline starts from it", async () => {
+  const fixture = await amendmentFixture(runner);
+  const settings = { name: "測試活動 改名", aliases: ["TA"], days: [{ id: "1", date: "2026-11-14" }] };
+  const first = await snapshotFor(fixture, [], "amendment-settings", settings);
+  const artifacts = await builder.buildApprovedPublicationArtifacts(first.source);
+  assert.equal(artifacts.event.name, "測試活動 改名");
+  assert.deepEqual(artifacts.event.aliases, ["TA"]);
+  assert.deepEqual(artifacts.event.days.map((day) => day.dateLabel), ["2026-11-14"]);
+  assert.equal(artifacts.event.dateRangeLabel, "2026-11-14");
+  assert.equal(artifacts.event.eventEndsAt, "2026-11-14T23:59:59+08:00");
+  assert.equal(artifacts.draft.event.name, "測試活動 改名");
+  assert.deepEqual(first.snapshot.draft, fixture.baseline.draft, "the draft itself never moves");
+  const settled = ["name", "aliases", "days", "dateRangeLabel", "eventEndsAt", "dataUpdatedAt"];
+  const rest = (event) => Object.fromEntries(Object.entries(event).filter(([key]) => !settled.includes(key)));
+  assert.deepEqual(rest(artifacts.event), rest(fixture.baseline.event), "fields outside the allow-list stay exactly as published");
+  const data = await builder.buildPublicationDataStage(first.source, dataBase(fixture));
+  const main = await builder.buildPublicationMainStage(first.source, mainInput(fixture, data.allFiles));
+  assert.deepEqual(reader(artifacts, main).placements.map((row) => [row.boothCode, row.circleId, row.status]),
+    [["S01", "c-000001", "active"], ["S02", "c-000002", "active"]], "a settings-only correction leaves the roster alone");
+  const nextFixture = { ...fixture, source: { ...fixture.source, ...first.source, candidateId: first.snapshot.candidateId, candidateVersion: 5,
+    mainCommit: "d".repeat(40), dataCommit: "b".repeat(40), jobId: "amendment-job", snapshotId: "amendment-snapshot" },
+    baseline: { mainCommit: "e".repeat(40) }, mainFiles: new Map(main.files.map((file) => [file.path, file.text])), dataFiles: new Map(data.allFiles.map((file) => [file.path, file.text])),
+    published: { dataCommit: "b".repeat(40), catalog: reader(artifacts, main) } };
+  const remote = gitReaderFixture(nextFixture);
+  nextFixture.baseline = await api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => "test" }, fetch: remote.fetch,
+    published: async () => nextFixture.published })(nextFixture.source);
+  assert.equal(nextFixture.baseline.draft.event.name, "測試活動 改名");
+  assert.deepEqual(nextFixture.baseline.draft.event.aliases, ["TA"]);
+  assert.equal(nextFixture.baseline.draft.event.days[0].date, "2026-11-14");
+  const second = await snapshotFor(nextFixture, [{ kind: "withdrawn", sources: ["1:S02"] }], "amendment-after-settings");
+  const secondArtifacts = await builder.buildApprovedPublicationArtifacts(second.source);
+  assert.equal(secondArtifacts.event.name, "測試活動 改名", "a later correction without settings keeps the corrected event");
+  assert.equal(secondArtifacts.event.eventEndsAt, "2026-11-14T23:59:59+08:00");
+});
+
+test("settings and roster declarations publish together", async () => {
+  const fixture = await amendmentFixture(runner);
+  const { source } = await snapshotFor(fixture, [{ kind: "released", sources: ["1:S02"], circleName: "接手社" }], "amendment-both", { name: "測試活動 改名" });
+  const artifacts = await builder.buildApprovedPublicationArtifacts(source);
+  const data = await builder.buildPublicationDataStage(source, dataBase(fixture));
+  const main = await builder.buildPublicationMainStage(source, mainInput(fixture, data.allFiles));
+  assert.equal(artifacts.event.name, "測試活動 改名");
+  assert.equal(Object.hasOwn(artifacts.event, "aliases"), false);
+  assert.equal(reader(artifacts, main).placements.find((row) => row.boothCode === "S02" && row.status === "active").circleId, "c-000003");
+});
+
+test("settings outside their stored form, and merged data that ignores them, fail closed", async () => {
+  const fixture = await amendmentFixture(runner);
+  const { source, snapshot } = await snapshotFor(fixture, [], "amendment-settings", { name: "測試活動 改名" });
+  for (const [alter, code] of [
+    [(s) => { s.amendment.settings = { name: "測試活動" }; }, "snapshot_mismatch"],
+    [(s) => { s.amendment.settings = { name: " 測試活動 改名" }; }, "snapshot_mismatch"],
+    [(s) => { s.amendment.settings = { mapTemplate: "OTHER" }; }, "artifact_invalid"],
+    [(s) => { s.amendment.settings = { days: [{ id: "9", date: "2026-11-14" }] }; }, "artifact_invalid"],
+    [(s) => { s.draft.event.name = "測試活動 改名"; }, "snapshot_mismatch"],
+  ]) {
+    const changed = structuredClone(snapshot); alter(changed);
+    await assert.rejects(builder.buildApprovedPublicationArtifacts(approved(changed)), (e) => e.code === code, JSON.stringify(changed.amendment.settings));
+  }
+  const data = await builder.buildPublicationDataStage(source, dataBase(fixture));
+  const input = mainInput(fixture, data.allFiles);
+  input.dataFiles.set(prefix + "event.json", fixture.dataFiles.get(prefix + "event.json"));
+  await assert.rejects(builder.buildPublicationMainStage(source, input), (e) => e.code === "snapshot_mismatch");
 });
 
 test("approval, operation, immutable baseline and declaration-derived rows fail closed", async () => {

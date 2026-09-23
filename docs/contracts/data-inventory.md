@@ -109,7 +109,7 @@
 | `revision`、`created_at`、`updated_at`、`updated_by` | 版本與作者 |
 | `status`、`takedown_reason`、`takendown_by`、`takendown_at` | 管理者撤下紀錄 |
 | `post_event_hidden` | 活動後退出旗標 |
-| `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。**控制面自 ADR-0054 起不再提供這個選擇**，新資料列一律為 NULL；既有的 `purge` 列仍照原到期日清除 |
+| `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。**控制面自 ADR-0054 起不再提供這個選擇**，新資料列一律為 NULL；既有的 `purge` 列仍照到期日清除；活動發布（含發布後更正改期）時，該活動的到期日依新的活動結束時間重算（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)） |
 | `hosted_thumbnail_key` | 目前代管縮圖的 R2 object key；公開 URL 仍在 `fields_json`，這欄只供更換與刪除生命週期使用 |
 
 **目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：不設期限；[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 之前選了 `purge` 的既有列，仍在活動結束滿 90 天時由排程 Worker **刪除資料列**。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 內容由社團本人維護。

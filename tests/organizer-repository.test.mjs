@@ -19,6 +19,7 @@ const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasSt
 const { createGitHubPublicationAdapter } = await environment.runner.import("/app/github-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
+const { circleRetentionExpiresAt } = await environment.runner.import("/app/circle-overrides.ts");
 const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
 const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
@@ -109,6 +110,36 @@ for (const [name, operation, snapshotOperation, schema, eventId, valid] of [
   assert.equal(job.status, valid ? "publishing" : "failed");
   assert.equal(job.failure_code, valid ? null : "snapshot_mismatch");
   assert.equal(job.remote_write_intent_at !== null, valid);
+});
+
+// ADR-0068: deadlines count from the event's end, so a corrected date moves
+// every purge deadline of that event once the correction is live, and nothing else.
+test("publishing a corrected event date recounts that event's purge deadlines and nothing else", async () => {
+  const { id, jobId } = await publicationFixture();
+  const draft = { schema: "organizer-event-draft/1", event: { id: "second-event", name: "第二場", days: [{ id: "1", label: "第一天", date: "2026-11-07" }] },
+    venue: { assignments: [] }, officialSource: { label: "", url: null } };
+  const snapshotJson = JSON.stringify({ schema: "organizer-submission-snapshot/4", operation: "AMEND", candidateId: id, candidateVersion: 1,
+    eventId: "second-event", draft, amendment: { changes: [], settings: { days: [{ id: "1", date: "2026-11-21" }] } } });
+  const hash = await sha256Hex(snapshotJson);
+  const rows = [["early", "second-event", "purge", 1], ["late", "second-event", "purge", 9_999_999_999_999],
+    ["kept", "second-event", "keep", null], ["unanswered", "second-event", null, null], ["other", "other-event", "purge", 1]];
+  await database.batch([
+    database.prepare("UPDATE organizer_event_candidates SET publication_operation = 'AMEND' WHERE id = ?1").bind(id),
+    database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE candidate_id = ?3").bind(snapshotJson, hash, id),
+    database.prepare("UPDATE organizer_publication_jobs SET approval_hash = ?1 WHERE id = ?2").bind(hash, jobId),
+    ...rows.map(([circle, event, choice, expires]) => database.prepare(`INSERT INTO circle_overrides
+      (id,event_id,circle_id,fields_json,updated_by,created_at,updated_at,retention_choice,retention_expires_at)
+      VALUES (?1,?2,?3,'{}',?4,?5,?5,?6,?7)`).bind(`override-${circle}`, event, circle, ownerId, NOW, choice, expires)),
+  ]);
+  const driver = { eventExists: async () => false, run: async ({ step }) => ({ metadata: checkpoint(step), productionVerified: step === "verifying_production" }) };
+  for (let i = 0; i < 20 && (await repository.getOrganizerPublicationJob(jobId)).status !== "published"; i += 1) {
+    await runPublicationTick({ repository, driver, now: () => NOW + 10 + i });
+  }
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
+  const deadline = circleRetentionExpiresAt("purge", Date.parse("2026-11-21T23:59:59+08:00"));
+  const stored = Object.fromEntries((await database.prepare("SELECT circle_id, retention_expires_at FROM circle_overrides").all()).results
+    .map((row) => [row.circle_id, row.retention_expires_at]));
+  assert.deepEqual(stored, { early: deadline, late: deadline, kept: null, unanswered: null, other: 1 });
 });
 
 test("durable ticks resume all waiting stages after runtime recreation without workspace requests", async () => {

@@ -3,7 +3,8 @@ import type { OrganizerNormalizedImportRow } from "../app/organizer-import";
 type Actor = { accountId: string; role: "owner" | "editor" | "admin"; admin: boolean; now: number };
 type AmendmentRow = {
   candidate_id: string; source_candidate_id: string; source_version: number; source_job_id: string;
-  baseline_json: string; baseline_sha256: string; created_at: number; changes_json: string; changes_version: number; current_version: number;
+  baseline_json: string; baseline_sha256: string; created_at: number; changes_json: string; settings_json: string | null;
+  changes_version: number; current_version: number;
 };
 
 /** Candidate writes only. The handler derives the baseline and rows from trusted
@@ -44,7 +45,7 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
 
   async function getOrganizerAmendment(candidateId: string): Promise<AmendmentRow | null> {
     await ensureTables();
-    return database.prepare(`SELECT a.*, changes.changes_json, changes.version AS changes_version, c.current_version
+    return database.prepare(`SELECT a.*, changes.changes_json, changes.settings_json, changes.version AS changes_version, c.current_version
       FROM organizer_amendments a JOIN organizer_event_candidates c ON c.id = a.candidate_id
       JOIN organizer_amendment_changes changes ON changes.candidate_id = a.candidate_id
       WHERE a.candidate_id = ?1 ORDER BY changes.version DESC LIMIT 1`).bind(candidateId).first<AmendmentRow>();
@@ -125,6 +126,8 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
   async function saveOrganizerAmendment(input: {
     candidateId: string; expectedVersion: number; baselineSha256: string;
     changesJson: string; changesSha256: string; rows: readonly OrganizerNormalizedImportRow[]; actor: Actor;
+    /** Declared event settings in their stored form, or null for none. */
+    settingsJson?: string | null; settingsSha256?: string | null;
   }) {
     await ensureTables();
     const { actor } = input;
@@ -147,11 +150,13 @@ export function createOrganizerAmendmentRepository(database: D1Database, ensureT
       database.prepare(`UPDATE organizer_event_candidates SET current_version = ?2, updated_at = ?3, last_updated_by = ?4,
         last_updated_role = ?5 WHERE id = ?6 AND ${revisionExists}`)
         .bind(revisionId, version, actor.now, actor.accountId, actorRole(actor), input.candidateId),
-      database.prepare(`INSERT INTO organizer_amendment_changes (candidate_id, version, changes_json, revision_id, created_at)
-        SELECT ?2, ?3, ?4, ?1, ?5 WHERE ${revisionExists}`).bind(revisionId, input.candidateId, version, input.changesJson, actor.now),
+      database.prepare(`INSERT INTO organizer_amendment_changes (candidate_id, version, changes_json, settings_json, revision_id, created_at)
+        SELECT ?2, ?3, ?4, ?6, ?1, ?5 WHERE ${revisionExists}`)
+        .bind(revisionId, input.candidateId, version, input.changesJson, actor.now, input.settingsJson ?? null),
       ...importStatements(revisionId, input.candidateId, version, actor, input.rows, input.changesSha256),
       audit(revisionId, input.candidateId, actor, "organizer.amendment.save", {
         version, baselineSha256: input.baselineSha256, changesSha256: input.changesSha256,
+        ...(input.settingsSha256 ? { settingsSha256: input.settingsSha256 } : {}),
       }),
     ];
     try {
