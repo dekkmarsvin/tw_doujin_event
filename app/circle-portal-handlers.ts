@@ -2,6 +2,7 @@ import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoic
 import { getEventDefinition } from "./event-catalog";
 import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
+import { loginLinkLetter } from "./mail-letter";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -105,7 +106,8 @@ type PortalDependencies = {
    * Omitted until the production driver and rollout gates are verified. */
   dispatchOrganizerPublication?: (jobId: string) => Promise<void>;
   repository: IdentityRepository;
-  sendMail: (message: { to: string; subject: string; text: string }) => Promise<void>;
+  /** `html`, when present, goes alongside `text`; the text part must stand on its own. */
+  sendMail: (message: { to: string; subject: string; text: string; html?: string }) => Promise<void>;
   /**
    * Whether this environment can deliver to an address at all, asked before
    * anything is written. Only the preview and local portals set it: they keep a
@@ -376,11 +378,12 @@ export function createCirclePortalHandlers({
     }
     const token = randomToken();
     destination.searchParams.set("login", token);
+    const expiresAt = now + LOGIN_TOKEN_TTL_MS;
     await repository.createLoginToken({
       tokenHash: await sha256Hex(token),
       email,
       now,
-      expiresAt: now + LOGIN_TOKEN_TTL_MS,
+      expiresAt,
       ipHash,
       audience,
     });
@@ -390,8 +393,7 @@ export function createCirclePortalHandlers({
     try {
       await sendMail({
         to: email,
-        subject: "場刊 Map 登入連結",
-        text: `請開啟以下連結登入（15 分鐘內有效，僅能使用一次）：\n\n${destination.href}\n\n若您沒有申請登入，請忽略這封信，不會有任何變更。`,
+        ...loginLinkLetter({ href: destination.href, origin: config.origin, requestedAt: now, expiresAt }),
       });
     } catch (error) {
       // The row exists but nobody can ever hold the link, and it counts against

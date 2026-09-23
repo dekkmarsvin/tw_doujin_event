@@ -1,6 +1,7 @@
 export type MailEnvironment = Pick<PortalEnv, "MAILGUN_API_KEY" | "MAILGUN_DOMAIN" | "MAILGUN_SENDER" |
   "PREVIEW_MAIL_SINK" | "PREVIEW_TEST_RECIPIENTS" | "PREVIEW_SANDBOX_RECIPIENTS">;
-export type PortalMail = { to: string; subject: string; text: string };
+/** `html`, when present, goes alongside `text`; the text part must stand on its own. */
+export type PortalMail = { to: string; subject: string; text: string; html?: string };
 
 export class MailDeliveryError extends Error {
   constructor(readonly code: string) { super(code); }
@@ -23,6 +24,8 @@ export async function sendMailgun(env: MailEnvironment, message: PortalMail, opt
   if (!key || !domain) throw new MailDeliveryError("Missing Mailgun configuration.");
   const form = new URLSearchParams({ from: env.MAILGUN_SENDER ?? `場刊 Map <noreply@${domain}>`,
     to: message.to, subject: message.subject, text: message.text });
+  // Both parts go in one message; Mailgun builds the multipart/alternative.
+  if (message.html) form.set("html", message.html);
   const response = await fetch(`https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`, {
     method: "POST", headers: { authorization: `Basic ${btoa(`api:${key}`)}`, "content-type": "application/x-www-form-urlencoded" },
     body: form, signal: AbortSignal.timeout(8_000),

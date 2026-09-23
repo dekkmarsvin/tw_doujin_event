@@ -182,6 +182,14 @@ test("a login request answers identically whether or not the inbox is known", as
   assert.equal(sent.length, before);
 });
 
+test("the login mail carries the same link in its HTML and text parts", async () => {
+  await handlers.requestLink(post("/api/auth/request-link", { email: "both-parts@example.com", turnstileToken: "solved" }));
+  const mail = sent.at(-1);
+  const link = mail.text.match(/(https?:\/\/\S*login=\S+)/)[1];
+  assert.equal(mail.subject, "場刊 Map 登入連結");
+  assert.ok(mail.html.includes(`href="${link.replaceAll("&", "&#38;")}"`), "the button opens the link from the text part");
+});
+
 test("a login request without a solved challenge reaches neither the mailer nor the database", async () => {
   const missing = await handlers.requestLink(post("/api/auth/request-link", { email: "unverified@example.com" }));
   assert.equal(missing.status, 403);
