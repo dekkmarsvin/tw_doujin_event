@@ -27,7 +27,7 @@
 
 新候選沿用申請名稱與官方來源，預計日期／地點留在申請供確認；真正活動日與使用空間由既有引導填寫。核准申請僅准許建置，不建立「官方認證」標示；內容送審、核准 snapshot、publication job、恢復與 production smoke 全沿用既有路徑。
 
-公開活動選擇頁的 CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN=true` 控制，送件另由 Pages `ORGANIZER_APPLICATIONS_OPEN=true` 控制，均預設關閉；Reader 不為此呼叫 Function。未通過真實零補救驗收前不得設定為 true。隔離／受控驗收可只把明確帳號加入伺服器的 `ORGANIZER_APPLICATION_ALLOWED_EMAILS`（逗號分隔），不顯示公開 CTA，其他帳號送件仍回 403。既有邀請與已送件結果不受關閉開關影響。實際啟用步驟見部署 runbook，驗收證據集中 #163。
+公開活動選擇頁的 CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN=true` 控制，送件另由 Pages `ORGANIZER_APPLICATIONS_OPEN=true` 控制，均預設關閉；Reader 不為此呼叫 Function。隔離／受控驗收可只把明確帳號加入伺服器的 `ORGANIZER_APPLICATION_ALLOWED_EMAILS`（逗號分隔），不顯示公開 CTA，其他帳號送件仍回 403。既有邀請與已送件結果不受關閉開關影響。啟用條件與步驟見[部署 runbook](../runbooks/deployment.md#organizer-發布)。
 
 申請與決策不設新的 TTL／排程；帳號刪除時刪除 pending 申請，已審核申請保留去識別的決策與候選連結，清空申請自由內容與理由。帳號／審核者去識別化沿用既有刪除交易；正式活動內容及 sole-owner 刪除保護不變。
 

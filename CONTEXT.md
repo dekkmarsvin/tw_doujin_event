@@ -138,7 +138,7 @@ Organizer 在受驗證的 Web UI 準備活動、場館、攤位及地圖，經�
 ## 工程
 
 **gate**
-適用於該次交付的必要檢查。指令見[本機開發與驗證](docs/runbooks/local-development.md)，本機驗證範圍依 [review-fix loop](docs/agents/review-loop.md#相稱的驗證)；required CI 不因純文件或局部改動而取消。
+適用於該次交付的必要檢查；指令與適用範圍見[本機開發與驗證](docs/runbooks/local-development.md#共同-gate)。
 
 **產物邊界**（artifact boundary）
 公開 build 中什麼必須存在、什麼絕不能存在的規則。由測試把關，不靠人工檢查。
