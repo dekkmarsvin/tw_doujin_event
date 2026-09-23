@@ -1421,3 +1421,30 @@ test("resending still respects the shared IP login-link limit", async () => {
   assert.equal((await handlers.manageOrganizerCollaborators(req, candidateId)).status, 429);
   assert.equal(sent.length, before);
 });
+
+test("invitation mail uses the current server-side event name and the inviter's task role, including resend", async () => {
+  const { candidateId, cookie, manage } = await invitationFixture();
+  assert.match(sent.at(-1).text, /活動：Invitation recovery/);
+  assert.match(sent.at(-1).text, /邀請者：網站管理者/);
+  assert.match(sent.at(-1).html, /Invitation recovery/);
+  assert.doesNotMatch(sent.at(-1).text + sent.at(-1).html, /admin@example\.test/);
+  for (const role of ["editor", "owner"]) {
+    const email = `context-${role}@example.test`;
+    const label = role === "owner" ? "網站管理者" : "活動負責人";
+    const name = `活動 ${role}`;
+    await database.prepare("UPDATE organizer_event_candidates SET tentative_name = ?1 WHERE id = ?2").bind(name, candidateId).run();
+    const initial = await handlers.manageOrganizerCollaborators(request(`/api/organizer/events/${candidateId}/collaborators`, "POST",
+      { role, email, action: "invite", eventName: "client-forgery", inviterRole: "forged-role" }, cookie), candidateId);
+    assert.equal(initial.status, 200);
+    for (const part of ["text", "html"]) {
+      assert.ok(sent.at(-1)[part].includes(name)); assert.ok(sent.at(-1)[part].includes(label));
+      assert.doesNotMatch(sent.at(-1)[part], /admin@example\.test|client-forgery|forged-role/);
+    }
+    const renamed = `${name} 新名稱`;
+    await database.prepare("UPDATE organizer_event_candidates SET tentative_name = ?1 WHERE id = ?2").bind(renamed, candidateId).run();
+    assert.equal((await manage(role, email, "resend")).status, 200);
+    for (const part of ["text", "html"]) {
+      assert.ok(sent.at(-1)[part].includes(renamed)); assert.ok(sent.at(-1)[part].includes(label));
+    }
+  }
+});

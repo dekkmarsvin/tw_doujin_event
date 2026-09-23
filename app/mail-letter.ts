@@ -144,7 +144,7 @@ function factsTable(facts: LetterFact[]) {
     const value = escapeHtml(fact.value);
     return `<tr>`
       + `<td width="76" valign="top" style="width:76px;white-space:nowrap;padding:10px 16px 10px 0;border-bottom:1px solid ${LINE};${text(13, 20, `color:${MUTED};`)}">${escapeHtml(fact.label)}</td>`
-      + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
+      + `<td valign="top" style="padding:10px 0;border-bottom:1px solid ${LINE};overflow-wrap:anywhere;word-break:break-word;font-family:${fact.data ? MONO : SANS};font-size:14px;line-height:20px;font-weight:700;${fact.data ? "letter-spacing:0.04em;" : ""}color:${INK};">`
       + (fact.href ? `<a href="${escapeHtml(fact.href)}" style="color:${LINK};">${value}</a>` : value)
       + `</td></tr>`;
   }).join("");
@@ -252,11 +252,13 @@ export function loginLinkLetter({ href, origin, requestedAt, expiresAt }: {
  * it expires. Any organizer sign-in accepts the address's pending invitations,
  * so the letter says where to ask for a fresh link instead of leaving a dead one.
  */
-export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt }: {
+export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt, eventName, inviterRole }: {
   href: string;
   origin: string;
   requestedAt: number;
   expiresAt: number;
+  eventName: string;
+  inviterRole: "admin" | "owner";
 }) {
   const minutes = Math.round((expiresAt - requestedAt) / 60_000);
   return renderLetter({
@@ -267,7 +269,11 @@ export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt
     stamp: formatTaipeiTime(requestedAt),
     title: "你已受邀管理一場活動",
     paragraphs: ["登入後會進入主辦工作區。連結只能使用一次。"],
-    facts: [{ label: "有效至", value: formatTaipeiTime(expiresAt), data: true }],
+    facts: [
+      { label: "活動", value: eventName },
+      { label: "邀請者", value: inviterRole === "admin" ? "網站管理者" : "活動負責人" },
+      { label: "有效至", value: formatTaipeiTime(expiresAt), data: true },
+    ],
     action: { label: "登入主辦工作區", href },
     showActionUrl: true,
     notes: [

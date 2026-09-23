@@ -90,7 +90,8 @@ test("the footer points back to the origin the letter was sent from", () => {
 
 test("an invitation says where to ask for a fresh link once this one expires", () => {
   const href = `${ORIGIN}/organizer?login=Invite_42`;
-  const mail = organizerInvitationLetter({ href, origin: ORIGIN, requestedAt: REQUESTED_AT, expiresAt: REQUESTED_AT + 15 * 60_000 });
+  const mail = organizerInvitationLetter({ href, origin: ORIGIN, requestedAt: REQUESTED_AT, expiresAt: REQUESTED_AT + 15 * 60_000,
+    eventName: "測試活動", inviterRole: "admin" });
   assert.equal(mail.subject, "場刊 Map 主辦工作區邀請");
   assert.equal(mail.text.match(/\/organizer\?login=([^\s]+)/)[1], "Invite_42");
   assert.ok(mail.text.split("\n").includes(href));
@@ -120,3 +121,20 @@ test("a digest with one kind gets a button; several kinds link row by row", () =
   assert.match(many.html, /href="https:\/\/map\.kotoban\.top\/admin#review-notifications" style="[^"]*">通知設定<\/a>/);
   assert.doesNotMatch(many.html, /#fff7df/, "a digest is a general letter, not an urgent one");
 });
+
+for (const [inviterRole, label] of [["admin", "網站管理者"], ["owner", "活動負責人"]]) {
+  test(`invitation facts identify the event and ${inviterRole} in both alternatives`, () => {
+    const eventName = '星塵 <&"交流會 ' + '長名稱'.repeat(30);
+    const href = `${ORIGIN}/organizer?login=Invitation_context`;
+    const mail = organizerInvitationLetter({ href, origin: ORIGIN, requestedAt: REQUESTED_AT,
+      expiresAt: REQUESTED_AT + 900000, eventName, inviterRole });
+    assert.ok(mail.text.includes(`活動：${eventName}`));
+    assert.ok(mail.text.includes(`邀請者：${label}`));
+    assert.ok(mail.html.includes(label));
+    assert.ok(mail.html.includes(eventName.replaceAll('&', '&#38;').replaceAll('<', '&#60;').replaceAll('"', '&#34;')));
+    assert.ok(!mail.html.includes(eventName));
+    assert.ok(mail.text.split('\n').includes(href));
+    assert.match(mail.text, /連結只能使用一次/);
+    assert.match(mail.text, /重新索取登入連結/);
+  });
+}
