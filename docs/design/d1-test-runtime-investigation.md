@@ -123,4 +123,17 @@ node --test --test-concurrency=1 --test-reporter=spec $testFiles
 
 本次樣本整檔少約 18.85 秒（31.7%），新連線少 1,233（33.0%）。完整 fixture（清理、seed、三個帳號與 admin）暖機後交錯量 5 組，平均由 **542.66 ms 降至 53.28 ms**；每次非同步往返由 29–30 次降至 1 次。這是實際單檔改善，不能外推為全套同等比例加速；其餘 D1 檔案未遷移。
 
-紀錄位於 `outputs/d1-implementation/{before,after,fixture}/`。聚焦 8 個 runner、2 個 fixture、44 個既有 repository 案例皆通過，ESLint、TypeScript 通過；正式 `npm test` 與本輪獨立 review 完成後補記。
+紀錄位於 `outputs/d1-implementation/{before,after,fixture}/`。聚焦 8 個 runner、2 個 fixture、44 個既有 repository 案例皆通過，ESLint、TypeScript 通過。
+
+### 完整入口與審查驗收
+
+原版 Miniflare、上述支援的 Node／npm 版本，以 Windows 預設 `npm test` 執行 build 與全部 91 個測試檔案，總耗時 **316.00 秒**、退出碼 0：
+
+| 執行組 | 檔案 | 通過案例 | Node runner 時間 |
+|---|---:|---:|---:|
+| module／cli／artifact，Node 預設併行 | 74 | 594/594 | 6.53 秒 |
+| D1，concurrency=1 | 17 | 307/307 | 304.47 秒 |
+
+合計 **901/901 通過，零失敗、零取消、零略過**，log 未出現 `EADDRINUSE`。這證明本次主機狀態下預設入口可完成；其他 D1 檔案仍保留原 fixture，整套結果也不能與先前不同案例數、執行方式的紀錄直接換算加速比例。紀錄為 `outputs/d1-implementation/npm-test.log` 與 `npm-test-result.json`。
+
+本輪首次受審 commit 為 `86b0a08`。獨立 reviewer 找到新增 runner 測試的 fixture 字串被現有 tier 偵測誤分類；`9e25be8` 改為執行時產生該字串，並以實際 `node scripts/run-tests.mjs cli --spec` 驗證 9 檔、62/62 通過，包含新增 8 案。完整入口量測期間的這項修正只影響測試 fixture 字串與分類，已用 CLI 聚焦重驗，其他未變內容沿用全套結果。修正檔 ESLint 與 diff 檢查通過；同一 reviewer 已完成聚焦 verification，blocker 為零，Review Done。
