@@ -8,7 +8,7 @@ const load = name => vite.environments.ssr.runner.import(name);
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
 const { runReviewNotificationTick } = await load("/app/review-notification-scheduler.ts");
 const { nextNotificationSlot, notificationRetryDelay } = await load("/app/review-notifications.ts");
-const { MailDeliveryError, sendPortalMail, sendMailgun } = await load("/app/portal-mail.ts");
+const { MailDeliveryError, sendPortalMail } = await load("/app/portal-mail.ts");
 const notificationWorker = (await load("/workers/publication-dispatch/index.ts")).default;
 const { createCirclePortalHandlers, SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
 const { hmacSign } = await load("/app/portal-crypto.ts");
@@ -259,8 +259,47 @@ test("Mailgun transport has a timeout, records provider id, and rejects without 
       assert.equal(init.body.get("to"), ADMIN);
       return Response.json({ id: "provider-message" });
     };
-    assert.equal(await sendMailgun(env, { to: ADMIN, subject: "x", text: "x" }), "provider-message");
+    assert.equal(await sendPortalMail(env, { to: ADMIN, subject: "x", text: "x" }, async () => assert.fail("production sink")), "provider-message");
     globalThis.fetch = async () => new Response("private recipient and body", { status: 429 });
-    await assert.rejects(sendMailgun(env, { to: ADMIN, subject: "x", text: "x" }), error => error.code === "mailgun_429" && !error.message.includes("private"));
+    await assert.rejects(sendPortalMail(env, { to: ADMIN, subject: "x", text: "x" }, async () => assert.fail("production sink")), error => error.code === "mailgun_429" && !error.message.includes("private"));
   } finally { globalThis.fetch = originalFetch; }
 });
+
+for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-rejected", "production-rejected"]) {
+  test(`scheduled Worker mail adapter: ${scenario}`, async (t) => {
+    now = Date.now() - 600000;
+    await db.prepare("UPDATE admin_notification_preferences SET enabled_since = 0, next_digest_at = 0").run();
+    await submit(`worker-route-${scenario}`);
+    const production = scenario.startsWith("production");
+    const runtime = { DB: db, ORGANIZER_PUBLICATION_MODE: "disabled", ADMIN_REVIEW_NOTIFICATIONS_ENABLED: "true",
+      NOTIFICATION_ORIGIN: "https://map.kotoban.top", MAILGUN_API_KEY: "fixture-key", MAILGUN_DOMAIN: "fixture.example",
+      PREVIEW_MAIL_SINK: production ? undefined : "d1", PREVIEW_TEST_RECIPIENTS: scenario === "sink" ? `${ADMIN},${SECOND}` : "",
+      PREVIEW_SANDBOX_RECIPIENTS: scenario === "denied" ? "" : `${ADMIN},${SECOND}` };
+    const errors = [], logs = [], mail = [];
+    t.mock.method(console, "error", (...args) => errors.push(args.join(" ")));
+    t.mock.method(console, "log", value => logs.push(JSON.parse(value)));
+    const rejection = `${ADMIN}: rejected ` + "x".repeat(400);
+    t.mock.method(globalThis, "fetch", async (url, init) => {
+      assert.equal(url, "https://api.mailgun.net/v3/fixture.example/messages");
+      assert.ok(init.signal instanceof AbortSignal);
+      assert.match(init.body.get("text"), /活動申請：1 筆/);
+      assert.match(init.body.get("html"), /活動申請/);
+      mail.push(init.body);
+      return scenario.endsWith("rejected") ? new Response(rejection, { status: 403 }) : Response.json({ id: `worker-provider-${mail.length}` });
+    });
+    await notificationWorker.scheduled({}, runtime);
+    assert.equal(mail.length, scenario === "sink" || scenario === "denied" ? 0 : 2);
+    const captured = await repo.latestPreviewMail(ADMIN);
+    if (scenario === "sink") assert.match(captured.text, /活動申請：1 筆/);
+    else assert.equal(captured, null);
+    assert.deepEqual(errors, scenario === "sandbox-rejected" ? Array(2).fill(`Mailgun rejected the message (403). ${rejection.slice(0, 300)}`) : []);
+    const { results: batches } = await db.prepare("SELECT state, provider_id, error_code FROM review_notification_batches ORDER BY provider_id").all();
+    assert.equal(batches.length, 2);
+    for (const [index, batch] of batches.entries()) {
+      assert.equal(batch.error_code, scenario === "denied" ? "preview_recipient_denied" : scenario.endsWith("rejected") ? "mailgun_403" : null);
+      assert.equal(batch.state, scenario === "denied" || scenario.endsWith("rejected") ? "pending" : "accepted");
+      assert.equal(batch.provider_id, scenario === "sink" ? "preview-sink" : scenario === "denied" || scenario.endsWith("rejected") ? null : `worker-provider-${index + 1}`);
+    }
+    assert.doesNotMatch(JSON.stringify(logs), /admin@example|second@example|rejected|fixture-key/);
+  });
+}

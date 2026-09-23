@@ -77,6 +77,8 @@ Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JS
 
 preview 永遠不碰 production Mailgun，但它會寄信——只寄給兩份名單上的地址，並且**依收件人**決定寄法：
 
+Pages 登入／邀請與排程 Worker 摘要都使用 `app/portal-mail.ts` 的 `sendPortalMail`；收件路由及拒絕本文的記錄規則由這個入口統一決定。
+
 | 收件人在哪份名單 | 信去哪裡 | 誰在用 |
 |---|---|---|
 | `PREVIEW_TEST_RECIPIENTS`（`wrangler.jsonc` 的 `env.preview.vars`，兩個保留的 `.test` 假地址） | 寫進 preview D1 的 `preview_mail_sink`，以 `GET /api/preview/mail` 讀回 | CI 的 E2E |

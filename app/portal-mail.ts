@@ -30,7 +30,7 @@ export function previewMailRouteFor(env: MailEnvironment, email: string): "sink"
   return null;
 }
 
-export async function sendMailgun(env: MailEnvironment, message: PortalMail, options: { logRejectionBody?: boolean } = {}) {
+async function sendMailgun(env: MailEnvironment, message: PortalMail, options: { logRejectionBody?: boolean } = {}) {
   const { MAILGUN_API_KEY: key, MAILGUN_DOMAIN: domain } = env;
   if (!key || !domain) throw new MailDeliveryError("Missing Mailgun configuration.");
   const form = new URLSearchParams({ from: env.MAILGUN_SENDER ?? `場刊 Map <noreply@${domain}>`,
@@ -52,11 +52,12 @@ export async function sendMailgun(env: MailEnvironment, message: PortalMail, opt
 }
 
 export async function sendPortalMail(env: MailEnvironment, message: PortalMail,
-  store: (message: PortalMail) => Promise<void>, options: { logRejectionBody?: boolean } = {}) {
+  store: (message: PortalMail) => Promise<void>) {
   if (env.PREVIEW_MAIL_SINK === "d1") {
     const route = previewMailRouteFor(env, message.to);
     if (route === "sink") { await store(message); return "preview-sink"; }
     if (route !== "sandbox") throw new MailDeliveryError("preview_recipient_denied");
+    return sendMailgun(env, message, { logRejectionBody: true });
   }
-  return sendMailgun(env, message, options);
+  return sendMailgun(env, message);
 }

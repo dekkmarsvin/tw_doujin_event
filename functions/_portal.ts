@@ -1,4 +1,4 @@
-import { sendMailgun, previewMailRouteFor } from "../app/portal-mail";
+import { sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -319,19 +319,8 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     }) : undefined,
     repository,
     sendMail: async (message) => {
-      if (env.PREVIEW_MAIL_SINK === "d1") {
-        switch (previewMailRouteFor(env, message.to)) {
-          case "sink":
-            await repository.storePreviewMail({ email: message.to, subject: message.subject, text: message.text, now: Date.now() });
-            return;
-          case "sandbox":
-            await sendMailgun(env, message, { logRejectionBody: true });
-            return;
-          default:
-            throw new Error("Preview mail recipient is not allowlisted.");
-        }
-      }
-      await sendMailgun(env, message);
+      await sendPortalMail(env, message,
+        mail => repository.storePreviewMail({ email: mail.to, subject: mail.subject, text: mail.text, now: Date.now() }));
     },
     // Only the environments with a fixed recipient list answer this. Production
     // has none, so it stays undefined and no handler gains a way to report that

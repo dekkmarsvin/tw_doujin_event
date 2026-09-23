@@ -6,7 +6,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { previewE2eAuthorized, previewMailRouteFor, previewSinkRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
+const { portalHandlers, previewE2eAuthorized, previewMailRouteFor, previewSinkRecipientAllowed, repositoryFor } = await environment.runner.import("/functions/_portal.ts");
 const { onRequestDelete, onRequestGet } = await environment.runner.import("/functions/api/preview/mail.ts");
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -104,3 +104,43 @@ test("preview reset fails before deleting anything when private map storage is m
   assert.equal((await repositoryFor(env).latestPreviewMail("preview-circle@example.test")).text, "keep");
   previewObjects.clear();
 });
+
+for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-rejected", "production-rejected"]) {
+  test(`Pages mail adapter: ${scenario}`, async (t) => {
+    const email = "route-test@example.com";
+    const repository = repositoryFor(env);
+    await database.batch(["login_tokens", "preview_mail_sink"].map(table => database.prepare(`DELETE FROM ${table}`)));
+    const production = scenario.startsWith("production");
+    const runtime = { ...env, EVENT_ID: "sample", SESSION_SECRET: "fixture-session", HASH_PEPPER: "fixture-pepper",
+      TURNSTILE_SECRET: "fixture-turnstile", MAILGUN_API_KEY: "fixture-key", MAILGUN_DOMAIN: "fixture.example",
+      PREVIEW_MAIL_SINK: production ? undefined : "d1",
+      PREVIEW_TEST_RECIPIENTS: scenario === "sink" ? email : "",
+      // Intentionally overlap sink and retain a stale allowlist in production.
+      PREVIEW_SANDBOX_RECIPIENTS: scenario === "denied" ? "" : email };
+    const errors = [], mail = [];
+    t.mock.method(console, "error", (...args) => errors.push(args.join(" ")));
+    const rejection = `${email}: rejected ` + "x".repeat(400);
+    t.mock.method(globalThis, "fetch", async (url, init) => {
+      if (url === "https://challenges.cloudflare.com/turnstile/v0/siteverify") return Response.json({ success: true });
+      assert.equal(url, "https://api.mailgun.net/v3/fixture.example/messages");
+      assert.ok(init.signal instanceof AbortSignal);
+      const form = init.body;
+      assert.equal(form.get("to"), email);
+      const link = form.get("text").split("\n").find(line => line.startsWith("https://preview.example/circle?login="));
+      assert.ok(link, "plain-text action URL stays alone on its line");
+      assert.ok(form.get("html").includes(`href="${link}"`), "the same HTML action URL reaches the transport");
+      mail.push(form);
+      return scenario.endsWith("rejected") ? new Response(rejection, { status: 403 }) : Response.json({ id: "pages-provider-id" });
+    });
+    const request = new Request("https://preview.example/api/auth/request-link", { method: "POST",
+      headers: { "content-type": "application/json" }, body: JSON.stringify({ email, turnstileToken: "fixture" }) });
+    const sending = portalHandlers({ env: runtime, request }).requestLink(request);
+    if (scenario.endsWith("rejected")) await assert.rejects(sending, error => error.code === "mailgun_403" && error.message === "mailgun_403");
+    else assert.equal((await sending).status, scenario === "denied" ? 400 : 202);
+    assert.equal(mail.length, scenario === "sink" || scenario === "denied" ? 0 : 1);
+    const captured = await repository.latestPreviewMail(email);
+    if (scenario === "sink") assert.match(captured.text, /^https:\/\/preview.example\/circle\?login=\S+$/m);
+    else assert.equal(captured, null);
+    assert.deepEqual(errors, scenario === "sandbox-rejected" ? [`Mailgun rejected the message (403). ${rejection.slice(0, 300)}`] : []);
+  });
+}
