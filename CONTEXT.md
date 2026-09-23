@@ -95,7 +95,7 @@
 ## 社團控制面
 
 **控制面**（control plane）
-與閱讀端分離的受驗證管理能力。社團自助與地圖貢獻使用 `/circle`，主辦活動建立與發布使用 `/organizer`；兩者的角色與發布邊界各見[社團契約](docs/contracts/circle-portal.md)、[地圖貢獻契約](docs/contracts/map-contributions.md)及[主辦契約](docs/contracts/organizer-workspace.md)。
+與閱讀端分離的受驗證管理能力。社團自助與地圖貢獻使用 `/circle`，網站管理（認領審核、管理者名單、地圖審閱與候選匯出）使用 `/admin`，主辦活動建立與發布使用 `/organizer`；各自的角色與發布邊界見[社團契約](docs/contracts/circle-portal.md)、[地圖貢獻契約](docs/contracts/map-contributions.md)及[主辦契約](docs/contracts/organizer-workspace.md)。
 
 **認領**（claim）
 社團證明自己是某個 `CircleRecord` 的擁有者的流程。email 只證明控制信箱，認領必須另有證據。

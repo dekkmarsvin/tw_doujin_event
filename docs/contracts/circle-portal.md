@@ -6,7 +6,7 @@
 **測試**：`tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 
-> **實作狀態（2026-08-30）**：寫入面與公開讀取面都已放行多活動（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)、[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136)）。`/circle` 是跨活動共用入口，帳號跨活動、認領逐活動；`env.EVENT_ID` 只剩「請求沒有指名活動時的預設值」。
+> **活動範圍**：`/circle` 是跨活動共用入口，寫入面與公開讀取面都支援多活動；帳號跨活動、認領逐活動，`env.EVENT_ID` 只是請求沒有指名活動時的預設值（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
 > 本文的「登入」指**社團為了維護自己的資料**而登入。這與 [資料匯入契約](./data-import.md) 裡「使用者授權外部服務以便匯入」是相反方向的兩件事，後者仍屬 P2 且未實作。
 
