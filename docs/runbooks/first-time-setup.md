@@ -27,7 +27,7 @@ npx wrangler pages project create tw-catalog --production-branch main
 
 建立資料庫 `tw-catalog-identity`，在 `wrangler.jsonc` 以 binding 名 `DB` 綁定。**不需要執行任何 migration。**
 
-identity、社團控制面與地圖貢獻共 16 張 runtime table，由 `db/identity-repository.ts` 的 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立。地圖貢獻新增 `map_contributor_grants`、`map_drafts`、`map_draft_revisions`、`map_draft_reviews`、`map_draft_comments`、`map_draft_files`、`map_draft_exports`；preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
+runtime table 由 `ensureTables()` 在首次請求時以 `CREATE TABLE IF NOT EXISTS` 建立，表名與數量以 [`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts) 為準，各表用途見[資料 inventory](../contracts/data-inventory.md)。preview-only mail sink 使用 `preview_mail_sink`。production 也會有空的 sink 表，但沒有 preview flag 與 E2E token，路由一律回 404，且正常寄信路徑不會寫入它。
 
 identity schema 的唯一 authority 是 `db/identity-runtime-schema.ts`；它從同一組 table／column／index declarations 產生首次請求使用的 SQL 與測試驗證 metadata。**本專案沒有任何一條路徑會執行 migration**，也沒有任何 ORM 或 migration 檔案——僅存的一份（只涵蓋 `event_maps`）已隨本機 authoring 堆疊依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除。
 
@@ -78,7 +78,7 @@ npx wrangler r2 bucket domain list tw-doujin-event-thumbnails
 npx wrangler r2 bucket domain list tw-doujin-event-thumbnails-preview
 ```
 
-容量與操作量的營運監控追蹤於 [#66](https://github.com/dekkmarsvin/tw_doujin_event/issues/66)，不屬於縮圖請求路徑。
+容量與操作量的營運監控見 [Cloudflare 容量與耗用監控](./cloudflare-usage-monitoring.md)，不屬於縮圖請求路徑。
 
 ### 3.2 建立私人地圖來源 bucket
 
@@ -95,7 +95,7 @@ npx wrangler r2 bucket domain list tw-doujin-event-map-contributions-preview
 
 ### 4. 設定 production 與 preview runtime secrets
 
-見上節。設定後重部署一次 preview，再確認 `/api/auth/session` 是 401；完整 E2E 由 PR workflow 執行。兩份收件人名單以外的地址，在寫入 D1 或呼叫 Mailgun **之前**就被拒絕，絕不退回 production Mailgun。
+secret 清單與 preview 的設定見[部署 runbook](./deployment.md#secrets)。設定後重部署一次 preview，再確認 `/api/auth/session` 是 401；完整 E2E 由 PR workflow 執行。兩份收件人名單以外的地址，在寫入 D1 或呼叫 Mailgun **之前**就被拒絕，絕不退回 production Mailgun。
 
 ### 5. 建立最小權限 token
 
@@ -245,4 +245,4 @@ curl -sI https://map.kotoban.top/circle | grep -ci '^content-security-policy'
 
 輸出 `1` 才是對的；`2` 代表移除沒生效，元件會被擋。
 
-**Turnstile 不可達時登入會停擺，這是刻意的。** siteverify 逾時或回非 2xx 一律視為未通過；症狀是登入表單回「真人驗證未通過」，而 Mailgun 與 D1 都沒有動靜。
+**Turnstile 不可達時登入會停擺，這是刻意的**（規則見[社團自助控制面契約](../contracts/circle-portal.md#索取登入連結需要通過真人驗證)）。症狀是登入表單回「真人驗證未通過」，而 Mailgun 與 D1 都沒有動靜。
