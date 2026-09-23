@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import test, { after, beforeEach } from "node:test";
+import test, { after, before, beforeEach } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
+import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } from "./support/organizer-repository-fixture.mjs";
 
 const vite = await createServer({
   configFile: false,
@@ -30,7 +31,7 @@ const { default: scheduledWorker } = await environment.runner.import("/workers/p
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
-  script: "export default { fetch() { return new Response('ok'); } }",
+  script: await organizerRepositoryFixtureScript(),
   d1Databases: { DB: "organizer-repository-test" },
 }));
 const database = await miniflare.getD1Database("DB");
@@ -42,13 +43,9 @@ let adminId;
 let ownerId;
 let editorId;
 
+before(() => repository.ensureTables());
 beforeEach(async () => {
-  await repository.ensureTables();
-  await repository.clearPreviewData();
-  adminId = await repository.upsertAccount("admin@example.test", NOW);
-  await repository.addAdmin("admin@example.test", "bootstrap", NOW);
-  ownerId = await repository.upsertAccount("owner@example.test", NOW);
-  editorId = await repository.upsertAccount("editor@example.test", NOW);
+  ({ adminId, ownerId, editorId } = await resetOrganizerRepositoryFixture(miniflare, NOW));
 });
 
 const initialDraft = {

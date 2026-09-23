@@ -3,10 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 /**
- * Source-level invariants for the circle editor, in the same spirit as
- * `tests/circle-media-degradation.test.mjs`: the repo has no DOM harness, so
- * "the buttons came back as 38px blocks" and "the draft was never written"
- * cannot be observed directly.
+ * Remaining source-level guards for the circle editor. Browser acceptance
+ * covers hydration delay/failure/retry, but not every CSS regression or local
+ * autosave path below. See docs/design/source-assertion-cleanup.md before
+ * treating a successful claim journey as a replacement for a whole case.
  *
  * Each case below is a regression that shipped once in this file's own
  * history. They share a shape — a change that looks local, made somewhere the
@@ -62,14 +62,11 @@ test("the draft is kept as soon as the record loads, not when the preview answer
   const deps = effect.slice(effect.indexOf("}, ["), effect.indexOf("]);") + 3);
   assert.doesNotMatch(deps, /baseRecords/);
 
-  // And only when the record actually arrived. A failed load leaves the editor
-  // disabled with a retry path; it must not clear the fields or lock retries
-  // behind a ref that was set before the request answered.
-  assert.equal(app.match(/setHydrated\(true\)/g)?.length, 1);
-  assert.match(app, /setHydrationError\(errorMessage\(error\)\)/);
+  // The separate record-loading protection is exercised by
+  // browser/portal-circle-claim.mjs with delayed, failed and retried reads.
+  // Keep the review-open branch: that journey counts any [inert] element,
+  // which does not prove the editor itself is disabled during confirmation.
   assert.match(app, /disabled=\{!hydrated \|\| reviewOpen\}/);
-  assert.match(app, /重試載入已儲存內容/);
-  assert.doesNotMatch(app, /\.catch\(\(\) => setFields\(\{\}\)\)/);
 });
 
 test("the post-event question is two outcomes, and staying public is the default", async () => {

@@ -107,6 +107,20 @@ npx tsc --noEmit --incremental false
 
 分層不需要維護清單：tier 歸屬由 `scripts/run-tests.mjs` 讀每支測試自己的原始碼推導——讀 `dist/` 的是 artifact、`import "miniflare"` 的是 d1、`import "node:child_process"` 的是 cli，其餘是 module。新增測試檔不必登記到任何地方，也因此不可能有測試檔落在所有 tier 之外而到處都不跑。
 
+### 本機 D1 併行數
+
+Windows 預設將 D1 檔案逐檔執行，降低 Miniflare 短連線造成的 TCP port 壓力。選取多層或執行 `npm test` 時，先以 Node 預設併行數跑其他層，再以 concurrency=1 跑 D1；一般測試失敗仍會跑完剩餘選取檔案，最後回傳失敗。收到中斷或無法啟動子行程時則停止，不自動重跑。Linux CI 維持原本單次完整集合與 Node 預設併行方式。
+
+需要明確限制時可使用正整數參數；它會覆寫平台預設，套用到**全部選取檔案**：
+
+```bash
+npm run test:d1 -- --concurrency=1
+npm test -- --concurrency=1
+node scripts/run-tests.mjs module cli --concurrency=2
+```
+
+未知選項、拼錯 tier 或非正整數會直接失敗，不會忽略後繼續執行。多個 worktree 共用同一台主機的 TCP port；避免同時啟動多組 D1。若剛發生 `EADDRINUSE`，先等連線壓力回落再重跑，關閉測試行程不會立即清除 TIME_WAIT。[診斷與量測](../design/d1-test-runtime-investigation.md)記錄此限制與改善範圍。
+
 ### 瀏覽器驗收
 
 `tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：
