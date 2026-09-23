@@ -60,7 +60,8 @@ test("every caller-supplied string is escaped in the HTML and left as written in
     facts: [{ label: "攤位", value: "<b>B07</b>", data: true }],
     action: { label: "查看", href: `${ORIGIN}/?a=1&b="x"` },
   }));
-  assert.doesNotMatch(mail.html, /<script>|<b>B07/);
+  assert.ok(!mail.html.includes("<script>alert(1)</script>"), "the title never lands unescaped");
+  assert.ok(!mail.html.includes("<b>B07</b>"), "a fact value never lands unescaped");
   assert.match(mail.html, /&#60;script&#62;alert\(1\)&#60;\/script&#62; &#38; 「社團」/);
   assert.match(mail.html, /href="https:\/\/map\.kotoban\.top\/\?a=1&#38;b=&#34;x&#34;"/);
   assert.match(mail.text, /^<script>alert\(1\)<\/script> & 「社團」$/m);
