@@ -38,11 +38,6 @@
 .navigationBanner b,.navigationBanner small { display:block; }
 .navigationBanner b { font-size:calc(10px * var(--ui-font-scale,1)); }.navigationBanner small { margin-top:4px; color:#8b744c; font-size:calc(8px * var(--ui-font-scale,1)); }
 .navigationBanner button { padding:4px 8px; border:1px solid #dac48f; border-radius:6px; background:#f9faf8; color:#755a25; font-size:calc(9px * var(--ui-font-scale,1)); cursor:pointer; }
-.layoutStatus { display:grid; grid-template-columns:28px 1fr auto; gap:9px; align-items:center; margin:-3px 0 10px; padding:8px 10px; border:1px solid #b8d8cc; border-radius:9px; background:#edf8f3; color:#306d59; }
-.layoutStatus>span { width:25px; height:25px; display:grid; place-items:center; border-radius:7px; background:#57a88e; color:#fff; font-weight:900; }
-.layoutStatus b,.layoutStatus small { display:block; }
-.layoutStatus b { font-size:calc(10px * var(--ui-font-scale,1)); }.layoutStatus small { margin-top:2px; color:#628578; font-size:calc(8px * var(--ui-font-scale,1)); }
-.layoutStatus button { width:28px; height:28px; display:grid; place-items:center; padding:0; border:1px solid #bdd4cb; border-radius:6px; background:#fff; color:#477665; font-size:calc(12px * var(--ui-font-scale,1)); cursor:pointer; }
 .vectorFloor { overflow:hidden; background:#f5f3ed; box-shadow:0 7px 24px #202a3526; }
 .vectorFloor.mapGestureActive { transition:none; }
 .mapState { position:absolute; z-index:8; left:50%; top:50%; width:min(360px,calc(100% - 32px)); transform:translate(-50%,-50%); padding:22px; border:1px solid #d3d9d4; border-radius:12px; background:#fffffff2; text-align:center; box-shadow:0 12px 36px #27332a24; }
@@ -85,13 +80,12 @@
   .mobileFilters :global(.favorite-only) { margin-bottom:10px; }
   .navigationToggle { width:100%; min-height:44px; justify-content:center; margin:8px 0 0; }
   .navigationBanner { grid-template-columns:26px 1fr auto; }
-  .navigationBanner button,.layoutStatus button { min-width:44px; min-height:44px; }
+  .navigationBanner button { min-width:44px; min-height:44px; }
   .undoToast { top:188px; right:12px; left:12px; max-width:none; }
   .undoToast button { min-height:44px; }.undoToast button:last-child { width:44px; }
   .fullDetailBackdrop { align-items:end; padding:0; }
   .fullDetailDialog { width:100%; max-height:88dvh; overflow:auto; border-radius:18px 18px 0 0; }
   .filterStack { display:none; }
-  .layoutStatus { grid-template-columns:26px 1fr auto; }.layoutStatus small { max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }
 
 /* Desktop composition: the map owns the overlay, never a third grid column. */
