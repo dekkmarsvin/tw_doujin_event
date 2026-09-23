@@ -18,6 +18,8 @@ try {
       const url = page.url();
       const transform = await page.locator(".floor").evaluate((el) => el.style.transform);
       const prefix = `sheet-${width}-${height}-${scale}`;
+      const claimEntry = dock.getByRole("link", { name: "認領／管理資料", exact: true });
+      assert.equal(await claimEntry.count(), 0, "the summary keeps its height budget");
       await run.capture(page, `${prefix}-02-summary`);
       await handle.press("ArrowDown");
       assert.equal(await level(), "peek");
@@ -52,6 +54,10 @@ try {
       await dock.locator('[data-embedded="true"]').waitFor();
       assert.equal(await page.getByRole("dialog").count(), 0);
       await run.capture(page, `${prefix}-03-full`);
+      assert.equal(await claimEntry.getAttribute("href"), "/circle?event=sample&circle=c-900001");
+      await claimEntry.scrollIntoViewIfNeeded();
+      assert.ok((await claimEntry.boundingBox()).height >= 44, "the claim entry keeps a touch-sized target");
+      await run.capture(page, `${prefix}-04-claim-entry`);
       await dock.getByRole("button", { name: "收藏社團", exact: true }).click();
       const notes = dock.getByPlaceholder("記下想買的刊物、預算或提醒");
       await notes.fill("想買的刊物");

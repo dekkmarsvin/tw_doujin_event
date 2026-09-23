@@ -563,6 +563,10 @@ export function createCirclePortalHandlers({
 
     const exact = circleId && circleId.length <= 200 ? await lookupCircle(circleId) : null;
     const matches = circleId === null ? await searchCircles(query, SEARCH_LIMIT) : exact ? [exact] : [];
+    // The exact entry lookup says whether the circle already has an owner, so
+    // the form can step aside before anyone fills it in. `createClaim` tells any
+    // signed-in account the same thing with its 409, and neither names the owner.
+    const claimed = exact ? await repository.hasVerifiedClaim(config.eventId, exact.id) : null;
     return json({
       circles: matches.map((circle) => ({
         id: circle.id,
@@ -570,6 +574,7 @@ export function createCirclePortalHandlers({
         // Only the links a Worker can verify are useful in the claim form.
         links: circle.links.filter((link) => FETCHABLE_EVIDENCE_PROVIDERS.has(link.provider)),
         linkCount: circle.links.length,
+        ...(claimed === null ? {} : { claimed }),
       })),
     });
   }

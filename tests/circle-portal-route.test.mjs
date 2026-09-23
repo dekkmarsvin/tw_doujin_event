@@ -1257,8 +1257,26 @@ test("exact claim entry lookup stays authenticated and returns only the requeste
   assert.equal((await handlers.searchCatalog(get("/api/circle/search?circle=ff47-social"))).status, 401);
   const cookie = await signIn("entry@example.com");
   const response = await handlers.searchCatalog(get("/api/circle/search?circle=ff47-social&q=社團", cookie));
-  assert.deepEqual((await response.json()).circles, [{ id: "ff47-social", name: "只有社群的社團", links: [], linkCount: 1 }]);
+  assert.deepEqual((await response.json()).circles, [{ id: "ff47-social", name: "只有社群的社團", links: [], linkCount: 1, claimed: false }]);
   assert.deepEqual((await (await handlers.searchCatalog(get("/api/circle/search?circle=missing", cookie))).json()).circles, []);
+});
+
+test("exact claim entry lookup reports another account's verified claim without naming it", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("entry-owner@example.com");
+  const visitor = await signIn("entry-visitor@example.com");
+  const lookup = async () => (await (await handlers.searchCatalog(get("/api/circle/search?circle=ff47-social", visitor))).json()).circles;
+
+  const { id } = await (await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, owner))).json();
+  assert.equal((await lookup())[0].claimed, false, "a claim still under review does not count as owned");
+  await handlers.adminDecideClaim(post("/api/admin/claims", { claimId: id, decision: "approve" }, admin));
+  const [circle] = await lookup();
+  assert.equal(circle.claimed, true);
+  assert.equal(JSON.stringify(circle).includes("entry-owner"), false, "the lookup never names the owner");
+  // The form would have ended in the same answer, only after being filled in.
+  assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, visitor))).status, 409);
+  // Only the exact entry lookup carries it; name search stays as it was.
+  assert.equal("claimed" in (await (await handlers.searchCatalog(get("/api/circle/search?q=只有社群", visitor))).json()).circles[0], false);
 });
 
 test("search needs two characters and returns only verifiable links", async () => {
