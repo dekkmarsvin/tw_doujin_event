@@ -1,6 +1,7 @@
 # ADR-0035：新活動 onboarding 以資料驅動，authoring 逐步搬離本機
 
 - 狀態：**已定案（2026-08-26）** — **選項 A 與選項 C 的 authoring 面已實作**，**選項 D 已否決**。**選項 B 當時未定案**，其定案與本 ADR 決策第 4 點的推翻記於 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)（2026-08-28）。
+- **部分被取代**（2026-09-23 標註）：決策第 5 點「核准後只產出候選、按一下即公開不在授權範圍」由 [ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)（App 可合併自己建立的 PR）與 [ADR-0057](./0057-approval-starts-create-publication.md)（核准即開始發布）取代。
 - **部分被取代**：選項 B 的定案與決策第 4 點的推翻見 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)；控制面持有 GitHub 憑證見 [ADR-0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md)
 - 相關 issue：[#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85)、[#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86)（已切分並關閉）、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - 輸入研究：[台灣同人展主辦官方攤位頁面盤點](../research/taiwan-organizer-booth-pages.md)

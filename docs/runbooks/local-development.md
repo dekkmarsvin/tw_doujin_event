@@ -77,7 +77,7 @@ npm run build:production
 
 ## 共同 gate
 
-程式改動的完整 [gate](../../CONTEXT.md) 使用以下指令；本機驗證範圍依 [review-fix loop](../agents/review-loop.md#相稱的驗證)判斷，純說明文件檢查內容與連結即可。Required CI 仍照常執行。
+程式改動的完整 gate 使用以下指令；本機驗證範圍依 [review-fix loop](../agents/review-loop.md#相稱的驗證)判斷，純文件變更見[下一節](#純文件變更)。Required CI 仍照常執行。
 
 ```bash
 npm ci
@@ -93,6 +93,17 @@ npx tsc --noEmit --incremental false
 - 閱讀端與 portal bundle 維持分離；
 - Service Worker precache 指向當次 staged event；
 - official base、社團 overlay、URL、地圖與 planning 契約一致。
+
+### 純文件變更
+
+只改 Markdown、不動程式與測試時，本機跑這兩項即可，PR 註明未跑程式測試的理由：
+
+```bash
+node --test tests/contribution-files.test.mjs
+node scripts/check-doc-map.mjs --check
+```
+
+前者檢查每個相對連結與錨點、ADR 索引與 `docs/design/` 的檔案範圍，後者檢查契約開頭的實作／測試清單與[契約索引](../contracts/INDEX.md)一致。改了契約的實作或測試清單時，先跑一次不帶 `--check` 的 `node scripts/check-doc-map.mjs` 重新產生索引。兩者都包含在 `npm test` 裡，CI 照常執行。
 
 ### 開發途中只跑相關的測試
 
@@ -174,7 +185,7 @@ npm run test:browser:install
 
 **注意**：`npm run test:browser` 會改寫 staging（最後一組是 fixture `sample` + `sample-two`）。之後跑 `npm test` 會自動換回單一 fixture，但開發途中若直接執行 `npm run dev:pages`，看到的會是上一次驗收留下的 staging。
 
-**交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
+**程式變更交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
 
 ## 額外檢查
 

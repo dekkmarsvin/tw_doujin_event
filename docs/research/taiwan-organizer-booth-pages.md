@@ -100,6 +100,8 @@ FF47 是 A 排 01–22、B–V 排 01–44、W 排 01–42，共 988 格。駁�
 
 ## 對 ADR-0035 的影響
 
+> **2026-09-23 註記**：本節與後兩節（排程觀察、後續必要工作）是撰寫當時對本專案的推論與待辦，不是對外部頁面的觀察，也不再更新。後續決策見 [ADR-0035](../adr/0035-new-event-onboarding-is-data-driven.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 與 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md)，現行行為以[主辦單位工作區契約](../contracts/organizer-workspace.md)為準，待辦以 GitHub issues 為準。
+
 > **2026-08-26 修訂。** 本節初稿主張這些發現支持「把 template 做成 descriptor」。ADR-0035 其後查明第 4 步的成因是**編輯器沒有建立排的原語**，選項 C 已改寫為「補上排原語」，descriptor 降為未決。下表的觀察本身仍然成立，但它們現在論證的是**排原語必須支援哪些形狀**，而不是 descriptor 需要哪些欄位。
 
 本次調查確認 FF47 以外的編號體系與其差異如下：

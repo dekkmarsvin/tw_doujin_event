@@ -95,7 +95,7 @@
 ## 社團控制面
 
 **控制面**（control plane）
-與閱讀端分離的受驗證管理能力。社團自助與地圖貢獻使用 `/circle`，主辦活動建立與發布使用 `/organizer`；兩者的角色與發布邊界各見[社團契約](docs/contracts/circle-portal.md)、[地圖貢獻契約](docs/contracts/map-contributions.md)及[主辦契約](docs/contracts/organizer-workspace.md)。
+與閱讀端分離的受驗證管理能力。社團自助與地圖貢獻使用 `/circle`，網站管理（認領審核、管理者名單、地圖審閱與候選匯出）使用 `/admin`，主辦活動建立與發布使用 `/organizer`；各自的角色與發布邊界見[社團契約](docs/contracts/circle-portal.md)、[地圖貢獻契約](docs/contracts/map-contributions.md)及[主辦契約](docs/contracts/organizer-workspace.md)。
 
 **認領**（claim）
 社團證明自己是某個 `CircleRecord` 的擁有者的流程。email 只證明控制信箱，認領必須另有證據。
@@ -138,7 +138,7 @@ Organizer 在受驗證的 Web UI 準備活動、場館、攤位及地圖，經�
 ## 工程
 
 **gate**
-適用於該次交付的必要檢查。指令見[本機開發與驗證](docs/runbooks/local-development.md)，本機驗證範圍依 [review-fix loop](docs/agents/review-loop.md#相稱的驗證)；required CI 不因純文件或局部改動而取消。
+適用於該次交付的必要檢查；指令與適用範圍見[本機開發與驗證](docs/runbooks/local-development.md#共同-gate)。
 
 **產物邊界**（artifact boundary）
 公開 build 中什麼必須存在、什麼絕不能存在的規則。由測試把關，不靠人工檢查。

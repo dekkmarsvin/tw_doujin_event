@@ -380,6 +380,8 @@ Plausible 的做法不是「IP 保存 N 天」，而是**根本不存 IP**。頁
 
 ## 與本站的對照缺口
 
+> **2026-09-23 註記**：本節的本站現況是 2026-08-19 的快照，部分已過時（例如 session 現為 7 天，保存期限清除已由排程 Worker 執行）。現況見[資料 inventory](../contracts/data-inventory.md)。
+
 以下純粹是**清單**：本站已在處理、但在上述對象的公開文本裡**找不到可直接對照的寫法**的資料類別。不含建議。
 
 本站現況取自 [`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts) 的實際 table 定義與 [`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts) 的常數（2026-08-19 讀）：`accounts`、`admins`、`login_tokens`、`sessions`、`circle_claims`、`circle_overrides`、`overrides_doc`、`audit_log`、`preview_mail_sink`；`LOGIN_TOKEN_TTL_MS` 15 分鐘、`SESSION_TTL_MS` 30 天、`CHALLENGE_TTL_MS` 24 小時。

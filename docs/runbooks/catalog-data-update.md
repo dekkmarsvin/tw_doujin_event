@@ -17,9 +17,9 @@
 
 第三方工作簿與原始配置圖不在本 repo，也不參與 production catalog 生成。
 
-> **流程定位**：建立、匯入、驗證與預覽已移到[主辦單位工作區](../contracts/organizer-workspace.md)，不需要本篇的 CLI。本篇仍是**發布**與資料維運的操作路徑：候選核准後寫入 data 與 main repository 的步驟尚未啟用（[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)），因此目前仍由維護者依本篇執行；名單變動宣告也還在這裡。收進 UI 的部分由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤。
+> **流程定位**：建立、匯入、驗證與預覽已移到[主辦單位工作區](../contracts/organizer-workspace.md)，不需要本篇的 CLI。候選核准後的發布由系統自動執行（[主辦契約](../contracts/organizer-workspace.md#發布邊界)）。本篇是維護者手動更新靜態快照、pin 與名單宣告的資料維運路徑，不與主辦發布步驟混用。
 
-> **現行 pipeline 的新活動前置條件**：主辦只公布錄取名單時，不產生可公開的 catalog、不配發 `c-*`、也不開放認領。`event-definition/3` 目前需要每一活動日的 `officialData.boothListUrls`，identity evidence 也只接受 `<day>:<booth>`；只有名稱與攤數的錄取名單不符合這兩個契約。等待攤位編號期間可以先完成 references、活動日與不依賴 placement 的 map layout。未來 Organizer CSV／XLSX 匯入若成為主辦配置的權威輸入，仍須在 #104 的受驗證草稿／預覽／發布流程中產生等價且可追溯的 booth evidence，不能在本 runbook 偷開特例。見 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
+> **現行 pipeline 的新活動前置條件**：主辦只公布錄取名單時，不產生可公開的 catalog、不配發 `c-*`、也不開放認領。`event-definition/3` 目前需要每一活動日的 `officialData.boothListUrls`，identity evidence 也只接受 `<day>:<booth>`；只有名稱與攤數的錄取名單不符合這兩個契約。等待攤位編號期間可以先完成 references、活動日與不依賴 placement 的 map layout。未來 Organizer CSV／XLSX 匯入若成為主辦配置的權威輸入，仍須在主辦單位工作區的受驗證草稿／預覽／發布流程中產生等價且可追溯的 booth evidence，不能在本 runbook 偷開特例。見 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
 
 ## 更新流程
 
@@ -114,7 +114,7 @@ FF47 從舊工作簿 evidence 遷移到官方 booth evidence 的七筆拆分紀�
 
 宣告在套用之後就完成任務，下一次更新時應從檔案移除；重複宣告已退役的攤位會被拒絕。
 
-這條路徑要求編輯 JSON 與執行 CLI，因此仍是維護者工序而不是主辦單位的產品流程。把它收進 UI 由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 追蹤，屆時 UI 產生的就是同一份宣告。
+這條路徑要求編輯 JSON 與執行 CLI，因此仍是維護者工序而不是主辦單位的產品流程。主辦單位工作區的[修正候選](../contracts/organizer-workspace.md#已發布名單的明確修正宣告)產生的是同一份宣告。
 
 ### 3. 更新 pin
 

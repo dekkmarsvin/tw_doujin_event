@@ -120,11 +120,11 @@ test("the ADR index accounts for every ADR", async () => {
   const missing = files.filter((name) => !index.includes(name));
   assert.deepEqual(missing, [], `ADRs absent from docs/adr/INDEX.md: ${missing.join(", ")}`);
 
-  // Every ADR carries exactly one of the three statuses the index defines.
+  // Every ADR carries one of the four statuses the index defines.
   const rows = index.split(/\r?\n/).filter((line) => /^\| \[\d{4}\]/.test(line));
   assert.equal(rows.length, files.length);
   for (const row of rows) {
-    assert.match(row, /生效|部分被取代|已取代/, `row states no status: ${row}`);
+    assert.match(row, /生效|部分被取代|已取代|草案/, `row states no status: ${row}`);
   }
 });
 

@@ -21,8 +21,8 @@
 | Pages project | 需要（`tw-catalog`） |
 | Pages Functions | **需要**——`functions/` 承載社團身分、認領、編輯、管理 route 與公開的 `overrides.json` |
 | D1 binding | **需要**——binding 名 `DB`。production 用 `tw-catalog-identity`，preview 用 `tw-catalog-identity-preview` |
-| Runtime secrets | **需要**——production 六個 secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
-| 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker) |
+| Runtime secrets | **需要**——production 六個基本 secret、發布用的四個 GitHub App secret 與一個公開變數；preview 使用隔離的 session／pepper、E2E token、D1 mail sink、Mailgun sandbox 與 Turnstile dummy 金鑰，見下 |
+| 排程 Worker（Cron Trigger） | **需要**——`tw-catalog-retention-purge` 與 `tw-catalog-publication-dispatch`，與 Pages project 分開部署，見[排程清除 Worker](#排程清除-worker)與 [Organizer 發布](#organizer-發布) |
 | R2 | **需要**——每個環境各有公開縮圖 bucket（`THUMBNAILS`）與無公開網域的地圖來源 bucket（`MAP_CONTRIBUTIONS`） |
 | KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
@@ -31,7 +31,7 @@
 
 Pages project 的 production 與 preview 都必須使用 **Fail open**（Dashboard → Workers & Pages → `tw-catalog` → Settings → Runtime → Fail open / closed）。Cloudflare 沒有提供降低每日額度或模擬 Error 1027 的安全測試介面，因此不刻意耗盡正式帳號額度；CI 每次部署後會透過 Pages project API 校正並驗證兩個環境的 `fail_open: true`。這項決策見 [ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)。
 
-公開 build 有三個 entry：`index.html`（閱讀端，可離線）、`circle.html`（社團控制面，`noindex`）與 `organizer.html`（主辦單位工作區，`noindex`）。控制面的程式碼不得出現在閱讀端 bundle，`tests/service-worker.test.mjs` 會確認 precache 不含控制面 chunk。
+公開 build 有四個 entry：`index.html`（閱讀端，可離線）、`circle.html`（社團控制面，`noindex`）、`organizer.html`（主辦單位工作區，`noindex`）與 `admin.html`（網站管理入口，`noindex`）。控制面的程式碼不得出現在閱讀端 bundle，`tests/service-worker.test.mjs` 會確認 precache 不含控制面 chunk。
 
 本機 authoring 的第二套 build 已依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除；`vite.pages.config.ts` 是唯一的 build 設定。
 
@@ -59,7 +59,7 @@ Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既�
 
 根目錄 `wrangler.jsonc` 是 Pages 專案設定，**不能**加 `observability`：Pages 的支援欄位清單沒有它，Wrangler 會直接以 `Configuration file for Pages projects does not support "observability"` 中斷部署。Pages Functions 也沒有可查詢的 Workers Logs，只有不落地的即時串流（見下方 `wrangler pages deployment tail`）。
 
-Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JSON／HMAC 必須保留，事件喚醒與 cron 恢復依 [Organizer 發布契約](../contracts/organizer-workspace.md#發布邊界)。需要暫停發布時，將兩份 production mode 改為 disabled 並部署；保留 D1 job、snapshot、lease／checkpoint，不手改 job 狀態。首次 CH20 啟用、內容核准與真實故障操作包依 #212 的既有真人確認執行；合併工程 PR 不代表已完成這些確認。
+Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JSON／HMAC 必須保留，事件喚醒與 cron 恢復依 [Organizer 發布契約](../contracts/organizer-workspace.md#發布邊界)。需要暫停發布時，將兩份 production mode 改為 disabled 並部署；保留 D1 job、snapshot、lease／checkpoint，不手改 job 狀態。正式啟用發布、核准內容與真實故障演練都需要維護者的真人確認；合併工程 PR 不代表已完成這些確認。
 
 ### preview 的兩個信箱
 
@@ -119,7 +119,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" |
 
 - **新增或修改密鑰後必須重新部署。** Pages 的密鑰是在建立 deployment 時綁定的，既有 deployment 不會追溯取得新密鑰。症狀是所有 `/api/*` 回 503「服務尚未設定完成」，而 `wrangler pages secret list` 明明列得出來。用 `gh workflow run deploy-pages.yml --ref main` 重跑即可。
 - **`SESSION_SECRET` 一旦上線就不要更換。** 它簽署 session cookie，更換等同讓所有已登入的社團同時被登出。
-- **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/circle` 的管理面板增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/circle-portal.md#管理者)。
+- **`ADMIN_EMAILS` 只在管理者名單為空時作為種子。** 名單存在 D1 的 `admins` 表，之後從 `/admin` 增減，立即生效、不需重新部署。見[社團自助控制面契約](../contracts/circle-portal.md#管理者)。
 
 ## 在 preview 用真實信箱登入
 
@@ -175,7 +175,7 @@ Mailgun 回非 2xx 時，這裡會印出狀態碼與回應內文。**只有 prev
 - `dist/index.html`、`dist/_headers` 存在，且沒有 Functions 或自訂 rewrite 規則攔截靜態請求。
 - `npm run build:production` 已依 `data/published-events.json` 重建**每一個已發布活動**的產物，且每一份地圖 artifact 都通過該活動 template 的 layout 驗證（FF47：988 格、28 根柱子、5 個出入口）。
 - `dist/_worker.js` 與 `dist/server/index.js` 不存在。
-- 公開 bundle 不包含 `/api/events/`、`MapAdminImporter` 或管理發布文案。
+- 閱讀端 bundle 不包含寫入端點（`/api/auth/`、`/api/claims`、`/api/admin/`、`/api/organizer/`）或登入與認領文案，由 `tests/public-artifact.test.mjs` 檢查。
 
 ## 手動 Direct Upload 備援
 

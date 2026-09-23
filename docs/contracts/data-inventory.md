@@ -1,6 +1,6 @@
 # 資料 inventory
 
-本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 與 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 決定。
+本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。
 
 **schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（runtime tables 由 `ensureTables()` 於首次請求建立；既有資料庫用同檔案的 additive column migrations 升級。表名與數量直接以該檔為準，不在本文複製一個會漂移的計數）
 **寫入端**：[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
@@ -36,10 +36,11 @@
 | `loginTokens` | 24 小時 | 建立時。**必須大於速率限制的一小時視窗**——計數的依據就是這張表，提早刪會把限制打穿，`purgeExpiredRecords()` 開頭直接拋錯擋住這個設定 |
 | `sessions` | 7 天 | 到期或撤銷，取先發生者 |
 | `previewMailSink` | 7 天 | 建立時。preview 限定，且是全站唯一存有信件內文的地方 |
+| `auditIpHashes` | 90 天 | 稽核紀錄寫入時；到期只清空 `audit_log.ip_hash`，操作紀錄保留 |
 | `mapDraftInactivity` | 180 天 | `draft`／`changes_requested` 最後一次活動；`submitted` 不套用此時鐘 |
 | `mapDecisionRaw` | 30 天 | `approved`／`rejected`／`exported`／`withdrawn` 的決定時間；只刪原始檔，metadata 保留 |
 
-社團自述內容的期限不在這張表裡——它由社團自選並寫在資料列上，Worker 只負責執行（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。
+社團自述內容不在這張表裡：[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 撤回了保存期限選項，新資料列不設期限；只有在那之前選了 `purge` 的既有列，仍照寫在列上的到期日由 Worker 清除（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。
 
 ## 資料類別
 
@@ -60,7 +61,7 @@
 
 ### `admins` — 管理者名單
 
-`email`（明文）、`added_by`、`added_at`。名單為空時由 `ADMIN_EMAILS` 重新灌入。**這是唯一有實際刪除路徑的表**（`removeAdmin()`）。
+`email`（明文）、`added_by`、`added_at`。名單為空時由 `ADMIN_EMAILS` 重新灌入。移除管理者走 `removeAdmin()`，直接刪除資料列。
 
 **目的**：撤下社團補充資料、審核認領。 **保存期**：不設期限。 **到期處置**：移除即刪除資料列（已實作）。
 
@@ -111,7 +112,7 @@
 | `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。**控制面自 ADR-0054 起不再提供這個選擇**，新資料列一律為 NULL；既有的 `purge` 列仍照原到期日清除 |
 | `hosted_thumbnail_key` | 目前代管縮圖的 R2 object key；公開 URL 仍在 `fields_json`，這欄只供更換與刪除生命週期使用 |
 
-**目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：由社團自選，選了 `purge` 的列在活動結束滿 90 天時由排程 Worker **刪除資料列**；未表態與選 `keep` 的列不設期限。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 **owner**：社團本人。
+**目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：不設期限；[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 之前選了 `purge` 的既有列，仍在活動結束滿 90 天時由排程 Worker **刪除資料列**。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 內容由社團本人維護。
 
 ### R2 代管代表圖
 
@@ -138,6 +139,8 @@
 | `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
 | `organizer_amendments` | 修正候選對應的來源候選／版本／published job、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
 | `organizer_amendment_changes` | 每次明確修正宣告的不可變 JSON、candidate version、對應 revision ID 與時間；社團名稱與攤位變動隨候選保存，不直接公開此控制面紀錄 |
+| `organizer_venues` | 主辦工作區建立的場館：名稱、正規化名稱鍵、來源 URL、建立者與時間 |
+| `organizer_venue_spaces` | 場館內的使用空間：所屬場館、名稱、正規化名稱鍵、來源 URL、預設展區模式、建立者與時間 |
 | `organizer_reference_records` | 主辦／分類／場館／空間的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
 | `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA、workflow run id、錯誤訊息、failure_code、retryable 與 sticky `remote_write_intent_at`；重試保留原 job 與核准 snapshot，退回修改後舊 job 標為不可重試歷史 |
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
@@ -249,11 +252,11 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 認領證據抓取（`fetchEvidence()`）由 Worker 主動連向社團自己登錄的 URL，**對該主機揭露的是本站，不是使用者**。
 
-Turnstile 是**閱讀端以外唯一的第三方腳本**，且只載入在 `/circle*` 與 `/organizer*`——`public/_headers` 為這兩個路徑各自覆寫 CSP，站台其餘部分的 `script-src` 仍只有 `'self'`。
+本站程式碼唯一載入的第三方腳本是 Turnstile，只在 `/circle*` 與 `/organizer*`——`public/_headers` 為這兩個路徑各自覆寫 CSP。另外，正式網域的每個 HTML 回應都由 Cloudflare zone 的 Web Analytics 自動注入 beacon（不在本 repo），因此三份 CSP 的 `script-src` 都放行 `https://static.cloudflareinsights.com`；beacon 回報到本網域的 `/cdn-cgi/rum`。設定理由見 `public/_headers` 開頭的註解與[部署 runbook](../runbooks/deployment.md)。
 
 ## 閱讀端不在本表範圍
 
-一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./planning.md#儲存與版本)）與介面字級偏好。沒有 cookie 或分析工具。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
+一般參觀者不登入、不建立任何伺服器端紀錄。瀏覽器端只有兩個 `localStorage` 鍵：規劃資料（`event-map-planning-v1`，見[收藏與走訪規劃契約](./planning.md#儲存與版本)）與介面字級偏好。本站程式不設 cookie；分析只有上述由 Cloudflare 自動注入的 Web Analytics beacon。代管縮圖由本站圖片網域載入；社團選用外部網址時則由設定的圖片主機直接載入。
 
 規劃資料只留在使用者裝置，是刻意的隱私姿態，不是本站持有的資料——見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 
@@ -271,4 +274,4 @@ Turnstile 是**閱讀端以外唯一的第三方腳本**，且只載入在 `/cir
 
 preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則交給 Mailgun sandbox；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
 
-已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第十節）。
+已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第七節）。

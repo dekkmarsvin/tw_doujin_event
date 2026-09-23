@@ -12,12 +12,12 @@
 | `login_tokens` | 建立後 24 小時 |
 | `sessions` | 到期或撤銷後 7 天 |
 | `preview_mail_sink` | 7 天 |
-| `circle_overrides` | **由社團自選**：只刪 `retention_choice = 'purge'` 且 `retention_expires_at` 已過的列（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)） |
+| `circle_overrides` | 只刪 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 之前選了 `retention_choice = 'purge'` 且 `retention_expires_at` 已過的既有列；新資料列不設期限 |
 | `map_drafts`／`map_draft_revisions` | `draft`／`changes_requested` 180 天無活動後刪除內容；後者保留去識別化 review |
 | 私人地圖來源 R2 bytes | `approved`／`rejected`／`exported`／`withdrawn` 決定 30 天後刪除；`submitted` 不自動清除 |
 | `audit_log.ip_hash` | 寫入滿 90 天後清為 `NULL`，audit 列不刪除 |
 
-憑證、地圖草稿／原始檔與 audit IP 的期限是這個 Worker 的常數；社團補充資料的期限寫在每一列自己身上。刪除 D1 metadata 前先刪除對應 R2 bytes；私人 bucket 未綁定且有到期原始檔時會中止，不把 metadata 當成已清除。社團自述清除後 `overrides_doc` 同步失去該筆並遞增 revision，且每筆寫一列 `override.purged` 稽核，內容不留。
+各期限的值與起算點以[資料 inventory 的保存期常數](../contracts/data-inventory.md#保存期現行常數)為準，上表只是執行範圍的摘要。刪除 D1 metadata 前先刪除對應 R2 bytes；私人 bucket 未綁定且有到期原始檔時會中止，不把 metadata 當成已清除。社團自述清除後 `overrides_doc` 同步失去該筆並遞增 revision，且每筆寫一列 `override.purged` 稽核，內容不留。
 
 **它只刪，不建表**——schema 仍由 Pages 端的 repository 首次使用時建立；找不到的表會列進摘要的 `skipped` 並跳過。
 

@@ -2,11 +2,14 @@
 
 要動某個區域之前，只讀那個區域指到的 ADR，不必從頭掃過整個目錄。
 
-狀態三種：
+狀態四種：
 
 - **生效** — 完整有效。
 - **部分被取代** — 仍然載重，但有部分內容被後來的 ADR 推翻。讀的時候要一併讀取代它的那份。
 - **已取代** — 只剩歷史脈絡，不要據此實作。
+- **草案** — 提案尚未生效，不要據此實作；現行規則以它列出的既有 ADR 為準。
+
+「暫緩」是附加說明：決策仍有效，只是實施時點延後。
 
 ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的那份標註被取代。內文允許的修改只有[維護規則](../README.md#維護規則)列出的三種。這張表是那些標註的彙整，不是另一個權威——衝突時以 ADR 本身為準。
 
@@ -37,7 +40,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0003](./0003-circle-identity-from-workbook-row.md) | 社團身分以試算表主資料列為準 | **已取代** — 全部由 0010 取代 |
 | [0004](./0004-plan-and-next-stop-are-separate-actions.md) | 加入行程與設為下一站是兩個獨立動作 | 生效 |
 | [0005](./0005-import-stays-p2-export-only.md) | 匯入維持 P2，一般介面只保留安全匯出 | 生效 |
-| [0006](./0006-split-search-planning-filter-and-display.md) | 把搜尋、規劃篩選與顯示設定拆成三組 | 生效 |
+| [0006](./0006-split-search-planning-filter-and-display.md) | 把搜尋、規劃篩選與顯示設定拆成三組 | 生效；後果中的原創／二創由 0051 改寫，列為尚未實作的三項已實作 |
 | [0007](./0007-circle-name-is-not-circle-editable.md) | 社團名稱不可由社團自行編輯 | 生效 |
 | [0008](./0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker | 生效 |
 | [0009](./0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload | 生效 |
@@ -55,7 +58,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0021](./0021-credentials-expire-and-are-purged-records-are-kept.md) | 憑證到期就清掉，紀錄類保留不設期限 | 生效 |
 | [0022](./0022-expiry-runs-in-a-separate-cron-worker.md) | 清除跑在獨立的排程 Worker | **部分被取代** — Free 成本表與 cron 額度由 0065 取代。獨立排程 Worker 的決策不變 |
 | [0023](./0023-the-privacy-notice-ships-without-professional-review.md) | 隱私告知自行撰寫，不送專業審閱 | **部分被取代** — 揭露方式由 0024 部分取代 |
-| [0024](./0024-user-facing-copy-uses-minimum-necessary-disclosure.md) | 對外文案採最少必要揭露 | 生效 |
+| [0024](./0024-user-facing-copy-uses-minimum-necessary-disclosure.md) | 對外文案採最少必要揭露 | 生效；2026-09-23 補充告知的揭露粒度 |
 | [0025](./0025-open-with-an-official-only-thin-catalog.md) | 重新公開前先切成主辦資料的薄場刊 | 生效 |
 | [0026](./0026-public-sanitized-event-data-and-history-rewrite.md) | 活動資料 repo 公開且只收可再發布資料 | 生效 |
 | [0027](./0027-personal-data-lifecycle-and-account-deletion.md) | 帳號刪除釋放擁有權，稽核個資塗銷，IP 雜湊保留 90 天 | 生效 |
@@ -66,18 +69,18 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0032](./0032-shared-reference-data-is-public-and-pinned.md) | 共享 reference-data 公開且由活動固定版本 | **部分被取代** — 決策 1／5（獨立 repo 與更新順序）由 0039 取代 |
 | [0033](./0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) | 地圖貢獻採管理者授權與私人版本化草稿 | 生效 |
 | [0034](./0034-production-origin-gates-deployment.md) | production origin 阻擋壞部署，自訂網域提供非阻塞訊號 | 生效 |
-| [0035](./0035-new-event-onboarding-is-data-driven.md) | 新活動 onboarding 以資料驅動 | **部分被取代** — 決策 4 由 0038 推翻；選項 D 已否決 |
+| [0035](./0035-new-event-onboarding-is-data-driven.md) | 新活動 onboarding 以資料驅動 | **部分被取代** — 決策 4 由 0038 推翻；決策 5 由 0046、0057 取代；選項 D 已否決 |
 | [0036](./0036-provenance-labels-name-the-source-not-its-trust-level.md) | 來源標示只寫來源，不寫信任等級 | 生效 |
 | [0037](./0037-the-control-plane-opens-pull-requests-with-a-scoped-token.md) | 控制面以受限 GitHub 憑證開 PR | **部分被取代且暫緩** — 「不得合併」由 0046 取代；PAT 路線由 0039 決策 5 暫緩。文中的 repo 表已封存，照字面執行會保護錯的對象。憑證範圍與外洩分析仍有效 |
-| [0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援 | **部分被取代** — 決策第 3 點（本機備援保留）由 0049 取代；其餘各點仍有效 |
-| [0039](./0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo | 生效 |
+| [0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) | authoring 介面搬到控制面，本機環境降為備援 | **部分被取代** — 決策第 3 點（本機備援保留）由 0049 取代；決策第 4 點由 0046、0057 取代；其餘各點仍有效 |
+| [0039](./0039-one-data-repo-for-events-and-references.md) | 活動與 reference 資料收斂為單一資料 repo | **部分被取代** — 決策 5 保留的「不得 merge」由 0046 取代 |
 | [0040](./0040-review-findings-are-bounded-by-the-ticket.md) | review 發現以 ticket 範圍為界 | **部分被取代** — finding 處置與熔斷方式由 0060 調整 |
 | [0041](./0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界 | 生效 |
 | [0042](./0042-the-public-entry-is-an-event-chooser.md) | 公開入口支援多活動選擇，既有 deep link 保持有效 | 生效 |
 | [0043](./0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口，claim 逐活動隔離 | 生效 |
 | [0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目，身分等主辦攤位證據 | 生效 |
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
-| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效 |
+| [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效；「結果」的本機備援由 0049 取代；決策 5 的推進方式由 0062 改寫 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
 | [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
 | [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |
@@ -89,7 +92,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | **部分被取代** — 關閉保留選取由 0063 取代；手機邊界由 0056 擴充 |
 | [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | **部分被取代** — 摘要關閉保留選取由 0063 取代；三階段完整資訊由 0064 擴充 |
 | [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |
-| [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046。第 5 點要求的重新評估已由 0066 完成 |
+| [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046。第 5 點要求的重新評估已由 0066 完成；第 1 點的作者檢查缺口由 0066 補上 |
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
 | [0060](./0060-review-ends-when-scoped-blockers-are-resolved.md) | 範圍內 blocker 解決後，review 必須結束 | 生效；部分取代 0040 |
 | [0061](./0061-organizer-snapshot-pins-complete-reference-records.md) | Organizer 送審固定完整 reference 記錄 | 生效 |

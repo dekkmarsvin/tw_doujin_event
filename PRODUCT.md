@@ -48,7 +48,7 @@ Favorite → Map Highlight
 4. **收藏並在地圖辨識**：Reader 可以把想去的社團收藏，收藏必須直接反映在地圖，而不是獨立孤立清單。
 5. **社團維護自己的補充資料**：Circle 可以認領並修改自己的 Circle Cut、簡介、作者、SNS、Tag 等內容；不能修改活動、日期、攤位號與官方配置。
 6. **Organizer 無程式建立活動**：Organizer 可以透過 UI 建立活動、選擇場館、匯入社團資料、檢查、預覽並發布。
-   主辦、獲授權人員與有官方來源的資料整理者可申請建置，經管理者逐案核准後取得工作區權限；核准申請不代表官方認證或活動已發布。申請功能已實作但公開入口與一般送件預設關閉，須完成一場真實活動的零人工技術補救驗收後才啟用。
+   主辦、獲授權人員與有官方來源的資料整理者可申請建置，經管理者逐案核准後取得工作區權限；核准申請不代表官方認證或活動已發布。公開申請入口的啟用條件見[部署 runbook](docs/runbooks/deployment.md#organizer-發布)。
 7. **重複使用場館資料**：Venue / Floor / Area / 固定設施不與單一活動綁死，下一場活動可以重用。
 
 ## Product Data Boundary
@@ -141,7 +141,7 @@ P0 穩定後才優先考慮：
 | Circle | 找到自己的官方條目 → 認領 → 修改 Circle Cut 與簡介、加入連結及 Tag → 在公開頁看見更新。 |
 | Organizer | 登入 → 建立活動 → 選擇既有 Venue → 設定日期 → 匯入社團資料 → 修正錯誤 → 預覽互動地圖 → 發布。 |
 
-Organizer 的完成目標是正常新增一場活動時，production code 修改、手動 production JSON／YAML、Git／CLI 操作、AI agent 依賴，以及每活動新增 repository／PAT／secret 均為零。內部系統可使用 repository、pin、CI 與 review，但不得要求主辦手動操作它們。這是驗收目標，不代表歷次發布皆已達標；量測方式與證據要求見[專案工作流程](docs/runbooks/project-workflow.md#6-留下完整驗收證據)。
+Organizer 的完成目標是正常新增一場活動時，不需要任何人工技術操作；逐項清單、統計區間與證據要求見[專案工作流程](docs/runbooks/project-workflow.md#6-留下完整驗收證據)。內部系統可使用 repository、pin、CI 與 review，但不得要求主辦手動操作它們。
 
 ## Explicit Non-Goals
 

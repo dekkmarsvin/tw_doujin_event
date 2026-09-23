@@ -2,12 +2,12 @@
 
 地圖貢獻讓經管理者授權的維護者，把**活動主辦官方說明頁面中的配置證據**整理成私人草稿。它不新增資料來源：公開快照的基礎仍只來自主辦官方頁面，社團補充則仍只由社團本人自填；工作簿、社群試算表與其他第三方資料不在來源鏈中。
 
-本契約涵蓋 [#72](https://github.com/dekkmarsvin/tw_doujin_event/issues/72) 的角色、私人草稿、檔案與保存機制，[#73](https://github.com/dekkmarsvin/tw_doujin_event/issues/73) 的投稿、審閱、核准替換與 event-data 候選匯出，以及 [#86](https://github.com/dekkmarsvin/tw_doujin_event/issues/86) 拆出的協作能力：審閱留言串、指向單一元素的局部修改請求（[#100](https://github.com/dekkmarsvin/tw_doujin_event/issues/100)）與具名的版本衝突說明（[#101](https://github.com/dekkmarsvin/tw_doujin_event/issues/101)）。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
+本契約涵蓋角色、私人草稿、檔案與保存機制；投稿、審閱、核准替換與 event-data 候選匯出；以及審閱留言串、指向單一元素的局部修改請求與具名的版本衝突說明。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
 
-**實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)
-**測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`
+**實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)、[`app/map-contribution-draft.ts`](../../app/map-contribution-draft.ts)、[`app/map-contribution-panels.tsx`](../../app/map-contribution-panels.tsx)、[`app/circle-portal/map-contribution-panel.tsx`](../../app/circle-portal/map-contribution-panel.tsx)
+**測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`、`tests/map-contribution-draft.test.mjs`
 
-> **實作狀態（2026-08-31）**：地圖貢獻 route 目前仍只服務 Pages 設定的單一 `eventId`。[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 將社團入口改為通用入口，但沒有決定 `map_contributor` 是否逐活動授權；[#136](https://github.com/dekkmarsvin/tw_doujin_event/issues/136) 也明確不擴張此流程。因此下方單一活動範圍仍是現行契約，未來若要改必須另行定案，不能從社團多活動 ownership 自動類推。
+> **活動範圍**：地圖貢獻 route 以請求的 `event` 參數決定活動（未帶時為部署預設活動），草稿、檔案與審閱都在該活動內分域。[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 沒有決定 `map_contributor` 是否逐活動授權；要改必須另行定案，不能從社團多活動 ownership 自動類推。
 
 ## 與主辦單位工作區共用一張表
 
@@ -21,59 +21,16 @@
 ## 授權邊界
 
 - 貢獻者在 `/circle` 編輯，既有管理者審閱、留言、核准與候選匯出在 `/admin`；搬移入口不變更角色、版本、來源確認或發布邊界。
-- `map_contributor` 沿用 magic-link 帳號，由具有近期 session 的管理者以 `POST /api/admin/map-contributors` 授予、撤銷或停權。
+- `map_contributor` 沿用 magic-link 帳號，由管理者以 `POST /api/admin/map-contributors` 授予、撤銷或停權。
 - 社團認領不會自動取得此角色；停用帳號也不具備投稿能力。
 - 撤銷與停權立即阻止建立、修改、上傳與提交，但不刪除已進入審閱流程的紀錄。
 - 原始檔只有草稿 owner 與管理者可讀。原始下載一律是 attachment；圖片可經授權 route 預覽，PDF 不提供 inline 預覽。
 
-## 共用畫布放置
+## 編輯器
 
-共用編輯器可選填活動日 × 使用空間的攤位 scope。兩個正式入口都提供該範圍的清單，依目前 layout 即時計算已畫／待畫數量、可搜尋的待畫代碼與社團群組；只有已有座標的代碼提供定位，選取攤位也顯示對應群組。切換範圍清除清單篩選與選取。清單外代碼沿用 API 判定：候選活動為提醒，已發布活動為錯誤；畫面提示不取代送審驗證。未提供 scope 的嵌入仍保留基本編輯能力。
+私人草稿使用與主辦單位工作區相同的編輯器，畫布行為見[地圖編輯器契約](./map-editor.md)。
 
 地圖貢獻的私人草稿 detail 回應帶入伺服器依該稿活動日與使用空間推導的 scope 與官方群組，沿用既有 owner／admin 授權。對照資料不寫入草稿版本或公開地圖。
-
-Organizer 與地圖貢獻使用同一個 `MapLayoutEditor`。新增工具只切換模式，尚未放置不改草稿；工具顯示按下狀態、畫布游標及操作提示。切換工具或 Escape 取消尚未放置的預覽，`pointercancel` 不建立元素，也不留下復原紀錄。
-
-- 排／排段與單一攤位拖出外框，放開才建立；沿用既有連續描摹與編號。
-- 柱子、企業攤、舞台與其他區域可拖出外框，或單擊以預設大小置中放置；靠近畫布邊緣時限制在畫布內。點擊與拖曳以螢幕 3 px 區分，單方向細線不建立矩形。
-- 入口／出口以單擊位置建立，預設朝北，可在屬性欄更改。每次設施放置只記一個復原步驟，選取新元素並回到選取模式。
-
-### 私人輔助線與吸附
-
-草稿 envelope 可選填 `authoring: { guides: [{ id, axis, position, locked }] }`；`axis` 為 `x`（垂直）或 `y`（水平），位置採地圖座標。舊稿未帶 authoring 時，介面視為零條輔助線，不改寫舊的 snapshot bytes。每稿最多 256 條，ID 唯一且最多 80 字，位置為有限數字且不得超出畫布；未知欄位與 malformed metadata 拒絕保存。
-
-- 水平／垂直工具以畫布單擊新增；輔助線可選取、拖曳、數字微調、鎖定／解鎖、刪除。鎖定禁止移動，仍可作吸附目標。線條為細虛線，命中區大於可見線寬。
-- 新增、移動、鎖定與刪除可復原／重做，和地圖共用同一份歷史。畫布尺寸改動同時縮放輔助線，復原也一併還原。
-- 矩形外緣與出入口中心吸附手動線及既有向量元素，8 螢幕 px 內取最小位移，同距離優先手動線。多選移動用整組外框，保留成員相對位置；排段縮放只改所拖角的邊，內部再等分並保持無縫。
-- 顯示輔助線與啟用吸附是分開的控制，Alt 暫停目前手勢的吸附。吸附時顯示命中線及其 X／Y 座標；不從圖片偵測邊線，也不為每個攤位自動建立輔助線。
-
-Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，沿用原有角色／狀態與 expected version／revision 檢查；不新增資料表或另一條保存路徑。核准 snapshot 保留私人草稿內容，但 publication／候選匯出僅取 `content.layout`，公開地圖與 Reader 不含輔助線。顯示／吸附開關不推進候選版本。
-
-### 描摹顯示與精準操作
-
-配置圖顯示與否、透明度、描摹模式與微移步進都是個人 UI 偏好：只存在這個瀏覽器（`localStorage` 鍵 `map-editor-display/1`），不進草稿 envelope、不進歷史、不推進候選版本，也不隨草稿送審。讀不到或格式不符的偏好逐欄退回預設（顯示配置圖、透明度 30%、關閉描摹、步進 1），不讓控制項停在沒有對應選項的狀態；瀏覽器不給寫入時只是下次回到預設。
-
-- 配置圖可顯示／隱藏、透明度 0–100% 連續調整並可一鍵重設為 30%。隱藏是改 `visibility` 而非移除，配置圖始終不接受滑鼠事件。沒有配置圖時，這三個控制項為 disabled。
-- 描摹模式把攤位、非一般攤位區、柱子與出入口收成外框（去填色），並隱藏格內代碼與排標籤；幾何與命中區不變。
-- 選取以獨立的 selection overlay 呈現，視覺線寬不超過 1.5px；原元件邊線維持原寬，不再改成 4px，也不加陰影。resize 把手的可見方塊縮小，命中區維持較大的透明範圍。
-- 微移步進提供 0.1／0.5／1／5／10，方向鍵移動一個步進，Shift + 方向鍵為 10 倍，步進顯示在畫布工具列上。
-- 編輯倍率最高 800%；放大後 Space + 拖曳或滑鼠中鍵拖曳平移畫布，平移只捲動視野，不修改 layout，也不產生復原步驟。
-
-### 排段整體調整
-
-選取單一攤位後可抓取它所在的排段（彼此貼齊的連續攤位），並以整段外框的 X／Y／寬／高欄位調整；每次修改重新無縫等分該段內部攤位，欄位值限制在畫布內且寬高不得收合為零。修改編號與方向是分開的第二步：讀入現有代碼後才可改代碼前綴、起始／結束編號、補零位數、方向與編號起點，套用時只重寫該段。同一排的其他排段保留自己的代碼、幾何與編號方向；只有整排都在選取範圍內時才改寫該排的 `orientation`。代碼與該段以外的既有代碼衝突時拒絕套用並指出衝突代碼，段內原本的代碼可自由重用。
-
-外框一律是該段攤位目前所佔的範圍：以拖曳、方向鍵微移或任何其他方式移動這些攤位之後，四角把手與四個欄位都對著移動後的位置，再次調整不會把該段退回先前的座標。選取不再剛好是該段的成員時（點選別的元素、加減選、框選或從元素選單切換），排段調整結束，面板與把手一併收起，不留下指向另一段的編輯目標。
-
-### 多排同步上下邊界
-
-選取兩排以上的直排攤位後，按「同步上下邊界」預覽共同的上界、下界與內部分隔線。上下界預設取整個選取的外緣，可直接修改上界 Y／下界 Y。綠色外框只呈現預覽，不寫入 layout、歷史或保存內容；按「套用上下邊界」才提交。取消、Escape、改變選取或編輯／替換 layout 都會捨棄待套用值。預覽不攔截畫布操作，套用後維持原選取。
-
-每一排以共同邊界無縫等分重切，因此各排的分隔線落在同一條線上，不會因為各自四捨五入格高而漂開。**每一格保留原本的 X 與寬度**，排與排之間的走道不變；未選取的元件完全不動。
-
-畫布範圍、最小格高 1 與「下界必須大於上界」在共同邊界層級檢查一次，不逐格各自夾限；空值與非有限數值不能套用。不適用時動作停用並就地說明：混入設施、不足兩排、各排格數不同（列出實際格數）、選取中含橫排攤位、無法辨識直排，或共同高度放不下該格數。依 X／寬度辨識直排，每排至少選兩格；同一 row 的多欄仍各自分組。代碼、row 歸屬、順序與編號方向不受影響，這個動作只改幾何。一次套用是一個歷史步驟，一次復原即可還原整批。
-
-與外部元件碰撞沿用既有的重疊提示與驗證，不另做全圖避碰或自動搬移。
 
 ## 草稿與版本
 
@@ -107,15 +64,15 @@ Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，
 | `GET /api/map-contributions/drafts/:draftId` | owner | 讀取草稿、來源 metadata 與審閱軌跡 |
 | `PUT /api/map-contributions/drafts/:draftId` | owner + 有效 contributor | 以 optimistic concurrency 新增 revision |
 | `POST /api/map-contributions/drafts/:draftId/submit` | owner + 有效 contributor | 驗證幾何、官方 placement 覆蓋與來源後提交目前 revision |
-| `POST /api/map-contributions/drafts/:draftId/comments` | owner + 有效 contributor，或近期管理者 session | 對目前 revision 留言，可指定單一 slot／landmark |
+| `POST /api/map-contributions/drafts/:draftId/comments` | owner + 有效 contributor，或管理者 | 對目前 revision 留言，可指定單一 slot／landmark |
 | `POST /api/map-contributions/files` | owner + 有效 contributor | 上傳官方來源檔並綁定目前 revision |
 | `GET /api/map-contributions/files/:fileId` | owner 或管理者 | 下載原始檔 |
 | `GET /api/map-contributions/files/:fileId/preview` | owner 或管理者 | 預覽圖片；PDF 回 `415` |
-| `GET /api/admin/map-contributions?days=N` | 近期管理者 session | 列出超過 N 天仍為 submitted 的草稿 |
-| `GET /api/admin/map-contributions/drafts` | 近期管理者 session | 列出已進入審閱流程的草稿 |
+| `GET /api/admin/map-contributions?days=N` | 管理者 | 列出超過 N 天仍為 submitted 的草稿 |
+| `GET /api/admin/map-contributions/drafts` | 管理者 | 列出已進入審閱流程的草稿 |
 | `GET /api/admin/map-contributions/drafts/:draftId` | 管理者 | 讀取審閱資料與共用 renderer 所需 layout |
-| `POST /api/admin/map-contributions/drafts/:draftId/review` | 近期管理者 session | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId。`targets[]` 附帶局部修改請求，只有 `changes_requested` 接受 |
-| `POST /api/admin/map-contributions/drafts/:draftId/export` | 近期管理者 session | 將核准 revision 固化為候選 JSON、SHA-256 與語意差異，並轉為 exported |
+| `POST /api/admin/map-contributions/drafts/:draftId/review` | 管理者 | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId。`targets[]` 附帶局部修改請求，只有 `changes_requested` 接受 |
+| `POST /api/admin/map-contributions/drafts/:draftId/export` | 管理者 | 將核准 revision 固化為候選 JSON、SHA-256 與語意差異，並轉為 exported |
 
 所有 contributor 與管理 route 都只列出、讀取或修改目前 Pages 設定的 `eventId`；共用 D1 中其他活動留下的草稿與來源檔不會進入目前活動的控制面。
 

@@ -10,7 +10,7 @@
 
 ## 範圍邊界
 
-<!-- 這張 PR 刻意不做什麼，以及為什麼對應 issue 不需要它。沒有則填「無」。見 ADR-0040。 -->
+<!-- 這張 PR 刻意不做什麼，以及為什麼對應 issue 不需要它。沒有則填「無」。見 docs/agents/review-loop.md。 -->
 
 ## 驗收證據
 
@@ -20,10 +20,17 @@
 
 ## 驗證
 
+程式變更：
+
 - [ ] `npm test`
 - [ ] `npm run lint`
 - [ ] `npx tsc --noEmit --incremental false`
 - [ ] 行為改變已在同一個 commit 更新唯一對應的 contract
+
+純文件變更（見 docs/runbooks/local-development.md 的「純文件變更」）：
+
+- [ ] `node --test tests/contribution-files.test.mjs`
+- [ ] `node scripts/check-doc-map.mjs --check`
 
 ## 資料、部署與回滾
 

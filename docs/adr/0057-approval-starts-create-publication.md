@@ -1,6 +1,7 @@
 # ADR-0057：核准即開始首次發布
 
 - 狀態：Accepted
+- **部分取代**（2026-09-23 標註）：[ADR-0035](./0035-new-event-onboarding-is-data-driven.md) 決策第 5 點與 [ADR-0038](./0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md) 決策第 4 點的「按一下即公開不在授權範圍」。
 - 日期：2026-09-13
 - 依據：#212；延續 ADR-0046 的安全邊界
 

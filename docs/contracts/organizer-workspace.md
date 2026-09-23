@@ -2,8 +2,8 @@
 
 主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開場刊仍只來自 data repository 的 reviewed snapshot 與 pin。
 
-**實作**：[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`app/github-app-token.ts`](../../app/github-app-token.ts)、[`app/github-installation-probe.ts`](../../app/github-installation-probe.ts)、[`app/github-publication.ts`](../../app/github-publication.ts)、[`app/github-remote-auditor.ts`](../../app/github-remote-auditor.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/api/organizer/`](../../functions/api/organizer)、[`functions/api/admin/organizer/`](../../functions/api/admin/organizer)、[`functions/api/admin/integrations/github/probe.ts`](../../functions/api/admin/integrations/github/probe.ts)
-**測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`
+**實作**：[`app/organizer/`](../../app/organizer)、[`app/organizer-client.ts`](../../app/organizer-client.ts)、[`app/organizer-event.ts`](../../app/organizer-event.ts)、[`app/organizer-workspace.ts`](../../app/organizer-workspace.ts)、[`app/organizer-import.ts`](../../app/organizer-import.ts)、[`app/organizer-workbook.ts`](../../app/organizer-workbook.ts)、[`app/organizer-publication.ts`](../../app/organizer-publication.ts)、[`app/organizer-publication-presentation.ts`](../../app/organizer-publication-presentation.ts)、[`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts)、[`app/publication-bundle-assembler.ts`](../../app/publication-bundle-assembler.ts)、[`app/github-app-token.ts`](../../app/github-app-token.ts)、[`app/github-installation-probe.ts`](../../app/github-installation-probe.ts)、[`app/github-publication.ts`](../../app/github-publication.ts)、[`app/github-remote-auditor.ts`](../../app/github-remote-auditor.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/api/organizer/`](../../functions/api/organizer)、[`functions/api/admin/organizer/`](../../functions/api/admin/organizer)、[`functions/api/admin/integrations/github/probe.ts`](../../functions/api/admin/integrations/github/probe.ts)、[`app/organizer-amendment.mjs`](../../app/organizer-amendment.mjs)、[`app/organizer-amendment-baseline.ts`](../../app/organizer-amendment-baseline.ts)、[`app/publication-artifacts.ts`](../../app/publication-artifacts.ts)、[`app/publication-rollout.ts`](../../app/publication-rollout.ts)、[`app/publication-dispatch.ts`](../../app/publication-dispatch.ts)、[`app/publication-scheduler.ts`](../../app/publication-scheduler.ts)、[`app/publication-runtime.ts`](../../app/publication-runtime.ts)、[`app/publication-origin.ts`](../../app/publication-origin.ts)、[`app/github-publication-driver.ts`](../../app/github-publication-driver.ts)、[`app/github-publication-deployment.ts`](../../app/github-publication-deployment.ts)、[`db/organizer-amendment-repository.ts`](../../db/organizer-amendment-repository.ts)、[`db/organizer-application-repository.ts`](../../db/organizer-application-repository.ts)、[`workers/publication-dispatch/`](../../workers/publication-dispatch/)
+**測試**：`tests/organizer-workspace.test.mjs`、`tests/organizer-handlers.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/organizer-reopen.test.mjs`、`tests/github-remote-auditor.test.mjs`、`tests/organizer-entry.test.mjs`、`tests/modal-focus.test.mjs`、`tests/organizer-import.test.mjs`、`tests/event-authoring-scope.test.mjs`、`tests/publication-bundle.test.mjs`、`tests/github-publication.test.mjs`、`tests/github-app-token.test.mjs`、`tests/github-installation-probe.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/organizer-amendment.test.mjs`、`tests/organizer-amendment-baseline.test.mjs`、`tests/organizer-amendment-handlers.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/organizer-applications.test.mjs`、`tests/organizer-publication-presentation.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/publication-amendment-artifacts.test.mjs`、`tests/publication-deployment.test.mjs`、`tests/publication-workerd.test.mjs`、`tests/github-publication-driver.test.mjs`
 **決策**：[ADR-0047](../adr/0047-organizer-onboarding-opens-into-a-resumable-workspace.md)、[ADR-0046](../adr/0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md)、[ADR-0058](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md)、[ADR-0038](../adr/0038-authoring-moves-to-the-control-surface-local-stays-as-backup.md)、[ADR-0039](../adr/0039-one-data-repo-for-events-and-references.md)、[ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)
 
 首次發布與發布後更正均已接上 Web UI 與自動發布。真實執行證據見 [CH20 首次發布／恢復](https://github.com/dekkmarsvin/tw_doujin_event/issues/212)及[地圖更正](https://github.com/dekkmarsvin/tw_doujin_event/issues/190)，其中記錄的人工補救不因功能已上線而抹除。部署模式與缺少 dispatcher 時的處置見[發布邊界](#發布邊界)。
@@ -27,7 +27,7 @@
 
 新候選沿用申請名稱與官方來源，預計日期／地點留在申請供確認；真正活動日與使用空間由既有引導填寫。核准申請僅准許建置，不建立「官方認證」標示；內容送審、核准 snapshot、publication job、恢復與 production smoke 全沿用既有路徑。
 
-公開活動選擇頁的 CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN=true` 控制，送件另由 Pages `ORGANIZER_APPLICATIONS_OPEN=true` 控制，均預設關閉；Reader 不為此呼叫 Function。未通過真實零補救驗收前不得設定為 true。隔離／受控驗收可只把明確帳號加入伺服器的 `ORGANIZER_APPLICATION_ALLOWED_EMAILS`（逗號分隔），不顯示公開 CTA，其他帳號送件仍回 403。既有邀請與已送件結果不受關閉開關影響。實際啟用步驟見部署 runbook，驗收證據集中 #163。
+公開活動選擇頁的 CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN=true` 控制，送件另由 Pages `ORGANIZER_APPLICATIONS_OPEN=true` 控制，均預設關閉；Reader 不為此呼叫 Function。隔離／受控驗收可只把明確帳號加入伺服器的 `ORGANIZER_APPLICATION_ALLOWED_EMAILS`（逗號分隔），不顯示公開 CTA，其他帳號送件仍回 403。既有邀請與已送件結果不受關閉開關影響。啟用條件與步驟見[部署 runbook](../runbooks/deployment.md#organizer-發布)。
 
 申請與決策不設新的 TTL／排程；帳號刪除時刪除 pending 申請，已審核申請保留去識別的決策與候選連結，清空申請自由內容與理由。帳號／審核者去識別化沿用既有刪除交易；正式活動內容及 sole-owner 刪除保護不變。
 
@@ -89,7 +89,7 @@ draft → submitted → approved → publishing → published
 
 ## 已發布名單的明確修正宣告
 
-`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。修正表單、送審與核准已接上候選 API 及原 publication engine；完整真實更正驗收仍由 #190 承接，CREATE 的碰撞保護不變。
+`app/organizer-amendment.mjs` 的共用 planner 接受已發布的 event、official booths、grouping、allocations／evidence，以及 `changes[]`；不接受替換整份名單來推論退出。共用核心本身不讀寫候選或公開資料；候選與 API 的 baseline 邊界如下。修正表單、送審與核准已接上候選 API 及原 publication engine；CREATE 的碰撞保護不變。
 
 每筆宣告必須明說 `kind`：
 
@@ -112,7 +112,7 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 - 建立新的候選、鎖定 eventId、immutable baseline、首版空宣告、版本紀錄、匯入列、獨立地圖草稿及 audit 在同一 D1 batch。交易內重新檢查來源版本、published job／snapshot 與 Owner grant 或目前 Admin 名冊；宣告保存同樣重檢 grant／Admin，避免預讀後撤權仍寫入。候選複製當下有效的 Owner／Editor grants；之後沿用每候選的協作者管理。Admin 不因建立動作取得 Owner。
 - `GET /api/organizer/events/:candidateId/amendment` 由候選 Owner／Editor／Admin 讀目前宣告、影響與可選來源名單；以同一 SQL 讀取 candidate 版本與最新宣告，地圖單獨修改後仍回目前候選版本，不能將舊宣告配上並行保存後的新版本。不回傳 global allocations／evidence 或核准 snapshot。`PUT` 只接受 `expectedVersion` 與完整 `changes[]`，從固定 baseline 重新規劃，不從前一次結果累加或推論。未知來源、錯誤宣告為 422，版本／狀態或交易內撤權衝突為 409。
 - 宣告保存以唯一 revision token 串起版本、不可變宣告紀錄、衍生匯入列與 audit；同時保存只成功一份，失敗請求不能把勝出者的匯入列退役。baseline 不隨保存改變。沿用 20,000 列、代碼 80 字、名稱 200 字及 8 MiB 名單限制；宣告本身也限制 8 MiB。匯入列只供既有地圖及驗證接線，身分仍由 baseline／宣告決定，不編造主辦 stable key。
-- 本切片中 AMEND 的一般活動設定儲存／匯入覆蓋均拒絕；地圖沿用原候選版本及權限檢查。送審／核准 AMEND 明確回 `amendment_publication_unavailable`，不產生 snapshot 或 publication job。後續接線才開放，不能用 CREATE 繞過。
+- AMEND 的一般活動設定儲存與匯入覆蓋一律回 409 `amendment_declaration_required`，名單變動只能經修正宣告；地圖沿用原候選版本及權限檢查。送審與核准沿用 CREATE 的 publication engine，不能用 CREATE 繞過修正宣告。
 - Runtime schema 新增 `publication_operation`（舊候選預設 CREATE）、`organizer_amendments` 與 `organizer_amendment_changes`。舊 eventId index 以同名在一個交易中替換，避免舊部署的 `CREATE INDEX IF NOT EXISTS` 重建舊規則；CREATE 唯一及 AMEND 活躍唯一各自保留，不需要人工 SQL 遷移。
 
 ### 修正操作介面
@@ -121,7 +121,7 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 - **修正只能表達四種變動，純分類變更不在其中。** 退出、換手、移動／重編號、新增——只有「移動」帶得動目的地的活動日、展區與代碼。所以「把展區重新歸類、攤位本身沒動」這種修正，在系統裡只能寫成逐攤的移動宣告，而讀者會因此在每一個攤位看到「已移動攤位」。發布時 `publication-artifacts` 還會比對 snapshot 的攤位清單與「baseline + 宣告」推出的結果，不一致就以 `snapshot_mismatch` 退件——因此直接改候選的匯入列也走不通。修正的 baseline 取自目前對外服務的目錄而非 D1，改舊候選同樣不影響未來的修正。遇到管線表達不了的資料更正時，預設是不動已發布資料、改為修正上游避免再發生；若確實必須更動已發布位元組，那是繞過「已發布內容來自已核准 snapshot」的治理例外，要明確記錄後才執行。
 - AMEND 的「名單修正」取代一般攤位匯入。表單明選變動類型、搜尋／勾選來源攤位，填接手或新增社團名稱，以及逐攤目的活動日、展區、代碼；選填 HTTPS 更正依據。來源每頁最多 50 個，跨頁／搜尋仍保留選取。
 - 宣告可加入清單、修改或取消，再按「儲存修正並檢視影響」。影響區只顯示伺服器已保存版本；未保存時明確標示，切換活動／項目或離開頁面有未儲存提示。「開始修正」的基準核對回應較晚到達時，也檢查目前面板的未儲存輸入，不能直接切走其他候選。取消宣告只撤掉那筆修正，不推論名單缺列。409 保留輸入與舊影響，需明確捨棄後讀取新版本，不能直接重送覆蓋。
-- 活動與場館設定為唯讀；地圖、檢查與 Reader 預覽沿用既有介面。AMEND 發布接線完成前，detail 回 `publicationAvailable: false`，送審按鈕停用，後端送審／核准仍拒絕。此狀態不代表修正產品里程碑完成。
+- 活動與場館設定為唯讀；地圖、檢查與 Reader 預覽沿用既有介面。自動發布未啟用時 detail 回 `publicationAvailable: false`：AMEND 的送審與所有核准按鈕停用，後端核准回 503 `publication_unavailable`，送審內容保留。
 
 ## 主辦與分類目錄
 
@@ -142,7 +142,7 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 - 每個群組的 `dayId`、`venueSpaceId` 與 `areaId` 必須落在草稿已宣告的集合內；`areaMode: none` 的列會被正規化為 `ALL`，不讀來源檔的展區值；同一活動日 × 場館空間 × 攤位代碼不得重複（大小寫不敏感）。
 - 每個群組保存 `codes[]`、社團名稱與來源參考列；正整數表示原檔列號，`sourceRow: 0` 表示手動新增或從不同來源列合併的群組，不虛構檔案列號。一團多攤不需要填主辦內部編號。重複驗證逐個代碼進行，同群組內重複也整批拒絕；API 要求非空的字串陣列，各碼不超過 80 字元，現有 20,000 群組與 8 MiB 上限不變。舊有正整數來源列維持相容，不需資料遷移。
 - 欄位 mapping 保存 `boothCodeMode`：預設 `single` 不拆碼；`delimited` 以空白、逗號（含全形）、頓號、分號（含全形）或斜線拆分；`fixed-width` 使用主辦明確確認的 `boothCodeWidth`（1–80 字元）。寬度只提出候選值、不自動套用；不可整除或包含分隔符號時，指出來源列並擋住儲存。`single` 遇可能連寫的代碼，於 mapping／預覽即提示。
-- 預覽顯示群組列數、展開代碼總數與各列的全部代碼；已儲存清單提供社團／代碼／內部編號搜尋、活動日與使用空間篩選、依第一個攤位代碼自然排序及每頁 100 列的分頁。候選鎖定時仍可唯讀檢視；地圖雙向對照由 #215 承接。
+- 預覽顯示群組列數、展開代碼總數與各列的全部代碼；已儲存清單提供社團／代碼／內部編號搜尋、活動日與使用空間篩選、依第一個攤位代碼自然排序及每頁 100 列的分頁。候選鎖定時仍可唯讀檢視；與地圖的對照見[地圖](#地圖)。
 - 已匯入清單在 draft／changes_requested 可修改、手動新增、刪除、拆分與合併群組。拆分勾選要移至另一組的代碼，兩組保留原名稱與明確的 stableKey／identityGroup，名稱相同不另外產生識別連結。合併只允許同活動日、同使用空間、同展區且內部編號一致；名稱不同時須明確選擇保留名稱，不能默默覆寫社團識別。同來源列的拆分／合併仍可回查原列，不同來源列合併標成手動群組。
 - 清單編輯草稿獨立於尚未儲存的匯入預覽；搜尋、篩選、排序與換頁不清除修改，僅渲染目前 100 列。離開區段與重新整理沿用未儲存提醒；有清單草稿時，先儲存或放棄才能以新檔案取代。此入口需要已有匯入出處，不提供從零建單。
 - 編輯時即時指出同日 × 同空間重複代碼、缺值與活動設定不符；可疑連寫只提供建議，須確認才拆碼。活動日與使用空間只能從活動設定選擇，無分區沿用 ALL；分區變動在儲存前沿用展區宣告，再以取得的新 expectedVersion 儲存整份清單。409 保留本機草稿並停止重試覆寫，須放棄及重新讀取新版本。
@@ -168,17 +168,17 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 
 清單的「已儲存地圖」逐群組顯示待畫、部分已畫或已畫，以該活動日 × 使用空間最新已存地圖的代碼核對，讀取失敗不當作待畫。已有座標可定位到同一範圍的編輯器；清單尚有未保存變更時先儲存再定位。此狀態來自既有 maps 列表的選填 `coverage=1` 投影，不另外保存完成旗標。
 
-編輯器的清單對照則依目前地圖草稿即時更新，清楚標示儲存後才更新清單狀態；畫入、改碼、刪除及復原都參與計算。可搜尋代碼與社團名稱，待畫代碼沒有無效定位，選取已有攤位可核對同範圍的群組。共用行為見[地圖貢獻契約](./map-contributions.md#共用畫布放置)。
+編輯器的清單對照則依目前地圖草稿即時更新，清楚標示儲存後才更新清單狀態；畫入、改碼、刪除及復原都參與計算。可搜尋代碼與社團名稱，待畫代碼沒有無效定位，選取已有攤位可核對同範圍的群組。共用行為見[地圖編輯器契約](./map-editor.md)。
 
 - 每一個「活動日 × venue-space」各一份地圖草稿，沿用既有的 `MapLayoutEditor` 與 template 辨識器。
-- 共用的[私人輔助線與吸附](./map-contributions.md#私人輔助線與吸附)隨地圖 revision 保存。API 以 layout 同層的可選 `authoring` 讀寫，公開預覽／publication 只採地圖 layout；畫布個人顯示開關不觸發候選保存。
-- 共用的[描摹顯示與精準操作](./map-contributions.md#描摹顯示與精準操作)與[排段整體調整](./map-contributions.md#排段整體調整)在本工作區與地圖貢獻控制面行為一致。配置圖顯示、透明度、描摹模式與微移步進只留在瀏覽器，不進草稿也不進 revision。
+- 共用的[私人輔助線與吸附](./map-editor.md#私人輔助線與吸附)隨地圖 revision 保存。API 以 layout 同層的可選 `authoring` 讀寫，公開預覽／publication 只採地圖 layout；畫布個人顯示開關不觸發候選保存。
+- 共用的[描摹顯示與精準操作](./map-editor.md#描摹顯示與精準操作)與[排段整體調整](./map-editor.md#排段整體調整)在本工作區與地圖貢獻控制面行為一致。配置圖顯示、透明度、描摹模式與微移步進只留在瀏覽器，不進草稿也不進 revision。
 - **「儲存地圖變更」只儲存，不關閉編輯器。** 一張地圖要畫很多輪，關閉是另一個決定，由「關閉編輯器」負責。儲存後編輯器沿用同一份 layout 繼續編輯，並改為更新剛才存下的那份地圖：第一次儲存之後的每一次儲存都是更新，不會再建立第二份。有未儲存變更時關閉才會出現「儲存並關閉／放棄／取消」。已保存的地圖沒有新變更時儲存鍵停用，旁邊沿用草稿表單同一組「尚有未儲存變更／目前沒有未儲存的變更」；畫布上沒有任何攤位或設施時，不論這張地圖是否已經建立，儲存鍵同樣停用並說明缺什麼。停用不只是版面整潔：每次儲存都讓 candidate 前進一個版本並寫入一份 revision，沒有變更的儲存會在歷史留下一步空紀錄，而空白地圖的第一次儲存是同一件事的另一個入口——它還會讓「N 張地圖」這個計數記上一張沒有內容的地圖。
 - **配置圖跟著地圖存下來。** 一份地圖草稿有一張目前的配置圖，經 `PUT /api/organizer/events/:candidateId/maps/:draftId/background` 存進私人 bucket `MAP_CONTRIBUTIONS`，由 `GET` 同一個位址讀回，兩者都限協作者且回應 `private, no-store`。物件位址由草稿自己的 id 決定（`organizer-map-backgrounds/<candidateId>/<draftId>`），因此**沒有任何 D1 資料列指向它**：再上傳一次就是覆蓋同一個位址，草稿被保存期限清除時也照同一組 id 刪除，不需要先讀 metadata。只接受 JPEG／PNG／WebP，上限 10 MB，容器檢查與貢獻來源檔共用同一份 [`prepareMapImageFile()`](../../app/map-contribution-files.ts)。
+- 上傳按鈕依狀態顯示三種字：編輯器沒開時是「上傳配置圖並編輯」，會用圖片建立新的 layout（有辨識器就辨識，沒有就依圖片尺寸開一張空白底圖）；編輯器開著而還沒有配置圖時是「上傳配置圖」，**只把圖片放到現有攤位底下，不動地圖內容**；已經有配置圖時是「更換配置圖」。同一個檔案可以連續選第二次。地圖還沒建立時選的配置圖會在第一次儲存時一起存上去。
 - **已發布修正沿用來源底圖。** 修正地圖尚未上傳自己的配置圖時，登入且具修正候選權限的協作者可讀取固定 baseline 中同活動日／場館空間的已發布來源底圖，連續修正也沿用這條來源關係；不接受客戶端提供來源 id 或 bucket key。更換配置圖只寫修正地圖自己的物件，不影響原版。GET 不寫入、不推進版本，來源底圖維持原保存期限；來源已清除時維持找不到配置圖，不複製資料以延長保存。
 - **上傳配置圖不推進版本。** 配置圖是描圖用的底圖，不是送審內容，所以它不增加 candidate version、不寫 map revision，只留一筆 `organizer_event.map_background_updated` 稽核。儲存鍵的停用條件因此不受影響。
 - **會清掉畫面內容的動作都先問。** 空白畫布（畫面上有內容時）、切換地圖分頁、從同場館空間複製、切換使用空間（有未儲存變更時），以及已經有配置圖時再次上傳，都要先確認再執行。
-- **編輯畫布的 100% 是整張地圖看得完**，不是把地圖拉滿畫布寬度；倍率由畫布實際可用空間與地圖比例算出，最高 800%，放大後可用 Space 或滑鼠中鍵拖曳平移。畫布高度來自編輯器版面而非固定值，右側屬性欄自行捲動，不把地圖擠成需要捲動才看得完。這條同樣適用於[地圖貢獻控制面](./map-contributions.md)嵌入的同一個編輯器。
 - 候選地圖的 scope 由 [`resolveCandidateAuthoringScope()`](../../app/event-authoring-scope.ts) 從草稿與匯入列推導：`allowedBoothCodes` 與 `requiredBoothCodes` 都是該 scope 實際匯入的攤位代碼。
 - **候選活動的地圖可以含沒有社團的攤位格。** 配置圖畫的是整個場地，包含沒賣掉的攤位，而那些格子沒有任何匯入列可以指認。已發布活動有 reviewed snapshot 透過 `existingBoothCodes` 認領這些格子，所以在那裡出現的陌生代碼是打錯字，仍然是 error；候選活動的第一份地圖沒有 snapshot 可依靠，因此 `unknown_booth` 降為 warning，代碼照樣列出來給人看。這是 `allowsUnallocatedBooths` 這個 scope 欄位唯一的用途。`missing_booth`、`overlap` 與幾何錯誤不受影響。
 - **候選地圖沒有公開檔案位址**（`targetPath: null`）。已發布活動的 authoring scope 才有 `targetPath`，只有一組「活動日 × 場館空間」時是 `map.json`，多組時是 `maps/<periodKey>/<venueSpaceId>.json`。
@@ -205,7 +205,7 @@ AMEND 沿用驗證、Reader 預覽、Owner 送審及 Admin 核准。送審固定
 
 `app/organizer-publication.ts` 每次 delivery 至多執行一個 transition，持有有時限的全域 lease。snapshot id、版本、hash 與 snapshot bytes 必須相符。driver 以 job/step/hash 作為 reconciliation key，副作用前必須再次確認 lease；pending 保留步驟。已保存的 PR、head SHA、merge SHA 與 workflow id 不能被新的 checkpoint 改寫。
 
-步驟為 preparing_data → waiting_data_checks → merging_data → preparing_main → waiting_main_checks → merging_main → waiting_deployment → verifying_production → completed。失敗保留原 step、failure_code、error、retryable 與 metadata。Main 需要 data merge SHA，deployment 需要 main merge SHA；productionVerified 必須明確為 true 才能完成。此 boolean 是 **driver 的 blocking Pages smoke 結果**，目前沒有 production adapter 實作，不能把測試 driver 當成真實 smoke。
+步驟為 preparing_data → waiting_data_checks → merging_data → preparing_main → waiting_main_checks → merging_main → waiting_deployment → verifying_production → completed。失敗保留原 step、failure_code、error、retryable 與 metadata。Main 需要 data merge SHA，deployment 需要 main merge SHA；productionVerified 必須明確為 true 才能完成。此 boolean 是 **driver 的 blocking Pages smoke 結果**，由下方 deployment adapter 核對實際公開來源；測試 driver 的結果不能當成真實 smoke。
 
 driver 第一次 remote mutation 前必須先以目前 job、candidate version、approval 與 lease CAS 寫入 sticky `remote_write_intent_at`，再在每個 mutation 前 assert lease；錯誤、timeout、空 remote audit 與 retry 都不清除它。這個欄位只表示遠端結果可能未知，不代替已確認的 PR／SHA／workflow checkpoint，因此有 intent 的 failed candidate 不能被 reopen。
 
@@ -251,7 +251,7 @@ AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核�
 
 依 ADR-0045 的發布產物補充，snapshot 宣告透過既有 planner 生成 transitions，main 只套用一次，退出歷史保存在 evidence；公開 groups/2 存放結果群組及空 transitions，供既有 `identity:generate --check` 驗證已套用的 registry，避免每次 build 再執行歷史退出。已公開 AMEND 可重新載入為下一次 baseline，source 只保留 job／snapshot 識別，不能遞迴嵌入前次 snapshot。
 
-AMEND 送審／核准與原 executor／driver 已接上以下固定觀測與恢復路徑，沿用既有 publication mode 與 dispatcher 啟用條件。正式 rollout 須先部署支援 AMEND 的獨立 Worker，再開放 Pages UI 核准；工程測試不當作真實更正驗收。
+AMEND 送審／核准與原 executor／driver 共用以下固定觀測與恢復路徑，沿用既有 publication mode 與 dispatcher 啟用條件。
 
 ### GitHub data／main driver
 
@@ -259,13 +259,13 @@ AMEND 送審／核准與原 executor／driver 已接上以下固定觀測與恢�
 
 每次 preparing 先找所有狀態的同分支 PR／branch；已有 commit 時先確認其唯一 parent 是固定 current main 的歷史祖先，再以該 parent 重建預期產物，比對完整 leaf tree（包含保留的舊檔與所有新檔的 Git blob hash），不只比對 PR 本文。不接受分支自行提出、未進入 main 的基準。分支、PR、核准 check 寫入成功但回應遺失時沿用遠端產物；已關閉未合併、換 head、額外檔案或 snapshot 不符時停止，不自動覆寫。每一次 GitHub mutation（含 tree／commit、branch、PR、check、merge）都在發送前持久化 write intent 並重驗 lease。
 
-必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 已加入唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義（#227 A）。
+必要 check 使用同 head SHA、最新 check run、completed + success；skipped 不通過。核准 check 另比對 job 與 approval hash。合併仍帶 expected SHA；若回應遺失，重試讀取同 PR 的已合併 SHA，不再次 merge。Main 產檔再次讀取固定 data merge commit 的 bytes。`Browser acceptance` 列在唯一的 `PUBLICATION_REQUIRED_CHECKS.main` 定義中。
 
 AMEND 沿用同一 executor 的八個步驟，候選 operation、eventId 與 snapshot/4 明確 AMEND 必須一致；CREATE 仍做首次發布碰撞檢查。Driver 每次 preparing 讀固定原目錄／pin，AMEND 不能靠相同 eventId 取得覆寫權。合併前重建原 PR parent 的核准產物、比對完整分支 tree，再查目前 main 的原 pin、活動資料與身份歷史；PR 準備後待寫入檔案有變更時，回不可重試 `amendment_base_conflict`，停止合併以保留介入的發布，交由管理者核對，不能靠反覆按重試覆寫。無關程式／文件前進不阻擋。
 
 AMEND 的分支、PR、核准 check 或 merge 回應遺失，仍以原工作識別與完整 tree 恢復；已合併 PR 不再要求目前 pin 等於舊基準（自己的 merge 已更新它），而是核對原 parent、固定 data merge 與該 PR 的合併 SHA／產物 bytes。原 checkpoint、expected head SHA、lease、sticky write intent 與同 head 必要 checks 全部保留，沒有改用另一个 job 或另一套部署流程。Pages production origin 驗證仍是完成 published 的必要條件。
 
-Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不能完成 published；Pages 與 cron 共用的 runtime 已接上 #212 Phase 4 adapter。只接受 main repository、`deploy-pages.yml`（workflow ID 331570396）、push/main、本 job `main_merge_sha` 的唯一 run。先保存 run ID／attempt，再讀該 attempt 的 jobs；`Deploy to Cloudflare Pages` 成功才進入 verifying，該 attempt 的 `Verify and deploy` 與 `Smoke test production deployment` 均 completed + success 才檢查公開來源。Skipped 不通過，custom domain 結果不影響 blocking gate。
+Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不能完成 published；Pages 與 cron 共用的 runtime 使用 [`github-publication-deployment.ts`](../../app/github-publication-deployment.ts) 的 adapter。只接受 main repository、`deploy-pages.yml`（workflow ID 331570396）、push/main、本 job `main_merge_sha` 的唯一 run。先保存 run ID／attempt，再讀該 attempt 的 jobs；`Deploy to Cloudflare Pages` 成功才進入 verifying，該 attempt 的 `Verify and deploy` 與 `Smoke test production deployment` 均 completed + success 才檢查公開來源。Skipped 不通過，custom domain 結果不影響 blocking gate。
 
 CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部署 commit、所有 published event 的 data pin commit 與實際輸出 JSON SHA-256；production smoke 同時核對部署 commit。Runtime 僅查固定 `https://tw-catalog.pages.dev`、不帶認證且不接受 redirect，核對本次 main SHA／data SHA、固定 main commit 的完整公開活動清單、全部列出的活動 JSON bytes（含既有活動、地圖）、Reader HTML 與匿名 session 401，最後重讀 manifest 確認驗證途中未換版。通過後保存 manifest SHA-256 才可 published。這不取代 CH20 真實 Reader UI 驗收。
 
@@ -276,7 +276,7 @@ CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部�
 - [`publicationPathAllowed()`](../../app/publication-bundle-assembler.ts) 的路徑 allowlist——data repository 只接受 `events/<eventId>/` 底下的 `event`／`official-booths`／`circle-identity-groups`／`map`／`map-manifest`／`reference-selection`、`maps/<day>/<space>.json` 與 `NOTICE`，加上 `references/**.json`；main repository 只接受 `data/published-events.json`、兩份 identity 檔與該活動的 pin。`.github/**` 與任何跳脫路徑一律拒絕。
 - webhook 的 HMAC 驗證與以 delivery id 去重。
 
-#245 接上 data／main 的 PR、核准 check、allowlist 與 expected SHA merge；#246 接上持久化排程，Phase 4 接上 deployment／origin。App ownership 沿用 ADR-0058 已接受的 bot 作者邊界。正式端到端流程仍須實測。disabled 不自動發布；啟用後僅目前核准版本的 active job 可派送，超時 queued 先轉 failed，failed 舊 job 不自行恢復。CH20 舊內容修正須明確經 UI reopen、重新匯入、validate／submit／approve，不重試錯誤 snapshot。
+data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 執行，持久化排程依 [ADR-0062](../adr/0062-publication-wakes-through-webhooks-and-a-dedicated-cron.md)，deployment／origin 由上述 adapter 核對。合併前 PR 作者必須是建立核准 check 的同一個 App（[ADR-0066](../adr/0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md)）。disabled 不自動發布；啟用後僅目前核准版本的 active job 可派送，超時 queued 先轉 failed，failed 舊 job 不自行恢復。失敗候選的內容有誤時，須明確經 UI reopen、重新匯入、validate／submit／approve，不重試錯誤 snapshot。
 
 ## 與地圖貢獻流程的邊界
 

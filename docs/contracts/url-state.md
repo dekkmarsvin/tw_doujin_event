@@ -9,7 +9,7 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 
 ## 搜尋入口與主要網址
 
-依 #338，公開活動介紹使用 `/events/<eventId>/`，社團在該活動的介紹使用 `/events/<eventId>/circles/<circleId>/`。它們是在 build 時從同一份已發布活動／reviewed base 產生的 `index.html`，不是 SPA fallback。社團頁集中呈現跨日、多攤位與已移動／已取消狀態；每筆配置以既有 query URL 回到正確日期、場館空間與攤位。未知靜態路徑沿用真實 404。
+公開活動介紹使用 `/events/<eventId>/`，社團在該活動的介紹使用 `/events/<eventId>/circles/<circleId>/`。它們是在 build 時從同一份已發布活動／reviewed base 產生的 `index.html`，不是 SPA fallback。社團頁集中呈現跨日、多攤位與已移動／已取消狀態；每筆配置以既有 query URL 回到正確日期、場館空間與攤位。未知靜態路徑沿用真實 404。
 
 - 首頁提供活動地圖與活動介紹的 href；每個活動介紹列出全部有配置的社團 href，不依賴「載入更多」。Reader 清單的一般點擊保持地圖選取，修改鍵／新分頁可開啟靜態社團頁。
 - 首頁 canonical 為正式網域 `/`；Reader 有效活動指向活動介紹，已解析且有效的社團選取指向該社團介紹。未驗證的 query 值不產生社團 canonical。篩選、排序、收藏及日／攤位選取不另建索引頁，原 URL 與還原語意不變。

@@ -1,6 +1,7 @@
 # ADR-0030：主辦分類目錄是活動資料，逐社團類別是社團自述
 
 - 狀態：已定案（2026-08-21）
+- **部分被取代**（2026-09-23 標註）：第 5 點關於畫面標示的部分由 [ADR-0036](./0036-provenance-labels-name-the-source-not-its-trust-level.md) 取代；provenance 不合併的實質決定不變。
 - 來源：[開拓動漫祭社團主題類別](https://www.f-2.com.tw/%E7%A4%BE%E5%9C%98%E4%B8%BB%E9%A1%8C%E9%A1%9E%E5%88%A5/)
 
 ## 問題

@@ -64,7 +64,7 @@ npm run usage:collect -- --date 2026-08-20 --allow-empty-history
 npm run usage:report -- --date 2026-08-20
 ```
 
-本機 history 在 `.cloudflare-usage/`，已忽略版控。token、account ID、價格、免費額度、預算與通知設定都不得提交。
+本機 history 在 `.cloudflare-usage/`，已忽略版控。token 與 account ID 一律不得提交。價格、免費額度、預算與通知設定不寫進 collector 的設定檔或 history；帳號層級的計費基準與管理目標依 [ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md) 記在[專案工作流程第 7 節](./project-workflow.md#7-成本與複雜度執行目標)。
 
 ## 外部設定
 

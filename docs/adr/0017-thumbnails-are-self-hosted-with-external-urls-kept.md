@@ -1,6 +1,7 @@
 # ADR-0017：縮圖由本站代管，外部網址保留為第二條線
 
 - 狀態：已定案（2026-08-19）；Error 1027 的未實測後果敘述已由 [ADR-0031](./0031-quota-exhaustion-is-not-a-release-gate.md) 取代；上傳邊界表的「單檔容量 2 MiB」已由 [ADR-0053](./0053-the-thumbnail-upload-asks-for-the-picture-only.md) 放寬為 5 MiB；以 Workers Free 每日 100,000 次與 10 ms CPU 為前提的成本敘述已由 [ADR-0065](./0065-cost-reasoning-uses-the-workers-paid-basis.md) 取代，代管不經 Function 的決策不變
+- **部分被取代**（2026-09-23 標註）：主機允許清單由 [ADR-0052](./0052-thumbnail-addresses-are-checked-as-images-not-hosts.md) 移除；本站代管為主線的決策不變。
 - 實作：[#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)（2026-08-21）
 - 延續：[ADR-0012：資料來源只留主辦官網與社團本人](./0012-first-party-sources-only.md)
 - 相關契約：[社團自助控制面契約](../contracts/circle-portal.md)、[資料傳輸與離線契約](../contracts/delivery-and-offline.md)

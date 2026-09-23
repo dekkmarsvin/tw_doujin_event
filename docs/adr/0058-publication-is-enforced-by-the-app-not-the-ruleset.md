@@ -1,6 +1,7 @@
 # ADR-0058：發布的強制點在 App adapter，ruleset 不作為必要閘門
 
 - **狀態**：Accepted
+- **後續標註**（2026-09-23 標註）：第 1 點記錄的 PR 作者檢查缺口已由 [ADR-0066](./0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md) 第 3 點補上。
 - **日期**：2026-09-13
 - **依據**：#212、#227、#104
 - **部分取代**：[ADR-0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) 的三處——(a) 決策第 4 點（Repository ruleset 是第二道強制邊界）與該點附帶的「兩個 ruleset 經 API 實測完成前 production merge feature flag 必須保持關閉」全數失效；(b) 決策第 3 點條件 5「repository ruleset 要求的所有 checks 已成功」，其 required checks 的權威來源改為程式常數 `PUBLICATION_REQUIRED_CHECKS`（條件本身仍成立，改由 App adapter 驗證）；(c)〈結果〉第一句的「ruleset 仍決定可否合併」。決策第 1、2、5 點與第 3 點的其餘七項條件不變
