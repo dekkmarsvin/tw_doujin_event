@@ -26,7 +26,7 @@
 .empty { padding-block:24px; }
 .list a {
   width:100%; min-height:44px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
-  padding:15px 16px; border:1px solid var(--line); border-radius:11px; background:#fff; color:var(--ink);
+  padding:15px 16px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink);
   text-align:left; cursor:pointer; text-decoration:none;
 }
 .list a:hover { border-color:#b9c2bb; }
