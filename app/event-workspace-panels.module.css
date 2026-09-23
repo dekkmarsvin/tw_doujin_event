@@ -267,6 +267,8 @@
   .details[data-embedded] .externalLinks a small,
   .details[data-embedded] .sources>b { font-size:calc(12px * var(--ui-font-scale)); }
   .details[data-embedded] .work p { overflow-wrap:anywhere; }
+  .details[data-embedded] .claimEntry { font-size:calc(14px * var(--ui-font-scale)); }
+  .details[data-embedded] .claimEntry a { min-height:44px; }
 }
 
 @media (min-width:761px) {

@@ -246,7 +246,7 @@ export function CircleDetails({ record, sharedRecords, movedDestination = null, 
         <b>資料來源</b>
         {record.sources.map((source) => <div key={`${source.provider}-${source.contentType}`}><span><strong>{source.provider}</strong>{source.label && <small>{source.label}</small>}{SOURCE_STATUS_NOTE[source.status] && <small>{SOURCE_STATUS_NOTE[source.status]}</small>}<small>{sourceDateLabel(source)}</small></span>{source.url && <a href={source.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}>原始來源 <UiIcon name="external" /></a>}</div>)}
       </div>}
-      {floating && !readOnly && <p className={styles.claimEntry}>這是你的社團嗎？<a href={`/circle?${new URLSearchParams({ event: record.placement.eventId, circle: record.circle.id })}`}>認領／管理資料</a></p>}
+      {(floating || embedded) && !readOnly && <p className={styles.claimEntry}>這是你的社團嗎？<a href={`/circle?${new URLSearchParams({ event: record.placement.eventId, circle: record.circle.id })}`}>認領／管理資料</a></p>}
     </div>;
   // The scroll region must be reachable with Tab so keyboard users can scroll it.
   // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex

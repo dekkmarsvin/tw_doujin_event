@@ -140,6 +140,8 @@ export type CircleMatch = {
   name: string;
   links: { provider: string; url: string }[];
   linkCount: number;
+  /** Only on the exact entry lookup: someone already holds a verified claim. */
+  claimed?: boolean;
 };
 
 export function searchCircles(query: string) {

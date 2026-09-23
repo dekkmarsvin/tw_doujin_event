@@ -1,5 +1,6 @@
 // staged-data: fixture
-// Focused UI regression: the one-time challenge must survive the claims refresh.
+// Focused UI regressions: the one-time challenge must survive the claims
+// refresh, and a circle someone else owns never offers a form to fill in.
 // Real authentication and claim ownership are exercised by portal-circle-claim
 // and circle-portal-route; these responses isolate the challenge-only branch.
 import assert from "node:assert/strict";
@@ -49,5 +50,30 @@ try {
   await page.getByRole("button", { name: "重新驗證", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "送出認領", exact: true }).count(), 0, "returning to pending never offers duplicate submission");
   await journey.capture(page, "claim-entry-pending-return");
+
+  // Someone else already holds the circle: the form would only end in a refusal.
+  let claimPosts = 0;
+  const owned = await journey.page({
+    url: `${base}/circle?event=sample&circle=c-900001`,
+    routes: async (page) => {
+      await page.route("**/api/**", async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        let body;
+        if (url.pathname === "/api/auth/session") body = { email: "visitor@example.test", isAdmin: false, isMapContributor: false, expiresAt: Date.now() + 86400000 };
+        else if (url.pathname === "/api/circle/search") body = { circles: [{ id: "c-900001", name: "北風畫室", links: [], linkCount: 1, claimed: true }] };
+        else if (url.pathname === "/api/claims" && request.method() === "POST") { claimPosts += 1; body = {}; }
+        else if (url.pathname === "/api/claims") body = { eventId: "sample", claims: [] };
+        else throw new Error(`unexpected fixture request ${url.pathname}`);
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+      });
+    },
+  });
+  await owned.getByText("此社團已有通過的認領。若這是你的社團，請聯絡管理者。", { exact: true }).waitFor();
+  assert.equal(await owned.getByRole("heading", { name: "北風畫室", exact: true }).count(), 1);
+  assert.equal(await owned.getByRole("button", { name: "送出認領", exact: true }).count(), 0, "no form to fill in for an owned circle");
+  assert.equal(await owned.locator("#portal-search").count(), 0);
+  assert.equal(claimPosts, 0);
+  await journey.capture(owned, "claim-entry-owned-elsewhere");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

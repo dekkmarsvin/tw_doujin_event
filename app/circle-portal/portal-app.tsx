@@ -498,6 +498,8 @@ function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
     : created?.id === claim.id && proof ? proof : <p>認領處理中，可在「我的社團」查看或撤回。</p>}</section>;
   if (!result) return <p className={styles.notice} role="status">正在讀取社團…</p>;
   if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{result.error}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>重新讀取</button></section>;
+  // Same words as the refusal `createClaim` would give after the form was filled in.
+  if (result.circle?.claimed) return <section className={styles.card}><h2>{result.circle.name}</h2><p>此社團已有通過的認領。若這是你的社團，請聯絡管理者。</p></section>;
   return <>{!result.circle && <p className={styles.notice}>在這個活動找不到指定社團，請重新搜尋。</p>}<ClaimForm key={result.circle?.id ?? "search"} initialCircle={result.circle} onCreated={(answer) => { setCreated(answer); onChanged(); }} /></>;
 }
 
