@@ -41,17 +41,29 @@ export const EVENT_GROUPS = [
 ] as const;
 
 /**
- * The event a control surface opens on when nothing names one: the one being
- * held, else the next to start, else the one that ended last. Published order
- * says nothing about where the work is, so only the id breaks ties.
+ * Events in the order a control surface cares about them: the one being held,
+ * then the next to start, and only after every current one, the ended ones
+ * from the most recent back. Published order says nothing about where the
+ * work is, so only the id breaks ties. An event whose days cannot be read
+ * ranks by its end date.
  */
-export function nearestEvent<T extends EventDefinition>(events: readonly T[], today: string): T | undefined {
-  const entries = events.map((event) => ({ event, ...eventCalendar(event) }));
+export function eventsByProximity<T extends EventDefinition>(events: readonly T[], today: string) {
+  const entries = events.map((event) => {
+    const calendar = eventCalendar(event);
+    const group = today > calendar.end ? "past" : !calendar.start ? "undated" : today < calendar.start ? "upcoming" : "ongoing";
+    return { event, ...calendar, group: group as (typeof EVENT_GROUPS)[number]["id"] };
+  });
   const byId = (a: { event: T }, b: { event: T }) => a.event.id.localeCompare(b.event.id);
-  const current = entries.filter((entry) => entry.end >= today)
+  const current = entries.filter((entry) => entry.group !== "past")
     .sort((a, b) => (a.start ?? a.end).localeCompare(b.start ?? b.end) || byId(a, b));
-  if (current.length) return current[0].event;
-  return entries.sort((a, b) => b.end.localeCompare(a.end) || byId(a, b))[0]?.event;
+  const past = entries.filter((entry) => entry.group === "past")
+    .sort((a, b) => b.end.localeCompare(a.end) || byId(a, b));
+  return [...current, ...past];
+}
+
+/** The event a control surface opens on when nothing names one. */
+export function nearestEvent<T extends EventDefinition>(events: readonly T[], today: string): T | undefined {
+  return eventsByProximity(events, today)[0]?.event;
 }
 
 export function groupCalendarEvents(events: readonly EventDefinition[], today: string) {

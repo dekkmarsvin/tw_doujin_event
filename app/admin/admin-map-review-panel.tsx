@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { exportMapContributionCandidate, listAdminMapDrafts, mapDraftConflict, mapDraftProblems, postMapDraftComment, readMapDraft, reviewMapContributionDraft, type MapDraftCommentTarget, type MapDraftSummary } from "../circle-editor-client";
 import type { EventDefinition } from "../event-catalog";
 import type { PublishedEventMap } from "../event-map";
 import type { MapCandidateDiff, MapDraftProblem } from "../map-contribution-draft";
-import { IDLE, STATUS_LABEL, TARGET_LABEL, CommentThread, DraftList, EvidenceList, Preview, Problems, StatusNotice, message, type Detail, type Status } from "../map-contribution-panels";
+import { IDLE, STATUS_LABEL, TARGET_LABEL, CommentThread, DraftList, draftScopeLabel, EvidenceList, Preview, Problems, StatusNotice, message, type Detail, type Status } from "../map-contribution-panels";
 import styles from "../circle-portal/portal.module.css";
 
-export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
+export function AdminMapReviewPanel({ event, picker }: { event: EventDefinition; picker?: ReactNode }) {
   const [drafts, setDrafts] = useState<MapDraftSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -64,12 +64,13 @@ export function AdminMapReviewPanel({ event }: { event: EventDefinition }) {
     URL.revokeObjectURL(url);
   };
 
-  return <section className={`${styles.card} ${styles.editorCard} ${styles.admin}`} id="map-review">
-    <h2>地圖草稿審閱</h2>
+  return <section className={`${styles.card} ${styles.editorCard} ${styles.admin}`} id="map-review" aria-labelledby="map-review-heading">
+    <h2 id="map-review-heading">地圖草稿審閱</h2>
     <p>核准與匯出地圖都不會直接發布。</p>
-    <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "審閱資料已載入。")} />
+    {picker}
+    <DraftList event={event} drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => openDraft(id), "審閱資料已載入。")} />
     {detail && <>
-      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
+      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{draftScopeLabel(event, detail.draft.period_key, detail.draft.venue_space_id)}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
       <Preview event={event} layout={detail.draft.content.layout} />
       <label>審閱說明<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       <h3>審閱留言</h3>

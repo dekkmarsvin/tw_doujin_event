@@ -143,7 +143,7 @@ test("the age rating group carries no explanation beyond its own checkboxes", as
 });
 
 test("only a load the reader asked for moves the refresh button", async () => {
-  const app = await readFile(new URL("../app/admin/admin-panels.tsx", import.meta.url), "utf8");
+  const app = await readFile(new URL("../app/admin/admin-review-queue.tsx", import.meta.url), "utf8");
 
   // The queue polls every 30 seconds and on every return to the tab. Those
   // used to run the same `refresh` the button ran, so the label flipped to
@@ -154,8 +154,8 @@ test("only a load the reader asked for moves the refresh button", async () => {
   assert.match(app, /if \(document\.visibilityState === "visible"\) refresh\(false\);/);
   assert.match(app, /window\.setTimeout\(\(\) => refresh\(true\), 0\)/);
   assert.match(app, /onClick=\{\(\) => refresh\(true\)\}/);
-  // A decision reloads the queue down the same silent path.
-  assert.match(app, /\.then\(\(\) => refresh\(false\)\)/);
+  // A decision, single or batched, reloads the queue down the same silent path.
+  assert.equal(app.match(/setWorking\(false\);\s*refresh\(false\);/g)?.length, 2);
 });
 
 

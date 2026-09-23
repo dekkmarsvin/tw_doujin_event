@@ -3,7 +3,7 @@ import AccessibleEventMapRenderer from "./accessible-event-map-renderer";
 import { withEventScope, type MapDraftComment, type MapDraftDetail, type MapDraftFile, type MapDraftReview, type MapDraftStatus, type MapDraftSummary } from "./circle-editor-client";
 import type { EventDefinition } from "./event-catalog";
 import type { EventMapLayout } from "./event-map";
-import type { MapDraftActorRole, MapDraftConflict, MapDraftProblem } from "./map-contribution-draft";
+import { resolveCanonicalMapPeriod, type MapDraftActorRole, type MapDraftConflict, type MapDraftProblem } from "./map-contribution-draft";
 import type { MapBoothScope } from "./map-booth-coverage";
 import styles from "./circle-portal/portal.module.css";
 
@@ -78,10 +78,17 @@ export function EvidenceList({ files, showReviewResult = false }: { files: MapDr
   })}</ul>;
 }
 
-export function DraftList({ drafts, selected, onSelect }: { drafts: MapDraftSummary[]; selected: string | null; onSelect: (id: string) => void }) {
+/** The day and the space as the event names them, e.g. 「第 1 日・1F 開放式場地」. */
+export function draftScopeLabel(event: EventDefinition, periodKey: string, venueSpaceId: string) {
+  const day = resolveCanonicalMapPeriod(event.days, periodKey)?.period;
+  const space = event.venueAssignments.find((assignment) => assignment.venueSpaceId === venueSpaceId);
+  return `${day?.label ?? periodKey}・${space?.venueSpaceName ?? venueSpaceId}`;
+}
+
+export function DraftList({ event, drafts, selected, onSelect }: { event: EventDefinition; drafts: MapDraftSummary[]; selected: string | null; onSelect: (id: string) => void }) {
   if (!drafts.length) return <p>目前沒有草稿。</p>;
   return <ul className={styles.claimList}>{drafts.map((draft) => <li key={draft.id}>
-    <div><b>{draft.period_key}・{draft.venue_space_id}</b><small>{draft.id}・版本 {draft.current_revision}{draft.owner_email ? `・${draft.owner_email}` : ""}</small></div>
+    <div><b>{draftScopeLabel(event, draft.period_key, draft.venue_space_id)}</b><small>{draft.id}・版本 {draft.current_revision}{draft.owner_email ? `・${draft.owner_email}` : ""}</small></div>
     <span>{STATUS_LABEL[draft.status]}</span>
     <button type="button" aria-pressed={selected === draft.id} onClick={() => onSelect(draft.id)}>開啟</button>
   </li>)}</ul>;

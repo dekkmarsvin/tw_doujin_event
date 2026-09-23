@@ -1622,6 +1622,33 @@ export function createCirclePortalHandlers({
     });
   }
 
+  /**
+   * Every served event's review work in one answer, so the admin page opens on
+   * where the work is instead of on a default event. Read-only on purpose: each
+   * decision still goes through the event-scoped routes, one claim at a time.
+   * An event this deployment does not serve is left out, the same answer every
+   * event-scoped route gives for it.
+   */
+  async function adminReviewQueue(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const queue = await repository.listAdminReviewQueue();
+    const eventIds = [...new Set([...queue.claims, ...queue.mapDrafts].map((row) => row.event_id))];
+    const served = new Set((await Promise.all(eventIds.map(async (eventId) => (config.publishedEvent
+      ? await config.publishedEvent(eventId) : eventId === config.eventId) ? eventId : null)))
+      .filter((eventId): eventId is string => eventId !== null));
+    return json({
+      claims: queue.claims.filter((claim) => served.has(claim.event_id)).map((claim) => ({
+        id: claim.id, eventId: claim.event_id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
+        evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
+        createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,
+      })),
+      mapDrafts: queue.mapDrafts.filter((row) => served.has(row.event_id))
+        .map((row) => ({ eventId: row.event_id, submitted: row.submitted })),
+      organizer: { applications: queue.applications, submissions: queue.submissions },
+    });
+  }
+
   async function adminDecideClaim(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
@@ -3159,6 +3186,8 @@ export function createCirclePortalHandlers({
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listEventApplications, submitEventApplication, reviewEventApplication,
     adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
+    // Cross-event and read-only; it filters to served events itself.
+    adminReviewQueue,
     adminProbeGitHubInstallation,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and
     // exists before any event is published, so `eventScoped` — which demands a

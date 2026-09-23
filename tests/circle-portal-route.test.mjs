@@ -1461,6 +1461,60 @@ test("the admin queue is one event's, and says which event it is", async () => {
   assert.deepEqual(other.claims, []);
 });
 
+test("the review queue gathers every served event's work, and each claim says its event", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("owner@example.com");
+  const rival = await signIn("rival@example.com");
+  const other = await signIn("other@example.com");
+  const everyEvent = ["ff47", "ff48", "ff99"];
+  const first = handlersForEvent("ff47", everyEvent);
+  const second = handlersForEvent("ff48", everyEvent);
+  const retired = handlersForEvent("ff99", everyEvent);
+  await database.batch(["map_drafts", "organizer_applications"].map((table) => database.prepare(`DELETE FROM ${table}`)));
+  const startedAt = clock;
+
+  // Two accounts ask for the same circle; approving one leaves the other
+  // pending against a circle that already has its owner.
+  const { id: winner } = await (await first.createClaim(post("/api/claims", { circleId: "ff47-site" }, owner))).json();
+  clock += 1_000;
+  await first.createClaim(post("/api/claims", { circleId: "ff47-site" }, rival));
+  await first.adminDecideClaim(post("/api/admin/claims", { claimId: winner, decision: "approve" }, admin));
+  clock += 1_000;
+  await second.createClaim(post("/api/claims", { circleId: "ff47-social" }, other));
+  await retired.createClaim(post("/api/claims", { circleId: "ff47-domain" }, other));
+  const draft = database.prepare(`INSERT INTO map_drafts (id, event_id, candidate_id, period_key, venue_space_id, owner_account_id,
+    status, created_at, updated_at, last_activity_at) VALUES (?1, ?2, ?3, '1', 'space', 'account', ?4, ?5, ?5, ?5)`);
+  await database.batch([
+    draft.bind("submitted-47", "ff47", null, "submitted", clock),
+    draft.bind("private-48", "ff48", null, "draft", clock),
+    draft.bind("submitted-99", "ff99", null, "submitted", clock),
+    draft.bind("organizer-47", "ff47", "candidate", "submitted", clock),
+    database.prepare(`INSERT INTO organizer_applications (id, account_id, data_json, status, created_at)
+      VALUES ('application', 'account', '{}', 'pending', ?1)`).bind(clock),
+  ]);
+
+  try {
+    // ff99 stopped being served: its work is left out, the same answer its
+    // event-scoped routes give.
+    const queue = handlersForEvent("ff47");
+    const answer = await queue.adminReviewQueue(get("/api/admin/review-queue", admin));
+    assert.equal(answer.status, 200);
+    const body = await answer.json();
+    assert.deepEqual(body.claims.map((claim) => [claim.eventId, claim.circleId, claim.circleClaimed]), [
+      ["ff47", "ff47-site", true],
+      ["ff48", "ff47-social", false],
+    ]);
+    assert.deepEqual(body.mapDrafts, [{ eventId: "ff47", submitted: 1 }]);
+    assert.deepEqual(body.organizer, { applications: 1, submissions: 0 });
+
+    assert.equal((await queue.adminReviewQueue(get("/api/admin/review-queue", owner))).status, 403);
+    assert.equal((await queue.adminReviewQueue(get("/api/admin/review-queue"))).status, 401);
+  } finally {
+    clock = startedAt;
+    await database.batch(["map_drafts", "organizer_applications"].map((table) => database.prepare(`DELETE FROM ${table}`)));
+  }
+});
+
 test("an event this deployment does not serve is a 404, not another event's data", async () => {
   const owner = await signIn("owner@example.com");
   const unknown = handlersForEvent("ff99");

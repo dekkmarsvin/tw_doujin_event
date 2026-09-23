@@ -7,7 +7,7 @@ import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-st
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
 import type { MapDraftProblem } from "../map-contribution-draft";
 import { loadStaticEventMap } from "../static-event-map-client";
-import { IDLE, STATUS_LABEL, CommentThread, DraftList, EvidenceList, Preview, Problems, StatusNotice, message, previewUrl, type Detail, type Status } from "../map-contribution-panels";
+import { IDLE, STATUS_LABEL, CommentThread, DraftList, draftScopeLabel, EvidenceList, Preview, Problems, StatusNotice, message, previewUrl, type Detail, type Status } from "../map-contribution-panels";
 import styles from "./portal.module.css";
 
 export function MapContributorPanel({ event }: { event: EventDefinition }) {
@@ -62,7 +62,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   return <section className={`${styles.card} ${styles.editorCard}`} id="map-contribution">
     <h2>活動地圖貢獻</h2>
     <p>草稿與來源檔僅供審閱。提交或核准都不會直接變更公開地圖，公開內容仍須另行審查後才會更新。</p>
-    <DraftList drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
+    <DraftList event={event} drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
     {!detail && <div className={styles.mapDraftCreate}>
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
       <label>使用空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
@@ -75,7 +75,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
       }, "私人草稿已建立。")}>從目前公開地圖建立私人草稿</button>
     </div>}
     {detail && layout && <>
-      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{detail.draft.period_key}・{detail.draft.venue_space_id}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
+      <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{draftScopeLabel(event, detail.draft.period_key, detail.draft.venue_space_id)}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
       {editable && <MapLayoutEditor key={detail.draft.id} layout={layout} scope={detail.scope} authoring={authoring} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); }} />}
       <h3>公開地圖預覽</h3><Preview event={event} layout={layout} />
       {editable && <>
