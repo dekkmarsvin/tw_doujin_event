@@ -278,6 +278,9 @@
 .readerPreview details { margin-top: 12px; color: var(--muted); }
 .subpanel { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 18px; }
 .subpanel textarea { margin: 10px 0; }
+.invitationForm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.invitationForm input { flex: 1 1 16rem; width: auto; min-width: 12rem; }
+.invitationForm button { flex: 0 0 auto; white-space: nowrap; }
 .warning { border: 1px solid #e7d4aa; border-radius: 7px; padding: 9px 11px; background: #fff9eb; color: #795818 !important; }
 .empty { margin-top: 18vh; text-align: center; color: var(--muted); }
 

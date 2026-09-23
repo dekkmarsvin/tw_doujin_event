@@ -42,9 +42,10 @@ function useSectionAction({ onChanged, onUnauthorized }: Pick<SectionProps, "onC
 
 function invitationMessage(result: { invitationDelivery?: "sent" | "failed" | "unknown" }) {
   if (result.invitationDelivery === "sent") return "邀請信已寄出。";
-  return result.invitationDelivery === "failed"
+  // Creation succeeded, but the action's mail failure still needs error feedback.
+  throw new Error(result.invitationDelivery === "failed"
     ? "邀請已建立，邀請信未寄出。請按「重寄邀請信」。"
-    : "邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。";
+    : "邀請已建立，無法確認邀請信是否寄出。你可以重寄邀請信。");
 }
 
 function CollaboratorSection(props: SectionProps) {
@@ -52,7 +53,7 @@ function CollaboratorSection(props: SectionProps) {
   const { detail } = props;
   const { act, notice, pending: busy } = useSectionAction(props);
   const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>協作者</h4><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), invitationMessage); }}><input aria-label="協作者 Email" type="email" required disabled={pending} placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit" disabled={pending}>邀請協作者</button><button type="button" disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form><ActionNotice notice={notice} /></div>;
+  return <div className={styles.subpanel}><h4>協作者</h4><form className={styles.invitationForm} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerEditor(detail.event.id, editorEmail, "invite"), invitationMessage); }}><input aria-label="協作者 Email" type="email" required disabled={pending} placeholder="editor@example.com" value={editorEmail} onChange={(event) => setEditorEmail(event.target.value)} /><button type="submit" disabled={pending}>邀請協作者</button><button type="button" disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!editorEmail || pending} onClick={() => act(manageOrganizerEditor(detail.event.id, editorEmail, "revoke"), "已移除這位協作者。")}>移除此協作者</button></form><ActionNotice notice={notice} /></div>;
 }
 
 function OwnerSection(props: SectionProps) {
@@ -60,7 +61,7 @@ function OwnerSection(props: SectionProps) {
   const { detail } = props;
   const { act, notice, pending: busy } = useSectionAction(props);
   const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.row} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), invitationMessage); }}><input aria-label="負責人 Email" type="email" required disabled={pending} placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
+  return <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.invitationForm} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), invitationMessage); }}><input aria-label="負責人 Email" type="email" required disabled={pending} placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
 }
 
 function SubmitSection(props: SectionProps) {
