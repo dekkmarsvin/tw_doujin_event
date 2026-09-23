@@ -9,6 +9,7 @@ import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from ".
 import { createVenueReference, createVenueSpaceReference, initialVenueReferences, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
+import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -104,6 +105,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         .then(() => upgradeOrganizerEventIndex())
         .then(() => database.batch(IDENTITY_INDEXES.map(({ sql }) => database.prepare(sql))))
         .then(() => seedAdmins())
+        .then(() => seedNotificationPreferences(database, Date.now()))
         .then(() => seedOrganizerVenueCatalog())
         .catch((error: unknown) => {
           tablesReady = null;
@@ -255,10 +257,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function addAdmin(email: string, addedBy: string, now: number) {
     await ensureTables();
-    const result = await database
-      .prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, ?2, ?3)")
-      .bind(email, addedBy, now).run();
-    return result.meta.changes === 1;
+    const results = await database.batch([
+      database.prepare("INSERT OR IGNORE INTO admins (email, added_by, added_at) VALUES (?1, ?2, ?3)").bind(email, addedBy, now),
+      database.prepare(`INSERT OR IGNORE INTO admin_notification_preferences (recipient, enabled_since, next_digest_at)
+        SELECT email, ?2, (CAST(?2 / 300000 AS INTEGER) + 1) * 300000 FROM admins WHERE email = ?1`).bind(email, now),
+    ]);
+    return results[0].meta.changes === 1;
   }
 
   /** Refuses the final row, so the roster can never be emptied into a lockout. */
@@ -266,8 +270,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     const total = await database.prepare("SELECT COUNT(*) AS total FROM admins").first<{ total: number }>();
     if ((total?.total ?? 0) <= 1) return "last" as const;
-    const result = await database.prepare("DELETE FROM admins WHERE email = ?1").bind(email).run();
-    return result.meta.changes === 1 ? "removed" as const : "missing" as const;
+    const results = await database.batch([
+      database.prepare("DELETE FROM admins WHERE email = ?1").bind(email),
+      ...deleteNotificationRecipient(database, email),
+    ]);
+    return results[0].meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
   function auditStatement(entry: IdentityAuditEntry, applicationToken: string | null = null) {
@@ -425,6 +432,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            SELECT id FROM accounts WHERE email = ?2 AND disabled_at = ?1 AND deletion_started_at IS NULL
          ) AND revoked_at IS NULL`,
       ).bind(now, email),
+      ...cancelNotificationRecipient(database, email, now),
     ]);
     if (results[0].meta.changes === 1) {
       return "disabled" as const;
@@ -480,6 +488,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
 
     statements.push(
+      ...deleteNotificationRecipient(database, input.email),
       database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
@@ -663,12 +672,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     // and `created_at` moves to now so a resubmission counts against the daily
     // limit exactly like a first submission — withdrawing is not a way to buy
     // more attempts. Everything else conflicts and reports no change.
-    const result = await database.prepare(
+    const notificationSubmissionId = crypto.randomUUID();
+    const results = await database.batch([database.prepare(
       `INSERT INTO circle_claims (
          id, account_id, event_id, circle_id, circle_name_key, circle_name_at_claim, source_row_at_claim,
          status, method, target_url, challenge_token_hash, challenge_expires_at,
-         evidence_url, evidence_note, created_at, verified_at
-       ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+         evidence_url, evidence_note, created_at, verified_at, notification_submission_id
+       ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
          FROM accounts WHERE id = ?2 AND disabled_at IS NULL AND deletion_started_at IS NULL
        ON CONFLICT(event_id, circle_id, account_id) DO UPDATE SET
          circle_name_key = excluded.circle_name_key,
@@ -680,7 +690,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          challenge_attempts = 0,
          evidence_url = excluded.evidence_url, evidence_note = excluded.evidence_note,
          created_at = excluded.created_at, verified_at = excluded.verified_at,
-         reviewed_by = NULL, reviewed_at = NULL
+         reviewed_by = NULL, reviewed_at = NULL, notification_submission_id = excluded.notification_submission_id
        WHERE circle_claims.status = 'withdrawn'
        RETURNING id`,
     ).bind(
@@ -688,11 +698,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.circleNameAtClaim, input.sourceRowAtClaim, input.status, input.method, input.targetUrl,
       input.challengeTokenHash, input.challengeExpiresAt, input.evidenceUrl, input.evidenceNote,
       input.now, input.status === "verified" ? input.now : null,
-    ).first<{ id: string }>();
+      notificationSubmissionId,
+    ), enqueueReviewNotification(database, "claim", notificationSubmissionId, input.now)]);
     // The id of the claim now in force, which is the reused row's own id after a
     // resubmission: the audit trail already points at it, and moving it would
     // orphan those entries. Null when nothing was written.
-    return result?.id ?? null;
+    return (results[0].results[0] as { id: string } | undefined)?.id ?? null;
   }
 
   async function getClaim(id: string) {
@@ -1273,6 +1284,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            'submitted', ?2, 'map_contributor', ?3
          FROM map_drafts d WHERE d.id = ?4 AND d.owner_account_id = ?2 AND d.status = 'submitted' AND d.transition_token = ?5`,
       ).bind(reviewId, input.ownerAccountId, input.now, input.draftId, transitionToken),
+      enqueueReviewNotification(database, "map", transitionToken, input.now),
     ]);
     return results[0].meta.changes === 1 && results[1].meta.changes === 1;
   }
@@ -2505,19 +2517,21 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       return { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
     }
     if (!candidate.event_id) return { ok: false as const, reason: "event_id_required" as const };
-    const result = await database.prepare(
+    const submissionId = crypto.randomUUID();
+    const results = await database.batch([database.prepare(
       `UPDATE organizer_event_candidates SET
          status = 'submitted', event_id_locked_at = COALESCE(event_id_locked_at, ?1),
          submitted_by = ?2, submitted_at = ?1, updated_at = ?1,
-         last_updated_by = ?2, last_updated_role = 'owner'
+         last_updated_by = ?2, last_updated_role = 'owner', notification_submission_id = ?5
        WHERE id = ?3 AND current_version = ?4 AND status IN ('draft', 'changes_requested')
          AND EXISTS (
            SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = organizer_event_candidates.id
              AND g.account_id = ?2 AND g.role = 'owner' AND g.revoked_at IS NULL
              AND EXISTS (SELECT 1 FROM accounts actor WHERE actor.id = ?2 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL)
          )`,
-    ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion).run();
-    return result.meta.changes === 1
+    ).bind(input.now, input.actorAccountId, input.candidateId, input.expectedVersion, submissionId),
+    enqueueReviewNotification(database, "organizer", submissionId, input.now)]);
+    return results[0].meta.changes === 1
       ? { ok: true as const, status: "submitted" as const }
       : { ok: false as const, reason: "status" as const };
   }
@@ -3327,6 +3341,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
+      ...["review_notification_items", "review_notification_batches"].map(table => database.prepare(`DELETE FROM ${table}`)),
+    ]);
+    await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
       "organizer_amendment_changes", "organizer_amendments", "organizer_applications",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
@@ -3337,6 +3354,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   return {
+    ...createReviewNotificationRepository(database, ensureTables),
     ...createOrganizerAmendmentRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements),
     ensureTables, writeAudit,

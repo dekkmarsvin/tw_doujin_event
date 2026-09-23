@@ -4,6 +4,7 @@ import { getPublishedEvent, PUBLISHED_EVENTS } from "../event-catalog";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
 import { AdminPanel } from "./admin-panels";
 import { AdminMapReviewPanel } from "./admin-map-review-panel";
+import { AdminNotificationPanel } from "./admin-notification-panel";
 import styles from "../circle-portal/portal.module.css";
 
 function initialEventId() {
@@ -62,7 +63,8 @@ export default function AdminApp() {
                 setEventId(change.target.value);
               }}>{PUBLISHED_EVENTS.map(item => <option key={item.id} value={item.id}>{item.name}・{item.dateRangeLabel}</option>)}</select>
             </section>}
-            <nav className={`${styles.card} ${styles.backLink}`} aria-label="管理項目"><a href="#admin">認領、補充資料與帳號</a> · <a href="#map-review">地圖草稿審閱</a></nav>
+            <nav className={`${styles.card} ${styles.backLink}`} aria-label="管理項目"><a href="#admin">認領、補充資料與帳號</a> · <a href="#map-review">地圖草稿審閱</a> · <a href="#review-notifications">待審通知</a></nav>
+            <AdminNotificationPanel email={session.email} />
             <Fragment key={event.id}><AdminPanel event={event} /><AdminMapReviewPanel event={event} /></Fragment>
           </>}
   </div>;

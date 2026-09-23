@@ -117,6 +117,8 @@ test("records every run in the audit log, including the empty ones", async () =>
   assert.equal(entry.subject_type, "retention");
   assert.equal(entry.at, NOW);
   assert.deepEqual(JSON.parse(entry.detail_json).deleted, {
+    review_notification_items: 0,
+    review_notification_batches: 0,
     login_tokens: 0,
     sessions: 0,
     preview_mail_sink: 0,
@@ -245,6 +247,8 @@ test("never creates a table it does not find", async () => {
   const summary = await purgeExpiredRecords(untouched, NOW);
 
   assert.deepEqual(summary.deleted, {
+    review_notification_items: 0,
+    review_notification_batches: 0,
     login_tokens: 0,
     sessions: 0,
     preview_mail_sink: 0,
@@ -263,6 +267,8 @@ test("never creates a table it does not find", async () => {
     "map_drafts",
     "overrides_doc",
     "preview_mail_sink",
+    "review_notification_batches",
+    "review_notification_items",
     "sessions",
   ]);
   const tables = await untouched.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all();

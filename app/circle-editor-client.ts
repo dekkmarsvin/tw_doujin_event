@@ -1,4 +1,13 @@
 import type { MapAuthoringState } from "./map-authoring-state";
+import type { NotificationPreferences } from "./review-notifications";
+
+export function readNotificationPreferences() {
+  return call<NotificationPreferences>("/api/admin/notification-preferences");
+}
+
+export function saveNotificationPreferences(preferences: NotificationPreferences) {
+  return call<NotificationPreferences>("/api/admin/notification-preferences", { method: "PUT", body: JSON.stringify(preferences) });
+}
 import type { CircleOverrideFields, CircleRetentionChoice } from "./circle-overrides";
 import type { MapBoothScope } from "./map-booth-coverage";
 import type { EventMapLayout, PublishedEventMap } from "./event-map";

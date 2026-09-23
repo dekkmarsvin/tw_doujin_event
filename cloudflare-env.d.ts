@@ -79,6 +79,8 @@ interface PortalEnv {
   MAILGUN_API_KEY?: string;
   MAILGUN_DOMAIN?: string;
   MAILGUN_SENDER?: string;
+  ADMIN_REVIEW_NOTIFICATIONS_ENABLED?: string;
+  NOTIFICATION_ORIGIN?: string;
   SESSION_SECRET?: string;
   HASH_PEPPER?: string;
   /** Public Turnstile sitekey. A plain variable: it is served to the browser. */

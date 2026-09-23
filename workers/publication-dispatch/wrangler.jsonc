@@ -5,6 +5,9 @@
   "compatibility_date": "2026-05-22",
   "workers_dev": false,
   "preview_urls": false,
+  // Keep environment-specific recipient lists managed in the Dashboard out of
+  // this public repository. Explicit vars below still take precedence.
+  "keep_vars": true,
   // Workers Logs 與 Workers Traces 都開著，兩者各自宣告 `enabled`：頂層的
   // `observability.enabled` 目前只開 logs，tracing 仍在 beta，不會被它帶開。
   // 這個 Worker 每分鐘跑一次、沒有 HTTP 入口，唯一能看到它行為的地方就是這裡，
@@ -30,6 +33,11 @@
   },
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
+    // Preview delivery verified; independent of publication mode.
+    "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
+    "NOTIFICATION_ORIGIN": "https://map.kotoban.top",
+    "MAILGUN_DOMAIN": "verify.kotoban.top",
+    "MAILGUN_SENDER": "noreply@verify.kotoban.top",
     "ORGANIZER_PUBLICATION_MODE": "github",
     "GITHUB_APP_ID": "4931208",
     "GITHUB_APP_INSTALLATION_ID": "161391064"
@@ -42,7 +50,15 @@
   "env": {
     "preview": {
       "triggers": { "crons": ["* * * * *"] },
-      "vars": { "ORGANIZER_PUBLICATION_MODE": "disabled", "PREVIEW_MAIL_SINK": "d1" },
+      "vars": {
+        "ORGANIZER_PUBLICATION_MODE": "disabled",
+        "PREVIEW_MAIL_SINK": "d1",
+        "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
+        "NOTIFICATION_ORIGIN": "https://review-notifications.tw-catalog.pages.dev",
+        "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
+        "MAILGUN_DOMAIN": "verify.kotoban.top",
+        "MAILGUN_SENDER": "postmaster@verify.kotoban.top"
+      },
       "d1_databases": [{
         "binding": "DB",
         "database_name": "tw-catalog-identity-preview",

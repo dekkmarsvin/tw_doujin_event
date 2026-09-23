@@ -1,5 +1,17 @@
 # Cloudflare Pages 部署
 
+## 管理者待審通知
+
+通知使用既有 `workers/publication-dispatch` 的每分鐘排程、同環境 D1 及 Mailgun；不新增部署單位。個人偏好位於 `/admin#review-notifications`，預設開啟、每 5 分鐘，只收初始化／啟用後的新送審。上線順序：先交付 Pages 的 runtime schema、偏好 API、四類送審寫入及面板，再交付 Worker 寄送端。既有資料庫首次初始化不回填待審項目。
+
+正式 Worker 的 `ADMIN_REVIEW_NOTIFICATIONS_ENABLED` 已設為 `true`，與 `ORGANIZER_PUBLICATION_MODE` 獨立。該 Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER`，及 `NOTIFICATION_ORIGIN=https://map.kotoban.top`；Pages secrets 不會自動變成獨立 Worker 的 secrets。通知與登入／邀請共用 Mailgun 用量，啟用前確認帳號額度。程式中的個人偏好不等於部署總開關已啟用。
+
+Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_TEST_RECIPIENTS` 及 preview 的固定 HTTPS origin，先驗證設定→送審→tick→D1 收信。通知 Worker 的 preview 已啟用，人工收信使用 `verify.kotoban.top` 與 `postmaster@verify.kotoban.top`，確保 SPF／DKIM 與 From 對齊；API key 仍由 preview 自己的 secret 提供。`PREVIEW_SANDBOX_RECIPIENTS` 是人工測試收件白名單，名稱雖含 sandbox，亦適用已驗證自有網域，不放寬任意收件人。Worker 的 `keep_vars: true` 保留 Dashboard 管理的白名單，設定檔明列的 vars 仍會覆寫同名值。preview 環境的 vars 與 secrets 必須各自設定；此調整不變更 Pages 的登入寄信設定。Mailgun `accepted` 後仍須查 `delivered`／`failed` 事件確認交付。
+
+首次正式啟用須先完成 preview 實際收信驗收，再把正式 Worker 總開關設為 `true`。總開關關閉屬於維運暫停，已排入的工作會在恢復後續寄；管理者在面板關閉則取消其待寄工作，重新開啟不補寄。需要停止外部寄信時可關閉總開關，不影響送審與 publication。
+
+以 Worker Logs 的 `review_notifications.tick`／`review_notifications.tick_failed` 檢查結果；摘要包含批次 ID、結果與錯誤分類，不輸出收件地址或供應商回應本文。`accepted` 只表示供應商受理；依 provider ID 查 Mailgun 交付結果。遇到設定錯誤先修正設定，既有批次依退避時間恢復，無需另建通知；不要把批次直接標為成功。已完成／取消的寄送紀錄由既有 retention Worker 清除（30 天）。
+
 公開站與社團入口都部署到**同一個** Cloudflare Pages project：`tw-catalog`。
 
 | 用途 | 網址 | Access |

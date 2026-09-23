@@ -12,6 +12,7 @@ async function open(role, entry = "admin") {
   const requests = [];
   const pending = [{ id: "claim-one", circleId: "c-900001", circleName: "待審測試社", evidenceNote: "本人申請" }];
   let admins = [{ email: "admin@example.test", addedBy: "bootstrap", addedAt: now }];
+  let notificationPreferences = { enabled: true, cadence: "five_minutes", version: 1 };
   let draftStatus = "submitted", failure = 0;
   const draft = () => ({ id: "map-one", event_id: "sample", period_key: "1", venue_space_id: "sample-hall", status: draftStatus, current_revision: 3,
     created_at: now, updated_at: now, decision_at: null, owner_email: "contributor@example.test", content: { schema: "map-contribution-draft/1", layout: map.layout } });
@@ -29,6 +30,11 @@ async function open(role, entry = "admin") {
         if (failure) return reply({ error: "登入已失效。" }, failure);
         if (method === "POST") { pending.splice(0); return reply({ ok: true }); }
         return reply({ claims: url.searchParams.get("event") === "sample" ? pending : [], eventId: url.searchParams.get("event") });
+      }
+      if (path === "/api/admin/notification-preferences") {
+        if (failure) return reply({ error: "登入已失效。" }, failure);
+        if (method === "PUT") notificationPreferences = { ...body, version: notificationPreferences.version + 1 };
+        return reply(notificationPreferences);
       }
       if (path === "/api/admin/admins") {
         if (method === "POST") { admins = body.action === "add" ? [...admins, { email: body.email, addedBy: "admin@example.test", addedAt: now }] : admins.filter(x => x.email !== body.email); return reply({ ok: true }); }

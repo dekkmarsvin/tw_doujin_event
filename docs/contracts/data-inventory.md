@@ -225,6 +225,14 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 **保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時把可連結的 account／email 主體改為固定值、清空 actor、IP 與自由內容，並寫入 `shredded_at`。仍保留「何時發生哪個動作」。
 
+### 管理者待審通知資料
+
+`admin_notification_preferences` 保存管理者明文 email、收信開關、頻率、設定版本、啟用起點、下一摘要時間與交易 token；只接受本人經授權修改。預設及行為見[個人待審通知](./circle-portal.md#個人待審通知)。管理者移除或帳號刪除時清除。
+
+`review_notification_items` 保存收件者 email、待審類型、來源 ID、送審識別、活動代碼、建立時間、所屬摘要及完成狀態。`review_notification_batches` 保存每位收件者的摘要識別、lease、嘗試次數、重試時間、供應商訊息 ID 與去除敏感內容的錯誤分類。兩表不保存申請內文、證據或信件全文；完成／取消 30 天後由既有清除 Worker 刪除，pending 保留至受理或取消。管理者移除／帳號刪除立即清除收件者紀錄，停用則取消 pending。
+
+`circle_claims.notification_submission_id` 與 `organizer_event_candidates.notification_submission_id` 是不含個資的本次送審識別；活動申請與地圖分別沿用 application ID、transition token。它們防止舊通知誤指向後一次送審。
+
 ### `preview_mail_sink` — 僅 preview
 
 `email`、`subject`、`text`、`created_at`。只有 preview 環境以 `PREVIEW_MAIL_SINK=d1` 明確選用時才寫入，收件人限 `PREVIEW_TEST_RECIPIENTS` 的 `.test` 假地址。production 有空表但沒有路由寫得進去。
@@ -245,7 +253,7 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 
 | 對象 | 收到什麼 | 何時 |
 |---|---|---|
-| **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（含一次性登入連結） | 每次索取登入連結，以及每一封 Organizer 邀請 |
+| **Mailgun**（`api.mailgun.net`） | 收件人**明文 email**、主旨、內文（登入與邀請信含一次性連結；待審摘要只含分類、活動代碼、筆數與管理入口） | 索取登入連結、Organizer 邀請及已啟用的管理者待審摘要 |
 | **Cloudflare Turnstile**（`challenges.cloudflare.com`） | 瀏覽器載入 widget；伺服器 siteverify 送 token 與**原始 IP** | 每次索取登入連結（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)） |
 | **Cloudflare**（Pages／Workers／D1／R2） | 平台本身，承載全部上述資料、代管縮圖與私人地圖來源檔 | 全時 |
 | **Cloudflare Access** | preview 的維護者身分與 CI service token | 存取 `*.tw-catalog.pages.dev` preview deployment 時；production 正式網域不使用（[ADR-0029](../adr/0029-public-production-gated-preview.md)） |
