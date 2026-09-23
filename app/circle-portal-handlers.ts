@@ -3,7 +3,7 @@ import { getEventDefinition } from "./event-catalog";
 import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
 import { loginLinkLetter, organizerInvitationLetter } from "./mail-letter";
-import type { PortalMail } from "./portal-mail";
+import { mailFailure, type PortalMail } from "./portal-mail";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
@@ -1803,18 +1803,24 @@ export function createCirclePortalHandlers({
 
   async function sendOrganizerInvitation(email: string, now: number, ipHash: string | null, mintedBy: string) {
     const token = randomToken();
+    const tokenHash = await sha256Hex(token);
     const expiresAt = now + LOGIN_TOKEN_TTL_MS;
     await repository.createLoginToken({
-      tokenHash: await sha256Hex(token), email, now,
+      tokenHash, email, now,
       expiresAt, ipHash, audience: "organizer", mintedBy,
     });
-    await sendMail({
-      to: email,
-      ...organizerInvitationLetter({
-        href: `${config.origin}/organizer?login=${encodeURIComponent(token)}`,
-        origin: config.origin, requestedAt: now, expiresAt,
-      }),
-    });
+    try {
+      await sendMail({
+        to: email,
+        ...organizerInvitationLetter({
+          href: `${config.origin}/organizer?login=${encodeURIComponent(token)}`,
+          origin: config.origin, requestedAt: now, expiresAt,
+        }),
+      });
+    } catch (error) {
+      await repository.deleteLoginToken(tokenHash);
+      throw error;
+    }
   }
 
   async function organizerAccess(request: Request, candidateId: string) {
@@ -2015,18 +2021,19 @@ export function createCirclePortalHandlers({
     // A failed invitation does not undo the activity. Reporting the whole call
     // as failed made the admin retry and create a second candidate under the
     // same name, because nothing stops two candidates sharing one.
-    let invitationSent = true;
+    let invitationDelivery: "sent" | "failed" | "unknown" = "sent";
     try {
       await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId);
-    } catch {
-      invitationSent = false;
+    } catch (error) {
+      const failure = mailFailure(error);
+      invitationDelivery = failure.delivery;
       await repository.writeAudit({
         at: config.now(), actorAccountId: gate.session.accountId, actorRole: "admin",
         action: "organizer_event.invitation_failed", subjectType: "organizer_event", subjectId: candidateId,
-        detail: { tentativeName }, ipHash,
+        detail: { role: "owner", emailHash: await emailAuditSubjectId(config.hashPepper, ownerEmail), errorCode: failure.code }, ipHash,
       });
     }
-    return json({ ok: true, candidateId, version: 1, invitationSent }, 201);
+    return json({ ok: true, candidateId, version: 1, invitationSent: invitationDelivery === "sent", invitationDelivery }, 201);
   }
 
   async function listOrganizerCandidates(request: Request) {
@@ -2778,13 +2785,16 @@ export function createCirclePortalHandlers({
     const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
     const action = body?.action;
     const role = body?.role === "owner" ? "owner" : "editor";
-    if (!isEmailShaped(email) || (action !== "invite" && action !== "revoke")) {
-      return json({ error: "Email 與動作（邀請／移除）為必填。" }, 400);
+    if (!isEmailShaped(email) || (action !== "invite" && action !== "resend" && action !== "revoke")) {
+      return json({ error: "Email 與動作（邀請／重寄／移除）為必填。" }, 400);
     }
     if (role === "owner" && !access.admin) return json({ error: "只有網站管理者可以增減負責人。" }, 403);
     if (role === "editor" && access.role !== "owner") return json({ error: "只有負責人可以管理協作者。" }, 403);
     const ipHash = await clientIpHash(request);
-    if (action === "invite" && !await organizerInvitationAllowed(email, access.current.accountId, ipHash, config.now())) {
+    if (action !== "revoke" && mailRecipientAllowed && !mailRecipientAllowed(email)) {
+      return json({ error: "這個測試環境不會寄信到這個地址。" }, 400);
+    }
+    if (action !== "revoke" && !await organizerInvitationAllowed(email, access.current.accountId, ipHash, config.now())) {
       return json({ error: "邀請寄送過於頻繁，請稍後再試。" }, 429);
     }
     const result = role === "owner"
@@ -2797,17 +2807,32 @@ export function createCirclePortalHandlers({
       });
     if (!result.ok) {
       const error = result.reason === "forbidden" ? "只有負責人可以管理協作者。"
-        : result.reason === "last_owner" ? "每個活動至少需要一位 Owner。" : "協作者狀態沒有變更。";
+        : result.reason === "last_owner" ? "每個活動至少需要一位負責人。"
+        : result.reason === "pending" ? "這個信箱已有待接受的邀請，請按「重寄邀請信」。"
+        : result.reason === "other_role" ? "這個信箱已有另一種角色的待接受邀請。"
+        : result.reason === "active" ? "這個信箱已具備這項活動角色，不需要再邀請。"
+        : result.reason === "not_pending" ? "找不到這項角色的待接受邀請，無法重寄。" : "協作者狀態沒有變更。";
       return json({ error }, result.reason === "forbidden" ? 403 : 409);
     }
-    if (action === "invite") await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId);
-    await repository.writeAudit({
+    const audit = {
       at: config.now(), actorAccountId: access.current.accountId,
-      actorRole: access.admin ? "admin" : "organizer_owner",
+      actorRole: access.admin ? "admin" as const : "organizer_owner" as const,
       action: `organizer_event.${role}_${action}`, subjectType: "organizer_event", subjectId: candidateId,
       detail: { role, emailHash: await emailAuditSubjectId(config.hashPepper, email) }, ipHash,
-    });
-    return json({ ok: true, result: result.result });
+    };
+    if (action !== "resend") await repository.writeAudit(audit);
+    if (action === "revoke") return json({ ok: true, result: result.result });
+    let invitationDelivery: "sent" | "failed" | "unknown" = "sent";
+    try {
+      await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId);
+    } catch (error) {
+      const failure = mailFailure(error);
+      invitationDelivery = failure.delivery;
+      await repository.writeAudit({ ...audit, action: "organizer_event.invitation_failed",
+        detail: { ...audit.detail, action, errorCode: failure.code } });
+    }
+    if (action === "resend" && invitationDelivery === "sent") await repository.writeAudit(audit);
+    return json({ ok: true, result: result.result, invitationSent: invitationDelivery === "sent", invitationDelivery });
   }
 
   async function submitOrganizerCandidate(request: Request, candidateId: string) {

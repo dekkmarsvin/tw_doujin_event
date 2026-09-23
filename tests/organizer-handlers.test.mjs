@@ -17,6 +17,8 @@ const { createIdentityRepository } = await environment.runner.import("/db/identi
 const { createCirclePortalHandlers } = await environment.runner.import("/app/circle-portal-handlers.ts");
 const { QUEUED_PUBLICATION_TIMEOUT_MS } = await environment.runner.import("/app/organizer-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
+const { MailDeliveryError } = await environment.runner.import("/app/portal-mail.ts");
+const { peppered } = await environment.runner.import("/app/portal-crypto.ts");
 
 const miniflare = new Miniflare(convertV4MiniflareOptions({
   modules: true,
@@ -1177,6 +1179,8 @@ test("an activity survives an invitation the mailer could not send, and says the
   assert.equal(created.status, 201);
   const body = await created.json();
   assert.equal(body.invitationSent, false);
+  assert.equal(body.invitationDelivery, "unknown");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM login_tokens WHERE email = 'owner@example.test'").first()).n, 0);
   const candidate = await database.prepare("SELECT tentative_name FROM organizer_event_candidates WHERE id = ?1")
     .bind(body.candidateId).first();
   assert.equal(candidate.tentative_name, "test");
@@ -1279,4 +1283,141 @@ test("a candidate map's layout plan is stored once per map, replaced in place, a
   const unbound = createCirclePortalHandlers({ ...handlerOptions, mapContributionStore: undefined });
   assert.equal((await unbound.putOrganizerMapBackground(upload(plan(), ownerCookie), candidateId, draftId)).status, 503);
   assert.equal((await unbound.getOrganizerMapBackground(request(path, "GET", undefined, ownerCookie), candidateId, draftId)).status, 503);
+});
+
+async function invitationFixture() {
+  const cookie = await signIn("admin@example.test", "organizer");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "Invitation recovery", ownerEmail: "admin@example.test" }, cookie));
+  const { candidateId } = await created.json();
+  const manage = (role, email, action, targetHandlers = handlers, targetCookie = cookie, targetId = candidateId) =>
+    targetHandlers.manageOrganizerCollaborators(request(`/api/organizer/events/${targetId}/collaborators`, "POST",
+      { role, email, action }, targetCookie), targetId);
+  return { cookie, candidateId, manage };
+}
+
+for (const role of ["editor", "owner"]) {
+  test(`${role} invitation failure keeps the invitation, cleans only its token, and can resend`, async () => {
+    const { candidateId, manage } = await invitationFixture();
+    const email = "invited@example.test";
+    await handlers.requestLink(request("/api/auth/request-link", "POST", { email, turnstileToken: "solved", audience: "organizer" }));
+    const existing = await database.prepare("SELECT token_hash FROM login_tokens WHERE email = ?1").bind(email).first();
+    const flaky = createCirclePortalHandlers({ ...handlerOptions, sendMail: async () => { throw new MailDeliveryError("mailgun_503"); } });
+    const failed = await manage(role, email, "invite", flaky);
+    assert.equal(failed.status, 200);
+    assert.deepEqual(await failed.json(), { ok: true, result: "invited", invitationSent: false, invitationDelivery: "failed" });
+    assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM login_tokens WHERE email = ?1").bind(email).first()).n, 1);
+    assert.equal((await database.prepare("SELECT token_hash FROM login_tokens WHERE email = ?1").bind(email).first()).token_hash, existing.token_hash);
+    const invitation = await database.prepare("SELECT id FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2").bind(candidateId, email).first();
+    const actions = (await database.prepare("SELECT action FROM audit_log WHERE subject_id = ?1 ORDER BY rowid").bind(candidateId).all()).results.map(row => row.action);
+    assert.deepEqual(actions.slice(-2), [`organizer_event.${role}_invite`, "organizer_event.invitation_failed"]);
+    const duplicate = await manage(role, email, "invite");
+    assert.equal(duplicate.status, 409); assert.match((await duplicate.json()).error, /重寄/);
+    const retry = await manage(role, email, "resend");
+    assert.deepEqual(await retry.json(), { ok: true, result: "resent", invitationSent: true, invitationDelivery: "sent" });
+    assert.equal((await database.prepare("SELECT id FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2").bind(candidateId, email).first()).id, invitation.id);
+    assert.equal((await repository.getOrganizerCandidate(candidateId)).current_version, 1);
+    const beforeAccept = (await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_grants WHERE candidate_id = ?1").bind(candidateId).first()).n;
+    assert.equal(beforeAccept, 1, "resending does not grant the invited role");
+    await signIn(email, "organizer");
+    const account = await database.prepare("SELECT id FROM accounts WHERE email = ?1").bind(email).first();
+    assert.equal(await repository.organizerRole(candidateId, account.id), role);
+    assert.equal((await manage(role, email, "resend")).status, 409);
+    const active = await manage(role, email, "invite");
+    assert.equal(active.status, 409); assert.match((await active.json()).error, /已具備/);
+    assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE subject_id = ?1 AND action = ?2").bind(candidateId, `organizer_event.${role}_resend`).first()).n, 1);
+  });
+}
+
+test("uncertain invitation delivery remains recoverable and never stores raw transport errors", async () => {
+  const { candidateId, manage } = await invitationFixture();
+  const flaky = createCirclePortalHandlers({ ...handlerOptions, sendMail: async () => { throw new DOMException("private-recipient-and-token", "TimeoutError"); } });
+  const failed = await manage("editor", "timeout@example.test", "invite", flaky);
+  assert.equal((await failed.json()).invitationDelivery, "unknown");
+  const audit = await database.prepare("SELECT detail_json FROM audit_log WHERE subject_id = ?1 AND action = 'organizer_event.invitation_failed'").bind(candidateId).first();
+  assert.match(audit.detail_json, /delivery_timeout/); assert.doesNotMatch(audit.detail_json, /private-recipient|timeout@example/);
+  const retried = await manage("editor", "timeout@example.test", "resend", flaky);
+  assert.equal((await retried.json()).invitationSent, false);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM login_tokens WHERE email = 'timeout@example.test'").first()).n, 0);
+  assert.equal((await manage("editor", "timeout@example.test", "resend")).status, 200);
+});
+
+test("resend rejects wrong roles, revoked or missing invitations, other events and unauthorized actors", async () => {
+  const { cookie, candidateId, manage } = await invitationFixture();
+  const other = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "Other invitation scope", ownerEmail: "admin@example.test" }, cookie));
+  const otherId = (await other.json()).candidateId;
+  const outsider = await signIn("outsider@example.test", "organizer");
+  for (const role of ["owner", "editor"]) {
+    const email = `${role}@example.test`;
+    assert.equal((await manage(role, email, "resend")).status, 409);
+    assert.equal((await manage(role, email, "invite")).status, 200);
+    const before = sent.length;
+    assert.equal((await manage(role === "owner" ? "editor" : "owner", email, "resend")).status, 409);
+    assert.equal((await manage(role, email, "resend", handlers, outsider)).status, 404);
+    assert.equal((await manage(role, email, "resend", handlers, cookie, otherId)).status, 409);
+    assert.equal(sent.length, before);
+    assert.equal((await manage(role, email, "revoke")).status, 200);
+    assert.equal((await manage(role, email, "resend")).status, 409);
+    assert.equal(sent.length, before);
+  }
+  await manage("editor", "member@example.test", "invite");
+  const editorCookie = await signIn("member@example.test", "organizer");
+  const before = sent.length;
+  for (const role of ["owner", "editor"]) assert.equal((await manage(role, "someone@example.test", "resend", handlers, editorCookie)).status, 403);
+  assert.equal(sent.length, before);
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).current_version, 1);
+});
+
+test("preview recipient preflight cannot leave an invitation or token and preserves existing invitations", async () => {
+  const { candidateId, manage } = await invitationFixture();
+  const denied = createCirclePortalHandlers({ ...handlerOptions, mailRecipientAllowed: () => false });
+  for (const role of ["owner", "editor"]) {
+    const email = `${role}@example.test`;
+    assert.equal((await manage(role, email, "invite", denied)).status, 400);
+    assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2").bind(candidateId, email).first()).n, 0);
+    assert.equal((await manage(role, email, "invite")).status, 200);
+    const before = sent.length;
+    assert.equal((await manage(role, email, "resend", denied)).status, 400);
+    assert.equal(sent.length, before);
+    assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2 AND revoked_at IS NULL").bind(candidateId, email).first()).n, 1);
+  }
+});
+
+test("resending old invitations is charged to the current sender's hourly budget", async () => {
+  const { candidateId, manage } = await invitationFixture();
+  const admin = await database.prepare("SELECT id FROM accounts WHERE email = 'admin@example.test'").first();
+  for (let i = 0; i < 11; i++) {
+    await repository.manageOrganizerCollaborator({ candidateId, actorAccountId: admin.id, email: `old${i}@example.test`, role: "editor", action: "invite", now: now - 2 * 3600000 });
+  }
+  const previousNow = now;
+  try {
+    now += 3600001;
+    const before = sent.length;
+    for (let i = 0; i < 10; i++) assert.equal((await manage("editor", `old${i}@example.test`, "resend")).status, 200);
+    assert.equal((await manage("editor", "old10@example.test", "resend")).status, 429);
+    assert.equal(sent.length - before, 10);
+    assert.equal(await repository.countOrganizerInvitationsSince(admin.id, now - 3600000), 10);
+  } finally { now = previousNow; }
+});
+
+test("resends share the invitation inbox budget but cannot spend self-service sign-in quota", async () => {
+  const { manage } = await invitationFixture();
+  const email = "limited@example.test";
+  for (const action of ["invite", "resend", "resend"]) assert.equal((await manage("editor", email, action)).status, 200);
+  assert.equal((await manage("editor", email, "resend")).status, 429);
+  for (let i = 0; i < 5; i++) assert.equal((await handlers.requestLink(request("/api/auth/request-link", "POST", { email, turnstileToken: "solved" }))).status, 202);
+  assert.equal((await handlers.requestLink(request("/api/auth/request-link", "POST", { email, turnstileToken: "solved" }))).status, 429);
+});
+
+test("resending still respects the shared IP login-link limit", async () => {
+  const { candidateId, cookie, manage } = await invitationFixture();
+  await manage("editor", "ip-limited@example.test", "invite");
+  const ipHash = await peppered(handlerOptions.config.hashPepper, "192.0.2.1");
+  for (let i = 0; i < 20; i++) await repository.createLoginToken({ tokenHash: `ip-fixture-${i}`, email: `ip${i}@example.test`, now, expiresAt: now + 900000, ipHash });
+  const req = request(`/api/organizer/events/${candidateId}/collaborators`, "POST", { email: "ip-limited@example.test", role: "editor", action: "resend" }, cookie);
+  req.headers.set("cf-connecting-ip", "192.0.2.1");
+  const before = sent.length;
+  assert.equal((await handlers.manageOrganizerCollaborators(req, candidateId)).status, 429);
+  assert.equal(sent.length, before);
 });

@@ -310,22 +310,26 @@ export function submitOrganizerEvent(candidateId: string, expectedVersion: numbe
   });
 }
 
-export function manageOrganizerEditor(candidateId: string, email: string, action: "invite" | "revoke") {
-  return organizerCall<{ ok: true }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/collaborators`, {
+export type OrganizerInvitationDelivery = "sent" | "failed" | "unknown";
+type CollaboratorResponse = { ok: true; result: "invited" | "resent" | "revoked";
+  invitationSent?: boolean; invitationDelivery?: OrganizerInvitationDelivery };
+
+export function manageOrganizerEditor(candidateId: string, email: string, action: "invite" | "resend" | "revoke") {
+  return organizerCall<CollaboratorResponse>(`/api/organizer/events/${encodeURIComponent(candidateId)}/collaborators`, {
     method: "POST",
     body: JSON.stringify({ email, action }),
   });
 }
 
-export function manageOrganizerOwner(candidateId: string, email: string, action: "invite" | "revoke") {
-  return organizerCall<{ ok: true }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/collaborators`, {
+export function manageOrganizerOwner(candidateId: string, email: string, action: "invite" | "resend" | "revoke") {
+  return organizerCall<CollaboratorResponse>(`/api/organizer/events/${encodeURIComponent(candidateId)}/collaborators`, {
     method: "POST",
     body: JSON.stringify({ email, role: "owner", action }),
   });
 }
 
 export function createOrganizerEvent(tentativeName: string, ownerEmail: string) {
-  return organizerCall<{ ok: true; candidateId: string; version: number; invitationSent: boolean }>("/api/admin/organizer/events", {
+  return organizerCall<{ ok: true; candidateId: string; version: number; invitationSent: boolean; invitationDelivery: OrganizerInvitationDelivery }>("/api/admin/organizer/events", {
     method: "POST",
     body: JSON.stringify({ tentativeName, ownerEmail }),
   });

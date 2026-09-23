@@ -1987,13 +1987,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.meta.changes === 1;
   }
 
-  /** Owners are invited third parties, not staff, so their invitations need
-   * their own budget on top of the per-inbox login-token limit. Counting the
-   * rows the actor created is enough: every invitation mints one login token. */
+  /** Count each send, including resends of an older invitation. Failed sends
+   * remove only their newly minted token, just like self-service sign-in. */
   async function countOrganizerInvitationsSince(invitedBy: string, since: number) {
     await ensureTables();
     const row = await database.prepare(
-      "SELECT COUNT(*) AS total FROM organizer_event_invitations WHERE invited_by = ?1 AND created_at >= ?2",
+      "SELECT COUNT(*) AS total FROM login_tokens WHERE minted_by = ?1 AND created_at >= ?2",
     ).bind(invitedBy, since).first<{ total: number }>();
     return row?.total ?? 0;
   }
@@ -2010,17 +2009,38 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return rows.results;
   }
 
+  async function organizerInvitationState(candidateId: string, email: string, role: OrganizerRole) {
+    const pending = await database.prepare(
+      `SELECT role FROM organizer_event_invitations
+       WHERE candidate_id = ?1 AND email = ?2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+    ).bind(candidateId, email).first<{ role: string }>();
+    if (pending) return pending.role === role ? "pending" as const : "other_role" as const;
+    const grant = await database.prepare(
+      `SELECT g.role FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
+       WHERE g.candidate_id = ?1 AND a.email = ?2 AND g.role = ?3 AND g.revoked_at IS NULL`,
+    ).bind(candidateId, email, role).first();
+    return grant ? "active" as const : "missing" as const;
+  }
+
   async function manageOrganizerCollaborator(input: {
     candidateId: string;
     actorAccountId: string;
     email: string;
     role: OrganizerRole;
-    action: "invite" | "revoke";
+    action: "invite" | "resend" | "revoke";
     now: number;
   }) {
     await ensureTables();
     if (await organizerRole(input.candidateId, input.actorAccountId) !== "owner") {
       return { ok: false as const, reason: "forbidden" as const };
+    }
+    if (input.action !== "revoke") {
+      if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
+      const state = await organizerInvitationState(input.candidateId, input.email, input.role);
+      if (input.action === "resend") return state === "pending"
+        ? { ok: true as const, result: "resent" as const }
+        : { ok: false as const, reason: "not_pending" as const };
+      if (state !== "missing") return { ok: false as const, reason: state };
     }
     if (input.action === "invite") {
       if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
@@ -2064,11 +2084,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     candidateId: string;
     actorAccountId: string;
     email: string;
-    action: "invite" | "revoke";
+    action: "invite" | "resend" | "revoke";
     now: number;
   }) {
     await ensureTables();
     if (!await getOrganizerCandidate(input.candidateId)) return { ok: false as const, reason: "not_found" as const };
+    if (input.action !== "revoke") {
+      const state = await organizerInvitationState(input.candidateId, input.email, "owner");
+      if (input.action === "resend") return state === "pending"
+        ? { ok: true as const, result: "resent" as const }
+        : { ok: false as const, reason: "not_pending" as const };
+      if (state !== "missing") return { ok: false as const, reason: state };
+    }
     if (input.action === "invite") {
       try {
         const result = await database.prepare(
