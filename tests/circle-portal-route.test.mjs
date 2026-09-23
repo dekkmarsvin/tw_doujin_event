@@ -1273,6 +1273,9 @@ test("exact claim entry lookup reports another account's verified claim without 
   const [circle] = await lookup();
   assert.equal(circle.claimed, true);
   assert.equal(JSON.stringify(circle).includes("entry-owner"), false, "the lookup never names the owner");
+  // Ownership is per event: the same circle id asked about in another event is unclaimed there.
+  const [elsewhere] = (await (await handlersForEvent("ff48").searchCatalog(get("/api/circle/search?circle=ff47-social", visitor))).json()).circles;
+  assert.equal(elsewhere.claimed, false);
   // The form would have ended in the same answer, only after being filled in.
   assert.equal((await handlers.createClaim(post("/api/claims", { circleId: "ff47-social" }, visitor))).status, 409);
   // Only the exact entry lookup carries it; name search stays as it was.
