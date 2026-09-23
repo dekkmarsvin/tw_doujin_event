@@ -7,6 +7,17 @@ export class MailDeliveryError extends Error {
   constructor(readonly code: string) { super(code); }
 }
 
+/** Only known transport failures can establish that mail was not accepted. */
+export function mailFailure(error: unknown): { delivery: "failed" | "unknown"; code: string } {
+  if (error instanceof MailDeliveryError) {
+    if (/^mailgun_[45]\d\d$/.test(error.code) || error.code === "preview_recipient_denied") {
+      return { delivery: "failed", code: error.code };
+    }
+    if (error.code === "Missing Mailgun configuration.") return { delivery: "failed", code: "mail_configuration" };
+  }
+  return { delivery: "unknown", code: error instanceof Error && error.name === "TimeoutError" ? "delivery_timeout" : "delivery_unknown" };
+}
+
 function addressList(value: string | undefined) {
   return new Set((value ?? "").split(/[,;\s]+/).map(entry => entry.normalize("NFKC").trim().toLowerCase()).filter(Boolean));
 }

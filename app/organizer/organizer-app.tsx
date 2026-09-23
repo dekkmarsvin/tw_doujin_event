@@ -327,7 +327,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
         {session.isAdmin && <CreateEntry
           onStarted={() => setNotice(IDLE)}
           onCreated={async (id) => { await reloadList(); setSelectedId(id); }}
-          onInvitationFailed={(email) => setNotice({ kind: "error", message: `活動已建立，但邀請信沒有寄到 ${email}。` })}
+          onInvitationFailed={(delivery, email) => setNotice({ kind: "error", message:
+            (delivery === "failed" ? "活動已建立，邀請信未寄出。" : "活動已建立，無法確認邀請信是否寄出。")
+            + (email.normalize("NFKC").trim().toLowerCase() === session.email ? "" : "請到「送審與發布狀態」重寄負責人邀請信。") })}
         />}
         <nav aria-label="活動列表" className={styles.eventList}>
           {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
@@ -610,7 +612,7 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
 function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
   onStarted: () => void;
   onCreated: (id: string) => Promise<void>;
-  onInvitationFailed: (email: string) => void;
+  onInvitationFailed: (delivery: "sent" | "failed" | "unknown", email: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -621,12 +623,12 @@ function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
     event.preventDefault();
     onStarted();
     setNotice({ kind: "busy", message: "建立中…" });
-    void createOrganizerEvent(name, email).then(async ({ candidateId, invitationSent }) => {
+    void createOrganizerEvent(name, email).then(async ({ candidateId, invitationSent, invitationDelivery }) => {
       setName(""); setEmail(""); setOpen(false);
       await onCreated(candidateId);
       // The activity is created either way. Saying only that it worked would
       // leave the owner waiting for mail that never arrives.
-      if (!invitationSent) onInvitationFailed(email);
+      if (!invitationSent) onInvitationFailed(invitationDelivery, email);
     }).catch((error) => setNotice({ kind: "error", message: message(error) }));
   }}>
     <label>暫定名稱<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
