@@ -43,8 +43,7 @@ export const EVENT_GROUPS = [
 /**
  * The event a control surface opens on when nothing names one: the one being
  * held, else the next to start, else the one that ended last. Published order
- * is the reader's offering order and says nothing about where the work is, so
- * it only breaks ties through the id.
+ * says nothing about where the work is, so only the id breaks ties.
  */
 export function nearestEvent<T extends EventDefinition>(events: readonly T[], today: string): T | undefined {
   const entries = events.map((event) => ({ event, ...eventCalendar(event) }));
