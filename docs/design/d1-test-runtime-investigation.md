@@ -1,6 +1,6 @@
 # 本機 D1 測試耗時與 TCP 連接埠診斷
 
-日期：2026-09-23。以 `11a611a` 的獨立 worktree 分析；先前的原始碼斷言清理已提交。此輪交付分析，不修改產品、測試案例、runner、依賴或 Windows TCP 設定。
+日期：2026-09-23。以下診斷以 `11a611a` 的獨立 worktree 分析，當時未修改產品、測試案例、runner、依賴或 Windows TCP 設定。維護者隨後接受前兩個改善切片，實作結果記於文末。
 
 ## 結論
 
@@ -100,3 +100,27 @@ node --test --test-concurrency=1 --test-reporter=spec $testFiles
 ```
 
 這是已成功的本機替代執行方式，不改寫 `npm test` 或 required CI，也不把本次故障診斷的中止結果記成通過。分析完成與實作改善分開驗收；本次沒有新增 issue、遠端資源或排程。
+
+## 已實作的兩個切片
+
+維護者接受上述 runner 與單檔 fixture 改善後，以 `7921f9d` 為實作起點：
+
+- `scripts/run-tests.mjs` 支援 `--concurrency=N`／`--concurrency N`，拒絕拼錯參數、tier 與非正整數。Windows 未指定值時，其他層先維持 Node 預設併行，D1 再逐檔執行；Linux 未指定值時維持原單次完整集合。明確值套用全部選取檔案。一般測試失敗不取消其他組，最後保留非零退出碼；中斷／spawn error 則立即停止，不重試。
+- 僅 `organizer-repository.test.mjs` 的 fixture 改為在同一個 Miniflare runtime 的 workerd 內，呼叫原有 `ensureTables()`、`clearPreviewData()` 與建立三個角色帳號／admin 的操作，一個 HTTP 回應傳回 ID。44 個原有案例與其斷言保留，案例本體仍走真實 repository／D1；Node 端 repository 在 before hook 初始化一次。
+- 新增 8 個 runner 回歸案例，及 2 個 fixture 案例。後者使用兩個隔離 D1，比對所有 schema tables 的資料（只將三個帳號 UUID 映射成角色），再加入殘留候選／帳號、修改場館與刪除 references 後重設，確認資料清空、seed 還原、admin roster 保留，以及 worker 初始化失敗會使 hook 拒絕。
+- fixture worker 只由測試的 esbuild bundle 載入，沒有部署設定。未修改 app／db、依賴、Miniflare dispatcher、Windows TCP 設定或 CI workflow。
+
+### 同機前後比較
+
+指定 Node `24.20.0`／npm `11.19.0`；前後皆使用原版 Miniflare、concurrency=1，開啟相同 Undici 診斷記錄。完整測試檔各量一次，不宣稱長期平均：
+
+| 指標 | 原 fixture | workerd fixture |
+|---|---:|---:|
+| 原有 organizer repository 案例 | 44/44 | 44/44 |
+| Node runner 整檔時間 | 59.47 秒 | 40.61 秒 |
+| 非同步 HTTP 新連線 | 3,739 | 2,506 |
+| socket error | 0 | 0 |
+
+本次樣本整檔少約 18.85 秒（31.7%），新連線少 1,233（33.0%）。完整 fixture（清理、seed、三個帳號與 admin）暖機後交錯量 5 組，平均由 **542.66 ms 降至 53.28 ms**；每次非同步往返由 29–30 次降至 1 次。這是實際單檔改善，不能外推為全套同等比例加速；其餘 D1 檔案未遷移。
+
+紀錄位於 `outputs/d1-implementation/{before,after,fixture}/`。聚焦 8 個 runner、2 個 fixture、44 個既有 repository 案例皆通過，ESLint、TypeScript 通過；正式 `npm test` 與本輪獨立 review 完成後補記。
