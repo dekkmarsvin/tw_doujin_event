@@ -12,7 +12,8 @@ import test from "node:test";
  *
  * Browser-covered entry, navigation and feedback assertions have been removed
  * individually. The remaining guards do not yet have equivalent behavioural
- * coverage; see docs/design/source-assertion-cleanup.md for that boundary.
+ * coverage; the boundary is mapped in the record kept with PR #344:
+ * https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/source-assertion-cleanup.md
  */
 async function organizerSource() {
   const directory = new URL("../app/organizer/", import.meta.url);

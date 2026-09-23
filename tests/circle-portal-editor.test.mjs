@@ -5,8 +5,9 @@ import test from "node:test";
 /**
  * Remaining source-level guards for the circle editor. Browser acceptance
  * covers hydration delay/failure/retry, but not every CSS regression or local
- * autosave path below. See docs/design/source-assertion-cleanup.md before
- * treating a successful claim journey as a replacement for a whole case.
+ * autosave path below. Read the mapping kept with PR #344 before treating a
+ * successful claim journey as a replacement for a whole case:
+ * https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/source-assertion-cleanup.md
  *
  * Each case below is a regression that shipped once in this file's own
  * history. They share a shape — a change that looks local, made somewhere the
