@@ -753,6 +753,37 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
+  /**
+   * Everything an administrator can act on, in every event at once. The caller
+   * keeps only the events this deployment serves; decisions still go through
+   * the event-scoped routes. `circle_claimed` says the circle already has an
+   * owner in that event, which an approval would be refused for.
+   */
+  async function listAdminReviewQueue(limit = 500) {
+    await ensureTables();
+    const [claims, mapDrafts, organizer] = await Promise.all([
+      database.prepare(
+        `SELECT c.*, EXISTS (SELECT 1 FROM circle_claims v WHERE v.event_id = c.event_id
+           AND v.circle_id = c.circle_id AND v.status = 'verified') AS circle_claimed
+         FROM circle_claims c WHERE c.status = 'pending' ORDER BY c.created_at ASC LIMIT ?1`,
+      ).bind(limit).all<ClaimRow & { circle_claimed: number }>(),
+      database.prepare(
+        `SELECT event_id, COUNT(*) AS submitted FROM map_drafts
+         WHERE status = 'submitted' AND candidate_id IS NULL AND retention_action IS NULL GROUP BY event_id`,
+      ).all<{ event_id: string; submitted: number }>(),
+      database.prepare(
+        `SELECT (SELECT COUNT(*) FROM organizer_applications WHERE status = 'pending') AS applications,
+                (SELECT COUNT(*) FROM organizer_event_candidates WHERE status = 'submitted') AS submissions`,
+      ).first<{ applications: number; submissions: number }>(),
+    ]);
+    return {
+      claims: claims.results,
+      mapDrafts: mapDrafts.results,
+      applications: organizer?.applications ?? 0,
+      submissions: organizer?.submissions ?? 0,
+    };
+  }
+
   async function hasVerifiedClaim(eventId: string, circleId: string) {
     await ensureTables();
     const row = await database.prepare(
@@ -788,11 +819,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     }
   }
 
-  async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null) {
+  /** `from` makes the change conditional on the status the caller decided
+   * against, so a decision made on a stale list cannot rewrite a later one. */
+  async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null, from?: ClaimStatus) {
     await ensureTables();
     const result = await database.prepare(
-      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4`,
-    ).bind(status, reviewedBy, now, id).run();
+      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND (?5 IS NULL OR status = ?5)`,
+    ).bind(status, reviewedBy, now, id, from ?? null).run();
     return result.meta.changes === 1;
   }
 
@@ -3390,7 +3423,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listAdminReviewQueue,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,

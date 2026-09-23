@@ -286,7 +286,7 @@ export default function CirclePortalApp() {
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
         <SessionDeadline session={session} />
         {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
-        {session.isAdmin && <a href={`/admin?event=${encodeURIComponent(event.id)}`}>管理</a>}
+        {session.isAdmin && <a href="/admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
       </div>}
     </header>

@@ -454,3 +454,125 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .commentThread li>b button:hover { background:#e2ede6; }
 .commentThread li>p { margin:0; color:#344039; font-size:calc(10px * var(--ui-font-scale,1)); line-height:1.6; overflow-wrap:anywhere; }
 .commentTarget { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:9px; }
+
+/* ---- /admin: cross-event review queue ----
+   One wider column for the whole admin page: the claim queue is a five-column
+   list, and sections of two widths stacked on each other read as misaligned.
+   The map review keeps its full width for the map preview. */
+.adminPage .card:not(.editorCard) { max-width: 960px; }
+
+.card .secondaryButton { border-color: var(--line); background: #fff; color: var(--ink); }
+.card .secondaryButton:disabled { background: var(--paper); color: var(--muted); }
+
+.queueHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.card .queueHeading button { min-height: 32px; margin-top: 0; padding: 4px 12px; }
+
+.overviewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
+.overviewCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.card .overviewCard h3 { margin: 0; font-size: 14px; line-height: 1.3; }
+.overviewStatus { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: 11px; }
+.lifecycle, .lifecycleMuted { padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.lifecycle { background: #edf8f3; color: var(--success); }
+.lifecycleMuted { background: #efefe9; color: #4d5660; }
+.overviewDate { margin: -6px 0 0; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
+.overviewCounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.card .countButton {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-height: 0; margin: 0; padding: 9px 11px;
+  border-color: var(--line); background: var(--surface); color: var(--ink);
+  font-weight: 400; letter-spacing: normal; text-align: left;
+}
+.countButton span { color: var(--muted); font-size: 11px; }
+.countButton b { font-family: "Geist Mono", ui-monospace, monospace; font-size: 20px; line-height: 1.1; }
+.countButton b[data-zero] { color: #9aa19c; }
+.overviewFacts { display: grid; gap: 4px; margin: 0; font-size: 12px; }
+.overviewFacts div { display: flex; justify-content: space-between; gap: 12px; }
+.overviewFacts dt { color: var(--muted); }
+.overviewFacts dd { margin: 0; font-family: "Geist Mono", ui-monospace, monospace; font-weight: 700; }
+.overviewLink {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 36px; margin-top: auto;
+  border: 1px solid var(--ink); border-radius: 7px; color: var(--ink); font-size: 11px; font-weight: 800; text-decoration: none;
+}
+.card .pastLine {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%;
+  min-height: 0; margin-top: 10px; padding: 9px 12px;
+  border: 1px dashed #cfd5d0; background: transparent; color: var(--ink);
+  font-size: 12px; font-weight: 400; letter-spacing: normal; text-align: left;
+}
+.card .pastLine .overviewDate { margin: 0; }
+.pastCounts { margin-left: auto; color: var(--muted); }
+
+.filterChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.card .filterChip {
+  min-height: 30px; margin: 0; padding: 0 10px;
+  border-color: var(--line); background: #fff; color: var(--ink); font-size: 11px; letter-spacing: normal;
+}
+.card .filterChip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+.filterChip span { font-family: "Geist Mono", ui-monospace, monospace; }
+
+.warningNotice { margin-top: 12px; padding: 9px 11px; border: 1px solid #efd9b2; border-radius: 8px; background: #fbf1e0; color: #5c3b0b; font-size: 11px; }
+
+/* Sticks while the list scrolls, so the batch actions stay reachable from the
+   last row as well as the first. */
+.queueToolbar {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  margin-top: 12px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff;
+}
+.queueToolbar[data-selected] { border-color: var(--ink); background: #eef1f2; }
+.card .selectAll { display: inline-flex; align-items: center; gap: 10px; margin: 0; color: var(--ink); font-size: 12px; font-weight: 400; letter-spacing: normal; }
+.queueActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.card .queueActions button:not(:where(.inlineButton)) { min-height: 34px; margin: 0; }
+.card .queueActions .inlineButton { margin: 0; }
+.selectionCount { display: flex; flex-wrap: wrap; gap: 0 8px; color: var(--muted); font-size: 11px; }
+.selectionCount b { color: var(--ink); font-size: 12px; }
+
+.queueHeader, .queueRow {
+  display: grid; grid-template-columns: 22px minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.4fr) 76px auto;
+  gap: 12px; align-items: center;
+}
+.queueHeader { margin-top: 12px; padding: 0 12px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+.queueList { display: grid; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+.queueRow { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.queueRow[data-selected] { border-color: var(--ink); background: #eef1f2; }
+.queueRow[data-problem] { border-color: #f0cdc6; }
+.card .queueRow input[type="checkbox"], .card .selectAll input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--ink); }
+.queueCircle, .queueEvent, .queueEvidence { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.card .queueCircle p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--ink); font-size: 12px; }
+.queueCircle b { font-size: 13px; }
+.queueCircle small, .queueEvent small, .queueEvidence small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.queueCircle small { font-family: "Geist Mono", ui-monospace, monospace; }
+.flagWarn, .flagMuted { padding: 1px 6px; border-radius: 5px; font-size: 10px; font-weight: 800; }
+.flagWarn { background: #fbf1e0; color: #7a4f10; }
+.flagMuted { background: #efefe9; color: #4d5660; }
+.rowError { color: var(--danger); font-size: 11px; }
+.queueEvent { font-size: 12px; }
+.queueEvidence a { overflow: hidden; color: var(--danger); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; text-underline-offset: 2px; }
+.queueTime { color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
+.queueRowActions { display: flex; justify-content: flex-end; gap: 6px; }
+.card .queueRowActions button { min-height: 32px; margin: 0; padding: 4px 10px; }
+
+.batchDialog {
+  display: flex; flex-direction: column; gap: 12px;
+  width: min(520px, 100%); max-height: calc(100vh - 48px); overflow: auto;
+  padding: 22px; border-radius: 18px; background: var(--surface); box-shadow: 0 28px 80px #11182066;
+}
+.card .batchDialog h2 { margin: 0; font-size: 17px; line-height: 1.3; }
+.batchGroup { padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.batchGroup p { display: flex; justify-content: space-between; gap: 12px; margin: 0; font-size: 12px; }
+.batchGroup p + p { display: block; margin-top: 3px; color: #4d5660; }
+.batchGroup span { font-family: "Geist Mono", ui-monospace, monospace; font-weight: 700; }
+.batchSkipped { padding: 11px 13px; border: 1px solid #efd9b2; border-radius: 9px; background: #fbf1e0; color: #5c3b0b; font-size: 12px; }
+.batchSkipped ul { margin: 4px 0 0; padding-left: 18px; }
+.card .batchDialog .reviewActions { justify-content: flex-end; }
+.card .batchDialog .reviewActions button { flex: 0 0 auto; }
+
+@media (max-width: 760px) {
+  .queueHeader { display: none; }
+  .queueRow { grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: 6px 10px; }
+  .queueRow > :not(input) { grid-column: 2; }
+  .card .queueRow input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; }
+  .queueRowActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card .queueRowActions button, .card .queueActions button:not(:where(.inlineButton)) { min-height: 44px; }
+  .queueActions { width: 100%; }
+}

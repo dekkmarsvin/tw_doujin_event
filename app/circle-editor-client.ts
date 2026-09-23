@@ -42,6 +42,15 @@ export type PendingClaim = {
   createdAt: number;
 };
 
+/** A pending claim in the cross-event review queue. */
+export type QueuedClaim = PendingClaim & { eventId: string; circleClaimed: boolean };
+
+export type ReviewQueue = {
+  claims: QueuedClaim[];
+  mapDrafts: { eventId: string; submitted: number }[];
+  organizer: { applications: number; submissions: number };
+};
+
 export class PortalError extends Error {
   constructor(message: string, readonly status: number, readonly body?: Record<string, unknown>) {
     super(message);
@@ -75,12 +84,17 @@ export function setPortalEventId(eventId: string) {
  * rather than by `call` — an evidence download link, a preview image — and they
  * need the same scope as everything else.
  */
-export function withEventScope(path: string) {
-  if (!portalEventId) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}event=${encodeURIComponent(portalEventId)}`;
+export function withEventScope(path: string, eventId = portalEventId) {
+  if (!eventId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}event=${encodeURIComponent(eventId)}`;
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * `eventId` names the event for this one request instead of the page's. The
+ * cross-event review queue decides claims from several events without moving
+ * the page, and each decision must still be scoped to its own claim's event.
+ */
+async function call<T>(path: string, init?: RequestInit, eventId?: string): Promise<T> {
   // Every mutating request declares JSON, body or not. The server requires it
   // on all of them — an HTML form cannot send that content type, which is what
   // makes form-based CSRF structurally impossible — and a bodyless DELETE that
@@ -89,7 +103,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const mutating = method !== "GET" && method !== "HEAD";
   const multipart = typeof FormData !== "undefined" && init?.body instanceof FormData;
 
-  const response = await fetch(withEventScope(path), {
+  const response = await fetch(withEventScope(path, eventId ?? portalEventId), {
     ...init,
     credentials: "same-origin",
     headers: { accept: "application/json", ...(mutating && !multipart ? { "content-type": "application/json" } : {}), ...init?.headers },
@@ -223,16 +237,16 @@ export function saveOverride(circleId: string, fields: CircleOverrideFields, ret
   });
 }
 
-export function listPendingClaims() {
-  return call<{ eventId: string; claims: PendingClaim[] }>("/api/admin/claims");
+export function listReviewQueue() {
+  return call<ReviewQueue>("/api/admin/review-queue");
 }
 
-export function decideClaim(claimId: string, decision: "approve" | "reject" | "revoke") {
-  return call<{ ok: true }>("/api/admin/claims", { method: "POST", body: JSON.stringify({ claimId, decision }) });
+export function decideClaim(claimId: string, decision: "approve" | "reject" | "revoke", eventId?: string) {
+  return call<{ ok: true }>("/api/admin/claims", { method: "POST", body: JSON.stringify({ claimId, decision }) }, eventId);
 }
 
-export function takedownOverride(circleId: string, reason: string) {
-  return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) });
+export function takedownOverride(circleId: string, reason: string, eventId?: string) {
+  return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) }, eventId);
 }
 
 export type AdminEntry = { email: string; addedBy: string | null; addedAt: number };

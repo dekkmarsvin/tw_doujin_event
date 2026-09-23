@@ -1622,6 +1622,33 @@ export function createCirclePortalHandlers({
     });
   }
 
+  /**
+   * Every served event's review work in one answer, so the admin page opens on
+   * where the work is instead of on a default event. Read-only on purpose: each
+   * decision still goes through the event-scoped routes, one claim at a time.
+   * An event this deployment does not serve is left out, the same answer every
+   * event-scoped route gives for it.
+   */
+  async function adminReviewQueue(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const queue = await repository.listAdminReviewQueue();
+    const eventIds = [...new Set([...queue.claims, ...queue.mapDrafts].map((row) => row.event_id))];
+    const served = new Set((await Promise.all(eventIds.map(async (eventId) => (config.publishedEvent
+      ? await config.publishedEvent(eventId) : eventId === config.eventId) ? eventId : null)))
+      .filter((eventId): eventId is string => eventId !== null));
+    return json({
+      claims: queue.claims.filter((claim) => served.has(claim.event_id)).map((claim) => ({
+        id: claim.id, eventId: claim.event_id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
+        evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
+        createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,
+      })),
+      mapDrafts: queue.mapDrafts.filter((row) => served.has(row.event_id))
+        .map((row) => ({ eventId: row.event_id, submitted: row.submitted })),
+      organizer: { applications: queue.applications, submissions: queue.submissions },
+    });
+  }
+
   async function adminDecideClaim(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
@@ -1641,9 +1668,15 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const method: ClaimMethod = "admin";
+    // Approving and rejecting decide a pending claim. The queue a reviewer
+    // decides from can be seconds old, and a batch can hold many rows: a
+    // rejection that landed on a claim approved meanwhile would withdraw the
+    // owner's content under the name of a rejection. Withdrawing an owner is
+    // what revoke is for.
     const ok = decision === "approve"
       ? await repository.markClaimVerified(claimId, method, now, gate.session.email)
-      : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email);
+      : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email,
+        decision === "reject" ? "pending" : undefined);
 
     // Revoking ownership withdraws that circle's content in the same step. The
     // phase has to be the current one: rebuilding as "during" after the event
@@ -1657,7 +1690,8 @@ export function createCirclePortalHandlers({
       detail: { circleId: claim.circle_id, applied: ok, evidenceUrl: claim.evidence_url },
       ipHash: await clientIpHash(request),
     });
-    return ok ? json({ ok: true }) : json({ error: "此社團已有通過的認領。" }, 409);
+    if (ok) return json({ ok: true });
+    return json({ error: decision !== "revoke" && claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
   }
 
   async function adminListAdmins(request: Request) {
@@ -3159,6 +3193,8 @@ export function createCirclePortalHandlers({
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listEventApplications, submitEventApplication, reviewEventApplication,
     adminListAdmins, adminManageAdmins, adminDisableAccount, adminManageMapContributor,
+    // Cross-event and read-only; it filters to served events itself.
+    adminReviewQueue,
     adminProbeGitHubInstallation,
     // Candidate-scoped: an organizer candidate is addressed by candidateId and
     // exists before any event is published, so `eventScoped` — which demands a

@@ -10,7 +10,10 @@ const map = JSON.parse(await readFile("fixtures/events/sample/map.json", "utf8")
 const now = Date.now();
 async function open(role, entry = "admin") {
   const requests = [];
-  const pending = [{ id: "claim-one", circleId: "c-900001", circleName: "待審測試社", evidenceNote: "本人申請" }];
+  const pending = [
+    { id: "claim-one", eventId: "sample", circleId: "c-900001", circleName: "待審測試社", evidenceUrl: null, evidenceNote: "本人申請", targetUrl: null, createdAt: now, circleClaimed: false },
+    { id: "claim-two", eventId: "sample-two", circleId: "c-900003", circleName: "第二場待審社", evidenceUrl: "https://example.test/circle", evidenceNote: null, targetUrl: null, createdAt: now, circleClaimed: false },
+  ];
   let admins = [{ email: "admin@example.test", addedBy: "bootstrap", addedAt: now }];
   let notificationPreferences = { enabled: true, cadence: "five_minutes", version: 1 };
   let draftStatus = "submitted", failure = 0;
@@ -26,10 +29,16 @@ async function open(role, entry = "admin") {
         : reply({ email: `${role}@example.test`, isAdmin: role === "admin", isMapContributor: false, expiresAt: now + 86400000 });
       if (path === "/api/auth/config") return reply({ turnstileSitekey: "" });
       if (path === "/api/claims") return reply({ claims: [], eventId: url.searchParams.get("event") });
-      if (path === "/api/admin/claims") {
+      if (path === "/api/admin/claims" && method === "POST") {
         if (failure) return reply({ error: "登入已失效。" }, failure);
-        if (method === "POST") { pending.splice(0); return reply({ ok: true }); }
-        return reply({ claims: url.searchParams.get("event") === "sample" ? pending : [], eventId: url.searchParams.get("event") });
+        const index = pending.findIndex(x => x.id === body.claimId && x.eventId === url.searchParams.get("event"));
+        if (index < 0) return reply({ error: "找不到這筆認領。" }, 404);
+        pending.splice(index, 1);
+        return reply({ ok: true });
+      }
+      if (path === "/api/admin/review-queue") {
+        if (failure) return reply({ error: "登入已失效。" }, failure);
+        return reply({ claims: pending, mapDrafts: [{ eventId: "sample", submitted: draftStatus === "submitted" ? 1 : 0 }], organizer: { applications: 2, submissions: 1 } });
       }
       if (path === "/api/admin/notification-preferences") {
         if (failure) return reply({ error: "登入已失效。" }, failure);
@@ -65,30 +74,49 @@ try {
   await page.getByRole("link", { name: "管理", exact: true }).waitFor();
   assert.equal(requests.filter(x => x.path.startsWith("/api/admin/")).length, 0, "/circle must never load management data");
   assert.equal(await page.locator("#admin, #map-review").count(), 0);
+  // The admin page is cross-event, so the link names no event.
+  assert.equal(await page.getByRole("link", { name: "管理", exact: true }).getAttribute("href"), "/admin");
   await page.getByRole("link", { name: "管理", exact: true }).click();
   await page.getByRole("heading", { name: "網站管理", exact: true }).waitFor();
-  const panel = page.locator("#admin"), review = page.locator("#map-review");
+  const overview = page.locator("#overview"), panel = page.locator("#admin"), review = page.locator("#map-review");
+  const takedown = page.locator("#takedown"), accounts = page.locator("#accounts");
+  // Both events' claims on one page, before any event is chosen.
   await panel.getByText("待審測試社", { exact: true }).waitFor();
+  await panel.getByText("第二場待審社", { exact: true }).waitFor();
+  await overview.getByRole("link", { name: "前往主辦工作區", exact: true }).waitFor();
   await journey.capture(page, "admin-management-entry");
-  await panel.getByRole("button", { name: "核准", exact: true }).click();
-  await panel.getByText("目前沒有待審項目。", { exact: true }).waitFor();
+  await panel.locator("li", { hasText: "待審測試社" }).getByRole("button", { name: "核准", exact: true }).click();
+  await panel.getByText("已核准「待審測試社」。", { exact: true }).waitFor();
   assert.deepEqual(requests.find(x => x.path === "/api/admin/claims" && x.method === "POST"), { path: "/api/admin/claims", method: "POST", event: "sample", body: { claimId: "claim-one", decision: "approve" } });
-  await panel.getByLabel("社團 ID", { exact: true }).fill("c-900001");
-  await panel.getByLabel("原因", { exact: true }).fill("測試撤下");
-  await panel.getByRole("button", { name: "撤下", exact: true }).click();
-  await panel.getByText("已撤下。", { exact: true }).waitFor();
-  await panel.getByLabel("新增管理者 email", { exact: true }).fill("second@example.test");
-  await panel.getByRole("button", { name: "新增", exact: true }).click();
-  await panel.getByText("已新增管理者。", { exact: true }).waitFor();
-  await panel.getByRole("button", { name: "移除", exact: true }).click();
-  await panel.getByText("已移除管理者。", { exact: true }).waitFor();
-  await panel.getByLabel("帳號 email", { exact: true }).fill("disabled@example.test");
-  await panel.getByRole("button", { name: "停用", exact: true }).click();
-  await panel.getByText("帳號已停用。", { exact: true }).waitFor();
-  assert.deepEqual(requests.find(x => x.path === "/api/admin/overrides").body, { circleId: "c-900001", reason: "測試撤下" });
+  // A batch decides each claim under its own event, after a confirmation.
+  await panel.getByRole("checkbox", { name: "選取第二場待審社（第二範例活動）", exact: true }).check();
+  await panel.getByRole("button", { name: "婉拒已選", exact: true }).click();
+  await panel.getByRole("dialog").getByText("第二場待審社", { exact: true }).waitFor();
+  await journey.capture(page, "admin-batch-confirm");
+  await panel.getByRole("dialog").getByRole("button", { name: "婉拒 1 筆", exact: true }).click();
+  await panel.getByText("已婉拒 1 筆。", { exact: true }).waitFor();
+  await panel.getByText("目前沒有待審項目。", { exact: true }).waitFor();
+  assert.deepEqual(requests.filter(x => x.path === "/api/admin/claims" && x.method === "POST").at(-1), { path: "/api/admin/claims", method: "POST", event: "sample-two", body: { claimId: "claim-two", decision: "reject" } });
+  await takedown.getByLabel("活動", { exact: true }).selectOption("sample");
+  await takedown.getByLabel("社團 ID", { exact: true }).fill("c-900001");
+  await takedown.getByLabel("原因", { exact: true }).fill("測試撤下");
+  await takedown.getByRole("button", { name: "撤下", exact: true }).click();
+  await takedown.getByText("已撤下。", { exact: true }).waitFor();
+  await accounts.getByLabel("新增管理者 email", { exact: true }).fill("second@example.test");
+  await accounts.getByRole("button", { name: "新增", exact: true }).click();
+  await accounts.getByText("已新增管理者。", { exact: true }).waitFor();
+  await accounts.getByRole("button", { name: "移除", exact: true }).click();
+  await accounts.getByText("已移除管理者。", { exact: true }).waitFor();
+  await accounts.getByLabel("帳號 email", { exact: true }).fill("disabled@example.test");
+  await accounts.getByRole("button", { name: "停用", exact: true }).click();
+  await accounts.getByText("帳號已停用。", { exact: true }).waitFor();
+  const takedownRequest = requests.find(x => x.path === "/api/admin/overrides");
+  assert.deepEqual(takedownRequest.body, { circleId: "c-900001", reason: "測試撤下" });
+  assert.equal(takedownRequest.event, "sample");
   assert.deepEqual(requests.filter(x => x.path === "/api/admin/admins" && x.method === "POST").map(x => x.body.action), ["add", "remove"]);
   assert.equal(requests.find(x => x.path === "/api/admin/accounts").body.email, "disabled@example.test");
 
+  await review.getByLabel("活動", { exact: true }).selectOption("sample");
   await review.getByRole("button", { name: "開啟", exact: true }).click();
   await review.getByRole("checkbox").check();
   await review.getByRole("button", { name: "核准", exact: true }).click();
@@ -102,16 +130,15 @@ try {
   assert.deepEqual(requests.find(x => x.path.endsWith("/export")).body, { expectedRevision: 3 });
   await review.evaluate(e => e.scrollIntoView({ block: "start" }));
   await journey.capture(page, "admin-map-candidate");
-  await page.getByLabel("管理活動", { exact: true }).selectOption("sample-two");
+  await review.getByLabel("活動", { exact: true }).selectOption("sample-two");
   await review.getByText("目前沒有草稿。", { exact: true }).waitFor();
   assert.equal(await review.getByRole("button", { name: "下載地圖檔案", exact: true }).count(), 0);
   assert.ok(requests.some(x => x.path === "/api/admin/map-contributions/drafts" && x.event === "sample-two"));
-  assert.equal(new URL(page.url()).searchParams.get("event"), "sample-two");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => scrollTo(0, 0));
   await journey.capture(page, "admin-narrow-event-switch");
   expire();
-  await panel.getByRole("button", { name: "重新整理待審認領", exact: true }).click();
+  await overview.getByRole("button", { name: "重新整理", exact: true }).click();
   await page.getByRole("link", { name: "前往社團入口登入", exact: true }).waitFor();
   assert.equal(await page.locator("#admin, #map-review").count(), 0);
   assert.equal(await page.getByRole("button", { name: "登出", exact: true }).count(), 0);

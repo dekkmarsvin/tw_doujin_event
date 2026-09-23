@@ -8,7 +8,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { default: EventChooser } = await environment.runner.import("/app/event-chooser.tsx");
-const { eventCalendar, groupCalendarEvents, nearestEvent, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
+const { eventCalendar, eventsByProximity, groupCalendarEvents, nearestEvent, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
 after(() => vite.close());
 
 const events = [
@@ -58,6 +58,16 @@ test("control surfaces open on the held, then the next, then the latest ended ev
   assert.equal(nearestEvent([ended, undated, later], "2026-09-23").id, "undated", "an undated event ranks by its end");
   assert.equal(nearestEvent([ended, dated("older", ["2026-05-01"])], "2026-09-23").id, "ended");
   assert.equal(nearestEvent([], "2026-09-23"), undefined);
+});
+
+test("proximity order puts current events by start, then ended events from the latest back", () => {
+  const source = [
+    dated("ended", ["2026-08-21", "2026-08-23"]), dated("later", ["2026-11-07"]), dated("older", ["2026-05-01"]),
+    dated("next", ["2026-10-09"]), dated("held", ["2026-09-22", "2026-09-24"]),
+  ];
+  assert.deepEqual(eventsByProximity(source, "2026-09-23").map(({ event, group }) => [event.id, group]), [
+    ["held", "ongoing"], ["next", "upcoming"], ["later", "upcoming"], ["ended", "past"], ["older", "past"],
+  ]);
 });
 
 test("Taiwan calendar boundaries include first/last days and nights between event days", () => {

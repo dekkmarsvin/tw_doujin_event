@@ -2,8 +2,8 @@
 
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
-**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/circle-portal-route.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
+**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`
@@ -193,10 +193,10 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - **新活動不需要改 `wrangler.jsonc`，也不需要為控制面另做一次部署**：活動隨自己的資料發布進同一次 build 就能被社團使用。
 - **ownership 一律用請求指名的活動判斷**：甲活動的認領對乙活動的寫入是 `403`；同一帳號可以在不同活動各自持有認領，兩者是不同的資料列，互不改寫。
 - **認領 id 也逐活動判斷**：認領 id 是全域的，請求的授權範圍不是。撤回、驗證與管理者裁決都先確認該筆認領屬於請求指名的活動，否則視為不存在（`404`）。少了這道檢查，甲活動的認領可以透過乙活動的控制面被撤銷，而被重建的是乙活動的公開文件——甲活動那份會留著已撤銷的內容。
-- **管理者佇列逐活動**：待審清單只列該活動的認領，回應帶 `eventId`，因此同名社團不會在兩場活動之間被混為一談。
+- **管理者裁決逐活動，讀取可跨活動**：`GET /api/admin/claims` 只列請求指名活動的認領；`GET /api/admin/review-queue` 一次列出這次部署服務的**每一場**活動的待審認領與待審獨立地圖草稿數，加上主辦工作區的待審申請與送審數。它只讀不寫，不服務的活動不列入（與 event-scoped route 回 `404` 同一個答案）；每筆認領帶 `eventId`，同名社團不會在兩場活動之間被混為一談，並帶 `circleClaimed` 表示該社團在該活動已有通過的認領。核准與婉拒仍逐筆走 `POST /api/admin/claims?event=<該筆認領的活動>`。
 - **活動後顯示與保存期限依該筆資料所屬活動計算**：階段與 `retention_expires_at` 都用該活動自己的 `eventEndsAt`。
 
-控制面前端把選到的活動記在瀏覽器與 URL 上，只是一個指標，不是授權：伺服器一律以請求指名的活動作答。只有一場已發布活動時不出現選擇器，直接進入。網址沒有指名、瀏覽器也沒有記錄時，`/circle` 與 `/admin` 依台北日期開在正在舉辦的活動，其次是最快開始的活動，全部結束時才是最近結束的那場；已發布清單的順序不決定控制面開在哪一場。
+控制面前端把選到的活動記在瀏覽器與 URL 上，只是一個指標，不是授權：伺服器一律以請求指名的活動作答。只有一場已發布活動時不出現選擇器，直接進入。網址沒有指名、瀏覽器也沒有記錄時，`/circle` 與 `/admin` 裡需要單一活動的區塊依台北日期開在正在舉辦的活動，其次是最快開始的活動，全部結束時才是最近結束的那場；已發布清單的順序不決定控制面開在哪一場。
 
 ## 活動後退出
 
@@ -265,10 +265,14 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ### 審核與帳號操作
 
-- 認領審核、撤下補充資料、管理者名單、停用帳號與地圖審閱／候選匯出在 `/admin`。活動選擇沿用逐活動請求範圍，切換時卸載前一場面板與表單；管理者名單及帳號停用仍是帳號層操作。候選活動的 Owner、核准並發布與重試留在 `/organizer`。
+- 認領審核、撤下補充資料、管理者名單、停用帳號與地圖審閱／候選匯出在 `/admin`。候選活動的 Owner、核准並發布與重試留在 `/organizer`；`/admin` 只顯示其待審數量並連過去。
+- **`/admin` 開在跨活動的待審總覽，不先選活動。** 總覽列出每場未結束活動的待審認領與地圖草稿數（依舉辦中、即將到來排序）；已結束活動只在仍有待審時以一行出現。認領清單跨活動列出，可依活動篩選；網址的 `?event=` 只是預先套用的篩選與地圖審閱的起始活動，`#admin`、`#map-review`、`#review-notifications` 錨點不變。`/circle` 的「管理」連結不帶活動。
+- 需要單一活動的區塊各自帶活動選單：地圖審閱切換時卸載前一場面板與表單；撤下表單的請求指名表單上選的活動，不跟隨地圖審閱。只有一場已發布活動時不顯示選單。管理者名單及帳號停用仍是帳號層操作。
+- **批次核准與婉拒先確認。** 確認視窗依活動分組列出社團；已有通過認領的社團、以及同一活動同一社團勾選了兩筆以上時，這些認領列為「略過」並留在清單，由管理者逐筆決定。送出時逐筆請求、逐筆回報：清單上方一行總結，未完成的原因標在該列；登入失效或失去管理者資格時停止送出其餘各筆。單筆核准與婉拒不經確認。
+- **核准與婉拒只作用於仍在待審的認領。** 清單可能落後其他管理者或其他分頁數秒；對已處理的認領送出核准或婉拒回 `409`「這筆認領已不在待審中。」，不改寫既有結果，也不重建公開文件。撤下擁有者只能用撤銷。
 - `/admin` 顯示 session 到期時間，到期或 API 回 401 時移除管理內容並提供 `/circle` 重新登入連結；逐 endpoint 的管理者、CSRF、活動與 revision 檢查不因入口搬移改變。
-- 待審認領在頁面可見時每 30 秒更新，切回頁面時立即更新，也可手動重新整理。更新失敗顯示錯誤，保留上次成功取得的清單。
-- **只有首次載入與手動按下才改變「重新整理待審認領」按鈕的狀態**；背景更新照常換清單、照常回報失敗，但不把按鈕切成「更新中…」。讀者沒有按過的控制項每 30 秒閃一次，只是動作，不是資訊。
+- 待審總覽與認領清單在頁面可見時每 30 秒更新，切回頁面時立即更新，也可手動重新整理。更新失敗顯示錯誤，保留上次成功取得的清單；核准或婉拒送出期間不以背景更新替換清單。
+- **只有首次載入與手動按下才改變「重新整理」按鈕的狀態**；背景更新照常換清單、照常回報失敗，但不把按鈕切成「更新中…」。讀者沒有按過的控制項每 30 秒閃一次，只是動作，不是資訊。
 - 讀取待審認領、核准、婉拒與撤銷都要求同一個有效 session 與當下的管理者資格。到期時整個控制面回到登入畫面，不保留「已登入但管理功能因登入時間被鎖定」的第二種狀態。
 - **管理者名單存在資料庫（`admins` 表）而非設定值**，可在控制面即時增減、不需重新部署。
 - **不得移除自己，也不得移除最後一位管理者**——兩者都是把自己鎖在門外的最短路徑。
