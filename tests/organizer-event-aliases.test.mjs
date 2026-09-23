@@ -31,6 +31,7 @@ test("a draft without aliases carries no aliases key", () => {
 test("aliases keep their order and drop rows left blank", () => {
   assert.deepEqual(parseOrganizerEventDraft(input({ aliases: ["  ＦＦ４７ ", "", "開拓動漫祭 47"] })).event.aliases, ["FF47", "開拓動漫祭 47"]);
   assert.equal(parseOrganizerEventDraft(input({ aliases: "FF47" })), null);
+  for (const aliases of [[123], ["FF47", null], [["FF47"]]]) assert.equal(parseOrganizerEventDraft(input({ aliases })), null, JSON.stringify(aliases));
 });
 
 test("alias problems name the row they belong to", () => {

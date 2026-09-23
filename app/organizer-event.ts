@@ -160,7 +160,9 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
     || !Array.isArray(value.event.days) || !Array.isArray(value.venue.assignments)) return null;
   const eventId = value.event.id === null ? null : text(value.event.id);
   const name = text(value.event.name);
-  if (value.event.aliases !== undefined && !Array.isArray(value.event.aliases)) return null;
+  // aliases is a list of text: anything else is malformed, not an empty row.
+  if (value.event.aliases !== undefined && (!Array.isArray(value.event.aliases)
+    || value.event.aliases.some((alias) => typeof alias !== "string"))) return null;
   // A row left blank in the form is not an alias; it drops out on save.
   const aliases = (value.event.aliases ?? []).map(text).filter(Boolean);
   const days: OrganizerEventDay[] = [];
