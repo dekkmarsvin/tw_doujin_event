@@ -252,11 +252,13 @@ export function loginLinkLetter({ href, origin, requestedAt, expiresAt }: {
  * it expires. Any organizer sign-in accepts the address's pending invitations,
  * so the letter says where to ask for a fresh link instead of leaving a dead one.
  */
-export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt }: {
+export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt, eventName, inviterRole }: {
   href: string;
   origin: string;
   requestedAt: number;
   expiresAt: number;
+  eventName: string;
+  inviterRole: "admin" | "owner";
 }) {
   const minutes = Math.round((expiresAt - requestedAt) / 60_000);
   return renderLetter({
@@ -267,7 +269,11 @@ export function organizerInvitationLetter({ href, origin, requestedAt, expiresAt
     stamp: formatTaipeiTime(requestedAt),
     title: "你已受邀管理一場活動",
     paragraphs: ["登入後會進入主辦工作區。連結只能使用一次。"],
-    facts: [{ label: "有效至", value: formatTaipeiTime(expiresAt), data: true }],
+    facts: [
+      { label: "活動", value: eventName },
+      { label: "邀請者", value: inviterRole === "admin" ? "網站管理者" : "活動負責人" },
+      { label: "有效至", value: formatTaipeiTime(expiresAt), data: true },
+    ],
     action: { label: "登入主辦工作區", href },
     showActionUrl: true,
     notes: [

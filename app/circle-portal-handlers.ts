@@ -1801,7 +1801,8 @@ export function createCirclePortalHandlers({
       && byActor < LIMITS.organizerInvitesPerActorPerHour;
   }
 
-  async function sendOrganizerInvitation(email: string, now: number, ipHash: string | null, mintedBy: string) {
+  async function sendOrganizerInvitation(email: string, now: number, ipHash: string | null, mintedBy: string,
+    context: { eventName: string; inviterRole: "admin" | "owner" }) {
     const token = randomToken();
     const tokenHash = await sha256Hex(token);
     const expiresAt = now + LOGIN_TOKEN_TTL_MS;
@@ -1813,6 +1814,7 @@ export function createCirclePortalHandlers({
       await sendMail({
         to: email,
         ...organizerInvitationLetter({
+          ...context,
           href: `${config.origin}/organizer?login=${encodeURIComponent(token)}`,
           origin: config.origin, requestedAt: now, expiresAt,
         }),
@@ -2023,7 +2025,8 @@ export function createCirclePortalHandlers({
     // same name, because nothing stops two candidates sharing one.
     let invitationDelivery: "sent" | "failed" | "unknown" = "sent";
     try {
-      await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId);
+      await sendOrganizerInvitation(ownerEmail, config.now(), ipHash, gate.session.accountId,
+        { eventName: tentativeName, inviterRole: "admin" });
     } catch (error) {
       const failure = mailFailure(error);
       invitationDelivery = failure.delivery;
@@ -2790,6 +2793,8 @@ export function createCirclePortalHandlers({
     }
     if (role === "owner" && !access.admin) return json({ error: "只有網站管理者可以增減負責人。" }, 403);
     if (role === "editor" && access.role !== "owner") return json({ error: "只有負責人可以管理協作者。" }, 403);
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
     const ipHash = await clientIpHash(request);
     if (action !== "revoke" && mailRecipientAllowed && !mailRecipientAllowed(email)) {
       return json({ error: "這個測試環境不會寄信到這個地址。" }, 400);
@@ -2824,7 +2829,8 @@ export function createCirclePortalHandlers({
     if (action === "revoke") return json({ ok: true, result: result.result });
     let invitationDelivery: "sent" | "failed" | "unknown" = "sent";
     try {
-      await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId);
+      await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId,
+        { eventName: candidate.tentative_name, inviterRole: role === "owner" ? "admin" : "owner" });
     } catch (error) {
       const failure = mailFailure(error);
       invitationDelivery = failure.delivery;
