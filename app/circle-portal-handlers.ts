@@ -392,6 +392,7 @@ export function createCirclePortalHandlers({
     // on every link they see, and a GET-consumes design burns the token first.
     try {
       await sendMail({
+        purpose: "login_link",
         to: email,
         ...loginLinkLetter({ href: destination.href, origin: config.origin, requestedAt: now, expiresAt }),
       });
@@ -1846,6 +1847,7 @@ export function createCirclePortalHandlers({
     });
     try {
       await sendMail({
+        purpose: "organizer_invitation",
         to: email,
         ...organizerInvitationLetter({
           ...context,
