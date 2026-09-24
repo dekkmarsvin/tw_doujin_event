@@ -45,12 +45,14 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   const calendar = eventCalendar(event);
   const schema = dates.every(Boolean) ? {
     "@context": "https://schema.org", "@type": "Event", name: event.name,
+    ...(event.aliases?.length ? { alternateName: [...event.aliases] } : {}),
     url: PUBLIC_ORIGIN + eventPath(event.id), description: pageMetadata(event).description,
     startDate: [...dates].sort()[0], endDate: [...dates].sort().at(-1),
     location: [...new Map(event.venueAssignments.map((venue) => [venue.venueId, { "@type": "Place", name: venue.venueName, url: venue.venueOfficialUrl }])).values()],
     organizer: event.organizerAssignments.map((organizer) => ({ "@type": "Organization", name: organizer.name, url: organizer.officialUrl })),
   } : undefined;
-  pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${eventFacts(event)}
+  const aliases = event.aliases?.length ? `<p>別稱：${escapeHtml(event.aliases.join("、"))}</p>` : "";
+  pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${aliases}${eventFacts(event)}
 <p>${link(readerLink(event), "開啟攤位地圖", "primary")}</p>
 <section><h2>參展社團</h2><p>${circles.length} 個社團</p><ul class="circle-directory">${circles.map((circle) => `<li>${link(circlePath(event.id, circle.id), circle.name)}</li>`).join("")}</ul></section>`, schema));
   for (const circle of circles) {

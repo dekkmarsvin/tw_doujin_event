@@ -9,7 +9,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite test environment missing.");
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
 const { pageMetadata, readerLink, eventPath } = await environment.runner.import("/app/seo.ts");
-const { discoveryPages, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
+const { discoveryPages, homepageSummary, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
 after(() => vite.close());
 const event = getEventDefinition("sample");
 const catalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
@@ -74,6 +74,39 @@ test("schema uses actual event days without fabricating an address or opening ti
   assert.equal(schema.location[0].address, undefined);
   const undated = { ...event, days: [{ ...event.days[0], dateLabel: "待確認" }] };
   assert.doesNotMatch(discoveryPages(undated, catalog).get("/events/sample/"), /application\/ld\+json/);
+});
+
+const text = (node) => node.nodeName === "#text" ? node.value : (node.childNodes ?? []).map(text).join("");
+const ldJson = (html) => JSON.parse(nodes(parse(html)).find((node) => attr(node, "type") === "application/ld+json").childNodes[0].value);
+
+// #362: an event without aliases keeps every title, line and schema it had.
+test("an event without aliases names itself only by its official name", () => {
+  assert.equal(event.aliases, undefined);
+  assert.equal(pageMetadata(event).title, `${event.name} 攤位地圖與社團查詢｜場刊 Map`);
+  assert.ok(pageMetadata(event).description.startsWith(`${event.name}的社團與攤位地圖。`));
+  assert.equal(pageMetadata(event, catalog.circles[0]).title, `${catalog.circles[0].name}｜${event.name} 攤位地圖與社團查詢｜場刊 Map`);
+  const html = discoveryPages(event, catalog).get("/events/sample/");
+  assert.doesNotMatch(html, /別稱|alternateName/);
+});
+
+// ADR-0068: aliases are what organizers and readers call the event. They name
+// it on its own pages; the homepage list and the map keep the official name.
+test("aliases name the event on its pages, the same in text and schema", () => {
+  const aliased = { ...event, aliases: ["CH20 百合ONLY", "百合 <Only>"] };
+  const metadata = pageMetadata(aliased);
+  assert.equal(metadata.title, `${event.name}（CH20 百合ONLY）攤位地圖與社團查詢｜場刊 Map`);
+  assert.ok(metadata.description.startsWith(`${event.name}（CH20 百合ONLY、百合 <Only>）的社團與攤位地圖。`));
+  const pages = discoveryPages(aliased, catalog);
+  const eventPage = pages.get("/events/sample/");
+  const line = nodes(parse(eventPage)).find((node) => node.tagName === "p" && text(node).startsWith("別稱："));
+  assert.equal(text(line), "別稱：CH20 百合ONLY、百合 <Only>");
+  assert.match(eventPage, /別稱：CH20 百合ONLY、百合 &lt;Only&gt;/);
+  assert.deepEqual(ldJson(eventPage).alternateName, aliased.aliases);
+  assert.equal(ldJson(eventPage).name, event.name);
+  const circlePage = pages.get("/events/sample/circles/c-900001/");
+  const title = text(nodes(parse(circlePage)).find((node) => node.tagName === "title"));
+  assert.equal(title, `${catalog.circles[0].name}｜CH20 百合ONLY 攤位地圖與社團查詢｜場刊 Map`);
+  assert.equal(homepageSummary([aliased]), homepageSummary([event]), "the homepage list keeps the official name");
 });
 
 test("sitemap deduplicates canonical paths and never fabricates lastmod", () => {

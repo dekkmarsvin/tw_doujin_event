@@ -28,9 +28,15 @@ export function readerLink(event: EventDefinition, placement?: { day: string | n
 export function pageMetadata(event?: EventDefinition, circle?: { id: string; name: string }) {
   const dates = event && eventCalendar(event).label;
   const venues = event && [...new Set(event.venueAssignments.map((venue) => venue.venueName))].join("、");
+  // Aliases are what organizers and readers actually call the event (ADR-0068).
+  // The event page gives both names; a circle page uses the first alias, the
+  // event's short name. An event without aliases reads exactly as it did.
+  const aliases = event?.aliases ?? [];
+  const named = !event ? "" : circle ? `${aliases[0] ?? event.name} ` : aliases.length ? `${event.name}（${aliases[0]}）` : `${event.name} `;
+  const described = event && !circle && aliases.length ? `${event.name}（${aliases.join("、")}）` : event?.name;
   return {
-    title: event ? `${circle ? `${circle.name}｜` : ""}${event.name} 攤位地圖與社團查詢｜場刊 Map` : SITE_TITLE,
-    description: event ? `${circle ? `${circle.name}在` : ""}${event.name}的${circle ? "參展日期與攤位" : "社團與攤位地圖"}。${dates}，${venues}。查看攤位位置、收藏社團並規劃逛攤路線。` : SITE_DESCRIPTION,
+    title: event ? `${circle ? `${circle.name}｜` : ""}${named}攤位地圖與社團查詢｜場刊 Map` : SITE_TITLE,
+    description: event ? `${circle ? `${circle.name}在` : ""}${described}的${circle ? "參展日期與攤位" : "社團與攤位地圖"}。${dates}，${venues}。查看攤位位置、收藏社團並規劃逛攤路線。` : SITE_DESCRIPTION,
     canonical: PUBLIC_ORIGIN + (event ? circle ? circlePath(event.id, circle.id) : eventPath(event.id) : "/"),
   };
 }
