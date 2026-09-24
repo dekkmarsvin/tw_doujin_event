@@ -73,6 +73,7 @@ test("schema uses actual event days without fabricating an address or opening ti
   assert.match(schema.startDate, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(schema.location[0].name, event.venue);
   assert.equal(schema.location[0].address, undefined);
+  assert.deepEqual(schema.image, ["https://map.kotoban.top/share-card.png"], "the image is the share card the page already names in og:image");
   const undated = { ...event, days: [{ ...event.days[0], dateLabel: "待確認" }] };
   assert.doesNotMatch(discoveryPages(undated, catalog).get("/events/sample/"), /application\/ld\+json/);
 });
