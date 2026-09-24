@@ -30,7 +30,9 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
   const viewRef = useRef(view);
   const fittedScope = useRef<string | null>(null);
   const geometry = useRef<{ width: number; height: number; fitWidth: number; windowWidth: number; inset: { x: number; y: number }; fit: MapView } | null>(null);
-  const pending = useRef<{ code: string; scope: string } | null>(null);
+  // A booth is looked up by code once the map for its scope is on screen; a
+  // facility is already a layout point on the current map.
+  const pending = useRef<{ scope: string } & ({ code: string } | { point: { x: number; y: number } }) | null>(null);
   const [request, setRequest] = useState(0);
   const fittedKey = `${artifactKey}|${publishedMap?.revision ?? "pending"}`;
   const floorHeight = 950;
@@ -45,6 +47,10 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
   const cancelPosition = useCallback(() => { pending.current = null; }, []);
   const position = useCallback((code: string, requestedScope = scope) => {
     pending.current = { code, scope: requestedScope };
+    setRequest((current) => current + 1);
+  }, [scope]);
+  const positionPoint = useCallback((point: { x: number; y: number }) => {
+    pending.current = { point, scope };
     setRequest((current) => current + 1);
   }, [scope]);
 
@@ -121,11 +127,12 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
       if (!target || target.scope !== scope) return;
       const bounds = measure(false);
       if (!bounds || bounds.rect.width <= 0 || bounds.rect.height <= 0) return;
-      const slot = publishedMap.layout.rows.flatMap((row) => row.slots).find((item) => item.code === target.code);
+      const slot = "code" in target ? publishedMap.layout.rows.flatMap((row) => row.slots).find((item) => item.code === target.code) : undefined;
+      const point = "point" in target ? target.point : slot && { x: slot.rect.x + slot.rect.width / 2, y: slot.rect.y + slot.rect.height / 2 };
       pending.current = null;
-      if (!slot) return;
+      if (!point) return;
       const scale = floorHeight / publishedMap.layout.height;
-      setView((current) => ({ ...current, offset: offsetMapPointInRect({ x: (slot.rect.x + slot.rect.width / 2) * scale, y: (slot.rect.y + slot.rect.height / 2) * scale }, bounds.rect, current.zoom, getInset()) }));
+      setView((current) => ({ ...current, offset: offsetMapPointInRect({ x: point.x * scale, y: point.y * scale }, bounds.rect, current.zoom, getInset()) }));
     };
     const schedule = () => {
       if (frame !== null) cancelAnimationFrame(frame);
@@ -137,5 +144,5 @@ export function useMapViewport({ elements, publishedMap, scope, artifactKey, des
     return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); };
   }, [controls, details, fittedKey, fitTools, getFit, getInset, map, measure, mobileDock, mobileNav, publishedMap, request, scope, setView, tools]);
 
-  return { view, viewRef, setView, minimum, floorWidth, floorHeight, getInset, position, cancelPosition, reset };
+  return { view, viewRef, setView, minimum, floorWidth, floorHeight, getInset, position, positionPoint, cancelPosition, reset };
 }

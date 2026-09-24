@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent } from "react";
 import { createPortal } from "react-dom";
 import { useMapViewport } from "./use-map-viewport";
 import AccessibleEventMapRenderer from "./accessible-event-map-renderer";
@@ -44,6 +44,8 @@ import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEvent
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
 import ReaderHelp from "./reader-help";
+import { mapFacilityDirectory, type MapFacilityEntry } from "./map-facility-directory";
+import MapFacilityPanel from "./map-facility-panel";
 import styles from "./event-map-app.module.css";
 
 type Hall = EventAreaDefinition["id"];
@@ -66,6 +68,13 @@ function categoryDotStyle(genres: readonly string[], category: string) {
 type MapGesture =
   | { kind: "drag"; pointerId: number; x: number; y: number; ox: number; oy: number }
   | ({ kind: "pinch" } & MapPinchOrigin);
+type MapPoint = { x: number; y: number };
+
+/** A press that travels further than this is a drag, not a tap. */
+const MAP_TAP_SLOP = 3;
+/** A second tap this soon and this close to the first zooms in. */
+const MAP_DOUBLE_TAP_MS = 350;
+const MAP_DOUBLE_TAP_DISTANCE = 24;
 
 /**
  * Renders one event. The caller remounts on a different event (`key={event.id}`)
@@ -107,6 +116,10 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const [restoreVersion, setRestoreVersion] = useState(0);
   const [mapRetry, setMapRetry] = useState(0);
   const [mapGestureActive, setMapGestureActive] = useState(false);
+  const [facilityListOpen, setFacilityListOpen] = useState(false);
+  // Outlined until the next map operation. It carries the scope it was located
+  // in, so a marker id that recurs on another day's map is not outlined there.
+  const [locatedFacility, setLocatedFacility] = useState<{ scope: string; key: string } | null>(null);
   // A multi-space event serves one map per day × venue-space, so a map is only
   // the current map while its scope still matches the chosen day and hall. The
   // loaded scope travels with the map and the render reads the pair: switching
@@ -137,6 +150,10 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const mobileSheetGesture = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const mobileSheetWasDragged = useRef(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const tapStart = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const lastTap = useRef<{ x: number; y: number; time: number } | null>(null);
+  const facilityTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const facilityPanelId = useId();
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const fitToolsRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -166,9 +183,11 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     elements: { map: mapRef, floor: floorRef, tools: toolsRef, fitTools: fitToolsRef, controls: controlsRef, details: detailsRef, mobileDock: mobileDockRef, mobileNav: mobileNavRef },
     publishedMap, scope: mapScopeKey, artifactKey: publishedMap ? loadedMap!.artifactKey : null, desktop, detailsOpen: desktopDetailsOpen,
   });
-  const { view: mapView, viewRef: mapViewRef, setView: setMapView, minimum: mapMinZoom, floorHeight, floorWidth, getInset: getFloorInset, position: focusCode, cancelPosition } = viewport;
+  const { view: mapView, viewRef: mapViewRef, setView: setMapView, minimum: mapMinZoom, floorHeight, floorWidth, getInset: getFloorInset, position: focusCode, positionPoint, cancelPosition } = viewport;
   const { zoom, offset } = mapView;
-  const interruptPosition = useCallback(() => { restoreInterrupted.current = true; cancelPosition(); }, [cancelPosition]);
+  const interruptPosition = useCallback(() => { restoreInterrupted.current = true; cancelPosition(); setLocatedFacility(null); }, [cancelPosition]);
+  const facilityDirectory = useMemo(() => publishedMap ? mapFacilityDirectory(publishedMap.layout) : null, [publishedMap]);
+  const fontScale = textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1;
   const previousDesktop = useRef<boolean | null>(null);
   useEffect(() => {
     const moveHiddenFocus = () => {
@@ -350,7 +369,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     if (!map) return;
 
     const handleWheel = (event: WheelEvent) => {
-      if ((event.target as Element).closest("button, input, select, aside, [data-map-tools]")) return;
+      if ((event.target as Element).closest("button, input, select, aside, [data-map-tools], [data-map-overlay]")) return;
       event.preventDefault();
       interruptPosition();
       const rect = map.getBoundingClientRect();
@@ -433,6 +452,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
 
   const selectRecord = useCallback((record: CircleViewRecord, panel: MobilePanel = "details", addHistory = true) => {
     if (addHistory) historyIntent.current = "push";
+    setLocatedFacility(null);
     selectionSource.current = document.activeElement;
     rememberMobileResultScroll();
     setDesktopDetailsOpen(true);
@@ -512,11 +532,12 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     setMobileSheetLevel("peek");
     requestAnimationFrame(() => mobileNavRef.current?.querySelector<HTMLButtonElement>("button[aria-pressed=true]")?.focus({ preventScroll: true }));
   };
-  const stepZoom = (delta: number) => {
+  /** One button step, around the map's centre or a map-local point. */
+  const stepZoom = (delta: number, around?: MapPoint) => {
     interruptPosition();
     const viewport = mapRef.current?.getBoundingClientRect();
     if (!viewport) return;
-    const point = { x: viewport.width / 2, y: viewport.height / 2 };
+    const point = around ?? { x: viewport.width / 2, y: viewport.height / 2 };
     setMapView((current) => {
       const buttonStep = current.zoom >= 2 ? .25 : .1;
       const nextZoom = clampMapZoom(+(current.zoom + Math.sign(delta) * buttonStep).toFixed(2), mapMinZoom);
@@ -524,6 +545,22 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       return { zoom: nextZoom, offset: zoomOffsetAroundPoint(current.offset, current.zoom, nextZoom, point, getFloorInset()) };
     });
   };
+  const closeFacilityList = useCallback((returnFocus: boolean) => {
+    setFacilityListOpen(false);
+    if (returnFocus) facilityTriggerRef.current?.focus({ preventScroll: true });
+  }, [setFacilityListOpen]);
+  // Moving to a facility keeps the zoom, like moving to a booth, and leaves the
+  // booth selection and the URL alone: a facility is somewhere to look, not a
+  // circle to share.
+  const locateFacility = useCallback((entry: MapFacilityEntry) => {
+    restoreInterrupted.current = true;
+    closeFacilityList(true);
+    setLocatedFacility({ scope: mapScopeKey, key: entry.key });
+    positionPoint(entry.point);
+  }, [closeFacilityList, mapScopeKey, positionPoint]);
+  useEffect(() => {
+    if (!desktop && mobileSheetLevel === "full") queueMicrotask(() => setFacilityListOpen(false));
+  }, [desktop, mobileSheetLevel]);
   const toggleNavigationMode = () => {
     const enabled = !navigationMode;
     setNavigationMode(enabled);
@@ -594,7 +631,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     setFavoriteUndo(existing ? { favorite: existing, circleName: record.name } : null);
   };
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if ((event.target as Element).closest("button, input, select, aside, [data-map-tools]")) return;
+    if ((event.target as Element).closest("button, input, select, aside, [data-map-tools], [data-map-overlay]")) return;
     interruptPosition();
     if ((event.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"]')) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -604,6 +641,8 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     const active = [...pointers.current.values()];
     const currentView = mapViewRef.current;
     const inset = getFloorInset();
+    tapStart.current = active.length === 1 ? { pointerId: event.pointerId, ...active[0] } : null;
+    if (active.length > 1) lastTap.current = null;
     if (active.length === 1) gesture.current = { kind: "drag", pointerId: event.pointerId, x: active[0].x, y: active[0].y, ox: currentView.offset.x, oy: currentView.offset.y };
     if (active.length === 2) {
       const center = { x: (active[0].x + active[1].x) / 2, y: (active[0].y + active[1].y) / 2 };
@@ -632,7 +671,10 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(event.pointerId)) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    pointers.current.set(event.pointerId, { x: event.clientX - rect.left, y: event.clientY - rect.top });
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    pointers.current.set(event.pointerId, point);
+    const tap = tapStart.current;
+    if (tap?.pointerId === event.pointerId && Math.hypot(point.x - tap.x, point.y - tap.y) > MAP_TAP_SLOP) tapStart.current = null;
     if (mapGestureFrame.current !== null) return;
     mapGestureFrame.current = requestAnimationFrame(() => {
       mapGestureFrame.current = null;
@@ -647,6 +689,18 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       finalOffset = applyMapGesture();
     }
     pointers.current.delete(event.pointerId);
+    // Two taps on the empty map zoom in one step around the second tap. Booths,
+    // buttons and panels never reach here, so a double tap still selects a booth.
+    const tap = tapStart.current;
+    tapStart.current = null;
+    if (event.type === "pointerup" && tap?.pointerId === event.pointerId) {
+      const now = event.timeStamp;
+      const previous = lastTap.current;
+      if (previous && now - previous.time <= MAP_DOUBLE_TAP_MS && Math.hypot(tap.x - previous.x, tap.y - previous.y) <= MAP_DOUBLE_TAP_DISTANCE) {
+        lastTap.current = null;
+        stepZoom(1, tap);
+      } else lastTap.current = { x: tap.x, y: tap.y, time: now };
+    }
     const remaining = [...pointers.current.entries()][0];
     const currentView = mapViewRef.current;
     const endOffset = finalOffset ?? currentView.offset;
@@ -802,9 +856,9 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       <section className="map-region" aria-label="攤位地圖">
         <div ref={mapRef} className={`map ${styles.mapCanvas}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd} onLostPointerCapture={handlePointerEnd}>
           <div ref={toolsRef} className={styles.mapTools} data-map-tools>{renderMapTools()}</div>{desktop && <div ref={fitToolsRef} className={`${styles.mapTools} ${styles.fitTools}`} inert aria-hidden="true" data-map-tools>{renderMapTools(true)}</div>}
-          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * (textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1), paddingPx: 2 } : undefined} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
+          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
           {selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
-          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div><div className="compass"><small>N</small><UiIcon name="north" /></div>
+          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={() => setFacilityListOpen((open) => !open)}>{desktop && <UiIcon name="map-pin" />}設施</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
           {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label="已選社團詳情" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{selected.code} · {selected.name} 詳情已更新</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? "回行程" : "回搜尋"}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
         </div>
       </section>
