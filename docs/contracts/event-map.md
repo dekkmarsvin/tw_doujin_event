@@ -2,8 +2,8 @@
 
 公開閱讀端的向量地圖：資料不變量、renderer 邊界、互動與縮放規則。
 
-**實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
-**測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`
+**實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
+**測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-map-facilities.mjs`
 **活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場館空間」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 
@@ -60,6 +60,8 @@ type AccessibleEventMapRendererProps = {
   slots: Record<string, MapSlotView>;
   showMedia?: boolean;
   labelPresentation?: { screenScale: number; targetPx: number; paddingPx: number };
+  markerPresentation?: { screenScale: number; fontScale: number };
+  locatedMarker?: string | null;
   onFocusCode?: (code: string | null) => void;
   onSelect: (code: string) => void;
 };
@@ -69,7 +71,8 @@ type AccessibleEventMapRendererProps = {
 - `retired` 只在該攤位號沒有任何 `active` placement 時帶 `cancelled` 或 `moved`；renderer 以形狀區分兩者（取消是叉、移動是箭頭），文字說明由 controller 投影進 `label` 與 `ariaLabel`，**不以顏色作為唯一狀態表達**。換手的攤位不算失效，仍由新主人的 placement 呈現。placement 狀態的完整語意見 [circle catalog 契約](./circle-catalog.md)。
 - **renderer 不自行讀取社團資料、規劃 store 或 URL**，也不寫入產品狀態。
 - 頁面 controller 負責把 URL、社團資料、收藏與行程投影成 renderer props，並在 `onSelect` 後同步 URL 與詳情。
-- 桌機傳入 layout 單位到 CSS px 的實際比例與標籤策略；手機不傳 `labelPresentation`，沿用舊顯示策略。renderer 不量測 DOM，焦點通知不修改 URL 或選取。
+- 桌機傳入 layout 單位到 CSS px 的實際比例與標籤策略；手機不傳 `labelPresentation`，攤位代碼沿用舊顯示策略。`markerPresentation` 兩種斷點都傳入同一個比例與字級倍率，只管出入口、排標籤與非一般攤位區名稱（見[設施標示](#設施標示)）；沒有傳入的預覽以一個 layout 單位當一個 px。renderer 不量測 DOM，焦點通知不修改 URL 或選取。
+- `locatedMarker` 是讀者剛從設施清單定位的標示鍵（`access:<id>`、`landmark:<id>`），renderer 為它畫外框；何時清除由頁面 controller 決定。
 - 這個邊界讓地圖可獨立測試，也讓同一份 layout 未來能投影出 minimap 而不維護第二套座標。
 
 ## 互動契約
@@ -84,6 +87,19 @@ type AccessibleEventMapRendererProps = {
 - 桌機的「查看全場」收起詳情、恢復 fit，保留選取、分享 URL 與規劃資料。桌機詳情 X／Escape、手機摘要「取消選取」／Escape 則取消選取與未完成定位、移除社團及攤位 URL 參數，保留視域及其他條件；詳情與手機摘要收合列都消失。焦點回觸發來源，SVG 因圖層變更被替換時回同一攤位，來源不可見時退回作用中工作入口。手機把手收合仍保留選取、URL 與可重開的社團列；探索／行程的「收起」只收合工作面板。回結果恢復列表捲動及焦點；完整資訊 X／Escape／遮罩返回原摘要或詳情、保留選取及觸發焦點。見 [ADR-0063](../adr/0063-reader-dismissal-clears-selection.md)。
 - 手機完整資訊在同一底部面板展開；收合、摘要、完整三段均保留橫向把手，可拖曳、點按或使用上下方向鍵。完整內容獨立捲動，把手收合保留選取；取消選取仍依 ADR-0063。桌機完整資訊沿用 dialog。
 - `prefers-reduced-motion` 時停用轉場；拖曳與縮放維持直接跟手，不加入彈性或慣性動畫。
+- **點兩下放大**：在空白地圖區於 350ms 內、24px 內點兩下（滑鼠或觸控皆同），以第二下的位置為中心放大一級，級距與放大按鈕相同；已到上限時不動作。按下後移動超過 3px 算拖曳，不算點按；攤位、按鈕與浮層上的點按不計入，所以攤位點兩下仍是選取。
+- **設施清單**：地圖有具名出入口或具名非一般攤位區時，固定控制器多一個「設施」按鈕；沒有就不顯示。清單列出每個具名出入口，以及名稱只出現一次的非一般攤位區；多個區塊共用的名稱（例如一整片「企業攤」）只在圖例說明一次。圖例只列這張地圖畫出的東西（入口、出口、柱子、共用名稱）。開啟時焦點移到第一項；Escape 關閉並回焦按鈕；外部按壓關閉清單但不攔下那次地圖操作，按壓結束時焦點若沒有移到別處（攤位、欄位、按鈕）就回到按鈕。選一項後關閉清單、回焦按鈕，地圖**只移動不改倍率**把該設施移到可用矩形中央並畫外框；不改攤位選取、URL 或規劃資料。外框保留到下一次地圖操作（按下地圖、滾輪、縮放按鈕、查看全場、選取攤位）；換日、換展區或場館空間、上一頁恢復都清除外框並關閉清單。手機的按鈕在「查看全場」左側，不加高右側控制欄；開啟清單時工作面板先收合，面板展開到最高段時清單關閉。
+
+### 設施標示
+
+出入口、排標籤與非一般攤位區名稱以**螢幕 px** 繪製：renderer 在 layout 錨點放一個抵銷縮放的群組，大小不隨地圖倍率改變。尺寸與取捨在 [`layoutMapMarkerLabels()`](../../app/map-marker-presentation.ts) 一處決定，不量測 DOM。
+
+- **出入口徽章固定 22px**：入口是圓形、出口是方形，箭頭指出通行方向，**形狀本身區分入口與出口**，不只靠顏色。徽章在任何倍率都畫，不參與隱藏。
+- **名稱有螢幕字級上下限**，下限與上限都乘上讀者的字級倍率：出入口 11–14px、排標籤 12–28px、非一般攤位區 11–16px。在上下限之間沿用原本的 layout 字級（10、22、12 單位），因此一般放大下的比例不變。
+- **出入口名稱放在朝場外那一側**：入口在箭頭後方、出口在箭頭前方；排標籤從原本的間隔起算，直排往上長、橫排往下長，字變大也不壓到自己的攤位。名稱靠近圖面邊緣時沿自己那一側滑回圖面內，不往徽章方向移。
+- **非一般攤位區名稱必須放得進自己的區塊**：放不下時先縮字，縮到下限仍放不下就不畫。
+- **名稱不互相重疊**：徽章先佔位，再依「出入口、排標籤、非一般攤位區」的順序放名稱，會與已放置者重疊的就不畫。寬度以字元數保守估計，寧可少畫一個也不畫出重疊。
+- 被省略的名稱仍在可讀名稱中：出入口與具名區塊各自是 `role="img"`，名稱含類型（「一般入口，入口」）；排號已在每一格攤位的可讀名稱裡。名稱加淺色描邊，壓在攤位上仍可辨認。
 
 ### Slot 視覺狀態
 

@@ -1,9 +1,11 @@
 "use client";
 
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { mapAccessArrowTransform, rowLabelAnchor, type EventMapLayout } from "./event-map";
+import { type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
+import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
+import { MapAccessBadge } from "./map-marker-icons";
 
 export type MapSlotView = {
   tone?: "coral" | "mint" | "blue" | "amber" | "lilac";
@@ -25,16 +27,27 @@ type AccessibleEventMapRendererProps = {
   slots: Record<string, MapSlotView>;
   showMedia?: boolean;
   labelPresentation?: MapLabelPresentation;
+  /** Sizes access point badges and row, access point and area names on screen. */
+  markerPresentation?: MapMarkerPresentation;
+  /** Marker key of a facility the reader just located, outlined until cleared. */
+  locatedMarker?: string | null;
   onFocusCode?: (code: string | null) => void;
   onSelect: (code: string) => void;
 };
 
-export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, labelPresentation, onFocusCode, onSelect }: AccessibleEventMapRendererProps) {
+export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, labelPresentation, markerPresentation = DEFAULT_MAP_MARKER_PRESENTATION, locatedMarker = null, onFocusCode, onSelect }: AccessibleEventMapRendererProps) {
   const clipPrefix = useId().replaceAll(":", "");
   const interactiveSlots = useMemo(() => layout.rows.flatMap((row) => row.slots).filter((slot) => !!slots[slot.code]), [layout.rows, slots]);
   const selectedCode = interactiveSlots.find((slot) => slots[slot.code]?.selected)?.code;
   const [keyboardCode, setKeyboardCode] = useState(selectedCode ?? interactiveSlots[0]?.code ?? "");
   const [focusWithin, setFocusWithin] = useState(false);
+  const { screenScale, fontScale } = markerPresentation;
+  const markerLabels = useMemo(() => layoutMapMarkerLabels(layout, { screenScale, fontScale }), [fontScale, layout, screenScale]);
+  const toScreen = 1 / (Number.isFinite(screenScale) && screenScale > 0 ? screenScale : 1);
+  // Markers are drawn in screen pixels: a group at the layout anchor undoes the
+  // map's scale, so badges and names keep their size while the map zooms.
+  const screenGroup = (x: number, y: number) => `translate(${x} ${y}) scale(${toScreen})`;
+  const markerText = (label: MapMarkerLabel, className: string) => <text className={className} x={label.dx} y={label.dy} textAnchor={label.anchor} style={{ fontSize: label.fontPx }}>{label.text}</text>;
   const preferredKeyboardCode = focusWithin ? keyboardCode : selectedCode;
   const activeKeyboardCode = interactiveSlots.some((slot) => slot.code === preferredKeyboardCode) ? preferredKeyboardCode : interactiveSlots.some((slot) => slot.code === keyboardCode) ? keyboardCode : interactiveSlots[0]?.code ?? "";
 
@@ -118,15 +131,33 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     {(showMedia || labelPresentation) && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => labelPresentation || slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
     <rect className={styles.floor} x={layout.floor.x} y={layout.floor.y} width={layout.floor.width} height={layout.floor.height} />
-    <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id}><rect className={styles.landmark} {...landmark.rect} />{landmark.label && <text className={styles.landmarkLabel} x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label}</text>}</g>)}</g>
+    <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><rect className={styles.landmark} {...landmark.rect} /></g>)}</g>
     <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
-      {(() => {
-        const anchor = rowLabelAnchor(row);
-        return anchor && <text className={styles.rowLabel} {...anchor}>{row.label}</text>;
-      })()}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>
     <g aria-label="場內柱子">{layout.pillars.map((pillar) => <rect key={pillar.id} className={styles.pillar} x={pillar.x} y={pillar.y} width={pillar.width} height={pillar.height} rx="1" />)}</g>
-    <g aria-label="出入口">{layout.accessPoints.map((point) => <g key={point.id} className={point.kind === "entrance" ? styles.entrance : styles.exit}><g transform={mapAccessArrowTransform(point)}><line x1={point.x} y1={point.y + 24} x2={point.x} y2={point.y - 20} /><path d={`M ${point.x - 7} ${point.y - 10} L ${point.x} ${point.y - 22} L ${point.x + 7} ${point.y - 10}`} /></g><text x={point.x} y={point.kind === "exit" ? point.y - 34 : point.y + 42}>{point.label}</text></g>)}</g>
+    <g className={styles.markerLayer} aria-hidden="true">
+      {layout.landmarks.map((landmark) => {
+        const key = mapMarkerLabelKey("landmark", landmark.id);
+        const label = markerLabels.get(key);
+        return <g key={landmark.id} data-marker={key}>
+          {locatedMarker === key && <rect className={styles.locatedArea} x={landmark.rect.x} y={landmark.rect.y} width={landmark.rect.width} height={landmark.rect.height} style={{ strokeWidth: 3 * toScreen }} />}
+          {label && <g transform={screenGroup(label.x, label.y)}>{markerText(label, styles.landmarkLabel)}</g>}
+        </g>;
+      })}
+      {layout.rows.map((row) => {
+        const label = markerLabels.get(mapMarkerLabelKey("row", row.label));
+        return label && <g key={row.label} data-marker={mapMarkerLabelKey("row", row.label)} transform={screenGroup(label.x, label.y)}>{markerText(label, styles.rowLabel)}</g>;
+      })}
+    </g>
+    <g className={styles.markerLayer} aria-label="出入口">{layout.accessPoints.map((point) => {
+      const key = mapMarkerLabelKey("access", point.id);
+      const label = markerLabels.get(key);
+      return <g key={point.id} data-marker={key} className={point.kind === "entrance" ? styles.entrance : styles.exit} role="img" aria-label={`${point.label || "未命名"}，${point.kind === "entrance" ? "入口" : "出口"}`} transform={screenGroup(point.x, point.y)}>
+        {locatedMarker === key && <circle className={styles.locatedRing} r={17} />}
+        <MapAccessBadge kind={point.kind} direction={point.direction} />
+        {label && markerText(label, styles.accessLabel)}
+      </g>;
+    })}</g>
   </svg>;
 }

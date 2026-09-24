@@ -45,18 +45,26 @@ type MapLandmark = {
   label: string;
 };
 
-/** Where a row's label goes: centred across the booths it holds, above a
- * vertical row and below a horizontal one. Both public renderers and the editor
- * read the position from here, so the label a contributor lines a row up against
- * while drawing is the one readers end up seeing. A row with no booths has
- * nowhere to put it. */
-export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number } | null {
+/** Where a row's label goes: centred across the booths it holds, a fixed gap
+ * above a vertical row and below a horizontal one. `y` is the label's edge
+ * nearest the row, so a label that grows keeps clear of its own booths. A row
+ * with no booths has nowhere to put it. */
+export function rowLabelPlacement(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number; side: "above" | "below" } | null {
   if (!row.slots.length) return null;
   const minX = Math.min(...row.slots.map(({ rect }) => rect.x));
   const maxX = Math.max(...row.slots.map(({ rect }) => rect.x + rect.width));
   const minY = Math.min(...row.slots.map(({ rect }) => rect.y));
   const maxY = Math.max(...row.slots.map(({ rect }) => rect.y + rect.height));
-  return { x: (minX + maxX) / 2, y: row.orientation === "horizontal" ? maxY + 30 : minY - 13 };
+  return row.orientation === "horizontal" ? { x: (minX + maxX) / 2, y: maxY + 13, side: "below" } : { x: (minX + maxX) / 2, y: minY - 13, side: "above" };
+}
+
+/** The baseline of the editor's fixed 22-unit row label. It sits at the same
+ * place the reader's label starts from, so the label a contributor lines a row
+ * up against while drawing is the one readers end up seeing; below a row the
+ * baseline drops by the cap height so the text top stays on the gap. */
+export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number } | null {
+  const placement = rowLabelPlacement(row);
+  return placement && { x: placement.x, y: placement.side === "below" ? placement.y + 17 : placement.y };
 }
 
 export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "label">): MapLandmarkKind {

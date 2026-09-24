@@ -55,3 +55,33 @@ test("a thumbnail moves the code into the shaded band instead of dropping it", (
   assert.match(result.attr(label, "style"), /font-size:[\d.]+/);
   assert.ok(result.slot.childNodes.some((node) => node.tagName === "image"));
 });
+
+test("entrances and exits differ in shape, keep their screen size and name themselves", () => {
+  const withFacilities = {
+    ...layout,
+    accessPoints: [
+      { id: "in", kind: "entrance", direction: "north", x: 50, y: 95, label: "一般入口" },
+      { id: "out", kind: "exit", direction: "north", x: 80, y: 5, label: "活動出口" },
+    ],
+    landmarks: [{ id: "hq", kind: "other", label: "大會總部", rect: { x: 50, y: 30, width: 40, height: 30 } }],
+  };
+  for (const screenScale of [.25, 4]) {
+    const result = output({ layout: withFacilities, markerPresentation: { screenScale, fontScale: 1 }, locatedMarker: "landmark:hq" });
+    const marker = (key) => result.nodes.find((node) => result.attr(node, "data-marker") === key);
+    const entrance = marker("access:in");
+    const exit = marker("access:out");
+    assert.equal(result.attr(entrance, "role"), "img");
+    assert.equal(result.attr(entrance, "aria-label"), "一般入口，入口");
+    assert.equal(result.attr(exit, "aria-label"), "活動出口，出口");
+    assert.ok(result.attr(entrance, "transform").endsWith(`scale(${1 / screenScale})`), "the badge undoes the map's scale");
+    assert.ok(entrance.childNodes.some((node) => node.tagName === "circle"), "an entrance is round");
+    assert.ok(exit.childNodes.some((node) => node.tagName === "rect"), "an exit is square");
+    assert.equal(entrance.childNodes.some((node) => node.tagName === "rect"), false);
+    const area = result.nodes.find((node) => result.attr(node, "aria-label") === "大會總部" && result.attr(node, "role") === "img");
+    assert.ok(area, "an area names itself even when its label is hidden");
+    const located = marker("landmark:hq").childNodes.find((node) => node.tagName === "rect");
+    assert.ok(located, "the located area is outlined");
+  }
+  const plain = output({ layout: withFacilities });
+  assert.equal(plain.nodes.filter((node) => node.tagName === "rect" && /located/i.test(plain.attr(node, "class") ?? "")).length, 0, "nothing is outlined until a facility is located");
+});

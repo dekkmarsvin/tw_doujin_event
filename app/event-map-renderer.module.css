@@ -3,7 +3,6 @@
 .paper { fill:#f7f5ef; }
 .floor { fill:#fff; stroke:#8b918b; stroke-width:3; }
 .landmark { fill:#f0eee7; stroke:#89918b; stroke-width:2; }
-.landmarkLabel { fill:#58625c; font-size:12px; font-weight:750; text-anchor:middle; dominant-baseline:middle; }
 .slot { outline:none; }
 .slotSurface { vector-effect:non-scaling-stroke; stroke-width:1; }
 .slot text { pointer-events:none; fill:#48534c; font-family:var(--font-mono),monospace; font-size:7px; font-weight:700; text-anchor:middle; }
@@ -26,10 +25,14 @@
 .retiredMark { fill:none; stroke:#4d4b47; stroke-width:1.2; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
 .favoriteMark { fill:#e86f5d; stroke:#fff; stroke-width:.8; }
 .nextMark { fill:none; stroke:#202a35; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-.rowLabel { fill:#202a35; font-family:var(--font-mono),monospace; font-size:22px; font-weight:900; text-anchor:middle; }
 .pillar { fill:#151918; }
-.entrance line,.entrance path { fill:none; stroke:#267cad; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
-.exit line,.exit path { fill:none; stroke:#d25b50; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
-.entrance text,.exit text { font-size:10px; font-weight:800; text-anchor:middle; }
-.entrance text { fill:#276b92; }
-.exit text { fill:#ad453d; }
+/* Marker names are drawn in screen pixels (see map-marker-presentation.ts);
+   the font size comes inline and the halo keeps them legible over booths. */
+.markerLayer { pointer-events:none; }
+.markerLayer text { dominant-baseline:central; paint-order:stroke; stroke:#fffffff2; stroke-width:3px; stroke-linejoin:round; font-weight:800; }
+.rowLabel { fill:#202a35; font-family:var(--font-mono),monospace; font-weight:900; }
+.landmarkLabel { fill:#4d5751; }
+.entrance .accessLabel { fill:#22658c; }
+.exit .accessLabel { fill:#a53d33; }
+.locatedRing,.locatedArea { fill:none; stroke:#1d2730; }
+.locatedRing { stroke-width:3px; }

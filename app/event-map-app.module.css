@@ -126,6 +126,10 @@
   .mapCanvas :global(.controls) button,.mapCanvas :global(.controls) span { height:44px; }
   .mapCanvas :global(.controls)[data-navigation] { grid-template-columns:44px 52px 44px 44px auto; }
   .mapCanvas :global(.controls) .exitNavigation { min-width:80px; padding-inline:10px; font-size:calc(12px * var(--ui-font-scale,1)); }
+  /* Controls past the four fixed columns (設施, 退出導航模式) take their own width. */
+  .mapCanvas :global(.controls) { grid-auto-flow:column; }
+  .mapCanvas :global(.controls) .facilityTrigger { display:flex; align-items:center; gap:6px; padding-inline:12px; font-size:calc(13px * var(--ui-font-scale,1)); font-weight:700; white-space:nowrap; }
+  .facilityPanel { position:absolute; z-index:4; left:14px; bottom:66px; width:min(300px,calc(100% - 28px)); max-height:calc(100% - 132px); }
   .mapCanvas :global(.compass) { z-index:2; width:44px; height:44px; }
   .mapTools { position:absolute; z-index:2; top:16px; left:16px; width:calc(100% - 32px); max-height:30%; overflow:auto; cursor:auto; touch-action:auto; container-type:inline-size; }
   .mapCanvas[data-details-open] .mapTools:not(.fitTools) { width:max(96px,calc(100% - 378px)); }
@@ -185,6 +189,18 @@
   .mapCanvas[data-details-open] .fitTools { width:calc(100% - var(--search-column-width) - 32px); }
   .returnToSearch { display:block; flex:0 0 auto; margin:10px 15px 0; padding:6px 12px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); font-size:calc(12px * var(--ui-font-scale,1)); font-family:inherit; font-weight:700; cursor:pointer; }
 }
+
+/* The facility list: the map's entrances, exits and named areas, plus a legend. */
+.facilityPanel { display:flex; flex-direction:column; gap:10px; overflow:auto; overscroll-behavior:contain; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 8px 24px #202a3526; cursor:auto; touch-action:auto; font-size:calc(13px * var(--ui-font-scale,1)); }
+.facilityPanel h2 { margin:0; font-size:calc(14px * var(--ui-font-scale,1)); }
+.facilityPanel h3 { margin:0 0 4px; color:#5f6964; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:700; }
+.facilityPanel ul { display:grid; gap:2px; margin:0; padding:0; list-style:none; }
+.facilityPanel li button { display:flex; align-items:center; gap:8px; width:100%; min-height:40px; padding:6px 8px; border:0; border-radius:7px; background:none; color:var(--ink); font:inherit; text-align:left; cursor:pointer; }
+.facilityPanel li button:hover { background:#f0f2ef; }
+.facilityPanel li button:focus-visible { outline:3px solid #71a58f; outline-offset:-3px; }
+.facilityPanel .facilityLegend { grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); }
+.facilityLegend li { display:flex; align-items:center; gap:6px; min-height:28px; color:#4d5751; }
+.facilitySymbol { flex:none; width:20px; height:20px; }
 
 /* Mobile scheme B: the map and selection summary share the viewport. */
 .fitLabel,.mobileToolsMenu,.mobileDateLabel { display:none; }
@@ -286,7 +302,14 @@
  .shell :global(.controls) button { flex:none; width:44px; height:44px; border:1px solid var(--line); font-size:20px; }
  .shell :global(.controls) button:first-child { border-radius:12px 12px 0 0; border-bottom:0; }
  .shell :global(.controls) button:nth-of-type(2) { border-radius:0 0 12px 12px; }
- .shell :global(.controls) button:last-child { width:64px; height:64px; margin-top:8px; border-radius:12px; box-shadow:0 3px 12px #202a3517; }
+ .shell :global(.controls) .fitButton { width:64px; height:64px; margin-top:8px; border-radius:12px; box-shadow:0 3px 12px #202a3517; }
+ /* 設施 sits beside 查看全場 rather than on top of the column: a taller column
+    reaches the date and venue tools on short phones. It stays below the fitted
+    floor, whose rect already keeps clear of the collapsed sheet. */
+ .shell :global(.controls) .facilityTrigger { position:absolute; right:72px; bottom:10px; border-radius:12px; font-size:calc(13px * var(--ui-font-scale,1)); font-weight:700; box-shadow:0 3px 12px #202a3517; }
+ /* Above the date and venue tools (z-index 10) while it is open. */
+ .facilityPanel { position:fixed; z-index:11; right:84px; bottom:calc(var(--mobile-sheet-height) + 76px); width:min(260px,calc(100vw - 100px)); max-height:calc(100dvh - var(--mobile-sheet-height) - 196px); }
+ .facilityPanel li button { min-height:44px; }
  .shell :global(.controls) .fitLabel { display:block; height:auto; border:0; font-size:12px; background:none; }
  .shell[data-mobile-sheet-level] :global(.compass) { display:none; }
  .shell[data-mobile-sheet-level="full"] :global(.controls) { display:none; }
