@@ -12,7 +12,7 @@ import styles from "../circle-portal/portal.module.css";
  * which drops every draft-scoped field with the event it was typed against.
  */
 export function AdminMapReviewPanel({ event, picker }: { event: EventDefinition; picker?: ReactNode }) {
-  return <section className={`${styles.card} ${styles.editorCard} ${styles.admin}`} id="map-review" aria-labelledby="map-review-heading">
+  return <section className={`${styles.card} ${styles.admin}`} id="map-review" aria-labelledby="map-review-heading">
     <h2 id="map-review-heading">地圖草稿審閱</h2>
     <p>核准與匯出地圖都不會直接發布。</p>
     {picker}
