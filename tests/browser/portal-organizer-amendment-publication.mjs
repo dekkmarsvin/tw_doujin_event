@@ -149,7 +149,7 @@ try {
     else if (match) {
       const [, id, action] = match;
       const mapAction = action?.match(/^maps\/([^/]+)(?:\/(background))?$/);
-      if (mapAction) response = await handlers[mapAction[2] ? "getOrganizerMapBackground" : "getOrganizerMap"](request,id,mapAction[1]);
+      if (mapAction) response = await handlers[mapAction[2] ? "getOrganizerMapBackground" : req.method() === "PATCH" ? "updateOrganizerMap" : "getOrganizerMap"](request,id,mapAction[1]);
       else {
       const method = ({ maps: "listOrganizerMaps", amendments: "createOrganizerAmendment", amendment: req.method() === "GET" ? "getOrganizerAmendment" : "saveOrganizerAmendment",
         workspace: "updateOrganizerWorkspacePreference", validate: "validateOrganizerCandidate", preview: "previewOrganizerCandidate",
@@ -197,6 +197,32 @@ try {
   const [amendmentMap] = await repo.listOrganizerMapDrafts(candidate);
   assert.equal(amendmentMap.current_revision,1,"background inheritance does not save map content");
   await journey.capture(owner,"amendment-real-d1-inherited-background");
+  // #380: a service point drawn in this correction travels with it through
+  // review and publication to the reader, in the same place. The map is edited
+  // after a fresh load, the way an organizer comes back to it: the detail held
+  // back above reaches this page after its map panel has mounted.
+  await owner.reload();
+  await openSection(owner, /^地圖/);
+  await owner.getByRole("button", { name: "第一天", exact: true }).click();
+  const editor = owner.getByRole("region", { name: "活動地圖編輯器" });
+  await editor.getByRole("button", { name: "新增服務設施", exact: true }).click();
+  await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption({ label: "醫護站" });
+  const canvas = editor.locator("svg[tabindex='0']");
+  await canvas.scrollIntoViewIfNeeded();
+  const canvasBox = await canvas.boundingBox();
+  await owner.mouse.click(canvasBox.x + canvasBox.width * .5, canvasBox.y + canvasBox.height * .85);
+  await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("北側");
+  await owner.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
+  await owner.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
+  const [savedMap] = await repo.listOrganizerMapDrafts(candidate);
+  const savedRevision = await db.prepare("SELECT content_json FROM map_draft_revisions WHERE draft_id=?1 AND revision=?2").bind(savedMap.id,savedMap.current_revision).first();
+  const savedServices = JSON.parse(savedRevision.content_json).layout.servicePoints;
+  assert.deepEqual(savedServices.map(({ kind, label }) => [kind, label]), [["first-aid", "北側"]], "the saved map revision carries the service point");
+  await owner.reload();
+  await openSection(owner, /^地圖/);
+  await owner.getByRole("button", { name: "第一天", exact: true }).click();
+  await owner.getByRole("region", { name: "活動地圖編輯器" }).getByRole("combobox", { name: "選取地圖元素" }).locator("option", { hasText: "服務設施 北側" }).waitFor({ state: "attached" });
+  await journey.capture(owner,"amendment-real-d1-service-point-reopened");
   await owner.getByRole("button", { name: /檢查與預覽/ }).first().click();
   await owner.getByRole("button", { name: "執行檢查", exact: true }).click();
   await owner.getByText("0 項必須修正", { exact: true }).waitFor();
@@ -211,7 +237,9 @@ try {
   // brief success notice is not the outcome; the durable status and approved
   // snapshot below are, and both still have to arrive.
   await owner.getByText("審閱中", { exact: true }).waitFor();
-  const approvedSnapshot = await repo.getOrganizerSubmissionSnapshot(candidate,2);
+  const submittedVersion = (await db.prepare("SELECT current_version AS version FROM organizer_event_candidates WHERE id=?1").bind(candidate).first()).version;
+  const approvedSnapshot = await repo.getOrganizerSubmissionSnapshot(candidate,submittedVersion);
+  assert.deepEqual(JSON.parse(approvedSnapshot.snapshot_json).maps[0].content.layout.servicePoints, savedServices, "the submitted snapshot carries the service point");
   assert.equal(JSON.parse(approvedSnapshot.snapshot_json).operation,"AMEND");
   await journey.capture(owner,"amendment-real-d1-submitted"); await owner.close();
   const admin = await journey.page({ url: `${base}/organizer`, routes: routes("admin") });
@@ -236,7 +264,7 @@ try {
   for (const key of ["id","snapshot_id","approval_hash","data_pr_number","data_head_sha","data_merge_sha","main_pr_number","main_head_sha","main_merge_sha"]) assert.equal(completed[key],failed[key],key);
   assert.equal(calls.filter((step) => step === "preparing_data").length,1);
   assert.equal(calls.filter((step) => step === "preparing_main").length,1);
-  assert.deepEqual(await repo.getOrganizerSubmissionSnapshot(candidate,2),approvedSnapshot);
+  assert.deepEqual(await repo.getOrganizerSubmissionSnapshot(candidate,submittedVersion),approvedSnapshot);
   assert.deepEqual(await repo.getOrganizerCandidate("source"),sourceBefore);
   assert.notEqual(publishedBytes,beforeBytes); assert.match(publishedBytes,/確認接手社/);
   assert.equal(generated.event.name,"測試活動 改名");
@@ -244,8 +272,22 @@ try {
   assert.equal(generated.event.eventEndsAt,"2026-11-14T23:59:59+08:00");
   assert.equal((await db.prepare("SELECT retention_expires_at AS at FROM circle_overrides WHERE id='purge-row'").first()).at,
     circleRetentionExpiresAt("purge",Date.parse("2026-11-14T23:59:59+08:00")),"the stored deadline follows the corrected date");
-  journey.report.publication = { candidateId:candidate, version:2, jobId:completed.id, approvalHash:completed.approval_hash, failedStep:failed.step, calls };
+  journey.report.publication = { candidateId:candidate, version:submittedVersion, jobId:completed.id, approvalHash:completed.approval_hash, failedStep:failed.step, calls };
   await journey.capture(retryOwner,"amendment-real-d1-recovered"); await retryOwner.close();
+  // The map file this publication produced, opened in the reader: the service
+  // point is drawn where it was placed and names itself. This build carries the
+  // sample event rather than event-alpha, so the published layout is served as
+  // sample's map; only the file's eventId is changed to match.
+  const publishedMap = JSON.parse(generated.files.find((file) => file.path.endsWith("/map.json")).text);
+  assert.deepEqual(publishedMap.layout.servicePoints, savedServices, "publication writes the approved service point unchanged");
+  const readerPage = await journey.mapPage({ event: "sample", routes: async (page) => page.route("**/data/events/sample/map.json", (route) => route.fulfill({ json: { ...publishedMap, eventId: "sample" } })) });
+  const published = readerPage.locator('[data-marker^="service:"]');
+  await published.waitFor();
+  assert.equal(await published.getAttribute("aria-label"), "北側，醫護站");
+  assert.ok((await published.getAttribute("transform")).startsWith(`translate(${savedServices[0].x} ${savedServices[0].y})`), "the reader draws it at the saved coordinates");
+  await readerPage.getByRole("button", { name: "設施", exact: true }).click();
+  await readerPage.getByRole("group", { name: "服務設施" }).getByRole("button", { name: "北側，醫護站", exact: true }).waitFor();
+  await journey.capture(readerPage,"amendment-real-d1-reader-service-point"); await readerPage.close();
   await journey.finish();
 } catch (error) { await journey.abort(error); }
 finally { releaseDetail(); await mf.dispose(); await vite.close(); }

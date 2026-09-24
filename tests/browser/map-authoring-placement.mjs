@@ -52,6 +52,13 @@ try {
     await activate("企業攤"); await click(.65, .25);
     await activate("入口"); await click(.75, .8);
     assert.match(await picker.inputValue(), /^access:/);
+    // A service point is a click too; its type is chosen before placing and its
+    // name is optional.
+    await activate("服務設施");
+    await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption({ label: "醫護站" });
+    await click(.55, .8);
+    assert.match(await picker.inputValue(), /^service:/);
+    await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("北側");
     await journey.capture(page, `${surface}-canvas-facility-placement`);
     await page.getByRole("button", { name: surface === "organizer" ? "儲存地圖變更" : "儲存新版本", exact: true }).click();
     await page.getByText(surface === "organizer" ? "地圖已儲存，尚未公開。" : "草稿已儲存。", { exact: true }).waitFor();
@@ -62,6 +69,9 @@ try {
     near(rect.width, source.width * .05); near(rect.height, source.height * .1);
     near(region.x + region.width / 2, source.width * .65); near(region.y + region.height / 2, source.height * .25);
     near(point.x, source.width * .75); near(point.y, source.height * .8); assert.equal(point.direction, "north");
+    const service = state.layout.servicePoints.at(-1);
+    assert.equal(service.kind, "first-aid"); assert.equal(service.label, "北側");
+    near(service.x, source.width * .55); near(service.y, source.height * .8);
     assert.deepEqual(state.layout.rows, source.rows, "facility placement preserves all booths");
     // Returning from a facility tool to the existing continuous row/slot tools
     // must still place on release, preserve numbering, and cancel cleanly.
@@ -80,7 +90,7 @@ try {
     await editor.getByRole("combobox", { name: "所屬排標籤", exact: true }).fill("T");
     await drag([.05, .03], [.1, .15], true);
     assert.equal(await count(), beforeRow, "manual slot cancellation leaves no element");
-    for (const label of ["舞台", "其他區域", "出口"]) {
+    for (const label of ["舞台", "其他區域", "出口", "服務設施"]) {
       await activate(label); await click(.45, .55);
       assert.equal(await count(), beforeRow + 1);
       await editor.getByRole("button", { name: "復原上一步編輯" }).click();

@@ -99,7 +99,7 @@ function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
 }
 
 function strictLayoutShape(layout: Record<string, unknown>) {
-  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks"])) return false;
+  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints"])) return false;
   if (!record(layout.floor) || !onlyKeys(layout.floor, ["x", "y", "width", "height"])) return false;
   if (!Array.isArray(layout.rows) || !layout.rows.every((row) => record(row)
     && onlyKeys(row, ["label", "orientation", "confidence", "slots"])
@@ -109,6 +109,8 @@ function strictLayoutShape(layout: Record<string, unknown>) {
     && onlyKeys(pillar, ["id", "x", "y", "width", "height"]))) return false;
   if (!Array.isArray(layout.accessPoints) || !layout.accessPoints.every((point) => record(point)
     && onlyKeys(point, ["id", "kind", "direction", "x", "y", "label"]))) return false;
+  if (layout.servicePoints !== undefined && !(Array.isArray(layout.servicePoints) && layout.servicePoints.every((point) => record(point)
+    && onlyKeys(point, ["id", "kind", "x", "y", "label"])))) return false;
   return Array.isArray(layout.landmarks) && layout.landmarks.every((landmark) => record(landmark)
     && onlyKeys(landmark, ["id", "kind", "rect", "label"])
     && record(landmark.rect) && onlyKeys(landmark.rect, ["x", "y", "width", "height"]));
@@ -235,6 +237,8 @@ export type MapCandidateDiff = {
   changedPillarIds: string[];
   changedAccessPointIds: string[];
   changedLandmarkIds: string[];
+  /** Missing on candidates built before service points existed. */
+  changedServicePointIds?: string[];
 };
 
 function same(valueA: unknown, valueB: unknown) {
@@ -264,6 +268,7 @@ function buildMapCandidateDiff(previous: PublishedEventMap | null, candidate: Pu
     changedPillarIds: changedKeys(previous?.layout.pillars ?? [], candidate.layout.pillars, (pillar) => pillar.id),
     changedAccessPointIds: changedKeys(previous?.layout.accessPoints ?? [], candidate.layout.accessPoints, (point) => point.id),
     changedLandmarkIds: changedKeys(previous?.layout.landmarks ?? [], candidate.layout.landmarks, (landmark) => landmark.id),
+    changedServicePointIds: changedKeys(previous?.layout.servicePoints ?? [], candidate.layout.servicePoints ?? [], (point) => point.id),
   };
 }
 

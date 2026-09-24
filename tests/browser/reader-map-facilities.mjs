@@ -8,14 +8,15 @@ const journey = await start("reader-map-facilities");
 journey.report.source = "local pinned FF47, not production";
 journey.report.measurements = [];
 const settle = page => page.waitForTimeout(250);
-const MINIMUM = { access: 11, row: 12, landmark: 11 };
-const MAXIMUM = { access: 14, row: 28, landmark: 16 };
+const MINIMUM = { access: 11, service: 11, row: 12, landmark: 11 };
+const MAXIMUM = { access: 14, service: 14, row: 28, landmark: 16 };
 
 // Screen size of every drawn marker name, badge and area, in CSS px.
 const markers = page => page.evaluate(() => {
   const svg = document.querySelector("svg[role=group]");
   const box = node => node.getBoundingClientRect().toJSON();
-  const labels = [...svg.querySelectorAll("[data-marker] text")].map(text => {
+  // Names carry a class; a badge's own pictogram text (WC) does not.
+  const labels = [...svg.querySelectorAll("[data-marker] text[class]")].map(text => {
     const key = text.closest("[data-marker]").dataset.marker;
     return { key, kind: key.split(":")[0], text: text.textContent, px: parseFloat(getComputedStyle(text).fontSize) * text.getScreenCTM().a, box: box(text) };
   });
@@ -157,6 +158,41 @@ try {
     const title = page.getByRole("heading", { name: "場內設施", exact: true });
     assert.equal(await title.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + 4, box.top + box.height / 2)); }), true, `360x640 ${scale}: the list is not covered by the tools`);
     await journey.capture(page, `facilities-360-${scale}-list`);
+    await page.close();
+  }
+
+  // Service points published with the map: badges named by type, grouped in the
+  // list, and located like any other facility.
+  {
+    const services = [
+      { id: "toilet-south", kind: "toilet", x: 180, y: 1400 },
+      { id: "toilet-north", kind: "toilet", x: 2150, y: 300, label: "女廁" },
+      { id: "desk", kind: "information", x: 400, y: 500, label: "大會服務台" },
+    ];
+    const page = await journey.mapPage({ event: "ff47", viewport: { width: 1440, height: 900 }, routes: async page => {
+      await page.route("**/data/events/ff47/map.json", async route => {
+        const response = await route.fetch();
+        const map = await response.json();
+        map.layout.servicePoints = services;
+        await route.fulfill({ response, json: map });
+      });
+    } });
+    await page.getByRole("button", { name: "查看全場", exact: true }).click();
+    await settle(page);
+    const badges = await page.locator('[data-marker^="service:"]').evaluateAll(nodes => nodes.map(node => [node.getAttribute("role"), node.getAttribute("aria-label"), Math.round(node.querySelector("rect").getBoundingClientRect().width)]));
+    assert.deepEqual(badges, [["img", "廁所", 21], ["img", "女廁，廁所", 21], ["img", "大會服務台", 21]], "each service point is a badge named by its type");
+    checkBounds(await markers(page), 1, "1440x900 service points fitted");
+    await page.getByRole("button", { name: "設施", exact: true }).click();
+    const panel = page.getByRole("group", { name: "場內設施" });
+    await panel.waitFor();
+    const group = panel.getByRole("group", { name: "服務設施" });
+    assert.deepEqual(await group.getByRole("button").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))), ["廁所", "女廁，廁所", "大會服務台"], "toilets are listed together, an unnamed one by its type");
+    assert.match(await panel.getByRole("group", { name: "圖例" }).innerText(), /廁所[\s\S]*服務台/);
+    await journey.capture(page, "facilities-service-points-list");
+    await group.getByRole("button", { name: "女廁，廁所", exact: true }).click();
+    await settle(page);
+    assert.equal(await page.locator('[data-marker="service:toilet-north"] [class*="locatedRing"]').count(), 1, "the located service point is ringed");
+    await journey.capture(page, "facilities-service-points-located");
     await page.close();
   }
 

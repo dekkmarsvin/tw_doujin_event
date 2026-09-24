@@ -165,3 +165,28 @@ test("accepted HTTPS URL schemes normalize consistently without altering approve
   assert.deepEqual(approved, before);
   assert.equal(JSON.parse(approved.snapshotJson).draft.officialSource.url, "HTTPS://Organizer.Example/event");
 });
+
+test("service points in an approved map survive publication and staging into the reader's map", async () => {
+  const snapshot = await sample();
+  const servicePoints = [{ id: "toilet", kind: "toilet", x: 20, y: 20 }, { id: "desk", kind: "information", x: 60, y: 20, label: "大會服務台" }];
+  snapshot.maps[0].content.layout.servicePoints = servicePoints;
+  snapshot.maps[0].content.layout.accessPoints = [{ id: "side", kind: "both", direction: "east", x: 5, y: 50, label: "側門" }];
+  const approved = source(snapshot);
+  const data = await builder.buildPublicationDataStage(approved, base(snapshot));
+  const main = await builder.buildPublicationMainStage(approved, mainInput(data.allFiles));
+  const workspace = await mkdtemp(path.join(tmpdir(), "publication-services-"));
+  try {
+    for (const file of [...data.allFiles, ...main.files]) {
+      const relative = file.path.startsWith("events/next-event/") ? `.event-data/next-event/${file.path.slice("events/next-event/".length)}`
+        : file.path.startsWith("references/") ? `.event-data/next-event/${file.path}` : file.path;
+      const destination = path.join(workspace, relative);
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, file.text);
+    }
+    execFileSync(process.execPath, ["scripts/stage-event-data.mjs", "next-event", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
+    execFileSync(process.execPath, ["scripts/check-staged-event-data.mjs", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
+    const map = JSON.parse(await readFile(path.join(workspace, "public/data/events/next-event/map.json"), "utf8"));
+    assert.deepEqual(map.layout.servicePoints, servicePoints);
+    assert.equal(map.layout.accessPoints[0].kind, "both");
+  } finally { await rm(workspace, { recursive: true, force: true }); }
+});

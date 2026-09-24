@@ -23,4 +23,6 @@ test("access points use clicks only and a cancelled-looking drag cannot create a
   const point = { x: 120, y: 70 }, bounds = { width: 200, height: 100 };
   assert.deepEqual(place("exit", point, point, { x: 0, y: 0 }, bounds), { ...point, width: 0, height: 0 });
   assert.equal(place("entrance", point, { x: 140, y: 70 }, { x: 20, y: 0 }, bounds), null);
+  assert.deepEqual(place("service", point, point, { x: 1, y: 1 }, bounds), { ...point, width: 0, height: 0 }, "a service point is placed by a click too");
+  assert.equal(place("service", point, { x: 140, y: 70 }, { x: 20, y: 0 }, bounds), null);
 });

@@ -70,6 +70,8 @@
    and go on ignoring the pointer. */
 .canvasViewport svg.tracing :is(.slot,.landmark,.pillar) { fill:none; pointer-events:visible; }
 .canvasViewport svg.tracing .access circle { fill:none; pointer-events:visible; }
+.canvasViewport svg.tracing .service rect { fill:none; stroke:#2e6b5a; pointer-events:visible; }
+.canvasViewport svg.tracing .service :is(path,circle) { display:none; }
 .canvasViewport svg.tracing :is(.editable text,.rowLabel) { display:none; }
 .canvasViewport svg:focus-visible { outline:3px solid #9fb4aa; outline-offset:2px; }
 .paper { fill:#f8f7f2; pointer-events:none; }
@@ -92,6 +94,9 @@
 .access text { font-family:var(--font-geist),sans-serif; font-size:9px; }
 .entrance circle,.entrance path { stroke:#267cad; }.entrance text { fill:#276b92; }
 .exit circle,.exit path { stroke:#d25b50; }.exit text { fill:#ad453d; }
+.bothWays circle,.bothWays path { stroke:#5b5fa8; }.bothWays text { fill:#4a4e94; }
+.service > text { font-family:var(--font-geist),sans-serif; font-size:9px; fill:#245446; text-anchor:middle; }
+.service g text { fill:#fff; font-family:system-ui,sans-serif; font-size:9px; }
 /* Selection recolours the element and is otherwise drawn beside it. Widening
    the traced stroke to 4px and casting a shadow was how selection used to
    read, and on a booth only a few units across that covered the plan's own
@@ -187,6 +192,8 @@
 
 .placementStatus { display:flex; align-items:center; gap:8px; margin:0; padding:8px 12px; background:#eef4f0; color:#26503c; font-size:12px; }
 .placementStatus button { margin-left:auto; padding:5px 10px; border:1px solid #8fa899; border-radius:6px; background:white; color:inherit; cursor:pointer; }
+.serviceKindPicker { display:flex; align-items:center; gap:6px; }
+.serviceKindPicker select { padding:4px 6px; border:1px solid #8fa899; border-radius:6px; background:white; color:inherit; font:inherit; }
 .facilityPreview { pointer-events:none; }
 .facilityPreview rect,.facilityPreview circle,.facilityPreview path { fill:#e9f0ec55; stroke:#3f7a5e; stroke-width:1.5; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; }
 

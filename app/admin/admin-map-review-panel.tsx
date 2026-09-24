@@ -131,7 +131,7 @@ function MapReviewBody({ event }: { event: EventDefinition }) {
             ["新增攤位", candidate.diff.addedBoothCodes], ["移除攤位", candidate.diff.removedBoothCodes],
             ["移動攤位", candidate.diff.movedBoothCodes], ["變更排段", candidate.diff.changedRowLabels],
             ["變更柱位", candidate.diff.changedPillarIds], ["變更出入口", candidate.diff.changedAccessPointIds],
-            ["變更區域", candidate.diff.changedLandmarkIds],
+            ["變更區域", candidate.diff.changedLandmarkIds], ["變更服務設施", candidate.diff.changedServicePointIds ?? []],
           ] as const).map(([label, values]) => values.length ? <li key={label}>{label}：{values.join("、")}</li> : null)}
         </ul>
         <button type="button" onClick={downloadCandidate}>下載地圖檔案</button>
