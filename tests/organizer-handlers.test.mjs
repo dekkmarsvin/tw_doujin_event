@@ -1324,19 +1324,17 @@ test("an event picture stays private until approval publishes it under its own h
   const { candidateId } = await created.json();
   const ownerCookie = await signIn("owner@example.test", "organizer");
   const path = `/api/organizer/events/${candidateId}/image`;
-  const upload = (file, rights = true) => {
+  const upload = (file) => {
     const form = new FormData();
     form.append("file", file);
-    if (rights) form.append("rightsConfirmed", "true");
     return new Request(`${ORIGIN}${path}`, { method: "PUT", headers: { origin: ORIGIN, cookie: ownerCookie }, body: form });
   };
 
-  assert.equal((await handlers.putOrganizerEventImage(upload(await eventPng(1200, 630), false), candidateId)).status, 400, "rights are confirmed with the upload");
   const narrow = await handlers.putOrganizerEventImage(upload(await eventPng(800, 600)), candidateId);
   assert.equal(narrow.status, 400);
   assert.match((await narrow.json()).error, /至少要 1200 px/);
   const uploaded = await handlers.putOrganizerEventImage(upload(await eventPng(1200, 630)), candidateId);
-  assert.equal(uploaded.status, 200);
+  assert.equal(uploaded.status, 200, "uploading needs only the image file, without a rights declaration");
   const { image } = await uploaded.json();
   assert.equal(image.url, `https://thumbs.example/event-images/${image.sha256}.png`);
   assert.deepEqual([...objects.keys()], [`organizer-event-images/${candidateId}/${image.sha256}.png`]);

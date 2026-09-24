@@ -4,23 +4,7 @@
 import assert from "node:assert/strict";
 import { ADMIN, clearMail, signIn } from "./support/portal.mjs";
 import { start } from "./support/journey.mjs";
-import { crc32, deflateSync } from "node:zlib";
-
-/** A real PNG the upload accepts: the server reads its structure, not its pixels. */
-function png(width, height) {
-  const chunk = (type, data) => {
-    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
-    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
-    return Buffer.concat([length, body, crc]);
-  };
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
-  const rows = Buffer.alloc((width + 1) * height, 0x9c);
-  for (let row = 0; row < height; row += 1) rows[row * (width + 1)] = 0;
-  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header),
-    chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
-}
+import { png } from "./support/png.mjs";
 
 const journey = await start("portal-organizer-references");
 try {
@@ -47,13 +31,11 @@ try {
   // #396: the picture is optional, staged privately, and part of the draft
   // only once saved. The preview comes from the private upload.
   await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "narrow.png", mimeType: "image/png", buffer: png(800, 450) });
-  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
   await page.getByRole("button", { name: "上傳", exact: true }).click();
   await page.getByRole("alert").getByText("活動圖片寬度至少要 1200 px，這張是 800 px。", { exact: true }).waitFor();
   await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "event.png", mimeType: "image/png", buffer: png(1200, 630) });
-  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
   await page.getByRole("button", { name: "上傳", exact: true }).click();
-  await page.getByRole("status").getByText("已上傳，尚未儲存。", { exact: true }).waitFor();
+  await page.getByText("尚有未儲存變更", { exact: true }).waitFor();
   const preview = page.getByRole("img", { name: "活動圖片", exact: true });
   await preview.waitFor();
   assert.equal(await preview.evaluate((image) => image.complete && image.naturalWidth), 1200, "the private upload is what the preview shows");
@@ -237,6 +219,9 @@ try {
   assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收", "saved canonical input is adopted without remounting away the success");
   await page.getByLabel(/^活動名稱/).fill("分類目錄驗收更新");
   assert.equal(await page.getByText("已儲存。", { exact: true }).count(), 0, "editing clears the earlier save result");
+  await page.getByLabel("更換圖片", { exact: true }).setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: png(1200, 800) });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await page.getByText("1200 × 800 px", { exact: true }).waitFor();
   // A successful write followed by a failed refresh must remain retryable at
   // its new version. During that refresh the submitted fields cannot change.
   let releaseRefresh;
@@ -257,10 +242,28 @@ try {
   releaseRefresh();
   await page.getByText(/^已儲存，但後續動作未完成：/).waitFor();
   await page.unroute(detailRoute, refuseRefresh);
+  assert.equal(await page.getByText("已上傳，尚未儲存。", { exact: true }).count(), 0, "an image has no stale second save state when refresh fails");
+  assert.equal(await page.getByText("尚有未儲存變更", { exact: true }).count(), 0);
+  const savedImage = await page.evaluate(async () => {
+    const list = await (await fetch("/api/organizer/events")).json();
+    const candidate = list.events.find((event) => event.eventId?.startsWith("references-"));
+    return (await (await fetch(`/api/organizer/events/${candidate.id}`)).json()).draft.event.image;
+  });
+  assert.equal(savedImage.height, 800, "the successful write already saved the replacement, despite failed refresh");
+  await page.getByRole("img", { name: "活動圖片", exact: true }).scrollIntoViewIfNeeded();
+  await journey.capture(page, "image-save-refresh-failed");
   assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收更新", "failed refresh does not revert the saved input");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();
   await journey.capture(page, "binder-save-feedback");
+  await page.getByRole("button", { name: "移除圖片", exact: true }).click();
+  await page.getByText("尚有未儲存變更", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await page.getByText("已儲存。", { exact: true }).waitFor();
+  await page.reload();
+  await page.getByLabel("選擇圖片", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).count(), 0, "removing and saving the picture survives reload");
 
   await sections.getByRole("button", { name: /^場館與場地/ }).click();
   assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 1);

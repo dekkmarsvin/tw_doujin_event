@@ -20,7 +20,7 @@ Google Search Console 對活動介紹頁的 Event 結構化資料回報「`image
 
 ### 2. 上傳只暫存，核准才公開
 
-- 上傳存進非公開的 `MAP_CONTRIBUTIONS` bucket，位於 `organizer-event-images/<candidateId>/`，並要求上傳者確認有權公開這張圖片。
+- 上傳存進非公開的 `MAP_CONTRIBUTIONS` bucket，位於 `organizer-event-images/<candidateId>/`。依對外文案的最少必要資訊原則，不另設權利聲明勾選門檻。
 - 儲存草稿或修正宣告時，若圖片有變，伺服器重新讀取暫存位元組並重新檢查，雜湊與尺寸都要與宣告相符，才接受儲存。
 - **核准時、建立發布工作之前**，把暫存位元組複製到公開位置；只有對目前待審版本的核准會複製，過時的核准不會公開圖片。公開位置已存在就略過，所以重試核准、或保留原圖片的修正都不會重複寫入。複製失敗時核准以 503 退回，送審狀態不變，可以再次核准。
 - 發布本身不碰 bucket，不改變發布 bundle 的格式，也不讓 dispatch Worker 取得新的 binding。
