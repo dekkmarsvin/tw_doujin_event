@@ -1,5 +1,7 @@
 import type { IdentityRepository } from "../db/identity-repository";
 import { sha256Hex } from "./portal-crypto";
+import { approvedEventDraft } from "./organizer-amendment-settings";
+import { eventDateFields } from "./event-calendar";
 
 export const PUBLICATION_STEPS = [
   "preparing_data", "waiting_data_checks", "merging_data", "preparing_main",
@@ -141,9 +143,13 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
       const next = result.pending ? step : PUBLICATION_STEPS[PUBLICATION_STEPS.indexOf(step as PublicationStep) + 1];
       const pendingAttempts = result.pending ? Math.min(job.pending_attempts + 1, 32) : 0;
       const completedAt = now();
+      // Stored retention deadlines count from the event's end. Once the new
+      // event is live they follow its published end date (ADR-0068).
+      const publishedDraft = next === "completed" ? approvedEventDraft(JSON.parse(snapshot.snapshot_json) as Parameters<typeof approvedEventDraft>[0]) : null;
+      const eventEndsAt = publishedDraft ? eventDateFields(publishedDraft.event.days.map((day) => day.date).sort()).eventEndsAt : undefined;
       if (!await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
         expectedStep: job.step, nextStep: next, status: next === "completed" ? "published" : "publishing",
-        metadata, productionVerified: result.productionVerified, now: completedAt,
+        metadata, productionVerified: result.productionVerified, now: completedAt, eventEndsAt,
         ...(pendingBackoff ? { pendingAttempts, nextAttemptAt: completedAt + (result.pending ? pendingBackoff(pendingAttempts) : 0) } : {}),
       })) throw new Error("Publication checkpoint conflict.");
       return result.pending ? "pending" as const : "advanced" as const;

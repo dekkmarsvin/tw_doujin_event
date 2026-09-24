@@ -352,7 +352,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
             requestNavigation("開啟已建立的修正候選", () => setSelectedId(result.candidateId));
             setNotice(IDLE);
           }).catch((error) => setNotice({ kind: "error", message: message(error) })).finally(() => setStartingAmendment(false));
-        }}>{startingAmendment ? "核對中…" : "開始修正已發布名單"}</button>
+        }}>{startingAmendment ? "核對中…" : "開始修正已發布活動"}</button>
       </div>}
       {publicationReadError?.candidateId === selectedId && publicationReadError && <div role="alert" className={styles.error}>
         <p>{publicationReadError.needsLogin ? "登入已失效，無法更新發布進度。" : "暫時無法讀取發布進度。"}目前顯示的是上次讀取的進度。</p>

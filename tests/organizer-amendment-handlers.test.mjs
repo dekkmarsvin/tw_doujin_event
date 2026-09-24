@@ -125,6 +125,44 @@ test("invalid declarations, stale versions and ordinary import/edit paths cannot
   assert.equal(await repo.getOrganizerSubmissionSnapshot(id, 1), null);
 });
 
+test("settings declarations are whole-state, kept only when they change something, and limited to the allow-list", async () => {
+  const id = await create();
+  const put = (version, settings, changes = []) => handlers.saveOrganizerAmendment(request("PUT",
+    { expectedVersion: version, changes, ...(settings === undefined ? {} : { settings }) }, owner), id);
+  const saved = await put(1, { name: " 測試活動 改名 ", aliases: ["TA"], days: [{ id: "1", date: "2026-11-14" }] });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const body = await saved.json();
+  const declared = { name: "測試活動 改名", aliases: ["TA"], days: [{ id: "1", date: "2026-11-14" }] };
+  assert.deepEqual(body.settings, declared);
+  assert.deepEqual(body.settingsImpact.map((row) => [row.field, row.before, row.after]),
+    [["name", "測試活動", "測試活動 改名"], ["aliases", [], ["TA"]], ["day", "2026-11-07", "2026-11-14"]]);
+  assert.equal((await repo.getOrganizerAmendment(id)).settings_json, JSON.stringify(declared));
+  const loaded = await (await handlers.getOrganizerAmendment(request("GET", undefined, editor), id)).json();
+  assert.deepEqual(loaded.settings, declared);
+  assert.deepEqual(loaded.settingsImpact, body.settingsImpact);
+  assert.equal(loaded.baseline.event.name, "測試活動", "the baseline stays the published event");
+  const preview = await (await handlers.previewOrganizerCandidate(request("POST", {}, owner), id)).json();
+  assert.equal(preview.preview.event.name, "測試活動 改名");
+  assert.equal(preview.preview.event.days[0].date, "2026-11-14");
+  for (const settings of [{ mapTemplate: "OTHER" }, { days: [{ id: "2", date: "2026-11-08" }] }, { days: [{ id: "1", date: "2026/11/14" }] },
+    { aliases: ["測試活動"] }, { name: "" }, "name"]) {
+    const response = await put(2, settings);
+    assert.equal(response.status, 422, JSON.stringify(settings));
+    assert.ok((await response.json()).error);
+  }
+  const oversized = await put(2, { name: "名".repeat(400_000) });
+  assert.equal(oversized.status, 413, "the corrected draft is held to the size a draft save accepts");
+  assert.equal((await repo.getOrganizerAmendment(id)).settings_json, JSON.stringify(declared), "a rejected save keeps the last declaration");
+  assert.equal((await put(2, { name: "測試活動", days: [{ id: "1", date: "2026-11-07" }] })).status, 200);
+  assert.equal((await repo.getOrganizerAmendment(id)).settings_json, null, "restating published values declares nothing");
+  assert.equal((await put(3, { name: "再改名" })).status, 200);
+  assert.equal((await put(4, undefined)).status, 200);
+  assert.equal((await repo.getOrganizerAmendment(id)).settings_json, null, "an omitted settings key clears the declaration");
+  const draft = structuredClone(data.baseline.draft); draft.event.name = "直接改草稿";
+  assert.equal((await handlers.updateOrganizerCandidate(request("PUT", { expectedVersion: 5, draft }, owner), id)).status, 409);
+  assert.equal((await repo.getOrganizerCandidate(id)).current_draft_json, JSON.stringify(data.baseline.draft));
+});
+
 test("revocation while loading published evidence prevents candidate creation and leaves no orphan copies", async () => {
   loadHook = async () => db.prepare("UPDATE organizer_event_grants SET revoked_at = ?1 WHERE candidate_id = 'source' AND account_id = ?2").bind(data.now, ownerId).run();
   const response = await handlers.createOrganizerAmendment(request("POST", { expectedVersion: 1 }, owner), "source");
@@ -254,6 +292,28 @@ test("AMEND approval rejects a self-consistent hash for snapshot content that di
   assert.equal(response.status, 409); assert.equal((await response.json()).code, "snapshot_mismatch");
   assert.equal(await repo.getLatestOrganizerPublicationJob(id), null);
   assert.equal((await repo.getOrganizerCandidate(id)).status, "submitted");
+});
+
+test("a settings-only correction is submitted and approved, and its settings cannot be swapped after submission", async () => {
+  const id = await create();
+  const settings = { name: "測試活動 改名", days: [{ id: "1", date: "2026-11-14" }] };
+  assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1, changes: [], settings }, owner), id)).status, 200);
+  const response = await submit(id);
+  assert.equal(response.status, 200, await response.clone().text());
+  const snapshot = await repo.getOrganizerSubmissionSnapshot(id, 2);
+  const content = JSON.parse(snapshot.snapshot_json);
+  assert.deepEqual(content.amendment.settings, settings);
+  assert.deepEqual(content.draft, data.baseline.draft, "the submitted draft is still the published one");
+  content.amendment.settings.name = "未送審名稱";
+  const text = JSON.stringify(content);
+  await db.prepare("UPDATE organizer_submission_snapshots SET snapshot_json=?1,sha256=?2 WHERE id=?3").bind(text, await sha256Hex(text), snapshot.id).run();
+  const swapped = await review(id);
+  assert.equal(swapped.status, 409); assert.equal((await swapped.json()).code, "snapshot_mismatch");
+  assert.equal(await repo.getLatestOrganizerPublicationJob(id), null);
+  await db.prepare("UPDATE organizer_submission_snapshots SET snapshot_json=?1,sha256=?2 WHERE id=?3").bind(snapshot.snapshot_json, snapshot.sha256, snapshot.id).run();
+  const approval = await review(id);
+  assert.equal(approval.status, 200, await approval.clone().text());
+  assert.equal((await repo.getLatestOrganizerPublicationJob(id)).snapshot_id, snapshot.id);
 });
 
 test("Owner revocation between validation and snapshot commit prevents submission", async (t) => {

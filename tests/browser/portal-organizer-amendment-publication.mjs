@@ -15,6 +15,7 @@ const { createCirclePortalHandlers, SESSION_COOKIE } = await runner.import("/app
 const { hmacSign } = await runner.import("/app/portal-crypto.ts");
 const { createOrganizerPublicationExecutor, PublicationFailure } = await runner.import("/app/organizer-publication.ts");
 const { buildApprovedPublicationArtifacts, buildPublicationMainStage } = await runner.import("/app/publication-artifacts.ts");
+const { circleRetentionExpiresAt } = await runner.import("/app/circle-overrides.ts");
 const data = await amendmentFixture(runner);
 
 /** Every page here opens /organizer fresh, where an amendment candidate is
@@ -88,6 +89,9 @@ try {
     VALUES (?1,'event-alpha','source',?2,?3,?4,'draft',1,?5,?5,?5)`).bind(sourceMap.id,sourceMap.periodKey,sourceMap.venueSpaceId,actors.owner.id,data.now).run();
   await db.prepare("INSERT INTO map_draft_revisions (id,draft_id,revision,content_json,created_by,created_at) VALUES ('source-map-revision',?1,1,?2,?3,?4)")
     .bind(sourceMap.id,JSON.stringify(sourceMap.content),actors.owner.id,data.now).run();
+  // A circle chose deletion before the date moved; its deadline must follow the event.
+  await db.prepare(`INSERT INTO circle_overrides (id,event_id,circle_id,fields_json,updated_by,created_at,updated_at,retention_choice,retention_expires_at)
+    VALUES ('purge-row','event-alpha','c-000001','{}',?1,?2,?2,'purge',1)`).bind(actors.owner.id,data.now).run();
   const sourceBefore = await repo.getOrganizerCandidate("source");
   const execute = createOrganizerPublicationExecutor(repo, {
     eventExists: async () => { throw new Error("AMEND must not take CREATE collision path"); },
@@ -164,14 +168,21 @@ try {
   };
   const owner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
   await openSection(owner, /^送審與發布/);
-  await owner.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();
+  await owner.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();
   const form = owner.getByRole("form", { name: "修正宣告表單" }); await form.waitFor();
   await form.getByRole("combobox", { name: "變動類型", exact: true }).selectOption("released");
   await form.getByRole("checkbox", { name: /S02/ }).check();
   await form.getByRole("textbox", { name: "接手社團名稱", exact: true }).fill("確認接手社");
   await form.getByRole("button", { name: "加入修正清單", exact: true }).click();
+  // ADR-0068: the same correction renames the event and moves its day.
+  const settings = owner.getByRole("group", { name: "活動設定" });
+  await settings.getByRole("textbox", { name: "活動名稱", exact: true }).fill("測試活動 改名");
+  await settings.getByLabel("第一天日期").fill("2026-11-14");
   await owner.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
   await owner.getByRole("heading", { name: "1. 換手", exact: true }).waitFor();
+  const settingsImpact = owner.getByRole("region", { name: "已儲存的活動設定更正" });
+  assert.match(await settingsImpact.innerText(), /測試活動.*測試活動 改名/s);
+  assert.match(await settingsImpact.innerText(), /2026-11-07.*2026-11-14/s);
   await journey.capture(owner,"amendment-real-d1-impact");
   const candidate = (await db.prepare("SELECT id FROM organizer_event_candidates WHERE publication_operation='AMEND'").first()).id;
   const lateRead = owner.waitForResponse(response => new URL(response.url()).pathname === `/api/organizer/events/${candidate}` && response.request().method() === "GET");
@@ -192,6 +203,7 @@ try {
   await owner.getByRole("button", { name: "建立預覽", exact: true }).click();
   await owner.locator('[data-slot-code="S02"]').click();
   await owner.getByRole("status").filter({ hasText: "S02 · 確認接手社" }).waitFor();
+  await owner.getByRole("heading", { name: "測試活動 改名", exact: true }).waitFor();
   await journey.capture(owner,"amendment-real-d1-preview");
   await openSection(owner, /^送審與發布/);
   await owner.getByRole("button", { name: "送出審閱", exact: true }).click();
@@ -227,6 +239,11 @@ try {
   assert.deepEqual(await repo.getOrganizerSubmissionSnapshot(candidate,2),approvedSnapshot);
   assert.deepEqual(await repo.getOrganizerCandidate("source"),sourceBefore);
   assert.notEqual(publishedBytes,beforeBytes); assert.match(publishedBytes,/確認接手社/);
+  assert.equal(generated.event.name,"測試活動 改名");
+  assert.deepEqual(generated.event.days.map((day) => day.dateLabel),["2026-11-14"]);
+  assert.equal(generated.event.eventEndsAt,"2026-11-14T23:59:59+08:00");
+  assert.equal((await db.prepare("SELECT retention_expires_at AS at FROM circle_overrides WHERE id='purge-row'").first()).at,
+    circleRetentionExpiresAt("purge",Date.parse("2026-11-14T23:59:59+08:00")),"the stored deadline follows the corrected date");
   journey.report.publication = { candidateId:candidate, version:2, jobId:completed.id, approvalHash:completed.approval_hash, failedStep:failed.step, calls };
   await journey.capture(retryOwner,"amendment-real-d1-recovered"); await retryOwner.close();
   await journey.finish();

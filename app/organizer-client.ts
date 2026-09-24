@@ -9,6 +9,7 @@ import type {
   OrganizerValidationIssue,
 } from "./organizer-event";
 import type { OrganizerImportMapping, OrganizerNormalizedImportRow } from "./organizer-import";
+import type { OrganizerAmendmentSettings, OrganizerAmendmentSettingsImpact } from "./organizer-amendment-settings";
 import type { EventMapLayout } from "./event-map";
 import type {
   OrganizerGuidedTask,
@@ -118,13 +119,20 @@ export type OrganizerAmendmentChange = (
 ) & { reference?: string };
 export type OrganizerAmendmentPlacement = OrganizerAmendmentDestination & { source: string; circleId: string; name: string };
 export type OrganizerAmendmentImpact = { kind: OrganizerAmendmentChange["kind"]; before: OrganizerAmendmentPlacement[]; after: OrganizerAmendmentPlacement[] };
+export type { OrganizerAmendmentSettings, OrganizerAmendmentSettingsImpact };
 export type OrganizerAmendmentDetail = {
   version: number;
   changes: OrganizerAmendmentChange[];
   impact: OrganizerAmendmentImpact[];
+  settings: OrganizerAmendmentSettings | null;
+  settingsImpact: OrganizerAmendmentSettingsImpact[];
   baseline: {
     sourceCandidateId: string; sourceVersion: number; publishedAt: number;
-    event: { id: string; days: Array<{ id: string; label: string }>; areas: Array<{ id: string; label?: string; name?: string }> };
+    event: {
+      id: string; name: string; aliases?: string[];
+      days: Array<{ id: string; label: string; dateLabel: string }>;
+      areas: Array<{ id: string; label?: string; name?: string }>;
+    };
     official: { days: Array<{ day: string | number; booths: Array<{ codes: string[]; name: string; areaId?: string }> }> };
   };
 };
@@ -136,9 +144,13 @@ export function startOrganizerAmendment(candidateId: string, expectedVersion: nu
 export function readOrganizerAmendment(candidateId: string) {
   return organizerCall<OrganizerAmendmentDetail>(`/api/organizer/events/${encodeURIComponent(candidateId)}/amendment`);
 }
-export function saveOrganizerAmendment(candidateId: string, expectedVersion: number, changes: OrganizerAmendmentChange[]) {
-  return organizerCall<{ ok: true; version: number; impact: OrganizerAmendmentImpact[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/amendment`, {
-    method: "PUT", body: JSON.stringify({ expectedVersion, changes }),
+/** Whole-state: the settings sent replace the saved declaration, and values
+ * equal to the published event are dropped by the server. */
+export function saveOrganizerAmendment(candidateId: string, expectedVersion: number, changes: OrganizerAmendmentChange[],
+  settings?: OrganizerAmendmentSettings) {
+  return organizerCall<{ ok: true; version: number; impact: OrganizerAmendmentImpact[];
+    settings: OrganizerAmendmentSettings | null; settingsImpact: OrganizerAmendmentSettingsImpact[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/amendment`, {
+    method: "PUT", body: JSON.stringify({ expectedVersion, changes, ...(settings ? { settings } : {}) }),
   });
 }
 

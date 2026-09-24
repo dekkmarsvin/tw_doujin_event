@@ -12,6 +12,7 @@ import { base, start } from "./support/journey.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const fixture = await amendmentFixture(vite.environments.ssr.runner);
+const { amendmentSettingsImpact, normalizeAmendmentSettings } = await vite.environments.ssr.runner.import("/app/organizer-amendment-settings.ts");
 await vite.close();
 const baseline = structuredClone(fixture.baseline);
 baseline.official.days[0].booths.push({ name: "丙社", codes: ["S03"], areaId: "A" }, { name: "丁社", codes: ["S04"], areaId: "A" });
@@ -32,7 +33,7 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
   let signalStart, releaseStart;
   const startSeen = new Promise((resolve) => { signalStart = resolve; });
   const startWait = delayStart ? new Promise((resolve) => { releaseStart = resolve; }) : Promise.resolve();
-  const state = { created: existing, version: 1, changes: [], impact: [], conflict: false, starts: 0, saves: 0,
+  const state = { created: existing, version: 1, changes: [], impact: [], settings: null, conflict: false, starts: 0, saves: 0,
     otherVersion: 1, otherDraft: { ...baseline.draft, event: { ...baseline.draft.event, id: "other-event", name: "另一場待編輯活動" } },
     sections: { source: "review", amendment: "import", other: "event" } };
   const plan = () => planOrganizerAmendment({ ...baseline, changes: state.changes, today: () => "2026-09-15" });
@@ -63,14 +64,18 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
       if (path.endsWith("/workspace")) { const id = path.split("/").at(-2); state.sections[id] = req.postDataJSON().lastSection; return reply({ ok: true }); }
       if (path.endsWith("/amendment/amendment")) {
         if (method === "GET") return reply({ version: state.version, changes: state.changes, impact: state.impact,
+          settings: state.settings, settingsImpact: amendmentSettingsImpact(baseline.draft, state.settings),
           baseline: { event: baseline.event, official: baseline.official, sourceCandidateId: "source", sourceVersion: 1, publishedAt: fixture.now } });
-        const body = req.postDataJSON(); assert.deepEqual(Object.keys(body).sort(), ["changes", "expectedVersion"]);
+        const body = req.postDataJSON(); assert.deepEqual(Object.keys(body).sort(), ["changes", "expectedVersion", "settings"]);
         if (state.conflict || body.expectedVersion !== state.version) return reply({ error: "版本已變更，請重新載入。" }, 409);
-        let result;
-        try { result = planOrganizerAmendment({ ...baseline, changes: body.changes, today: () => "2026-09-15" }); }
-        catch (error) { return reply({ error: error.message }, 422); }
-        state.changes = body.changes; state.impact = result.impact; state.version++; state.saves++;
-        return reply({ ok: true, version: state.version, impact: state.impact });
+        let result, settings;
+        try {
+          result = planOrganizerAmendment({ ...baseline, changes: body.changes, today: () => "2026-09-15" });
+          settings = normalizeAmendmentSettings(baseline.draft, body.settings);
+        } catch (error) { return reply({ error: error.message }, 422); }
+        state.changes = body.changes; state.impact = result.impact; state.settings = settings; state.version++; state.saves++;
+        return reply({ ok: true, version: state.version, impact: state.impact,
+          settings, settingsImpact: amendmentSettingsImpact(baseline.draft, settings) });
       }
       if (path.endsWith("/events/other") && method === "PATCH") {
         const body = req.postDataJSON(); assert.equal(body.expectedVersion, state.otherVersion);
@@ -86,8 +91,8 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
 try {
   const ownerRoutes = fixtureRoutes("owner");
   const page = await journey.page({ url: `${base}/organizer`, routes: ownerRoutes.routes });
-  await page.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();
-  await page.getByRole("heading", { name: "已發布名單修正", exact: true }).waitFor();
+  await page.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();
+  await page.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(ownerRoutes.state.starts, 1);
   assert.equal(await page.getByRole("button", { name: /發布後修正/ }).count(), 1);
   const form = page.getByRole("form", { name: "修正宣告表單" });
@@ -122,6 +127,23 @@ try {
   assert.equal(JSON.stringify(baseline.official), publicBefore);
   await journey.capture(page, "organizer-amendment-four-declarations");
   await impact.scrollIntoViewIfNeeded(); await journey.capture(page, "organizer-amendment-saved-impact");
+  // ADR-0068: settings are declared beside the roster and saved with it.
+  const settings = page.getByRole("group", { name: "活動設定" });
+  await settings.getByRole("textbox", { name: "活動名稱", exact: true }).fill("測試活動 改名");
+  await settings.getByRole("button", { name: "新增別稱", exact: true }).click();
+  await settings.getByRole("textbox", { name: "別稱 1", exact: true }).fill("測試");
+  await settings.getByLabel("第一天日期").fill("2026-11-14");
+  await page.getByText("活動設定尚未儲存；下方顯示的影響仍是上次儲存內容。", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
+  const settingsImpact = page.getByRole("region", { name: "已儲存的活動設定更正" });
+  await settingsImpact.getByRole("heading", { name: "活動名稱", exact: true }).waitFor();
+  assert.equal(ownerRoutes.state.saves, 2);
+  assert.deepEqual(ownerRoutes.state.settings, { name: "測試活動 改名", aliases: ["測試"], days: [{ id: "1", date: "2026-11-14" }] });
+  assert.deepEqual(ownerRoutes.state.changes.map((item) => item.kind), ["withdrawn", "released", "moved", "added"], "saving settings keeps the roster");
+  assert.match(await settingsImpact.innerText(), /測試活動.*測試活動 改名/s);
+  assert.match(await settingsImpact.innerText(), /無.*測試/s);
+  assert.match(await settingsImpact.innerText(), /2026-11-07.*2026-11-14/s);
+  await settings.scrollIntoViewIfNeeded(); await journey.capture(page, "organizer-amendment-settings");
   await page.reload(); await page.getByRole("heading", { name: "4. 新增", exact: true }).waitFor();
   assert.equal(await page.locator('input[type="file"]').count(), 0, "AMEND cannot replace a workbook");
   // Edit a saved declaration without inferring disappearance as withdrawal.
@@ -146,12 +168,12 @@ try {
     const routes = fixtureRoutes(role);
     const actor = await journey.page({ url: `${base}/organizer`, routes: routes.routes, viewport: { width: 1100, height: 900 } });
     await actor.getByRole("heading", { name: "送審與發布狀態", exact: true }).waitFor();
-    assert.equal(await actor.getByRole("button", { name: "開始修正已發布名單", exact: true }).count(), role === "admin" ? 1 : 0);
+    assert.equal(await actor.getByRole("button", { name: "開始修正已發布活動", exact: true }).count(), role === "admin" ? 1 : 0);
     await journey.capture(actor, `organizer-amendment-${role}-entry`); await actor.close();
   }
   const editorRoutes = fixtureRoutes("editor", true);
   const editor = await journey.page({ url: `${base}/organizer`, routes: editorRoutes.routes, viewport: { width: 1100, height: 900 } });
-  await editor.getByRole("heading", { name: "已發布名單修正", exact: true }).waitFor();
+  await editor.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(await editor.getByRole("combobox", { name: "變動類型", exact: true }).isEnabled(), true);
   await editor.getByRole("combobox", { name: "變動類型", exact: true }).selectOption("released");
   await editor.getByRole("checkbox", { name: /S02/ }).check();
@@ -164,7 +186,7 @@ try {
   await editor.close();
   const delayed = fixtureRoutes("owner", false, true);
   const moving = await journey.page({ url: `${base}/organizer`, routes: delayed.routes });
-  await moving.getByRole("button", { name: "開始修正已發布名單", exact: true }).click();
+  await moving.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();
   await delayed.startSeen;
   await moving.getByRole("button", { name: /另一場待編輯活動/ }).click();
   // #221: the field now carries a worked example, so it is matched by prefix.
@@ -182,7 +204,7 @@ try {
   await journey.capture(moving, "organizer-amendment-late-response-preserves-other-draft");
   await moving.getByRole("button", { name: /發布後修正/ }).click();
   await lateDialog.getByRole("button", { name: "儲存並切換", exact: true }).click();
-  await moving.getByRole("heading", { name: "已發布名單修正", exact: true }).waitFor();
+  await moving.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");
   assert.equal(delayed.state.otherVersion, 2);
   await moving.close();

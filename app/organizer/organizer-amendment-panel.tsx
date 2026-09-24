@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { PortalError } from "../circle-editor-client";
+import { EVENT_ALIAS_MAX_COUNT } from "../event-aliases";
 import {
   readOrganizerAmendment, saveOrganizerAmendment,
   type OrganizerAmendmentChange, type OrganizerAmendmentDestination, type OrganizerAmendmentDetail,
-  type OrganizerAmendmentImpact, type OrganizerEventDetail,
+  type OrganizerAmendmentImpact, type OrganizerAmendmentSettingsImpact, type OrganizerEventDetail,
 } from "../organizer-client";
 import styles from "./organizer.module.css";
 
@@ -11,6 +12,20 @@ const KIND_LABEL = { withdrawn: "退出", released: "換手", moved: "移動／�
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "目前無法讀取修正內容。";
 const sourcesOf = (change: OrganizerAmendmentChange) => change.kind === "added" ? []
   : change.kind === "moved" ? change.moves.map((move) => move.source) : change.sources;
+
+/** The event as this correction would publish it: the published values with
+ * the saved declaration applied. The form edits these and the save sends them
+ * whole; the server keeps only what differs from the published event. */
+type SettingsForm = { name: string; aliases: string[]; days: Record<string, string> };
+function settingsForm(detail: OrganizerAmendmentDetail): SettingsForm {
+  const { event } = detail.baseline;
+  const dates = new Map((detail.settings?.days ?? []).map((day) => [day.id, day.date]));
+  return {
+    name: detail.settings?.name ?? event.name,
+    aliases: detail.settings?.aliases ?? event.aliases ?? [],
+    days: Object.fromEntries(event.days.map((day) => [String(day.id), dates.get(String(day.id)) ?? day.dateLabel])),
+  };
+}
 
 export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSaveReady }: {
   detail: OrganizerEventDetail;
@@ -20,6 +35,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
 }) {
   const [loaded, setLoaded] = useState<OrganizerAmendmentDetail | null>(null);
   const [changes, setChanges] = useState<OrganizerAmendmentChange[]>([]);
+  const [settings, setSettings] = useState<SettingsForm | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -28,11 +44,12 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
   const [formKey, setFormKey] = useState(0);
   const editable = ["draft", "changes_requested"].includes(detail.event.status);
   const changesDirty = loaded !== null && JSON.stringify(changes) !== JSON.stringify(loaded.changes);
-  const dirty = changesDirty || formDirty;
+  const settingsDirty = loaded !== null && settings !== null && JSON.stringify(settings) !== JSON.stringify(settingsForm(loaded));
+  const dirty = changesDirty || settingsDirty || formDirty;
   useEffect(() => {
     let active = true;
     void readOrganizerAmendment(detail.event.id).then((result) => {
-      if (active) { setLoaded(result); setChanges(result.changes); }
+      if (active) { setLoaded(result); setChanges(result.changes); setSettings(settingsForm(result)); }
     }).catch((error) => { if (active) setNotice(errorMessage(error)); });
     return () => { active = false; };
   }, [detail.event.id]);
@@ -47,8 +64,14 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
     if (formDirty) { setNotice("請先將目前表單加入修正清單，或取消這筆表單，再儲存。"); return false; }
     setBusy(true); setNotice("");
     try {
-      const result = await saveOrganizerAmendment(detail.event.id, loaded.version, changes);
-      setLoaded({ ...loaded, version: result.version, changes, impact: result.impact });
+      const result = await saveOrganizerAmendment(detail.event.id, loaded.version, changes, settings ? {
+        name: settings.name, aliases: settings.aliases,
+        days: Object.entries(settings.days).map(([id, date]) => ({ id, date })),
+      } : undefined);
+      const next = { ...loaded, version: result.version, changes, impact: result.impact,
+        settings: result.settings, settingsImpact: result.settingsImpact };
+      setLoaded(next);
+      setSettings(settingsForm(next));
       onDirtyChange(false);
       setNotice("修正已儲存，請核對下方影響；公開活動尚未改變。");
       await onChanged();
@@ -58,24 +81,25 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
       if (error instanceof PortalError && error.status === 409) setConflict(true);
       return false;
     } finally { setBusy(false); }
-  }, [loaded, busy, conflict, editable, formDirty, detail.event.id, changes, onDirtyChange, onChanged]);
+  }, [loaded, busy, conflict, editable, formDirty, detail.event.id, changes, settings, onDirtyChange, onChanged]);
   useEffect(() => { onSaveReady(save); return () => onSaveReady(null); }, [save, onSaveReady]);
   const resetForm = () => { setEditing(null); setFormDirty(false); setFormKey((key) => key + 1); };
   const reload = async () => {
     setBusy(true);
     try {
       const result = await readOrganizerAmendment(detail.event.id);
-      setLoaded(result); setChanges(result.changes); setConflict(false); setNotice(""); resetForm();
+      setLoaded(result); setChanges(result.changes); setSettings(settingsForm(result)); setConflict(false); setNotice(""); resetForm();
       await onChanged();
     } catch (error) { setNotice(errorMessage(error)); }
     finally { setBusy(false); }
   };
-  return <section className={styles.panel} aria-label="已發布名單修正">
-    <div className={styles.panelHead}><div><h3>已發布名單修正</h3><p>明確宣告每項變動，儲存後核對受影響的社團與攤位。沒有選取的名單保持原狀。</p></div></div>
+  return <section className={styles.panel} aria-label="已發布活動修正">
+    <div className={styles.panelHead}><div><h3>已發布活動修正</h3><p>明確宣告要更正的活動設定與名單變動，儲存後核對影響。沒有更正的設定與名單保持原狀。</p></div></div>
     {notice && <p role="alert" className={styles.warning}>{notice}</p>}
     {!loaded ? <><p>正在讀取已發布名單…</p>{notice && <button type="button" onClick={() => void reload()}>重新讀取修正</button>}</> : <>
       <p>來源：第 {loaded.baseline.sourceVersion} 版，{new Date(loaded.baseline.publishedAt).toLocaleString("zh-TW")} 發布。此修正尚未變更公開活動。</p>
       {conflict && <div className={styles.subpanel}><p>其他人已修改內容或權限已變更。你的輸入仍保留在此頁，請先核對；重新讀取會捨棄尚未儲存的修正。</p><button type="button" disabled={busy} onClick={() => void reload()}>捨棄未儲存修正並讀取最新版本</button></div>}
+      {settings && <SettingsFields baseline={loaded.baseline} value={settings} disabled={!editable || busy || conflict} onChange={setSettings} />}
       {editable && <AmendmentForm key={formKey} baseline={loaded.baseline} initial={editing === null ? null : changes[editing]}
         disabled={busy || conflict} onDirty={setFormDirty}
         onCancel={resetForm} onAdd={(change) => {
@@ -90,10 +114,12 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
           {editable && <div className={styles.row}><button type="button" className={styles.ghost} disabled={busy || conflict || formDirty} onClick={() => { setEditing(index); setFormKey((key) => key + 1); }}>修改此宣告</button>
             <button type="button" className={styles.dangerText} disabled={busy || conflict || formDirty} onClick={() => { setChanges((current) => current.filter((_, at) => at !== index)); resetForm(); }}>取消此修正</button></div>}
         </li>)}</ol>}
-        {editable && <button type="button" disabled={busy || conflict || !changesDirty || formDirty} onClick={() => void save()}>{busy ? "儲存中…" : "儲存修正並檢視影響"}</button>}
+        {editable && <button type="button" disabled={busy || conflict || !(changesDirty || settingsDirty) || formDirty} onClick={() => void save()}>{busy ? "儲存中…" : "儲存修正並檢視影響"}</button>}
         {changesDirty && <p className={styles.warning}>清單尚未儲存；下方顯示的影響仍是上次儲存內容。</p>}
+        {settingsDirty && <p className={styles.warning}>活動設定尚未儲存；下方顯示的影響仍是上次儲存內容。</p>}
         {formDirty && <p className={styles.warning}>表單尚未加入清單。</p>}
       </div>
+      <SettingsImpact impact={loaded.settingsImpact} />
       <AmendmentImpact impact={loaded.impact} />
     </>}
   </section>;
@@ -174,6 +200,43 @@ function Destination({ title, baseline, value, onChange }: {
     <label>展區<select required value={value.areaId} onChange={(event) => onChange({ ...value, areaId: event.target.value })}><option value="">請選擇展區</option>{baseline.event.areas.map((area) => <option key={area.id} value={area.id}>{area.label ?? area.name ?? area.id}</option>)}</select></label>
     <label>攤位代碼<input required maxLength={80} value={value.code} onChange={(event) => onChange({ ...value, code: event.target.value })} /></label>
   </fieldset>;
+}
+
+/** Only the settings ADR-0068 allows a correction to change. Days keep their
+ * number and ids; only each day's date can move. */
+function SettingsFields({ baseline, value, disabled, onChange }: {
+  baseline: OrganizerAmendmentDetail["baseline"]; value: SettingsForm; disabled: boolean; onChange: (value: SettingsForm) => void;
+}) {
+  const set = (mutate: (next: SettingsForm) => void) => { const next = structuredClone(value); mutate(next); onChange(next); };
+  return <fieldset className={`${styles.subpanel} ${styles.amendmentFields}`} disabled={disabled} aria-label="活動設定">
+    <h4>活動設定</h4>
+    <p>可更正活動名稱、活動別稱與各活動日的日期。</p>
+    <label>活動名稱<input value={value.name} onChange={(event) => set((next) => { next.name = event.target.value; })} /></label>
+    <div><div className={styles.row}><strong>活動別稱</strong>
+      <button type="button" className={styles.ghost} disabled={value.aliases.length >= EVENT_ALIAS_MAX_COUNT}
+        onClick={() => set((next) => { next.aliases.push(""); })}>新增別稱</button></div>
+      {value.aliases.length === 0 && <p>沒有別稱。</p>}
+      {value.aliases.map((alias, index) => <div className={styles.row} key={index}>
+        <label>別稱 {index + 1}<input value={alias} onChange={(event) => set((next) => { next.aliases[index] = event.target.value; })} /></label>
+        <button type="button" className={styles.dangerText} aria-label={`移除別稱 ${index + 1}`}
+          onClick={() => set((next) => { next.aliases.splice(index, 1); })}>移除</button>
+      </div>)}
+    </div>
+    {baseline.event.days.map((day) => <label key={day.id}>{day.label}日期<input type="date" value={value.days[String(day.id)] ?? ""}
+      onChange={(event) => set((next) => { next.days[String(day.id)] = event.target.value; })} /></label>)}
+  </fieldset>;
+}
+
+function SettingsImpact({ impact }: { impact: OrganizerAmendmentSettingsImpact[] }) {
+  const label = (item: OrganizerAmendmentSettingsImpact) => item.field === "name" ? "活動名稱" : item.field === "aliases" ? "活動別稱" : `${item.label}日期`;
+  const text = (value: string | string[]) => Array.isArray(value) ? value.join("、") || "無" : value;
+  return <section className={styles.subpanel} aria-label="已儲存的活動設定更正"><h4>已儲存的活動設定更正</h4>
+    {impact.length === 0 ? <p>目前已儲存的內容沒有活動設定變動。</p> : impact.map((item, index) => <div key={index} className={styles.amendmentImpact}>
+      <h5>{label(item)}</h5>
+      <div><strong>原本</strong><p>{text(item.before)}</p></div>
+      <div><strong>修正後</strong><p>{text(item.after)}</p></div>
+    </div>)}
+  </section>;
 }
 
 function AmendmentImpact({ impact }: { impact: OrganizerAmendmentImpact[] }) {

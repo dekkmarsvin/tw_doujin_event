@@ -1,4 +1,6 @@
-import { parseOrganizerEventDraft, validateOrganizerEventDraft } from "./organizer-event";
+import { parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
+import { AmendmentSettingsError, applyAmendmentSettings, normalizeAmendmentSettings, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
+import { eventDateFields } from "./event-calendar";
 import type { OrganizerNormalizedImportRow } from "./organizer-import";
 import type { OrganizerReferenceSnapshot } from "./organizer-reference-catalog";
 import { parseEventDefinition } from "./event-catalog";
@@ -20,7 +22,7 @@ export type ApprovedArtifactSource = { snapshotJson: string; approvalHash: strin
 type Snapshot = {
   schema: string; candidateId: string; candidateVersion: number; eventId: string; draft: unknown; contentUpdatedAt: string;
   operation?: "CREATE" | "AMEND";
-  amendment?: { baselineJson: string; baselineSha256: string; changes: unknown[] };
+  amendment?: { baselineJson: string; baselineSha256: string; changes: unknown[]; settings?: OrganizerAmendmentSettings | null };
   references: OrganizerReferenceSnapshot;
   import: { source: { sourceDescription: string }; rows: OrganizerNormalizedImportRow[] };
   maps: Array<{ id: string; periodKey: string; venueSpaceId: string; mapRevision: number; content: unknown }>;
@@ -45,15 +47,6 @@ export function assertAmendmentPublishedBaseline(baseline: OrganizerAmendmentBas
   } catch { fail("已發布活動已變更或原 pin 不符，請從最新公開版本重新開始修正。", "amendment_baseline_changed"); }
 }
 
-/** The event's date fields, all derived from its sorted day dates. Shared so a
- * corrected date recomputes them exactly the way a first publication does. */
-export function eventDateFields(dates: readonly string[]) {
-  return {
-    dateRangeLabel: dates[0] === dates.at(-1) ? dates[0] : `${dates[0]}–${dates.at(-1)}`,
-    eventEndsAt: `${dates.at(-1)}T23:59:59+08:00`,
-  };
-}
-
 /** Key order is part of the approved bytes: an older snapshot must rebuild the
  * exact event.json it was approved with, so optional fields appear only when set. */
 function snapshotEvent(snapshot: Snapshot, draft: NonNullable<ReturnType<typeof parseOrganizerEventDraft>>, templates: string[], areaIds: string[], dates: string[], officialUrl: string) {
@@ -72,9 +65,25 @@ function snapshotEvent(snapshot: Snapshot, draft: NonNullable<ReturnType<typeof 
       boothListUrls: Object.fromEntries(draft.event.days.map((day) => [day.id, officialUrl])) },
   };
 }
+/** The published baseline event with a correction's declared settings applied:
+ * what the rebuilt event.json must equal, apart from dataUpdatedAt. Every field
+ * outside the allow-list therefore still has to match the baseline exactly. */
+function amendedBaselineEvent(event: OrganizerAmendmentBaseline["event"], settings: OrganizerAmendmentSettings | null) {
+  if (!settings) return event;
+  const dates = new Map((settings.days ?? []).map((day) => [day.id, day.date]));
+  const days = event.days.map((day) => dates.has(String(day.id)) ? { ...day, dateLabel: dates.get(String(day.id))! } : day);
+  const aliases = settings.aliases ?? event.aliases ?? [];
+  const next: Record<string, unknown> = { ...event, name: settings.name ?? event.name, days,
+    ...(settings.days ? eventDateFields(days.map((day) => day.dateLabel).sort()) : {}) };
+  delete next.aliases;
+  return aliases.length > 0 ? { ...next, aliases } : next;
+}
+
 type PublicationArtifacts = {
   snapshot: Snapshot; operation: "CREATE" | "AMEND";
-  amendment: { baseline: OrganizerAmendmentBaseline; changes: unknown[] } | null;
+  amendment: { baseline: OrganizerAmendmentBaseline; changes: unknown[]; settings: OrganizerAmendmentSettings | null } | null;
+  /** The draft this publication publishes: the approved one, or a correction's baseline with its settings applied. */
+  draft: OrganizerEventDraft;
   event: ReturnType<typeof snapshotEvent>;
   official: { schemaVersion: number; days: Array<{ day: string; url: string; booths: Array<{ codes: string[]; name: string; areaId: string }> }> };
   grouping: { schema: string; eventId: string; groups: Array<{ sources: string[]; linkage?: { kind: string; value: string; reference: string } }>; transitions?: never[] };
@@ -90,14 +99,14 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     const operation = snapshot.schema === "organizer-submission-snapshot/4" ? "AMEND" as const : "CREATE" as const;
     if (operation === "AMEND" ? snapshot.operation !== "AMEND" || !snapshot.amendment
       : (snapshot.operation !== undefined && snapshot.operation !== "CREATE") || snapshot.amendment !== undefined) fail("snapshot 的發布操作不符。", "snapshot_mismatch");
-    const draft = parseOrganizerEventDraft(snapshot.draft);
-    if (!draft || !snapshot.candidateId || !Number.isSafeInteger(snapshot.candidateVersion) || snapshot.candidateVersion < 1
-      || snapshot.eventId !== draft.event.id || !draft.references?.categoryCatalog
-      || validateOrganizerEventDraft(draft).some((issue) => issue.severity === "error")
+    const snapshotDraft = parseOrganizerEventDraft(snapshot.draft);
+    if (!snapshotDraft || !snapshot.candidateId || !Number.isSafeInteger(snapshot.candidateVersion) || snapshot.candidateVersion < 1
+      || snapshot.eventId !== snapshotDraft.event.id || !snapshotDraft.references?.categoryCatalog
+      || validateOrganizerEventDraft(snapshotDraft).some((issue) => issue.severity === "error")
       || !Array.isArray(snapshot.import?.rows) || !snapshot.import.rows.length || !Array.isArray(snapshot.maps)) fail("核准 snapshot 的活動資料不完整。");
     const timestamp = Date.parse(snapshot.contentUpdatedAt);
     if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== snapshot.contentUpdatedAt) fail("核准內容時間無效。");
-    let amendment: { baseline: OrganizerAmendmentBaseline; changes: unknown[] } | null = null;
+    let amendment: PublicationArtifacts["amendment"] = null;
     if (operation === "AMEND") {
       const approved = snapshot.amendment!;
       if (typeof approved.baselineJson !== "string" || await sha256Hex(approved.baselineJson) !== approved.baselineSha256) fail("修正基準的核准 hash 不符。", "snapshot_mismatch");
@@ -107,9 +116,18 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
         || !COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit)
         || baseline.event.id !== snapshot.eventId || baseline.pin.eventId !== snapshot.eventId || baseline.pin.commit !== baseline.source.dataCommit
         || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)
-        || !sameJson(draft, baseline.draft) || !sameJson(snapshot.references, baseline.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
-      amendment = { baseline, changes: approved.changes };
+        || !sameJson(snapshotDraft, baseline.draft) || !sameJson(snapshot.references, baseline.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
+      // The declaration must already be in its one stored form; an approval
+      // cannot carry values the save path would have rejected or dropped.
+      let settings: OrganizerAmendmentSettings | null;
+      try { settings = normalizeAmendmentSettings(baseline.draft, approved.settings ?? null); }
+      catch (error) { return fail(error instanceof AmendmentSettingsError ? error.message : "活動設定宣告無效。"); }
+      if (!sameJson(settings, approved.settings ?? null)) fail("修正的活動設定宣告與保存格式不符。", "snapshot_mismatch");
+      amendment = { baseline, changes: approved.changes, settings };
     }
+    // What gets published: the approved draft, or for a correction the fixed
+    // baseline with its declared settings applied. The draft itself never moves.
+    const draft = amendment ? applyAmendmentSettings(snapshotDraft, amendment.settings) : snapshotDraft;
     const templates = [...new Set(draft.venue.assignments.map((assignment) => assignment.mapTemplate))];
     if (templates.length !== 1) fail("目前公開活動格式要求所有使用空間採同一地圖模板。");
     const areaIds = draft.venue.assignments.flatMap((assignment) => assignment.areaIds);
@@ -117,7 +135,8 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     const dates = draft.event.days.map((day) => day.date).sort();
     const officialUrl = new URL(draft.officialSource.url!).href;
     const event = snapshotEvent(snapshot, draft, templates, areaIds, dates, officialUrl);
-    if (amendment && !sameJson({ ...event, dataUpdatedAt: amendment.baseline.event.dataUpdatedAt }, amendment.baseline.event)) fail("修正活動定義與已發布基準不符。", "snapshot_mismatch");
+    if (amendment && !sameJson({ ...event, dataUpdatedAt: amendment.baseline.event.dataUpdatedAt },
+      amendedBaselineEvent(amendment.baseline.event, amendment.settings))) fail("修正活動定義與已發布基準不符。", "snapshot_mismatch");
     const prefix = `events/${snapshot.eventId}/`;
     const inputs: Array<{ path: string; content: unknown }> = [];
     const refs = new Map<string, Uint8Array>();
@@ -179,7 +198,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     inputs.push({ path: prefix + "event.json", content: event }, { path: prefix + "official-booths.json", content: official },
       { path: prefix + "circle-identity-groups.json", content: grouping }, { path: prefix + "reference-selection.json", content: snapshot.references.selection },
       { path: prefix + "NOTICE", content: `${draft.officialSource.label}\n${officialUrl}\n` });
-    return { snapshot, operation, amendment, event, official, grouping, files: await assemblePublicationStage("data", snapshot.eventId, inputs) };
+    return { snapshot, operation, amendment, draft, event, official, grouping, files: await assemblePublicationStage("data", snapshot.eventId, inputs) };
   } catch (error) {
     if (error instanceof PublicationFailure) throw error;
     return fail(`核准資料無法產檔：${error instanceof Error ? error.message : "資料格式無效"}`);

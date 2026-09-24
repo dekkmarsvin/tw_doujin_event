@@ -19,6 +19,7 @@ const { createOrganizerPublicationExecutor, PublicationFailure, publicationHasSt
 const { createGitHubPublicationAdapter } = await environment.runner.import("/app/github-publication.ts");
 const { publicationFailureMessage } = await environment.runner.import("/app/organizer-publication-presentation.ts");
 const { sha256Hex } = await environment.runner.import("/app/portal-crypto.ts");
+const { circleRetentionExpiresAt } = await environment.runner.import("/app/circle-overrides.ts");
 const { createPublicationDispatcher } = await environment.runner.import("/app/publication-dispatch.ts");
 const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
@@ -109,6 +110,72 @@ for (const [name, operation, snapshotOperation, schema, eventId, valid] of [
   assert.equal(job.status, valid ? "publishing" : "failed");
   assert.equal(job.failure_code, valid ? null : "snapshot_mismatch");
   assert.equal(job.remote_write_intent_at !== null, valid);
+});
+
+// ADR-0068: deadlines count from the event's end, so a corrected date moves
+// every purge deadline of that event once the correction is live, and nothing else.
+async function correctedDateFixture() {
+  const { id, jobId } = await publicationFixture();
+  const draft = { schema: "organizer-event-draft/1", event: { id: "second-event", name: "第二場", days: [{ id: "1", label: "第一天", date: "2026-11-07" }] },
+    venue: { assignments: [] }, officialSource: { label: "", url: null } };
+  const snapshotJson = JSON.stringify({ schema: "organizer-submission-snapshot/4", operation: "AMEND", candidateId: id, candidateVersion: 1,
+    eventId: "second-event", draft, amendment: { changes: [], settings: { days: [{ id: "1", date: "2026-11-21" }] } } });
+  const hash = await sha256Hex(snapshotJson);
+  const rows = [["early", "second-event", "purge", 1], ["late", "second-event", "purge", 9_999_999_999_999],
+    ["kept", "second-event", "keep", null], ["unanswered", "second-event", null, null], ["other", "other-event", "purge", 1]];
+  await database.batch([
+    database.prepare("UPDATE organizer_event_candidates SET publication_operation = 'AMEND' WHERE id = ?1").bind(id),
+    database.prepare("UPDATE organizer_submission_snapshots SET snapshot_json = ?1, sha256 = ?2 WHERE candidate_id = ?3").bind(snapshotJson, hash, id),
+    database.prepare("UPDATE organizer_publication_jobs SET approval_hash = ?1 WHERE id = ?2").bind(hash, jobId),
+    ...rows.map(([circle, event, choice, expires]) => database.prepare(`INSERT INTO circle_overrides
+      (id,event_id,circle_id,fields_json,updated_by,created_at,updated_at,retention_choice,retention_expires_at)
+      VALUES (?1,?2,?3,'{}',?4,?5,?5,?6,?7)`).bind(`override-${circle}`, event, circle, ownerId, NOW, choice, expires)),
+  ]);
+  const driver = { eventExists: async () => false, run: async ({ step }) => ({ metadata: checkpoint(step), productionVerified: step === "verifying_production" }) };
+  let clock = NOW + 10;
+  /** Ticks until the job settles, as the scheduled Worker would. */
+  const settle = async () => {
+    for (let i = 0; i < 20; i += 1) {
+      const job = await repository.getOrganizerPublicationJob(jobId);
+      if (job.status === "published" || job.status === "failed") return job;
+      await runPublicationTick({ repository, driver, now: () => clock });
+      clock = Math.max(clock + 1_000, job.next_attempt_at ?? 0);
+    }
+    assert.fail("publication did not settle");
+  };
+  const deadlines = async () => Object.fromEntries((await database.prepare("SELECT circle_id, retention_expires_at FROM circle_overrides").all()).results
+    .map((row) => [row.circle_id, row.retention_expires_at]));
+  const recounted = circleRetentionExpiresAt("purge", Date.parse("2026-11-21T23:59:59+08:00"));
+  return { id, jobId, settle, deadlines, now: () => clock, recounted };
+}
+
+test("publishing a corrected event date recounts that event's purge deadlines and nothing else", async () => {
+  const { settle, deadlines, recounted } = await correctedDateFixture();
+  assert.equal((await settle()).status, "published");
+  assert.deepEqual(await deadlines(), { early: recounted, late: recounted, kept: null, unanswered: null, other: 1 });
+});
+
+// Completion and the recount commit together: a job marked published on its
+// own is skipped from then on, and the old deadlines would stand for good.
+test("a completion that fails to commit leaves nothing published, and its retry recounts the deadlines", async () => {
+  const { id, jobId, settle, deadlines, now, recounted } = await correctedDateFixture();
+  const before = await deadlines();
+  await database.prepare(`CREATE TRIGGER fail_retention_recount BEFORE UPDATE OF retention_expires_at ON circle_overrides
+    BEGIN SELECT RAISE(ABORT, 'injected retention failure'); END`).run();
+  let failed;
+  try { failed = await settle(); }
+  finally { await database.prepare("DROP TRIGGER IF EXISTS fail_retention_recount").run(); }
+  assert.deepEqual([failed.status, failed.step, failed.failure_code, failed.retryable], ["failed", "verifying_production", "infrastructure_error", 1]);
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "failed");
+  assert.equal((await repository.getOrganizerCandidate(id)).published_version, null);
+  assert.deepEqual(await deadlines(), before, "no part of the completion landed");
+  assert.equal((await database.prepare("SELECT count(*) AS count FROM organizer_publication_lease").first()).count, 0);
+  assert.equal((await repository.retryOrganizerPublicationJob({ jobId, now: now() })).ok, true);
+  const published = await settle();
+  assert.deepEqual([published.status, published.step], ["published", "completed"]);
+  assert.equal((await repository.getOrganizerCandidate(id)).status, "published");
+  assert.deepEqual(await deadlines(), { early: recounted, late: recounted, kept: null, unanswered: null, other: 1 });
+  assert.equal((await database.prepare("SELECT count(*) AS count FROM organizer_publication_lease").first()).count, 0);
 });
 
 test("durable ticks resume all waiting stages after runtime recreation without workspace requests", async () => {

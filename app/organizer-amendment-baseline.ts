@@ -82,7 +82,10 @@ export function createPublishedAmendmentBaselineLoader(options: Pick<GitHubAdapt
     void _snapshotJson;
     return { schema: "organizer-amendment-baseline/1", source: identity, mainCommit, pin,
       event: artifacts.event, official: artifacts.official, grouping: artifacts.grouping, allocations, evidence,
-      draft: parseOrganizerEventDraft(artifacts.snapshot.draft)!, references: artifacts.snapshot.references,
+      // The draft as published: after an earlier correction with settings this
+      // is its baseline with those settings applied, so the next correction
+      // starts from the event readers actually see (ADR-0068).
+      draft: artifacts.draft, references: artifacts.snapshot.references,
       // Do not embed the previous amendment's baseline recursively.
       maps: artifacts.snapshot.maps };
   };

@@ -102,4 +102,4 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0065](./0065-cost-reasoning-uses-the-workers-paid-basis.md) | 成本推算以 Workers Paid 的月度計費量為準 | 生效；部分取代 0017、0022、0031 |
 | [0066](./0066-the-ruleset-cannot-bound-an-app-that-writes-checks.md) | required check 不綁定產生者時，ruleset 擋不住持有 checks 寫入權的 App | 生效；延續 0058 |
 | [0067](./0067-audit-retention-follows-purpose.md) | 稽核依用途保存，先移除兩項重複寫入 | **草案，未生效**；#189 方案，期限與實作範圍待決策 |
-| [0068](./0068-published-event-settings-are-declared-amendments.md) | 活動別稱是活動資料，已發布活動的設定以宣告更正 | 生效；延續 0045、0028。決策 2、3 由 #366 後續 PR 實作 |
+| [0068](./0068-published-event-settings-are-declared-amendments.md) | 活動別稱是活動資料，已發布活動的設定以宣告更正 | 生效；延續 0045、0028 |

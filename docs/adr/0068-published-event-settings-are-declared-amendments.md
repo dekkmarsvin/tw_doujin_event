@@ -1,6 +1,6 @@
 # ADR-0068：活動別稱是活動資料，已發布活動的設定以宣告更正
 
-- 狀態：已定案（2026-09-23）。決策 1 由 [#366](https://github.com/dekkmarsvin/tw_doujin_event/issues/366) 第一個 PR 實作；決策 2、3 由同票後續 PR 實作，實作前仍以現行契約為準。
+- 狀態：已定案（2026-09-23）。由 [#366](https://github.com/dekkmarsvin/tw_doujin_event/issues/366) 實作：決策 1 在第一個 PR，決策 2、3 在第二個 PR。
 - 相關 issue：[#366](https://github.com/dekkmarsvin/tw_doujin_event/issues/366)、[#362](https://github.com/dekkmarsvin/tw_doujin_event/issues/362)、[#338](https://github.com/dekkmarsvin/tw_doujin_event/issues/338)
 - 延續：[ADR-0045](./0045-list-changes-are-declared-not-inferred.md)（名單變動要宣告）、[ADR-0028](./0028-versioned-json-event-definitions.md)（活動定義版本化）、[ADR-0039](./0039-one-data-repo-for-events-and-references.md)（活動與 reference 同一個 data repo）、[ADR-0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md)（保存期限選項撤回）
 

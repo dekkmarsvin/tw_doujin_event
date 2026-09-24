@@ -373,6 +373,8 @@ export const IDENTITY_TABLES = [
     "candidate_id TEXT NOT NULL",
     "version INTEGER NOT NULL",
     "changes_json TEXT NOT NULL",
+    // Declared event settings (ADR-0068). NULL when this version declares none.
+    "settings_json TEXT",
     "revision_id TEXT NOT NULL",
     "created_at INTEGER NOT NULL",
   ]),
@@ -598,6 +600,7 @@ export const IDENTITY_COLUMN_MIGRATIONS = [
   { table: "organizer_event_candidates", column: "notification_submission_id", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN notification_submission_id TEXT" },
   { table: "organizer_event_candidates", column: "publication_operation", sql: "ALTER TABLE organizer_event_candidates ADD COLUMN publication_operation TEXT NOT NULL DEFAULT 'CREATE' CHECK (publication_operation IN ('CREATE', 'AMEND'))" },
   { table: "organizer_import_rows", column: "codes_json", sql: "ALTER TABLE organizer_import_rows ADD COLUMN codes_json TEXT" },
+  { table: "organizer_amendment_changes", column: "settings_json", sql: "ALTER TABLE organizer_amendment_changes ADD COLUMN settings_json TEXT" },
   { table: "organizer_publication_jobs", column: "failure_code", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN failure_code TEXT" },
   { table: "organizer_publication_jobs", column: "retryable", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN retryable INTEGER NOT NULL DEFAULT 1" },
   { table: "organizer_publication_jobs", column: "remote_write_intent_at", sql: "ALTER TABLE organizer_publication_jobs ADD COLUMN remote_write_intent_at INTEGER" },
