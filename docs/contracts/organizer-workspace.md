@@ -82,7 +82,7 @@ draft → submitted → approved → publishing → published
 |---|---|---|
 | `event` | `id`、`name`、選填 `aliases[]`、選填 `image`、`days[]` | `id` 只允許小寫英數與連字號；每個活動日需要 id、名稱與 `YYYY-MM-DD` 日期，id 不得重複。活動別稱最多 5 個、每個不超過 40 字，不得與活動名稱或彼此重複（NFKC 後不分大小寫）；空白列在儲存時略去，沒有別稱時不保存這個欄位（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)）。`image` 見下方「活動圖片」，沒有時不保存這個欄位 |
 | `venue.assignments` | `venueId`、`venueSpaceId`、`areaMode`、`areaIds[]`、`mapTemplate` | 至少一個場地；`venueSpaceId` 不得重複且必須屬於所選場館；`areaMode` 為 `imported` 或 `none`；`none` 必須且只能保存 `areaIds: ["ALL"]` |
-| `officialSource` | `label`、`url` | 來源說明與 HTTPS 網址均必填 |
+| `officialSource` | `label`、`url` | HTTPS 網址必填；`label` 選填，留空時以「活動官方來源」發布（`NOTICE` 與匯入的來源說明），與核准申請時預填的名稱相同 |
 
 ### 活動圖片
 
@@ -155,6 +155,8 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。建立及選取共用 Reader 分類驗證，分類名稱不可使用其保留名稱「全部類別」。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。
 
 `POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。Owner／Editor／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
+
+建立分類目錄時，「分類官方來源網址」預填活動設定的官方公告網址（分類通常公布在活動公告裡），可以修改；活動尚未填網址時留空。
 
 `organizer_reference_records` 保存 canonical public_reference_json 與 source_captured_at。場館／場地正常建立在同交易固定 canonical 記錄；seed adoption 依 [ADR-0061](../adr/0061-organizer-snapshot-pins-complete-reference-records.md) 的已核對來源與時間，只補缺少記錄，既有 metadata 不一致時不強行採用。控制面名稱「全館」與公開名稱「爭艷館展區」分開保存。
 

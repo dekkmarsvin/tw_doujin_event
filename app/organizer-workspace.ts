@@ -29,7 +29,6 @@ const IDENTITY_SOURCE_CODES = new Set([
   "duplicate_alias",
   "missing_event_id",
   "invalid_event_id",
-  "missing_source",
   "invalid_source_url",
 ]);
 const DAY_CODES = new Set(["missing_days", "invalid_day", "duplicate_day"]);

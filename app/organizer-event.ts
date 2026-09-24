@@ -79,6 +79,14 @@ function httpsUrl(value: string | null) {
   }
 }
 
+/** What a source is called when the organizer names it nothing (#397). The
+ * address is what identifies it; a name is only a courtesy. */
+export const ORGANIZER_DEFAULT_SOURCE_LABEL = "活動官方來源";
+
+export function organizerSourceLabel(source: OrganizerEventDraft["officialSource"]) {
+  return source.label || ORGANIZER_DEFAULT_SOURCE_LABEL;
+}
+
 export function createEmptyOrganizerEventDraft(tentativeName: string): OrganizerEventDraft {
   return {
     schema: "organizer-event-draft/1",
@@ -283,7 +291,6 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
     if (assignment.venueSpaceId && spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "同一個場地重複選取。" });
     if (assignment.venueSpaceId) spaces.add(assignment.venueSpaceId);
   });
-  if (!draft.officialSource.label) add({ severity: "error", step: "event", code: "missing_source", target: "officialSource.label", message: "請說明主辦資料來源。" });
   if (!httpsUrl(draft.officialSource.url)) add({ severity: "error", step: "event", code: "invalid_source_url", target: "officialSource.url", message: "來源網址必須使用 HTTPS。" });
   return issues;
 }

@@ -69,6 +69,8 @@ try {
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
   await page.getByRole("button", { name: "建立分類目錄", exact: true }).click();
+  // #397: categories are usually published in the event's own announcement.
+  assert.equal(await page.getByLabel("分類官方來源網址", { exact: true }).inputValue(), "https://organizer.example/event");
   await page.getByLabel("分類目錄名稱", { exact: true }).fill("作品分類");
   await page.getByLabel("分類官方來源網址", { exact: true }).fill("https://organizer.example/categories");
   await page.getByLabel("分類名稱 1", { exact: true }).fill("原創作品");

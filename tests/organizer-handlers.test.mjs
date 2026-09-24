@@ -461,7 +461,7 @@ test("organizer onboarding persists real progress and completes without a candid
   ), candidateId);
   assert.equal(invalid.status, 422);
   assert.deepEqual((await invalid.json()).issues.map((issue) => issue.code), [
-    "missing_event_id", "missing_source", "invalid_source_url", "missing_days", "missing_venue",
+    "missing_event_id", "invalid_source_url", "missing_days", "missing_venue",
   ]);
 
   const preference = await handlers.updateOrganizerWorkspacePreference(request(

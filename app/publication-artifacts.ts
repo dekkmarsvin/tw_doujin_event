@@ -1,4 +1,4 @@
-import { parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
+import { organizerSourceLabel, parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
 import { AmendmentSettingsError, applyAmendmentSettings, normalizeAmendmentSettings, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
 import { eventDateFields } from "./event-calendar";
 import { publishedEventImage } from "./event-image";
@@ -201,7 +201,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     if (scoped) inputs.push({ path: prefix + "map-manifest.json", content: { schema: "event-map-manifest/1", eventId: snapshot.eventId, maps: manifest } });
     inputs.push({ path: prefix + "event.json", content: event }, { path: prefix + "official-booths.json", content: official },
       { path: prefix + "circle-identity-groups.json", content: grouping }, { path: prefix + "reference-selection.json", content: snapshot.references.selection },
-      { path: prefix + "NOTICE", content: `${draft.officialSource.label}\n${officialUrl}\n` });
+      { path: prefix + "NOTICE", content: `${organizerSourceLabel(draft.officialSource)}\n${officialUrl}\n` });
     return { snapshot, operation, amendment, draft, event, official, grouping, files: await assemblePublicationStage("data", snapshot.eventId, inputs) };
   } catch (error) {
     if (error instanceof PublicationFailure) throw error;
