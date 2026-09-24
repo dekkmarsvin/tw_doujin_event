@@ -337,6 +337,27 @@ test("resizing the canvas keeps rows, pillars, access points and landmarks in pl
   );
 });
 
+test("resizing the canvas keeps a point on its edge on the edge, and a point off the canvas off it", () => {
+  const layout = {
+    version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 100, floor: { x: 0, y: 0, width: 200, height: 100 },
+    rows: [], pillars: [], landmarks: [],
+    accessPoints: [{ id: "gate", kind: "entrance", direction: "north", x: 200, y: 100, label: "角落入口" }],
+    servicePoints: [{ id: "service-1", kind: "toilet", x: 200, y: 100 }],
+  };
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  // 200 × 1.1 is 220.00000000000003 in floating point; the corner has to stay
+  // the corner or the resized layout is refused on save.
+  for (const size of [{ width: 220, height: 110 }, { width: 230, height: 115 }, { width: 70, height: 35 }]) {
+    const scaled = scaleEventMapLayout(layout, size);
+    assert.deepEqual([scaled.accessPoints[0].x, scaled.accessPoints[0].y], [size.width, size.height]);
+    assert.deepEqual([scaled.servicePoints[0].x, scaled.servicePoints[0].y], [size.width, size.height]);
+    assert.deepEqual(validateEventMapLayout(scaled), { ok: true, errors: [] }, `${size.width}×${size.height}`);
+  }
+  const outside = { ...layout, accessPoints: [{ ...layout.accessPoints[0], x: 201 }], servicePoints: [{ ...layout.servicePoints[0], y: 100.5 }] };
+  const scaled = scaleEventMapLayout(outside, { width: 220, height: 110 });
+  assert.deepEqual(validateEventMapLayout(scaled).errors, ["出入口 gate 的座標無效。", "服務設施 service-1 的座標無效。"], "a point already off the canvas is not pulled back onto it");
+});
+
 test("rejects images that are too small", () => {
   const report = recognizeFF47Map({ data: new Uint8ClampedArray(400 * 300 * 4), width: 400, height: 300 });
   assert.equal(report.confidence, 0);

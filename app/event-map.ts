@@ -131,6 +131,17 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
   const scaleX = targetSize.width / layout.width;
   const scaleY = targetSize.height / layout.height;
   const scaleRect = (rect: MapRect) => scaleRectBy(rect, scaleX, scaleY);
+  // Points are validated without the rectangles' 1-unit slack, so a point on
+  // the edge must stay exactly on it: 200 × 1.1 is 220.00000000000003, and
+  // 200 × 1.15 falls short at 229.99999999999997. Only a point that was on the
+  // canvas is held to it; one already off stays off.
+  const scaleCoordinate = (value: number, from: number, to: number, scale: number) =>
+    value === from ? to : value < from ? Math.min(value * scale, to) : value * scale;
+  const scalePoint = <T extends { x: number; y: number }>(point: T): T => ({
+    ...point,
+    x: scaleCoordinate(point.x, layout.width, targetSize.width, scaleX),
+    y: scaleCoordinate(point.y, layout.height, targetSize.height, scaleY),
+  });
   return {
     ...layout,
     width: targetSize.width,
@@ -138,9 +149,9 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
     floor: scaleRect(layout.floor),
     rows: layout.rows.map((row) => ({ ...row, slots: row.slots.map((slot) => ({ ...slot, rect: scaleRect(slot.rect) })) })),
     pillars: layout.pillars.map((pillar) => ({ ...pillar, ...scaleRect(pillar) })),
-    accessPoints: layout.accessPoints.map((point) => ({ ...point, x: point.x * scaleX, y: point.y * scaleY })),
+    accessPoints: layout.accessPoints.map(scalePoint),
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: scaleRect(landmark.rect) })),
-    ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map((point) => ({ ...point, x: point.x * scaleX, y: point.y * scaleY })) } : {}),
+    ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map(scalePoint) } : {}),
   };
 }
 
