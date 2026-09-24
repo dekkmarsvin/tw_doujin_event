@@ -179,6 +179,10 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 
 `.github/workflows/deploy-pages.yml`：
 
+先由 `Classify verification scope` 比較整次 push 的 before→after，或 PR base→受測 merge tree；新增、刪除及 rename 的兩端都納入。[ci-scope.mjs](../../scripts/ci-scope.mjs) 僅允許已列出的內部 Markdown、設計證據、`.evidence/`、issue／PR 模板及開發工具走輕量流程。公開隱私權頁、產品程式、data pin、bindings、依賴、測試／CI 基礎設施與未知路徑維持完整 gate；歷史不完整時也回到完整 gate。分類失敗不放行後續工作。
+
+輕量流程的 `Check non-product changes` 執行 contribution-files（已含 doc-map），tooling 類另檢查 Claude JSON、hook 語法與非遠端模式。不部署、不跑產品 Node／browser／remote preview E2E；summary 明確標示它們不適用且未執行，不能當成那些測試通過的證據。以下部署表適用完整 gate；手動 dispatch 一律完整執行。
+
 | 觸發 | 行為 |
 |---|---|
 | push 到 `main` | 完整 gate 通過後以 branch `main` 發布到 `tw-catalog`；production origin smoke 必須通過，再以獨立 job 匿名觀測正式入口 `map.kotoban.top` |
@@ -187,11 +191,12 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 | `workflow_dispatch` | 從 GitHub Actions 頁面手動重跑目前 branch |
 
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
-- 每個 branch 同時只保留最新執行，新的 commit 會取消舊的部署工作。
+- 同一 branch 的完整部署 job 與 browser job 各自只保留最新執行；輕量文件／工具檢查不會取消已在執行的產品部署。完整部署之間仍沿用取消舊工作的政策。
 - Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`，它是本 repo 唯一的 Wrangler 設定。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper、E2E token 與 Mailgun 金鑰都必須用 `--env preview` 設定；preview 的寄件網域是 `verify.kotoban.top`。
 - **401 wiring smoke 與完整 portal E2E 是兩件事。** production origin 與 preview smoke 的 200 只證明靜態資產上線，401 只證明 handler 可建立且 session／pepper 存在，**沒有寄信、D1 寫入或管理流程**。PR 的「Full preview portal E2E」才會實走 request link → mail sink → verify → claim → admin approval → preview → edit → public overlay。
+- `Full preview portal E2E` 使用該 run 的 immutable deployment URL，排隊期間即使 PR branch alias 已前進，也不會改驗另一版本。共用 preview 資源的 E2E 仍以同一個全域鎖序列執行；不代表每個 PR 擁有獨立 D1。
 - `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
 - E2E 前後會查 production `accounts`、claims、overrides 與公開文件 revision fingerprint；任何變化立即失敗。流程結束（成功或失敗）以受 token 保護的 `DELETE /api/preview/mail` 清空 preview accounts、tokens、sessions、claims、overrides、地圖貢獻資料、公開文件、audit、captured mail，以及兩個 preview R2 bucket；admins roster 保留供下一次重跑。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。

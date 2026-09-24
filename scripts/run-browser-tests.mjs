@@ -3,6 +3,7 @@
 //   node scripts/run-browser-tests.mjs                 representative sizes
 //   node scripts/run-browser-tests.mjs --matrix full   every size and scale
 //   node scripts/run-browser-tests.mjs --matrix none   interaction journeys only
+//   node scripts/run-browser-tests.mjs --journey reader-thumbnails
 //
 // Journeys live in tests/browser/*.mjs. Each declares the staged data it needs
 // with a `// staged-data: pinned|fixture` line; pinned is the default.
@@ -13,10 +14,8 @@
 // them. That is why they were never a gate. Everything that recipe did by hand
 // happens here, so the journeys can be rerun by name like every other tier.
 //
-// Browsers stay out of package.json on purpose: `npm ci` must keep working, and
-// the Node suite must keep running, on a machine with no browser at all. So
-// Playwright is resolved wherever it already is rather than depended upon, and
-// its absence is reported as the one command that fixes it.
+// npm ci installs locked Playwright without downloading a browser. Chromium
+// is installed separately, only where the browser journeys will run.
 //
 // Which journeys exist is read off disk, and which data each one needs is read
 // out of its own source, for the same reason `scripts/run-tests.mjs` derives
@@ -27,6 +26,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const JOURNEYS = path.join(ROOT, "tests", "browser");
@@ -51,11 +51,18 @@ const DECLARED_DATA = /^\/\/ staged-data: (\w+)/m;
 // it), so unlike the Vite journeys it cannot be moved to a free port.
 const PORTAL_ORIGIN = "http://127.0.0.1:8788";
 
-const args = process.argv.slice(2);
-const matrixIndex = args.indexOf("--matrix");
-const matrix = matrixIndex === -1 ? "representative" : args[matrixIndex + 1];
-if (!MATRIX_MODES.includes(matrix)) {
-  console.error(`usage: run-browser-tests.mjs [--matrix ${MATRIX_MODES.join("|")}]`);
+let matrix;
+let requested;
+try {
+  const { values } = parseArgs({ options: {
+    matrix: { type: "string", default: "representative" },
+    journey: { type: "string", multiple: true, default: [] },
+  }, strict: true, allowPositionals: false });
+  matrix = values.matrix;
+  requested = new Set(values.journey.map(name => name.endsWith(".mjs") ? name : `${name}.mjs`));
+  if (!MATRIX_MODES.includes(matrix)) throw new Error(`Unknown matrix: ${matrix}`);
+} catch (error) {
+  console.error(`${error.message}\nusage: run-browser-tests.mjs [--matrix ${MATRIX_MODES.join("|")}] [--journey name]...`);
   process.exit(2);
 }
 
@@ -78,12 +85,10 @@ function resolvePlaywright() {
     createRequire(path.join(ROOT, "package.json")).resolve("playwright");
     return null;
   } catch {
-    console.error("Playwright is not installed. It is deliberately not a devDependency, so install it once:\n\n  npm run test:browser:install\n\nOr point PLAYWRIGHT_MODULE at an existing installation.");
+    console.error("Playwright is not installed. Run npm ci, then npm run test:browser:install to install its matching Chromium. PLAYWRIGHT_MODULE may override the module for an explicit diagnostic environment.");
     process.exit(2);
   }
 }
-
-const playwright = resolvePlaywright();
 
 // Grouped by the data they need, because staging is one set at a time: each
 // group stages, serves and runs together before the next replaces it.
@@ -92,8 +97,12 @@ async function discover() {
     .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
     .map((entry) => entry.name)
     .sort();
+  for (const name of requested) {
+    if (!files.includes(name)) throw new Error(`Unknown browser journey: ${name}. Use a filename from tests/browser (with or without .mjs).`);
+  }
   const groups = new Map();
   for (const file of files) {
+    if (requested.size && !requested.has(file)) continue;
     const declared = DECLARED_DATA.exec(await readFile(path.join(JOURNEYS, file), "utf8"))?.[1] ?? "pinned";
     if (!ENVIRONMENTS[declared]) throw new Error(`tests/browser/${file} declares unknown staged-data "${declared}"; expected ${Object.keys(ENVIRONMENTS).join(" or ")}`);
     groups.set(declared, [...(groups.get(declared) ?? []), file]);
@@ -106,10 +115,13 @@ const groups = await discover();
 // nothing is staged under them. A deployment serves published events, never
 // fixtures, so only the pinned journeys can mean anything against one.
 const external = process.env.MAP_TEST_URL;
-if (external && groups.size > 1) {
+if (external && [...groups.keys()].some(key => key !== "pinned")) {
+  if (requested.size) throw new Error("Selected fixture/portal journeys cannot use MAP_TEST_URL; unset it so the runner prepares their isolated environment.");
   console.error(`MAP_TEST_URL is set, so only the pinned journeys run; ${[...groups.keys()].filter((key) => key !== "pinned").join(", ")} journeys need staged fixtures this script is not allowed to replace.`);
   for (const key of [...groups.keys()]) if (key !== "pinned") groups.delete(key);
 }
+if (!groups.size) throw new Error("No browser journeys are eligible; refusing an empty successful run.");
+const playwright = resolvePlaywright();
 
 function stage(mode) {
   const { fetch: fetchEvents, stage: stageArguments, label } = ENVIRONMENTS[mode];
@@ -264,4 +276,4 @@ if (failures.length) {
   console.error(`\n${failures.length} browser journey(s) failed: ${failures.join(", ")}`);
   process.exit(1);
 }
-console.error(`\nAll browser journeys passed (${[...groups.values()].flat().length} files).`);
+console.error(`\n${requested.size ? "Selected" : "All eligible"} browser journeys passed (${[...groups.values()].flat().length} files).`);
