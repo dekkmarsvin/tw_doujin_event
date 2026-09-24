@@ -32,8 +32,11 @@ yarn-error.log*
 .dev.vars
 .dev.vars.*
 
-# Local editor/agent tooling configuration, not project configuration.
-/.claude/
+# Local editor/agent tooling configuration, not project configuration — except
+# the shared SessionStart hook that sets up Claude Code on the web sessions.
+/.claude/*
+!/.claude/settings.json
+!/.claude/hooks/
 
 # vercel
 .vercel
