@@ -60,6 +60,25 @@ test("every built page shares the chosen 1200×630 brand card, kept out of the o
   assert.ok(!manifest.includes("/share-card.png"), "the card is for other sites' servers, not the offline map");
 });
 
+// #364: each day's section lists exactly the circles the catalog places that day.
+test("multi-day event pages have one section per day matching the published catalog", async () => {
+  const stage = JSON.parse(await readFile(new URL("../.event-data-stage.json", import.meta.url), "utf8"));
+  for (const { eventId } of stage.events) {
+    const event = JSON.parse(await read(`data/events/${eventId}/event.json`));
+    const catalog = JSON.parse(await read(`data/events/${eventId}/circles.json`));
+    const main = nodes(parse(await read(`events/${eventId}/index.html`))).find((node) => node.tagName === "section");
+    const headings = main.childNodes.filter((node) => node.tagName === "h3");
+    const lists = main.childNodes.filter((node) => node.tagName === "ul");
+    if (event.days.length < 2) { assert.equal(headings.length, 0, eventId); continue; }
+    assert.equal(headings.length, event.days.length, eventId);
+    const listed = lists.map((list) => nodes(list).filter((node) => node.tagName === "a").map((a) => attr(a, "href")));
+    const expected = event.days.map((day) => new Set(catalog.placements.filter((placement) => String(placement.day) === String(day.id)).map((placement) => `/events/${eventId}/circles/${placement.circleId}/`)));
+    const byDay = listed.map((hrefs) => new Set(hrefs));
+    for (const hrefs of listed) assert.equal(new Set(hrefs).size, hrefs.length, `${eventId}: no circle twice in one day`);
+    assert.deepEqual(byDay.map((set) => [...set].sort()).sort(), expected.map((set) => [...set].sort()).sort(), eventId);
+  }
+});
+
 test("shared shell has a static fallback without conflicting query canonical", async () => {
   const html = await read("index.html");
   const elements = nodes(parse(html));

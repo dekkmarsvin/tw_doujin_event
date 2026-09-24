@@ -11,7 +11,7 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 
 公開活動介紹使用 `/events/<eventId>/`，社團在該活動的介紹使用 `/events/<eventId>/circles/<circleId>/`。它們是在 build 時從同一份已發布活動／reviewed base 產生的 `index.html`，不是 SPA fallback。社團頁集中呈現跨日、多攤位與已移動／已取消狀態；每筆配置以既有 query URL 回到正確日期、場館空間與攤位。未知靜態路徑沿用真實 404。
 
-- 首頁提供活動地圖與活動介紹的 href；每個活動介紹列出全部有配置的社團 href，不依賴「載入更多」。Reader 清單的一般點擊保持地圖選取，修改鍵／新分頁可開啟靜態社團頁。
+- 首頁提供活動地圖與活動介紹的 href；每個活動介紹列出全部有配置的社團 href，不依賴「載入更多」。多日活動的名單依活動日分段（依日曆日期排序，標題為「11月7日（六）」格式與當日社團數），社團在每個有配置的活動日各列一次、連到同一張社團頁；當天只有失效配置時依社團的最終狀態附上用詞：活動其他地方仍有有效配置為「已移動攤位」，完全沒有有效配置為「已取消參展」。單日活動只有一份名單。Reader 清單的一般點擊保持地圖選取，修改鍵／新分頁可開啟靜態社團頁。
 - 首頁 canonical 為正式網域 `/`；Reader 有效活動指向活動介紹，已解析且有效的社團選取指向該社團介紹。未驗證的 query 值不產生社團 canonical。篩選、排序、收藏及日／攤位選取不另建索引頁，原 URL 與還原語意不變。
 - 不存在或未發布活動仍顯示 fail-closed 提示，渲染後加 noindex；切回有效活動／首頁時清除。控制面的 noindex 不由 Reader 管理。
 - 共用 Reader 原始 HTML 提供品牌 metadata 與活動摘要，不硬寫首頁 canonical／og:url 給所有 query。React 啟動後取代摘要；活動／社團介紹的原始 HTML 則已有專屬 metadata、絕對 canonical 與 OG／Twitter Card；分享圖的規則見[資料傳輸契約](./delivery-and-offline.md#公開搜尋介紹頁)。
