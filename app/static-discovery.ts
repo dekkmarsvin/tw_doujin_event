@@ -61,6 +61,9 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
     "@context": "https://schema.org", "@type": "Event", name: event.name,
     ...(event.aliases?.length ? { alternateName: [...event.aliases] } : {}),
     url: PUBLIC_ORIGIN + eventPath(event.id), description: pageMetadata(event).description,
+    // The share card every page already points og:image at; events carry no
+    // picture of their own, and Search Console asks for one.
+    image: [SHARE_IMAGE.url],
     startDate: [...dates].sort()[0], endDate: [...dates].sort().at(-1),
     location: [...new Map(event.venueAssignments.map((venue) => [venue.venueId, { "@type": "Place", name: venue.venueName, url: venue.venueOfficialUrl }])).values()],
     organizer: event.organizerAssignments.map((organizer) => ({ "@type": "Organization", name: organizer.name, url: organizer.officialUrl })),
