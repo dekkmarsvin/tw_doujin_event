@@ -1,6 +1,7 @@
 import { parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
 import { AmendmentSettingsError, applyAmendmentSettings, normalizeAmendmentSettings, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
 import { eventDateFields } from "./event-calendar";
+import { publishedEventImage } from "./event-image";
 import type { OrganizerNormalizedImportRow } from "./organizer-import";
 import type { OrganizerReferenceSnapshot } from "./organizer-reference-catalog";
 import { parseEventDefinition } from "./event-catalog";
@@ -63,6 +64,7 @@ function snapshotEvent(snapshot: Snapshot, draft: NonNullable<ReturnType<typeof 
     venueAssignments: draft.venue.assignments.map(({ venueId, venueSpaceId, areaIds }) => ({ venueId, venueSpaceId, areaIds })),
     officialData: { adapter: "organizer-import/1", eventUrl: officialUrl,
       boothListUrls: Object.fromEntries(draft.event.days.map((day) => [day.id, officialUrl])) },
+    ...(draft.event.image ? { image: publishedEventImage(draft.event.image) } : {}),
   };
 }
 /** The published baseline event with a correction's declared settings applied:
@@ -76,6 +78,8 @@ function amendedBaselineEvent(event: OrganizerAmendmentBaseline["event"], settin
   const next: Record<string, unknown> = { ...event, name: settings.name ?? event.name, days,
     ...(settings.days ? eventDateFields(days.map((day) => day.dateLabel).sort()) : {}) };
   delete next.aliases;
+  if (settings.image === null) delete next.image;
+  else if (settings.image) next.image = publishedEventImage(settings.image);
   return aliases.length > 0 ? { ...next, aliases } : next;
 }
 

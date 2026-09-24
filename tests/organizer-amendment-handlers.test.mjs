@@ -17,6 +17,7 @@ const secret = "test-session-secret";
 const origin = "https://organizer.example";
 let handlers, owner, editor, admin, stranger, ownerId, loadCount, loadHook, dispatched, dispatchHook, auditRecoveryHook;
 const backgroundObjects = new Map();
+const publicObjects = new Map();
 const backgroundReads = [];
 const request = (method, body, cookie) => new Request(`${origin}/api/organizer/events/source/amendments`, {
   method, headers: { origin, ...(body === undefined ? {} : { "content-type": "application/json" }), ...(cookie ? { cookie } : {}) },
@@ -52,7 +53,7 @@ beforeEach(async () => {
     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`).bind(row.path,row.kind,row.id,row.organizerId,row.revision,row.displayName,row.publicReferenceJson,row.sourceCapturedAt,adminActor.id).run();
   loadCount = 0; loadHook = async () => {}; dispatched = []; dispatchHook = async () => {};
   auditRecoveryHook = async () => ({ restorationPullNumber: 9, restorationMergeSha: "9".repeat(40), sourceCandidateId: "source" });
-  backgroundObjects.clear(); backgroundReads.length = 0;
+  backgroundObjects.clear(); backgroundReads.length = 0; publicObjects.clear();
   handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     auditPublicationRecovery: (input) => auditRecoveryHook(input),
     githubRemoteAuditor: async () => { throw Error("A publication with remote checkpoints cannot reach the reopen audit"); },
@@ -61,7 +62,14 @@ beforeEach(async () => {
     mapContributionStore: {
       async get(key) { backgroundReads.push(key); const object = backgroundObjects.get(key); return object ? { body: new Response(object.bytes).body, contentType: object.contentType } : null; },
       async put(key, bytes, contentType) { backgroundObjects.set(key,{ bytes: new Uint8Array(bytes), contentType }); },
-      async delete(key) { backgroundObjects.delete(key); },
+      async delete(key) { for (const one of [key].flat()) backgroundObjects.delete(one); },
+      async list(prefix) { return [...backgroundObjects.keys()].filter((key) => key.startsWith(prefix)); },
+    },
+    thumbnailStore: {
+      url: (key) => `https://thumbs.example/${key}`,
+      list: async (prefix) => [...publicObjects.keys()].filter((key) => key.startsWith(prefix)),
+      put: async (key, value, contentType) => { publicObjects.set(key, { bytes: new Uint8Array(value), contentType }); },
+      delete: async (keys) => { for (const key of [keys].flat()) publicObjects.delete(key); },
     },
     dispatchOrganizerPublication: async (jobId) => { dispatched.push(jobId); await dispatchHook(jobId); },
     loadPublishedAmendmentBaseline: async (source) => { loadCount++; assert.deepEqual(source, data.source); await loadHook(); return structuredClone(data.baseline); },
@@ -429,6 +437,46 @@ test("a settings-only correction is submitted and approved, and its settings can
   const approval = await review(id);
   assert.equal(approval.status, 200, await approval.clone().text());
   assert.equal((await repo.getLatestOrganizerPublicationJob(id)).snapshot_id, snapshot.id);
+});
+
+async function eventPng(width, height) {
+  const { crc32, deflateSync } = await import("node:zlib");
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
+  return new File([Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header),
+    chunk("IDAT", deflateSync(Buffer.alloc((width + 1) * height))), chunk("IEND", Buffer.alloc(0))])], "event.png", { type: "image/png" });
+}
+
+test("a correction can give a published event its picture, which approval then makes public", async () => {
+  const id = await create();
+  const form = new FormData();
+  form.append("file", await eventPng(1200, 675));
+  form.append("rightsConfirmed", "true");
+  const uploaded = await handlers.putOrganizerEventImage(new Request(`${origin}/api/organizer/events/${id}/image`,
+    { method: "PUT", headers: { origin, cookie: owner }, body: form }), id);
+  assert.equal(uploaded.status, 200, await uploaded.clone().text());
+  const { image } = await uploaded.json();
+  const unstaged = { ...image, sha256: "f".repeat(64), url: `https://thumbs.example/event-images/${"f".repeat(64)}.png` };
+  assert.equal((await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1, changes: [], settings: { image: unstaged } }, owner), id)).status, 422);
+  const saved = await handlers.saveOrganizerAmendment(request("PUT", { expectedVersion: 1, changes: [], settings: { image } }, owner), id);
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.deepEqual((await saved.json()).settingsImpact, [{ field: "image", before: null, after: image }]);
+  assert.equal((await submit(id)).status, 200);
+  assert.equal(publicObjects.size, 0, "submitting does not publish the picture");
+  const approval = await review(id);
+  assert.equal(approval.status, 200, await approval.clone().text());
+  assert.deepEqual(publicObjects.get(`event-images/${image.sha256}.png`).bytes, backgroundObjects.get(`organizer-event-images/${id}/${image.sha256}.png`).bytes);
+  const snapshot = await repo.getOrganizerSubmissionSnapshot(id, 2);
+  const { buildApprovedPublicationArtifacts } = await runner.import("/app/publication-artifacts.ts");
+  const artifacts = await buildApprovedPublicationArtifacts({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256 });
+  assert.deepEqual(artifacts.event.image, { url: image.url, width: 1200, height: 675 });
+  assert.deepEqual(artifacts.draft.event.image, image, "the next correction's baseline carries it");
 });
 
 test("Owner revocation between validation and snapshot commit prevents submission", async (t) => {

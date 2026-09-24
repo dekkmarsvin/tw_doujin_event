@@ -169,6 +169,12 @@
 .referencePanel { grid-column: 1 / -1; }
 .referencePanel fieldset { min-width: 0; border: 0; padding: 0; margin: 12px 0; }
 .full { grid-column: 1 / -1; }
+.eventImageField fieldset { min-width: 0; border: 0; padding: 0; margin: 12px 0 0; display: grid; gap: 10px; }
+.eventImagePreview { margin: 10px 0 0; }
+.eventImagePreview img { display: block; max-width: min(100%, 480px); height: auto; border: 1px solid var(--line); border-radius: 9px; }
+.eventImagePreview figcaption { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.checkLabel { display:flex!important; flex-direction:row!important; align-items:center; gap:6px; }
+.checkLabel input { width:16px; min-height:16px; height:16px; padding:0; }
 .page :global(label small) { color: var(--muted); font-weight: 400; }
 .inlineFields { display: grid; grid-template-columns: .55fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
 .inlineEmpty { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 14px; background: var(--paper); }

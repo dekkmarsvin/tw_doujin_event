@@ -1287,6 +1287,139 @@ test("a candidate map's layout plan is stored once per map, replaced in place, a
   assert.equal((await unbound.getOrganizerMapBackground(request(path, "GET", undefined, ownerCookie), candidateId, draftId)).status, 503);
 });
 
+/** A minimal real PNG; the upload only reads its structure, never its pixels. */
+async function eventPng(width, height) {
+  const { crc32, deflateSync } = await import("node:zlib");
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
+  return new File([Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header),
+    chunk("IDAT", deflateSync(Buffer.alloc((width + 1) * height))), chunk("IEND", Buffer.alloc(0))])], "event.png", { type: "image/png" });
+}
+
+/**
+ * #396: an event picture is staged privately, saved like any field once the
+ * bucket confirms it, and made public by the approval that publishes it —
+ * under its own hash, so nothing unapproved is ever at a public address.
+ */
+test("an event picture stays private until approval publishes it under its own hash", async () => {
+  const publicObjects = new Map();
+  const thumbnailStore = {
+    url: (key) => `https://thumbs.example/${key}`,
+    list: async (prefix) => [...publicObjects.keys()].filter((key) => key.startsWith(prefix)),
+    put: async (key, value, contentType) => { publicObjects.set(key, { bytes: Buffer.from(value), contentType }); },
+    delete: async (keys) => { for (const key of [keys].flat()) publicObjects.delete(key); },
+  };
+  const listing = { ...handlerOptions.mapContributionStore, list: async (prefix) => [...objects.keys()].filter((key) => key.startsWith(prefix)) };
+  handlers = createCirclePortalHandlers({ ...handlerOptions, thumbnailStore, mapContributionStore: listing });
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST", { tentativeName: "PF45", ownerEmail: "owner@example.test" }, adminCookie,
+  ));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const path = `/api/organizer/events/${candidateId}/image`;
+  const upload = (file, rights = true) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (rights) form.append("rightsConfirmed", "true");
+    return new Request(`${ORIGIN}${path}`, { method: "PUT", headers: { origin: ORIGIN, cookie: ownerCookie }, body: form });
+  };
+
+  assert.equal((await handlers.putOrganizerEventImage(upload(await eventPng(1200, 630), false), candidateId)).status, 400, "rights are confirmed with the upload");
+  const narrow = await handlers.putOrganizerEventImage(upload(await eventPng(800, 600)), candidateId);
+  assert.equal(narrow.status, 400);
+  assert.match((await narrow.json()).error, /至少要 1200 px/);
+  const uploaded = await handlers.putOrganizerEventImage(upload(await eventPng(1200, 630)), candidateId);
+  assert.equal(uploaded.status, 200);
+  const { image } = await uploaded.json();
+  assert.equal(image.url, `https://thumbs.example/event-images/${image.sha256}.png`);
+  assert.deepEqual([...objects.keys()], [`organizer-event-images/${candidateId}/${image.sha256}.png`]);
+  assert.equal(publicObjects.size, 0, "an upload is not public");
+
+  const preview = await handlers.getOrganizerEventImage(request(`${path}?sha256=${image.sha256}&contentType=image/png`, "GET", undefined, ownerCookie), candidateId);
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("cache-control"), "private, no-store");
+  const stranger = await signIn("stranger@example.test", "organizer");
+  assert.equal((await handlers.getOrganizerEventImage(request(`${path}?sha256=${image.sha256}&contentType=image/png`, "GET", undefined, stranger), candidateId)).status, 404);
+
+  const draft = {
+    references: await createReferenceSelection(candidateId, ownerCookie),
+    schema: "organizer-event-draft/1",
+    event: { id: "pf45", name: "PF45", image, days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "none" }] },
+    officialSource: { label: "主辦提供名單", url: "https://organizer.example/pf45" },
+  };
+  // A draft cannot claim a picture the bucket does not hold.
+  const forged = await handlers.updateOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "PATCH",
+    { expectedVersion: 1, draft: { ...draft, event: { ...draft.event, image: { ...image, width: 1600 } } } }, ownerCookie), candidateId);
+  assert.equal(forged.status, 422);
+  const saved = await handlers.updateOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "PATCH", { expectedVersion: 1, draft }, ownerCookie), candidateId);
+  assert.equal(saved.status, 200);
+
+  // Uploads nobody saves wait until the submission freezes the content: while
+  // the draft is editable, a collaborator's save could still point at them.
+  await handlers.putOrganizerEventImage(upload(await eventPng(1300, 700)), candidateId);
+  await handlers.putOrganizerEventImage(upload(await eventPng(1400, 700)), candidateId);
+  assert.equal(objects.size, 3);
+
+  assert.equal((await handlers.putOrganizerImport(request(`/api/organizer/events/${candidateId}/imports`, "PUT", {
+    expectedVersion: 2,
+    source: { fileName: "official.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
+    rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "ALL", codes: ["A01"], circleName: "甲社", stableKey: null, identityGroup: null }],
+  }, ownerCookie), candidateId)).status, 200);
+  assert.equal((await handlers.createOrganizerMap(request(`/api/organizer/events/${candidateId}/maps`, "POST", {
+    expectedVersion: 3, periodKey: "1", venueSpaceId: VENUE_SPACE_ID,
+    layout: { version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80, floor: { x: 0, y: 0, width: 100, height: 80 },
+      rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 5, y: 5, width: 10, height: 8 } }] }],
+      pillars: [], accessPoints: [], landmarks: [] },
+  }, ownerCookie), candidateId)).status, 201);
+  assert.deepEqual((await (await handlers.validateOrganizerCandidate(request(`/api/organizer/events/${candidateId}/validate`, "POST", {}, ownerCookie), candidateId)).json()).issues, []);
+  const version = (await repository.getOrganizerCandidate(candidateId)).current_version;
+  assert.equal((await handlers.submitOrganizerCandidate(request(`/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: version }, ownerCookie), candidateId)).status, 200);
+  assert.deepEqual([...objects.keys()].filter((key) => key.startsWith("organizer-event-images/")), [`organizer-event-images/${candidateId}/${image.sha256}.png`],
+    "submitting keeps only the picture it submitted");
+
+  const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, version);
+  const { buildApprovedPublicationArtifacts } = await environment.runner.import("/app/publication-artifacts.ts");
+  const artifacts = await buildApprovedPublicationArtifacts({ snapshotJson: snapshot.snapshot_json, approvalHash: snapshot.sha256 });
+  assert.deepEqual(artifacts.event.image, { url: image.url, width: 1200, height: 630 });
+  assert.equal(Object.keys(artifacts.event).at(-1), "image", "an event without a picture keeps its old bytes");
+
+  const dispatched = [];
+  const approving = (store) => createCirclePortalHandlers({ ...handlerOptions, thumbnailStore, mapContributionStore: store,
+    config: { ...handlerOptions.config, organizerPublicationMode: "fake" }, dispatchOrganizerPublication: async (jobId) => { dispatched.push(jobId); } });
+  // The staged bytes vanished: nothing moves, and the approval can be retried.
+  const withoutBytes = { ...listing, get: async () => null };
+  const refused = await approving(withoutBytes).adminReviewOrganizerCandidate(request(`/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: version, decision: "approve" }, adminCookie), candidateId);
+  assert.equal(refused.status, 503);
+  assert.equal((await refused.json()).code, "event_image_unavailable");
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).status, "submitted");
+  assert.equal(publicObjects.size, 0);
+
+  // An approval from a stale page, after changes were requested, publishes nothing.
+  assert.equal((await approving(listing).adminReviewOrganizerCandidate(request(`/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: version, decision: "changes_requested" }, adminCookie), candidateId)).status, 200);
+  assert.equal((await approving(listing).adminReviewOrganizerCandidate(request(`/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: version, decision: "approve" }, adminCookie), candidateId)).status, 409);
+  assert.equal(publicObjects.size, 0, "a picture is public only through the approval of the version under review");
+  assert.equal((await handlers.submitOrganizerCandidate(request(`/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: version }, ownerCookie), candidateId)).status, 200);
+
+  const approved = await approving(listing).adminReviewOrganizerCandidate(request(`/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: version, decision: "approve" }, adminCookie), candidateId);
+  assert.equal(approved.status, 200);
+  assert.equal(dispatched.length, 1);
+  const published = publicObjects.get(`event-images/${image.sha256}.png`);
+  assert.equal(published.contentType, "image/png");
+  assert.deepEqual(published.bytes, objects.get(`organizer-event-images/${candidateId}/${image.sha256}.png`).bytes);
+});
+
 async function invitationFixture() {
   const cookie = await signIn("admin@example.test", "organizer");
   const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",

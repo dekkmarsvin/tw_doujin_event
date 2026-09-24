@@ -152,6 +152,18 @@ async function fetchEvidence(url: string): Promise<string | null> {
 }
 
 /** Configured roster, used only to seed an empty table. */
+/** Every key under a prefix, following R2's cursor across pages. */
+async function listBucketKeys(bucket: R2Bucket, prefix: string) {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, cursor });
+    keys.push(...page.objects.map(({ key }) => key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys;
+}
+
 function bootstrapAdmins(env: PortalEnv) {
   // Split on whatever a human pasted — comma, semicolon or newline — and drop
   // quotes carried in from a shell or a prompt. The handler normalizes each
@@ -245,16 +257,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
   const thumbnailOrigin = env.THUMBNAIL_PUBLIC_ORIGIN;
   const thumbnailStore: HostedThumbnailStore | undefined = thumbnailOrigin ? {
     url: (key) => `${thumbnailOrigin.replace(/\/$/, "")}/${key}`,
-    list: async (prefix) => {
-      const keys: string[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await env.THUMBNAILS.list({ prefix, cursor });
-        keys.push(...page.objects.map(({ key }) => key));
-        cursor = page.truncated ? page.cursor : undefined;
-      } while (cursor);
-      return keys;
-    },
+    list: (prefix) => listBucketKeys(env.THUMBNAILS, prefix),
     put: async (key, value, contentType) => {
       await env.THUMBNAILS.put(key, value, {
         httpMetadata: { contentType, cacheControl: "public, max-age=31536000, immutable" },
@@ -275,6 +278,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       return object ? { body: object.body, contentType: object.httpMetadata?.contentType } : null;
     },
     delete: (keys) => env.MAP_CONTRIBUTIONS!.delete(keys),
+    list: (prefix) => listBucketKeys(env.MAP_CONTRIBUTIONS!, prefix),
   } : undefined;
   const readPublishedEventMap = async (targetPath: string) => {
     const response = await env.ASSETS.fetch(new Request(new URL(

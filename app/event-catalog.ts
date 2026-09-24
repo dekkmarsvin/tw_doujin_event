@@ -46,6 +46,8 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   circleCategories: CircleCategoryCatalog;
   genres: readonly string[];
   officialData: OfficialDataDefinition;
+  /** 活動圖片 (#396): already public when this definition is. Absent when none. */
+  image?: { url: string; width: number; height: number };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -107,7 +109,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
   if (!isRecord(value) || value.schema !== EVENT_DEFINITION_SCHEMA) throw new Error("Unsupported event definition schema.");
   requireOnlyKeys(value, [
     "schema", "id", "name", "aliases", "dateRangeLabel", "dataUpdatedAt", "eventEndsAt", "mapTemplate", "areaMode",
-    "days", "areas", "organizerAssignments", "categoryCatalog", "venueAssignments", "officialData",
+    "days", "areas", "organizerAssignments", "categoryCatalog", "venueAssignments", "officialData", "image",
   ], "Event definition");
   for (const key of ["id", "name", "dateRangeLabel", "dataUpdatedAt", "eventEndsAt", "mapTemplate"] as const) {
     if (!nonempty(value[key])) throw new Error(`Event definition ${key} must be a non-empty string.`);
@@ -119,6 +121,14 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     throw new Error("Event definition aliases are invalid.");
   }
   const aliases = value.aliases as readonly string[] | undefined;
+  if (value.image !== undefined) {
+    const image = value.image;
+    if (!isRecord(image)) throw new Error("Event definition image is invalid.");
+    requireOnlyKeys(image, ["url", "width", "height"], "Event definition image");
+    if (!https(image.url) || !Number.isSafeInteger(image.width) || (image.width as number) <= 0
+      || !Number.isSafeInteger(image.height) || (image.height as number) <= 0) throw new Error("Event definition image is invalid.");
+  }
+  const image = value.image as EventDefinition["image"];
   if (!isoInstant(value.dataUpdatedAt) || !isoInstant(value.eventEndsAt)) {
     throw new Error("Event definition timestamps must be valid ISO instants.");
   }
@@ -255,6 +265,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     genres: circleCategoryLabels(circleCategories),
     officialData: value.officialData as OfficialDataDefinition,
     dataLastUpdatedLabel: dataDateLabel(value.dataUpdatedAt as string),
+    ...(image ? { image: { url: image.url, width: image.width, height: image.height } } : {}),
   };
 }
 

@@ -4,6 +4,23 @@
 import assert from "node:assert/strict";
 import { ADMIN, clearMail, signIn } from "./support/portal.mjs";
 import { start } from "./support/journey.mjs";
+import { crc32, deflateSync } from "node:zlib";
+
+/** A real PNG the upload accepts: the server reads its structure, not its pixels. */
+function png(width, height) {
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
+  const rows = Buffer.alloc((width + 1) * height, 0x9c);
+  for (let row = 0; row < height; row += 1) rows[row * (width + 1)] = 0;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
 
 const journey = await start("portal-organizer-references");
 try {
@@ -27,6 +44,21 @@ try {
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await page.getByLabel(/^來源名稱/).fill("測試主辦提供");
   await page.getByLabel(/^官方公告網址/).fill("https://organizer.example/event");
+  // #396: the picture is optional, staged privately, and part of the draft
+  // only once saved. The preview comes from the private upload.
+  await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "narrow.png", mimeType: "image/png", buffer: png(800, 450) });
+  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await page.getByRole("alert").getByText("活動圖片寬度至少要 1200 px，這張是 800 px。", { exact: true }).waitFor();
+  await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "event.png", mimeType: "image/png", buffer: png(1200, 630) });
+  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await page.getByRole("status").getByText("已上傳，尚未儲存。", { exact: true }).waitFor();
+  const preview = page.getByRole("img", { name: "活動圖片", exact: true });
+  await preview.waitFor();
+  assert.equal(await preview.evaluate((image) => image.complete && image.naturalWidth), 1200, "the private upload is what the preview shows");
+  await page.getByText("1200 × 630 px", { exact: true }).waitFor();
+  await journey.capture(page, "event-image-staged");
   await page.getByRole("button", { name: "建立主辦單位", exact: true }).click();
   await page.getByLabel("主辦名稱", { exact: true }).fill("測試主辦");
   await page.getByLabel("主辦官方網址", { exact: true }).fill("http://organizer.example/");
@@ -53,6 +85,8 @@ try {
   await page.reload();
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
   assert.equal(await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).locator("option:checked").textContent(), "測試主辦");
+  await page.getByText("1200 × 630 px", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).evaluate((image) => image.complete && image.naturalWidth), 1200, "the saved picture survives a reload");
   assert.equal(await page.getByRole("combobox", { name: "主辦分類目錄", exact: true }).locator("option:checked").textContent(), "作品分類（2 個分類）");
   await journey.capture(page, "references-persisted");
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("partner");

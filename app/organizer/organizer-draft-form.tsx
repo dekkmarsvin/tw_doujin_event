@@ -11,6 +11,7 @@ import { validateOrganizerVenueCatalogAssignments, type OrganizerVenueCatalog, t
 import { type OrganizerGuidedTask } from "../organizer-workspace";
 import { VenueCatalogCreator } from "./organizer-import-panel";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
+import { EventImageField } from "./organizer-event-image";
 import { GUIDED_LABEL, TASK_QUESTION, mapTemplatePreview, message, organizerGuidedDraftIssues } from "./organizer-shared";
 import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import { VenueLayerGuide } from "./organizer-venue-layers";
@@ -152,6 +153,8 @@ export function DraftForm({
         <label>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "例如：autumn-doujin-2026。使用小寫英數字與連字號；首次送審後不能修改。"}</small></label>
         <label>來源名稱<input disabled={!editable} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /><small>例如：秋日同人交流會官方網站</small></label>
         <label>官方公告網址<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /><small>貼上主辦單位的活動頁或公告貼文網址。</small></label>
+        <EventImageField candidateId={detail.event.id} image={draft.event.image} saved={detail.draft.event.image} editable={editable}
+          onChange={(image) => update((next) => { if (image) next.event.image = image; else delete next.event.image; return next; })} />
         <OrganizerReferencePanel candidateId={detail.event.id} expectedVersion={expectedVersion}
           catalog={detail.referenceCatalog} selection={draft.references} editable={editable}
           onChange={(references) => update((next) => ({ ...next, references }))} />
