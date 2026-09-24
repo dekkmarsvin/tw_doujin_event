@@ -35,7 +35,7 @@ const base = {
 
 test("guided tasks partition the existing draft validation without a second rule set", () => {
   assert.deepEqual(organizerGuidedTaskIssues(empty, "identity_source").map((issue) => issue.code), [
-    "missing_event_id", "missing_source", "invalid_source_url",
+    "missing_event_id", "invalid_source_url",
   ]);
   assert.deepEqual(organizerGuidedTaskIssues(empty, "days").map((issue) => issue.code), ["missing_days"]);
   assert.deepEqual(organizerGuidedTaskIssues(empty, "venue").map((issue) => issue.code), ["missing_venue"]);

@@ -166,6 +166,15 @@ test("accepted HTTPS URL schemes normalize consistently without altering approve
   assert.equal(JSON.parse(approved.snapshotJson).draft.officialSource.url, "HTTPS://Organizer.Example/event");
 });
 
+// #397: a source needs an address, not a name. One left unnamed is published
+// under the same name an approved application gives it.
+test("an unnamed official source is published as the event's official source", async () => {
+  const snapshot = await sample();
+  snapshot.draft.officialSource.label = "";
+  const artifacts = await builder.buildApprovedPublicationArtifacts(source(snapshot));
+  assert.equal(artifacts.files.find((file) => file.path.endsWith("/NOTICE")).text, "活動官方來源\nhttps://organizer.example/event\n");
+});
+
 test("service points in an approved map survive publication and staging into the reader's map", async () => {
   const snapshot = await sample();
   const servicePoints = [{ id: "toilet", kind: "toilet", x: 20, y: 20 }, { id: "desk", kind: "information", x: 60, y: 20, label: "大會服務台" }];

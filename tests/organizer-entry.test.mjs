@@ -103,7 +103,7 @@ test("organizer reuses the event source for imports and labels every activity-da
   const app = await organizerSource();
 
   assert.doesNotMatch(app, /<label>來源說明<input/);
-  assert.match(app, /const sourceLabel = detail\.draft\.officialSource\.label;/);
+  assert.match(app, /const sourceLabel = organizerSourceLabel\(detail\.draft\.officialSource\);/);
   assert.match(app, /sourceDescription: sourceLabel/);
   assert.match(app, /<label>代碼<input/);
   assert.match(app, /<label>名稱<input/);

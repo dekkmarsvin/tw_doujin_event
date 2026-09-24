@@ -6,9 +6,11 @@ import styles from "./organizer.module.css";
 
 type Selection = NonNullable<OrganizerEventDraft["references"]>;
 
-export function OrganizerReferencePanel({ candidateId, expectedVersion, catalog: initialCatalog, selection, editable, onChange }: {
+/** `eventSourceUrl` is the event's official announcement: an organizer's
+ * categories are usually published there, so a new catalog starts from it. */
+export function OrganizerReferencePanel({ candidateId, expectedVersion, catalog: initialCatalog, selection, editable, eventSourceUrl = "", onChange }: {
   candidateId: string; expectedVersion: number; catalog?: OrganizerReferenceCatalog; selection?: Selection;
-  editable: boolean; onChange: (selection: Selection) => void;
+  editable: boolean; eventSourceUrl?: string; onChange: (selection: Selection) => void;
 }) {
   const [catalog, setCatalog] = useState(initialCatalog ?? { organizers: [], categories: [] });
   const [action, setAction] = useState<"organizer" | "category-catalog" | null>(null);
@@ -22,7 +24,7 @@ export function OrganizerReferencePanel({ candidateId, expectedVersion, catalog:
   const selectedIds = value.organizerAssignments.map((item) => item.organizerId);
   const availableCatalogs = catalog.categories.filter((item) => selectedIds.includes(item.organizerId));
   const chooseAction = (next: typeof action) => {
-    setAction(next); setName(""); setSourceUrl(""); setError("");
+    setAction(next); setName(""); setSourceUrl(next === "category-catalog" ? eventSourceUrl.trim() : ""); setError("");
     setOrganizerId(selectedIds.length === 1 ? selectedIds[0] : "");
     setCategories([{ label: "", description: "" }]);
   };
