@@ -2,7 +2,7 @@
   "schema": "event-data-pin/2",
   "eventId": "pf45-rf14",
   "repository": "dekkmarsvin/tw_doujin_event-data",
-  "commit": "b0256da5528ed25cf7880ca8a3023de15857ac67",
+  "commit": "fcc02adaa468725d89910d754c7a2ae06666a92c",
   "files": [
     {
       "path": "events/pf45-rf14/circle-identity-groups.json",
@@ -10,7 +10,7 @@
     },
     {
       "path": "events/pf45-rf14/event.json",
-      "sha256": "cdca9186ffb00c669d113f5d06393144feb4f293a374128d985c4091a075ea2f"
+      "sha256": "e72963626cc61d082440fbc00c4d808542c44f00f27475066ebe2bb0504eaae8"
     },
     {
       "path": "events/pf45-rf14/map-manifest.json",
@@ -18,11 +18,11 @@
     },
     {
       "path": "events/pf45-rf14/maps/1/zhengyan-exhibition-area.json",
-      "sha256": "0afa8c0eee89acf995d1252743874518cd66999dd2309e507ba303893789141b"
+      "sha256": "1e9314a86f1fb787f4898dbb5a9ff47b82d49a0aad24f38d38538cd24d0f581b"
     },
     {
       "path": "events/pf45-rf14/maps/2/zhengyan-exhibition-area.json",
-      "sha256": "ec7d0508037ee8e330eb51a287e9d86bc05692510d5a751d8074b81e4514930f"
+      "sha256": "af805b511081bfe9c219e554cd1670720be727e3d7de547cf16dd4e906f591d3"
     },
     {
       "path": "events/pf45-rf14/official-booths.json",
