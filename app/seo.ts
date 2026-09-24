@@ -34,8 +34,11 @@ export type MetadataPlacement = { day: string | number; boothCode: string; statu
  * now; a moved or cancelled one always carries its status words (#361). */
 export function circleBooths(event: EventDefinition, placements: readonly MetadataPlacement[]) {
   const order = (day: string | number) => event.days.findIndex((candidate) => String(candidate.id) === String(day));
+  // Earliest by calendar date: a corrected date can leave day 1 after day 2
+  // (ADR-0068). Declaration order only decides between days with no date.
   const rows = placements.map((placement) => ({ ...placement, date: eventDayCalendarDate(event, placement.day) }))
-    .sort((a, b) => order(a.day) - order(b.day) || a.boothCode.localeCompare(b.boothCode, "en", { numeric: true }));
+    .sort((a, b) => (a.date && b.date ? a.date.localeCompare(b.date) : 0) || order(a.day) - order(b.day)
+      || a.boothCode.localeCompare(b.boothCode, "en", { numeric: true }));
   if (!rows.length) return null;
   const when = (row: (typeof rows)[number], format: (iso: string) => string) => row.date ? format(row.date)
     : event.days[order(row.day)]?.dateLabel ?? String(row.day);

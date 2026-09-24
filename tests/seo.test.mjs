@@ -161,6 +161,16 @@ test("a circle with every placement cancelled is titled by its earliest one with
   assert.deepEqual(readerHead(event, payload, "c-900001"), page);
 });
 
+test("the earliest placement is the earliest date, even when a corrected day now comes after the next one", () => {
+  const corrected = { ...event, days: [{ ...event.days[0], dateLabel: "2026-09-15" }, { ...event.days[1], dateLabel: "2026-09-02" }],
+    eventEndsAt: "2026-09-15T23:59:59+08:00" };
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01"), placed("2-s03", "c-900001", 2, "S03"), placed("1-s02", "c-900002", 1, "S02")]);
+  const page = head(discoveryPages(corrected, payload).get("/events/sample/circles/c-900001/"));
+  assert.equal(page.title, `北風畫室｜${event.name} 9/2 S03｜場刊 Map`);
+  assert.match(page.description, /的攤位：2026年9月2日 S03；2026年9月15日 S01。/);
+  assert.deepEqual(readerHead(corrected, payload, "c-900001"), page);
+});
+
 test("dates read in full in summaries and in one format on booth rows, however the event published them", () => {
   const description = pageMetadata(event).description;
   assert.match(description, /2026年9月1日至2日/);
