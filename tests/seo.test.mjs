@@ -10,7 +10,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite test environme
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
 const { buildCircleCatalog } = await environment.runner.import("/app/circle-records.ts");
 const { pageMetadata, readerLink, eventPath } = await environment.runner.import("/app/seo.ts");
-const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
+const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
 after(() => vite.close());
 const event = getEventDefinition("sample");
 const catalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
@@ -246,6 +246,28 @@ test("a single-day event keeps one list", () => {
   const html = discoveryPages(single, payload).get("/events/sample/");
   assert.doesNotMatch(html, /<h3>/);
   assert.match(html, /<h2>參展社團<\/h2><p>2 個社團<\/p><ul class="circle-directory"><li><a href="\/events\/sample\/circles\/c-900001\/">北風畫室<\/a><\/li><li><a href="\/events\/sample\/circles\/c-900002\/">南星工房<\/a><\/li><\/ul><\/section>/);
+});
+
+// #365: an introduction page's own links answer directly, never with a redirect.
+test("introduction pages link only to final addresses, and the homepage names the site", () => {
+  for (const html of discoveryPages(event, catalog).values()) {
+    const internal = nodes(parse(html)).filter((node) => node.tagName === "a").map((node) => attr(node, "href")).filter((href) => href.startsWith("/"));
+    assert.ok(internal.includes("/privacy/"));
+    for (const href of internal) assert.ok(new URL(href, "https://map.kotoban.top").pathname.endsWith("/"), href);
+  }
+  const script = nodes(parse(websiteSchemaHtml())).find((node) => attr(node, "type") === "application/ld+json");
+  assert.deepEqual(JSON.parse(script.childNodes[0].value), { "@context": "https://schema.org", "@type": "WebSite", name: "場刊 Map", url: "https://map.kotoban.top/" });
+});
+
+test("the date line on introduction pages meets the 4.5:1 text contrast", async () => {
+  const css = await readFile(new URL("../public/discovery.css", import.meta.url), "utf8");
+  const background = css.match(/\.discovery \{[^}]*background:(#[0-9a-f]{6})/)[1];
+  const eyebrow = css.match(/\.discovery \.eyebrow \{[^}]*color:(#[0-9a-f]{6})/)[1];
+  const luminance = (hex) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255)
+    .map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+  const [light, dark] = [luminance(background), luminance(eyebrow)].sort((a, b) => b - a);
+  assert.ok((light + 0.05) / (dark + 0.05) >= 4.5, `${eyebrow} on ${background}`);
 });
 
 test("sitemap deduplicates canonical paths and never fabricates lastmod", () => {

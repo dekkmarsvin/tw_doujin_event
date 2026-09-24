@@ -21,7 +21,7 @@ ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><m
 function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, schema?: unknown) {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 ${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/fonts/geist.css"><link rel="stylesheet" href="/discovery.css">
-${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}</head><body class="discovery"><header>${link("/", "場刊 Map")}</header><main>${content}</main><footer>${link("/privacy", "隱私權與資料使用")}</footer></body></html>`;
+${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}</head><body class="discovery"><header>${link("/", "場刊 Map")}</header><main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
 }
 
 function eventFacts(event: EventDefinition) {
@@ -30,6 +30,12 @@ function eventFacts(event: EventDefinition) {
   return `<p class="eyebrow">${escapeHtml(calendar.label)}</p><p>${escapeHtml(venues.join("、"))}</p>
 <p>主辦單位：${event.organizerAssignments.map((organizer) => link(organizer.officialUrl, organizer.name)).join("、")}</p>
 <p>${link(event.officialData.eventUrl, "活動網站")}</p>`;
+}
+
+/** The site's own name for search results (#365). Only the homepage carries
+ * it, once, in the head the build writes; the Reader never adds another. */
+export function websiteSchemaHtml() {
+  return `<script type="application/ld+json">${json({ "@context": "https://schema.org", "@type": "WebSite", name: "場刊 Map", url: `${PUBLIC_ORIGIN}/` })}</script>`;
 }
 
 export function homepageSummary(events: readonly EventDefinition[]) {

@@ -79,6 +79,15 @@ test("multi-day event pages have one section per day matching the published cata
   }
 });
 
+// #365: search engines read the site's name from the homepage's WebSite schema.
+test("the built homepage names the site once, and introductions link to the privacy page directly", async () => {
+  const scripts = nodes(parse(await read("index.html"))).filter((node) => attr(node, "type") === "application/ld+json");
+  assert.equal(scripts.length, 1);
+  assert.deepEqual(JSON.parse(scripts[0].childNodes[0].value), { "@context": "https://schema.org", "@type": "WebSite", name: "場刊 Map", url: "https://map.kotoban.top/" });
+  assert.match(await read("events/sample/index.html"), /href="\/privacy\/"/);
+  assert.match(await read("privacy/index.html"), /<html/, "the linked address is the built page itself");
+});
+
 test("shared shell has a static fallback without conflicting query canonical", async () => {
   const html = await read("index.html");
   const elements = nodes(parse(html));

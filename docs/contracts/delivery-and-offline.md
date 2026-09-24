@@ -14,6 +14,8 @@
 
 首頁、介紹頁與 Reader 啟動後的 head 都以絕對網址指向同一張品牌分享圖 `/share-card.png`（1200×630 PNG，維護者選定的 C 版），並使用 `summary_large_image`；多數分享平台不接受 SVG，所以不用站台圖示。分享圖供其他平台的伺服器抓取，不加入 Service Worker precache。
 
+首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
+
 介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。原 query 地圖仍使用既有離線行為。介紹頁及 sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證，避免舊活動／配置長期停留在瀏覽器；這不新增輪詢。
 
 ## Payload 邊界
