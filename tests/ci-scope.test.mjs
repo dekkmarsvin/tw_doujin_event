@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { classifyPaths, determineScope } from "../scripts/ci-scope.mjs";
+import { classifyPaths, determineScope, determineWorkflowScope, findValidatedMainRun } from "../scripts/ci-scope.mjs";
 
 test("only known non-product inputs take a short path", () => {
   assert.equal(classifyPaths(["AGENTS.md", "docs/agents/review-loop.md", "docs/runbooks/local-development.md", ".evidence/a/b.png"]).profile, "docs");
@@ -60,19 +60,83 @@ test("missing history falls back to full, while a mismatched checkout fails", as
   assert.equal(determineScope({ eventName: "workflow_dispatch", event: {} }).profile, "full");
 });
 
+test("a docs push carries unverified product work, but skips products already verified on main", async t => {
+  const r = await repository(t);
+  await r.put("app/product.ts");
+  const product = r.commit();
+  await r.put("README.md", "docs after product");
+  const sha = r.commit();
+  const args = { eventName: "push", event: { before: product, ref: "refs/heads/main" }, sha, cwd: r.cwd };
+  assert.equal(determineScope(args).profile, "docs");
+  // A slow/cancelled product run has not advanced the successful baseline.
+  const pending = await determineWorkflowScope(args, { findBaseline: async () => ({ sha: r.base, runId: 1 }) });
+  assert.equal(pending.profile, "full");
+  assert.ok(pending.paths.includes("app/product.ts"));
+  const delivered = await determineWorkflowScope(args, { findBaseline: async () => ({ sha: product, runId: 2 }) });
+  assert.equal(delivered.profile, "docs");
+  assert.deepEqual(delivered.paths, ["README.md"]);
+  for (const findBaseline of [async () => null, async () => { throw new Error("API unavailable"); }, async () => ({ sha: "f".repeat(40), runId: 1 })]) {
+    assert.equal((await determineWorkflowScope(args, { findBaseline })).profile, "full");
+  }
+});
+
+test("PR, dispatch and product changes do not need a deployment lookup", async t => {
+  const r = await repository(t);
+  await r.put("README.md", "docs");
+  const docs = r.commit();
+  const noLookup = { findBaseline: () => { assert.fail("unnecessary baseline lookup"); } };
+  const pr = await determineWorkflowScope({ eventName: "pull_request", event: { pull_request: { base: { sha: r.base } } }, sha: docs, cwd: r.cwd }, noLookup);
+  assert.equal(pr.profile, "docs");
+  assert.equal((await determineWorkflowScope({ eventName: "workflow_dispatch", event: {} }, noLookup)).profile, "full");
+  await r.put("app/product.ts");
+  assert.equal((await determineWorkflowScope({ eventName: "push", event: { before: docs }, sha: r.commit(), cwd: r.cwd }, noLookup)).profile, "full");
+});
+
+test("baseline lookup skips lightweight runs and requires an identifiable successful deploy", async () => {
+  const run = { head_branch: "main", event: "push", path: ".github/workflows/deploy-pages.yml", status: "completed", conclusion: "success", id: 20, head_sha: "a".repeat(40) };
+  const deploy = { name: "Verify and deploy", status: "completed", conclusion: "success" };
+  const calls = [];
+  const lookup = responses => findValidatedMainRun({ repository: "owner/repo", token: "fixture", fetchImpl: async url => {
+    calls.push(url);
+    const data = responses.shift();
+    assert.ok(data, `unexpected call ${url}`);
+    return { ok: true, json: async () => data };
+  } });
+  assert.deepEqual(await lookup([
+    { workflow_runs: [{ ...run, id: 21 }, run] },
+    { jobs: [{ ...deploy, conclusion: "skipped" }], total_count: 1 },
+    { jobs: [deploy], total_count: 1 },
+  ]), { sha: run.head_sha, runId: 20 });
+  assert.match(calls[1], /runs\/21\/jobs/);
+  assert.match(calls[2], /runs\/20\/jobs/);
+  for (const jobs of [[], [deploy, deploy], [{ ...deploy, conclusion: "failure" }], [{ ...deploy, name: "Unexpected job" }]]) {
+    await assert.rejects(lookup([{ workflow_runs: [run] }, { jobs, total_count: jobs.length }]));
+  }
+  await assert.rejects(lookup([{ workflow_runs: [run] }, { jobs: [deploy], total_count: 2 }]), /Incomplete/);
+  await assert.rejects(lookup([{ workflow_runs: [{ ...run, path: "other.yml" }] }]), /identity/);
+  assert.equal(await lookup([{ workflow_runs: [{ ...run, event: "workflow_dispatch" }, run] }]), null);
+  assert.equal(await lookup([{ workflow_runs: [] }]), null);
+  assert.equal(await findValidatedMainRun({ repository: "owner/repo" }), null);
+  await assert.rejects(findValidatedMainRun({ repository: "owner/repo", token: "fixture", fetchImpl: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
+});
+
 test("the real CLI reports docs applicability and fails on malformed event input", async t => {
   const r = await repository(t);
   await r.put("docs/runbooks/example with spaces.md");
   const sha = r.commit();
   const eventFile = path.join(r.cwd, "event.json");
-  await writeFile(eventFile, JSON.stringify({ before: r.base }));
+  await writeFile(eventFile, JSON.stringify({ pull_request: { base: { sha: r.base } } }));
   const script = new URL("../scripts/ci-scope.mjs", import.meta.url);
-  const env = { ...process.env, GITHUB_EVENT_PATH: eventFile, GITHUB_EVENT_NAME: "push", GITHUB_SHA: sha };
+  const env = { ...process.env, GITHUB_EVENT_PATH: eventFile, GITHUB_EVENT_NAME: "pull_request", GITHUB_SHA: sha };
   delete env.GITHUB_OUTPUT; delete env.GITHUB_STEP_SUMMARY;
   const run = () => spawnSync(process.execPath, [fileURLToPath(script)], { cwd: r.cwd, env, encoding: "utf8" });
   const result = run();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).profile, "docs");
+  await writeFile(eventFile, JSON.stringify({ before: r.base, ref: "refs/heads/main" }));
+  env.GITHUB_EVENT_NAME = "push";
+  delete env.GITHUB_TOKEN;
+  assert.equal(JSON.parse(run().stdout).profile, "full");
   await writeFile(eventFile, "broken JSON");
   assert.notEqual(run().status, 0);
 });

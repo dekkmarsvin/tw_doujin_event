@@ -13,11 +13,18 @@ permissions:
   contents: read
   deployments: write
 
+concurrency:
+  group: cloudflare-pages-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   scope:
     name: Classify verification scope
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
     outputs:
       profile: ${{ steps.scope.outputs.profile }}
     steps:
@@ -29,6 +36,8 @@ jobs:
           node-version-file: .nvmrc
       - name: Classify all changed paths
         id: scope
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci-scope.mjs
 
   non-product:
@@ -57,11 +66,6 @@ jobs:
     if: needs.scope.outputs.profile == 'full' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # A lightweight main update must not cancel a product deployment already
-    # in progress. Full runs retain their existing latest-version policy.
-    concurrency:
-      group: pages-deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref }}
-      cancel-in-progress: true
     outputs:
       preview-url: ${{ steps.deploy.outputs.deployment-url }}
 
@@ -414,9 +418,6 @@ jobs:
     if: needs.scope.outputs.profile == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    concurrency:
-      group: pages-browser-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref }}
-      cancel-in-progress: true
 
     steps:
       - name: Check out repository

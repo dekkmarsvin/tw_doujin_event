@@ -181,6 +181,8 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 
 先由 `Classify verification scope` 比較整次 push 的 before→after，或 PR base→受測 merge tree；新增、刪除及 rename 的兩端都納入。[ci-scope.mjs](../../scripts/ci-scope.mjs) 僅允許已列出的內部 Markdown、設計證據、`.evidence/`、issue／PR 模板及開發工具走輕量流程。公開隱私權頁、產品程式、data pin、bindings、依賴、測試／CI 基礎設施與未知路徑維持完整 gate；歷史不完整時也回到完整 gate。分類失敗不放行後續工作。
 
+main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本，避免文件 push 取消前一個產品 run 後，未交付的產品差異被跳過。基準必須來自同一 workflow，整個 run 及唯一的 `Verify and deploy` job 都成功；輕量 run 的 skipped deploy 不算基準。只查最近 20 個成功 run，找不到、API／歷史不可驗證或遇到手動部署時保守執行完整 gate；僅分類 job 需要 `actions: read`。
+
 輕量流程的 `Check non-product changes` 執行 contribution-files（已含 doc-map），tooling 類另檢查 Claude JSON、hook 語法與非遠端模式。不部署、不跑產品 Node／browser／remote preview E2E；summary 明確標示它們不適用且未執行，不能當成那些測試通過的證據。以下部署表適用完整 gate；手動 dispatch 一律完整執行。
 
 | 觸發 | 行為 |
@@ -191,7 +193,7 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 | `workflow_dispatch` | 從 GitHub Actions 頁面手動重跑目前 branch |
 
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
-- 同一 branch 的完整部署 job 與 browser job 各自只保留最新執行；輕量文件／工具檢查不會取消已在執行的產品部署。完整部署之間仍沿用取消舊工作的政策。
+- 同一 branch 沿用 workflow 層的取消舊 run 政策；分類也在此鎖內，較舊 run 不會因分類較慢而反向取消較新的部署。後續文件更新若仍含未交付產品差異，會承接完整 gate。部署取消與 publication checkpoint 的後續處置維持既有邊界。
 - Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 要求使用 repository root 的標準 `wrangler.jsonc`，它是本 repo 唯一的 Wrangler 設定。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper、E2E token 與 Mailgun 金鑰都必須用 `--env preview` 設定；preview 的寄件網域是 `verify.kotoban.top`。

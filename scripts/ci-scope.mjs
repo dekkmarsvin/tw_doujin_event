@@ -53,9 +53,58 @@ export function determineScope({ eventName, event, sha, cwd = process.cwd() }) {
   return { ...(typeChange ? { profile: "full", reason: "A file type changed; use the full gate." } : classifyPaths(paths)), paths };
 }
 
+// A docs push can cancel a still-running product push under the existing
+// workflow lock. Only omit product work when it has already passed on main.
+// Bound the lookup; an unavailable/older baseline simply costs a full run.
+export async function findValidatedMainRun({ repository, token, fetchImpl = fetch }) {
+  if (!token || !/^[\w.-]+\/[\w.-]+$/.test(repository ?? "")) return null;
+  const api = async suffix => {
+    const response = await fetchImpl(`https://api.github.com/repos/${repository}/actions/${suffix}`, {
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`GitHub scope API returned HTTP ${response.status}.`);
+    return response.json();
+  };
+  const { workflow_runs: runs } = await api("workflows/deploy-pages.yml/runs?branch=main&status=success&per_page=20");
+  if (!Array.isArray(runs)) throw new Error("Invalid workflow run response.");
+  for (const run of runs) {
+    if (run.head_branch !== "main" || !["push", "workflow_dispatch"].includes(run.event)) continue;
+    // A manual deployment is not the normal main-push baseline; force the next
+    // candidate through the full gate rather than infer what it published.
+    if (run.event === "workflow_dispatch") return null;
+    if (run.path !== ".github/workflows/deploy-pages.yml" || run.status !== "completed" || run.conclusion !== "success"
+      || !Number.isSafeInteger(run.id) || run.id <= 0 || !/^[a-f0-9]{40}$/.test(run.head_sha ?? "")) {
+      throw new Error("Unverifiable main workflow identity.");
+    }
+    const { jobs, total_count: count } = await api(`runs/${run.id}/jobs?filter=latest&per_page=100`);
+    if (!Array.isArray(jobs) || count !== jobs.length) throw new Error("Incomplete workflow job response.");
+    const deploys = jobs.filter(job => job.name === "Verify and deploy");
+    if (deploys.length !== 1) throw new Error("Unverifiable deployment job identity.");
+    if (deploys[0].status === "completed" && deploys[0].conclusion === "success") return { sha: run.head_sha, runId: run.id };
+    if (deploys[0].conclusion !== "skipped") throw new Error("Main deployment did not pass.");
+  }
+  return null;
+}
+
+export async function determineWorkflowScope(args, { findBaseline = findValidatedMainRun, ...apiOptions } = {}) {
+  const scope = determineScope(args);
+  if (scope.profile === "full" || args.eventName !== "push") return scope;
+  const full = reason => ({ ...scope, profile: "full", reason });
+  if (args.event.ref !== "refs/heads/main") return full("No verified main ref; use the full gate.");
+  let baseline;
+  try { baseline = await findBaseline(apiOptions); }
+  catch { return full("Deployment baseline lookup failed; use the full gate."); }
+  if (!baseline) return full("No verified successful main deployment; use the full gate.");
+  const cumulative = determineScope({ ...args, event: { ...args.event, before: baseline.sha } });
+  return { ...cumulative, baseline, reason: `Compared with successful main run ${baseline.runId}. ${cumulative.reason}` };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const event = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, "utf8"));
-  const scope = determineScope({ eventName: process.env.GITHUB_EVENT_NAME, event, sha: process.env.GITHUB_SHA });
+  const scope = await determineWorkflowScope({ eventName: process.env.GITHUB_EVENT_NAME, event, sha: process.env.GITHUB_SHA }, {
+    repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN,
+  });
   console.log(JSON.stringify(scope, null, 2));
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `profile=${scope.profile}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) {
