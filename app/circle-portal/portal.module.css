@@ -458,8 +458,8 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 /* ---- /admin: cross-event review queue ----
    One wider column for the whole admin page: the claim queue is a five-column
    list, and sections of two widths stacked on each other read as misaligned.
-   The map review keeps its full width for the map preview. */
-.adminPage .card:not(.editorCard) { max-width: 960px; }
+   The map review stays in it too; its preview's own 900px cap fits inside. */
+.adminPage .card { max-width: 960px; }
 
 .card .secondaryButton { border-color: var(--line); background: #fff; color: var(--ink); }
 .card .secondaryButton:disabled { background: var(--paper); color: var(--muted); }

@@ -60,6 +60,16 @@ async function open(role, entry = "admin") {
   return { page, requests, expire: () => { failure = 401; } };
 }
 
+/** The admin page is one column: a section wider than the rest reads as a
+ * broken layout, whether or not it holds a map preview. */
+async function assertOneColumn(page, label) {
+  const boxes = await page.evaluate(() => ["#overview", "#admin", "#map-review", "#takedown", "#accounts"].map(id => {
+    const box = document.querySelector(id).getBoundingClientRect();
+    return { id, left: Math.round(box.left), width: Math.round(box.width) };
+  }));
+  assert.ok(boxes.every(box => box.left === boxes[0].left && box.width === boxes[0].width), `${label}: ${JSON.stringify(boxes)}`);
+}
+
 try {
   for (const role of ["anonymous", "member"]) {
     const { page, requests } = await open(role);
@@ -85,6 +95,7 @@ try {
   await panel.getByText("第二場待審社", { exact: true }).waitFor();
   await overview.getByRole("link", { name: "前往主辦工作區", exact: true }).waitFor();
   await journey.capture(page, "admin-management-entry");
+  await assertOneColumn(page, "no draft open");
   await panel.locator("li", { hasText: "待審測試社" }).getByRole("button", { name: "核准", exact: true }).click();
   await panel.getByText("已核准「待審測試社」。", { exact: true }).waitFor();
   assert.deepEqual(requests.find(x => x.path === "/api/admin/claims" && x.method === "POST"), { path: "/api/admin/claims", method: "POST", event: "sample", body: { claimId: "claim-one", decision: "approve" } });
@@ -128,6 +139,11 @@ try {
   assert.equal(approval.body.expectedRevision, 3);
   assert.equal(approval.body.confirmOfficialSource, true);
   assert.deepEqual(requests.find(x => x.path.endsWith("/export")).body, { expectedRevision: 3 });
+  await assertOneColumn(page, "draft preview open");
+  // The preview keeps the width it had when the section spanned the page: its
+  // own 900px cap, inside a 1px border.
+  const preview = await review.getByRole("group", { name: /草稿預覽 社團攤位配置圖/ }).boundingBox();
+  assert.ok(preview.width >= 898, `the map preview is ${preview.width}px wide`);
   await review.evaluate(e => e.scrollIntoView({ block: "start" }));
   await journey.capture(page, "admin-map-candidate");
   await review.getByLabel("活動", { exact: true }).selectOption("sample-two");
