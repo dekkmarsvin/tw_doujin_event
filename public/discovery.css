@@ -4,6 +4,7 @@
 .discovery footer { border-top:1px solid #dfe3df; font-size:14px; }
 .discovery h1 { margin:12px 0; font-size:clamp(24px,5vw,36px); line-height:1.35; overflow-wrap:anywhere; }
 .discovery h2 { font-size:20px; margin-top:32px; }
+.discovery h3 { font-size:17px; margin:28px 0 0; }
 .discovery a { color:#306d59; text-underline-offset:4px; overflow-wrap:anywhere; }
 .discovery a:focus-visible { outline:3px solid #d99b44; outline-offset:4px; }
 .discovery .eyebrow { font-variant-numeric:tabular-nums; color:#707a82; }

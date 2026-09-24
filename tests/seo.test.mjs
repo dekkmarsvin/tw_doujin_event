@@ -198,6 +198,41 @@ test("every page's head shares the brand card as a large image", () => {
   }
 });
 
+// #364: a multi-day event page lists circles under each day they exhibit.
+const sections = (html) => {
+  const main = nodes(parse(html)).find((node) => node.tagName === "section");
+  const out = [];
+  for (const node of main.childNodes) {
+    if (node.tagName === "h3") out.push({ day: text(node), links: [] });
+    if (node.tagName === "ul" && out.length) out.at(-1).links = nodes(node).filter((child) => child.tagName === "a").map((a) => [attr(a, "href"), text(a)]);
+  }
+  return out;
+};
+
+test("a multi-day event lists each circle under every day it exhibits, once per day", () => {
+  const html = discoveryPages(event, catalog).get("/events/sample/");
+  assert.deepEqual(sections(html), [
+    { day: "9月1日（二）", links: [["/events/sample/circles/c-900001/", "北風畫室"], ["/events/sample/circles/c-900002/", "南星工房"]] },
+    { day: "9月2日（三）", links: [["/events/sample/circles/c-900001/", "北風畫室"]] },
+  ]);
+  assert.match(html, /<h3>9月1日（二）<\/h3><p>2 個社團<\/p>/);
+  assert.match(html, /<h2>參展社團<\/h2><p>2 個社團<\/p>/, "the event total still counts each circle once");
+});
+
+test("a day a circle only moved away from lists it with the status words, never as present", () => {
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01", "moved"), placed("2-s03", "c-900001", 2, "S03"), placed("1-s02", "c-900002", 1, "S02")]);
+  assert.deepEqual(sections(discoveryPages(event, payload).get("/events/sample/")).map(({ links }) => links.map(([, name]) => name)),
+    [["北風畫室（已移動攤位）", "南星工房"], ["北風畫室"]]);
+});
+
+test("a single-day event keeps one list", () => {
+  const single = { ...event, days: [event.days[0]] };
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01"), placed("1-s02", "c-900002", 1, "S02")]);
+  const html = discoveryPages(single, payload).get("/events/sample/");
+  assert.doesNotMatch(html, /<h3>/);
+  assert.match(html, /<h2>參展社團<\/h2><p>2 個社團<\/p><ul class="circle-directory"><li><a href="\/events\/sample\/circles\/c-900001\/">北風畫室<\/a><\/li><li><a href="\/events\/sample\/circles\/c-900002\/">南星工房<\/a><\/li><\/ul><\/section>/);
+});
+
 test("sitemap deduplicates canonical paths and never fabricates lastmod", () => {
   const xml = sitemapHtml(["/", "/events/sample/", "/events/sample/", "/events/a&b/"]);
   assert.equal((xml.match(/<url>/g) ?? []).length, 3);

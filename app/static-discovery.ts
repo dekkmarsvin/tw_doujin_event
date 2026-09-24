@@ -60,9 +60,27 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
     organizer: event.organizerAssignments.map((organizer) => ({ "@type": "Organization", name: organizer.name, url: organizer.officialUrl })),
   } : undefined;
   const aliases = event.aliases?.length ? `<p>別稱：${escapeHtml(event.aliases.join("、"))}</p>` : "";
+  const directory = (entries: readonly string[]) => `<ul class="circle-directory">${entries.map((entry) => `<li>${entry}</li>`).join("")}</ul>`;
+  const entry = (circle: (typeof circles)[number], status = "") => link(circlePath(event.id, circle.id), `${listed(circle)}${status ? `（${status}）` : ""}`);
   pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${aliases}${eventFacts(event)}
 <p>${link(readerLink(event), "開啟攤位地圖", "primary")}</p>
-<section><h2>參展社團</h2><p>${circles.length} 個社團</p><ul class="circle-directory">${circles.map((circle) => `<li>${link(circlePath(event.id, circle.id), listed(circle))}</li>`).join("")}</ul></section>`, schema));
+<section><h2>參展社團</h2><p>${circles.length} 個社團</p>${event.days.length > 1 ? dayDirectory() : directory(circles.map((circle) => entry(circle)))}</section>`, schema));
+  /** A multi-day event lists its circles day by day, the way readers plan and
+   * search a day (#364). A circle appears under every day it has a placement,
+   * each entry linking to its one page; a day it only moved away from or
+   * cancelled carries the status words, so it is never listed as present. */
+  function dayDirectory() {
+    const days = event.days.map((day, index) => ({ day, index, date: eventDayCalendarDate(event, day.id) }))
+      .sort((a, b) => (a.date && b.date ? a.date.localeCompare(b.date) : 0) || a.index - b.index);
+    return days.map(({ day, date }) => {
+      const onDay = circles.flatMap((circle) => {
+        const here = placementsOf(circle.id).filter((placement) => String(placement.day) === String(day.id));
+        if (!here.length) return [];
+        return [entry(circle, here.some((placement) => placement.status === "active") ? "" : placementStatusLabel(here[0].status))];
+      });
+      return `<h3>${escapeHtml(date ? dayDateLabel(date) : day.dateLabel)}</h3><p>${onDay.length} 個社團</p>${directory(onDay)}`;
+    }).join("");
+  }
   for (const circle of circles) {
     const placements = placementsOf(circle.id);
     const rows = placements.map((placement) => {
