@@ -12,6 +12,7 @@ if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR 
 const runner = vite.environments.ssr.runner;
 const builder = await runner.import("/app/publication-artifacts.ts");
 const api = await runner.import("/app/organizer-amendment-baseline.ts");
+const { pinnedVenue } = await runner.import("/app/organizer-reference-seeds.ts");
 after(() => vite.close());
 const prefix = "events/event-alpha/";
 const pinPath = "data/event-data-pins/event-alpha.json";
@@ -248,6 +249,35 @@ test("data replacement requires the complete unchanged event directory and retai
   assert.equal(data.allFiles.find((file) => file.path === refPath).text, base.references.get(refPath));
   base.references.set(refPath, "{}");
   await assert.rejects(builder.buildPublicationDataStage(source, base), (e) => e.code === "reference_conflict");
+});
+
+// #395: an event published before its venue had an address gets it through a
+// correction. The venue record may differ from the baseline by that address
+// and nothing else; the data stage writes it and the new pin names it.
+test("a correction carries the venue's added address, and no other reference change", async () => {
+  const venuePath = "references/venues/taipei-expo-park-zhengyan-hall.json";
+  const fixture = await amendmentFixture(runner, (snapshot) => {
+    const file = snapshot.references.files.find((item) => item.path === venuePath);
+    Object.assign(file, { content: pinnedVenue, sha256: hash(pinnedVenue) });
+  });
+  const completed = fixture.referenceRecords.find((record) => record.path === venuePath).publicReferenceJson;
+  assert.equal(JSON.parse(completed).address, "10452 臺北市中山區玉門街1號");
+  assert.equal(fixture.dataFiles.get(venuePath), pinnedVenue);
+  const { snapshot } = await snapshotFor(fixture, [{ kind: "released", sources: ["1:S02"], circleName: "接手社" }]);
+  const withAddress = (content) => {
+    const changed = structuredClone(snapshot);
+    Object.assign(changed.references.files.find((item) => item.path === venuePath), { content, sha256: hash(content) });
+    return approved(changed);
+  };
+  const source = withAddress(completed);
+  const data = await builder.buildPublicationDataStage(source, dataBase(fixture));
+  assert.equal(data.files.find((file) => file.path === venuePath)?.text, completed);
+  const main = await builder.buildPublicationMainStage(source, mainInput(fixture, data.allFiles));
+  assert.equal(jsonFile(main, pinPath).files.find((file) => file.path === venuePath).sha256, hash(completed));
+
+  const renamed = JSON.parse(completed);
+  renamed.name = "爭艷館（改名）";
+  await assert.rejects(builder.buildApprovedPublicationArtifacts(withAddress(`${JSON.stringify(renamed, null, 2)}\n`)), (e) => e.code === "snapshot_mismatch");
 });
 
 test("main replacement rejects changed or absent pin, changed source identity and changed merged data", async () => {

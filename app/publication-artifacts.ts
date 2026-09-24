@@ -7,7 +7,7 @@ import { parseEventDefinition } from "./event-catalog";
 import { buildMapCandidate, validateMapContributionDraft } from "./map-contribution-draft";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import { eventMapArtifactPath } from "./event-map-manifest";
-import { verifyReferenceFiles, selectEventReferenceRecords } from "./reference-selection.mjs";
+import { verifyReferenceFiles, selectEventReferenceRecords, isVenueAddressCompletion } from "./reference-selection.mjs";
 import { parseOfficialBoothData } from "./official-booth-data.mjs";
 import { parseCircleIdentityGrouping, planCircleIdentityRegistryUpdate } from "./circle-identity-registry.mjs";
 import { parseEventDataPin, EVENT_DATA_REPOSITORY } from "./event-data-pin.mjs";
@@ -37,6 +37,19 @@ function semanticJson(text: string): string {
   return JSON.stringify(canonical(JSON.parse(text)));
 }
 const sameJson = (a: unknown, b: unknown) => semanticJson(JSON.stringify(a)) === semanticJson(JSON.stringify(b));
+
+/** A correction publishes the references its baseline was published with,
+ * except that a venue may have gained its address since (#395). Every other
+ * difference, in the selection or any file, still breaks the baseline. */
+function referencesMatchBaseline(baseline: OrganizerReferenceSnapshot, current: OrganizerReferenceSnapshot) {
+  if (!sameJson(baseline.selection, current.selection) || baseline.files.length !== current.files.length) return false;
+  return current.files.every((file, index) => {
+    const before = baseline.files[index];
+    if (sameJson(before, file)) return true;
+    try { return before.path === file.path && isVenueAddressCompletion(JSON.parse(before.content), JSON.parse(file.content), file.path); }
+    catch { return false; }
+  });
+}
 
 /** A matching event id alone never authorizes an update. Callers must observe
  * this pin at the fixed main base (and again before the eventual merge). */
@@ -116,7 +129,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
         || !COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit)
         || baseline.event.id !== snapshot.eventId || baseline.pin.eventId !== snapshot.eventId || baseline.pin.commit !== baseline.source.dataCommit
         || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)
-        || !sameJson(snapshotDraft, baseline.draft) || !sameJson(snapshot.references, baseline.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
+        || !sameJson(snapshotDraft, baseline.draft) || !referencesMatchBaseline(baseline.references, snapshot.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
       // The declaration must already be in its one stored form; an approval
       // cannot carry values the save path would have rejected or dropped.
       let settings: OrganizerAmendmentSettings | null;
@@ -234,9 +247,19 @@ export async function buildPublicationDataStage(source: ApprovedArtifactSource, 
     if (!base.references.has(file.path)) fail(`尚未核對固定 base 的 reference：${file.path}`);
     const existing = base.references.get(file.path);
     if (existing === null) { files.push(file); allFiles.push(file); continue; }
+    let same = false;
+    let completes = false;
     try {
-      if (typeof existing !== "string" || semanticJson(existing) !== semanticJson(file.text)) throw new Error("different");
-    } catch { fail(`既有 reference 不同或損壞，拒絕覆寫：${file.path}`, "reference_conflict"); }
+      if (typeof existing === "string") {
+        same = semanticJson(existing) === semanticJson(file.text);
+        completes = !same && isVenueAddressCompletion(JSON.parse(existing), JSON.parse(file.text), file.path);
+      }
+    } catch { /* unreadable bytes are a conflict like any other difference */ }
+    // An existing record is kept as it is. The one change it takes is a venue
+    // gaining its address (#395); pins taken before still read the old bytes
+    // at their own commit, so no published event changes until it is corrected.
+    if (completes) { files.push(file); allFiles.push(file); continue; }
+    if (!same) fail(`既有 reference 不同或損壞，拒絕覆寫：${file.path}`, "reference_conflict");
     allFiles.push({ path: file.path, text: existing!, sha256: await sha256Hex(existing!) });
   }
   return { eventId: artifacts.snapshot.eventId, baseCommit: base.commit, files, allFiles };

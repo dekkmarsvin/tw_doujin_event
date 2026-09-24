@@ -83,6 +83,14 @@ test("canonical seed adoption preserves pinned public names and bytes across rep
   assert.equal(space.displayName, "全館");
   assert.equal(JSON.parse(space.publicReferenceJson).name, "爭艷館展區");
   assert.equal(JSON.parse(space.publicReferenceJson).sources[0].retrievedAt, "2026-08-25T03:43:00Z");
+  // #395: every seed venue carries the address its official page prints, as a
+  // source of its own; FF47's pinned facts keep their original source and time.
+  const venues = initial.filter((item) => item.kind === "venue").map((item) => JSON.parse(item.publicReferenceJson));
+  assert.deepEqual(venues.map(({ id, address }) => [id, address]), INITIAL_ORGANIZER_VENUE_CATALOG.map(({ id, address }) => [id, address]).sort());
+  const zhengyan = venues.find(({ id }) => id === "taipei-expo-park-zhengyan-hall");
+  assert.deepEqual(zhengyan.sources.map(({ id, retrievedAt }) => [id, retrievedAt]), [
+    ["expo-zhengyan-hall", "2026-08-25T03:43:00Z"], ["address-source", "2026-09-24T15:50:00.000Z"]]);
+  assert.deepEqual(zhengyan.provenance, { "/name": ["expo-zhengyan-hall"], "/officialUrl": ["expo-zhengyan-hall"], "/address": ["address-source"] });
   const restarted = createIdentityRepository(database);
   await restarted.ensureTables();
   assert.deepEqual(await restarted.listOrganizerReferenceRecords(), initial);
@@ -100,6 +108,7 @@ test("a new venue and spaces are immediately shared while duplicate human names 
     id: "venue-new",
     name: "新展覽館",
     sourceUrl: "https://venue.example/",
+    address: "100 臺北市中正區範例路1號",
     createdByAccountId: "account-owner",
     now: 10,
     initialSpace: {
@@ -122,6 +131,9 @@ test("a new venue and spaces are immediately shared while duplicate human names 
   }), { ok: true });
 
   const venue = (await repository.listOrganizerVenueCatalog()).venues.find(({ id }) => id === "venue-new");
+  const record = JSON.parse((await repository.listOrganizerReferenceRecords()).find(({ id }) => id === "venue-new").publicReferenceJson);
+  assert.equal(record.address, "100 臺北市中正區範例路1號");
+  assert.deepEqual(record.provenance["/address"], ["official-source"]);
   assert.deepEqual(venue.spaces.map(({ id, defaultAreaMode }) => [id, defaultAreaMode]), [
     ["venue-space-new-1f", "none"],
     ["venue-space-new-4f", "imported"],
@@ -131,6 +143,7 @@ test("a new venue and spaces are immediately shared while duplicate human names 
     id: "venue-duplicate",
     name: "  新展覽館  ",
     sourceUrl: "https://duplicate.example/",
+    address: "100 臺北市中正區範例路2號",
     createdByAccountId: "account-owner",
     now: 12,
     initialSpace: {
@@ -169,6 +182,7 @@ test("catalog rows roll back when their required audit insert fails", async () =
       id: "venue-without-audit",
       name: "不可留下的場館",
       sourceUrl: "https://rollback.example/",
+      address: "100 臺北市中正區範例路3號",
       createdByAccountId: "account-owner",
       now: 20,
       initialSpace: {

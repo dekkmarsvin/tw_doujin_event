@@ -10,7 +10,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite test environme
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
 const { buildCircleCatalog } = await environment.runner.import("/app/circle-records.ts");
 const { pageMetadata, readerLink, eventPath } = await environment.runner.import("/app/seo.ts");
-const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
+const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml, venuePostalAddress, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
 after(() => vite.close());
 const event = getEventDefinition("sample");
 const catalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
@@ -72,9 +72,35 @@ test("schema uses actual event days without fabricating an address or opening ti
   assert.equal(schema["@type"], "Event");
   assert.match(schema.startDate, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(schema.location[0].name, event.venue);
+  // The sample fixture pins a venue record from before #395, with no address.
+  assert.equal(event.venueAssignments[0].venueAddress, undefined);
   assert.equal(schema.location[0].address, undefined);
   const undated = { ...event, days: [{ ...event.days[0], dateLabel: "待確認" }] };
   assert.doesNotMatch(discoveryPages(undated, catalog).get("/events/sample/"), /application\/ld\+json/);
+});
+
+// #395: a venue with an address says where it is, split the way schema.org
+// asks; the page itself is unchanged.
+test("a venue with an address gives the schema a postal address", () => {
+  const addressed = { ...event, venueAssignments: event.venueAssignments.map((venue) => ({ ...venue, venueAddress: "10452 臺北市中山區玉門街1號" })) };
+  const html = discoveryPages(addressed, catalog).get("/events/sample/");
+  const schema = JSON.parse(nodes(parse(html)).find((node) => attr(node, "type") === "application/ld+json").childNodes[0].value);
+  assert.deepEqual(schema.location[0].address, {
+    "@type": "PostalAddress", streetAddress: "玉門街1號", addressLocality: "中山區", addressRegion: "臺北市", postalCode: "10452", addressCountry: "TW",
+  });
+  assert.equal(schema.location.length, new Set(event.venueAssignments.map(({ venueId }) => venueId)).size);
+  assert.doesNotMatch(html.replace(/<script type="application\/ld\+json">.*?<\/script>/su, ""), /玉門街/);
+});
+
+test("an address splits into schema.org parts wherever its postal code sits, and whole when it does not parse", () => {
+  const split = (address) => { const { "@type": type, addressCountry, ...parts } = venuePostalAddress(address);
+    assert.equal(type, "PostalAddress"); assert.equal(addressCountry, "TW"); return parts; };
+  assert.deepEqual(split("台北市 11568 南港區經貿二路 1 號"), { streetAddress: "經貿二路 1 號", addressLocality: "南港區", addressRegion: "台北市", postalCode: "11568" });
+  assert.deepEqual(split("100 臺北市中正區汀州路三段2號"), { streetAddress: "汀州路三段2號", addressLocality: "中正區", addressRegion: "臺北市", postalCode: "100" });
+  assert.deepEqual(split("新竹縣竹北市光明六路10號"), { streetAddress: "光明六路10號", addressLocality: "竹北市", addressRegion: "新竹縣" });
+  assert.deepEqual(split("臺灣臺北市信義區市府路1號"), { streetAddress: "市府路1號", addressLocality: "信義區", addressRegion: "臺北市" });
+  assert.deepEqual(split("臺北市市民大道三段8號"), { streetAddress: "市民大道三段8號", addressRegion: "臺北市" });
+  assert.deepEqual(split("Hall 1, Nangang Exhibition Center"), { streetAddress: "Hall 1, Nangang Exhibition Center" });
 });
 
 const text = (node) => node.nodeName === "#text" ? node.value : (node.childNodes ?? []).map(text).join("");

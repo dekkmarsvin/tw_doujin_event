@@ -76,6 +76,7 @@ export type OrganizerEventDetail = {
   venueCatalog: OrganizerVenueCatalog;
   referenceCatalog?: OrganizerReferenceCatalog;
   missingVenueReferences?: Array<{ kind: "venue" | "venue-space"; id: string; name: string; sourceUrl: string | null }>;
+  missingVenueAddresses?: Array<{ id: string; name: string }>;
   revisions: Array<{ version: number; eventId: string | null; createdByRole: string; createdAt: number }>;
   import: null | {
     source: {
@@ -170,8 +171,8 @@ export function listOrganizerVenues(candidateId: string) {
 
 export function createOrganizerReferenceEntry(candidateId: string, input: {
   expectedVersion: number; kind: "organizer" | "category-catalog" | "venue" | "venue-space"; name: string; sourceUrl: string; referenceId?: string;
-  organizerId?: string; categories?: Array<{ label: string; description: string }>;
-}) {
+  organizerId?: string; categories?: Array<{ label: string; description: string }>; address?: string;
+} | { expectedVersion: number; kind: "venue-address"; referenceId: string; address: string }) {
   return organizerCall<{ created: { id: string; organizerId: string | null; revision: string | null }; catalog: OrganizerReferenceCatalog }>(
     `/api/organizer/events/${encodeURIComponent(candidateId)}/references`, { method: "POST", body: JSON.stringify(input) });
 }
@@ -179,6 +180,7 @@ export function createOrganizerReferenceEntry(candidateId: string, input: {
 export function createOrganizerVenue(candidateId: string, input: {
   name: string;
   sourceUrl: string | null;
+  address: string;
   initialSpace: { name: string; sourceUrl: string | null; defaultAreaMode: OrganizerVenueSpaceAreaMode };
 }) {
   return organizerCall<{

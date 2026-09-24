@@ -89,6 +89,20 @@ test("event definitions fail closed on v2, incomplete assignments and mismatched
   assert.throws(() => parseEventDefinition({ ...sampleDefinition, venueAssignments: [{ ...sampleDefinition.venueAssignments[0], areaIds: ["north"] }] }, sampleReferences), /uniquely cover every area/);
 });
 
+// #395: the venue's address reaches the definition when its pinned record has
+// one, and a record pinned before addresses still parses without it.
+test("a pinned venue address is carried into the event, and its absence is not an error", () => {
+  const venueRecord = (references) => references.find(({ schema }) => schema === "venue/1");
+  assert.equal(Object.hasOwn(parseEventDefinition(sampleDefinition, sampleReferences).venueAssignments[0], "venueAddress"), false);
+  const addressed = structuredClone(sampleReferences);
+  Object.assign(venueRecord(addressed), { address: "100 臺北市中正區範例路1號" });
+  venueRecord(addressed).provenance["/address"] = venueRecord(addressed).provenance["/name"];
+  assert.deepEqual(parseEventDefinition(sampleDefinition, addressed).venueAssignments.map(({ venueAddress }) => venueAddress),
+    sampleDefinition.venueAssignments.map(() => "100 臺北市中正區範例路1號"));
+  Object.assign(venueRecord(addressed), { address: "  " });
+  assert.throws(() => parseEventDefinition(sampleDefinition, addressed), /does not match pinned data/);
+});
+
 test("aliases are optional, keep their order, and malformed lists fail closed", () => {
   assert.equal(Object.hasOwn(parseEventDefinition(sampleDefinition, sampleReferences), "aliases"), false);
   assert.deepEqual(parseEventDefinition({ ...sampleDefinition, aliases: ["S1", "樣本展"] }, sampleReferences).aliases, ["S1", "樣本展"]);
