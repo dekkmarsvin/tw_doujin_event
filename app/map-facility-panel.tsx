@@ -40,16 +40,24 @@ export default function MapFacilityPanel({ id, entries, legend, triggerRef, onCl
       // The press carries on: a pan pans and a booth or a field takes focus.
       // Only when it ends with focus nowhere does focus go back to 設施 — and
       // only then, since pressing the empty map blurs whatever was focused.
+      // A tap's emulated mousedown lands after pointerup and blurs again, so
+      // the check waits for the click; a drag that ends without one falls back
+      // to a timer.
+      let fallback: number | undefined;
       const restore = () => {
-        window.removeEventListener("pointerup", restore, true);
-        window.removeEventListener("pointercancel", restore, true);
+        window.clearTimeout(fallback);
+        window.removeEventListener("pointerup", released, true);
+        window.removeEventListener("pointercancel", released, true);
+        window.removeEventListener("click", restore, true);
         requestAnimationFrame(() => {
           const active = document.activeElement;
           if (!active || active === document.body) triggerRef.current?.focus({ preventScroll: true });
         });
       };
-      window.addEventListener("pointerup", restore, true);
-      window.addEventListener("pointercancel", restore, true);
+      const released = () => { window.clearTimeout(fallback); fallback = window.setTimeout(restore, 400); };
+      window.addEventListener("pointerup", released, true);
+      window.addEventListener("pointercancel", released, true);
+      window.addEventListener("click", restore, true);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
