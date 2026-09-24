@@ -31,6 +31,19 @@ test("built sitemap covers exactly the staged introductions and grouped circles"
   }
 });
 
+// #361: every introduction is its own search result.
+test("every built introduction has its own title and description", async () => {
+  const sitemap = await read("sitemap.xml");
+  const heads = await Promise.all([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(async ([, url]) => {
+    const path = new URL(url).pathname.slice(1);
+    const elements = nodes(parse(await read(`${path}index.html`)));
+    const text = (node) => node.nodeName === "#text" ? node.value : (node.childNodes ?? []).map(text).join("");
+    return { title: text(elements.find((node) => node.tagName === "title")), description: attr(elements.find((node) => attr(node, "name") === "description"), "content") };
+  }));
+  assert.equal(new Set(heads.map((head) => head.title)).size, heads.length);
+  assert.equal(new Set(heads.map((head) => head.description)).size, heads.length);
+});
+
 test("shared shell has a static fallback without conflicting query canonical", async () => {
   const html = await read("index.html");
   const elements = nodes(parse(html));

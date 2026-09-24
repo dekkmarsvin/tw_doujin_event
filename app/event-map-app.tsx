@@ -409,9 +409,12 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     visitedCount, sharedRecords, filtered, resultCircleCount, workTopicSuggestions, matchReasonsByRecordId, genreCounts, markersByCode, slots,
     activeFilterDescriptors,
   } = workspace;
+  // The same title and description as the circle's static page: both are
+  // built from the circle's reviewed placements.
+  const selectedPlacements = selected ? circleRecordsByCircleId.get(selected.circle.id) : undefined;
   useEffect(() => {
-    applyReaderMetadata(pageMetadata(event, selected?.circle));
-  }, [event, selected?.circle]);
+    applyReaderMetadata(pageMetadata(event, selected?.circle, selectedPlacements?.map((record) => record.placement)));
+  }, [event, selected?.circle, selectedPlacements]);
   // A circle on two adjacent booths resolves to its first active record. When the
   // reader already has one of them open, navigating keeps that booth rather than
   // moving the selection and the URL to the sibling.

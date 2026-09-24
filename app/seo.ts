@@ -1,5 +1,6 @@
 import type { EventDefinition } from "./event-catalog";
-import { eventCalendar } from "./event-calendar";
+import { placementStatusLabel } from "./circle-records";
+import { eventCalendar, eventDayCalendarDate, fullDateRange, shortDate } from "./event-calendar";
 
 export const PUBLIC_ORIGIN = "https://map.kotoban.top";
 export const SITE_TITLE = "場刊 Map｜同人展逛攤地圖";
@@ -25,19 +26,55 @@ export function readerLink(event: EventDefinition, placement?: { day: string | n
   return `/?${query}`;
 }
 
-export function pageMetadata(event?: EventDefinition, circle?: { id: string; name: string }) {
-  const dates = event && eventCalendar(event).label;
-  const venues = event && [...new Set(event.venueAssignments.map((venue) => venue.venueName))].join("、");
+/** A circle's placement as both the static page and the Reader hold it. */
+export type MetadataPlacement = { day: string | number; boothCode: string; status: "active" | "cancelled" | "moved" };
+
+/** Where a circle is, earliest day first, for a search result that must tell
+ * two same-named circles apart. Only active placements say where a circle is
+ * now; a moved or cancelled one always carries its status words (#361). */
+export function circleBooths(event: EventDefinition, placements: readonly MetadataPlacement[]) {
+  const order = (day: string | number) => event.days.findIndex((candidate) => String(candidate.id) === String(day));
+  // Earliest by calendar date: a corrected date can leave day 1 after day 2
+  // (ADR-0068). Declaration order only decides between days with no date.
+  const rows = placements.map((placement) => ({ ...placement, date: eventDayCalendarDate(event, placement.day) }))
+    .sort((a, b) => (a.date && b.date ? a.date.localeCompare(b.date) : 0) || order(a.day) - order(b.day)
+      || a.boothCode.localeCompare(b.boothCode, "en", { numeric: true }));
+  if (!rows.length) return null;
+  const when = (row: (typeof rows)[number], format: (iso: string) => string) => row.date ? format(row.date)
+    : event.days[order(row.day)]?.dateLabel ?? String(row.day);
+  const active = rows.filter((row) => row.status === "active");
+  const first = active[0] ?? rows[0];
+  const headline = active.length
+    ? `${when(first, shortDate)} ${active.filter((row) => String(row.day) === String(first.day)).map((row) => row.boothCode).join("、")}`
+    : `${when(first, shortDate)} ${first.boothCode} ${placementStatusLabel(first.status)}`;
+  const summary = [...new Set(rows.map((row) => String(row.day)))].map((day) => {
+    const onDay = rows.filter((row) => String(row.day) === day);
+    const codes = onDay.map((row) => row.status === "active" ? row.boothCode : `${row.boothCode}（${placementStatusLabel(row.status)}）`);
+    return `${when(onDay[0], (iso) => fullDateRange(iso))} ${codes.join("、")}`;
+  }).join("；");
+  return { headline, summary };
+}
+
+export function pageMetadata(event?: EventDefinition, circle?: { id: string; name: string }, placements: readonly MetadataPlacement[] = []) {
+  if (!event) return { title: SITE_TITLE, description: SITE_DESCRIPTION, canonical: `${PUBLIC_ORIGIN}/` };
+  const calendar = eventCalendar(event);
+  const dates = calendar.start ? fullDateRange(calendar.start, calendar.end) : calendar.label;
+  const venues = [...new Set(event.venueAssignments.map((venue) => venue.venueName))].join("、");
+  const closing = "查看攤位位置、收藏社團並規劃逛攤路線。";
   // Aliases are what organizers and readers actually call the event (ADR-0068).
   // The event page gives both names; a circle page uses the first alias, the
-  // event's short name. An event without aliases reads exactly as it did.
-  const aliases = event?.aliases ?? [];
-  const named = !event ? "" : circle ? `${aliases[0] ?? event.name} ` : aliases.length ? `${event.name}（${aliases[0]}）` : `${event.name} `;
-  const described = event && !circle && aliases.length ? `${event.name}（${aliases.join("、")}）` : event?.name;
+  // event's short name. An event without aliases reads as it always did.
+  const aliases = event.aliases ?? [];
+  if (!circle) return {
+    title: `${aliases.length ? `${event.name}（${aliases[0]}）` : `${event.name} `}攤位地圖與社團查詢｜場刊 Map`,
+    description: `${aliases.length ? `${event.name}（${aliases.join("、")}）` : event.name}的社團與攤位地圖。${dates}，${venues}。${closing}`,
+    canonical: PUBLIC_ORIGIN + eventPath(event.id),
+  };
+  const booths = circleBooths(event, placements);
   return {
-    title: event ? `${circle ? `${circle.name}｜` : ""}${named}攤位地圖與社團查詢｜場刊 Map` : SITE_TITLE,
-    description: event ? `${circle ? `${circle.name}在` : ""}${described}的${circle ? "參展日期與攤位" : "社團與攤位地圖"}。${dates}，${venues}。查看攤位位置、收藏社團並規劃逛攤路線。` : SITE_DESCRIPTION,
-    canonical: PUBLIC_ORIGIN + (event ? circle ? circlePath(event.id, circle.id) : eventPath(event.id) : "/"),
+    title: `${circle.name}｜${aliases[0] ?? event.name}${booths ? ` ${booths.headline}` : ""}｜場刊 Map`,
+    description: `${circle.name}在${event.name}的${booths ? `攤位：${booths.summary}。${venues}` : `參展日期與攤位。${dates}，${venues}`}。${closing}`,
+    canonical: PUBLIC_ORIGIN + circlePath(event.id, circle.id),
   };
 }
 

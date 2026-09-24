@@ -8,6 +8,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite test environment missing.");
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
+const { buildCircleCatalog } = await environment.runner.import("/app/circle-records.ts");
 const { pageMetadata, readerLink, eventPath } = await environment.runner.import("/app/seo.ts");
 const { discoveryPages, homepageSummary, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
 after(() => vite.close());
@@ -84,7 +85,7 @@ test("an event without aliases names itself only by its official name", () => {
   assert.equal(event.aliases, undefined);
   assert.equal(pageMetadata(event).title, `${event.name} 攤位地圖與社團查詢｜場刊 Map`);
   assert.ok(pageMetadata(event).description.startsWith(`${event.name}的社團與攤位地圖。`));
-  assert.equal(pageMetadata(event, catalog.circles[0]).title, `${catalog.circles[0].name}｜${event.name} 攤位地圖與社團查詢｜場刊 Map`);
+  assert.equal(pageMetadata(event, catalog.circles[0], catalog.placements.slice(0, 1)).title, `${catalog.circles[0].name}｜${event.name} 9/1 S01｜場刊 Map`);
   const html = discoveryPages(event, catalog).get("/events/sample/");
   assert.doesNotMatch(html, /別稱|alternateName/);
 });
@@ -105,8 +106,82 @@ test("aliases name the event on its pages, the same in text and schema", () => {
   assert.equal(ldJson(eventPage).name, event.name);
   const circlePage = pages.get("/events/sample/circles/c-900001/");
   const title = text(nodes(parse(circlePage)).find((node) => node.tagName === "title"));
-  assert.equal(title, `${catalog.circles[0].name}｜CH20 百合ONLY 攤位地圖與社團查詢｜場刊 Map`);
+  assert.equal(title, `${catalog.circles[0].name}｜CH20 百合ONLY 9/1 S01｜場刊 Map`);
   assert.equal(homepageSummary([aliased]), homepageSummary([event]), "the homepage list keeps the official name");
+});
+
+const head = (html) => {
+  const elements = nodes(parse(html));
+  return { title: text(elements.find((node) => node.tagName === "title")), description: attr(elements.find((node) => attr(node, "name") === "description"), "content") };
+};
+/** What the Reader puts in the head when this circle is selected. */
+const readerHead = (definition, payload, circleId) => {
+  const records = buildCircleCatalog(payload, undefined, definition).recordsByCircleId.get(circleId);
+  const { title, description } = pageMetadata(definition, records[0].circle, records.map((record) => record.placement));
+  return { title, description };
+};
+const placed = (id, circleId, day, boothCode, status = "active") => ({ ...catalog.placements[0], id, circleId, day, area: day === 1 ? "north" : "south", boothCode, status });
+const withPlacements = (placements, names = {}) => ({ ...catalog,
+  circles: catalog.circles.map((circle) => ({ ...circle, name: names[circle.id] ?? circle.name })), placements });
+
+// #361: a circle page says when and where the circle is, so two same-named
+// circles (one per day, as the data records them) never share a title.
+test("same-named circles on different days get their own titles, descriptions and directory entries", () => {
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01"), placed("2-s02", "c-900002", 2, "S02")],
+    { "c-900001": "杏。Xing", "c-900002": "杏。Xing" });
+  const pages = discoveryPages(event, payload);
+  const first = head(pages.get("/events/sample/circles/c-900001/"));
+  const second = head(pages.get("/events/sample/circles/c-900002/"));
+  assert.equal(first.title, `杏。Xing｜${event.name} 9/1 S01｜場刊 Map`);
+  assert.equal(second.title, `杏。Xing｜${event.name} 9/2 S02｜場刊 Map`);
+  assert.ok(first.description.startsWith(`杏。Xing在${event.name}的攤位：2026年9月1日 S01。`));
+  assert.notEqual(first.description, second.description);
+  const entries = nodes(parse(pages.get("/events/sample/"))).filter((node) => node.tagName === "a" && attr(node, "href").includes("/circles/"))
+    .map((node) => [attr(node, "href"), text(node)]);
+  assert.deepEqual(entries, [["/events/sample/circles/c-900001/", "杏。Xing（9/1 S01）"], ["/events/sample/circles/c-900002/", "杏。Xing（9/2 S02）"]]);
+  assert.deepEqual(readerHead(event, payload, "c-900001"), first);
+  assert.deepEqual(readerHead(event, payload, "c-900002"), second);
+});
+
+test("a circle moved to another day is titled by where it is now, and the old booth keeps its status words", () => {
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01", "moved"), placed("2-s03", "c-900001", 2, "S03"), placed("1-s02", "c-900002", 1, "S02")]);
+  const page = head(discoveryPages(event, payload).get("/events/sample/circles/c-900001/"));
+  assert.equal(page.title, `北風畫室｜${event.name} 9/2 S03｜場刊 Map`);
+  assert.match(page.description, /2026年9月1日 S01（已移動攤位）；2026年9月2日 S03。/);
+  assert.deepEqual(readerHead(event, payload, "c-900001"), page);
+});
+
+test("a circle with every placement cancelled is titled by its earliest one with its status, at the same address", () => {
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01", "cancelled"), placed("2-s01", "c-900001", 2, "S01", "cancelled"), placed("1-s02", "c-900002", 1, "S02")]);
+  const html = discoveryPages(event, payload).get("/events/sample/circles/c-900001/");
+  const page = head(html);
+  assert.equal(page.title, `北風畫室｜${event.name} 9/1 S01 已取消參展｜場刊 Map`);
+  assert.match(page.description, /2026年9月1日 S01（已取消參展）；2026年9月2日 S01（已取消參展）。/);
+  assert.equal(attr(nodes(parse(html)).find((node) => attr(node, "rel") === "canonical"), "href"), "https://map.kotoban.top/events/sample/circles/c-900001/");
+  assert.deepEqual(readerHead(event, payload, "c-900001"), page);
+});
+
+test("the earliest placement is the earliest date, even when a corrected day now comes after the next one", () => {
+  const corrected = { ...event, days: [{ ...event.days[0], dateLabel: "2026-09-15" }, { ...event.days[1], dateLabel: "2026-09-02" }],
+    eventEndsAt: "2026-09-15T23:59:59+08:00" };
+  const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01"), placed("2-s03", "c-900001", 2, "S03"), placed("1-s02", "c-900002", 1, "S02")]);
+  const page = head(discoveryPages(corrected, payload).get("/events/sample/circles/c-900001/"));
+  assert.equal(page.title, `北風畫室｜${event.name} 9/2 S03｜場刊 Map`);
+  assert.match(page.description, /的攤位：2026年9月2日 S03；2026年9月15日 S01。/);
+  assert.deepEqual(readerHead(corrected, payload, "c-900001"), page);
+});
+
+test("dates read in full in summaries and in one format on booth rows, however the event published them", () => {
+  const description = pageMetadata(event).description;
+  assert.match(description, /2026年9月1日至2日/);
+  assert.doesNotMatch(description, /\d{2}\.\d{2}\.\d{2}/, "no two-digit years");
+  const iso = { ...event, days: [{ ...event.days[0], dateLabel: "2026-09-01" }, { ...event.days[1], dateLabel: "2026-09-02" }] };
+  const rows = (definition) => nodes(parse(discoveryPages(definition, catalog).get("/events/sample/circles/c-900001/")))
+    .filter((node) => node.tagName === "p" && text(node).includes("9月")).map(text);
+  assert.deepEqual(rows(event), rows(iso));
+  assert.match(rows(event)[0], /^9月1日（二）/);
+  assert.equal(head(discoveryPages(iso, catalog).get("/events/sample/circles/c-900001/")).title,
+    head(discoveryPages(event, catalog).get("/events/sample/circles/c-900001/")).title);
 });
 
 test("sitemap deduplicates canonical paths and never fabricates lastmod", () => {
