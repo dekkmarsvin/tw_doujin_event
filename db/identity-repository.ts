@@ -3286,7 +3286,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     await ensureTables();
     if (input.status === "published" && (input.expectedStep !== "verifying_production"
       || input.nextStep !== "completed" || input.productionVerified !== true)) return false;
-    const result = await database.prepare(
+    const jobUpdate = database.prepare(
       `UPDATE organizer_publication_jobs SET step = ?1, status = ?2, error = ?3, updated_at = ?4,
          failure_code = ?9, retryable = ?10,
          data_pr_number = COALESCE(?11, data_pr_number), data_head_sha = COALESCE(?12, data_head_sha),
@@ -3314,36 +3314,51 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.metadata?.workflow_run_id ?? null,
       input.status === "failed" && input.allowExpiredFailure ? 1 : 0,
       input.nextAttemptAt ?? null, input.pendingAttempts ?? null,
-      input.metadata?.workflow_run_attempt ?? null, input.metadata?.production_manifest_sha256 ?? null).run();
-    if (result.meta.changes !== 1) return false;
+      input.metadata?.workflow_run_attempt ?? null, input.metadata?.production_manifest_sha256 ?? null);
     if (input.status !== "published") {
+      const result = await jobUpdate.run();
+      if (result.meta.changes !== 1) return false;
       await database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
         WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?3)
           AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?3)
           AND status IN ('approved', 'publishing', 'failed')`).bind(input.status, input.now, input.jobId).run();
+      return true;
     }
-    if (input.status === "published") {
-      await database.batch([
-        database.prepare("DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2")
-          .bind(input.jobId, input.leaseToken),
-        database.prepare(
-          `UPDATE organizer_event_candidates SET status = 'published', published_version = current_version,
-             published_at = ?1, updated_at = ?1, last_updated_role = 'system'
-           WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?2)
-             AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?2)`,
-        ).bind(input.now, input.jobId),
-        // A deadline was counted from the end date live when it was chosen. A
-        // corrected date must move it too, or a postponed event could lose its
-        // circles' content before it has even ended (ADR-0068).
-        ...(input.eventEndsAt ? [database.prepare(
-          `UPDATE circle_overrides SET retention_expires_at = ?1
-           WHERE retention_choice = 'purge' AND event_id = (
-             SELECT c.event_id FROM organizer_event_candidates c
-             JOIN organizer_publication_jobs j ON j.candidate_id = c.id WHERE j.id = ?2)`,
-        ).bind(circleRetentionExpiresAt("purge", Date.parse(input.eventEndsAt)), input.jobId)] : []),
-      ]);
-    }
-    return true;
+    // Completion is one transaction. If any part fails, none of it lands: the
+    // job stays at verifying_production, the executor records a retryable
+    // failure, and the retry completes everything. A job marked published on
+    // its own would be skipped forever with its side effects missing.
+    // Statements in a batch cannot read each other's results, so each one after
+    // the job update checks that this call made the transition: the job is
+    // published while this call's lease, released last, is still held.
+    const transitioned = `EXISTS (SELECT 1 FROM organizer_publication_jobs
+        WHERE id = ?2 AND status = 'published' AND step = 'completed')
+      AND EXISTS (SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?2 AND token = ?3)`;
+    const [job] = await database.batch([
+      jobUpdate,
+      database.prepare(
+        `UPDATE organizer_event_candidates SET status = 'published', published_version = current_version,
+           published_at = ?1, updated_at = ?1, last_updated_role = 'system'
+         WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?2)
+           AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?2)
+           AND ${transitioned}`,
+      ).bind(input.now, input.jobId, input.leaseToken),
+      // A deadline was counted from the end date live when it was chosen. A
+      // corrected date must move it too, or a postponed event could lose its
+      // circles' content before it has even ended (ADR-0068).
+      ...(input.eventEndsAt ? [database.prepare(
+        `UPDATE circle_overrides SET retention_expires_at = ?1
+         WHERE retention_choice = 'purge' AND event_id = (
+           SELECT c.event_id FROM organizer_event_candidates c
+           JOIN organizer_publication_jobs j ON j.candidate_id = c.id WHERE j.id = ?2)
+           AND ${transitioned}`,
+      ).bind(circleRetentionExpiresAt("purge", Date.parse(input.eventEndsAt)), input.jobId, input.leaseToken)] : []),
+      database.prepare(
+        `DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2
+           AND EXISTS (SELECT 1 FROM organizer_publication_jobs WHERE id = ?1 AND status = 'published' AND step = 'completed')`,
+      ).bind(input.jobId, input.leaseToken),
+    ]);
+    return job.meta.changes === 1;
   }
 
   async function hasOrganizerPublicationLease(jobId: string, token: string, now: number) {
