@@ -102,7 +102,13 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   >(null);
   // The editor stays open across saves, so the version the next save must send
   // comes from the last response rather than from a remount with fresh props.
-  const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
+  // A detail read can still land after the panel mounted -- a save made in
+  // another section just before the map was opened (#384) -- and that is the
+  // candidate this panel now shows, so the newer of the two goes out. Unsaved
+  // edits may take it too: the map itself is guarded by its revision, which
+  // comes only from reading the map and from this panel's own saves.
+  const [savedVersion, setSavedVersion] = useState(detail.event.version);
+  const expectedVersion = Math.max(savedVersion, detail.event.version);
   const closeDialog = useRef<HTMLElement | null>(null);
   useModalFocus(confirmingClose, closeDialog, () => setConfirmingClose(false));
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
@@ -231,11 +237,11 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
       let saved: OrganizerMapDetail;
       if (selected) {
         const result = await saveOrganizerMap(detail.event.id, selected.id, { expectedVersion, expectedMapRevision: selected.mapRevision, layout, authoring });
-        setExpectedVersion(result.version);
+        setSavedVersion(result.version);
         saved = { ...selected, mapRevision: result.mapRevision, layout, authoring };
       } else {
         const created = await createOrganizerMap(detail.event.id, { expectedVersion, periodKey, venueSpaceId, layout, authoring });
-        setExpectedVersion(created.version);
+        setSavedVersion(created.version);
         saved = (await readOrganizerMap(detail.event.id, created.draftId)).map;
       }
       // The plan the map is being traced from goes up with it. Saying which of

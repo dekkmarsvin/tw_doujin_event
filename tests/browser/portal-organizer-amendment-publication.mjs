@@ -39,6 +39,18 @@ const openSection = async (page, name) => {
  * 其餘等待都是「畫面重繪了沒有」，共用預設值仍然正確；只有跨越整條流程的等待
  * 需要跨越整條流程的預算。這不是固定等待——流程壞掉時它照樣失敗。 */
 const PUBLICATION_TIMEOUT = 60_000;
+/** A map save answers on the line beside its button. Waiting for either answer
+ * lets a version conflict fail as a conflict, not as a ten-second timeout. */
+const mapSaveResult = async (page) => {
+  const line = page.getByRole("group", { name: "地圖儲存動作" }).locator("[aria-live]")
+    .filter({ hasText: /^(地圖已儲存，尚未公開。|版本或狀態已變更。)$/ });
+  await line.waitFor();
+  return line.innerText();
+};
+// What each map save sent and what came back, for the version assertions below.
+const mapSaves = [];
+// Set to a write that another device makes just before the next detail read.
+let otherDeviceSave = null;
 // Reproduce the main CI failure: an amendment save's detail response captured
 // the import section, but reached the browser after the user opened the map.
 // Hold that response until the map preference has been saved; no timer guess.
@@ -142,6 +154,9 @@ try {
     const req = route.request(); const path = new URL(req.url()).pathname;
     const request = new Request(req.url(), { method: req.method(), headers: { ...req.headers(), cookie: actors[role].cookie }, body: req.postData() ?? undefined });
     const match = path.match(/^\/api\/(?:admin\/)?organizer\/events\/([^/]+)(?:\/(.*))?$/);
+    if (otherDeviceSave && match && !match[2] && req.method() === "GET") {
+      const save = otherDeviceSave; otherDeviceSave = null; await save();
+    }
     let response;
     if (path === "/api/auth/session") response = await handlers.session(request);
     else if (path === "/api/organizer/events") response = await handlers.listOrganizerCandidates(request);
@@ -157,6 +172,10 @@ try {
       assert.ok(method, `Unexpected UI action ${path}`); response = await handlers[method](request,id);
       }
     } else throw new Error(`Unexpected UI request ${path}`);
+    if (/^maps\/[^/]+$/.test(match?.[2] ?? "") && req.method() === "PATCH") {
+      const { expectedVersion, expectedMapRevision } = req.postDataJSON();
+      mapSaves.push({ expectedVersion, expectedMapRevision, status: response.status, response: await response.clone().json() });
+    }
     if (role === "owner" && match?.[2] === "amendment" && req.method() === "PUT") holdNextDetail = true;
     if (role === "owner" && match?.[2] === "workspace" && req.postDataJSON().lastSection === "map") releaseDetail();
     if (role === "owner" && match && !match[2] && holdNextDetail) {
@@ -198,12 +217,10 @@ try {
   assert.equal(amendmentMap.current_revision,1,"background inheritance does not save map content");
   await journey.capture(owner,"amendment-real-d1-inherited-background");
   // #380: a service point drawn in this correction travels with it through
-  // review and publication to the reader, in the same place. The map is edited
-  // after a fresh load, the way an organizer comes back to it: the detail held
-  // back above reaches this page after its map panel has mounted.
-  await owner.reload();
-  await openSection(owner, /^地圖/);
-  await owner.getByRole("button", { name: "第一天", exact: true }).click();
+  // review and publication to the reader, in the same place. #384: it is drawn
+  // on the panel that was already open when the held detail arrived, so the
+  // first save has to send that detail's candidate version, not the one the
+  // panel mounted with.
   const editor = owner.getByRole("region", { name: "活動地圖編輯器" });
   await editor.getByRole("button", { name: "新增服務設施", exact: true }).click();
   await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption({ label: "醫護站" });
@@ -212,12 +229,38 @@ try {
   const canvasBox = await canvas.boundingBox();
   await owner.mouse.click(canvasBox.x + canvasBox.width * .5, canvasBox.y + canvasBox.height * .85);
   await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("北側");
+  // The same map is then saved from another device in the gap between this
+  // save and the detail read that follows it. It stores what this page just
+  // stored, so the steps after this one see the same map either way.
+  otherDeviceSave = async () => {
+    const [map] = await repo.listOrganizerMapDrafts(candidate);
+    const latest = await db.prepare("SELECT content_json FROM map_draft_revisions WHERE draft_id=?1 AND revision=?2").bind(map.id,map.current_revision).first();
+    const { version } = await db.prepare("SELECT current_version AS version FROM organizer_event_candidates WHERE id=?1").bind(candidate).first();
+    const saved = await repo.saveOrganizerMapDraft({ candidateId: candidate, draftId: map.id, actorAccountId: actors.owner.id,
+      expectedVersion: version, expectedMapRevision: map.current_revision, contentJson: latest.content_json, now: data.now });
+    assert.equal(saved.ok, true, "the other device's save lands");
+  };
   await owner.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
-  await owner.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
+  assert.equal(await mapSaveResult(owner), "地圖已儲存，尚未公開。", `a detail read after the panel mounted sets the version the save sends: ${JSON.stringify(mapSaves.at(-1))}`);
+  assert.equal(otherDeviceSave, null, "the detail read after the save followed the other device's save");
   const [savedMap] = await repo.listOrganizerMapDrafts(candidate);
   const savedRevision = await db.prepare("SELECT content_json FROM map_draft_revisions WHERE draft_id=?1 AND revision=?2").bind(savedMap.id,savedMap.current_revision).first();
   const savedServices = JSON.parse(savedRevision.content_json).layout.servicePoints;
   assert.deepEqual(savedServices.map(({ kind, label }) => [kind, label]), [["first-aid", "北側"]], "the saved map revision carries the service point");
+  await journey.capture(owner,"amendment-real-d1-map-saved-after-late-read");
+  // That read carried the other device's candidate version, and the panel
+  // sends it. The map it would overwrite is newer than the one on screen,
+  // though, and the map's own revision is what refuses the next save.
+  await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("北側入口");
+  await owner.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
+  const refusal = await mapSaveResult(owner);
+  const refused = mapSaves.at(-1);
+  assert.equal(refusal, "版本或狀態已變更。", `a map saved elsewhere still conflicts: ${JSON.stringify(refused)}`);
+  assert.equal(refused.expectedVersion, refused.response.conflict.currentVersion, "the panel sent the newest candidate version it was shown");
+  assert.ok(refused.expectedMapRevision < refused.response.conflict.currentMapRevision, "the stale map revision is what refused the save");
+  const [keptMap] = await repo.listOrganizerMapDrafts(candidate);
+  assert.equal(keptMap.current_revision, savedMap.current_revision, "the refused save wrote no map revision");
+  await journey.capture(owner,"amendment-real-d1-map-conflict");
   await owner.reload();
   await openSection(owner, /^地圖/);
   await owner.getByRole("button", { name: "第一天", exact: true }).click();
