@@ -93,8 +93,22 @@ try {
   // reflect the previous step after saving changes there.
   await page.getByRole("button", { name: "2 活動日期 已完成", exact: true }).click();
   await page.getByRole("button", { name: "移除", exact: true }).nth(1).click();
+  // Advancing remembers the new position twice, and the second write reports
+  // a failure across the top of the workspace. Finishing the basic settings
+  // later is a new action and must not leave that line above its handoff.
+  let workspaceSaves = 0;
+  const refuseSecondSave = (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    workspaceSaves += 1;
+    if (workspaceSaves !== 2) return route.continue();
+    return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "暫時無法記住目前位置。" }) });
+  };
+  await page.route("**/api/organizer/events/*/workspace", refuseSecondSave);
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("heading", { name: "場館與場地", exact: true }).waitFor();
+  const staleNotice = page.getByText("暫時無法記住目前位置。", { exact: true });
+  await staleNotice.waitFor();
+  await page.unroute("**/api/organizer/events/*/workspace", refuseSecondSave);
   await dates.getByLabel("第一天日期", { exact: true }).waitFor();
   assert.equal(await dates.getByLabel("第二天日期", { exact: true }).count(), 0);
   // Creating a venue fills an existing blank row too, instead of appending a
@@ -158,6 +172,7 @@ try {
   await page.getByRole("combobox", { name: /^場地/ }).nth(1).selectOption({ label: "全館" });
   await journey.capture(page, "venue-multiple-spaces");
   await page.getByRole("button", { name: "移除此場地", exact: true }).nth(1).click();
+  assert.equal(await staleNotice.count(), 1, "the earlier failure is still showing when completion starts");
   const remembered = page.waitForRequest((request) => request.method() === "PATCH" && request.url().endsWith("/workspace"));
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
   // Finishing opens the work that comes next, not the first of the three forms
@@ -167,6 +182,7 @@ try {
   const handoff = page.getByRole("status").filter({ hasText: "基本設定完成" });
   await handoff.getByText("接下來匯入攤位名單。之後的地圖、檢查與送審，從右側「準備進度」進入。", { exact: true }).waitFor();
   assert.equal(await handoff.evaluate((node) => node === document.activeElement), true, "focus follows the unmounted button to the line");
+  assert.equal(await staleNotice.count(), 0, "an earlier step's failure does not stand above the handoff");
   const sections = page.getByRole("group", { name: "活動項目" });
   assert.equal(await sections.getByRole("button", { name: /^攤位匯入/ }).getAttribute("aria-current"), "page");
   assert.equal(await page.getByRole("button", { name: /^下一步：/ }).count(), 0, "no 下一步 to the section already open");

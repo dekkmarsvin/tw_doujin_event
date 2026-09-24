@@ -276,6 +276,8 @@ test("finishing the basic settings opens the next section and marks where the re
   // Said on that section, not across the top of the workspace, and in terms of
   // the next job rather than the mode that changed.
   assert.doesNotMatch(app, /已開啟全部項目/);
+  // Completing is a new action: an earlier step's workspace notice goes.
+  assert.match(app, /const completeOnboarding = useCallback\(async \(candidateId: string, version: number\) => \{\s*setNotice\(IDLE\);/, "completion clears the earlier notice");
   assert.ok(app.includes("{handoff && <OnboardingHandoff"), "the line sits with the panel it introduces");
   assert.match(app, /const finishNavigation = [^]*?setHandoff\(null\);[^]*?request\.run\(\);/, "moving away clears it with every other notice");
 

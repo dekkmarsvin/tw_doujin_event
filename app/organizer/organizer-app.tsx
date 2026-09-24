@@ -259,8 +259,15 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * its own result has nowhere to stand. The binder opens on the suggested
    * section instead, with one line there saying what happened and where the
    * rest of the work now lives. That section is also remembered, so the next
-   * visit resumes at it rather than at the first of the three finished forms. */
-  const openBinder = useCallback(async (candidateId: string) => {
+   * visit resumes at it rather than at the first of the three finished forms.
+   *
+   * Completing is a new action, so it clears the workspace notice as it starts,
+   * as advancing a guided step does: a failed preference save from an earlier
+   * step would otherwise stay above the handoff, failure and success on one
+   * screen describing different moments. */
+  const completeOnboarding = useCallback(async (candidateId: string, version: number) => {
+    setNotice(IDLE);
+    await completeOrganizerOnboarding(candidateId, version);
     setHandoff(candidateId);
     const [, next] = await Promise.all([reloadList(), reloadDetail(candidateId, undefined, "suggested")]);
     if (!next) return;
@@ -411,7 +418,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           onShowAll={() => requestNavigation("查看全部項目", () => setShowAllTasks(true))}
           onReturnToGuide={() => requestNavigation("回到基本設定", () => setShowAllTasks(false))}
           onLeave={() => { setNotice(IDLE); setDirty(false); setSelectedId(null); }}
-          onOnboardingCompleted={() => openBinder(detail.event.id)}
+          onCompleteOnboarding={(version) => completeOnboarding(detail.event.id, version)}
           handoff={handoff === detail.event.id}
           onHandoffDone={() => setHandoff(null)}
           onChanged={refresh}
@@ -437,7 +444,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
 
 function WorkspaceSurface({
   session, detail, section, guidedTask, showAllTasks, onSection, onGuidedTask, onGuidedTaskSaved,
-  onShowAll, onReturnToGuide, onLeave, onOnboardingCompleted, handoff, onHandoffDone, onChanged, onDirtyChange, onDraftSaveReady, persistLocation,
+  onShowAll, onReturnToGuide, onLeave, onCompleteOnboarding, handoff, onHandoffDone, onChanged, onDirtyChange, onDraftSaveReady, persistLocation,
 }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
@@ -450,7 +457,7 @@ function WorkspaceSurface({
   onShowAll: () => void;
   onReturnToGuide: () => void;
   onLeave: () => void;
-  onOnboardingCompleted: () => Promise<void>;
+  onCompleteOnboarding: (version: number) => Promise<void>;
   /** The basic settings were just finished and the reader has not moved yet. */
   handoff: boolean;
   onHandoffDone: () => void;
@@ -477,7 +484,7 @@ function WorkspaceSurface({
         onTaskSaved={onGuidedTaskSaved}
         onShowAll={onShowAll}
         onLeave={onLeave}
-        onCompleted={onOnboardingCompleted}
+        onComplete={onCompleteOnboarding}
         onChanged={onChanged}
         onDirtyChange={onDirtyChange}
         onDraftSaveReady={onDraftSaveReady}
@@ -539,7 +546,7 @@ function OnboardingHandoff({ detail, section }: { detail: OrganizerEventDetail; 
 }
 
 function GuidedTaskStation({
-  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onCompleted, onChanged, onDirtyChange, onDraftSaveReady, onLiveDraftStateChange, persistLocation,
+  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onComplete, onChanged, onDirtyChange, onDraftSaveReady, onLiveDraftStateChange, persistLocation,
 }: {
   detail: OrganizerEventDetail;
   task: OrganizerGuidedTask;
@@ -547,7 +554,7 @@ function GuidedTaskStation({
   onTaskSaved: (task: OrganizerGuidedTask) => void;
   onShowAll: () => void;
   onLeave: () => void;
-  onCompleted: () => Promise<void>;
+  onComplete: (version: number) => Promise<void>;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
@@ -571,8 +578,7 @@ function GuidedTaskStation({
     }
     // The button stays busy through all of this, and a failure is reported
     // beside it by the form; success is the binder opening on the next section.
-    await completeOrganizerOnboarding(detail.event.id, version);
-    await onCompleted();
+    await onComplete(version);
   };
 
   return <section className={styles.guidedStation}>
