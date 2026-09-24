@@ -303,8 +303,12 @@
  .shell :global(.controls) button:first-child { border-radius:12px 12px 0 0; border-bottom:0; }
  .shell :global(.controls) button:nth-of-type(2) { border-radius:0 0 12px 12px; }
  .shell :global(.controls) .fitButton { width:64px; height:64px; margin-top:8px; border-radius:12px; box-shadow:0 3px 12px #202a3517; }
- .shell :global(.controls) .facilityTrigger { order:-1; margin-bottom:8px; border-radius:12px; font-size:calc(13px * var(--ui-font-scale,1)); font-weight:700; box-shadow:0 3px 12px #202a3517; }
- .facilityPanel { position:fixed; z-index:9; right:84px; bottom:calc(var(--mobile-sheet-height) + 14px); width:min(260px,calc(100vw - 100px)); max-height:calc(100dvh - var(--mobile-sheet-height) - 190px); }
+ /* 設施 sits beside 查看全場 rather than on top of the column: a taller column
+    reaches the date and venue tools on short phones. It stays below the fitted
+    floor, whose rect already keeps clear of the collapsed sheet. */
+ .shell :global(.controls) .facilityTrigger { position:absolute; right:72px; bottom:10px; border-radius:12px; font-size:calc(13px * var(--ui-font-scale,1)); font-weight:700; box-shadow:0 3px 12px #202a3517; }
+ /* Above the date and venue tools (z-index 10) while it is open. */
+ .facilityPanel { position:fixed; z-index:11; right:84px; bottom:calc(var(--mobile-sheet-height) + 76px); width:min(260px,calc(100vw - 100px)); max-height:calc(100dvh - var(--mobile-sheet-height) - 196px); }
  .facilityPanel li button { min-height:44px; }
  .shell :global(.controls) .fitLabel { display:block; height:auto; border:0; font-size:12px; background:none; }
  .shell[data-mobile-sheet-level] :global(.compass) { display:none; }

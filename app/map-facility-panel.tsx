@@ -16,7 +16,8 @@ function FacilitySymbol({ kind }: { kind: MapFacilityEntry["kind"] | MapLegendEn
  * legend for what the map draws. Choosing an entry locates it on the map. The
  * panel opens with focus on its first entry; Escape returns focus to the
  * button that opened it, and a press outside closes it without taking over
- * that press, so a pan or a booth tap still happens.
+ * that press, so a pan or a booth tap still happens, and returns focus to the
+ * button unless the press itself moved focus somewhere.
  */
 export default function MapFacilityPanel({ id, entries, legend, triggerRef, onClose, onLocate }: {
   id: string;
@@ -36,6 +37,19 @@ export default function MapFacilityPanel({ id, entries, legend, triggerRef, onCl
       const target = event.target instanceof Node ? event.target : null;
       if (target && (panelRef.current?.contains(target) || triggerRef.current?.contains(target))) return;
       onClose(false);
+      // The press carries on: a pan pans and a booth or a field takes focus.
+      // Only when it ends with focus nowhere does focus go back to 設施 — and
+      // only then, since pressing the empty map blurs whatever was focused.
+      const restore = () => {
+        window.removeEventListener("pointerup", restore, true);
+        window.removeEventListener("pointercancel", restore, true);
+        requestAnimationFrame(() => {
+          const active = document.activeElement;
+          if (!active || active === document.body) triggerRef.current?.focus({ preventScroll: true });
+        });
+      };
+      window.addEventListener("pointerup", restore, true);
+      window.addEventListener("pointercancel", restore, true);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;

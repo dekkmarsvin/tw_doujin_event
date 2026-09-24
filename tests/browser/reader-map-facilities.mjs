@@ -27,6 +27,15 @@ const markers = page => page.evaluate(() => {
   const areaNames = [...svg.querySelectorAll('[data-marker^="landmark:"]')].flatMap((group, index) => group.querySelector("text") ? [{ name: box(group.querySelector("text")), area: areas[index] }] : []);
   return { labels, badges, areaNames, zoom: new DOMMatrix(getComputedStyle(document.querySelector(".floor")).transform).a, located: !!svg.querySelector('[class*="located"]') };
 });
+// A point on the map's own background: no booth, plan, control or panel.
+const emptyPoint = page => page.evaluate(() => {
+  const map = document.querySelector(".map");
+  const box = map.getBoundingClientRect();
+  for (let y = box.top + box.height * .3; y < box.bottom - 40; y += 17) {
+    for (let x = box.right - 30; x > box.left + 20; x -= 23) if (document.elementFromPoint(x, y) === map) return { x, y };
+  }
+  throw new Error("no empty map background on screen");
+});
 const overlapping = labels => {
   const pairs = [];
   for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) {
@@ -94,8 +103,20 @@ try {
     assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
     await journey.capture(page, `facilities-${width}-${scale}-located`);
 
-    // The empty paper beside the plan: two quick presses zoom one step there.
-    const empty = { x: map.left + 20, y: (outline.top + outline.bottom) / 2 };
+    // The empty background: a press there closes the list and hands focus back
+    // to 設施; two quick presses zoom one step there.
+    await trigger.click();
+    await panel.waitFor();
+    const outside = await emptyPoint(page);
+    await page.mouse.click(outside.x, outside.y);
+    await settle(page);
+    assert.equal(await panel.count(), 0, "a press outside closes the list");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "設施", `${context}: a press outside that focuses nothing returns focus to the trigger`);
+    await trigger.click();
+    await panel.waitFor();
+    await panel.getByRole("button", { name: "大會總部，區域", exact: true }).click();
+    await settle(page);
+    const empty = await emptyPoint(page);
     await page.mouse.dblclick(empty.x, empty.y);
     await settle(page);
     const zoomed = await markers(page);
@@ -108,6 +129,34 @@ try {
     assert.ok(close.zoom > 5.99);
     checkBounds(close, factor, `${context} 600%`);
     journey.report.measurements.push({ context, state: "600%", labels: close.labels.map(({ key, px }) => ({ key, px: +px.toFixed(2) })) });
+    await page.close();
+  }
+
+  // On a short phone with the results open, the zoom column still clears the
+  // date and venue tools, so 設施 stays pressable; opening it folds the sheet.
+  for (const scale of ["standard", "extra"]) {
+    const page = await journey.mapPage({ event: "ff47", viewport: { width: 360, height: 640 }, routes: async page => {
+      await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), scale);
+    } });
+    await page.getByRole("button", { name: "探索", exact: true }).click();
+    await settle(page);
+    const trigger = page.getByRole("button", { name: "設施", exact: true });
+    const reachable = await trigger.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      return [box.top + 2, box.top + box.height / 2, box.bottom - 2].every(y => node.contains(document.elementFromPoint(box.left + box.width / 2, y)));
+    });
+    assert.equal(reachable, true, `360x640 ${scale}: nothing covers 設施 with the sheet open`);
+    const tools = await page.locator("[data-map-tools]").first().evaluate(node => node.getBoundingClientRect().bottom);
+    const column = await page.locator(".controls").evaluate(node => node.getBoundingClientRect().top);
+    assert.ok(column >= tools, `360x640 ${scale}: the zoom column starts below the tools (${column} ≥ ${tools})`);
+    await journey.capture(page, `facilities-360-${scale}-sheet`);
+    await trigger.click();
+    await page.getByRole("group", { name: "場內設施" }).waitFor();
+    await settle(page);
+    assert.equal(await page.locator("[data-mobile-sheet-level]").first().getAttribute("data-mobile-sheet-level"), "peek", "opening the list folds the sheet");
+    const title = page.getByRole("heading", { name: "場內設施", exact: true });
+    assert.equal(await title.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + 4, box.top + box.height / 2)); }), true, `360x640 ${scale}: the list is not covered by the tools`);
+    await journey.capture(page, `facilities-360-${scale}-list`);
     await page.close();
   }
 

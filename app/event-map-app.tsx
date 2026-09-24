@@ -185,7 +185,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   });
   const { view: mapView, viewRef: mapViewRef, setView: setMapView, minimum: mapMinZoom, floorHeight, floorWidth, getInset: getFloorInset, position: focusCode, positionPoint, cancelPosition } = viewport;
   const { zoom, offset } = mapView;
-  const interruptPosition = useCallback(() => { restoreInterrupted.current = true; cancelPosition(); setLocatedFacility(null); }, [cancelPosition]);
+  const interruptPosition = useCallback(() => { restoreInterrupted.current = true; cancelPosition(); setLocatedFacility(null); }, [cancelPosition, setLocatedFacility]);
   const facilityDirectory = useMemo(() => publishedMap ? mapFacilityDirectory(publishedMap.layout) : null, [publishedMap]);
   const fontScale = textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1;
   const previousDesktop = useRef<boolean | null>(null);
@@ -252,6 +252,8 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       pendingSelection.current = state.selection;
       if (fromHistory) restoreInterrupted.current = false;
       cancelPosition();
+      setLocatedFacility(null);
+      setFacilityListOpen(false);
       setRestoreVersion((current) => current + 1);
       if (fromHistory) suppressUrlWrite.current = true;
       setDay(state.day);
@@ -474,7 +476,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     }
     const destinationScope = eventUsesScopedMaps(event) ? `${String(record.day)}\u0000${destination.venueSpaceId}` : eventId;
     focusCode(record.code, destinationScope);
-  }, [day, event, eventId, focusCode, hall, rememberMobileResultScroll, setDay, setHall, setDesktopDetailsOpen, setSelectedRecordId, setMobilePanel, setMobileSheetLevel, venueAssignment]);
+  }, [day, event, eventId, focusCode, hall, rememberMobileResultScroll, setDay, setHall, setDesktopDetailsOpen, setLocatedFacility, setSelectedRecordId, setMobilePanel, setMobileSheetLevel, venueAssignment]);
 
   useEffect(() => {
     const key = `${day}|${hall}|${genre}|${favoriteOnly}|${query.trim()}|${filtered[0]?.recordId ?? ""}`;
@@ -486,6 +488,8 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const changeArea = (next: Hall, nextVenueSpaceId = venueAssignment.venueSpaceId) => {
     historyIntent.current = "push";
     cancelPosition();
+    setLocatedFacility(null);
+    setFacilityListOpen(false);
     pendingSelection.current = null;
     pendingRestoreCode.current = null;
     setHall(next);
@@ -545,6 +549,12 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       return { zoom: nextZoom, offset: zoomOffsetAroundPoint(current.offset, current.zoom, nextZoom, point, getFloorInset()) };
     });
   };
+  // On a phone the list needs the map's height, so opening it collapses the
+  // sheet the way 查看全場 does.
+  const toggleFacilityList = () => {
+    if (!facilityListOpen && !desktop) setMobileSheetLevel("peek");
+    setFacilityListOpen(!facilityListOpen);
+  };
   const closeFacilityList = useCallback((returnFocus: boolean) => {
     setFacilityListOpen(false);
     if (returnFocus) facilityTriggerRef.current?.focus({ preventScroll: true });
@@ -557,7 +567,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     closeFacilityList(true);
     setLocatedFacility({ scope: mapScopeKey, key: entry.key });
     positionPoint(entry.point);
-  }, [closeFacilityList, mapScopeKey, positionPoint]);
+  }, [closeFacilityList, mapScopeKey, positionPoint, setLocatedFacility]);
   useEffect(() => {
     if (!desktop && mobileSheetLevel === "full") queueMicrotask(() => setFacilityListOpen(false));
   }, [desktop, mobileSheetLevel]);
@@ -790,6 +800,8 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const changeDay = (next: EventDay) => {
     historyIntent.current = "push";
     cancelPosition();
+    setLocatedFacility(null);
+    setFacilityListOpen(false);
     pendingSelection.current = null;
     pendingRestoreCode.current = null;
     setDay(next);
@@ -858,7 +870,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
           <div ref={toolsRef} className={styles.mapTools} data-map-tools>{renderMapTools()}</div>{desktop && <div ref={fitToolsRef} className={`${styles.mapTools} ${styles.fitTools}`} inert aria-hidden="true" data-map-tools>{renderMapTools(true)}</div>}
           {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
           {selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
-          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={() => setFacilityListOpen((open) => !open)}>{desktop && <UiIcon name="map-pin" />}設施</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
+          <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={toggleFacilityList}>{desktop && <UiIcon name="map-pin" />}設施</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
           {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label="已選社團詳情" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{selected.code} · {selected.name} 詳情已更新</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? "回行程" : "回搜尋"}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}
         </div>
       </section>
