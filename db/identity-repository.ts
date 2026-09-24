@@ -8,6 +8,7 @@ import {
 import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
 import { createVenueReference, createVenueSpaceReference, initialVenueReferences, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
+import { createOrganizerRecoveryRepository } from "./organizer-recovery-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
 
@@ -29,7 +30,7 @@ type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn"
 export type ClaimMethod = "email_domain" | "link_token" | "admin";
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 export type OrganizerRole = "owner" | "editor";
-export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed";
+export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed" | "abandoned";
 
 type IdentityAuditEntry = {
   at: number;
@@ -135,6 +136,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       await database.batch([
         database.prepare("DROP INDEX IF EXISTS organizer_candidates_event_id_idx"),
         database.prepare(replacement.sql),
+      ]);
+    }
+    const active = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'organizer_candidates_active_amendment_idx'").first<{ sql: string }>();
+    if (active && !active.sql.includes("abandoned")) {
+      await database.batch([
+        database.prepare("DROP INDEX IF EXISTS organizer_candidates_active_amendment_idx"),
+        database.prepare(IDENTITY_INDEXES.find(({ name }) => name === "organizer_candidates_active_amendment_idx")!.sql),
       ]);
     }
   }
@@ -3442,6 +3450,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   return {
     ...createReviewNotificationRepository(database, ensureTables),
     ...createOrganizerAmendmentRepository(database, ensureTables),
+    ...createOrganizerRecoveryRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements),
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,

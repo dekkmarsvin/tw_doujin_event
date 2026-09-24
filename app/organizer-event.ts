@@ -9,7 +9,8 @@ export type OrganizerCandidateStatus =
   | "approved"
   | "publishing"
   | "published"
-  | "failed";
+  | "failed"
+  | "abandoned";
 
 export type OrganizerValidationIssue = {
   severity: "error" | "warning";

@@ -104,6 +104,7 @@ type PortalConfig = {
 };
 
 type PortalDependencies = {
+  auditPublicationRecovery?: import("./organizer-publication-recovery").PublicationRecoveryAudit;
   loadPublishedAmendmentBaseline?: (source: AmendmentPublishedSource) => Promise<OrganizerAmendmentBaseline>;
   /** Durable dispatch only; never wait for checks or deployment in a request.
    * Omitted until the production driver and rollout gates are verified. */
@@ -204,6 +205,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 }
 
 export function createCirclePortalHandlers({
+  auditPublicationRecovery,
   loadPublishedAmendmentBaseline,
   dispatchOrganizerPublication,
   repository, sendMail, mailRecipientAllowed, lookupCircle, searchCircles, fetchEvidence, verifyHuman, turnstileSitekey,
@@ -2261,6 +2263,11 @@ export function createCirclePortalHandlers({
         })),
       } : null,
       publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
+      recoveryAvailable: Boolean(access.admin && auditPublicationRecovery && loadPublishedAmendmentBaseline
+        && candidate.publication_operation === "AMEND" && candidate.status === "failed"
+        && publication?.status === "failed" && publication.candidate_version === candidate.current_version
+        && publication.data_merge_sha && publication.main_pr_number && publication.main_head_sha
+        && !publication.main_merge_sha && !publication.workflow_run_id),
       publication: publication ? {
         id: publication.id,
         status: publication.status,
@@ -3095,11 +3102,61 @@ export function createCirclePortalHandlers({
   }
 
   /**
-   * Return a failed approval to the organizer only after the fixed GitHub
-   * repositories prove that no branch or PR was left behind. The failed job
-   * stays failed while the remote audit runs under the same global lease as a
-   * publication, so an old retry cannot race the version transition.
+   * Retire an unpublished amendment only after a separate restoration PR is
+   * verified under the publication lease. Its failed job remains immutable
+   * history; a new candidate requires a new submission and approval.
    */
+  async function abandonOrganizerAmendment(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!access.admin) return json({ error: "只有網站管理者可以終止失敗修正。" }, 403);
+    const body = await readJson(request);
+    const expectedVersion = body?.expectedVersion;
+    const restorationPullNumber = body?.restorationPullNumber;
+    const reason = typeof body?.reason === "string" ? body.reason.normalize("NFKC").trim() : "";
+    if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1
+      || !Number.isSafeInteger(restorationPullNumber) || (restorationPullNumber as number) < 1 || !reason || reason.length > 1000
+      || Object.keys(body!).some((key) => !["expectedVersion", "restorationPullNumber", "reason"].includes(key))) {
+      return json({ error: "請填寫還原 PR 編號與終止原因，並使用目前版本。" }, 400);
+    }
+    if (!auditPublicationRecovery || !loadPublishedAmendmentBaseline) return json({ error: "目前無法核對還原紀錄。" }, 503);
+    const lease = await repository.claimOrganizerRecoveryLease({ candidateId, expectedVersion: expectedVersion as number,
+      actorAccountId: access.current.accountId, now: config.now() });
+    if (!lease) return json({ error: "目前狀態不適用此恢復流程，或另一筆發布正在處理。請重新載入。" }, 409);
+    try {
+      const job = await repository.getOrganizerPublicationJob(lease.jobId);
+      const stored = await repository.getOrganizerAmendment(candidateId);
+      const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, expectedVersion as number);
+      if (!job || !stored || !snapshot || snapshot.id !== job.snapshot_id || snapshot.sha256 !== job.approval_hash
+        || await sha256Hex(snapshot.snapshot_json) !== job.approval_hash) throw new Error("snapshot");
+      const approved = JSON.parse(snapshot.snapshot_json);
+      if (approved.candidateId !== candidateId || approved.candidateVersion !== expectedVersion
+        || approved.operation !== "AMEND" || approved.amendment?.baselineJson !== stored.baseline_json
+        || approved.amendment?.baselineSha256 !== stored.baseline_sha256) throw new Error("baseline");
+      const baseline = await readOrganizerAmendmentBaseline(stored.baseline_json, stored.baseline_sha256);
+      const source = await repository.getOrganizerCandidate(baseline.source.candidateId);
+      const sourceJob = await repository.getOrganizerPublicationJob(baseline.source.jobId);
+      const sourceSnapshot = await repository.getOrganizerSubmissionSnapshot(baseline.source.candidateId, baseline.source.candidateVersion);
+      if (!source || source.status !== "published" || source.current_version !== baseline.source.candidateVersion
+        || source.published_version !== baseline.source.candidateVersion || !sourceJob || sourceJob.status !== "published"
+        || sourceJob.candidate_id !== source.id || sourceJob.candidate_version !== source.current_version
+        || sourceJob.snapshot_id !== baseline.source.snapshotId || sourceJob.approval_hash !== baseline.source.approvalHash
+        || sourceJob.data_merge_sha !== baseline.source.dataCommit || sourceJob.main_merge_sha !== baseline.source.mainCommit
+        || !sourceSnapshot || sourceSnapshot.id !== sourceJob.snapshot_id) throw new Error("source");
+      const current = await loadPublishedAmendmentBaseline({ ...baseline.source, snapshotJson: sourceSnapshot.snapshot_json });
+      if (JSON.stringify(current.pin) !== JSON.stringify(baseline.pin)) throw new Error("published");
+      const evidence = await auditPublicationRecovery({ job, baseline, restorationPullNumber: restorationPullNumber as number });
+      if (!evidence || evidence.restorationPullNumber !== restorationPullNumber) throw new Error("audit");
+      const committed = await repository.abandonRestoredOrganizerAmendment({ candidateId, expectedVersion: expectedVersion as number,
+        actorAccountId: access.current.accountId, now: config.now(), job, leaseToken: lease.token,
+        baselineSha256: stored.baseline_sha256, reason, evidence });
+      if (!committed) return json({ error: "版本、權限或處理時間已變更，請重新載入後再試。" }, 409);
+      return json({ ok: true, status: "abandoned", sourceCandidateId: baseline.source.candidateId });
+    } catch {
+      return json({ error: "還原紀錄或公開基準未通過核對，這次修正仍維持失敗狀態。", code: "publication_recovery_unverified" }, 409);
+    } finally { await repository.releaseOrganizerPublicationLease(lease.jobId, lease.token); }
+  }
+
   async function reopenOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -3228,7 +3285,7 @@ export function createCirclePortalHandlers({
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
     putOrganizerMapBackground, getOrganizerMapBackground,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
-    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate,
+    submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate, abandonOrganizerAmendment,
     createOrganizerAmendment, getOrganizerAmendment, saveOrganizerAmendment,
     // Event-scoped: each answers only for the event the request named.
     listClaims: eventScoped(listClaims),

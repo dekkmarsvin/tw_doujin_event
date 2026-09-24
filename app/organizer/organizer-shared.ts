@@ -52,6 +52,7 @@ export const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
   publishing: "發布中",
   published: "已發布",
   failed: "發布失敗",
+  abandoned: "已終止修正",
 };
 
 export const ROLE_LABEL: Record<string, string> = { owner: "負責人", editor: "協作者", admin: "網站管理者", system: "系統" };

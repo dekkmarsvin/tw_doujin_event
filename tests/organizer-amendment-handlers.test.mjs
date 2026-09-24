@@ -15,7 +15,7 @@ const repo = createIdentityRepository(db, { bootstrapAdmins: ["admin@example.tes
 const data = await amendmentFixture(runner);
 const secret = "test-session-secret";
 const origin = "https://organizer.example";
-let handlers, owner, editor, admin, stranger, ownerId, loadCount, loadHook, dispatched, dispatchHook;
+let handlers, owner, editor, admin, stranger, ownerId, loadCount, loadHook, dispatched, dispatchHook, auditRecoveryHook;
 const backgroundObjects = new Map();
 const backgroundReads = [];
 const request = (method, body, cookie) => new Request(`${origin}/api/organizer/events/source/amendments`, {
@@ -51,8 +51,11 @@ beforeEach(async () => {
     (path,kind,reference_id,organizer_id,revision,display_name,public_reference_json,source_captured_at,created_by)
     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`).bind(row.path,row.kind,row.id,row.organizerId,row.revision,row.displayName,row.publicReferenceJson,row.sourceCapturedAt,adminActor.id).run();
   loadCount = 0; loadHook = async () => {}; dispatched = []; dispatchHook = async () => {};
+  auditRecoveryHook = async () => ({ restorationPullNumber: 9, restorationMergeSha: "9".repeat(40), sourceCandidateId: "source" });
   backgroundObjects.clear(); backgroundReads.length = 0;
   handlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
+    auditPublicationRecovery: (input) => auditRecoveryHook(input),
+    githubRemoteAuditor: async () => { throw Error("A publication with remote checkpoints cannot reach the reopen audit"); },
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true,
     turnstileSitekey: () => "test-sitekey", projectCircle: async () => null,
     mapContributionStore: {
@@ -226,6 +229,118 @@ async function changed() {
   assert.equal(result.status, 200, await result.clone().text());
   return id;
 }
+
+async function failedAfterDataMerge() {
+  const id = await changed();
+  assert.equal((await submit(id)).status, 200);
+  assert.equal((await review(id)).status, 200);
+  const job = await repo.getLatestOrganizerPublicationJob(id);
+  await db.prepare("UPDATE organizer_event_candidates SET status='failed' WHERE id=?1").bind(id).run();
+  await db.prepare(`UPDATE organizer_publication_jobs SET status='failed',step='merging_main',failure_code='snapshot_mismatch',
+    error='old worker omitted settings',retryable=1,data_pr_number=6,data_head_sha=?2,data_merge_sha=?3,
+    main_pr_number=375,main_head_sha=?4,remote_write_intent_at=?5 WHERE id=?1`)
+    .bind(job.id,"6".repeat(40),"7".repeat(40),"8".repeat(40),data.now).run();
+  return { id, job: await repo.getOrganizerPublicationJob(job.id), snapshot: await repo.getOrganizerSubmissionSnapshot(id,2) };
+}
+const abandon = (id, cookie = admin, extra = {}) => handlers.abandonOrganizerAmendment(request("POST", {
+  expectedVersion: 2, restorationPullNumber: 9, reason: "舊版產檔錯誤，未公開資料已還原", ...extra,
+}, cookie), id);
+
+test("restored amendment retires atomically, keeps failure/snapshot/intent and permits a fresh approval only", async () => {
+  const { id, job, snapshot } = await failedAfterDataMerge();
+  const original = await repo.getOrganizerCandidate("source");
+  const before = await repo.getOrganizerAmendment(id);
+  const detail = await (await handlers.getOrganizerCandidate(request("GET",undefined,admin),id)).json();
+  assert.equal(detail.recoveryAvailable,true);
+  const response = await abandon(id);
+  assert.equal(response.status,200,await response.clone().text());
+  assert.equal((await response.json()).sourceCandidateId,"source");
+  assert.equal((await repo.getOrganizerCandidate(id)).status,"abandoned");
+  assert.equal((await repo.getOrganizerCandidate(id)).current_version,2);
+  assert.deepEqual(await repo.getOrganizerPublicationJob(job.id),{...job,retryable:0});
+  assert.deepEqual(await repo.getOrganizerSubmissionSnapshot(id,2),snapshot);
+  assert.deepEqual(await repo.getOrganizerAmendment(id),before);
+  assert.deepEqual(await repo.getOrganizerCandidate("source"),original);
+  assert.equal((await repo.retryOrganizerPublicationJob({jobId:job.id,now:data.now})).ok,false);
+  const {createOrganizerPublicationExecutor}=await runner.import('/app/organizer-publication.ts');
+  assert.equal(await createOrganizerPublicationExecutor(repo,{eventExists(){throw Error('stale');},run(){throw Error('stale');}},()=>data.now)(job.id),'skipped');
+  assert.equal((await abandon(id)).status,409);
+  assert.equal((await handlers.saveOrganizerAmendment(request("PUT",{expectedVersion:2,changes:[]},owner),id)).status,409);
+  const audits=await db.prepare("SELECT detail_json FROM audit_log WHERE action='organizer.amendment.abandoned' AND subject_id=?1").bind(id).all();
+  assert.equal(audits.results.length,1);
+  assert.equal(JSON.parse(audits.results[0].detail_json).restorationPullNumber,9);
+  const next=await changed();
+  assert.notEqual(next,id);
+  assert.equal(await repo.getLatestOrganizerPublicationJob(next),null);
+  assert.equal((await review(next)).status,409,"old approval cannot authorize a new candidate");
+  assert.equal((await submit(next)).status,200);
+  assert.equal((await review(next)).status,200);
+  const nextJob=await repo.getLatestOrganizerPublicationJob(next);
+  assert.notEqual(nextJob.id,job.id);
+  assert.notEqual(nextJob.snapshot_id,job.snapshot_id);
+  assert.notEqual(nextJob.approval_hash,job.approval_hash);
+});
+
+test("concurrent recovery requests perform one remote audit and one retirement", async () => {
+  const { id } = await failedAfterDataMerge();
+  let audited = 0;
+  auditRecoveryHook = async () => { audited++; return { restorationPullNumber: 9 }; };
+  const responses = await Promise.all([abandon(id), abandon(id)]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+  assert.equal(audited, 1);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM organizer_event_reviews WHERE candidate_id=?1 AND to_status='abandoned'").bind(id).first()).n, 1);
+});
+
+test("recovery authorizes Admin before any audit, rejects wrong input and does not change original reopen", async () => {
+  const {id}=await failedAfterDataMerge();
+  let audits=0; auditRecoveryHook=async()=>{audits++;throw Error('must not audit');};
+  for(const [cookie,status] of [[null,401],[owner,403],[editor,403],[stranger,404]]) assert.equal((await abandon(id,cookie)).status,status);
+  for(const extra of [{expectedVersion:1},{reason:""},{restorationPullNumber:0},{restorationPullNumber:1.5},{repository:"foreign"}]) {
+    assert.ok([400,409].includes((await abandon(id,admin,extra)).status));
+  }
+  assert.equal((await handlers.reopenOrganizerCandidate(request("POST",{expectedVersion:2,reason:"不可清空"},admin),id)).status,409);
+  assert.equal(audits,0);
+});
+
+test("unknown remote state, changed public baseline, and already merged main keep the amendment locked", async () => {
+  const {id,job}=await failedAfterDataMerge();
+  auditRecoveryHook=async()=>{throw Error('GitHub 403 / incomplete lookup');};
+  assert.equal((await abandon(id)).status,409);
+  assert.equal((await repo.getOrganizerCandidate(id)).status,'failed');
+  loadHook=async()=>{throw Error('public pin changed');};
+  assert.equal((await abandon(id)).status,409);
+  loadHook=async()=>{};
+  await db.prepare("UPDATE organizer_publication_jobs SET main_merge_sha=?1 WHERE id=?2").bind('a'.repeat(40),job.id).run();
+  assert.equal((await abandon(id)).status,409);
+  assert.equal((await handlers.createOrganizerAmendment(request('POST',{expectedVersion:1},owner),'source')).status,409);
+});
+
+for(const [name,change] of [
+  ['expired lease',()=>db.prepare("UPDATE organizer_publication_lease SET expires_at=0").run()],
+  ['revoked Admin',()=>db.prepare("DELETE FROM admins WHERE email='admin@example.test'").run()],
+  ['disabled Admin',()=>db.prepare("UPDATE accounts SET disabled_at=1 WHERE email='admin@example.test'").run()],
+  ['changed checkpoint',()=>db.prepare("UPDATE organizer_publication_jobs SET data_head_sha=?1 WHERE status='failed'").bind('f'.repeat(40)).run()],
+  ['changed candidate version',()=>db.prepare("UPDATE organizer_event_candidates SET current_version=3 WHERE status='failed'").run()],
+]) test(`recovery CAS refuses ${name} during remote audit without writing retirement evidence`,async()=>{
+  const {id}=await failedAfterDataMerge();
+  auditRecoveryHook=async()=>{await change();return {restorationPullNumber:9};};
+  assert.equal((await abandon(id)).status,409);
+  assert.equal((await repo.getOrganizerCandidate(id)).status,'failed');
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM audit_log WHERE action='organizer.amendment.abandoned'").first()).n,0);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM organizer_event_reviews WHERE to_status='abandoned'").first()).n,0);
+});
+
+test("retirement audit failure rolls back status, lock release and retryability together",async()=>{
+  const {id,job}=await failedAfterDataMerge();
+  await db.exec("CREATE TRIGGER fail_recovery_audit BEFORE INSERT ON audit_log WHEN NEW.action='organizer.amendment.abandoned' BEGIN SELECT RAISE(ABORT,'injected recovery audit failure'); END;");
+  try {
+    assert.equal((await abandon(id)).status,409);
+    assert.equal((await repo.getOrganizerCandidate(id)).status,'failed');
+    assert.deepEqual(await repo.getOrganizerPublicationJob(job.id),job);
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM organizer_event_reviews WHERE to_status='abandoned'").first()).n,0);
+    assert.equal((await handlers.createOrganizerAmendment(request('POST',{expectedVersion:1},owner),'source')).status,409);
+  } finally {await db.exec("DROP TRIGGER fail_recovery_audit");}
+});
 test("AMEND validation, preview, immutable submission and unique approval use the shared publication job", async () => {
   const id = await changed();
   const before = await repo.getOrganizerCandidate("source");

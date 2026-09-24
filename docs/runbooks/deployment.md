@@ -73,6 +73,18 @@ Worker 的 `preview_urls: false` 與 observability 也納入設定，保留既�
 
 Webhook 使用 Pages production 的 `POST /api/integrations/github/webhook`，JSON／HMAC 必須保留，事件喚醒與 cron 恢復依 [Organizer 發布契約](../contracts/organizer-workspace.md#發布邊界)。需要暫停發布時，將兩份 production mode 改為 disabled 並部署；保留 D1 job、snapshot、lease／checkpoint，不手改 job 狀態。正式啟用發布、核准內容與真實故障演練都需要維護者的真人確認；合併工程 PR 不代表已完成這些確認。
 
+### 還原未公開的失敗修正
+
+此維護流程限 [ADR-0069](../adr/0069-restored-unpublished-amendments-retain-failed-history.md) 的 failed AMEND；開始前確認維護者已核准恢復。保留原失敗 job，不手改 D1、不清空 intent／checkpoint、不重新使用舊核准。
+
+1. 確認原 data PR 已合併、main PR 尚未合併且原 pin 仍公開；關閉原 main PR 並保留紀錄。若 main 已合併或部署結果不明，停止使用此流程。
+2. 在最新 data main 建立還原分支，只將 `events/<eventId>/` 還原至原公開 pin commit。比對完整活動目錄及共用 reference；不要回退其他活動或共用 reference。以獨立 PR 通過 `data / check`，使用 squash 合併（還原 commit 必須只有一個 parent）。
+3. 確認 Pages 與獨立 publication Worker 都已部署支援目前 snapshot 的工程版本。Pages 成功部署不代表 Worker 已更新；分別記錄兩者版本。
+4. Admin 開啟失敗修正的「審核與發布」，填入資料還原 PR 編號與終止原因，執行「核對還原並終止」。伺服器唯讀查核 GitHub，成功才在 D1 交易中解除候選鎖定。查核失敗時維持原狀，先處理回報原因，不繞過核對。
+5. 確認狀態為「已終止修正」，舊失敗工作仍可查閱且不可重試。回到已發布來源，建立新修正，重新驗證、預覽、送審與核准。以新 job 的 data／main PR、Pages deployment、公開內容與 D1 完成狀態驗收。
+
+將還原 PR、原／新 job、版本、核准 snapshot 與驗證結果記錄於原 issue／PR；這是人工恢復，不列入零人工補救旅程。
+
 ### preview 的兩個信箱
 
 preview 永遠不碰 production Mailgun，但它會寄信——只寄給兩份名單上的地址，並且**依收件人**決定寄法：
