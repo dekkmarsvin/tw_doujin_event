@@ -15,6 +15,10 @@ import { catalogRoute, start } from "./support/journey.mjs";
 const CIRCLE = "c-900001";
 const placement = (id, boothCode, status) => ({ id, circleId: CIRCLE, day: 1, area: "north", boothCode, status, tone: "mint" });
 const detailOf = (page) => page.locator('aside[aria-label="已選社團詳情"]');
+// #361: the tab title is the circle's static-page title, named by where the
+// circle is now. Written out here so the Reader is checked against the format,
+// not against the function that produces it.
+const titled = (page, title) => page.waitForFunction((expected) => document.title === expected, title);
 
 const journey = await start("reader-booth-changes");
 try {
@@ -31,6 +35,7 @@ try {
     const text = await detail.innerText();
     assert.match(text, /已移動攤位/, "a moved booth says so");
     assert.match(text, /已改到.*S02/, "and says where the circle went");
+    await titled(page, "北風畫室｜範例創作市集 9/1 S02｜場刊 Map");
     await journey.capture(page, "booth-moved-detail");
 
     // The way onward has to actually go there. A label that names the new booth
@@ -53,6 +58,7 @@ try {
     await detail.waitFor();
 
     assert.match(await detail.innerText(), /已取消參展/, "a cancelled booth says so");
+    await titled(page, "北風畫室｜範例創作市集 9/1 S01 已取消參展｜場刊 Map");
     // No destination exists, so offering one would send the reader to a booth
     // that is not there.
     assert.equal(await page.getByRole("button", { name: /看新攤位/ }).count(), 0, "a cancellation offers no onward booth");

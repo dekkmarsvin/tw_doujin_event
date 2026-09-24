@@ -1,8 +1,8 @@
 import type { EventDefinition } from "./event-catalog";
 import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
-import { eventCalendar, eventDayDate, taipeiDate } from "./event-calendar";
-import { circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
+import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
+import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
@@ -40,6 +40,13 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   if (catalog.eventId !== event.id) throw new Error("Discovery catalog must belong to its event.");
   const pages = new Map<string, string>();
   const circles = catalog.circles.filter((circle) => catalog.placements.some((placement) => placement.circleId === circle.id));
+  const placementsOf = (circleId: string) => catalog.placements.filter((placement) => placement.circleId === circleId);
+  // Same-named circles are separate circles (their days are separate evidence);
+  // the directory tells them apart by where each one is, as their titles do.
+  const named = new Map<string, number>();
+  for (const circle of circles) named.set(circle.name, (named.get(circle.name) ?? 0) + 1);
+  const listed = (circle: (typeof circles)[number]) => (named.get(circle.name) ?? 0) > 1
+    ? `${circle.name}（${circleBooths(event, placementsOf(circle.id))?.headline}）` : circle.name;
   const dateEnd = taipeiDate(Date.parse(event.eventEndsAt));
   const dates = event.days.map((day) => eventDayDate(day.dateLabel, dateEnd));
   const calendar = eventCalendar(event);
@@ -54,18 +61,19 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   const aliases = event.aliases?.length ? `<p>別稱：${escapeHtml(event.aliases.join("、"))}</p>` : "";
   pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${aliases}${eventFacts(event)}
 <p>${link(readerLink(event), "開啟攤位地圖", "primary")}</p>
-<section><h2>參展社團</h2><p>${circles.length} 個社團</p><ul class="circle-directory">${circles.map((circle) => `<li>${link(circlePath(event.id, circle.id), circle.name)}</li>`).join("")}</ul></section>`, schema));
+<section><h2>參展社團</h2><p>${circles.length} 個社團</p><ul class="circle-directory">${circles.map((circle) => `<li>${link(circlePath(event.id, circle.id), listed(circle))}</li>`).join("")}</ul></section>`, schema));
   for (const circle of circles) {
-    const placements = catalog.placements.filter((placement) => placement.circleId === circle.id);
+    const placements = placementsOf(circle.id);
     const rows = placements.map((placement) => {
       const day = event.days.find((candidate) => String(candidate.id) === String(placement.day));
       const venue = event.venueAssignments.find((assignment) => assignment.areaIds.includes(placement.area));
       const area = event.areas.find((candidate) => candidate.id === placement.area);
       const status = placementStatusLabel(placement.status);
+      const date = eventDayCalendarDate(event, placement.day);
       return `<li><div><strong>${escapeHtml(placement.boothCode)}</strong>${status ? ` <span class="status">${escapeHtml(status)}</span>` : ""}
-<p>${escapeHtml([day?.dateLabel, venue?.venueName, venue?.venueSpaceName, area?.label].filter(Boolean).join(" · "))}</p></div>${link(readerLink(event, placement), "在地圖查看")}</li>`;
+<p>${escapeHtml([date ? dayDateLabel(date) : day?.dateLabel, venue?.venueName, venue?.venueSpaceName, area?.label].filter(Boolean).join(" · "))}</p></div>${link(readerLink(event, placement), "在地圖查看")}</li>`;
     }).join("");
-    pages.set(circlePath(event.id, circle.id), documentHtml(pageMetadata(event, circle), `<nav aria-label="活動">${link(eventPath(event.id), event.name)}</nav>
+    pages.set(circlePath(event.id, circle.id), documentHtml(pageMetadata(event, circle, placements), `<nav aria-label="活動">${link(eventPath(event.id), event.name)}</nav>
 <h1>${escapeHtml(circle.name)}</h1><p>${escapeHtml(event.name)} · ${escapeHtml(calendar.label)}</p><h2>參展攤位</h2><ul class="placements">${rows}</ul>
 <p>${link(eventPath(event.id), "全部參展社團")}</p><p>${link(event.officialData.eventUrl, "活動網站")}</p>`));
   }

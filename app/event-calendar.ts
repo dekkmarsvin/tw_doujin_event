@@ -22,6 +22,38 @@ export function eventDayDate(label: string, end: string): string | null {
   return calendarDate(year, month, day);
 }
 
+const parts = (iso: string) => ({ year: Number(iso.slice(0, 4)), month: Number(iso.slice(5, 7)), day: Number(iso.slice(8, 10)) });
+
+/** 2026-11-07 → 11/7, the date a search title has room for. */
+export function shortDate(iso: string) {
+  const { month, day } = parts(iso);
+  return `${month}/${day}`;
+}
+
+/** 2026-11-07 → 11月7日（六）: one event day, whether it was published as an
+ * ISO date or as an older month/day label. */
+export function dayDateLabel(iso: string) {
+  const { month, day } = parts(iso);
+  return `${month}月${day}日（${"日一二三四五六"[new Date(`${iso}T00:00:00Z`).getUTCDay()]}）`;
+}
+
+/** Dates written out in full for a summary a reader meets without the site
+ * around it: 2026年8月21日, 2026年8月21日至23日, 2026年8月30日至9月1日. */
+export function fullDateRange(start: string, end = start) {
+  const from = parts(start);
+  const to = parts(end);
+  const first = `${from.year}年${from.month}月${from.day}日`;
+  if (start === end) return first;
+  const last = from.year !== to.year ? `${to.year}年${to.month}月${to.day}日` : from.month !== to.month ? `${to.month}月${to.day}日` : `${to.day}日`;
+  return `${first}至${last}`;
+}
+
+/** An event day's calendar date, or null when its label is not a date. */
+export function eventDayCalendarDate(event: EventDefinition, dayId: string | number) {
+  const day = event.days.find((candidate) => String(candidate.id) === String(dayId));
+  return day ? eventDayDate(day.dateLabel, taipeiDate(Date.parse(event.eventEndsAt))) : null;
+}
+
 /** The published date fields, derived from the event's sorted ISO day dates.
  * A first publication and a corrected date compute them the same way. */
 export function eventDateFields(dates: readonly string[]) {
