@@ -570,7 +570,7 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
         : [{
           section: liveSection,
           code: `unsaved_${liveSection}`,
-          message: liveSection === "venue" ? "場館與使用空間已選好，尚未儲存。" : "活動基本資料已修改，尚未儲存。",
+          message: liveSection === "venue" ? "場館與場地已選好，尚未儲存。" : "活動基本資料已修改，尚未儲存。",
         }]),
     ]
     /* The rail reports what is wrong, not everything that is not yet done. A

@@ -129,9 +129,9 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     // baseline with its declared settings applied. The draft itself never moves.
     const draft = amendment ? applyAmendmentSettings(snapshotDraft, amendment.settings) : snapshotDraft;
     const templates = [...new Set(draft.venue.assignments.map((assignment) => assignment.mapTemplate))];
-    if (templates.length !== 1) fail("目前公開活動格式要求所有使用空間採同一地圖模板。");
+    if (templates.length !== 1) fail("目前公開活動格式要求所有場地採同一地圖模板。");
     const areaIds = draft.venue.assignments.flatMap((assignment) => assignment.areaIds);
-    if (!areaIds.length || new Set(areaIds).size !== areaIds.length) fail("各使用空間的展區必須明確且不可重複。");
+    if (!areaIds.length || new Set(areaIds).size !== areaIds.length) fail("各場地的展區必須明確且不可重複。");
     const dates = draft.event.days.map((day) => day.date).sort();
     const officialUrl = new URL(draft.officialSource.url!).href;
     const event = snapshotEvent(snapshot, draft, templates, areaIds, dates, officialUrl);
@@ -182,7 +182,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       const key = `${day.id}\0${assignment.venueSpaceId}`;
       expectedScopes.add(key);
       const matches = snapshot.maps.filter((map) => map.periodKey === day.id && map.venueSpaceId === assignment.venueSpaceId);
-      if (matches.length !== 1 || !matches[0].id || !Number.isSafeInteger(matches[0].mapRevision) || matches[0].mapRevision < 1) fail("每個活動日與使用空間必須恰好有一份核准地圖。");
+      if (matches.length !== 1 || !matches[0].id || !Number.isSafeInteger(matches[0].mapRevision) || matches[0].mapRevision < 1) fail("每個活動日與場地必須恰好有一份核准地圖。");
       const map = matches[0];
       const authoring = resolveCandidateAuthoringScope({ candidateId: snapshot.candidateId, draft, importedRows: snapshot.import.rows }, day.id, assignment.venueSpaceId)!;
       const path = scoped ? eventMapArtifactPath(day.id, assignment.venueSpaceId) : "map.json";

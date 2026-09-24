@@ -84,7 +84,7 @@ export function createVenueReference(input: { id: string; name: string; sourceUr
 }
 
 export function createVenueSpaceReference(input: { id: string; venueId: string; name: string; sourceUrl: string | null }, now: number) {
-  if (!input.sourceUrl) throw new Error("使用空間缺少官方來源網址。");
+  if (!input.sourceUrl) throw new Error("場地缺少官方來源網址。");
   return record("venue-space", { schema: "venue-space/1", id: input.id, venueId: input.venueId, name: input.name,
     ...provenance(input.sourceUrl, now, "venue-official", ["/name"]) }, `references/venue-spaces/${input.id}.json`, input.name, now);
 }
@@ -161,7 +161,7 @@ export async function resolveOrganizerReferences(draft: OrganizerEventDraft, rec
     for (const item of [venue, ...venue.spaces]) {
       if (!records.some((record) => record.path === item.path)) issues.push({ severity: "error", step: "venue",
         target: item.id, code: "missing_venue_reference",
-        message: "所選場館或使用空間尚未保存完整來源，請在「場館與使用空間」補齊官方來源。" });
+        message: "所選場館或場地尚未保存完整來源，請在「場館與場地」補齊官方來源。" });
     }
   }
   if (issues.length) return { issues, snapshot: null };

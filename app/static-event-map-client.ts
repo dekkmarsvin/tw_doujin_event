@@ -32,7 +32,7 @@ export async function loadStaticEventMapResource(eventId: string, scope?: { peri
   if (!manifestResponse.ok) throw new Error(`讀取活動地圖索引失敗（${manifestResponse.status}）。`);
   const manifest = parseEventMapManifest(await manifestResponse.json(), eventId);
   const entry = manifest.maps.find((map) => map.periodKey === scope.periodKey && map.venueSpaceId === scope.venueSpaceId);
-  if (!entry) throw new Error("找不到目前活動日與場地空間的地圖。");
+  if (!entry) throw new Error("找不到目前活動日與場地的地圖。");
   return resource(entry.path);
 }
 

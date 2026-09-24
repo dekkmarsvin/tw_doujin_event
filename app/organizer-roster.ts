@@ -25,7 +25,7 @@ export function rosterIssues(rows: readonly Row[], draft: OrganizerEventDraft) {
     const row = normalizeRosterRow(original, draft);
     if (!days.has(row.dayId)) add(index, "請選擇活動設定中的活動日。");
     const space = spaces.get(row.venueSpaceId);
-    if (!space) add(index, "請選擇活動設定中的使用空間。");
+    if (!space) add(index, "請選擇活動設定中的場地。");
     if (space && space.areaMode !== "none" && !isOrganizerAreaId(row.areaId)) add(index, "展區只能使用英數字、底線與連字號。");
     if (!row.circleName || row.circleName.length > 200) add(index, "請填寫 200 字以內的社團名稱。");
     if (!row.codes.length || row.codes.some(code => !code || code.length > 80)) add(index, "每組至少一個攤位代碼，每碼最多 80 字。");
@@ -34,8 +34,8 @@ export function rosterIssues(rows: readonly Row[], draft: OrganizerEventDraft) {
       const key = `${row.dayId}\u0000${row.venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;
       const previous = placements.get(key);
       if (previous !== undefined) {
-        add(index, `攤位 ${code} 在同一活動日與使用空間重複。`);
-        if (previous !== index) add(previous, `攤位 ${code} 在同一活動日與使用空間重複。`);
+        add(index, `攤位 ${code} 在同一活動日與場地重複。`);
+        if (previous !== index) add(previous, `攤位 ${code} 在同一活動日與場地重複。`);
       } else placements.set(key, index);
     }
   });
@@ -60,7 +60,7 @@ export function splitRosterRow(row: Row, selectedCodes: readonly string[]): Row[
 
 export function rosterMergeError(rows: readonly Row[]) {
   if (rows.length < 2) return "請選取至少兩個群組。";
-  if (new Set(rows.map(row => row.dayId)).size !== 1 || new Set(rows.map(row => row.venueSpaceId)).size !== 1) return "只能合併同活動日、同使用空間的群組。";
+  if (new Set(rows.map(row => row.dayId)).size !== 1 || new Set(rows.map(row => row.venueSpaceId)).size !== 1) return "只能合併同活動日、同場地的群組。";
   if (new Set(rows.map(row => row.areaId)).size !== 1) return "請先將群組改為同一展區，再合併。";
   if (new Set(rows.map(row => row.stableKey || null)).size !== 1) return "主辦內部編號不同，不能直接合併；請先核對社團識別。";
   return null;

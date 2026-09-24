@@ -36,7 +36,7 @@ test("roster split and merge preserve explicit identity, codes and source proven
   assert.deepEqual(merged.codes, before.codes);
   assert.match(roster.rosterMergeError([left, { ...right, stableKey: "different" }]), /社團識別/);
   assert.match(roster.rosterMergeError([left, { ...right, dayId: "2" }]), /同活動日/);
-  assert.match(roster.rosterMergeError([left, { ...right, venueSpaceId: "other" }]), /同使用空間/);
+  assert.match(roster.rosterMergeError([left, { ...right, venueSpaceId: "other" }]), /同場地/);
   assert.match(roster.rosterMergeError([left, { ...right, areaId: "B" }]), /同一展區/);
 });
 
@@ -298,7 +298,7 @@ test("the downloadable example parses back into the table it was built from", ()
     spaces: [{ id: "zhengyan", label: "新光三越高雄左營店・10F國際活動展演中心", divided: true }],
     requiresArea: true,
   });
-  assert.deepEqual(sample.header, ["活動日", "使用空間", "展區", "攤位代碼", "社團名稱", "主辦內部編號"]);
+  assert.deepEqual(sample.header, ["活動日", "場地", "展區", "攤位代碼", "社團名稱", "主辦內部編號"]);
 
   const parsed = imports.parseOrganizerCsv(imports.toOrganizerCsv([sample.header, ...sample.rows]));
   assert.deepEqual(parsed.map((row) => row.cells), [sample.header, ...sample.rows]);
@@ -324,7 +324,7 @@ test("an undivided event gets an example without an area column", () => {
     spaces: [{ id: "whole-hall", label: "全館", divided: false }],
     requiresArea: false,
   });
-  assert.deepEqual(sample.header, ["活動日", "使用空間", "攤位代碼", "社團名稱", "主辦內部編號"]);
+  assert.deepEqual(sample.header, ["活動日", "場地", "攤位代碼", "社團名稱", "主辦內部編號"]);
   assert.equal(sample.rows.every((row) => row[0] === "1" && row[1] === "全館"), true);
 });
 
@@ -337,7 +337,7 @@ test("the example leaves the area blank for a space that has no divisions", () =
   // The column exists because another space is divided, but filling it in for
   // the undivided one would teach a value the import throws away.
   const area = sample.header.indexOf("展區");
-  const space = sample.header.indexOf("使用空間");
+  const space = sample.header.indexOf("場地");
   const cells = sample.rows.map((row) => [row[space], row[area]]);
   assert.deepEqual(cells.filter(([name]) => name === "全館").map(([, value]) => value), ["", ""]);
   assert.equal(cells.find(([name]) => name === "分區館")[1], "A");

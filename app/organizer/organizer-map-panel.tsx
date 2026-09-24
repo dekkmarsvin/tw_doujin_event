@@ -177,7 +177,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
    * recognition or as a blank sheet its size — belongs to the empty editor,
    * where there is no work to lose. */
   const runFile = async (file: File) => {
-    if (!assignment) throw new Error("請先選擇場館空間。");
+    if (!assignment) throw new Error("請先選擇場地。");
     if (file.size > MAP_IMAGE_MAX_BYTES || !MAP_PLAN_TYPES.includes(file.type)) {
       throw new Error("配置圖需為 JPG、PNG 或 WebP，且不可超過 10MB。");
     }
@@ -263,13 +263,13 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
 
   return <section className={`${styles.panel} ${styles.mapPanel}`}>
     <ActionNotice notice={loadNotice} />
-    <div className={styles.panelHead}><div><h3>各活動日的場館空間地圖</h3><p>每個活動日的每個場館空間各一張地圖。</p></div><span className={styles.version}>{maps.length} 張地圖</span></div>
+    <div className={styles.panelHead}><div><h3>各活動日的場地地圖</h3><p>每個活動日的每個場地各一張地圖。</p></div><span className={styles.version}>{maps.length} 張地圖</span></div>
     <div className={styles.mapToolbar}>
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
         discarding(() => { setPeriodKey(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
       }}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
-      <label>使用空間<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
+      <label>場地<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
         discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
       }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
@@ -291,7 +291,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
           run: load,
         });
       }} /><ActionNotice notice={planFeedback.notice} /></label>
-      <label>從同場館空間複製<select value="" onChange={(event) => {
+      <label>從同場地複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
         if (!map) return;
         discarding(() => {
@@ -313,7 +313,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
           moves the candidate on and writes a revision recording nothing, and
           then counts itself as 1 張地圖 (#218). */}
       <div className={styles.mapActions} role="group" aria-label="地圖儲存動作">
-        <button type="button" disabled={!editable || savingMap || !layoutHasContent(layout) || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與空間的地圖"}</button>
+        <button type="button" disabled={!editable || savingMap || !layoutHasContent(layout) || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖"}</button>
         <button type="button" className={styles.ghost} disabled={savingMap} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
         {/* One line, one truth: the result replaces the dirty state instead of
           standing beside a contradiction of it (#220). */}
@@ -335,7 +335,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
       </> : <>
         <p>{organizerDayLabel(detail.draft.event.days, periodKey)}・{organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}尚未建立地圖。</p>
         <button type="button" disabled={!editable || !assignment} onClick={startBlank}>建立這張地圖</button>
-        <p>也可以上傳配置圖，或從同一個場館空間的其他活動日複製。</p>
+        <p>也可以上傳配置圖，或從同一個場地的其他活動日複製。</p>
       </>}
     </div>}
     {confirmingClose && <div className={styles.dialogBackdrop}>

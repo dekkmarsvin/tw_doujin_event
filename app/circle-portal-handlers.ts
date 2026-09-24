@@ -1143,7 +1143,7 @@ export function createCirclePortalHandlers({
     if (!resolvedScope.ok) return json({
       error: resolvedScope.reason === "scope_conflict"
         ? "同一活動範圍已有互相衝突的核准稿，請由管理者先處理。"
-        : "活動日或使用空間不存在。",
+        : "活動日或場地不存在。",
     }, resolvedScope.reason === "scope_conflict" ? 409 : 400);
     const scope = resolvedScope.scope;
     const draftId = crypto.randomUUID();
@@ -1249,7 +1249,7 @@ export function createCirclePortalHandlers({
     const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
     if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
       ? "同一活動範圍有互相衝突的核准稿，請由管理者先處理。"
-      : "活動日或使用空間已不存在。" }, 409);
+      : "活動日或場地已不存在。" }, 409);
     const scope = resolvedScope.scope;
     const validation = validateMapContributionDraft(
       draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
@@ -1490,7 +1490,7 @@ export function createCirclePortalHandlers({
       const resolvedScope = await mapScope(draft.period_key, draft.venue_space_id);
       if (!resolvedScope.ok) return json({ error: resolvedScope.reason === "scope_conflict"
         ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-        : "活動日或使用空間已不存在。" }, 409);
+        : "活動日或場地已不存在。" }, 409);
       const scope = resolvedScope.scope;
       const validation = validateMapContributionDraft(
         draft.content_json ? JSON.parse(draft.content_json) as unknown : null,
@@ -1560,7 +1560,7 @@ export function createCirclePortalHandlers({
       }
       return json({ error: resolvedScope.reason === "scope_conflict"
         ? "同一活動範圍有互相衝突的核准稿，請先人工處理。"
-        : "活動日或使用空間已不存在。" }, 409);
+        : "活動日或場地已不存在。" }, 409);
     }
     const scope = resolvedScope.scope;
 
@@ -1913,7 +1913,7 @@ export function createCirclePortalHandlers({
         if (!name || !sourceUrl) return json({ error: "請填寫公開名稱與有效的 HTTPS 官方來源網址。" }, 400);
         const catalog = await repository.listOrganizerVenueCatalog();
         const venue = catalog.venues.find((item) => body.kind === "venue" ? item.id === body.referenceId : item.spaces.some((space) => space.id === body.referenceId));
-        if (!venue) return json({ error: "找不到場館或使用空間。" }, 404);
+        if (!venue) return json({ error: "找不到場館或場地。" }, 404);
         record = body.kind === "venue"
           ? createVenueReference({ id: venue.id, name, sourceUrl }, now)
           : createVenueSpaceReference({ id: body.referenceId, venueId: venue.id, name, sourceUrl }, now);
@@ -1946,7 +1946,7 @@ export function createCirclePortalHandlers({
     const defaultAreaMode = initialSpace?.defaultAreaMode ?? "imported";
     if (!name || !spaceName || !sourceUrl || requestedSpaceUrl === undefined
       || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
-      return json({ error: "請填寫場館名稱、使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
+      return json({ error: "請填寫場館名稱、場地名稱與有效的 HTTPS 來源網址。" }, 400);
     }
     const spaceSourceUrl = requestedSpaceUrl ?? sourceUrl;
     const venueId = `venue-${crypto.randomUUID()}`;
@@ -1967,7 +1967,7 @@ export function createCirclePortalHandlers({
       },
     });
     if (!created.ok) {
-      return json({ error: created.reason === "duplicate" ? "這個場館或使用空間已經存在。" : "無法建立場館，請重新整理後再試。" }, 409);
+      return json({ error: created.reason === "duplicate" ? "這個場館或場地已經存在。" : "無法建立場館，請重新整理後再試。" }, 409);
     }
     return json({
       venue: { id: venueId, name, sourceUrl },
@@ -1983,7 +1983,7 @@ export function createCirclePortalHandlers({
     const requestedUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
     const defaultAreaMode = body?.defaultAreaMode ?? "imported";
     if (!name || requestedUrl === undefined || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
-      return json({ error: "請填寫使用空間名稱與有效的 HTTPS 來源網址。" }, 400);
+      return json({ error: "請填寫場地名稱與有效的 HTTPS 來源網址。" }, 400);
     }
     // Blank inherits the venue this space belongs to (#219). The catalog read
     // also answers the missing venue here rather than leaving it to the write.
@@ -2008,7 +2008,7 @@ export function createCirclePortalHandlers({
       },
     });
     if (!created.ok) {
-      const error = created.reason === "not_found" ? "找不到這個場館。" : "這個使用空間已經存在。";
+      const error = created.reason === "not_found" ? "找不到這個場館。" : "這個場地已經存在。";
       return json({ error }, created.reason === "not_found" ? 404 : 409);
     }
     return json({ space: { id: venueSpaceId, venueId, name, sourceUrl, defaultAreaMode } }, 201);
@@ -2554,7 +2554,7 @@ export function createCirclePortalHandlers({
         || !assignment || !areaAllowed || codes.length === 0 || codes.some((code) => !code || code.length > 80)
         || !circleName || circleName.length > 200 || stableKey === undefined || identityGroup === undefined
         || identityGroup !== (stableKey ? `stable:${stableKey}` : null)) {
-        return json({ error: `${rowLabel} 的活動日、使用空間、展區或社團識別對應不一致。` }, 422);
+        return json({ error: `${rowLabel} 的活動日、場地、展區或社團識別對應不一致。` }, 422);
       }
       for (const code of codes) {
         const placement = `${dayId}\u0000${venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;
@@ -2644,10 +2644,10 @@ export function createCirclePortalHandlers({
     const venueSpaceId = typeof body?.venueSpaceId === "string" ? body.venueSpaceId.normalize("NFKC").trim() : "";
     const content = parseMapContributionDraftContent({ schema: "map-contribution-draft/1", layout: body?.layout, ...(body?.authoring === undefined ? {} : { authoring: body.authoring }) });
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1 || !content) {
-      return json({ error: "活動日、場館空間與地圖內容為必填。" }, 400);
+      return json({ error: "活動日、場地與地圖內容為必填。" }, 400);
     }
     const scope = await candidateMapScope(candidateId, periodKey, venueSpaceId);
-    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "這張地圖的活動日、場館空間或地圖模板不屬於此活動。" }, 422);
+    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "這張地圖的活動日、場地或地圖模板不屬於此活動。" }, 422);
     const draftId = crypto.randomUUID();
     const result = await repository.createOrganizerMapDraft({
       id: draftId, candidateId, periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
@@ -2681,7 +2681,7 @@ export function createCirclePortalHandlers({
     const current = await repository.getOrganizerMapDraft(candidateId, draftId);
     if (!current) return json({ error: "找不到地圖草稿。" }, 404);
     const scope = await candidateMapScope(candidateId, current.period_key, current.venue_space_id);
-    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "這張地圖的活動日、場館空間或地圖模板不屬於此活動。" }, 422);
+    if (!scope || content.layout.template !== scope.mapTemplate) return json({ error: "這張地圖的活動日、場地或地圖模板不屬於此活動。" }, 422);
     const result = await repository.saveOrganizerMapDraft({
       candidateId, draftId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number, expectedMapRevision: expectedMapRevision as number,

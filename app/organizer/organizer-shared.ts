@@ -17,7 +17,7 @@ export type PendingNavigation = { description: string; run: () => void };
 export const IDLE: Notice = { kind: "idle", message: "" };
 export const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
   event: "活動",
-  venue: "場館與使用空間",
+  venue: "場館與場地",
   import: "攤位匯入",
   map: "地圖",
   validate: "檢查與預覽",
@@ -28,7 +28,7 @@ export const organizerSectionLabel = (detail: OrganizerEventDetail, section: Org
 export const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
   identity_source: "活動名稱與來源",
   days: "活動日期",
-  venue: "場館與使用空間",
+  venue: "場館與場地",
 };
 /** What each basic setting is actually asking. The heading names the task;
  * this says what answering it means, so the organizer does not have to infer
@@ -36,7 +36,7 @@ export const GUIDED_LABEL: Record<OrganizerGuidedTask, string> = {
 export const TASK_QUESTION: Record<OrganizerGuidedTask, string> = {
   identity_source: "填寫活動名稱，以及主辦單位公告這場活動的頁面。",
   days: "這場活動辦在哪幾天？每一天各填一個日期。",
-  venue: "選擇活動使用的場館與空間。例如同一場館使用兩層樓，可分別加入 1F 與 2F。",
+  venue: "選擇活動使用的場館與場地。例如同一場館使用兩層樓，可分別加入 1F 與 2F。",
 };
 export const READINESS_LABEL = {
   complete: "已完成",
@@ -58,7 +58,7 @@ export const STATUS_LABEL: Record<OrganizerEventSummary["status"], string> = {
 export const ROLE_LABEL: Record<string, string> = { owner: "負責人", editor: "協作者", admin: "網站管理者", system: "系統" };
 export const STEP_LABEL: Record<OrganizerValidationIssue["step"], string> = {
   event: "活動",
-  venue: "場館與使用空間",
+  venue: "場館與場地",
   import: "攤位匯入",
   map: "地圖",
   preview: "預覽",
@@ -95,7 +95,7 @@ export function organizerVenueSpaceLabel(catalog: OrganizerVenueCatalog, venueSp
     const space = venue.spaces.find((item) => item.id === venueSpaceId);
     if (space) return `${venue.name}・${space.name}`;
   }
-  return "原使用空間已不存在";
+  return "原場地已不存在";
 }
 
 /** Maps are addressed by the day's stable id, which is what the workspace
@@ -127,7 +127,7 @@ export function organizerIssueMessage(
   const onMap = (issue.step ?? issue.section) === "map";
   const booths = issue.count ?? issue.boothCodes?.length;
   if (onMap && issue.code === "unknown_booth") {
-    return `地圖有 ${booths ?? "部分"} 個攤位代碼未出現在同一天、同一場館空間的匯入資料。`;
+    return `地圖有 ${booths ?? "部分"} 個攤位代碼未出現在同一天、同一場地的匯入資料。`;
   }
   if (onMap && issue.code === "missing_booth") {
     return `匯入資料有 ${booths ?? "部分"} 個攤位代碼未出現在這份地圖。`;

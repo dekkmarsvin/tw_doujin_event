@@ -65,7 +65,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
     <DraftList event={event} drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
     {!detail && <div className={styles.mapDraftCreate}>
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
-      <label>使用空間<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
+      <label>場地<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
       <button type="button" onClick={() => void run(async () => {
         const current = await loadStaticEventMap(event.id, eventUsesScopedMaps(event)
           ? { periodKey, venueSpaceId }

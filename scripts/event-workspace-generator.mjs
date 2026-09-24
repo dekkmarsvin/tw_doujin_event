@@ -285,7 +285,7 @@ export async function collectEventGeneratorInput({ workspace, ask }) {
 
   const venueAssignments = [];
   const selectedVenueMap = new Map();
-  for (let index = 0, total = await count("場館空間 assignment 數量"); index < total; index += 1) {
+  for (let index = 0, total = await count("場地 assignment 數量"); index < total; index += 1) {
     const venueId = await required(`第 ${index + 1} 個 venue stable ID`);
     const venuePath = referencePath("venue", { id: venueId });
     const venue = await loadOrCreate(venuePath, async () => {

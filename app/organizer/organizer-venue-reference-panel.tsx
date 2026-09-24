@@ -13,7 +13,7 @@ export function OrganizerVenueReferencePanel({ entry, candidateId, expectedVersi
   const [sourceUrl, setSourceUrl] = useState(entry.sourceUrl ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const label = entry.kind === "venue" ? "場館" : "使用空間";
+  const label = entry.kind === "venue" ? "場館" : "場地";
   return <form className={styles.catalogCreator} aria-label={`補齊${entry.name}來源`} onSubmit={(event) => {
     event.preventDefault();
     if (disabled || busy) return;

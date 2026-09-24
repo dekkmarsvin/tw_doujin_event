@@ -30,7 +30,7 @@ export function MapBoothList({ layout, scope, selectedCode, onLocate }: {
     <h4>攤位清單對照</h4>
     <p role="status">清單 {coverage.required.length} 碼・已畫 {coverage.completed} 碼・待畫 {coverage.missing.length} 碼</p>
     <p>依目前地圖草稿即時計算；未儲存的修改不代表已完成保存。</p>
-    {selectedCode && <p aria-live="polite">選取 {selectedCode}：{names.get(selectedCode)?.join("、") || "本活動日與使用空間沒有對應群組"}</p>}
+    {selectedCode && <p aria-live="polite">選取 {selectedCode}：{names.get(selectedCode)?.join("、") || "本活動日與場地沒有對應群組"}</p>}
     {coverage.unknown.length > 0 && <p className={scope.allowsUnallocatedBooths ? styles.boothWarning : styles.boothError} role="status">
       {scope.allowsUnallocatedBooths ? "提醒" : "錯誤"}：{coverage.unknown.length} 個代碼不在可用清單。{scope.allowsUnallocatedBooths ? "請核對是否為未分配攤位。" : "請修正後再送審。"}
     </p>}

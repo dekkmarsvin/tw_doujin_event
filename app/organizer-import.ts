@@ -177,7 +177,7 @@ export function prepareOrganizerImport(input: {
     const stableKey = corrected("stableKey", mapped(source, input.mapping.stableKey)) || null;
     const missing = [
       [dayId, "missing_day", "活動日"],
-      [venueSpaceId, "missing_venue_space", "場館空間"],
+      [venueSpaceId, "missing_venue_space", "場地"],
       [areaId, "missing_area", "展區"],
       [boothCode, "missing_booth", "攤位代碼"],
       [circleName, "missing_circle", "社團名稱"],
@@ -240,7 +240,7 @@ export function prepareOrganizerImport(input: {
     issues.push({
       severity: "warning", step: "import", code: "area_looks_like_booth_row",
       message: "每一列的展區值都是該列攤位代碼的開頭，看起來對應到的是攤位排號而不是分區。"
-        + "如果這場活動沒有真正的分區，請把這個使用空間的展區方式改成「沒有分區」；"
+        + "如果這場活動沒有真正的分區，請把這個場地的展區方式改成「沒有分區」；"
         + "如果有，請把展區對應到名單裡真正的分區欄位。",
     });
   }
@@ -276,7 +276,7 @@ export function buildOrganizerImportSample(input: {
   const days = input.days.length > 0 ? input.days : [{ id: "1", label: "第一天" }];
   const spaces = input.spaces.length > 0 ? input.spaces : [{ id: "hall-a", label: "A 館", divided: true }];
   const header = [
-    "活動日", "使用空間", ...(input.requiresArea ? ["展區"] : []),
+    "活動日", "場地", ...(input.requiresArea ? ["展區"] : []),
     "攤位代碼", "社團名稱", "主辦內部編號",
   ];
   const samples = [

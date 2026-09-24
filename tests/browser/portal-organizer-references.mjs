@@ -66,35 +66,68 @@ try {
   // #221: the first date is asked for rather than assumed, so the step does
   // not pass until someone answers it.
   await page.getByLabel("第一天日期", { exact: true }).fill("2026-11-07");
+  await page.getByRole("button", { name: "新增一天", exact: true }).click();
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
-  // #298: 場館／使用空間／展區 are near-synonyms in everyday Chinese, so the step
+  await page.getByRole("heading", { name: "場館與場地", exact: true }).waitFor();
+  const dates = page.getByRole("group", { name: "活動日期", exact: true });
+  await dates.getByLabel("第一天日期", { exact: true }).waitFor();
+  assert.equal(await dates.getByLabel("第一天日期", { exact: true }).inputValue(), "2026-11-07");
+  assert.equal(await dates.getByLabel("第二天日期", { exact: true }).inputValue(), "2026-11-08");
+  assert.equal(await dates.getByLabel("第一天日期", { exact: true }).getAttribute("readonly"), "");
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 1, "the first selector is visible without adding a row");
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).inputValue(), "");
+  assert.equal(await page.getByRole("combobox", { name: /^場地/ }).isDisabled(), true);
+  assert.equal(await page.getByRole("button", { name: "建立新場館", exact: true }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: "新增場地", exact: true }).count(), 0);
+  await page.getByText("目前沒有未儲存的變更", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("group", { name: "這個表單尚待完成的項目" }).count(), 0);
+  // #298: 場館／場地／展區 are near-synonyms in everyday Chinese, so the step
   // that asks for all three opens with two published events answering it.
   // 展區 belongs to the event, not to the building.
-  const layers = page.getByRole("group", { name: "場館、使用空間、展區的填寫依據" });
+  const layers = page.getByRole("group", { name: "場館、場地、展區的填寫依據" });
   await layers.getByText("A–K 區、L–W 區", { exact: true }).waitFor();
   await layers.getByText("沒有分區", { exact: true }).waitFor();
+  await layers.getByText("活動使用多個場地時，設定展區可讓讀者在地圖頁面依展區篩選攤位；只有一個場地時不顯示展區篩選。", { exact: true }).waitFor();
   await journey.capture(page, "venue-layer-examples");
+  // An untouched placeholder must not open an unsaved-changes dialog. Dates
+  // reflect the previous step after saving changes there.
+  await page.getByRole("button", { name: "2 活動日期 已完成", exact: true }).click();
+  await page.getByRole("button", { name: "移除", exact: true }).nth(1).click();
+  await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
+  await page.getByRole("heading", { name: "場館與場地", exact: true }).waitFor();
+  await dates.getByLabel("第一天日期", { exact: true }).waitFor();
+  assert.equal(await dates.getByLabel("第二天日期", { exact: true }).count(), 0);
+  // Creating a venue fills an existing blank row too, instead of appending a
+  // selected row while leaving a pending row that prevents saving.
+  await page.getByRole("combobox", { name: /^場館/ }).selectOption("taipei-expo-park-zhengyan-hall");
+  await page.getByRole("combobox", { name: /^場館/ }).selectOption("");
   // #219: an organizer usually has one official address, and 「全館」 rarely has
   // a page of its own, so the space URL is optional and the form names what it
   // would inherit instead of leaving it implied. The required fields answer
   // inline, under the field, rather than through the browser's own bubble.
-  await page.getByRole("button", { name: "建立新場館", exact: true }).first().click();
+  await page.getByRole("button", { name: "建立新場館", exact: true }).click();
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByText("請填寫場館名稱。", { exact: true }).waitFor();
   await page.getByText("請填寫場館官方網址。", { exact: true }).waitFor();
-  await page.getByText("請填寫使用空間名稱。", { exact: true }).waitFor();
+  await page.getByText("請填寫場地名稱。", { exact: true }).waitFor();
   await journey.capture(page, "venue-creator-inline-errors");
   await page.getByLabel(/^場館名稱/).fill("三重體育館");
   await page.getByLabel(/^場館官方網址/).fill("https://venue.example/sanchong");
-  await page.getByLabel(/^使用空間名稱/).fill("全館");
+  await page.getByLabel(/^場地名稱/).fill("全館");
   await page.getByText("留空沿用場館網址：https://venue.example/sanchong", { exact: true }).waitFor();
   await journey.capture(page, "venue-creator-inherited-url");
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
+  await page.getByRole("button", { name: "建立並選取", exact: true }).waitFor({ state: "hidden" });
   await page.getByRole("combobox", { name: /^場館/ }).waitFor();
   assert.equal(await page.getByRole("combobox", { name: /^場館/ }).locator("option:checked").textContent(), "三重體育館");
-  // Put the step back where the rest of this journey expects it.
-  await page.getByRole("button", { name: "移除此空間", exact: true }).click();
-  await page.getByRole("button", { name: "新增使用空間", exact: true }).click();
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 1);
+  // Removing the last choice leaves a visible empty selector. Start a choice
+  // and clear it to exercise pending-selection validation and navigation.
+  await page.getByRole("button", { name: "移除此場地", exact: true }).click();
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 1);
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).inputValue(), "");
+  await page.getByRole("combobox", { name: /^場館/ }).selectOption("taipei-expo-park-zhengyan-hall");
+  await page.getByRole("combobox", { name: /^場館/ }).selectOption("");
   // #222: a new row is empty, and saving stays refused until both choices are
   // made. The venue used to be picked for the owner and the space along with
   // it, so 請選擇場館 was an option the list could never show as chosen.
@@ -103,7 +136,7 @@ try {
   // Scoped, because 準備進度 lists the same blocker: an unscoped match races the
   // rail, which is fed by an effect and so lands a render later.
   await page.getByRole("group", { name: "這個表單尚待完成的項目" })
-    .getByText("使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。", { exact: true }).waitFor();
+    .getByText("場地 1：尚未選擇場館，請從清單選擇或建立新場館。", { exact: true }).waitFor();
   await journey.capture(page, "references-venue-unselected");
   // The dialog covers the panel that names the pending row, so a refused
   // 儲存並切換 used to read as nothing happening at all.
@@ -115,9 +148,16 @@ try {
   await unsaved.getByRole("button", { name: "取消", exact: true }).click();
   await page.getByRole("combobox", { name: /^場館/ }).selectOption("taipei-expo-park-zhengyan-hall");
   // Choosing a venue does not choose a space either.
-  assert.equal(await page.getByRole("combobox", { name: /^使用空間/ }).locator("option:checked").textContent(), "請選擇使用空間");
+  assert.equal(await page.getByRole("combobox", { name: /^場地/ }).locator("option:checked").textContent(), "請選擇場地");
   assert.equal(await page.getByRole("button", { name: "完成基本設定", exact: true }).isDisabled(), true);
-  await page.getByRole("combobox", { name: /^使用空間/ }).selectOption("zhengyan-exhibition-area");
+  await page.getByRole("combobox", { name: /^場地/ }).selectOption("zhengyan-exhibition-area");
+  await page.getByRole("button", { name: "再選一個場地", exact: true }).click();
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 2);
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).nth(1).inputValue(), "");
+  await page.getByRole("combobox", { name: /^場館/ }).nth(1).selectOption({ label: "三重體育館" });
+  await page.getByRole("combobox", { name: /^場地/ }).nth(1).selectOption({ label: "全館" });
+  await journey.capture(page, "venue-multiple-spaces");
+  await page.getByRole("button", { name: "移除此場地", exact: true }).nth(1).click();
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
   const sections = page.getByRole("group", { name: "活動項目" });
   await sections.getByRole("button", { name: /^活動/ }).click();
@@ -152,7 +192,11 @@ try {
   await page.getByText("已儲存。", { exact: true }).waitFor();
   await journey.capture(page, "binder-save-feedback");
 
-  await sections.getByRole("button", { name: /^場館與使用空間/ }).click();
+  await sections.getByRole("button", { name: /^場館與場地/ }).click();
+  assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 1);
+  assert.equal(await page.getByRole("combobox", { name: /^場地/ }).inputValue(), "zhengyan-exhibition-area");
+  assert.equal(await dates.getByLabel("第一天日期", { exact: true }).inputValue(), "2026-11-07");
+  assert.equal(await page.getByRole("button", { name: "建立新場館", exact: true }).count(), 1);
   await page.getByLabel(/^攤位名單有另外區分展區嗎？/).selectOption("none");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();

@@ -5,9 +5,9 @@
 
 ## 決策
 
-每個活動以一份帶 `schema` 版本的 JSON 定義 id、名稱、日期、天數、展區、地圖模板、官方資料 adapter、主辦角色、分類目錄 selection、場館／場館空間 assignment 與發布時間。共用 TypeScript 只保留 parser、validator、通用 `EventDefinition` 型別與 registry，不保留 `FF47_*` 常數。
+每個活動以一份帶 `schema` 版本的 JSON 定義 id、名稱、日期、天數、展區、地圖模板、官方資料 adapter、主辦角色、分類目錄 selection、場館／場地 assignment 與發布時間。共用 TypeScript 只保留 parser、validator、通用 `EventDefinition` 型別與 registry，不保留 `FF47_*` 常數。
 
-`event-definition/3` 不內嵌主辦、分類目錄、場館或場館空間內容，而是以 stable ID 指向同一 event-data commit 所固定的 `reference-data-pin/2`。parser 必須驗證 exactly one lead organizer、分類目錄的 organizer／revision，以及每個 venue space 與 venue 的關聯；venue assignments 必須不重疊地覆蓋所有 `area`。`event-definition/2` 不會靜默套用這些新語意，讀取時明確拒絕。
+`event-definition/3` 不內嵌主辦、分類目錄、場館或場地內容，而是以 stable ID 指向同一 event-data commit 所固定的 `reference-data-pin/2`。parser 必須驗證 exactly one lead organizer、分類目錄的 organizer／revision，以及每個 venue space 與 venue 的關聯；venue assignments 必須不重疊地覆蓋所有 `area`。`event-definition/2` 不會靜默套用這些新語意，讀取時明確拒絕。
 
 主辦分類記錄投影為 `circleCategories`，再由 parser 為既有 filter／URL codec 產生 `genres`；資料檔不得自行提供第二份字彙。`venue` 顯示名稱同樣由 pinned reference record 投影，不是 event JSON 的第二份副本。
 

@@ -168,6 +168,8 @@
 .inlineEmpty { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 14px; background: var(--paper); }
 .inlineEmpty p { margin: 0; }
 .venueCard { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr 1.7fr auto; gap: 12px; align-items: start; margin-top: 12px; border-bottom: 1px solid var(--line); padding: 12px 0 16px; }
+.guidedVenueCard { grid-template-columns: 1fr 1fr 1fr auto; }
+.venueDates { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 220px)); gap: 12px; }
 /* One field-label line plus its gap, so the row's action starts level with the
    selects it removes rather than with their labels. */
 .venueCard > .dangerText { margin-top: 22px; }

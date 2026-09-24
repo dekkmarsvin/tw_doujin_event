@@ -143,8 +143,8 @@ export function validateOrganizerVenueCatalogAssignments(
     if (!venue) return issue(row, "venueId", "unknown_venue", "選取的場館已不存在，請重新選擇或建立新場館。");
     if (!assignment.venueSpaceId) return [];
     const space = spaces.get(assignment.venueSpaceId);
-    if (!space) return issue(row, "venueSpaceId", "unknown_venue_space", "選取的使用空間已不存在，請重新選擇或新增使用空間。");
+    if (!space) return issue(row, "venueSpaceId", "unknown_venue_space", "選取的場地已不存在，請重新選擇或新增場地。");
     return space.venueId === venue.id ? []
-      : issue(row, "venueSpaceId", "venue_space_mismatch", "選取的使用空間不屬於這個場館，請重新選擇。");
+      : issue(row, "venueSpaceId", "venue_space_mismatch", "選取的場地不屬於這個場館，請重新選擇。");
   });
 }

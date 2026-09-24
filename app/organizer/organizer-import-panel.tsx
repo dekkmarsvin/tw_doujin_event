@@ -236,7 +236,7 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
     {sheet && <>
       <div className={styles.mappingGrid}>
         {select("活動日", day, setDay, "活動日代碼", dayOptions)}
-        {select("使用空間", venueSpace, setVenueSpace, "使用空間", spaceOptions)}
+        {select("場地", venueSpace, setVenueSpace, "場地", spaceOptions)}
         {/* The read-only card carries the same title, sub-label and value line
             as the pickers beside it, so the row reads as one row. */}
         {requiresAreaMapping ? <>{select("展區", area, setArea, "展區代碼")}
@@ -247,7 +247,7 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
           {/* Collapsed here: by this point the choice is already made, so this
               is something to check against rather than the first explanation. */}
           <div className={styles.mappingEscape}><VenueLayerGuide /></div>
-          <p className={styles.mappingEscape}>這場活動沒有分區？把這個使用空間的展區方式改成「沒有分區」，就不需要對應這一欄。<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與使用空間</button></p>
+          <p className={styles.mappingEscape}>這場活動沒有分區？把這個場地的展區方式改成「沒有分區」，就不需要對應這一欄。<button type="button" className={styles.textButton} onClick={() => onSection("venue")}>前往場館與場地</button></p>
         </> : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
           <legend>展區</legend>
           <div><div className={styles.subLabel}>固定值<strong>無分區</strong></div></div>
@@ -300,20 +300,20 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
       {result && <div className={styles.importPreview}>
         <div className={styles.validationSummary}><b>{result.rows.length} 列 → {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 列待修正</span><span>{excluded.length} 列已移除</span></div>
         {derived.length > 0 && <div className={styles.derivedSummary}>
-          <h4>這份檔案裡的場館空間與展區</h4>
+          <h4>這份檔案裡的場地與展區</h4>
           {derived.map((space) => <div key={space.venueSpaceId} className={space.declared ? undefined : styles.issueError}>
             <strong>{organizerVenueSpaceLabel(catalog, space.venueSpaceId)}</strong>
             {space.declared
               ? <span>{space.areas.map((area) => `${areaModeByVenueSpace[space.venueSpaceId] === "none" ? "無分區" : area.id}（${area.rows} 列）${area.valid ? "" : "・代碼不可用"}`).join("、")}</span>
-              : <span>這個使用空間不在活動設定裡，請先到「場館與使用空間」新增，或修正來源檔。</span>}
+              : <span>這個場地不在活動設定裡，請先到「場館與場地」新增，或修正來源檔。</span>}
           </div>)}
           {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}
-          {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場館空間會變成沒有攤位。</p>}
-          <p>儲存時會把分區空間的展區寫進活動設定；無分區的空間不需要展區欄。沒出現在檔案裡的使用空間會標示為未匯入。</p>
+          {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場地會變成沒有攤位。</p>}
+          <p>儲存時會把分區場地的展區寫進活動設定；無分區的場地不需要展區欄。沒出現在檔案裡的場地會標示為未匯入。</p>
         </div>}
         {result.issues.filter((issue) => issue.severity === "warning").slice(0, 10).map((issue) => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
         <table>
-          <thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
+          <thead><tr><th>來源列</th><th>活動日</th><th>場地</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
           {result.rejected.length > 0 && <tbody>
             <tr className={styles.rowGroup}><td colSpan={columns}>待修正 {result.rejected.length} 列<span>填好標記的欄位，這一列就會移到可匯入。</span></td></tr>
             {result.rejected.slice(0, 100).map((row) => <RejectedImportRow key={row.sourceRow} row={row} columns={columns}
@@ -391,7 +391,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
     <tr className={styles.issueRow}>
       <td>{row.sourceRow}</td>
       {choice("dayId", row.dayId, "活動日", dayOptions)}
-      {choice("venueSpaceId", row.venueSpaceId, "使用空間", spaceOptions)}
+      {choice("venueSpaceId", row.venueSpaceId, "場地", spaceOptions)}
       {requiresArea && (areaModeByVenueSpace[row.venueSpaceId] === "none" ? <td>無分區</td> : cell("areaId", row.areaId, "展區"))}
       {cell("boothCode", row.boothCode, "攤位代碼")}
       {cell("circleName", row.circleName, "社團名稱")}
@@ -414,7 +414,7 @@ function ColumnSelect({ label, value, header, required = false, onChange }: {
  * read are different needs (#221 3.2, 3.3). */
 function ImportSampleCard({ sample, fileBase }: { sample: { header: string[]; rows: string[][] }; fileBase: string }) {
   return <>
-    <p>每列填一個攤位。主辦內部編號可留空。活動日與使用空間請使用本活動的值；欄位順序可以不同，選好檔案後再對應。</p>
+    <p>每列填一個攤位。主辦內部編號可留空。活動日與場地請使用本活動的值；欄位順序可以不同，選好檔案後再對應。</p>
     <div className={styles.sampleTable}>
       <table><thead><tr>{sample.header.map((name) => <th key={name}>{name}</th>)}</tr></thead>
         <tbody>{sample.rows.map((row) => <tr key={row.join("/")}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table>
@@ -455,9 +455,9 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
       const source = normalizeOrganizerVenueSourceUrl(venueUrl);
       if (!source) errors.venueUrl = source === undefined ? "場館官方網址必須是 https:// 開頭的網址。" : "請填寫場館官方網址。";
     }
-    if (!spaceName.trim()) errors.spaceName = "請填寫使用空間名稱。";
+    if (!spaceName.trim()) errors.spaceName = "請填寫場地名稱。";
     if (normalizeOrganizerVenueSourceUrl(spaceUrl) === undefined) {
-      errors.spaceUrl = "空間官方網址必須是 https:// 開頭的網址；留空會沿用場館網址。";
+      errors.spaceUrl = "場地官方網址必須是 https:// 開頭的網址；留空會沿用場館網址。";
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) { setLocalNotice(IDLE); return; }
@@ -475,14 +475,14 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
       onCreated(created, space);
     }).catch((error) => setLocalNotice({ kind: "error", message: message(error) }));
   }}>
-    <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的使用空間` : "建立新場館"}</h4><p>建立後會立即出現在下方選單中。</p></div></div>
+    <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的場地` : "建立新場館"}</h4><p>建立後會立即出現在下方選單中。</p></div></div>
     <div className={styles.formGrid}>
       {!venue && <>
         <label>場館名稱<input maxLength={120} aria-invalid={fieldErrors.venueName ? true : undefined} value={venueName} onChange={(event) => setVenueName(event.target.value)} />{fieldErrors.venueName && <small className={styles.fieldError}>{fieldErrors.venueName}</small>}</label>
         <label>場館官方網址<input type="url" placeholder="https://" aria-invalid={fieldErrors.venueUrl ? true : undefined} value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} />{fieldErrors.venueUrl && <small className={styles.fieldError}>{fieldErrors.venueUrl}</small>}</label>
       </>}
-      <label>使用空間名稱<input maxLength={120} placeholder="例如：全館、1F 展場" aria-invalid={fieldErrors.spaceName ? true : undefined} value={spaceName} onChange={(event) => setSpaceName(event.target.value)} />{fieldErrors.spaceName && <small className={styles.fieldError}>{fieldErrors.spaceName}</small>}</label>
-      <label>空間官方網址（選填）<input type="url" placeholder="https://" aria-invalid={fieldErrors.spaceUrl ? true : undefined} value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} />
+      <label>場地名稱<input maxLength={120} placeholder="例如：全館、1F 展場" aria-invalid={fieldErrors.spaceName ? true : undefined} value={spaceName} onChange={(event) => setSpaceName(event.target.value)} />{fieldErrors.spaceName && <small className={styles.fieldError}>{fieldErrors.spaceName}</small>}</label>
+      <label>場地官方網址（選填）<input type="url" placeholder="https://" aria-invalid={fieldErrors.spaceUrl ? true : undefined} value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} />
         {fieldErrors.spaceUrl
           ? <small className={styles.fieldError}>{fieldErrors.spaceUrl}</small>
           : <small>{inheritedUrl ? `留空沿用場館網址：${inheritedUrl}` : "留空沿用場館官方網址，不必重打一次。"}</small>}</label>

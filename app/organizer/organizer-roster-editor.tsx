@@ -140,7 +140,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     {source && <details><summary>匯入出處</summary><p>{source.fileName}{source.worksheet ? `・${source.worksheet}` : ""}・{source.sourceDescription}</p>
       <p style={{ overflowWrap: "anywhere" }}>原檔 SHA-256：{source.sha256}</p><p>此雜湊只識別原始檔，編輯後清單以儲存版本與送審快照為準。來源列只供回查原檔。</p></details>}
     {editable && !editing && <button type="button" onClick={() => setEditing(true)}>編輯清單</button>}
-    {editable && needsAreaUpdate && <p role="status">使用空間已改為無分區，儲存清單即可套用。</p>}
+    {editable && needsAreaUpdate && <p role="status">場地已改為無分區，儲存清單即可套用。</p>}
     {editing && <fieldset className={styles.formFields} disabled={!editable || busy} aria-label="清單編輯">
       <div className={styles.row}>
         <button type="button" disabled={entries.length >= 20_000} onClick={() => {
@@ -167,7 +167,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
         <h5>{active.row.sourceRow === 0 ? "手動群組" : `來源列 ${active.row.sourceRow} 的群組`}</h5>
         <div className={styles.importGrid}>
           <label>群組活動日<select value={active.row.dayId} onChange={event => update(active.key, { dayId: event.target.value })}><option value="">請選擇</option>{detail.draft.event.days.map(day => <option key={day.id} value={day.id}>{day.label}</option>)}</select></label>
-          <label>群組使用空間<select value={active.row.venueSpaceId} onChange={event => {
+          <label>群組場地<select value={active.row.venueSpaceId} onChange={event => {
             const assignment = detail.draft.venue.assignments.find(space => space.venueSpaceId === event.target.value);
             update(active.key, { venueSpaceId: event.target.value, areaId: assignment?.areaMode === "none" ? "ALL" : assignment?.areaIds[0] ?? "" });
           }}><option value="">請選擇</option>{detail.draft.venue.assignments.map(space => <option key={space.venueSpaceId} value={space.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, space.venueSpaceId)}</option>)}</select></label>
@@ -204,13 +204,13 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     <div className={styles.importGrid}>
       <label>搜尋清單<input type="search" value={query} placeholder="社團、攤位或主辦內部編號" onChange={event => { setQuery(event.target.value); setPage(0); }} /></label>
       <label>清單活動日<select value={day} onChange={event => { setDay(event.target.value); setPage(0); }}><option value="">全部活動日</option>{savedDays.map(id => <option key={id} value={id}>{organizerDayLabel(detail.draft.event.days, id)}</option>)}</select></label>
-      <label>清單使用空間<select value={space} onChange={event => { setSpace(event.target.value); setPage(0); }}><option value="">全部使用空間</option>{savedSpaces.map(id => <option key={id} value={id}>{organizerVenueSpaceLabel(detail.venueCatalog, id)}</option>)}</select></label>
+      <label>清單場地<select value={space} onChange={event => { setSpace(event.target.value); setPage(0); }}><option value="">全部場地</option>{savedSpaces.map(id => <option key={id} value={id}>{organizerVenueSpaceLabel(detail.venueCatalog, id)}</option>)}</select></label>
       <label>攤位排序<select value={descending ? "desc" : "asc"} onChange={event => { setDescending(event.target.value === "desc"); setPage(0); }}><option value="asc">代碼由小到大</option><option value="desc">代碼由大到小</option></select></label>
     </div>
     <p role="status">符合 {filtered.length} 列・第 {shownPage + 1} / {pages} 頁</p>
-    <p>地圖狀態依已儲存地圖核對。{dirty ? "清單尚有草稿變更，儲存後即可定位。" : "已畫代碼可定位到對應活動日與使用空間。"}</p>
+    <p>地圖狀態依已儲存地圖核對。{dirty ? "清單尚有草稿變更，儲存後即可定位。" : "已畫代碼可定位到對應活動日與場地。"}</p>
     {coverageError && <p role="status">無法讀取地圖狀態：{coverageError}</p>}
-    <div className={`${styles.sampleTable} ${styles.savedImportTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>使用空間</th><th>展區</th><th>攤位代碼</th><th>社團名稱</th><th>主辦內部編號</th><th>已儲存地圖</th>{editing && <th>編輯</th>}</tr></thead>
+    <div className={`${styles.sampleTable} ${styles.savedImportTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>場地</th><th>展區</th><th>攤位代碼</th><th>社團名稱</th><th>主辦內部編號</th><th>已儲存地圖</th>{editing && <th>編輯</th>}</tr></thead>
       <tbody>{filtered.slice(shownPage * 100, (shownPage + 1) * 100).map(({ key, row }) => {
         const saved = coverageByScope.get(JSON.stringify([row.dayId, row.venueSpaceId]));
         const drawn = saved?.drawn ?? new Set<string>();

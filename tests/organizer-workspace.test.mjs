@@ -124,7 +124,7 @@ test("a stale persisted import reopens import and blocks maps even when rows and
       step: "import",
       code: "stale_import_area_mode",
       target: "hall-a",
-      message: "使用空間已改為無分區，請重新儲存清單以套用無分區設定。",
+      message: "場地已改為無分區，請重新儲存清單以套用無分區設定。",
     }],
     currentVersion: 5,
     lastValidatedVersion: 5,

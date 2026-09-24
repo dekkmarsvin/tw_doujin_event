@@ -70,8 +70,8 @@ const detail = {
       name: "合成驗證場館",
       sourceUrl: "https://example.test/venue",
       spaces: [
-        { id: "space-a", venueId: "venue-synthetic", name: "A 空間", sourceUrl: "https://example.test/venue/a", defaultAreaMode: "imported" },
-        { id: "space-b", venueId: "venue-synthetic", name: "B 空間", sourceUrl: "https://example.test/venue/b", defaultAreaMode: "imported" },
+        { id: "space-a", venueId: "venue-synthetic", name: "A 場地", sourceUrl: "https://example.test/venue/a", defaultAreaMode: "imported" },
+        { id: "space-b", venueId: "venue-synthetic", name: "B 場地", sourceUrl: "https://example.test/venue/b", defaultAreaMode: "imported" },
       ],
     }],
   },
@@ -200,7 +200,7 @@ try {
 
   const search = list.getByRole("searchbox", { name: "搜尋清單" });
   const dayFilter = list.getByRole("combobox", { name: "清單活動日" });
-  const spaceFilter = list.getByRole("combobox", { name: "清單使用空間" });
+  const spaceFilter = list.getByRole("combobox", { name: "清單場地" });
   const sortFilter = list.getByRole("combobox", { name: "攤位排序" });
   await sortFilter.selectOption("desc");
   await status.getByText("符合 20000 列・第 1 / 200 頁", { exact: true }).waitFor();
@@ -210,14 +210,14 @@ try {
   await status.getByText("符合 20000 列・第 1 / 200 頁", { exact: true }).waitFor();
   await dayFilter.selectOption({ label: "第一天" });
   await status.getByText("符合 10000 列・第 1 / 100 頁", { exact: true }).waitFor();
-  await spaceFilter.selectOption({ label: "合成驗證場館・B 空間" });
+  await spaceFilter.selectOption({ label: "合成驗證場館・B 場地" });
   await status.getByText("符合 5000 列・第 1 / 50 頁", { exact: true }).waitFor();
   await search.fill("B01235-SECOND");
   await status.getByText("符合 1 列・第 1 / 1 頁", { exact: true }).waitFor();
   assert.equal(await rowsOnPage.count(), 1, "the second code identifies one saved group");
   const filteredRow = await rowsOnPage.first().innerText();
   assert.match(filteredRow, /第一天/);
-  assert.match(filteredRow, /合成驗證場館・B 空間/);
+  assert.match(filteredRow, /合成驗證場館・B 場地/);
   assert.match(filteredRow, /B01235、B01235-SECOND/);
   assert.equal(await rowsOnPage.first().locator("td").nth(3).innerText(), "無分區", "only an undivided space translates the internal ALL value");
   await journey.capture(organizer, "organizer-import-filtered-second-code");
@@ -227,7 +227,7 @@ try {
   await organizer.getByLabel(/^來源檔案/).setInputFiles({ name: "mixed-spaces.csv", mimeType: "text/csv", buffer: Buffer.from("攤位,社團\nB01,完整社團\nB02,\n") });
   const form = organizer.getByRole("group", { name: "匯入檔案與欄位對應", exact: true });
   await form.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("day-1");
-  await form.getByRole("group", { name: "使用空間", exact: true }).getByLabel("固定值").selectOption("space-b");
+  await form.getByRole("group", { name: "場地", exact: true }).getByLabel("固定值").selectOption("space-b");
   await form.getByLabel(/^攤位代碼(?!格式)/).selectOption("0");
   await form.getByLabel(/^社團名稱/).selectOption("1");
   await form.getByRole("button", { name: "預覽對應結果", exact: true }).click();
@@ -262,7 +262,7 @@ try {
   assert.equal(await rowsOnPage.count(), 1);
   await list.getByRole("button", { name: "新增群組", exact: true }).click();
   await group.getByRole("combobox", { name: "群組活動日", exact: true }).selectOption("day-2");
-  await group.getByRole("combobox", { name: "群組使用空間", exact: true }).selectOption("space-b");
+  await group.getByRole("combobox", { name: "群組場地", exact: true }).selectOption("space-b");
   await group.getByRole("textbox", { name: "群組社團名稱", exact: true }).fill("手動社");
   const codesInput = group.getByRole("textbox", { name: /^群組攤位代碼/ });
   await codesInput.fill("b00004");
@@ -320,7 +320,7 @@ try {
   assert.equal(detail.import.rows.some(row => row.venueSpaceId === "space-a" && row.areaId !== "ALL"), true);
   await organizer.reload();
   await list.getByRole("button", { name: "編輯清單", exact: true }).click();
-  await list.getByText("使用空間已改為無分區，儲存清單即可套用。", { exact: true }).waitFor();
+  await list.getByText("場地已改為無分區，儲存清單即可套用。", { exact: true }).waitFor();
   assert.equal(await save.isDisabled(), false, "a changed space mode can be applied without editing an unrelated field");
   await save.click();
   await list.getByText("清單已儲存；公開活動尚未改變。", { exact: true }).waitFor();
