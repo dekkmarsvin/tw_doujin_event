@@ -3,7 +3,7 @@
 // SSR-only test cannot catch differences in the Functions bundler's imports.
 import assert from "node:assert/strict";
 import { ADMIN, clearMail, signIn } from "./support/portal.mjs";
-import { start } from "./support/journey.mjs";
+import { output, start } from "./support/journey.mjs";
 import { png } from "./support/png.mjs";
 
 const journey = await start("portal-organizer-references");
@@ -252,6 +252,7 @@ try {
   assert.equal(savedImage.height, 800, "the successful write already saved the replacement, despite failed refresh");
   await page.getByRole("img", { name: "活動圖片", exact: true }).scrollIntoViewIfNeeded();
   await journey.capture(page, "image-save-refresh-failed");
+  await page.getByRole("group", { name: "活動基本資料欄位", exact: true }).locator("..").screenshot({ path: `${output}/image-save-refresh-failed-form.png` });
   assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收更新", "failed refresh does not revert the saved input");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();
