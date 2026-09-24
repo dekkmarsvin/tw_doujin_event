@@ -20,17 +20,16 @@
 
 ## 驗證
 
-程式變更：
+<!-- 本機預設聚焦驗證；完整產品套件由對應版本的 CI 提供。不適用寫明理由，未執行或 skipped 不寫成通過。 -->
 
-- [ ] `npm test`
-- [ ] `npm run lint`
-- [ ] `npx tsc --noEmit --incremental false`
-- [ ] 行為改變已在同一個 commit 更新唯一對應的 contract
+- 待交付 commit／環境：
+- CI scope 與 run 連結（產品變更須有完整 Node、lint、type-check 與適用 browser／preview checks）：
+- 本機聚焦命令、結果與對應驗收條件：
+- 人工／真實環境驗收及剩餘未完成項：
+- 沿用既有證據或不適用項的依據：
+- 行為契約更新：對應 contract／不適用理由。
 
-純文件變更（見 docs/runbooks/local-development.md 的「純文件變更」）：
-
-- [ ] `node --test tests/contribution-files.test.mjs`
-- [ ] `node scripts/check-doc-map.mjs --check`
+<!-- 純內部文件：node --test tests/contribution-files.test.mjs 已包含 check-doc-map，不需重跑。公開頁面來源仍屬產品變更。詳見 docs/runbooks/local-development.md。 -->
 
 ## 資料、部署與回滾
 

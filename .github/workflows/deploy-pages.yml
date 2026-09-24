@@ -18,11 +18,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Classify verification scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      profile: ${{ steps.scope.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Classify all changed paths
+        id: scope
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-scope.mjs
+
+  non-product:
+    name: Check non-product changes
+    needs: scope
+    if: needs.scope.outputs.profile == 'docs' || needs.scope.outputs.profile == 'tooling'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Check non-product documents
+        run: node --test tests/contribution-files.test.mjs
+      - name: Check development tooling
+        if: needs.scope.outputs.profile == 'tooling'
+        run: |
+          node -e "JSON.parse(require('node:fs').readFileSync('.claude/settings.json', 'utf8'))"
+          bash -n .claude/hooks/session-start.sh
+          env -u CLAUDE_CODE_REMOTE bash .claude/hooks/session-start.sh
+
   deploy:
     name: Verify and deploy
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: scope
+    if: needs.scope.outputs.profile == 'full' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      preview-url: ${{ steps.deploy.outputs.deployment-url }}
 
     steps:
       - name: Check out repository
@@ -194,8 +239,8 @@ jobs:
   # a failed deployment after the Pages origin has already passed its smoke test.
   production-availability:
     name: Observe public production custom domain
-    if: github.event_name != 'pull_request' && github.ref_name == 'main'
-    needs: deploy
+    if: needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
+    needs: [scope, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
@@ -266,8 +311,8 @@ jobs:
   # job prevents one PR's cleanup from deleting another PR's in-flight fixture.
   preview-e2e:
     name: Full preview portal E2E
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: deploy
+    if: needs.scope.outputs.profile == 'full' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [scope, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -292,7 +337,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PREVIEW_BASE_URL: https://pr-${{ github.event.number }}.tw-catalog.pages.dev
+          # Queued runs must test their own deployment, even if a newer PR
+          # update has already moved the shared branch alias.
+          PREVIEW_BASE_URL: ${{ needs.deploy.outputs.preview-url }}
           PREVIEW_E2E_TOKEN: ${{ secrets.PREVIEW_E2E_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
@@ -367,6 +414,8 @@ jobs:
   # `npm run test:browser:matrix`.
   browser-acceptance:
     name: Browser acceptance
+    needs: scope
+    if: needs.scope.outputs.profile == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -383,10 +432,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      # Browsers are deliberately absent from package.json so `npm ci` and the
-      # Node suite stay browser-free; this job is the one place that wants them.
-      # The same command a maintainer runs, plus the shared libraries a bare
-      # runner image does not carry.
+      # npm ci locks the Playwright package; only this job installs its browser
+      # binary and the shared libraries a bare runner image does not carry.
       - name: Install Chromium
         run: |
           npm run test:browser:install

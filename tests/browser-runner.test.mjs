@@ -6,6 +6,79 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
+// Drive the actual runner against a disposable HTTP server and tiny journeys.
+// This verifies selection, data setup, cleanup and exit status without using
+// a second browser suite to test the browser suite's orchestration.
+async function selectionFixture(t) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "browser-selection-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const directory of ["scripts", "tests/browser", "node_modules/vite/bin"]) await mkdir(path.join(root, directory), { recursive: true });
+  await writeFile(path.join(root, "package.json"), '{"type":"module"}');
+  await copyFile(new URL("../scripts/run-browser-tests.mjs", import.meta.url), path.join(root, "scripts/run-browser-tests.mjs"));
+  await writeFile(path.join(root, "scripts/stage-event-data.mjs"), `
+    import { appendFileSync } from "node:fs";
+    appendFileSync("staged", JSON.stringify(process.argv.slice(2)) + "\\n");
+  `);
+  await writeFile(path.join(root, "scripts/fetch-event-data.mjs"), `throw new Error("unselected pinned data must not be fetched");`);
+  await writeFile(path.join(root, "node_modules/vite/bin/vite.js"), `
+    import http from "node:http";
+    http.createServer((_request, response) => response.end("ready"))
+      .listen(Number(process.argv[process.argv.indexOf("--port") + 1]));
+  `);
+  const journey = async (name, mode = "fixture", status = 0) => writeFile(path.join(root, "tests/browser", `${name}.mjs`), `
+// staged-data: ${mode}
+import { appendFileSync } from "node:fs";
+appendFileSync("ran", "${name}\\n");
+if (!await fetch(process.env.MAP_TEST_URL).then(response => response.ok)) process.exit(9);
+process.exit(${status});
+  `);
+  const run = (args = [], overrides = {}) => {
+    const env = { ...process.env, PLAYWRIGHT_MODULE: "unused-test-module" };
+    delete env.MAP_TEST_URL; delete env.MAP_TEST_PORT;
+    return spawnSync(process.execPath, [path.join(root, "scripts/run-browser-tests.mjs"), ...args], {
+      cwd: root, env: { ...env, ...overrides }, encoding: "utf8", timeout: 20000,
+    });
+  };
+  return { root, journey, run };
+}
+
+test("named journeys run once, prepare only their data and preserve failures", async t => {
+  const f = await selectionFixture(t);
+  await f.journey("first", "fixture", 1);
+  await f.journey("second");
+  await f.journey("unselected-pinned", "pinned");
+  await f.journey("unselected-portal", "portal");
+  const result = f.run(["--journey", "first", "--journey=second.mjs", "--journey", "first.mjs"]);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(await readFile(path.join(f.root, "ran"), "utf8"), "first\nsecond\n");
+  assert.equal(await readFile(path.join(f.root, "staged"), "utf8"), '["--fixture","sample","sample-two"]\n');
+  assert.match(result.stderr, /1 browser journey\(s\) failed: first.mjs/);
+});
+
+test("no selection still runs every journey and reports success", async t => {
+  const f = await selectionFixture(t);
+  await f.journey("first"); await f.journey("second");
+  const result = f.run();
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(await readFile(path.join(f.root, "ran"), "utf8"), "first\nsecond\n");
+  assert.match(result.stderr, /All eligible browser journeys passed \(2 files\)/);
+});
+
+test("unknown names, options and incompatible external selections fail before staging", async t => {
+  const f = await selectionFixture(t);
+  await f.journey("fixture-only");
+  for (const args of [["--journey", "missing"], ["--journey"], ["--journey", "../fixture-only"], ["--matrx", "full"], ["--matrix", "invalid"], ["fixture-only"]]) {
+    const result = f.run(args);
+    assert.notEqual(result.status, 0, `${args}: ${result.stdout}`);
+  }
+  const external = { MAP_TEST_URL: "http://127.0.0.1:1" };
+  assert.match(f.run(["--journey", "fixture-only"], external).stderr, /cannot use MAP_TEST_URL/);
+  assert.match(f.run([], external).stderr, /refusing an empty successful run/);
+  await assert.rejects(readFile(path.join(f.root, "staged")), { code: "ENOENT" });
+});
+
 // Exercise the real CLI with subordinate data commands in an isolated tree.
 // Pin/hash validation belongs to event-data-fetcher.test.mjs; this protects
 // the runner from bypassing that boundary when a previous checkout left data.
