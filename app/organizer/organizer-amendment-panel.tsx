@@ -6,6 +6,8 @@ import {
   type OrganizerAmendmentChange, type OrganizerAmendmentDestination, type OrganizerAmendmentDetail,
   type OrganizerAmendmentImpact, type OrganizerAmendmentSettingsImpact, type OrganizerEventDetail,
 } from "../organizer-client";
+import type { EventImage } from "../event-image";
+import { EventImageField } from "./organizer-event-image";
 import styles from "./organizer.module.css";
 
 const KIND_LABEL = { withdrawn: "退出", released: "換手", moved: "移動／重編號", added: "新增" };
@@ -16,7 +18,9 @@ const sourcesOf = (change: OrganizerAmendmentChange) => change.kind === "added" 
 /** The event as this correction would publish it: the published values with
  * the saved declaration applied. The form edits these and the save sends them
  * whole; the server keeps only what differs from the published event. */
-type SettingsForm = { name: string; aliases: string[]; days: Record<string, string> };
+type SettingsForm = { name: string; aliases: string[]; days: Record<string, string>;
+  /** Unlike the others, undefined is its own answer: keep the published picture. */
+  image?: EventImage | null };
 function settingsForm(detail: OrganizerAmendmentDetail): SettingsForm {
   const { event } = detail.baseline;
   const dates = new Map((detail.settings?.days ?? []).map((day) => [day.id, day.date]));
@@ -24,6 +28,7 @@ function settingsForm(detail: OrganizerAmendmentDetail): SettingsForm {
     name: detail.settings?.name ?? event.name,
     aliases: detail.settings?.aliases ?? event.aliases ?? [],
     days: Object.fromEntries(event.days.map((day) => [String(day.id), dates.get(String(day.id)) ?? day.dateLabel])),
+    ...(detail.settings?.image !== undefined ? { image: detail.settings.image } : {}),
   };
 }
 
@@ -67,6 +72,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
       const result = await saveOrganizerAmendment(detail.event.id, loaded.version, changes, settings ? {
         name: settings.name, aliases: settings.aliases,
         days: Object.entries(settings.days).map(([id, date]) => ({ id, date })),
+        ...(settings.image !== undefined ? { image: settings.image } : {}),
       } : undefined);
       const next = { ...loaded, version: result.version, changes, impact: result.impact,
         settings: result.settings, settingsImpact: result.settingsImpact };
@@ -99,7 +105,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
     {!loaded ? <><p>正在讀取已發布名單…</p>{notice && <button type="button" onClick={() => void reload()}>重新讀取修正</button>}</> : <>
       <p>來源：第 {loaded.baseline.sourceVersion} 版，{new Date(loaded.baseline.publishedAt).toLocaleString("zh-TW")} 發布。此修正尚未變更公開活動。</p>
       {conflict && <div className={styles.subpanel}><p>其他人已修改內容或權限已變更。你的輸入仍保留在此頁，請先核對；重新讀取會捨棄尚未儲存的修正。</p><button type="button" disabled={busy} onClick={() => void reload()}>捨棄未儲存修正並讀取最新版本</button></div>}
-      {settings && <SettingsFields baseline={loaded.baseline} value={settings} disabled={!editable || busy || conflict} onChange={setSettings} />}
+      {settings && <SettingsFields candidateId={detail.event.id} baseline={loaded.baseline} saved={loaded.settings?.image} value={settings} disabled={!editable || busy || conflict} onChange={setSettings} />}
       {editable && <AmendmentForm key={formKey} baseline={loaded.baseline} initial={editing === null ? null : changes[editing]}
         disabled={busy || conflict} onDirty={setFormDirty}
         onCancel={resetForm} onAdd={(change) => {
@@ -204,13 +210,14 @@ function Destination({ title, baseline, value, onChange }: {
 
 /** Only the settings ADR-0068 allows a correction to change. Days keep their
  * number and ids; only each day's date can move. */
-function SettingsFields({ baseline, value, disabled, onChange }: {
-  baseline: OrganizerAmendmentDetail["baseline"]; value: SettingsForm; disabled: boolean; onChange: (value: SettingsForm) => void;
+function SettingsFields({ candidateId, baseline, saved, value, disabled, onChange }: {
+  candidateId: string; baseline: OrganizerAmendmentDetail["baseline"]; saved: EventImage | null | undefined;
+  value: SettingsForm; disabled: boolean; onChange: (value: SettingsForm) => void;
 }) {
   const set = (mutate: (next: SettingsForm) => void) => { const next = structuredClone(value); mutate(next); onChange(next); };
   return <fieldset className={`${styles.subpanel} ${styles.amendmentFields}`} disabled={disabled} aria-label="活動設定">
     <h4>活動設定</h4>
-    <p>可更正活動名稱、活動別稱與各活動日的日期。</p>
+    <p>可更正活動名稱、活動別稱、各活動日的日期與活動圖片。</p>
     <label>活動名稱<input value={value.name} onChange={(event) => set((next) => { next.name = event.target.value; })} /></label>
     <div><div className={styles.row}><strong>活動別稱</strong>
       <button type="button" className={styles.ghost} disabled={value.aliases.length >= EVENT_ALIAS_MAX_COUNT}
@@ -224,12 +231,16 @@ function SettingsFields({ baseline, value, disabled, onChange }: {
     </div>
     {baseline.event.days.map((day) => <label key={day.id}>{day.label}日期<input type="date" value={value.days[String(day.id)] ?? ""}
       onChange={(event) => set((next) => { next.days[String(day.id)] = event.target.value; })} /></label>)}
+    <EventImageField candidateId={candidateId} image={value.image} saved={saved} published={baseline.event.image} editable={!disabled}
+      onChange={(image) => set((next) => { if (image === undefined) delete next.image; else next.image = image; })} />
   </fieldset>;
 }
 
 function SettingsImpact({ impact }: { impact: OrganizerAmendmentSettingsImpact[] }) {
-  const label = (item: OrganizerAmendmentSettingsImpact) => item.field === "name" ? "活動名稱" : item.field === "aliases" ? "活動別稱" : `${item.label}日期`;
-  const text = (value: string | string[]) => Array.isArray(value) ? value.join("、") || "無" : value;
+  const label = (item: OrganizerAmendmentSettingsImpact) => item.field === "name" ? "活動名稱" : item.field === "aliases" ? "活動別稱"
+    : item.field === "image" ? "活動圖片" : `${item.label}日期`;
+  const text = (value: string | string[] | EventImage | null) => value === null ? "無" : Array.isArray(value) ? value.join("、") || "無"
+    : typeof value === "string" ? value : `${value.width} × ${value.height} px`;
   return <section className={styles.subpanel} aria-label="已儲存的活動設定更正"><h4>已儲存的活動設定更正</h4>
     {impact.length === 0 ? <p>目前已儲存的內容沒有活動設定變動。</p> : impact.map((item, index) => <div key={index} className={styles.amendmentImpact}>
       <h5>{label(item)}</h5>

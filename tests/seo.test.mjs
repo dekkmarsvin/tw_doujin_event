@@ -75,6 +75,7 @@ test("schema uses actual event days without fabricating an address or opening ti
   // The sample fixture pins a venue record from before #395, with no address.
   assert.equal(event.venueAssignments[0].venueAddress, undefined);
   assert.equal(schema.location[0].address, undefined);
+  assert.deepEqual(schema.image, ["https://map.kotoban.top/share-card.png"], "the image is the share card the page already names in og:image");
   const undated = { ...event, days: [{ ...event.days[0], dateLabel: "待確認" }] };
   assert.doesNotMatch(discoveryPages(undated, catalog).get("/events/sample/"), /application\/ld\+json/);
 });

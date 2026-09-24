@@ -1,6 +1,7 @@
-import { parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
+import { organizerSourceLabel, parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
 import { AmendmentSettingsError, applyAmendmentSettings, normalizeAmendmentSettings, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
 import { eventDateFields } from "./event-calendar";
+import { publishedEventImage } from "./event-image";
 import type { OrganizerNormalizedImportRow } from "./organizer-import";
 import type { OrganizerReferenceSnapshot } from "./organizer-reference-catalog";
 import { parseEventDefinition } from "./event-catalog";
@@ -76,6 +77,7 @@ function snapshotEvent(snapshot: Snapshot, draft: NonNullable<ReturnType<typeof 
     venueAssignments: draft.venue.assignments.map(({ venueId, venueSpaceId, areaIds }) => ({ venueId, venueSpaceId, areaIds })),
     officialData: { adapter: "organizer-import/1", eventUrl: officialUrl,
       boothListUrls: Object.fromEntries(draft.event.days.map((day) => [day.id, officialUrl])) },
+    ...(draft.event.image ? { image: publishedEventImage(draft.event.image) } : {}),
   };
 }
 /** The published baseline event with a correction's declared settings applied:
@@ -89,6 +91,8 @@ function amendedBaselineEvent(event: OrganizerAmendmentBaseline["event"], settin
   const next: Record<string, unknown> = { ...event, name: settings.name ?? event.name, days,
     ...(settings.days ? eventDateFields(days.map((day) => day.dateLabel).sort()) : {}) };
   delete next.aliases;
+  if (settings.image === null) delete next.image;
+  else if (settings.image) next.image = publishedEventImage(settings.image);
   return aliases.length > 0 ? { ...next, aliases } : next;
 }
 
@@ -210,7 +214,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     if (scoped) inputs.push({ path: prefix + "map-manifest.json", content: { schema: "event-map-manifest/1", eventId: snapshot.eventId, maps: manifest } });
     inputs.push({ path: prefix + "event.json", content: event }, { path: prefix + "official-booths.json", content: official },
       { path: prefix + "circle-identity-groups.json", content: grouping }, { path: prefix + "reference-selection.json", content: snapshot.references.selection },
-      { path: prefix + "NOTICE", content: `${draft.officialSource.label}\n${officialUrl}\n` });
+      { path: prefix + "NOTICE", content: `${organizerSourceLabel(draft.officialSource)}\n${officialUrl}\n` });
     return { snapshot, operation, amendment, draft, event, official, grouping, files: await assemblePublicationStage("data", snapshot.eventId, inputs) };
   } catch (error) {
     if (error instanceof PublicationFailure) throw error;

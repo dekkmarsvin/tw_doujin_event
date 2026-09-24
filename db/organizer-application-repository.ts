@@ -1,5 +1,5 @@
 import type { OrganizerApplicationInput } from "../app/organizer-applications";
-import { createEmptyOrganizerEventDraft } from "../app/organizer-event";
+import { createEmptyOrganizerEventDraft, ORGANIZER_DEFAULT_SOURCE_LABEL } from "../app/organizer-event";
 import type { OrganizerCandidateInput } from "./identity-repository";
 import { enqueueReviewNotification } from "./review-notification-repository";
 
@@ -62,7 +62,7 @@ export function createOrganizerApplicationRepository(
     const candidateId = input.decision === "approved" ? crypto.randomUUID() : null;
     const data = JSON.parse(row.data_json) as OrganizerApplicationInput;
     const draft = createEmptyOrganizerEventDraft(data.name);
-    draft.officialSource = { label: "活動官方來源", url: data.officialUrl };
+    draft.officialSource = { label: ORGANIZER_DEFAULT_SOURCE_LABEL, url: data.officialUrl };
     // Expected dates and location stay on the application. Actual days and
     // spaces are confirmed by the owner in the existing guided workspace.
     const statements = [database.prepare(`UPDATE organizer_applications

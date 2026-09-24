@@ -1,4 +1,5 @@
 import { EVENT_ALIAS_MAX_COUNT, EVENT_ALIAS_MAX_LENGTH, eventAliasProblems } from "./event-aliases";
+import { parseEventImage, type EventImage } from "./event-image";
 
 export type OrganizerRole = "owner" | "editor";
 
@@ -39,6 +40,8 @@ export type OrganizerEventDraft = {
     name: string;
     /** 活動別稱. Absent when there are none, so older drafts stay byte-identical. */
     aliases?: string[];
+    /** 活動圖片 (#396). Absent when there is none, for the same reason. */
+    image?: EventImage;
     days: OrganizerEventDay[];
   };
   venue: {
@@ -74,6 +77,14 @@ function httpsUrl(value: string | null) {
   } catch {
     return false;
   }
+}
+
+/** What a source is called when the organizer names it nothing (#397). The
+ * address is what identifies it; a name is only a courtesy. */
+export const ORGANIZER_DEFAULT_SOURCE_LABEL = "活動官方來源";
+
+export function organizerSourceLabel(source: OrganizerEventDraft["officialSource"]) {
+  return source.label || ORGANIZER_DEFAULT_SOURCE_LABEL;
 }
 
 export function createEmptyOrganizerEventDraft(tentativeName: string): OrganizerEventDraft {
@@ -166,6 +177,8 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
     || value.event.aliases.some((alias) => typeof alias !== "string"))) return null;
   // A row left blank in the form is not an alias; it drops out on save.
   const aliases = (value.event.aliases ?? []).map(text).filter(Boolean);
+  const image = value.event.image === undefined ? undefined : parseEventImage(value.event.image);
+  if (image === null) return null;
   const days: OrganizerEventDay[] = [];
   for (const day of value.event.days) {
     if (!record(day)) return null;
@@ -208,7 +221,7 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
   }
   return {
     schema: "organizer-event-draft/1",
-    event: { id: eventId, name, ...(aliases.length > 0 ? { aliases } : {}), days },
+    event: { id: eventId, name, ...(aliases.length > 0 ? { aliases } : {}), ...(image ? { image } : {}), days },
     venue: { assignments },
     officialSource: { label: text(value.officialSource.label), url: sourceUrl },
     ...(references ? { references } : {}),
@@ -278,7 +291,6 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
     if (assignment.venueSpaceId && spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "同一個場地重複選取。" });
     if (assignment.venueSpaceId) spaces.add(assignment.venueSpaceId);
   });
-  if (!draft.officialSource.label) add({ severity: "error", step: "event", code: "missing_source", target: "officialSource.label", message: "請說明主辦資料來源。" });
   if (!httpsUrl(draft.officialSource.url)) add({ severity: "error", step: "event", code: "invalid_source_url", target: "officialSource.url", message: "來源網址必須使用 HTTPS。" });
   return issues;
 }

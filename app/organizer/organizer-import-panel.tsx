@@ -4,7 +4,7 @@
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
-import { isOrganizerAreaId, withOrganizerImportedAreaIds } from "../organizer-event";
+import { isOrganizerAreaId, organizerSourceLabel, withOrganizerImportedAreaIds } from "../organizer-event";
 import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
@@ -70,7 +70,7 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
   // number means. Corrections keyed by those numbers cannot survive that.
   const forgetPreview = () => { setPreviewRequested(false); setOverrides({}); setExcluded([]); };
 
-  const sourceLabel = detail.draft.officialSource.label;
+  const sourceLabel = organizerSourceLabel(detail.draft.officialSource);
   useEffect(() => {
     if (!bytes) { setMetadata(null); return; }
     let ignore = false;

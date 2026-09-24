@@ -18,6 +18,10 @@ import {
 } from "./map-contribution-draft";
 import { validateEventMapLayout, type EventMapLayout, type PublishedEventMap } from "./event-map";
 import {
+  describeEventImageBytes, eventImageKeyParts, eventImagePublicKey, organizerEventImageObjectKey, organizerEventImagePrefix,
+  prepareEventImage, sameEventImage, type EventImage,
+} from "./event-image";
+import {
   createEmptyOrganizerEventDraft, organizerPendingVenueSelections, parseOrganizerEventDraft, serializeOrganizerEventDraft,
   type OrganizerEventDraft,
 } from "./organizer-event";
@@ -38,7 +42,7 @@ import { buildApprovedPublicationArtifacts } from "./publication-artifacts";
 import { planOrganizerAmendmentCandidate, readOrganizerAmendmentBaseline,
   type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
 import { AmendmentSettingsError, amendmentSettingsImpact, applyAmendmentSettings, normalizeAmendmentSettings,
-  type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
+  approvedEventDraft, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
 import {
   isOrganizerVenueSpaceAreaMode,
   normalizeOrganizerVenueAddress,
@@ -2207,6 +2211,10 @@ export function createCirclePortalHandlers({
     catch (error) {
       return error instanceof AmendmentSettingsError ? json({ error: error.message }, error.status) : json({ error: "活動設定宣告無效。" }, 422);
     }
+    const previousImage = amendment.settings?.image ?? undefined;
+    const nextImage = settings?.image ?? undefined;
+    const imageProblem = await eventImageChangeProblem(candidateId, previousImage, nextImage);
+    if (imageProblem) return json({ error: imageProblem.error }, imageProblem.status);
     const settingsJson = settings ? JSON.stringify(settings) : null;
     const result = await repository.saveOrganizerAmendment({ candidateId, expectedVersion: candidate.current_version,
       baselineSha256: amendment.stored.baseline_sha256, changesJson, changesSha256: await sha256Hex(changesJson), rows: plan.rows,
@@ -2349,6 +2357,9 @@ export function createCirclePortalHandlers({
     const referenceIssues = validateOrganizerReferences(serialized.draft,
       projectReferenceCatalog(referenceRecords), false);
     if (referenceIssues.length) return json({ error: referenceIssues[0].message, issues: referenceIssues }, 422);
+    const previousImage = candidate ? parseOrganizerEventDraft(JSON.parse(candidate.current_draft_json) as unknown)?.event.image : undefined;
+    const imageProblem = await eventImageChangeProblem(candidateId, previousImage, serialized.draft.event.image);
+    if (imageProblem) return json({ error: imageProblem.error }, imageProblem.status);
     const result = await repository.saveOrganizerCandidate({
       candidateId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number,
@@ -2819,6 +2830,106 @@ export function createCirclePortalHandlers({
     });
   }
 
+  const EVENT_IMAGE_UNAVAILABLE = "暫時無法使用活動圖片，請稍後再試。";
+
+  /** The staged upload a draft or declaration points at, re-read and re-checked:
+   * what the browser sent back about a picture is only trusted once the bucket
+   * holds exactly those bytes, under the address the draft names. */
+  async function readStagedEventImage(candidateId: string, image: EventImage): Promise<ArrayBuffer | null> {
+    if (!mapContributionStore || !thumbnailStore) return null;
+    if (image.url !== thumbnailStore.url(eventImagePublicKey(image))) return null;
+    const object = await mapContributionStore.get(organizerEventImageObjectKey(candidateId, image));
+    if (!object) return null;
+    const bytes = await new Response(object.body).arrayBuffer();
+    try {
+      const described = await describeEventImageBytes(object.contentType ?? "", bytes);
+      return described.sha256 === image.sha256 && described.contentType === image.contentType
+        && described.width === image.width && described.height === image.height ? bytes : null;
+    } catch { return null; }
+  }
+
+  /** A save that keeps the picture it already had needs no bucket read. */
+  async function eventImageChangeProblem(candidateId: string, previous: EventImage | undefined, next: EventImage | undefined) {
+    if (!next || sameEventImage(previous, next)) return null;
+    if (!mapContributionStore || !thumbnailStore) return { status: 503, error: EVENT_IMAGE_UNAVAILABLE };
+    return await readStagedEventImage(candidateId, next) ? null
+      : { status: 422, error: "找不到剛上傳的活動圖片，請重新上傳後再儲存。" };
+  }
+
+  /** Staged uploads the submission does not use. Run only once a submission
+   * has frozen the content: while the draft is editable, a concurrent save
+   * could come to point at any of them. Cleanup never fails the submission. */
+  async function pruneStagedEventImages(candidateId: string, keep: EventImage | undefined) {
+    if (!mapContributionStore?.list) return;
+    try {
+      const kept = keep ? organizerEventImageObjectKey(candidateId, keep) : null;
+      const stale = (await mapContributionStore.list(organizerEventImagePrefix(candidateId))).filter((key) => key !== kept);
+      await deleteObjectKeys(mapContributionStore, stale);
+    } catch { /* The next submission tries again. */ }
+  }
+
+  /** Approval makes the picture public before the publication that names it
+   * starts. The key is the content hash, so a retried approval, or a
+   * correction that keeps the published picture, finds it already there. */
+  async function publishEventImage(candidateId: string, image: EventImage) {
+    if (!thumbnailStore) return false;
+    const key = eventImagePublicKey(image);
+    if ((await thumbnailStore.list(key)).includes(key)) return true;
+    const bytes = await readStagedEventImage(candidateId, image);
+    if (!bytes) return false;
+    await thumbnailStore.put(key, bytes, image.contentType);
+    return true;
+  }
+
+  async function putOrganizerEventImage(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!mapContributionStore || !thumbnailStore) return json({ error: EVENT_IMAGE_UNAVAILABLE }, 503);
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    if (!candidate) return json({ error: "找不到活動。" }, 404);
+    if (candidate.status !== "draft" && candidate.status !== "changes_requested") {
+      return json({ error: "這個活動目前不能編輯。" }, 409);
+    }
+    let form: FormData;
+    try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
+    const file = form.get("file");
+    if (!(file instanceof File)) return json({ error: "請選擇活動圖片。" }, 400);
+    if (form.get("rightsConfirmed") !== "true") return json({ error: "請先確認你有權公開這張圖片。" }, 400);
+    let prepared: Awaited<ReturnType<typeof prepareEventImage>>;
+    try { prepared = await prepareEventImage(file, thumbnailStore.url); }
+    catch (error) { return json({ error: error instanceof Error ? error.message : "活動圖片格式無效。" }, 400); }
+    // Staged only. The draft points at it once the organizer saves, and it
+    // becomes public only when an approval publishes the event.
+    await mapContributionStore.put(organizerEventImageObjectKey(candidateId, prepared.image), prepared.bytes, prepared.image.contentType);
+    await repository.writeAudit({
+      at: config.now(), actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access),
+      action: "organizer_event.image_uploaded", subjectType: "organizer_event", subjectId: candidateId,
+      detail: { sha256: prepared.image.sha256, sizeBytes: file.size, width: prepared.image.width, height: prepared.image.height, rightsConfirmed: true },
+      ipHash: await clientIpHash(request),
+    });
+    return json({ ok: true, image: prepared.image });
+  }
+
+  /** The private copy of an upload, for the organizer to see before approval.
+   * A picture already published is read from its public address instead. */
+  async function getOrganizerEventImage(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    if (!mapContributionStore || !thumbnailStore) return json({ error: EVENT_IMAGE_UNAVAILABLE }, 503);
+    const query = new URL(request.url).searchParams;
+    const image = eventImageKeyParts(query.get("sha256"), query.get("contentType"));
+    const object = image ? await mapContributionStore.get(organizerEventImageObjectKey(candidateId, image)) : null;
+    if (!image || !object || object.contentType !== image.contentType) return json({ error: "找不到活動圖片。" }, 404);
+    return new Response(object.body, {
+      headers: {
+        "content-type": image.contentType,
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "default-src 'none'; sandbox",
+      },
+    });
+  }
+
   async function validateOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -3012,6 +3123,7 @@ export function createCirclePortalHandlers({
       action: "organizer_event.submitted", subjectType: "organizer_event", subjectId: candidateId,
       detail: { version: expectedVersion, revisionHash }, ipHash: await clientIpHash(request),
     });
+    await pruneStagedEventImages(candidateId, approvedEventDraft(JSON.parse(snapshotJson) as Parameters<typeof approvedEventDraft>[0])?.event.image);
     return json({ ok: true, status: result.status, revisionHash });
   }
 
@@ -3063,6 +3175,15 @@ export function createCirclePortalHandlers({
         if (exists && candidate.publication_operation !== "AMEND") return json({ error: "這個活動代碼已存在，首次發布不能覆寫。請使用已發布活動修正流程。", code: "event_id_collision" }, 409);
         const { issues } = await validateOrganizerWorkspace(candidateId, draft);
         if (issues.some((issue) => issue.severity === "error")) return json({ error: "這個活動仍有待修正項目。", issues }, 422);
+      }
+      // Public before the publication names it, and before any state moves:
+      // a failed copy leaves the submission exactly where it was. Only a live
+      // approval of the version under review may publish it; a replayed
+      // approval found it public already, and a stale one must not.
+      const image = candidate.status === "submitted" && candidate.current_version === expectedVersion
+        ? approvedEventDraft(JSON.parse(snapshot.snapshot_json) as Parameters<typeof approvedEventDraft>[0])?.event.image : undefined;
+      if (image && !await publishEventImage(candidateId, image)) {
+        return json({ error: "活動圖片暫時無法公開，送審內容已保留，請稍後再核准。", code: "event_image_unavailable" }, 503);
       }
     }
     let publicationJobId: string | null = decision === "approve" ? crypto.randomUUID() : null;
@@ -3317,7 +3438,7 @@ export function createCirclePortalHandlers({
     listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace, createOrganizerReferenceEntry,
     updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
-    putOrganizerMapBackground, getOrganizerMapBackground,
+    putOrganizerMapBackground, getOrganizerMapBackground, putOrganizerEventImage, getOrganizerEventImage,
     validateOrganizerCandidate, previewOrganizerCandidate, manageOrganizerCollaborators,
     submitOrganizerCandidate, adminReviewOrganizerCandidate, adminRetryOrganizerPublication, reopenOrganizerCandidate, abandonOrganizerAmendment,
     createOrganizerAmendment, getOrganizerAmendment, saveOrganizerAmendment,

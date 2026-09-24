@@ -10,9 +10,9 @@
 
 `scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
 
-介紹頁由 Pages 靜態直送，不經 Function，不新增資料寫入。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin、售票與開場時間省略，不保證 rich result 資格。
+介紹頁由 Pages 靜態直送，不經 Function，不新增資料寫入。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
 
-首頁、介紹頁與 Reader 啟動後的 head 都以絕對網址指向同一張品牌分享圖 `/share-card.png`（1200×630 PNG，維護者選定的 C 版），並使用 `summary_large_image`；多數分享平台不接受 SVG，所以不用站台圖示。分享圖供其他平台的伺服器抓取，不加入 Service Worker precache。
+首頁、介紹頁與 Reader 啟動後的 head 都以絕對網址指向品牌分享圖 `/share-card.png`（1200×630 PNG，維護者選定的 C 版），並使用 `summary_large_image`。例外是有活動圖片的活動：它的活動介紹頁與 Reader 的活動畫面改指向活動圖片及其尺寸，社團頁仍用品牌分享圖；多數分享平台不接受 SVG，所以不用站台圖示。分享圖供其他平台的伺服器抓取，不加入 Service Worker precache。
 
 首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
 

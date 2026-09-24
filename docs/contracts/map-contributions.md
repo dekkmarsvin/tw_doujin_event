@@ -86,7 +86,7 @@
 
 接受的保守 upload profile 是 baseline JPEG、非交錯 PNG（宣告像素資料最多 32 MiB）、靜態 WebP，以及使用 classic xref、未加密且不含 object stream 的 PDF；不接受 progressive JPEG、交錯 PNG、動畫 WebP 或 xref-stream／object-stream PDF。單檔最多 20 MiB，圖片最多 1,600 萬 pixels、單邊最多 8,192 pixels，PDF 最多 20 頁。伺服器以不解碼像素的方式檢查容器邊界、尺寸／頁數與 PDF 禁用項目：不把未受信任的位元組交給影像解碼器，並讓驗證成本與檔案內容無關。**這不再是 CPU 額度的限制**——Workers Paid 的 CPU 上限是每次呼叫 5 分鐘（Free 為 10 ms，見 [ADR-0065](../adr/0065-cost-reasoning-uses-the-workers-paid-basis.md)），保守 profile 的理由是攻擊面與可預期的驗證成本，不是額度。可否正常顯示仍由投稿者與審閱者在私人預覽確認。另要求 HTTPS 官方來源 URL、文件日期及 PDF 頁碼；不符合 profile 時請先由可信工具轉存成上述格式。永久 metadata 是來源 URL、日期、頁碼、SHA-256、MIME、容量、尺寸／頁數與審閱結果。
 
-原始 bytes 只存於 `MAP_CONTRIBUTIONS` 私人 R2 bucket。它與公開代表圖的 `THUMBNAILS` bucket 分離，不設定 custom domain 或 `r2.dev`。同一個 bucket 也存[主辦候選地圖](./organizer-workspace.md)的配置圖，位址前綴 `organizer-map-backgrounds/`，兩者互不重疊。先寫 R2、再綁 D1；D1 拒絕時立即刪除剛寫入的物件。帳號刪除與排程清除也先刪 bytes，再移除或匿名化 D1 資料，讓失敗保留可重試的 metadata，不留下已宣告刪除但仍可讀的物件。
+原始 bytes 只存於 `MAP_CONTRIBUTIONS` 私人 R2 bucket。它與公開代表圖的 `THUMBNAILS` bucket 分離，不設定 custom domain 或 `r2.dev`。同一個 bucket 也存[主辦候選地圖](./organizer-workspace.md)的配置圖（前綴 `organizer-map-backgrounds/`）與暫存的[活動圖片](./organizer-workspace.md#活動圖片)（前綴 `organizer-event-images/`），彼此互不重疊。先寫 R2、再綁 D1；D1 拒絕時立即刪除剛寫入的物件。帳號刪除與排程清除也先刪 bytes，再移除或匿名化 D1 資料，讓失敗保留可重試的 metadata，不留下已宣告刪除但仍可讀的物件。
 
 ## 保存與刪除
 

@@ -120,6 +120,10 @@
 
 同一社團若在多個分頁並行上傳或清理，R2 與 D1 之間沒有跨服務交易鎖，短時間內可能多留草稿，或讓其中一個分頁需要重新上傳。這不會發布未確認的物件；下一次上述生命週期動作會再次掃描。若產品要提供多分頁無衝突保證，需另以可序列化的 staged pointer 協調，不能把目前的 prefix 掃描描述成強一致上限。
 
+### R2 活動圖片
+
+主辦選填上傳的活動圖片（[活動圖片契約](./organizer-workspace.md#活動圖片)、[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)）。暫存在私人 `MAP_CONTRIBUTIONS` bucket 的 `organizer-event-images/<candidateId>/`，隨候選活動保存、不設期限；送審成功後刪除送審內容沒有使用的暫存。核准後以內容雜湊複製到公開 `THUMBNAILS` bucket 的 `event-images/`，不設期限；更換或移除後舊圖仍保留，因為舊版活動資料可能仍指向它。活動圖片是主辦提供的活動資料，不隨個別帳號刪除；`organizer_event.image_uploaded` audit 只記雜湊、大小、尺寸與權利確認。
+
 ### `organizer_*` — 主辦單位工作區
 
 相關表與狀態機見[主辦單位工作區契約](./organizer-workspace.md)：

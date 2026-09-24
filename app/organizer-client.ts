@@ -11,6 +11,7 @@ import type {
 import type { OrganizerImportMapping, OrganizerNormalizedImportRow } from "./organizer-import";
 import type { OrganizerAmendmentSettings, OrganizerAmendmentSettingsImpact } from "./organizer-amendment-settings";
 import type { EventMapLayout } from "./event-map";
+import type { EventImage } from "./event-image";
 import type {
   OrganizerGuidedTask,
   OrganizerWorkspaceReadiness,
@@ -132,6 +133,7 @@ export type OrganizerAmendmentDetail = {
     sourceCandidateId: string; sourceVersion: number; publishedAt: number;
     event: {
       id: string; name: string; aliases?: string[];
+      image?: { url: string; width: number; height: number };
       days: Array<{ id: string; label: string; dateLabel: string }>;
       areas: Array<{ id: string; label?: string; name?: string }>;
     };
@@ -276,6 +278,24 @@ export function saveOrganizerMap(candidateId: string, draftId: string, input: {
   return organizerCall<{ ok: true; version: number; mapRevision: number }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/maps/${encodeURIComponent(draftId)}`, {
     method: "PATCH", body: JSON.stringify(input),
   });
+}
+
+/** Staged, not saved: the result goes into the draft (or a correction's
+ * declaration), and the organizer saves it like any other field. */
+export function uploadOrganizerEventImage(candidateId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("rightsConfirmed", "true");
+  return organizerCall<{ ok: true; image: EventImage }>(
+    `/api/organizer/events/${encodeURIComponent(candidateId)}/image`, { method: "PUT", body: form },
+  );
+}
+
+/** Where the organizer sees a picture: the private upload while it waits for
+ * approval, which the page falls back from to the public address once published. */
+export function organizerEventImagePreviewPath(candidateId: string, image: Pick<EventImage, "sha256" | "contentType">) {
+  const query = new URLSearchParams({ sha256: image.sha256, contentType: image.contentType });
+  return `/api/organizer/events/${encodeURIComponent(candidateId)}/image?${query}`;
 }
 
 function organizerMapBackgroundPath(candidateId: string, draftId: string) {

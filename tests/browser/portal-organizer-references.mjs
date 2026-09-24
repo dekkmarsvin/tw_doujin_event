@@ -4,6 +4,23 @@
 import assert from "node:assert/strict";
 import { ADMIN, clearMail, signIn } from "./support/portal.mjs";
 import { start } from "./support/journey.mjs";
+import { crc32, deflateSync } from "node:zlib";
+
+/** A real PNG the upload accepts: the server reads its structure, not its pixels. */
+function png(width, height) {
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
+  const rows = Buffer.alloc((width + 1) * height, 0x9c);
+  for (let row = 0; row < height; row += 1) rows[row * (width + 1)] = 0;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
 
 const journey = await start("portal-organizer-references");
 try {
@@ -27,6 +44,21 @@ try {
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await page.getByLabel(/^來源名稱/).fill("測試主辦提供");
   await page.getByLabel(/^官方公告網址/).fill("https://organizer.example/event");
+  // #396: the picture is optional, staged privately, and part of the draft
+  // only once saved. The preview comes from the private upload.
+  await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "narrow.png", mimeType: "image/png", buffer: png(800, 450) });
+  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await page.getByRole("alert").getByText("活動圖片寬度至少要 1200 px，這張是 800 px。", { exact: true }).waitFor();
+  await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "event.png", mimeType: "image/png", buffer: png(1200, 630) });
+  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await page.getByRole("status").getByText("已上傳，尚未儲存。", { exact: true }).waitFor();
+  const preview = page.getByRole("img", { name: "活動圖片", exact: true });
+  await preview.waitFor();
+  assert.equal(await preview.evaluate((image) => image.complete && image.naturalWidth), 1200, "the private upload is what the preview shows");
+  await page.getByText("1200 × 630 px", { exact: true }).waitFor();
+  await journey.capture(page, "event-image-staged");
   await page.getByRole("button", { name: "建立主辦單位", exact: true }).click();
   await page.getByLabel("主辦名稱", { exact: true }).fill("測試主辦");
   await page.getByLabel("主辦官方網址", { exact: true }).fill("http://organizer.example/");
@@ -37,6 +69,8 @@ try {
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
   await page.getByRole("button", { name: "建立分類目錄", exact: true }).click();
+  // #397: categories are usually published in the event's own announcement.
+  assert.equal(await page.getByLabel("分類官方來源網址", { exact: true }).inputValue(), "https://organizer.example/event");
   await page.getByLabel("分類目錄名稱", { exact: true }).fill("作品分類");
   await page.getByLabel("分類官方來源網址", { exact: true }).fill("https://organizer.example/categories");
   await page.getByLabel("分類名稱 1", { exact: true }).fill("原創作品");
@@ -53,6 +87,8 @@ try {
   await page.reload();
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
   assert.equal(await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).locator("option:checked").textContent(), "測試主辦");
+  await page.getByText("1200 × 630 px", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).evaluate((image) => image.complete && image.naturalWidth), 1200, "the saved picture survives a reload");
   assert.equal(await page.getByRole("combobox", { name: "主辦分類目錄", exact: true }).locator("option:checked").textContent(), "作品分類（2 個分類）");
   await journey.capture(page, "references-persisted");
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("partner");
@@ -93,8 +129,22 @@ try {
   // reflect the previous step after saving changes there.
   await page.getByRole("button", { name: "2 活動日期 已完成", exact: true }).click();
   await page.getByRole("button", { name: "移除", exact: true }).nth(1).click();
+  // Advancing remembers the new position twice, and the second write reports
+  // a failure across the top of the workspace. Finishing the basic settings
+  // later is a new action and must not leave that line above its handoff.
+  let workspaceSaves = 0;
+  const refuseSecondSave = (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    workspaceSaves += 1;
+    if (workspaceSaves !== 2) return route.continue();
+    return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "暫時無法記住目前位置。" }) });
+  };
+  await page.route("**/api/organizer/events/*/workspace", refuseSecondSave);
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("heading", { name: "場館與場地", exact: true }).waitFor();
+  const staleNotice = page.getByText("暫時無法記住目前位置。", { exact: true });
+  await staleNotice.waitFor();
+  await page.unroute("**/api/organizer/events/*/workspace", refuseSecondSave);
   await dates.getByLabel("第一天日期", { exact: true }).waitFor();
   assert.equal(await dates.getByLabel("第二天日期", { exact: true }).count(), 0);
   // Creating a venue fills an existing blank row too, instead of appending a
@@ -166,9 +216,29 @@ try {
   await page.getByRole("combobox", { name: /^場地/ }).nth(1).selectOption({ label: "全館" });
   await journey.capture(page, "venue-multiple-spaces");
   await page.getByRole("button", { name: "移除此場地", exact: true }).nth(1).click();
+  assert.equal(await staleNotice.count(), 1, "the earlier failure is still showing when completion starts");
+  const remembered = page.waitForRequest((request) => request.method() === "PATCH" && request.url().endsWith("/workspace"));
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
+  // Finishing opens the work that comes next, not the first of the three forms
+  // just completed, and the next visit resumes there too.
+  await page.getByRole("heading", { name: "攤位與社團名單匯入", exact: true }).waitFor();
+  assert.equal((await remembered).postDataJSON().lastSection, "import");
+  const handoff = page.getByRole("status").filter({ hasText: "基本設定完成" });
+  await handoff.getByText("接下來匯入攤位名單。之後的地圖、檢查與送審，從右側「準備進度」進入。", { exact: true }).waitFor();
+  assert.equal(await handoff.evaluate((node) => node === document.activeElement), true, "focus follows the unmounted button to the line");
+  assert.equal(await staleNotice.count(), 0, "an earlier step's failure does not stand above the handoff");
   const sections = page.getByRole("group", { name: "活動項目" });
+  assert.equal(await sections.getByRole("button", { name: /^攤位匯入/ }).getAttribute("aria-current"), "page");
+  assert.equal(await page.getByRole("button", { name: /^下一步：/ }).count(), 0, "no 下一步 to the section already open");
+  await journey.capture(page, "onboarding-handoff");
+  // Reaching for a control in the panel starts the next action; the line
+  // about the previous one does not stay beside it. Moving away clears it
+  // through the same navigation step every other notice uses.
+  await page.getByRole("spinbutton", { name: /^標題列/ }).click();
+  assert.equal(await handoff.count(), 0, "acting in the panel retires the handoff");
   await sections.getByRole("button", { name: /^活動/ }).click();
+  assert.equal(await sections.getByRole("button", { name: /^活動/ }).getAttribute("aria-current"), "page");
+  await page.getByRole("button", { name: "下一步：攤位匯入", exact: true }).waitFor();
   await page.getByLabel(/^活動名稱/).fill("  分類目錄驗收  ");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();

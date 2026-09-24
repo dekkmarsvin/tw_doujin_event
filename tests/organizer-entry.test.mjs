@@ -103,7 +103,7 @@ test("organizer reuses the event source for imports and labels every activity-da
   const app = await organizerSource();
 
   assert.doesNotMatch(app, /<label>來源說明<input/);
-  assert.match(app, /const sourceLabel = detail\.draft\.officialSource\.label;/);
+  assert.match(app, /const sourceLabel = organizerSourceLabel\(detail\.draft\.officialSource\);/);
   assert.match(app, /sourceDescription: sourceLabel/);
   assert.match(app, /<label>代碼<input/);
   assert.match(app, /<label>名稱<input/);
@@ -261,6 +261,29 @@ test("the rail reports problems, not unstarted work, and empty states name an ac
   assert.match(app, /這一版已通過檢查/);
   assert.match(app, /這一版還沒檢查/);
   assert.match(app, /尚未加入攤位名單/);
+});
+// Finishing the basic settings used to leave the reader on the first of the
+// three forms they had just completed, with a workspace-wide line naming a mode
+// switch. The browser journey in portal-organizer-references drives it.
+test("finishing the basic settings opens the next section and marks where the reader is", async () => {
+  const app = await organizerSource();
+
+  // The binder opens on the suggested section in the same pass as the detail,
+  // and that section is what the next visit resumes at.
+  assert.ok(app.includes('reloadDetail(candidateId, undefined, "suggested")'), "completion opens the suggested section");
+  assert.match(app, /persistLocation\(candidateId, next\.workspace\.resume\.guidedTask, next\.workspace\.readiness\.suggestedNextSection\)/, "the suggested section is remembered");
+
+  // Said on that section, not across the top of the workspace, and in terms of
+  // the next job rather than the mode that changed.
+  assert.doesNotMatch(app, /已開啟全部項目/);
+  // Completing is a new action: an earlier step's workspace notice goes.
+  assert.match(app, /const completeOnboarding = useCallback\(async \(candidateId: string, version: number\) => \{\s*setNotice\(IDLE\);/, "completion clears the earlier notice");
+  assert.ok(app.includes("{handoff && <OnboardingHandoff"), "the line sits with the panel it introduces");
+  assert.match(app, /const finishNavigation = [^]*?setHandoff\(null\);[^]*?request\.run\(\);/, "moving away clears it with every other notice");
+
+  // The rail says where the reader is, and does not offer a step they are on.
+  assert.ok(app.includes('aria-current={item.id === current ? "page" : undefined}'), "the open section is marked");
+  assert.ok(app.includes("{showNext && <button"), "no 下一步 to the panel already open");
 });
 // #298: 場館／場地／展區 are near-synonyms in everyday Chinese, and the
 // glossary that tells them apart is written for developers. The explanation
