@@ -2175,7 +2175,9 @@ export function createCirclePortalHandlers({
     // Whole-state like changes[]: an omitted settings key declares none.
     let settings: OrganizerAmendmentSettings | null;
     try { settings = normalizeAmendmentSettings(amendment.baseline.draft, body.settings); }
-    catch (error) { return json({ error: error instanceof AmendmentSettingsError ? error.message : "活動設定宣告無效。" }, 422); }
+    catch (error) {
+      return error instanceof AmendmentSettingsError ? json({ error: error.message }, error.status) : json({ error: "活動設定宣告無效。" }, 422);
+    }
     const settingsJson = settings ? JSON.stringify(settings) : null;
     const result = await repository.saveOrganizerAmendment({ candidateId, expectedVersion: candidate.current_version,
       baselineSha256: amendment.stored.baseline_sha256, changesJson, changesSha256: await sha256Hex(changesJson), rows: plan.rows,

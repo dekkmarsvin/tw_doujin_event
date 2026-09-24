@@ -115,7 +115,7 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 修正候選除了 `changes[]`，另可保存選填的 `settings`：`{ name?, aliases?, days?: [{ id, date }] }`（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)）。`app/organizer-amendment-settings.ts` 的純函式負責正規化、套用與影響，兩種宣告分開保存、分開比對。
 
 - **允許清單**：活動名稱、活動別稱、既有活動日的日期。其他鍵、新增或刪除活動日、重複的活動日代號，以及活動日除 `id`、`date` 以外的欄位，一律 422。
-- 從固定 baseline 草稿正規化：名稱與別稱去頭尾空白，空白別稱略去；與 baseline 相同的值不保存，全部相同時不保存任何設定（`settings_json` 為 NULL）。`aliases: []` 表示移除全部別稱。套上宣告後的草稿必須通過建立活動時的同一套驗證。
+- 從固定 baseline 草稿正規化：名稱與別稱去頭尾空白，空白別稱略去；與 baseline 相同的值不保存，全部相同時不保存任何設定（`settings_json` 為 NULL）。`aliases: []` 表示移除全部別稱。套上宣告後的草稿必須通過建立活動時的同一套驗證，包括草稿儲存的 1 MiB 上限；超過上限回 413，其餘不合規則回 422。
 - **整份覆寫**：每次 `PUT` 的 `settings` 取代上一份，省略即沒有設定更正。
 - 修正候選的草稿維持等於 baseline 草稿，設定只存在宣告裡；Reader 預覽顯示套上宣告後的活動名稱與日期。
 

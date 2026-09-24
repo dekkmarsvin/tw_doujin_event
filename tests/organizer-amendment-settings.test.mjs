@@ -46,6 +46,12 @@ test("anything outside the allow-list, or that a first publication would refuse,
   rejects(["name"], /只能更正活動名稱/);
 });
 
+test("a declaration whose corrected draft a first save would refuse as too large is 413", () => {
+  assert.throws(() => normalizeAmendmentSettings(baseline, { name: "名".repeat(400_000) }),
+    (error) => error instanceof AmendmentSettingsError && error.status === 413 && /超過 1 MB/.test(error.message));
+  assert.throws(() => normalizeAmendmentSettings(baseline, { name: "" }), (error) => error.status === 422);
+});
+
 test("applying a declaration yields the draft a first save would have produced", () => {
   const settings = normalizeAmendmentSettings(baseline, { name: "新名稱", aliases: [], days: [{ id: "2", date: "2026-11-15" }] });
   const draft = applyAmendmentSettings(baseline, settings);

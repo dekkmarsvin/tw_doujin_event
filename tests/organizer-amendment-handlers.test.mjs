@@ -150,6 +150,8 @@ test("settings declarations are whole-state, kept only when they change somethin
     assert.equal(response.status, 422, JSON.stringify(settings));
     assert.ok((await response.json()).error);
   }
+  const oversized = await put(2, { name: "名".repeat(400_000) });
+  assert.equal(oversized.status, 413, "the corrected draft is held to the size a draft save accepts");
   assert.equal((await repo.getOrganizerAmendment(id)).settings_json, JSON.stringify(declared), "a rejected save keeps the last declaration");
   assert.equal((await put(2, { name: "測試活動", days: [{ id: "1", date: "2026-11-07" }] })).status, 200);
   assert.equal((await repo.getOrganizerAmendment(id)).settings_json, null, "restating published values declares nothing");

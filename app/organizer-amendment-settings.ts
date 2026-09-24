@@ -6,7 +6,7 @@
  * declared. Anything touching booths, maps or identity — adding or removing a
  * day, venues, areas, templates — stays out until a later decision.
  */
-import { parseOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
+import { parseOrganizerEventDraft, serializeOrganizerEventDraft, validateOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
 
 export type OrganizerAmendmentSettings = {
   name?: string;
@@ -21,7 +21,10 @@ export type OrganizerAmendmentSettingsImpact =
   | { field: "aliases"; before: string[]; after: string[] }
   | { field: "day"; dayId: string; label: string; before: string; after: string };
 
-export class AmendmentSettingsError extends Error {}
+/** `status` is the HTTP answer: a declaration the rules refuse is 422, one too large to store is 413. */
+export class AmendmentSettingsError extends Error {
+  constructor(message: string, readonly status: 413 | 422 = 422) { super(message); }
+}
 
 const SETTING_KEYS = ["name", "aliases", "days"];
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -89,8 +92,11 @@ export function normalizeAmendmentSettings(baseline: OrganizerEventDraft, input:
   };
   if (Object.keys(settings).length === 0) return null;
   // The same checks a first publication passes, so a corrected date or alias
-  // is held to the rules the organizer met when creating the event.
-  const problems = validateOrganizerEventDraft(applyAmendmentSettings(baseline, settings))
+  // is held to the rules the organizer met when creating the event, including
+  // the size a draft save accepts.
+  const applied = applyAmendmentSettings(baseline, settings);
+  if (!serializeOrganizerEventDraft(applied)) throw new AmendmentSettingsError("更正後的活動資料超過 1 MB，請縮短活動名稱或別稱。", 413);
+  const problems = validateOrganizerEventDraft(applied)
     .filter((issue) => issue.severity === "error" && issue.step === "event");
   if (problems.length > 0) throw new AmendmentSettingsError(problems.map((issue) => issue.message).join(""));
   return settings;
