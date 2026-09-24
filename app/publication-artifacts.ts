@@ -45,11 +45,24 @@ export function assertAmendmentPublishedBaseline(baseline: OrganizerAmendmentBas
   } catch { fail("已發布活動已變更或原 pin 不符，請從最新公開版本重新開始修正。", "amendment_baseline_changed"); }
 }
 
+/** The event's date fields, all derived from its sorted day dates. Shared so a
+ * corrected date recomputes them exactly the way a first publication does. */
+export function eventDateFields(dates: readonly string[]) {
+  return {
+    dateRangeLabel: dates[0] === dates.at(-1) ? dates[0] : `${dates[0]}–${dates.at(-1)}`,
+    eventEndsAt: `${dates.at(-1)}T23:59:59+08:00`,
+  };
+}
+
+/** Key order is part of the approved bytes: an older snapshot must rebuild the
+ * exact event.json it was approved with, so optional fields appear only when set. */
 function snapshotEvent(snapshot: Snapshot, draft: NonNullable<ReturnType<typeof parseOrganizerEventDraft>>, templates: string[], areaIds: string[], dates: string[], officialUrl: string) {
+  const { dateRangeLabel, eventEndsAt } = eventDateFields(dates);
   return {
     schema: "event-definition/3", id: snapshot.eventId, name: draft.event.name,
-    dateRangeLabel: dates[0] === dates.at(-1) ? dates[0] : `${dates[0]}–${dates.at(-1)}`,
-    dataUpdatedAt: snapshot.contentUpdatedAt, eventEndsAt: `${dates.at(-1)}T23:59:59+08:00`,
+    ...(draft.event.aliases?.length ? { aliases: draft.event.aliases } : {}),
+    dateRangeLabel,
+    dataUpdatedAt: snapshot.contentUpdatedAt, eventEndsAt,
     mapTemplate: templates[0], areaMode: areaIds.length === 1 ? "single" : "switchable",
     days: draft.event.days.map((day) => ({ id: day.id, label: day.label, dateLabel: day.date })),
     areas: areaIds.map((id) => ({ id, label: id, shortLabel: id })),

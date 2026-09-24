@@ -78,6 +78,18 @@ test("approved snapshot produces deterministic two-stage files and stages throug
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
 
+test("aliases publish only when the organizer set them", async () => {
+  const original = await sample();
+  const plain = await builder.buildApprovedPublicationArtifacts(source(original));
+  assert.equal(Object.hasOwn(plain.event, "aliases"), false);
+  const snapshot = structuredClone(original);
+  snapshot.draft.event.aliases = ["NE", "下一場"];
+  const artifacts = await builder.buildApprovedPublicationArtifacts(source(snapshot));
+  assert.deepEqual(Object.keys(artifacts.event).slice(0, 5), ["schema", "id", "name", "aliases", "dateRangeLabel"]);
+  assert.deepEqual(artifacts.event.aliases, ["NE", "下一場"]);
+  assert.deepEqual({ ...artifacts.event, aliases: undefined }, { ...plain.event, aliases: undefined });
+});
+
 test("scoped maps retain every day and explicit stable-key linkage without name guessing", async () => {
   const snapshot = await sample({ days: 2 });
   for (const row of snapshot.import.rows.filter((row) => row.codes[0] === "S01")) { row.stableKey = "circle-1"; row.identityGroup = "stable:circle-1"; }

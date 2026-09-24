@@ -3,6 +3,7 @@ import sampleReferences from "../fixtures/events/sample/reference-records.json";
 import sampleTwoDefinition from "../fixtures/events/sample-two/event.json";
 import sampleTwoReferences from "../fixtures/events/sample-two/reference-records.json";
 import { circleCategoryLabels, parseCircleCategoryCatalog, type CircleCategoryCatalog } from "./circle-categories";
+import { eventAliasProblems } from "./event-aliases";
 
 declare const __PUBLISHED_EVENTS__: readonly { definition: unknown; references: unknown }[];
 
@@ -27,6 +28,8 @@ export type EventDefinition<TDay extends string | number = string | number, TAre
   schema: typeof EVENT_DEFINITION_SCHEMA;
   id: string;
   name: string;
+  /** 活動別稱, first one the short name. Absent rather than empty (ADR-0068). */
+  aliases?: readonly string[];
   /** Compatibility display label derived from the first pinned venue assignment. */
   venue: string;
   dateRangeLabel: string;
@@ -103,12 +106,19 @@ function findReference(
 export function parseEventDefinition(value: unknown, references: unknown): EventDefinition {
   if (!isRecord(value) || value.schema !== EVENT_DEFINITION_SCHEMA) throw new Error("Unsupported event definition schema.");
   requireOnlyKeys(value, [
-    "schema", "id", "name", "dateRangeLabel", "dataUpdatedAt", "eventEndsAt", "mapTemplate", "areaMode",
+    "schema", "id", "name", "aliases", "dateRangeLabel", "dataUpdatedAt", "eventEndsAt", "mapTemplate", "areaMode",
     "days", "areas", "organizerAssignments", "categoryCatalog", "venueAssignments", "officialData",
   ], "Event definition");
   for (const key of ["id", "name", "dateRangeLabel", "dataUpdatedAt", "eventEndsAt", "mapTemplate"] as const) {
     if (!nonempty(value[key])) throw new Error(`Event definition ${key} must be a non-empty string.`);
   }
+  // Present means at least one: an empty list has one spelling, the missing key.
+  if (value.aliases !== undefined && (!Array.isArray(value.aliases) || value.aliases.length === 0
+    || !value.aliases.every((alias) => typeof alias === "string")
+    || eventAliasProblems(value.name as string, value.aliases).length > 0)) {
+    throw new Error("Event definition aliases are invalid.");
+  }
+  const aliases = value.aliases as readonly string[] | undefined;
   if (!isoInstant(value.dataUpdatedAt) || !isoInstant(value.eventEndsAt)) {
     throw new Error("Event definition timestamps must be valid ISO instants.");
   }
@@ -229,6 +239,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     schema: EVENT_DEFINITION_SCHEMA,
     id: value.id as string,
     name: value.name as string,
+    ...(aliases ? { aliases: [...aliases] } : {}),
     venue: venueAssignments[0].venueName,
     dateRangeLabel: value.dateRangeLabel as string,
     dataUpdatedAt: value.dataUpdatedAt as string,

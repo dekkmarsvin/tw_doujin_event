@@ -89,6 +89,14 @@ test("event definitions fail closed on v2, incomplete assignments and mismatched
   assert.throws(() => parseEventDefinition({ ...sampleDefinition, venueAssignments: [{ ...sampleDefinition.venueAssignments[0], areaIds: ["north"] }] }, sampleReferences), /uniquely cover every area/);
 });
 
+test("aliases are optional, keep their order, and malformed lists fail closed", () => {
+  assert.equal(Object.hasOwn(parseEventDefinition(sampleDefinition, sampleReferences), "aliases"), false);
+  assert.deepEqual(parseEventDefinition({ ...sampleDefinition, aliases: ["S1", "樣本展"] }, sampleReferences).aliases, ["S1", "樣本展"]);
+  for (const aliases of [[], "S1", [1], [""], [" S1"], ["x".repeat(41)], ["S1", "s1"], ["ＳＡ", "sa"], [sampleDefinition.name], ["a", "b", "c", "d", "e", "f"]]) {
+    assert.throws(() => parseEventDefinition({ ...sampleDefinition, aliases }, sampleReferences), /aliases are invalid/, JSON.stringify(aliases));
+  }
+});
+
 test("one event may assign lead, co-organizer and partner roles", () => {
   const references = structuredClone(sampleReferences);
   for (const [id, name] of [["sample-co-organizer", "共同主辦"], ["sample-partner", "協力單位"]]) {
