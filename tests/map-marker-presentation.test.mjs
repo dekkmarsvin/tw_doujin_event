@@ -108,3 +108,36 @@ test("the facility list names each access point and each uniquely named area, an
   const empty = mapFacilityDirectory({ accessPoints: [], landmarks: blocks, pillars: [] });
   assert.equal(empty.entries.length, 0, "a map with only shared names offers nothing to locate");
 });
+
+test("service points name themselves by type and are grouped so the toilets sit together", () => {
+  const directory = mapFacilityDirectory({
+    accessPoints: [{ id: "side", kind: "both", direction: "east", x: 10, y: 10, label: "側門" }],
+    landmarks: [], pillars: [],
+    servicePoints: [
+      { id: "t1", kind: "toilet", x: 10, y: 20 },
+      { id: "desk", kind: "information", x: 30, y: 20, label: "大會服務台" },
+      { id: "t2", kind: "toilet", x: 50, y: 20, label: "女廁" },
+    ],
+  });
+  assert.deepEqual(directory.entries.map((entry) => [entry.key, entry.group, entry.label, entry.ariaLabel]), [
+    ["access:side", "access", "側門", "側門，出入兩用"],
+    ["service:t1", "service", "廁所", "廁所"],
+    ["service:t2", "service", "女廁", "女廁，廁所"],
+    ["service:desk", "service", "大會服務台", "大會服務台"],
+  ]);
+  assert.deepEqual(directory.legend.map((item) => item.label), ["出入兩用", "廁所", "服務台"]);
+});
+
+test("a service point badge is an obstacle, and only a name of its own is drawn", () => {
+  const layout = hall({
+    rows: [],
+    accessPoints: [entrance("in", 1000, "一般入口")],
+    servicePoints: [{ id: "t1", kind: "toilet", x: 1000, y: 1140 }, { id: "t2", kind: "toilet", x: 400, y: 600, label: "女廁" }],
+  });
+  const fitted = layoutMapMarkerLabels(layout, { screenScale: .5, fontScale: 1 });
+  assert.equal(fitted.has("service:t1"), false, "an unnamed service point has no text");
+  assert.equal(fitted.has("access:in"), false, "a name that would cover a service badge gives way");
+  const named = fitted.get("service:t2");
+  assert.ok(named && named.dy > 11 && named.anchor === "middle", "a service name sits below its badge");
+  assert.equal(accessLabelSide({ kind: "both", direction: "north" }), "south", "a two-way doorway is named like an entrance");
+});

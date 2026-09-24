@@ -85,3 +85,24 @@ test("entrances and exits differ in shape, keep their screen size and name thems
   const plain = output({ layout: withFacilities });
   assert.equal(plain.nodes.filter((node) => node.tagName === "rect" && /located/i.test(plain.attr(node, "class") ?? "")).length, 0, "nothing is outlined until a facility is located");
 });
+
+test("service points draw a badge named by type, and a two-way doorway is a diamond", () => {
+  const result = output({
+    layout: {
+      ...layout,
+      accessPoints: [{ id: "side", kind: "both", direction: "north", x: 50, y: 95, label: "側門" }],
+      servicePoints: [{ id: "t1", kind: "toilet", x: 20, y: 80 }, { id: "aid", kind: "first-aid", x: 80, y: 80, label: "北側" }],
+    },
+    markerPresentation: { screenScale: 2, fontScale: 1 },
+    locatedMarker: "service:aid",
+  });
+  const marker = (key) => result.nodes.find((node) => result.attr(node, "data-marker") === key);
+  assert.equal(result.attr(marker("service:t1"), "aria-label"), "廁所");
+  assert.equal(result.attr(marker("service:aid"), "aria-label"), "北側，醫護站");
+  assert.equal(result.attr(marker("service:t1"), "role"), "img");
+  assert.ok(marker("service:aid").childNodes.some((node) => node.tagName === "circle" && /located/i.test(result.attr(node, "class") ?? "")), "the located service point is ringed");
+  const side = marker("access:side");
+  assert.equal(result.attr(side, "aria-label"), "側門，出入兩用");
+  assert.equal(side.childNodes.some((node) => node.tagName === "circle" || node.tagName === "rect"), false, "a two-way doorway is neither round nor square");
+  assert.equal(output({ layout }).nodes.some((node) => result.attr(node, "aria-label") === "服務設施"), false, "a map without service points draws no service layer");
+});

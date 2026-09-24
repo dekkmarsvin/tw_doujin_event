@@ -1344,3 +1344,21 @@ test("history keeps a bounded number of layouts and never image bytes", () => {
   assert.ok(entries.every((entry) => validateEventMapLayout({ ...entry, marker: undefined }).ok));
   assert.ok(entries.every((entry) => Object.keys(entry).every((key) => key !== "image" && key !== "source")));
 });
+
+test("service points are picked up, moved and removed like access points", () => {
+  const layout = { ...multiSelectLayout(), servicePoints: [{ id: "toilet", kind: "toilet", x: 60, y: 90 }, { id: "desk", kind: "information", x: 150, y: 90, label: "服務台" }] };
+  const band = selectionsWithinBox(layout, { x: 40, y: 80, width: 40, height: 20 });
+  assert.deepEqual(band.filter((item) => item.kind === "service"), [{ kind: "service", itemIndex: 0 }]);
+  const selections = [{ kind: "service", itemIndex: 0 }, { kind: "service", itemIndex: 1 }];
+  const resolved = resolveSelectionBoxes(layout, selections);
+  assert.deepEqual(resolved.boxes, [{ x: 60, y: 90, width: 0, height: 0 }, { x: 150, y: 90, width: 0, height: 0 }]);
+  applySelectionBoxes(layout, resolved.selections, translateBoxesWithin(resolved.boxes, 10, 5, layout));
+  assert.deepEqual(layout.servicePoints.map(({ x, y }) => [x, y]), [[70, 95], [160, 95]]);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  removeSelectionsFrom(layout, [{ kind: "service", itemIndex: 0 }]);
+  assert.deepEqual(layout.servicePoints.map(({ id }) => id), ["desk"]);
+  const scaled = scaleEventMapLayout(layout, { width: layout.width * 2, height: layout.height * 2 });
+  assert.deepEqual([scaled.servicePoints[0].x, scaled.servicePoints[0].y], [320, 190], "resizing the canvas keeps service points where they sit");
+  assert.equal("servicePoints" in scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 }), false, "a layout without service points does not gain the field");
+  assert.equal(validateEventMapLayout({ ...layout, accessPoints: [{ id: "side", kind: "both", direction: "west", x: 1, y: 1, label: "側門" }] }).ok, true, "a two-way doorway is a valid access point");
+});

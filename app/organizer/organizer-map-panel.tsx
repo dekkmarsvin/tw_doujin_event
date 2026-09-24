@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function layoutHasContent(layout: EventMapLayout | null) {
   return !!layout && (layout.rows.length > 0 || layout.pillars.length > 0
-    || layout.accessPoints.length > 0 || layout.landmarks.length > 0);
+    || layout.accessPoints.length > 0 || layout.landmarks.length > 0 || (layout.servicePoints?.length ?? 0) > 0);
 }
 
 /** One dialog for every action that would take what is on the canvas away. The

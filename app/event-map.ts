@@ -20,9 +20,13 @@ export type MapPillar = MapRect & { id: string };
 export const MAP_ACCESS_DIRECTIONS = ["north", "south", "east", "west"] as const;
 export type MapAccessDirection = (typeof MAP_ACCESS_DIRECTIONS)[number];
 
+/** `both` is a doorway used in and out; its direction points into the hall. */
+export const MAP_ACCESS_KINDS = ["entrance", "exit", "both"] as const;
+export type MapAccessKind = (typeof MAP_ACCESS_KINDS)[number];
+
 export type MapAccessPoint = {
   id: string;
-  kind: "entrance" | "exit";
+  kind: MapAccessKind;
   direction: MapAccessDirection;
   x: number;
   y: number;
@@ -37,6 +41,21 @@ export function mapAccessArrowTransform(point: Pick<MapAccessPoint, "direction" 
 }
 
 export type MapLandmarkKind = "enterprise" | "stage" | "other";
+
+/** Venue services a reader looks for, each drawn as one badge at a point. The
+ * list is fixed: a badge a reader cannot recognise does not help them. */
+export const MAP_SERVICE_POINT_KINDS = ["toilet", "accessible-toilet", "information", "cloakroom", "first-aid", "stairs", "elevator"] as const;
+export type MapServicePointKind = (typeof MAP_SERVICE_POINT_KINDS)[number];
+export const MAP_SERVICE_POINT_LABEL_LIMIT = 40;
+
+export type MapServicePoint = {
+  id: string;
+  kind: MapServicePointKind;
+  x: number;
+  y: number;
+  /** Optional: the type already names it; a label tells two of a kind apart. */
+  label?: string;
+};
 
 type MapLandmark = {
   id: string;
@@ -101,6 +120,8 @@ export type EventMapLayout = {
   pillars: MapPillar[];
   accessPoints: MapAccessPoint[];
   landmarks: MapLandmark[];
+  /** Absent on every layout published before service points existed. */
+  servicePoints?: MapServicePoint[];
 };
 
 /** Rescales every coordinate onto a new canvas size. A canvas is only ever the
@@ -119,6 +140,7 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
     pillars: layout.pillars.map((pillar) => ({ ...pillar, ...scaleRect(pillar) })),
     accessPoints: layout.accessPoints.map((point) => ({ ...point, x: point.x * scaleX, y: point.y * scaleY })),
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: scaleRect(landmark.rect) })),
+    ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map((point) => ({ ...point, x: point.x * scaleX, y: point.y * scaleY })) } : {}),
   };
 }
 
@@ -226,7 +248,7 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
       if (typeof point.id !== "string" || !point.id.trim()) errors.push("每一個出入口都必須有 id。" );
       else if (accessIds.has(point.id)) errors.push(`出入口 id ${point.id} 重複。`);
       else accessIds.add(point.id);
-      if (point.kind !== "entrance" && point.kind !== "exit") errors.push(`出入口 ${point.id || "未命名"} 的類型無效。`);
+      if (!MAP_ACCESS_KINDS.includes(point.kind as MapAccessKind)) errors.push(`出入口 ${point.id || "未命名"} 的類型無效。`);
       if (!MAP_ACCESS_DIRECTIONS.includes(point.direction as MapAccessDirection)) errors.push(`出入口 ${point.id || "未命名"} 的方向無效。`);
       if (typeof point.label !== "string" || !point.label.trim()) errors.push(`出入口 ${point.id || "未命名"} 必須有顯示名稱。`);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`出入口 ${point.id || "未命名"} 的座標無效。`);
@@ -242,6 +264,20 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
       if (typeof landmark.label !== "string" || !landmark.label.trim()) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 必須有顯示名稱。`);
       if (landmark.kind !== undefined && !["enterprise", "stage", "other"].includes(landmark.kind)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的類型無效。`);
       if (!landmark.rect || !finiteRect(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的矩形座標無效。`);
+    });
+  }
+  if (layout.servicePoints !== undefined && !Array.isArray(layout.servicePoints)) errors.push("servicePoints 必須是陣列。" );
+  if (Array.isArray(layout.servicePoints)) {
+    const serviceIds = new Set<string>();
+    layout.servicePoints.forEach((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("每一個服務設施都必須是物件。" ); return; }
+      const point = candidate as Partial<MapServicePoint>;
+      if (typeof point.id !== "string" || !point.id.trim()) errors.push("每一個服務設施都必須有 id。" );
+      else if (serviceIds.has(point.id)) errors.push(`服務設施 id ${point.id} 重複。`);
+      else serviceIds.add(point.id);
+      if (!MAP_SERVICE_POINT_KINDS.includes(point.kind as MapServicePointKind)) errors.push(`服務設施 ${point.id || "未命名"} 的類型無效。`);
+      if (point.label !== undefined && (typeof point.label !== "string" || point.label.length > MAP_SERVICE_POINT_LABEL_LIMIT)) errors.push(`服務設施 ${point.id || "未命名"} 的名稱必須是 ${MAP_SERVICE_POINT_LABEL_LIMIT} 字以內的文字。`);
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`服務設施 ${point.id || "未命名"} 的座標無效。`);
     });
   }
 

@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import type { MapFacilityEntry, MapLegendEntry } from "./map-facility-directory";
-import { MapAccessBadge } from "./map-marker-icons";
+import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
+import { MAP_SERVICE_POINT_KINDS, type MapServicePointKind } from "./event-map";
 import styles from "./event-map-app.module.css";
 
+const isService = (kind: string): kind is MapServicePointKind => (MAP_SERVICE_POINT_KINDS as readonly string[]).includes(kind);
+
 function FacilitySymbol({ kind }: { kind: MapFacilityEntry["kind"] | MapLegendEntry["kind"] }) {
-  if (kind === "entrance" || kind === "exit") return <svg className={styles.facilitySymbol} viewBox="-12 -12 24 24" aria-hidden="true"><MapAccessBadge kind={kind} direction="north" /></svg>;
+  if (isService(kind)) return <svg className={styles.facilitySymbol} viewBox="-12 -12 24 24" aria-hidden="true"><MapServiceBadge kind={kind} /></svg>;
+  if (kind === "entrance" || kind === "exit" || kind === "both") return <svg className={styles.facilitySymbol} viewBox="-12 -12 24 24" aria-hidden="true"><MapAccessBadge kind={kind} direction="north" /></svg>;
   if (kind === "pillar") return <svg className={styles.facilitySymbol} viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1" fill="#151918" /></svg>;
   return <svg className={styles.facilitySymbol} viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5" fill="#f0eee7" stroke="#89918b" strokeWidth="1.5" /></svg>;
 }
@@ -85,6 +89,7 @@ export default function MapFacilityPanel({ id, entries, legend, triggerRef, onCl
   return <div id={id} ref={panelRef} className={styles.facilityPanel} data-map-overlay role="group" aria-labelledby={`${id}-title`}>
     <h2 id={`${id}-title`}>場內設施</h2>
     {section("出入口", "access")}
+    {section("服務設施", "service")}
     {section("場內區域", "area")}
     {legend.length > 0 && <div role="group" aria-labelledby={`${id}-legend`}>
       <h3 id={`${id}-legend`}>圖例</h3>

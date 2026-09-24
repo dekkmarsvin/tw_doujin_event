@@ -1044,6 +1044,7 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
 
   layout.landmarks.push({ id: "stage", kind: "stage", label: "舞台", rect: { x: 4, y: 4, width: 10, height: 10 } });
   layout.rows.push({ label: "A", orientation: "vertical", confidence: 1, slots: [{ code: "A01", rect: { x: 30, y: 30, width: 10, height: 10 } }] });
+  layout.servicePoints = [{ id: "toilet", kind: "toilet", x: 60, y: 70 }, { id: "desk", kind: "information", x: 80, y: 70, label: "大會服務台" }];
   const authoring = { guides: [{ id: "horizontal", axis: "y", position: 22.5, locked: true }] };
   const saved = await handlers.updateOrganizerMap(request(
     `/api/organizer/events/${candidateId}/maps/${draftId}`, "PATCH",
@@ -1056,8 +1057,9 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   const anonymousCoverage = await handlers.listOrganizerMaps(request(`/api/organizer/events/${candidateId}/maps?coverage=1`, "GET"), candidateId);
   assert.equal(anonymousCoverage.status, 401);
   const path = `/api/organizer/events/${candidateId}/maps/${draftId}`;
-  const reopened = await handlers.getOrganizerMap(request(path, "GET", undefined, ownerCookie), candidateId, draftId);
-  assert.deepEqual((await reopened.json()).map.authoring, authoring);
+  const reopened = await (await handlers.getOrganizerMap(request(path, "GET", undefined, ownerCookie), candidateId, draftId)).json();
+  assert.deepEqual(reopened.map.authoring, authoring);
+  assert.deepEqual(reopened.map.layout.servicePoints, layout.servicePoints, "service points survive saving and reopening");
   const stale = await handlers.updateOrganizerMap(request(path, "PATCH", { expectedVersion: 3, expectedMapRevision: 1, layout, authoring: { guides: [] } }, ownerCookie), candidateId, draftId);
   assert.equal(stale.status, 409, "guide changes retain the existing version guard");
   const cleared = await handlers.updateOrganizerMap(request(path, "PATCH", { expectedVersion: 4, expectedMapRevision: 2, layout, authoring: { guides: [] } }, ownerCookie), candidateId, draftId);

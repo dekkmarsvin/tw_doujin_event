@@ -29,10 +29,12 @@
 /* Marker names are drawn in screen pixels (see map-marker-presentation.ts);
    the font size comes inline and the halo keeps them legible over booths. */
 .markerLayer { pointer-events:none; }
-.markerLayer text { dominant-baseline:central; paint-order:stroke; stroke:#fffffff2; stroke-width:3px; stroke-linejoin:round; font-weight:800; }
+.markerLayer :is(.rowLabel,.landmarkLabel,.accessLabel,.serviceLabel) { dominant-baseline:central; paint-order:stroke; stroke:#fffffff2; stroke-width:3px; stroke-linejoin:round; font-weight:800; }
 .rowLabel { fill:#202a35; font-family:var(--font-mono),monospace; font-weight:900; }
 .landmarkLabel { fill:#4d5751; }
 .entrance .accessLabel { fill:#22658c; }
 .exit .accessLabel { fill:#a53d33; }
+.bothWays .accessLabel { fill:#4a4e94; }
+.service .serviceLabel { fill:#245446; }
 .locatedRing,.locatedArea { fill:none; stroke:#1d2730; }
 .locatedRing { stroke-width:3px; }

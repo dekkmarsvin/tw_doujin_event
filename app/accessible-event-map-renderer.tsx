@@ -5,7 +5,8 @@ import { type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
-import { MapAccessBadge } from "./map-marker-icons";
+import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
+import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
 
 export type MapSlotView = {
   tone?: "coral" | "mint" | "blue" | "amber" | "lilac";
@@ -153,11 +154,22 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     <g className={styles.markerLayer} aria-label="出入口">{layout.accessPoints.map((point) => {
       const key = mapMarkerLabelKey("access", point.id);
       const label = markerLabels.get(key);
-      return <g key={point.id} data-marker={key} className={point.kind === "entrance" ? styles.entrance : styles.exit} role="img" aria-label={`${point.label || "未命名"}，${point.kind === "entrance" ? "入口" : "出口"}`} transform={screenGroup(point.x, point.y)}>
+      return <g key={point.id} data-marker={key} className={point.kind === "exit" ? styles.exit : point.kind === "both" ? styles.bothWays : styles.entrance} role="img" aria-label={`${point.label || "未命名"}，${MAP_FACILITY_TYPE_LABELS[point.kind]}`} transform={screenGroup(point.x, point.y)}>
         {locatedMarker === key && <circle className={styles.locatedRing} r={17} />}
         <MapAccessBadge kind={point.kind} direction={point.direction} />
         {label && markerText(label, styles.accessLabel)}
       </g>;
     })}</g>
+    {layout.servicePoints?.length ? <g className={styles.markerLayer} aria-label="服務設施">{layout.servicePoints.map((point) => {
+      const key = mapMarkerLabelKey("service", point.id);
+      const label = markerLabels.get(key);
+      const type = MAP_FACILITY_TYPE_LABELS[point.kind];
+      const name = point.label?.trim();
+      return <g key={point.id} data-marker={key} className={styles.service} role="img" aria-label={name && !name.includes(type) ? `${name}，${type}` : name || type} transform={screenGroup(point.x, point.y)}>
+        {locatedMarker === key && <circle className={styles.locatedRing} r={17} />}
+        <MapServiceBadge kind={point.kind} />
+        {label && markerText(label, styles.serviceLabel)}
+      </g>;
+    })}</g> : null}
   </svg>;
 }

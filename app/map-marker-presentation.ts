@@ -34,8 +34,8 @@ export type MapMarkerLabel = {
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
-/** Keys are `row:<label>`, `access:<id>` and `landmark:<id>`. */
-export function mapMarkerLabelKey(kind: "row" | "access" | "landmark", id: string) {
+/** Keys are `row:<label>`, `access:<id>`, `service:<id>` and `landmark:<id>`. */
+export function mapMarkerLabelKey(kind: "row" | "access" | "service" | "landmark", id: string) {
   return `${kind}:${id}`;
 }
 
@@ -60,17 +60,18 @@ function boundedPx(rule: { units: number; minPx: number; maxPx: number }, { scre
 
 /** Where an access point's name sits: on the side facing out of the hall. A
  * reader walks in through an entrance, so its name is behind the arrow; they
- * walk out through an exit, so its name is ahead of it. */
+ * walk out through an exit, so its name is ahead of it. A doorway used both
+ * ways points into the hall, like an entrance. */
 export function accessLabelSide(point: Pick<MapAccessPoint, "kind" | "direction">): MapAccessDirection {
   if (point.kind === "exit") return point.direction;
   return ({ north: "south", south: "north", east: "west", west: "east" } as const)[point.direction];
 }
 
-function accessLabel(point: MapAccessPoint, fontPx: number): MapMarkerLabel {
+function badgeLabel(point: { x: number; y: number }, text: string, side: MapAccessDirection, fontPx: number): MapMarkerLabel {
   const offset = MAP_ACCESS_BADGE_PX / 2 + LABEL_GAP_PX;
   const vertical = offset + fontPx * HALF_LINE_EM;
-  const base = { text: point.label, x: point.x, y: point.y, fontPx };
-  switch (accessLabelSide(point)) {
+  const base = { text, x: point.x, y: point.y, fontPx };
+  switch (side) {
     case "north": return { ...base, dx: 0, dy: -vertical, anchor: "middle" };
     case "south": return { ...base, dx: 0, dy: vertical, anchor: "middle" };
     case "east": return { ...base, dx: offset, dy: 0, anchor: "start" };
@@ -94,17 +95,19 @@ function overlaps(a: Box, b: Box) {
 
 /**
  * Sizes and places every row, access point and landmark label for one zoom, and
- * returns only the ones to draw. Access point badges are always drawn, so they
- * are placed first as obstacles; labels then claim space in priority order —
- * access points and rows before landmarks — and a label that would overlap one
+ * returns only the ones to draw. Access and service point badges are always
+ * drawn, so they are placed first as obstacles; labels then claim space in
+ * priority order — access points and rows, then service points, then
+ * landmarks — and a label that would overlap one
  * already placed is left out. A landmark name also has to fit inside its own
  * area at the smallest size, or it is left out. Hidden names stay available
  * through the accessible names the renderer gives each element.
  */
-export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "height" | "rows" | "accessPoints" | "landmarks">, requested: MapMarkerPresentation): Map<string, MapMarkerLabel> {
+export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "height" | "rows" | "accessPoints" | "landmarks" | "servicePoints">, requested: MapMarkerPresentation): Map<string, MapMarkerLabel> {
   const presentation = usable(requested);
   const { screenScale, fontScale } = presentation;
-  const placed: Box[] = layout.accessPoints.map((point) => {
+  const servicePoints = layout.servicePoints ?? [];
+  const placed: Box[] = [...layout.accessPoints, ...servicePoints].map((point) => {
     const half = MAP_ACCESS_BADGE_PX / 2;
     return { left: point.x * screenScale - half, right: point.x * screenScale + half, top: point.y * screenScale - half, bottom: point.y * screenScale + half };
   });
@@ -112,7 +115,7 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
 
   const accessPx = boundedPx(ACCESS_LABEL, presentation);
   for (const point of layout.accessPoints) {
-    if (point.label.trim()) candidates.push([mapMarkerLabelKey("access", point.id), accessLabel(point, accessPx)]);
+    if (point.label.trim()) candidates.push([mapMarkerLabelKey("access", point.id), badgeLabel(point, point.label, accessLabelSide(point), accessPx)]);
   }
   const rowPx = boundedPx(ROW_LABEL, presentation);
   for (const row of layout.rows) {
@@ -120,6 +123,12 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
     if (!placement) continue;
     const dy = (placement.side === "below" ? 1 : -1) * rowPx * HALF_LINE_EM;
     candidates.push([mapMarkerLabelKey("row", row.label), { text: row.label, x: placement.x, y: placement.y, dx: 0, dy, fontPx: rowPx, anchor: "middle" }]);
+  }
+  // A service point's badge already says what it is; only a name that tells
+  // two of a kind apart is drawn, below the badge.
+  for (const point of servicePoints) {
+    const text = point.label?.trim();
+    if (text) candidates.push([mapMarkerLabelKey("service", point.id), badgeLabel(point, text, "south", accessPx)]);
   }
   const landmarkPx = boundedPx(LANDMARK_LABEL, presentation);
   for (const landmark of layout.landmarks) {

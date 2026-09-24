@@ -6,11 +6,23 @@ export type Selection =
   | { kind: "slot"; rowIndex: number; itemIndex: number }
   | { kind: "pillar"; itemIndex: number }
   | { kind: "access"; itemIndex: number }
+  | { kind: "service"; itemIndex: number }
   | { kind: "landmark"; itemIndex: number };
 
-/** Everything except an access point is a rectangle, so moving, corner resizing
- * and the coordinate fields all take one path. */
-type RectSelection = Exclude<Selection, { kind: "access" }>;
+/** Access and service points are points; everything else is a rectangle, so
+ * moving, corner resizing and the coordinate fields all take one path. */
+type PointSelection = Extract<Selection, { kind: "access" | "service" }>;
+type RectSelection = Exclude<Selection, PointSelection>;
+
+export function isPointSelection(selection: Selection | null | undefined): selection is PointSelection {
+  return selection?.kind === "access" || selection?.kind === "service";
+}
+
+/** The point as it lives inside `layout`, so a caller holding a draft moves it
+ * in place. */
+function pointFor(layout: EventMapLayout, selection: PointSelection): { x: number; y: number } | undefined {
+  return selection.kind === "access" ? layout.accessPoints[selection.itemIndex] : layout.servicePoints?.[selection.itemIndex];
+}
 type SlotSelection = Extract<Selection, { kind: "slot" }>;
 export type AlignEdge = "left" | "right" | "top" | "bottom";
 
@@ -61,8 +73,8 @@ export function rectFor(layout: EventMapLayout, selection: RectSelection): MapRe
 /** A detached box for any element, so batch moves, alignment and box selection
  * treat an access point as a zero-sized rectangle instead of a special case. */
 export function boxFor(layout: EventMapLayout, selection: Selection): MapRect | undefined {
-  if (selection.kind === "access") {
-    const point = layout.accessPoints[selection.itemIndex];
+  if (isPointSelection(selection)) {
+    const point = pointFor(layout, selection);
     return point && { x: point.x, y: point.y, width: 0, height: 0 };
   }
   const rect = rectFor(layout, selection);
@@ -82,8 +94,8 @@ export function applySelectionBoxes(draft: EventMapLayout, selections: readonly 
   selections.forEach((selection, index) => {
     const box = boxes[index];
     if (!box) return;
-    if (selection.kind === "access") {
-      const point = draft.accessPoints[selection.itemIndex];
+    if (isPointSelection(selection)) {
+      const point = pointFor(draft, selection);
       if (!point) return;
       point.x = clamp(box.x, 0, draft.width);
       point.y = clamp(box.y, 0, draft.height);
@@ -381,6 +393,7 @@ export function selectionsWithinBox(layout: EventMapLayout, area: MapRect): Sele
   }));
   layout.pillars.forEach((pillar, itemIndex) => { if (overlaps(pillar, area)) selections.push({ kind: "pillar", itemIndex }); });
   layout.accessPoints.forEach((point, itemIndex) => { if (overlaps({ x: point.x, y: point.y, width: 0, height: 0 }, area)) selections.push({ kind: "access", itemIndex }); });
+  layout.servicePoints?.forEach((point, itemIndex) => { if (overlaps({ x: point.x, y: point.y, width: 0, height: 0 }, area)) selections.push({ kind: "service", itemIndex }); });
   layout.landmarks.forEach((landmark, itemIndex) => { if (overlaps(landmark.rect, area)) selections.push({ kind: "landmark", itemIndex }); });
   return selections;
 }
@@ -410,6 +423,7 @@ export function snapTargetsOutsideSelection(layout: EventMapLayout, excluded: re
     ...layout.pillars.map((_, itemIndex): Selection => ({ kind: "pillar", itemIndex })),
     ...layout.landmarks.map((_, itemIndex): Selection => ({ kind: "landmark", itemIndex })),
     ...layout.accessPoints.map((_, itemIndex): Selection => ({ kind: "access", itemIndex })),
+    ...(layout.servicePoints ?? []).map((_, itemIndex): Selection => ({ kind: "service", itemIndex })),
   ];
   return all.filter(item => !keys.has(selectionKey(item))).map(item => ({ id: selectionKey(item), rect: boxFor(layout, item)! }));
 }
@@ -418,7 +432,7 @@ export function slotSelections(selections: readonly Selection[]): SlotSelection[
   return selections.filter((item): item is SlotSelection => item.kind === "slot");
 }
 
-function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "landmark"): number[] {
+function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "service" | "landmark"): number[] {
   return selections.filter((item): item is Extract<Selection, { itemIndex: number }> => item.kind === kind).map(({ itemIndex }) => itemIndex);
 }
 
@@ -443,6 +457,7 @@ export function removeSelectionsFrom(draft: EventMapLayout, selections: readonly
   });
   descending(itemIndicesOf(selections, "pillar")).forEach((itemIndex) => draft.pillars.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "access")).forEach((itemIndex) => draft.accessPoints.splice(itemIndex, 1));
+  descending(itemIndicesOf(selections, "service")).forEach((itemIndex) => draft.servicePoints?.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "landmark")).forEach((itemIndex) => draft.landmarks.splice(itemIndex, 1));
 }
 
