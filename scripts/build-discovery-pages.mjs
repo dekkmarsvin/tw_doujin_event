@@ -12,7 +12,7 @@ try {
   if (!isRunnableDevEnvironment(environment)) throw new Error("Vite discovery environment is not runnable.");
   const { parseEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
   const { isCircleCatalogPayload } = await environment.runner.import("/app/circle-records.ts");
-  const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
+  const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
   const { pageMetadata } = await environment.runner.import("/app/seo.ts");
   const paths = ["/"];
   const events = [];
@@ -35,7 +35,7 @@ try {
   const indexPath = resolve(dist, "index.html");
   const index = await readFile(indexPath, "utf8");
   // No static canonical on the shared Reader document: query links resolve in JS.
-  const html = index.replace(/<title>[\s\S]*?<\/title>/, metadataHtml(pageMetadata(), false))
+  const html = index.replace(/<title>[\s\S]*?<\/title>/, metadataHtml(pageMetadata(), false) + websiteSchemaHtml())
     .replace(/\s*<meta name="description"[^>]*\/>/, "")
     .replace('<div id="root"></div>', `<div id="root">${homepageSummary(events)}</div>`);
   await writeFile(indexPath, html);
