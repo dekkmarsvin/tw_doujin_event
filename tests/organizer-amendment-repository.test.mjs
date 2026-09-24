@@ -182,3 +182,26 @@ test("ordinary candidate saves and imports cannot bypass the amendment-only path
   assert.equal((await repository.getOrganizerCandidate("amendment")).current_version, 1);
   assert.equal((await repository.getOrganizerAmendment("amendment")).changes_json, "[]");
 });
+
+test("active amendment index upgrades in place and releases only published or abandoned candidates", async () => {
+  const legacy = await mf.getD1Database("LEGACY");
+  await legacy.prepare("DELETE FROM organizer_event_candidates").run();
+  await legacy.prepare("DROP INDEX organizer_candidates_active_amendment_idx").run();
+  const oldIndex = "CREATE UNIQUE INDEX IF NOT EXISTS organizer_candidates_active_amendment_idx ON organizer_event_candidates (event_id) WHERE publication_operation = 'AMEND' AND status != 'published'";
+  await legacy.prepare(oldIndex).run();
+  const insert = (id, status) => legacy.prepare(`INSERT INTO organizer_event_candidates
+    (id,tentative_name,event_id,current_draft_json,created_by,created_at,updated_at,last_updated_by,last_updated_role,publication_operation,status)
+    VALUES (?1,'New','event-alpha','{}','admin',1,1,'admin','admin','AMEND',?2)`).bind(id, status).run();
+  await insert("failed-old", "failed");
+  await createIdentityRepository(legacy).ensureTables();
+  await createIdentityRepository(legacy).ensureTables();
+  await legacy.prepare(oldIndex).run();
+  assert.match((await legacy.prepare("SELECT sql FROM sqlite_master WHERE name='organizer_candidates_active_amendment_idx'").first()).sql, /abandoned/);
+  await assert.rejects(insert("blocked", "draft"), /UNIQUE/);
+  await legacy.prepare("UPDATE organizer_event_candidates SET status='abandoned' WHERE id='failed-old'").run();
+  await insert("new-active", "draft");
+  await insert("published-history", "published");
+  await insert("abandoned-history", "abandoned");
+  await assert.rejects(insert("second-active", "draft"), /UNIQUE/);
+  assert.equal((await legacy.prepare("SELECT status FROM organizer_event_candidates WHERE id='failed-old'").first()).status, "abandoned");
+});

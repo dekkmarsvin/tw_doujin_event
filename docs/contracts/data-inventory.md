@@ -223,6 +223,8 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 
 發布的 `published`／`failed` 結果目前在 `organizer_publication_jobs`，不是額外的 audit action；重試會清空該 job 的錯誤與 failure code，不能把它當作每次失敗的永久歷史。一般 handler 的事後 `writeAudit` 不保證與業務寫入同一交易，部分 repository 路徑才使用同一 batch。
 
+依 [ADR-0069](../adr/0069-restored-unpublished-amendments-retain-failed-history.md) 終止已還原的未公開 AMEND 時，candidate 以 `abandoned` 保留，舊 job 維持 failed 且不可重試，因此保留最後失敗的 error、failure code、metadata、intent 與 checkpoint。`organizer.amendment.abandoned` 與狀態變更、review 在同一 batch 寫入；detail 保存管理者填寫的原因、原 job／approval／baseline hash、還原 PR／head／merge SHA、核對當時的 data／main SHA 與公開來源。這不改變一般 retry 的覆寫語意，也不聲稱保存每次嘗試的歷史。
+
 **保存期**：action 與時間不設期限，**永不刪列**；`ip_hash` 只保留 90 天。 **到期處置**：帳號刪除時把可連結的 account／email 主體改為固定值、清空 actor、IP 與自由內容，並寫入 `shredded_at`。仍保留「何時發生哪個動作」。
 
 ### 管理者待審通知資料

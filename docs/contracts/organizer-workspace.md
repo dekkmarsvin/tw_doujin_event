@@ -233,6 +233,18 @@ lease 過期後，只允許仍持有原 token 與原 step 的 executor 寫入 fa
 
 成功退回會遞增 candidate version、保留 `eventId` 鎖定與舊 snapshot／review／job，新增 immutable revision 與含理由的 `changes_requested` review，並令舊 job `retryable = 0`。舊 job 仍會在頁面顯示為上一版本的歷史發布紀錄，不能再 retry；新的版本回到一般編輯、驗證與送審流程。Owner／Admin 以外的 Editor 沒有此動作。
 
+### 還原未公開的失敗修正
+
+依 [ADR-0069](../adr/0069-restored-unpublished-amendments-retain-failed-history.md)，data 已合併但 main 未合併的 failed AMEND 使用獨立恢復路徑，不放寬上述 reopen。維護者先依[部署 runbook](../runbooks/deployment.md#還原未公開的失敗修正)合併還原 PR，Admin 再送出 `POST /api/admin/organizer/events/:candidateId/abandon`，body 只接受 `expectedVersion`、正整數 `restorationPullNumber` 與 1–1000 字的 `reason`。Owner／Editor 不具此權限。
+
+伺服器核對原 snapshot／基準、已發布來源、原 data／main PR、還原 PR 的成功檢查、完整 tree 與目前公開 pin。data main 必須恢復至原活動內容及其 reference；還原 PR 不得改動其他活動或 reference。任何未知遠端結果、已合併的 main、現有 workflow checkpoint、lease 競爭或過期、Admin 撤銷、版本／checkpoint 改變都拒絕，保留 failed 與 active AMEND 鎖定。
+
+成功時在同一 D1 batch 寫入 `failed → abandoned` review、含原因及還原證據的 `organizer.amendment.abandoned` audit，並讓 candidate 進入唯讀終態「已終止修正」。舊 job 保持 failed、所有失敗與發布紀錄保留，只有 retryable 固定為 0。active AMEND 唯一索引排除 published 與 abandoned；其餘狀態仍限制每活動一筆。從已發布來源開始新修正會重新讀取基準，重新驗證／預覽／送審／核准，不沿用舊核准、snapshot 或 job。
+
+實作：[`organizer-publication-recovery.ts`](../../app/organizer-publication-recovery.ts)、[`organizer-recovery-repository.ts`](../../db/organizer-recovery-repository.ts)。驗證：`tests/organizer-publication-recovery.test.mjs`、`tests/organizer-amendment-handlers.test.mjs`、`tests/organizer-amendment-repository.test.mjs`、`tests/browser/portal-organizer-recovery.mjs`。
+
+### 持續推進與呈現
+
 **`queued` 停留超過 15 分鐘就是失敗。** 依 ADR-0062，獨立 publication Worker 每分鐘掃描，把超時 job 改為 `failed` + `queued_timeout` + retryable，step 原封不動，candidate 一併轉為 `failed`；活動列表與候選 GET 不執行掃描或寫入。更新交易再次檢查 live lease，避免掃描與 dispatch 同時開始時錯誤判定逾時。恢復沿用同一筆 job、同一份 snapshot，不新增手動啟動 queued job 的入口。等待 CI 是 `publishing`，不受 queued timeout 影響。
 
 **持續推進不依賴使用者開啟頁面。** Pages 核准／retry 僅提交到期的持久化 job；cron 每輪最多處理十筆目前核准版本且到期的 queued／publishing job，各推進一步。pending 的 next attempt 與 checkpoint 在同一 lease 下寫入 D1，退避依序 1、2、4、5 分鐘，上限五分鐘，短於 queued timeout。前進後下一輪可續推；failed 不自動 retry，舊版本不派送。Webhook 只重設到期時間，漏送或早於 checkpoint 到達仍由 cron 接手。服務停機時不保證一分鐘執行，恢復後超時 queued 仍按既有失敗／retry 路徑處理。

@@ -15,6 +15,7 @@ import { createGitHubRemoteAuditor, GITHUB_PUBLICATION_REPOSITORIES } from "../a
 import { createGitHubAppTokenProvider } from "../app/github-app-token";
 import { createPublicationDispatcher } from "../app/publication-dispatch";
 import { createPublishedAmendmentBaselineLoader } from "../app/organizer-amendment-baseline";
+import { createPublicationRecoveryAuditor } from "../app/organizer-publication-recovery";
 
 /**
  * Wires the framework-agnostic portal handlers to the Pages runtime: D1, the
@@ -303,6 +304,11 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     }),
   });
   return createCirclePortalHandlers({
+    auditPublicationRecovery: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublicationRecoveryAuditor({
+      tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
+        privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
+        permissions: { contents: "read", pull_requests: "read", checks: "read", metadata: "read" }, now: () => Date.now() }),
+    }) : undefined,
     loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublishedAmendmentBaselineLoader({
       tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
         privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,

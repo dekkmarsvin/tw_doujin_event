@@ -563,7 +563,7 @@ export const IDENTITY_INDEXES = [
   index("organizer_venue_spaces_venue_idx", "organizer_venue_spaces", "venue_id, name_key", { unique: true }),
   index("organizer_venue_spaces_id_venue_idx", "organizer_venue_spaces", "id, venue_id", { unique: true }),
   index("organizer_candidates_event_id_idx", "organizer_event_candidates", "event_id", { unique: true, where: "event_id IS NOT NULL AND publication_operation = 'CREATE'" }),
-  index("organizer_candidates_active_amendment_idx", "organizer_event_candidates", "event_id", { unique: true, where: "publication_operation = 'AMEND' AND status <> 'published'" }),
+  index("organizer_candidates_active_amendment_idx", "organizer_event_candidates", "event_id", { unique: true, where: "publication_operation = 'AMEND' AND status NOT IN ('published','abandoned')" }),
   index("organizer_amendment_changes_version_idx", "organizer_amendment_changes", "candidate_id, version", { unique: true }),
   index("organizer_candidates_status_idx", "organizer_event_candidates", "status, updated_at"),
   index("organizer_workspace_preferences_key_idx", "organizer_workspace_preferences", "candidate_id, account_id", { unique: true }),
