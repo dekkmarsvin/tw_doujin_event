@@ -158,9 +158,27 @@ try {
   await page.getByRole("combobox", { name: /^場地/ }).nth(1).selectOption({ label: "全館" });
   await journey.capture(page, "venue-multiple-spaces");
   await page.getByRole("button", { name: "移除此場地", exact: true }).nth(1).click();
+  const remembered = page.waitForRequest((request) => request.method() === "PATCH" && request.url().endsWith("/workspace"));
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
+  // Finishing opens the work that comes next, not the first of the three forms
+  // just completed, and the next visit resumes there too.
+  await page.getByRole("heading", { name: "攤位與社團名單匯入", exact: true }).waitFor();
+  assert.equal((await remembered).postDataJSON().lastSection, "import");
+  const handoff = page.getByRole("status").filter({ hasText: "基本設定完成" });
+  await handoff.getByText("接下來匯入攤位名單。之後的地圖、檢查與送審，從右側「準備進度」進入。", { exact: true }).waitFor();
+  assert.equal(await handoff.evaluate((node) => node === document.activeElement), true, "focus follows the unmounted button to the line");
   const sections = page.getByRole("group", { name: "活動項目" });
+  assert.equal(await sections.getByRole("button", { name: /^攤位匯入/ }).getAttribute("aria-current"), "page");
+  assert.equal(await page.getByRole("button", { name: /^下一步：/ }).count(), 0, "no 下一步 to the section already open");
+  await journey.capture(page, "onboarding-handoff");
+  // Reaching for a control in the panel starts the next action; the line
+  // about the previous one does not stay beside it. Moving away clears it
+  // through the same navigation step every other notice uses.
+  await page.getByRole("spinbutton", { name: /^標題列/ }).click();
+  assert.equal(await handoff.count(), 0, "acting in the panel retires the handoff");
   await sections.getByRole("button", { name: /^活動/ }).click();
+  assert.equal(await sections.getByRole("button", { name: /^活動/ }).getAttribute("aria-current"), "page");
+  await page.getByRole("button", { name: "下一步：攤位匯入", exact: true }).waitFor();
   await page.getByLabel(/^活動名稱/).fill("  分類目錄驗收  ");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();

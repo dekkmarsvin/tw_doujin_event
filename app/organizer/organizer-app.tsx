@@ -140,6 +140,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const setDirty = useCallback((value: boolean) => { dirty.current = value; }, []);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const [notice, setNotice] = useState<Notice>(IDLE);
+  // The activity whose basic settings were just finished, until the reader
+  // moves or acts. Kept here because moving is decided here.
+  const [handoff, setHandoff] = useState<string | null>(null);
   const [startingAmendment, setStartingAmendment] = useState(false);
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationSaveRefused, setNavigationSaveRefused] = useState(false);
@@ -160,20 +163,32 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     setSelectedId((current) => current === null ? null
       : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
   }, []);
-  const reloadDetail = useCallback(async (candidateId: string, isCurrent: () => boolean = () => true, restoreLocation = true) => {
+  const reloadDetail = useCallback(async (
+    candidateId: string,
+    isCurrent: () => boolean = () => true,
+    location: "restore" | "keep" | "suggested" = "restore",
+  ) => {
     const next = await readOrganizerEvent(candidateId);
-    if (!isCurrent()) return;
+    if (!isCurrent()) return null;
     setPublicationReadError(null);
     setPollGeneration((value) => value + 1);
     setDetail(next);
     // Resume navigation only when opening an activity. A save refresh may
     // arrive after the user has moved to another section; its older workspace
     // preference must not move them back or close the all-tasks view.
-    if (restoreLocation) {
+    if (location === "restore") {
       setSection(next.workspace.resume.section);
       setGuidedTask(next.workspace.resume.guidedTask);
       setShowAllTasks(false);
     }
+    // Finishing the basic settings opens the binder on the work that comes
+    // next. Set in the same pass as the detail, so the binder's first frame is
+    // already that section rather than the form just completed.
+    if (location === "suggested") {
+      setSection(next.workspace.readiness.suggestedNextSection);
+      setShowAllTasks(false);
+    }
+    return next;
   }, []);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => {
@@ -229,7 +244,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * still corrected, because reloadList's own update re-runs the detail
    * effect. */
   const refresh = useCallback(async () => {
-    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId, undefined, false) : Promise.resolve()]);
+    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId, undefined, "keep") : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
 
   const persistLocation = useCallback(async (
@@ -240,8 +255,22 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     await saveOrganizerWorkspacePreference(candidateId, { guidedTask: nextTask, lastSection: nextSection });
   }, []);
 
+  /* The button that finished onboarding unmounts with the guided station, so
+   * its own result has nowhere to stand. The binder opens on the suggested
+   * section instead, with one line there saying what happened and where the
+   * rest of the work now lives. That section is also remembered, so the next
+   * visit resumes at it rather than at the first of the three finished forms. */
+  const openBinder = useCallback(async (candidateId: string) => {
+    setHandoff(candidateId);
+    const [, next] = await Promise.all([reloadList(), reloadDetail(candidateId, undefined, "suggested")]);
+    if (!next) return;
+    void persistLocation(candidateId, next.workspace.resume.guidedTask, next.workspace.readiness.suggestedNextSection)
+      .catch((error) => setNotice({ kind: "error", message: message(error) }));
+  }, [persistLocation, reloadDetail, reloadList]);
+
   const finishNavigation = (request: PendingNavigation) => {
     setNotice(IDLE);
+    setHandoff(null);
     setPendingNavigation(null);
     setDirty(false);
     draftSave.current = null;
@@ -382,11 +411,13 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           onShowAll={() => requestNavigation("查看全部項目", () => setShowAllTasks(true))}
           onReturnToGuide={() => requestNavigation("回到基本設定", () => setShowAllTasks(false))}
           onLeave={() => { setNotice(IDLE); setDirty(false); setSelectedId(null); }}
+          onOnboardingCompleted={() => openBinder(detail.event.id)}
+          handoff={handoff === detail.event.id}
+          onHandoffDone={() => setHandoff(null)}
           onChanged={refresh}
           onDirtyChange={setDirty}
           onDraftSaveReady={(save) => { draftSave.current = save; }}
           persistLocation={persistLocation}
-          setNotice={setNotice}
         />}
       {pendingNavigation && <div className={styles.dialogBackdrop}>
         <section ref={navigationDialog} className={styles.navigationDialog} role="dialog" aria-modal="true" aria-labelledby="unsaved-title" aria-describedby="unsaved-description" tabIndex={-1}>
@@ -406,7 +437,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
 
 function WorkspaceSurface({
   session, detail, section, guidedTask, showAllTasks, onSection, onGuidedTask, onGuidedTaskSaved,
-  onShowAll, onReturnToGuide, onLeave, onChanged, onDirtyChange, onDraftSaveReady, persistLocation, setNotice,
+  onShowAll, onReturnToGuide, onLeave, onOnboardingCompleted, handoff, onHandoffDone, onChanged, onDirtyChange, onDraftSaveReady, persistLocation,
 }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
@@ -419,11 +450,14 @@ function WorkspaceSurface({
   onShowAll: () => void;
   onReturnToGuide: () => void;
   onLeave: () => void;
+  onOnboardingCompleted: () => Promise<void>;
+  /** The basic settings were just finished and the reader has not moved yet. */
+  handoff: boolean;
+  onHandoffDone: () => void;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
   persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
-  setNotice: (notice: Notice) => void;
 }) {
   const guided = detail.workspace.mode === "guided" && !showAllTasks;
   const [liveDraft, setLiveDraft] = useState(detail.draft);
@@ -443,12 +477,12 @@ function WorkspaceSurface({
         onTaskSaved={onGuidedTaskSaved}
         onShowAll={onShowAll}
         onLeave={onLeave}
+        onCompleted={onOnboardingCompleted}
         onChanged={onChanged}
         onDirtyChange={onDirtyChange}
         onDraftSaveReady={onDraftSaveReady}
         onLiveDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
         persistLocation={persistLocation}
-        setNotice={setNotice}
       />
     </div> : <>
       {detail.workspace.mode === "guided" && <div className={styles.guideBanner}>
@@ -456,29 +490,56 @@ function WorkspaceSurface({
         <button type="button" className={styles.secondary} onClick={onReturnToGuide}>回到基本設定</button>
       </div>}
       <div className={styles.workspaceGrid}>
-        {/* Editable panels keep their action feedback across their own saves.
-            Validation and review still reset when the candidate version changes. */}
-        <StepContent
-          key={`${detail.event.id}:${section}${["event", "venue", "map"].includes(section) || (section === "import" && detail.event.operation !== "AMEND") ? "" : `:${detail.event.version}`}`}
-          session={session}
-          detail={detail}
-          section={section}
-          onSection={onSection}
-          mapLocation={mapLocation?.candidateId === detail.event.id ? mapLocation : null}
-          onLocate={location => { setMapLocation(location); onSection("map"); }}
-          onChanged={onChanged}
-          onDirtyChange={onDirtyChange}
-          onDraftSaveReady={onDraftSaveReady}
-          onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
-        />
-        <ReadinessRail detail={detail} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />
+        {/* The wrapper is always here, so the panel keeps its place in the tree
+            when the handoff line comes and goes. Any control pressed in the
+            panel is a new action, and the line describes the one before it. */}
+        <div
+          className={styles.workspaceMain}
+          onChangeCapture={handoff ? onHandoffDone : undefined}
+          onClickCapture={handoff ? (event) => { if ((event.target as Element).closest("button, a, input, select, textarea, summary")) onHandoffDone(); } : undefined}
+        >
+          {handoff && <OnboardingHandoff detail={detail} section={section} />}
+          {/* Editable panels keep their action feedback across their own saves.
+              Validation and review still reset when the candidate version changes. */}
+          <StepContent
+            key={`${detail.event.id}:${section}${["event", "venue", "map"].includes(section) || (section === "import" && detail.event.operation !== "AMEND") ? "" : `:${detail.event.version}`}`}
+            session={session}
+            detail={detail}
+            section={section}
+            onSection={onSection}
+            mapLocation={mapLocation?.candidateId === detail.event.id ? mapLocation : null}
+            onLocate={location => { setMapLocation(location); onSection("map"); }}
+            onChanged={onChanged}
+            onDirtyChange={onDirtyChange}
+            onDraftSaveReady={onDraftSaveReady}
+            onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
+          />
+        </div>
+        <ReadinessRail detail={detail} current={section} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />
       </div>
     </>}
   </>;
 }
 
+/** The one moment the navigation changes shape: three numbered steps give way
+ * to the six sections in 準備進度. Said once, on the section the reader was
+ * brought to, and gone as soon as they move or act. The button that led here
+ * has just unmounted, so focus comes here: a keyboard reader is not dropped to
+ * the top of the document, and a reader who scrolled down to press it sees
+ * this line rather than the middle of the next panel. */
+function OnboardingHandoff({ detail, section }: { detail: OrganizerEventDetail; section: OrganizerWorkspaceSection }) {
+  const line = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { line.current?.focus(); }, []);
+  return <div ref={line} tabIndex={-1} role="status" className={styles.handoff}>
+    <strong>基本設定完成</strong>
+    <p>{section === "import"
+      ? "接下來匯入攤位名單。之後的地圖、檢查與送審，從右側「準備進度」進入。"
+      : `接下來處理「${organizerSectionLabel(detail, section)}」。其餘項目從右側「準備進度」進入。`}</p>
+  </div>;
+}
+
 function GuidedTaskStation({
-  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onChanged, onDirtyChange, onDraftSaveReady, onLiveDraftStateChange, persistLocation, setNotice,
+  detail, task, onTask, onTaskSaved, onShowAll, onLeave, onCompleted, onChanged, onDirtyChange, onDraftSaveReady, onLiveDraftStateChange, persistLocation,
 }: {
   detail: OrganizerEventDetail;
   task: OrganizerGuidedTask;
@@ -486,12 +547,12 @@ function GuidedTaskStation({
   onTaskSaved: (task: OrganizerGuidedTask) => void;
   onShowAll: () => void;
   onLeave: () => void;
+  onCompleted: () => Promise<void>;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
   onLiveDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
   persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
-  setNotice: (notice: Notice) => void;
 }) {
   /* The station keeps only the dirty flag now that progress is counted from
    * the stored draft: the live draft still travels up, because the rail the
@@ -508,10 +569,10 @@ function GuidedTaskStation({
       onTaskSaved(nextTask);
       return;
     }
-    setNotice({ kind: "busy", message: "正在確認基本設定…" });
+    // The button stays busy through all of this, and a failure is reported
+    // beside it by the form; success is the binder opening on the next section.
     await completeOrganizerOnboarding(detail.event.id, version);
-    setNotice({ kind: "ok", message: "基本設定完成，已開啟全部項目。" });
-    await onChanged();
+    await onCompleted();
   };
 
   return <section className={styles.guidedStation}>
@@ -546,8 +607,10 @@ function GuidedTaskStation({
   </section>;
 }
 
-function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenueCatalog, liveDirty = false, liveSection }: {
+function ReadinessRail({ detail, current, onSection, compact = false, liveDraft, liveVenueCatalog, liveDirty = false, liveSection }: {
   detail: OrganizerEventDetail;
+  /** The section open beside the rail. */
+  current: OrganizerWorkspaceSection;
   onSection: (section: OrganizerWorkspaceSection) => void;
   compact?: boolean;
   liveDraft?: OrganizerEventDraft;
@@ -588,21 +651,25 @@ function ReadinessRail({ detail, onSection, compact = false, liveDraft, liveVenu
   const completed = liveDirty && currentSavedState === "complete" ? readiness.completed - 1 : readiness.completed;
   const nextSection = liveDirty && liveSection ? liveSection : readiness.suggestedNextSection;
   const liveSectionIndex = liveSection ? ORGANIZER_WORKSPACE_SECTIONS.indexOf(liveSection) : -1;
+  // Already standing on the next step, the button would send the reader to
+  // the panel beside it and visibly do nothing; the marked row says it instead.
+  const showNext = nextSection !== current;
   return <aside className={styles.readiness} aria-label="活動準備進度">
     <div className={styles.readinessHead}><h3>準備進度</h3><strong>{completed}/{readiness.total}</strong></div>
     <p>最後儲存 {new Date(detail.event.updatedAt).toLocaleString("zh-TW")}</p>
-    <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
+    {showNext && <button type="button" className={styles.nextAction} onClick={() => onSection(nextSection)}>
       下一步：{organizerSectionLabel(detail, nextSection)}
-    </button>
+    </button>}
     {/* Named, because this is now the only way to reach a section: the strip
         that used to carry 活動項目 above the panel was a second copy of this
-        list, kept in step by hand (#221 1.1). */}
-    <div className={styles.readinessList} role="group" aria-label="活動項目">{readiness.sections.map((item) => <button type="button" key={item.id} onClick={() => onSection(item.id)}>
+        list, kept in step by hand (#221 1.1). The open section is marked, so
+        the list also answers where the reader is. */}
+    <div className={styles.readinessList} role="group" aria-label="活動項目">{readiness.sections.map((item) => <button type="button" key={item.id} aria-current={item.id === current ? "page" : undefined} onClick={() => onSection(item.id)}>
       <span>{organizerSectionLabel(detail, item.id)}</span><small data-state={item.state}>{liveDirty && liveSection
         ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
         : READINESS_LABEL[item.state]}</small>
     </button>)}</div>
-    <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>沒有需要修正的項目；還沒開始的工作看上面的下一步。</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
+    <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>{showNext ? "沒有需要修正的項目；還沒開始的工作看上面的下一步。" : "沒有需要修正的項目。"}</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
       <strong>{organizerSectionLabel(detail, blocker.section)}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>
     </button>)}</div>
     {blockers.length > visibleBlockers.length && <p>另有 {blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}

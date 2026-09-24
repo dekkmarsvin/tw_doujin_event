@@ -102,6 +102,12 @@
 .contextLine { margin: 0 0 3px !important; color: var(--muted) !important; font-size: 10px !important; font-weight: 700; }
 .version { border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
 .workspaceGrid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: start; }
+.workspaceMain { min-width: 0; }
+/* Finishing the basic settings: what happened and where the rest of the work
+   is now, above the section the reader was brought to. */
+.handoff { margin-bottom: 14px; border: 1px solid #b8d8ca; border-radius: 9px; padding: 10px 14px; background: var(--success-soft); color: var(--success); }
+.handoff strong { font-size: 13px; }
+.handoff p { margin: 3px 0 0; font-size: 12px; line-height: 1.6; }
 /* The guided station stands alone: the six-section rail belongs to work the
    reader has not reached yet, and its N/6 contradicts the N/3 in front of
    them (#221). */
@@ -206,6 +212,9 @@
 .readinessList small { color: var(--muted); font-size: 9px; }
 .readinessList small[data-state="complete"] { color: var(--success); }
 .readinessList small[data-state="needs_attention"] { color: var(--danger); }
+/* Where the reader is, by shape as well as tint: the bar survives a screen
+   that flattens the background. */
+.readinessList button[aria-current="page"] { margin: 0 -8px; width: calc(100% + 16px); padding: 9px 8px !important; background: var(--map-paper) !important; box-shadow: inset 3px 0 0 var(--ink); }
 .blockerList { margin-top: 16px; }
 .blockerList button { display: grid; width: 100%; gap: 3px; margin-top: 7px; border: 1px solid var(--line) !important; padding: 9px !important; background: var(--paper) !important; color: var(--ink) !important; text-align: left; }
 .blockerList button:hover { border-color: #aeb6b3 !important; }
