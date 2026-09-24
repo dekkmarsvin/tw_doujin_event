@@ -12,6 +12,8 @@
 
 介紹頁由 Pages 靜態直送，不經 Function，不新增資料寫入。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；無資料的地址、售票與開場時間省略，不保證 rich result 資格。
 
+首頁、介紹頁與 Reader 啟動後的 head 都以絕對網址指向同一張品牌分享圖 `/share-card.png`（1200×630 PNG，維護者選定的 C 版），並使用 `summary_large_image`；多數分享平台不接受 SVG，所以不用站台圖示。分享圖供其他平台的伺服器抓取，不加入 Service Worker precache。
+
 介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。原 query 地圖仍使用既有離線行為。介紹頁及 sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證，避免舊活動／配置長期停留在瀏覽器；這不新增輪詢。
 
 ## Payload 邊界
@@ -63,6 +65,7 @@
 | R2 代管縮圖 | `public, max-age=31536000, immutable`（URL 含內容 SHA-256） |
 | `/sw.js` | `no-cache`（另帶 `Service-Worker-Allowed: /`） |
 | `/manifest.webmanifest` | `public, max-age=3600` |
+| `/share-card.png` | `public, max-age=86400`（網址固定，換圖後最多一天更新） |
 
 ### 更新可見性
 

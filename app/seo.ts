@@ -5,6 +5,10 @@ import { eventCalendar, eventDayCalendarDate, fullDateRange, shortDate } from ".
 export const PUBLIC_ORIGIN = "https://map.kotoban.top";
 export const SITE_TITLE = "場刊 Map｜同人展逛攤地圖";
 export const SITE_DESCRIPTION = "搜尋同人展攤位、收藏社團並規劃你的逛攤路線。";
+/** The brand card every page shares (#363). A 1200×630 PNG, because most
+ * platforms that unfurl a link refuse SVG; its address is absolute because
+ * they fetch it from their own servers. */
+export const SHARE_IMAGE = { url: `${PUBLIC_ORIGIN}/share-card.png`, width: 1200, height: 630 } as const;
 
 function segment(id: string) {
   if (!id || id === "." || id === "..") throw new Error("Invalid discovery identifier.");
@@ -90,6 +94,10 @@ export function applyReaderMetadata(metadata: ReturnType<typeof pageMetadata>, n
   meta("og:title", metadata.title, "property");
   meta("og:description", metadata.description, "property");
   meta("og:url", metadata.canonical, "property");
+  meta("og:image", SHARE_IMAGE.url, "property");
+  meta("og:image:width", String(SHARE_IMAGE.width), "property");
+  meta("og:image:height", String(SHARE_IMAGE.height), "property");
+  meta("twitter:card", "summary_large_image");
   meta("twitter:title", metadata.title);
   meta("twitter:description", metadata.description);
   let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
