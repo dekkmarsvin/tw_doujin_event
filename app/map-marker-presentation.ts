@@ -20,6 +20,9 @@ const LANDMARK_PADDING_PX = 3;
 const COLLISION_MARGIN_PX = 2;
 /** The label is drawn on a central baseline; this is half its line box. */
 const HALF_LINE_EM = .6;
+/** Floating-point slack when asking whether a slid label is on the plan. */
+const EDGE_EPSILON_PX = 1e-6;
+const OPPOSITE_SIDE = { north: "south", south: "north", east: "west", west: "east" } as const;
 
 /** A label drawn in screen pixels around a layout anchor. */
 export type MapMarkerLabel = {
@@ -64,7 +67,7 @@ function boundedPx(rule: { units: number; minPx: number; maxPx: number }, { scre
  * ways points into the hall, like an entrance. */
 export function accessLabelSide(point: Pick<MapAccessPoint, "kind" | "direction">): MapAccessDirection {
   if (point.kind === "exit") return point.direction;
-  return ({ north: "south", south: "north", east: "west", west: "east" } as const)[point.direction];
+  return OPPOSITE_SIDE[point.direction];
 }
 
 function badgeLabel(point: { x: number; y: number }, text: string, side: MapAccessDirection, fontPx: number): MapMarkerLabel {
@@ -99,7 +102,9 @@ function overlaps(a: Box, b: Box) {
  * drawn, so they are placed first as obstacles; labels then claim space in
  * priority order — access points and rows, then service points, then
  * landmarks — and a label that would overlap one
- * already placed is left out. A landmark name also has to fit inside its own
+ * already placed is left out. An access or service point name that cannot stay
+ * on the plan on its own side of the badge moves to the other side, and is left
+ * out only if neither side fits. A landmark name also has to fit inside its own
  * area at the smallest size, or it is left out. Hidden names stay available
  * through the accessible names the renderer gives each element.
  */
@@ -111,11 +116,15 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
     const half = MAP_ACCESS_BADGE_PX / 2;
     return { left: point.x * screenScale - half, right: point.x * screenScale + half, top: point.y * screenScale - half, bottom: point.y * screenScale + half };
   });
-  const candidates: [string, MapMarkerLabel][] = [];
+  // The third entry is where a badge's name goes when its own side runs off
+  // the plan; other labels have nowhere else to go.
+  const candidates: [string, MapMarkerLabel, MapMarkerLabel?][] = [];
 
   const accessPx = boundedPx(ACCESS_LABEL, presentation);
   for (const point of layout.accessPoints) {
-    if (point.label.trim()) candidates.push([mapMarkerLabelKey("access", point.id), badgeLabel(point, point.label, accessLabelSide(point), accessPx)]);
+    if (!point.label.trim()) continue;
+    const side = accessLabelSide(point);
+    candidates.push([mapMarkerLabelKey("access", point.id), badgeLabel(point, point.label, side, accessPx), badgeLabel(point, point.label, OPPOSITE_SIDE[side], accessPx)]);
   }
   const rowPx = boundedPx(ROW_LABEL, presentation);
   for (const row of layout.rows) {
@@ -128,7 +137,7 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
   // two of a kind apart is drawn, below the badge.
   for (const point of servicePoints) {
     const text = point.label?.trim();
-    if (text) candidates.push([mapMarkerLabelKey("service", point.id), badgeLabel(point, text, "south", accessPx)]);
+    if (text) candidates.push([mapMarkerLabelKey("service", point.id), badgeLabel(point, text, "south", accessPx), badgeLabel(point, text, "north", accessPx)]);
   }
   const landmarkPx = boundedPx(LANDMARK_LABEL, presentation);
   for (const landmark of layout.landmarks) {
@@ -144,16 +153,28 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
 
   // A name by the edge of the plan slides back along its own side rather than
   // running off the drawing, where the fitted map would cut it short. It never
-  // slides toward what it names, which would put it on top of the badge.
+  // slides toward what it names, which would put it on top of the badge; a
+  // badge's name that still runs off crosses to the badge's other side instead.
   const planWidth = layout.width * screenScale;
   const planHeight = layout.height * screenScale;
-  const labels = new Map<string, MapMarkerLabel>();
-  for (const [key, candidate] of candidates) {
+  const slideOntoPlan = (candidate: MapMarkerLabel) => {
     const initial = labelBox(candidate, screenScale);
     const alongX = candidate.anchor === "middle";
     const shiftX = !alongX ? 0 : initial.left < 0 ? -initial.left : initial.right > planWidth ? planWidth - initial.right : 0;
     const shiftY = alongX ? 0 : initial.top < 0 ? -initial.top : initial.bottom > planHeight ? planHeight - initial.bottom : 0;
-    const label = shiftX || shiftY ? { ...candidate, dx: candidate.dx + shiftX, dy: candidate.dy + shiftY } : candidate;
+    return shiftX || shiftY ? { ...candidate, dx: candidate.dx + shiftX, dy: candidate.dy + shiftY } : candidate;
+  };
+  const onPlan = (label: MapMarkerLabel) => {
+    const box = labelBox(label, screenScale);
+    return box.left >= -EDGE_EPSILON_PX && box.top >= -EDGE_EPSILON_PX && box.right <= planWidth + EDGE_EPSILON_PX && box.bottom <= planHeight + EDGE_EPSILON_PX;
+  };
+  const labels = new Map<string, MapMarkerLabel>();
+  for (const [key, candidate, otherSide] of candidates) {
+    let label = slideOntoPlan(candidate);
+    if (otherSide && !onPlan(label)) {
+      label = slideOntoPlan(otherSide);
+      if (!onPlan(label)) continue;
+    }
     const box = labelBox(label, screenScale);
     if (placed.some((other) => overlaps(box, other))) continue;
     placed.push(box);

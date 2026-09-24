@@ -78,6 +78,61 @@ test("a name at the edge of the plan slides back onto it", () => {
   assert.ok(Math.abs(left) < 1e-9, "the label starts at the plan's left edge");
 });
 
+/** The label's on-screen box, the way the renderer lays it out. */
+function screenBox(label, scale) {
+  const width = mapLabelEms(label.text) * label.fontPx, x = label.x * scale + label.dx, y = label.y * scale + label.dy;
+  const left = label.anchor === "start" ? x : label.anchor === "end" ? x - width : x - width / 2;
+  return { left, right: left + width, top: y - label.fontPx * .6, bottom: y + label.fontPx * .6 };
+}
+function assertOnPlan(label, scale, layout, message) {
+  const box = screenBox(label, scale), slack = 1e-6;
+  assert.ok(box.left >= -slack && box.top >= -slack && box.right <= layout.width * scale + slack && box.bottom <= layout.height * scale + slack, `${message}: ${JSON.stringify(box)}`);
+}
+
+test("a facility name that would run off the plan crosses to the other side of its badge", () => {
+  // Found in review: a named desk just above the lower edge of a 100-high plan
+  // had its name cut in half by the map, and a doorway there lost its name.
+  // At 8 px a unit the desk's name below it would end at 807.8 px of 800.
+  const scale = 8;
+  const plan = hall({
+    width: 200, height: 100, rows: [],
+    accessPoints: [
+      { id: "south-gate", kind: "entrance", direction: "north", x: 40, y: 98, label: "南門" },
+      { id: "north-gate", kind: "exit", direction: "north", x: 100, y: 2, label: "北門" },
+      { id: "east-gate", kind: "entrance", direction: "west", x: 198, y: 50, label: "東門" },
+      { id: "west-gate", kind: "entrance", direction: "east", x: 2, y: 50, label: "西門" },
+    ],
+    servicePoints: [{ id: "desk", kind: "information", x: 150, y: 97, label: "服務台" }],
+  });
+  const labels = layoutMapMarkerLabels(plan, { screenScale: scale, fontScale: 1 });
+  const expected = { "access:south-gate": "above", "access:north-gate": "below", "access:east-gate": "west", "access:west-gate": "east", "service:desk": "above" };
+  for (const [key, side] of Object.entries(expected)) {
+    const label = labels.get(key);
+    assert.ok(label, `${key} is still drawn`);
+    assertOnPlan(label, scale, plan, key);
+    if (side === "above") assert.ok(label.dy < 0 && label.anchor === "middle", `${key} moves above its badge`);
+    if (side === "below") assert.ok(label.dy > 0 && label.anchor === "middle", `${key} moves below its badge`);
+    if (side === "west") assert.ok(label.dx < 0 && label.anchor === "end", `${key} moves left of its badge`);
+    if (side === "east") assert.ok(label.dx > 0 && label.anchor === "start", `${key} moves right of its badge`);
+  }
+  // With room on its own side, a name stays where it always was.
+  const roomy = layoutMapMarkerLabels({ ...plan, height: 120 }, { screenScale: scale, fontScale: 1 });
+  assert.ok(roomy.get("service:desk").dy > 0 && roomy.get("access:south-gate").dy > 0);
+});
+
+test("a name that crossed over still gives way, and is left out only when neither side fits", () => {
+  const scale = 8;
+  const desk = { id: "desk", kind: "information", x: 100, y: 97, label: "服務台" };
+  // A second badge just above takes the space the name would cross into.
+  const crowded = layoutMapMarkerLabels(hall({ width: 200, height: 100, rows: [], servicePoints: [desk, { id: "toilet", kind: "toilet", x: 100, y: 93 }] }), { screenScale: scale, fontScale: 1 });
+  assert.equal(crowded.has("service:desk"), false, "the other side still goes through the overlap check");
+  // A plan too short for the name on either side of the badge.
+  const shallow = hall({ width: 200, height: 4, rows: [], servicePoints: [{ ...desk, y: 2 }], accessPoints: [{ id: "gate", kind: "entrance", direction: "north", x: 40, y: 2, label: "入口" }] });
+  const labels = layoutMapMarkerLabels(shallow, { screenScale: scale, fontScale: 1 });
+  assert.equal(labels.has("service:desk"), false);
+  assert.equal(labels.has("access:gate"), false);
+});
+
 test("row names start at the same gap the editor draws them at", () => {
   const vertical = { orientation: "vertical", slots: [slot("A01", 100, 200)] };
   const horizontal = { orientation: "horizontal", slots: [slot("W01", 100, 200)] };
