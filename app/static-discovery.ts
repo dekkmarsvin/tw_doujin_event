@@ -74,9 +74,16 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
       .sort((a, b) => (a.date && b.date ? a.date.localeCompare(b.date) : 0) || a.index - b.index);
     return days.map(({ day, date }) => {
       const onDay = circles.flatMap((circle) => {
-        const here = placementsOf(circle.id).filter((placement) => String(placement.day) === String(day.id));
+        const all = placementsOf(circle.id);
+        const here = all.filter((placement) => String(placement.day) === String(day.id));
         if (!here.length) return [];
-        return [entry(circle, here.some((placement) => placement.status === "active") ? "" : placementStatusLabel(here[0].status))];
+        if (here.some((placement) => placement.status === "active")) return [entry(circle)];
+        // Label the day by where the circle ended up, not by catalog order: a
+        // circle still somewhere in the event moved; one nowhere withdrew.
+        const elsewhere = all.some((placement) => placement.status === "active");
+        const has = (status: "moved" | "cancelled") => here.some((placement) => placement.status === status);
+        const status = elsewhere ? (has("moved") ? "moved" : "cancelled") : (has("cancelled") ? "cancelled" : "moved");
+        return [entry(circle, placementStatusLabel(status))];
       });
       return `<h3>${escapeHtml(date ? dayDateLabel(date) : day.dateLabel)}</h3><p>${onDay.length} 個社團</p>${directory(onDay)}`;
     }).join("");

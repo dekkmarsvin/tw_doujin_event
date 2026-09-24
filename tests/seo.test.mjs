@@ -225,6 +225,21 @@ test("a day a circle only moved away from lists it with the status words, never 
     [["北風畫室（已移動攤位）", "南星工房"], ["北風畫室"]]);
 });
 
+test("a day with several inactive booths is labelled by where the circle ended up, not by their order", () => {
+  // Moved A01 → B09 on day 1, then withdrew from B09: not attending, whatever the order.
+  for (const order of [["moved", "cancelled"], ["cancelled", "moved"]]) {
+    const rows = { moved: placed("1-a01", "c-900001", 1, "A01", "moved"), cancelled: placed("1-b09", "c-900001", 1, "B09", "cancelled") };
+    const payload = withPlacements([...order.map((status) => rows[status]), placed("1-s02", "c-900002", 1, "S02")]);
+    assert.deepEqual(sections(discoveryPages(event, payload).get("/events/sample/"))[0].links.map(([, name]) => name),
+      ["北風畫室（已取消參展）", "南星工房"], order.join());
+  }
+  // Still exhibiting on day 2: day 1's booths moved away, even beside a cancelled one.
+  const moved = withPlacements([placed("1-b09", "c-900001", 1, "B09", "cancelled"), placed("1-a01", "c-900001", 1, "A01", "moved"),
+    placed("2-s03", "c-900001", 2, "S03"), placed("1-s02", "c-900002", 1, "S02")]);
+  assert.deepEqual(sections(discoveryPages(event, moved).get("/events/sample/")).map(({ links }) => links.map(([, name]) => name)),
+    [["北風畫室（已移動攤位）", "南星工房"], ["北風畫室"]]);
+});
+
 test("a single-day event keeps one list", () => {
   const single = { ...event, days: [event.days[0]] };
   const payload = withPlacements([placed("1-s01", "c-900001", 1, "S01"), placed("1-s02", "c-900002", 1, "S02")]);
