@@ -1,0 +1,14 @@
+{
+  "journey": "reader-event-chooser",
+  "browser": "153.0.8010.12",
+  "recordedAt": "2026-09-24T02:02:51.950Z",
+  "source": "local fixtures, not production",
+  "checks": [
+    "chooser-lists-published-events",
+    "chooser-refuses-unknown-event",
+    "chooser-opens-the-chosen-event",
+    "chooser-switches-without-stale-state-1440",
+    "chooser-switches-without-stale-state-390"
+  ],
+  "errors": []
+}
