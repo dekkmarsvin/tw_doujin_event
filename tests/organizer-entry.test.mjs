@@ -274,7 +274,8 @@ test("the three venue layers are explained by real published events", async () =
   assert.match(app, /花博公園爭艷館/);
   assert.match(app, /三重綜合體育館/);
 
-  // The mistake this exists to prevent, said outright.
-  assert.match(app, /，不是展區。/);
+  // Explain what the choice enables, including the reader's current boundary.
+  assert.match(app, /設定展區可讓讀者在地圖頁面依展區篩選攤位/);
+  assert.match(app, /只有一個空間時不顯示展區篩選/);
 
 });

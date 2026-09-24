@@ -17,6 +17,10 @@ import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
 import { useCallback, useEffect, useState } from "react";
 
+const emptyVenueAssignment = (): OrganizerEventDraft["venue"]["assignments"][number] => ({
+  venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "imported",
+});
+
 export function DraftForm({
   detail, section, guidedTask, saveLabel = "儲存", secondarySaveLabel,
   onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, onDraftStateChange,
@@ -69,6 +73,13 @@ export function DraftForm({
     setResult(null);
     setDraft((current) => mutate(structuredClone(current)));
   };
+  // Show the first question immediately without making an untouched form dirty
+  // or saving a placeholder that the venue catalog correctly rejects.
+  const venueAssignments = draft.venue.assignments.length > 0 ? draft.venue.assignments : [emptyVenueAssignment()];
+  const updateVenue = (mutate: (current: OrganizerEventDraft) => OrganizerEventDraft) => update((next) => {
+    if (next.venue.assignments.length === 0) next.venue.assignments.push(emptyVenueAssignment());
+    return mutate(next);
+  });
   /* Writing the draft is only the first of three calls: the answer is followed
    * by a fresh event list and a fresh detail read, and the panel keeps showing
    * the old readiness until all three land. That whole wait is what the reader
@@ -157,20 +168,17 @@ export function DraftForm({
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
       </div>}
     </div> : <div>
-      {/* Open here: this is the moment the three layers are chosen, and the
-          value of the explanation is getting it right the first time (#298). */}
-      <VenueLayerGuide open />
+      <div role="group" aria-label="活動日期" className={styles.venueDates}>
+        {draft.event.days.map((day, index) => <label key={`${index}-${day.id}`}>{day.label || `第 ${index + 1} 天`}
+          <input type="date" aria-label={`${day.label || `第 ${index + 1} 天`}日期`} value={day.date} readOnly />
+        </label>)}
+      </div>
+      <p>{draft.event.days.length > 0 ? "以下場館與空間套用至所有活動日。" : `尚未設定活動日期，請先到「${guidedTask ? "活動日期" : "活動"}」填寫。`}</p>
       {detail.missingVenueReferences?.map((entry) => <OrganizerVenueReferencePanel key={entry.id}
         entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
         disabled={!editable || dirty} onCreated={onChanged} />)}
-      <div className={styles.row}>
-        {/* A new row is a question, not an answer. Choosing a venue and a
-            space on the owner's behalf made 請選擇場館 an option nobody ever
-            saw, and the event went on carrying a space nobody picked (#222). */}
-        <button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => {
-          next.venue.assignments.push({ venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "imported" });
-          return next;
-        })}>新增使用空間</button>
+      <div className={styles.panelHead}>
+        <h4>活動場館與空間</h4>
         <button type="button" className={styles.ghost} disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button>
       </div>
       {catalogAction && <VenueCatalogCreator
@@ -184,7 +192,9 @@ export function DraftForm({
               : current.venues.map((venue) => venue.id === space.venueId ? { ...venue, spaces: [...venue.spaces, space] } : venue),
           }));
           update((next) => {
-            const assignmentIndex = catalogAction.kind === "space" ? catalogAction.assignmentIndex : next.venue.assignments.length;
+            const emptyIndex = next.venue.assignments.findIndex((assignment) => !assignment.venueId && !assignment.venueSpaceId);
+            const assignmentIndex = catalogAction.kind === "space" ? catalogAction.assignmentIndex
+              : emptyIndex >= 0 ? emptyIndex : next.venue.assignments.length;
             const selected = {
               venueId: space.venueId,
               venueSpaceId: space.id,
@@ -199,12 +209,12 @@ export function DraftForm({
           setCatalogAction(null);
         }}
       />}
-      {draft.venue.assignments.map((assignment, index) => {
+      {venueAssignments.map((assignment, index) => {
         const selectedVenue = venueCatalog.venues.find((venue) => venue.id === assignment.venueId);
         const spaces = selectedVenue?.spaces ?? [];
         const selectedSpace = spaces.find((space) => space.id === assignment.venueSpaceId);
-        return <div className={styles.venueCard} key={index}>
-          <label>場館<select disabled={!editable} value={assignment.venueId} onChange={(event) => update((next) => {
+        return <div className={`${styles.venueCard} ${guidedTask ? styles.guidedVenueCard : ""}`} key={index}>
+          <label>場館<select disabled={!editable} value={assignment.venueId} onChange={(event) => updateVenue((next) => {
             // Changing the venue invalidates whatever space sat under it, and
             // choosing the replacement belongs to the owner for the same
             // reason the first choice did.
@@ -215,27 +225,31 @@ export function DraftForm({
             };
             return next;
           })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select></label>
-          <label>使用空間<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => update((next) => {
+          <label>使用空間<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => updateVenue((next) => {
             const space = spaces.find((item) => item.id === event.target.value);
             next.venue.assignments[index].venueSpaceId = space?.id ?? "";
             next.venue.assignments[index].areaMode = space?.defaultAreaMode ?? "imported";
             next.venue.assignments[index].areaIds = space?.defaultAreaMode === "none" ? ["ALL"] : [];
             return next;
           })}><option value="">請選擇使用空間</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原使用空間已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個空間一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到空間？立即新增</button></label>
-          <label>攤位名單有另外區分展區嗎？<select disabled={!editable} value={assignment.areaMode ?? "imported"} onChange={(event) => update((next) => {
+          <label>攤位名單有另外區分展區嗎？<select disabled={!editable || !selectedSpace} value={assignment.areaMode ?? "imported"} onChange={(event) => updateVenue((next) => {
             const areaMode = event.target.value as OrganizerVenueSpaceAreaMode;
             next.venue.assignments[index].areaMode = areaMode;
             next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
             return next;
           })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個空間沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
-          {!guidedTask && <label>地圖模板<select disabled={!editable} value={assignment.mapTemplate} onChange={(event) => update((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
+          {!guidedTask && <label>地圖模板<select disabled={!editable || !selectedSpace} value={assignment.mapTemplate} onChange={(event) => updateVenue((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
             {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
             {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}
           </select><MapTemplatePreview template={assignment.mapTemplate} /></label>}
-          <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>
+          {draft.venue.assignments.length > 0 && <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>}
         </div>;
       })}
-      {draft.venue.assignments.length === 0 && <div className={styles.inlineEmpty}><p>尚未選擇場館與使用空間。</p><button type="button" disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button></div>}
+      <button type="button" className={styles.secondary} disabled={!editable || venueAssignments.some((assignment) => !assignment.venueId || !assignment.venueSpaceId)} onClick={() => update((next) => {
+        next.venue.assignments.push(emptyVenueAssignment());
+        return next;
+      })}>再選一個空間</button>
+      <VenueLayerGuide open />
     </div>}
     </fieldset>
     {/* The same pending item is also listed in 準備進度, so this block carries a
