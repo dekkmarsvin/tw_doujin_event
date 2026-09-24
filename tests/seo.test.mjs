@@ -10,7 +10,7 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite test environme
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
 const { buildCircleCatalog } = await environment.runner.import("/app/circle-records.ts");
 const { pageMetadata, readerLink, eventPath } = await environment.runner.import("/app/seo.ts");
-const { discoveryPages, homepageSummary, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
+const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml } = await environment.runner.import("/app/static-discovery.ts");
 after(() => vite.close());
 const event = getEventDefinition("sample");
 const catalog = JSON.parse(await readFile(new URL("../fixtures/events/sample/circles.json", import.meta.url), "utf8"));
@@ -182,6 +182,20 @@ test("dates read in full in summaries and in one format on booth rows, however t
   assert.match(rows(event)[0], /^9月1日（二）/);
   assert.equal(head(discoveryPages(iso, catalog).get("/events/sample/circles/c-900001/")).title,
     head(discoveryPages(event, catalog).get("/events/sample/circles/c-900001/")).title);
+});
+
+// #363: platforms that unfurl a link fetch the card themselves, so its address
+// is absolute and the card asks to be shown large.
+test("every page's head shares the brand card as a large image", () => {
+  const heads = [metadataHtml(pageMetadata(), false), ...discoveryPages(event, catalog).values()];
+  for (const html of heads) {
+    const elements = nodes(parse(html));
+    const content = (key, value) => attr(elements.find((node) => attr(node, key) === value), "content");
+    assert.equal(content("property", "og:image"), "https://map.kotoban.top/share-card.png");
+    assert.equal(content("property", "og:image:width"), "1200");
+    assert.equal(content("property", "og:image:height"), "630");
+    assert.equal(content("name", "twitter:card"), "summary_large_image");
+  }
 });
 
 test("sitemap deduplicates canonical paths and never fabricates lastmod", () => {

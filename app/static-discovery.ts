@@ -2,7 +2,7 @@ import type { EventDefinition } from "./event-catalog";
 import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
-import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
+import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SHARE_IMAGE, SITE_TITLE } from "./seo";
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
@@ -14,7 +14,8 @@ export function metadataHtml(metadata: ReturnType<typeof pageMetadata>, canonica
 ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><meta property="og:url" content="${escapeHtml(metadata.canonical)}">` : ""}
 <meta property="og:type" content="website"><meta property="og:site_name" content="場刊 Map"><meta property="og:locale" content="zh_TW">
 <meta property="og:title" content="${escapeHtml(metadata.title)}"><meta property="og:description" content="${escapeHtml(metadata.description)}">
-<meta name="twitter:card" content="summary"><meta name="twitter:title" content="${escapeHtml(metadata.title)}"><meta name="twitter:description" content="${escapeHtml(metadata.description)}">`;
+<meta property="og:image" content="${escapeHtml(SHARE_IMAGE.url)}"><meta property="og:image:width" content="${SHARE_IMAGE.width}"><meta property="og:image:height" content="${SHARE_IMAGE.height}">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(metadata.title)}"><meta name="twitter:description" content="${escapeHtml(metadata.description)}">`;
 }
 
 function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, schema?: unknown) {

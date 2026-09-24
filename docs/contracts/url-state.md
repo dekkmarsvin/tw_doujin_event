@@ -14,7 +14,7 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 - 首頁提供活動地圖與活動介紹的 href；每個活動介紹列出全部有配置的社團 href，不依賴「載入更多」。Reader 清單的一般點擊保持地圖選取，修改鍵／新分頁可開啟靜態社團頁。
 - 首頁 canonical 為正式網域 `/`；Reader 有效活動指向活動介紹，已解析且有效的社團選取指向該社團介紹。未驗證的 query 值不產生社團 canonical。篩選、排序、收藏及日／攤位選取不另建索引頁，原 URL 與還原語意不變。
 - 不存在或未發布活動仍顯示 fail-closed 提示，渲染後加 noindex；切回有效活動／首頁時清除。控制面的 noindex 不由 Reader 管理。
-- 共用 Reader 原始 HTML 提供品牌 metadata 與活動摘要，不硬寫首頁 canonical／og:url 給所有 query。React 啟動後取代摘要；活動／社團介紹的原始 HTML 則已有專屬 metadata、絕對 canonical 與 OG／Twitter Card。
+- 共用 Reader 原始 HTML 提供品牌 metadata 與活動摘要，不硬寫首頁 canonical／og:url 給所有 query。React 啟動後取代摘要；活動／社團介紹的原始 HTML 則已有專屬 metadata、絕對 canonical 與 OG／Twitter Card；分享圖的規則見[資料傳輸契約](./delivery-and-offline.md#公開搜尋介紹頁)。
 - 活動有別稱時（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)），活動介紹的 title 在正式名稱後以括號附第一個別稱，description 與可見內容列出全部別稱，Event JSON-LD 以 `alternateName` 列出同一份清單；社團介紹的 title 以第一個別稱作為活動短稱。Reader 對同一活動／社團套用同一份 metadata。沒有別稱的活動輸出不變；首頁活動清單與地圖畫面維持正式名稱。
 - 社團介紹的 title 為「社團名稱｜活動短稱 M/D 攤位、攤位｜場刊 Map」，只取有效配置：日期與攤位取最早一個有效配置那一天。完全沒有有效配置時，改用最早一筆失效配置的活動日與攤位並附「已移動攤位」或「已取消參展」，網址與 canonical 不變。description 依活動日列出全部攤位，失效配置帶同樣的狀態用詞，日期寫成完整年月日；活動介紹的 description 也使用完整年月日。社團介紹的攤位列不論活動以 ISO 或月日標籤發布，日期都寫成「11月7日（六）」。活動介紹名單中同名的社團以同一組日期與攤位區分。Reader 選取社團時以同一份已審核配置產生相同的 title 與 description（[circle catalog 契約](./circle-catalog.md)的失效配置呈現）。
 - sitemap 僅列首頁、已發布活動及其有配置的社團介紹，不列 Reader 互動變體、控制面或個人資料；隨同一次 build 更新。不捏造 lastmod。

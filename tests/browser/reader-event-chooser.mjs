@@ -73,6 +73,10 @@ try {
     assert.match(page.url(), new RegExp(`event=${events[1].id}(&|$)`), "the chosen event is the one that opens");
     assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), `https://map.kotoban.top/events/${events[1].id}/`);
     assert.equal(await page.locator('meta[name="robots"]').count(), 0);
+    // #363: a link copied from the open map still unfurls with the brand card,
+    // at the absolute address the sharing platform will fetch.
+    assert.equal(await page.locator('meta[property="og:image"]').getAttribute("content"), "https://map.kotoban.top/share-card.png");
+    assert.equal(await page.locator('meta[name="twitter:card"]').getAttribute("content"), "summary_large_image");
     await journey.capture(page, "chooser-opens-the-chosen-event");
     await page.close();
   }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parse } from "parse5";
@@ -42,6 +43,21 @@ test("every built introduction has its own title and description", async () => {
   }));
   assert.equal(new Set(heads.map((head) => head.title)).size, heads.length);
   assert.equal(new Set(heads.map((head) => head.description)).size, heads.length);
+});
+
+// #363: the card the maintainer chose (audit D1), byte for byte.
+test("every built page shares the chosen 1200×630 brand card, kept out of the offline precache", async () => {
+  const sitemap = await read("sitemap.xml");
+  for (const [, url] of sitemap.matchAll(/<loc>(.*?)<\/loc>/g)) {
+    const elements = nodes(parse(await read(`${new URL(url).pathname.slice(1)}index.html`)));
+    assert.equal(attr(elements.find((node) => attr(node, "property") === "og:image"), "content"), "https://map.kotoban.top/share-card.png", url);
+  }
+  const card = await readFile(new URL("../dist/share-card.png", import.meta.url));
+  assert.equal(card.subarray(1, 4).toString(), "PNG");
+  assert.deepEqual([card.readUInt32BE(16), card.readUInt32BE(20)], [1200, 630]);
+  assert.equal(createHash("sha256").update(card).digest("hex"), "eb48aa35783dc4e49ba4fe98c55ed65d1b6053165600f2386dbc58e5355bb435");
+  const manifest = JSON.parse((await read("sw.js")).match(/const PRECACHE_MANIFEST = (\[[^\]]*\]);/)[1]);
+  assert.ok(!manifest.includes("/share-card.png"), "the card is for other sites' servers, not the offline map");
 });
 
 test("shared shell has a static fallback without conflicting query canonical", async () => {
