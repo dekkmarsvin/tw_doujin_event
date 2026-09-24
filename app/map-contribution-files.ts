@@ -27,6 +27,8 @@ export type MapContributionFileStore = {
   put: (key: string, value: ArrayBuffer, contentType: string) => Promise<void>;
   get: (key: string) => Promise<{ body: ReadableStream; contentType?: string } | null>;
   delete: (key: string | string[]) => Promise<void>;
+  /** Keys under a prefix. Optional so a store that cannot list still serves the rest. */
+  list?: (prefix: string) => Promise<string[]>;
 };
 
 function validHttps(value: string) {
@@ -187,7 +189,7 @@ function pdfPageCount(bytes: Uint8Array) {
 /** The container checks both entry points share. Sniffing follows the declared
  * type rather than guessing at one: a file that claims to be a PNG and does not
  * parse as one is rejected, never re-labelled. */
-async function mapImageDimensions(type: string, view: Uint8Array) {
+export async function mapImageDimensions(type: string, view: Uint8Array) {
   if (type === "image/png") {
     const dimensions = await pngDimensions(view);
     if (!dimensions) throw new Error("只接受容器完整、非交錯且宣告像素資料不超過 32 MiB 的 PNG。");

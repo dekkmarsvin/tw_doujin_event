@@ -60,7 +60,7 @@ export function circleBooths(event: EventDefinition, placements: readonly Metada
 }
 
 export function pageMetadata(event?: EventDefinition, circle?: { id: string; name: string }, placements: readonly MetadataPlacement[] = []) {
-  if (!event) return { title: SITE_TITLE, description: SITE_DESCRIPTION, canonical: `${PUBLIC_ORIGIN}/` };
+  if (!event) return { title: SITE_TITLE, description: SITE_DESCRIPTION, canonical: `${PUBLIC_ORIGIN}/`, image: SHARE_IMAGE };
   const calendar = eventCalendar(event);
   const dates = calendar.start ? fullDateRange(calendar.start, calendar.end) : calendar.label;
   const venues = [...new Set(event.venueAssignments.map((venue) => venue.venueName))].join("、");
@@ -73,12 +73,16 @@ export function pageMetadata(event?: EventDefinition, circle?: { id: string; nam
     title: `${aliases.length ? `${event.name}（${aliases[0]}）` : `${event.name} `}攤位地圖與社團查詢｜場刊 Map`,
     description: `${aliases.length ? `${event.name}（${aliases.join("、")}）` : event.name}的社團與攤位地圖。${dates}，${venues}。${closing}`,
     canonical: PUBLIC_ORIGIN + eventPath(event.id),
+    // An event page shares its own picture when it has one (#396); circle
+    // pages and the homepage keep the brand card.
+    image: event.image ?? SHARE_IMAGE,
   };
   const booths = circleBooths(event, placements);
   return {
     title: `${circle.name}｜${aliases[0] ?? event.name}${booths ? ` ${booths.headline}` : ""}｜場刊 Map`,
     description: `${circle.name}在${event.name}的${booths ? `攤位：${booths.summary}。${venues}` : `參展日期與攤位。${dates}，${venues}`}。${closing}`,
     canonical: PUBLIC_ORIGIN + circlePath(event.id, circle.id),
+    image: SHARE_IMAGE,
   };
 }
 
@@ -94,9 +98,9 @@ export function applyReaderMetadata(metadata: ReturnType<typeof pageMetadata>, n
   meta("og:title", metadata.title, "property");
   meta("og:description", metadata.description, "property");
   meta("og:url", metadata.canonical, "property");
-  meta("og:image", SHARE_IMAGE.url, "property");
-  meta("og:image:width", String(SHARE_IMAGE.width), "property");
-  meta("og:image:height", String(SHARE_IMAGE.height), "property");
+  meta("og:image", metadata.image.url, "property");
+  meta("og:image:width", String(metadata.image.width), "property");
+  meta("og:image:height", String(metadata.image.height), "property");
   meta("twitter:card", "summary_large_image");
   meta("twitter:title", metadata.title);
   meta("twitter:description", metadata.description);

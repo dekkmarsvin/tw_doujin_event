@@ -1,4 +1,5 @@
 import { EVENT_ALIAS_MAX_COUNT, EVENT_ALIAS_MAX_LENGTH, eventAliasProblems } from "./event-aliases";
+import { parseEventImage, type EventImage } from "./event-image";
 
 export type OrganizerRole = "owner" | "editor";
 
@@ -39,6 +40,8 @@ export type OrganizerEventDraft = {
     name: string;
     /** 活動別稱. Absent when there are none, so older drafts stay byte-identical. */
     aliases?: string[];
+    /** 活動圖片 (#396). Absent when there is none, for the same reason. */
+    image?: EventImage;
     days: OrganizerEventDay[];
   };
   venue: {
@@ -166,6 +169,8 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
     || value.event.aliases.some((alias) => typeof alias !== "string"))) return null;
   // A row left blank in the form is not an alias; it drops out on save.
   const aliases = (value.event.aliases ?? []).map(text).filter(Boolean);
+  const image = value.event.image === undefined ? undefined : parseEventImage(value.event.image);
+  if (image === null) return null;
   const days: OrganizerEventDay[] = [];
   for (const day of value.event.days) {
     if (!record(day)) return null;
@@ -208,7 +213,7 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
   }
   return {
     schema: "organizer-event-draft/1",
-    event: { id: eventId, name, ...(aliases.length > 0 ? { aliases } : {}), days },
+    event: { id: eventId, name, ...(aliases.length > 0 ? { aliases } : {}), ...(image ? { image } : {}), days },
     venue: { assignments },
     officialSource: { label: text(value.officialSource.label), url: sourceUrl },
     ...(references ? { references } : {}),

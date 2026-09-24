@@ -145,7 +145,9 @@ try {
   assert.match(await settingsImpact.innerText(), /2026-11-07.*2026-11-14/s);
   await settings.scrollIntoViewIfNeeded(); await journey.capture(page, "organizer-amendment-settings");
   await page.reload(); await page.getByRole("heading", { name: "4. 新增", exact: true }).waitFor();
-  assert.equal(await page.locator('input[type="file"]').count(), 0, "AMEND cannot replace a workbook");
+  // The picture has a file input of its own (#396); a workbook does not.
+  assert.equal(await page.locator('input[type="file"]:not([accept^="image/"])').count(), 0, "AMEND cannot replace a workbook");
+  assert.equal(await page.locator('input[type="file"][accept^="image/"]').count(), 1, "a correction can replace the event picture");
   // Edit a saved declaration without inferring disappearance as withdrawal.
   await page.getByRole("button", { name: "修改此宣告", exact: true }).nth(1).click();
   await form.getByRole("textbox", { name: "接手社團名稱", exact: true }).fill("確認接手社");

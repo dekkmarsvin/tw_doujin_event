@@ -2,7 +2,7 @@ import type { EventDefinition } from "./event-catalog";
 import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
-import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SHARE_IMAGE, SITE_TITLE } from "./seo";
+import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
@@ -14,7 +14,7 @@ export function metadataHtml(metadata: ReturnType<typeof pageMetadata>, canonica
 ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><meta property="og:url" content="${escapeHtml(metadata.canonical)}">` : ""}
 <meta property="og:type" content="website"><meta property="og:site_name" content="場刊 Map"><meta property="og:locale" content="zh_TW">
 <meta property="og:title" content="${escapeHtml(metadata.title)}"><meta property="og:description" content="${escapeHtml(metadata.description)}">
-<meta property="og:image" content="${escapeHtml(SHARE_IMAGE.url)}"><meta property="og:image:width" content="${SHARE_IMAGE.width}"><meta property="og:image:height" content="${SHARE_IMAGE.height}">
+<meta property="og:image" content="${escapeHtml(metadata.image.url)}"><meta property="og:image:width" content="${metadata.image.width}"><meta property="og:image:height" content="${metadata.image.height}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(metadata.title)}"><meta name="twitter:description" content="${escapeHtml(metadata.description)}">`;
 }
 
@@ -61,9 +61,9 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
     "@context": "https://schema.org", "@type": "Event", name: event.name,
     ...(event.aliases?.length ? { alternateName: [...event.aliases] } : {}),
     url: PUBLIC_ORIGIN + eventPath(event.id), description: pageMetadata(event).description,
-    // The share card every page already points og:image at; events carry no
-    // picture of their own, and Search Console asks for one.
-    image: [SHARE_IMAGE.url],
+    // The event's own picture when it has one (#396), else the brand card the
+    // page's og:image also names; Search Console asks for one either way.
+    image: [pageMetadata(event).image.url],
     startDate: [...dates].sort()[0], endDate: [...dates].sort().at(-1),
     location: [...new Map(event.venueAssignments.map((venue) => [venue.venueId, { "@type": "Place", name: venue.venueName, url: venue.venueOfficialUrl }])).values()],
     organizer: event.organizerAssignments.map((organizer) => ({ "@type": "Organization", name: organizer.name, url: organizer.officialUrl })),

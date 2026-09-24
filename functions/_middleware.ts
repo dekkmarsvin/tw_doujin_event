@@ -34,9 +34,11 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
       (request.method === "POST"
         && (/^\/api\/circle\/[^/]+\/thumbnail$/.test(url.pathname)
           || url.pathname === "/api/map-contributions/files"))
-      // Replace-in-place, hence PUT: a candidate map has one layout plan.
+      // Replace-in-place, hence PUT: a candidate map has one layout plan, and
+      // an event has one picture.
       || (request.method === "PUT"
-        && /^\/api\/organizer\/events\/[^/]+\/maps\/[^/]+\/background$/.test(url.pathname))
+        && (/^\/api\/organizer\/events\/[^/]+\/maps\/[^/]+\/background$/.test(url.pathname)
+          || /^\/api\/organizer\/events\/[^/]+\/image$/.test(url.pathname)))
     );
     if (contentType !== "application/json" && !privateFileUpload) return json({ error: "請求格式無效。" }, 415);
   }
