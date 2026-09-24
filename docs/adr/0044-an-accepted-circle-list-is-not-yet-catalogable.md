@@ -64,7 +64,7 @@
 
 以下不依賴攤位編號，應在等待期完成，讓編號公布時資料在等流程而不是流程在等資料：
 
-- **references**：organizer、場館、場館空間與分類目錄。同一主辦或同一場館的既有 record 可直接沿用；現行內部流程由 wizard 建立候選檔，未來 Organizer UI 需提供等價的 Venue／Area／Space 建立與重用能力（[#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85) 的需求驅動路徑）。
+- **references**：organizer、場館、場地與分類目錄。同一主辦或同一場館的既有 record 可直接沿用；現行內部流程由 wizard 建立候選檔，未來 Organizer UI 需提供等價的 Venue／Area／Space 建立與重用能力（[#85](https://github.com/dekkmarsvin/tw_doujin_event/issues/85) 的需求驅動路徑）。
 - **地圖 authoring**：配置圖一公布就能描摹排、slot、柱子與出入口。**layout 不需要知道誰在哪一格**，這是等待期最大的一塊平行工作；現行是本機工具，Organizer P0 的 Web 流程由 [#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104) 收斂。
 - 活動日、day id 與顯示 label。
 

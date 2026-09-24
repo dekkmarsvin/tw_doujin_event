@@ -39,7 +39,7 @@ test("the organizer login form requests its own audience", async () => {
 
 test("venue authoring uses human selections, immediate creation, and no-division guidance", async () => {
   const app = await organizerSource();
-  assert.match(app, /找不到空間？立即新增/);
+  assert.match(app, /找不到場地？立即新增/);
   assert.match(app, /無分區/);
   // #225: ALL is a stored value; the organizer never needs to know it exists.
   assert.doesNotMatch(app, /（ALL）|使用 ALL|套用 ALL/);
@@ -48,7 +48,7 @@ test("venue authoring uses human selections, immediate creation, and no-division
   assert.match(app, /liveSection=\{activeLiveSection\}/);
   assert.match(app, /需先儲存/);
   assert.match(app, /organizerIssueMessage/);
-  assert.doesNotMatch(app, /<label>場館 ID|<label>場館空間 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
+  assert.doesNotMatch(app, /<label>場館 ID|<label>場地 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
   // The row's remove button starts level with the selects it removes.
   const venueCss = await readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8");
   assert.match(venueCss, /\.venueCard > \.dangerText \{ margin-top: 22px; \}/);
@@ -262,7 +262,7 @@ test("the rail reports problems, not unstarted work, and empty states name an ac
   assert.match(app, /這一版還沒檢查/);
   assert.match(app, /尚未加入攤位名單/);
 });
-// #298: 場館／使用空間／展區 are near-synonyms in everyday Chinese, and the
+// #298: 場館／場地／展區 are near-synonyms in everyday Chinese, and the
 // glossary that tells them apart is written for developers. The explanation
 // uses published events rather than a drawing: no asset to maintain, and the
 // reader recognises them.
@@ -276,6 +276,6 @@ test("the three venue layers are explained by real published events", async () =
 
   // Explain what the choice enables, including the reader's current boundary.
   assert.match(app, /設定展區可讓讀者在地圖頁面依展區篩選攤位/);
-  assert.match(app, /只有一個空間時不顯示展區篩選/);
+  assert.match(app, /只有一個場地時不顯示展區篩選/);
 
 });

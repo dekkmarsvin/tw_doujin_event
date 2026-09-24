@@ -293,7 +293,7 @@ test("an event organizer can list and immediately extend the shared venue catalo
   // still refused rather than quietly replaced by the venue.
   const malformedSpaceSource = await handlers.createOrganizerVenueSpace(request(
     `/api/organizer/events/${candidateId}/venues/${createdVenueBody.venue.id}/spaces`, "POST", {
-      name: "格式錯誤的空間", sourceUrl: "ftp://venue.example/songshan", defaultAreaMode: "none",
+      name: "格式錯誤的場地", sourceUrl: "ftp://venue.example/songshan", defaultAreaMode: "none",
     }, ownerCookie,
   ), candidateId, createdVenueBody.venue.id);
   assert.equal(malformedSpaceSource.status, 400);
@@ -302,7 +302,7 @@ test("an event organizer can list and immediately extend the shared venue catalo
   // before the write rather than by it.
   const unknownVenueSpace = await handlers.createOrganizerVenueSpace(request(
     `/api/organizer/events/${candidateId}/venues/venue-missing/spaces`, "POST", {
-      name: "沒有場館的空間", sourceUrl: "", defaultAreaMode: "none",
+      name: "沒有場館的場地", sourceUrl: "", defaultAreaMode: "none",
     }, ownerCookie,
   ), candidateId, "venue-missing");
   assert.equal(unknownVenueSpace.status, 404);
@@ -417,13 +417,13 @@ test("candidate updates reject missing and mismatched venue catalog references",
   assert.equal(blankVenue.status, 422);
   const blankVenueBody = await blankVenue.json();
   assert.deepEqual(blankVenueBody.issues.map((issue) => issue.code), ["missing_venue_selection", "missing_venue_space_selection"]);
-  assert.equal(blankVenueBody.error, "使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。");
+  assert.equal(blankVenueBody.error, "場地 1：尚未選擇場館，請從清單選擇或建立新場館。");
   for (const issue of blankVenueBody.issues) assert.doesNotMatch(issue.message, /已不存在/);
   const blankSpace = await save({ venueId: VENUE_ID, venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1" });
   assert.equal(blankSpace.status, 422);
   const blankSpaceBody = await blankSpace.json();
   assert.deepEqual(blankSpaceBody.issues.map((issue) => issue.code), ["missing_venue_space_selection"]);
-  assert.equal(blankSpaceBody.error, "使用空間 1：尚未選擇場館內的空間，請從清單選擇或新增使用空間。");
+  assert.equal(blankSpaceBody.error, "場地 1：尚未選擇場館內的場地，請從清單選擇或新增場地。");
   const mismatch = await save({
     venueId: "taipei-nangang-exhibition-center-hall-1",
     venueSpaceId: "taipei-nangang-exhibition-center-hall-2-1f",

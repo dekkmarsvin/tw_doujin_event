@@ -21,19 +21,21 @@
 - 一個 **攤位**（booth）在不同日可能有不同社團。
 - 收藏、備註與行程掛在 `CircleRecord.id` 上，**不掛在攤位上**。
 
-### 「場館」、「場館空間」與「展區」不是同一件事
+### 「場館」、「場地」與「展區」不是同一件事
 
 | 說法 | 意思 | FF47 的值 |
 |---|---|---|
 | **場館**（venue） | 活動實際舉辦的建築；由活動定義選取 pinned venue record | 花博公園爭艷館 |
-| **場館空間**（venue space） | 場館內可穩定識別的館別、樓層或展場；地圖 layout 掛在這一層 | 爭艷館展區 |
-| **展區**（area） | 活動在場館空間內定義的攤位／展示分區，供篩選與定位使用 | `ALL`（全區）、`A`（A–K 區）、`B`（L–W 區） |
+| **場地**（venue space） | 場館內可穩定識別的館別、樓層或展場；地圖 layout 掛在這一層 | 爭艷館展區 |
+| **展區**（area） | 活動在場地內定義的攤位／展示分區，供篩選與定位使用 | `ALL`（全區）、`A`（A–K 區）、`B`（L–W 區） |
 
-**場館與場館空間屬於 pinned reference data，不寫死在程式或文件裡。** 活動定義只保存 stable ID assignment；production pipeline 先驗證 reference commit／hash／selection，parser 再驗證 staged records 與 assignments 後投影名稱。
+中文介面與文件統一稱「場地」，對應既有的 venue space。程式欄位 `venueSpaceId`、資料種類 `venue-space`、資料庫欄位 `venue_space_id` 與既有 stable ID 維持不變。
 
-展區由主辦的攤位名單推導，所以活動定義裡的 `areas` 只有名單出現過的代碼，**沒有一個代表「全部展區」**。FF47 自行宣告的 `ALL` 是它資料的一部分，不是通例。讀者介面自己補上 `ALL`（全區）作為預設，語意固定是**目前場館空間**的全部展區。**展區也不是一定會給讀者篩的維度**：只有跨多個場館空間的活動才出現展區切換。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/event-map.md`](docs/contracts/event-map.md)）。
+**場館與場地屬於 pinned reference data，不寫死在程式或文件裡。** 活動定義只保存 stable ID assignment；production pipeline 先驗證 reference commit／hash／selection，parser 再驗證 staged records 與 assignments 後投影名稱。
 
-`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場館空間**。公開切換與逐空間地圖的行為見[活動地圖契約](docs/contracts/event-map.md)。
+展區由主辦的攤位名單推導，所以活動定義裡的 `areas` 只有名單出現過的代碼，**沒有一個代表「全部展區」**。FF47 自行宣告的 `ALL` 是它資料的一部分，不是通例。讀者介面自己補上 `ALL`（全區）作為預設，語意固定是**目前場地**的全部展區。**展區也不是一定會給讀者篩的維度**：只有跨多個場地的活動才出現展區切換。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/event-map.md`](docs/contracts/event-map.md)）。
+
+`area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場地**。公開切換與逐場地地圖的行為見[活動地圖契約](docs/contracts/event-map.md)。
 
 **`Booth["hall"]` 的名字說謊**：它存的是展區代碼（`"A" | "B"`），不是場館。名稱是歷史遺留，且已寫進公開快照 schema，改名不是改一個識別字。**文件與新程式碼一律用「展區」／`area`。**
 
@@ -139,7 +141,7 @@ Organizer 在受驗證的 Web UI 準備活動、場館、攤位及地圖，經�
 由管理者授權、使用既有 magic-link 帳號整理主辦官方配置證據的人。它不是社團認領附帶的角色，也不新增工作簿或第三方資料來源。
 
 **地圖貢獻草稿**（map draft）
-依活動、period 與場館空間分域的私人版本化內容。平行草稿可以共存，只有核准狀態互斥；核准後仍須匯出到 event-data repository 並通過其 diff、schema 與 review，才可能進入公開快照。
+依活動、period 與場地分域的私人版本化內容。平行草稿可以共存，只有核准狀態互斥；核准後仍須匯出到 event-data repository 並通過其 diff、schema 與 review，才可能進入公開快照。
 
 ## 工程
 

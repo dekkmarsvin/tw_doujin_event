@@ -1,4 +1,4 @@
-/** 活動草稿表單：基本設定、活動日、場館與使用空間、地圖模板。
+/** 活動草稿表單：基本設定、活動日、場館與場地、地圖模板。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
@@ -134,9 +134,9 @@ export function DraftForm({
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
   return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
-    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與使用空間"}</h3>
+    <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與場地"}</h3>
       {guidedTask && <p>{TASK_QUESTION[guidedTask]}</p>}</div></div>
-    <fieldset className={styles.formFields} disabled={saving} aria-label={guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料欄位" : "場館與使用空間欄位"}>
+    <fieldset className={styles.formFields} disabled={saving} aria-label={guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料欄位" : "場館與場地欄位"}>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
         <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /><small>例如：秋日同人交流會 2026</small></label>
@@ -173,12 +173,12 @@ export function DraftForm({
           <input type="date" aria-label={`${day.label || `第 ${index + 1} 天`}日期`} value={day.date} readOnly />
         </label>)}
       </div>
-      <p>{draft.event.days.length > 0 ? "以下場館與空間套用至所有活動日。" : `尚未設定活動日期，請先到「${guidedTask ? "活動日期" : "活動"}」填寫。`}</p>
+      <p>{draft.event.days.length > 0 ? "以下場館與場地套用至所有活動日。" : `尚未設定活動日期，請先到「${guidedTask ? "活動日期" : "活動"}」填寫。`}</p>
       {detail.missingVenueReferences?.map((entry) => <OrganizerVenueReferencePanel key={entry.id}
         entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
         disabled={!editable || dirty} onCreated={onChanged} />)}
       <div className={styles.panelHead}>
-        <h4>活動場館與空間</h4>
+        <h4>活動場館與場地</h4>
         <button type="button" className={styles.ghost} disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button>
       </div>
       {catalogAction && <VenueCatalogCreator
@@ -225,30 +225,30 @@ export function DraftForm({
             };
             return next;
           })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select></label>
-          <label>使用空間<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => updateVenue((next) => {
+          <label>場地<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => updateVenue((next) => {
             const space = spaces.find((item) => item.id === event.target.value);
             next.venue.assignments[index].venueSpaceId = space?.id ?? "";
             next.venue.assignments[index].areaMode = space?.defaultAreaMode ?? "imported";
             next.venue.assignments[index].areaIds = space?.defaultAreaMode === "none" ? ["ALL"] : [];
             return next;
-          })}><option value="">請選擇使用空間</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原使用空間已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個空間一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到空間？立即新增</button></label>
+          })}><option value="">請選擇場地</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原場地已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個場地一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到場地？立即新增</button></label>
           <label>攤位名單有另外區分展區嗎？<select disabled={!editable || !selectedSpace} value={assignment.areaMode ?? "imported"} onChange={(event) => updateVenue((next) => {
             const areaMode = event.target.value as OrganizerVenueSpaceAreaMode;
             next.venue.assignments[index].areaMode = areaMode;
             next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
             return next;
-          })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個空間沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
+          })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個場地沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
           {!guidedTask && <label>地圖模板<select disabled={!editable || !selectedSpace} value={assignment.mapTemplate} onChange={(event) => updateVenue((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
             {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
             {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}
           </select><MapTemplatePreview template={assignment.mapTemplate} /></label>}
-          {draft.venue.assignments.length > 0 && <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此空間</button>}
+          {draft.venue.assignments.length > 0 && <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.venue.assignments.splice(index, 1); return next; })}>移除此場地</button>}
         </div>;
       })}
       <button type="button" className={styles.secondary} disabled={!editable || venueAssignments.some((assignment) => !assignment.venueId || !assignment.venueSpaceId)} onClick={() => update((next) => {
         next.venue.assignments.push(emptyVenueAssignment());
         return next;
-      })}>再選一個空間</button>
+      })}>再選一個場地</button>
       <VenueLayerGuide open />
     </div>}
     </fieldset>

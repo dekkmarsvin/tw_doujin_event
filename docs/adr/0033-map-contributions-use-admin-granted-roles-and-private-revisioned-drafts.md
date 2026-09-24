@@ -19,7 +19,7 @@
 ### 草稿與審閱
 
 1. 同一個 `eventId + day/period + venueSpaceId` 可有多份平行草稿。每份有不可變 draft ID 與遞增 revision，寫入使用 optimistic concurrency；revision 落後時拒絕覆寫並要求重新載入。
-2. 同一活動空間同時只能有一個 approved revision。核准新 revision 前必須明確取代或撤回既有 approved revision。
+2. 同一活動場地同時只能有一個 approved revision。核准新 revision 前必須明確取代或撤回既有 approved revision。
 3. 狀態機是 `draft -> submitted -> changes_requested -> submitted -> approved -> exported`；`rejected` 是終止狀態，不能直接 exported。需要重做時建立新 draft 或新 revision。核准同範圍的新稿時，既有 `approved` 或 `exported` 稿原子地轉為 `withdrawn`，新稿才轉為 `approved`；`withdrawn` 也是終止狀態。
 4. `exported` 只表示已產生 event-data 候選檔；仍須經該 repo 的 diff、schema gate 與 repository review，不能直接發布到公開站。
 

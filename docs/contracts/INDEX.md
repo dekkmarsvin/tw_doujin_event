@@ -127,6 +127,6 @@
 | [地圖編輯器契約](./map-editor.md) | 主辦單位工作區與地圖貢獻控制面共用同一個 `MapLayoutEditor`。本契約管兩個入口共同的畫布編輯行為；草稿的保存、權限、版本與審閱各見[主辦單位工作區契約](./organizer-workspace.md#地圖)與[地圖貢獻控制面契約](./map-contributions.md)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。 |
 | [主辦單位工作區契約](./organizer-workspace.md) | 主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開場刊仍只來自 data repository 的 reviewed snapshot 與 pin。 |
 | [收藏與走訪規劃契約](./planning.md) | 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。 |
-| [共享 reference 選擇契約](./reference-selection.md) | 跨活動共用的主辦、主辦分類目錄、場館與場館空間維護在公開的 [`dekkmarsvin/tw_doujin_event-data`](https://github.com/dekkmarsvin/tw_doujin_event-data) 的 `references/`。公開事實只接受活動主辦或場館官方說明頁；社團自行填寫的內容仍屬活動 overlay。 |
+| [共享 reference 選擇契約](./reference-selection.md) | 跨活動共用的主辦、主辦分類目錄、場館與場地維護在公開的 [`dekkmarsvin/tw_doujin_event-data`](https://github.com/dekkmarsvin/tw_doujin_event-data) 的 `references/`。公開事實只接受活動主辦或場館官方說明頁；社團自行填寫的內容仍屬活動 overlay。 |
 | [搜尋、篩選與顯示設定契約](./search.md) | 三組條件的責任切分。它們常被誤放在同一個面板裡，因此邊界必須明寫：**搜尋改變結果集合，規劃篩選投影使用者資料，顯示設定只改變呈現。** |
 | [URL 檢視狀態契約](./url-state.md) | URL 是跨模組的共享狀態，因此獨立成一份契約：搜尋、地圖、規劃篩選與顯示設定都往同一組查詢參數寫入。任何模組新增可分享狀態，都必須先在這裡登記。 |

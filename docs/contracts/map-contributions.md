@@ -30,11 +30,11 @@
 
 私人草稿使用與主辦單位工作區相同的編輯器，畫布行為見[地圖編輯器契約](./map-editor.md)。
 
-地圖貢獻的私人草稿 detail 回應帶入伺服器依該稿活動日與使用空間推導的 scope 與官方群組，沿用既有 owner／admin 授權。對照資料不寫入草稿版本或公開地圖。
+地圖貢獻的私人草稿 detail 回應帶入伺服器依該稿活動日與場地推導的 scope 與官方群組，沿用既有 owner／admin 授權。對照資料不寫入草稿版本或公開地圖。
 
 ## 草稿與版本
 
-`eventId + periodKey + venueSpaceId` 是審閱範圍，同一範圍允許多份平行草稿。`periodKey` 一律保存活動定義中的日程 ID；不會與另一個正式 ID 衝突時，相容輸入 `day-<id>` 會先正規化成 `<id>`，多空間 `targetPath` 也只使用正規值。既有 alias 列會在下一次處理該範圍時原子正規化；若資料庫已存在兩份 alias 不同但邏輯範圍相同的有效核准稿，操作回 `409` 並要求人工處理，不再核准第三份。已固化的 legacy export 不改寫其 `targetPath`；live scope 仍存在時，非正規路徑的重試匯出會回 `409`，由管理者人工處理；live scope 日後移除或改名時，既有 immutable export 仍可下載。每份草稿有固定 ID 與單調遞增 revision；修改與提交都必須帶 `expectedRevision`，落後的版本回 `409`，不覆寫較新的內容。
+`eventId + periodKey + venueSpaceId` 是審閱範圍，同一範圍允許多份平行草稿。`periodKey` 一律保存活動定義中的日程 ID；不會與另一個正式 ID 衝突時，相容輸入 `day-<id>` 會先正規化成 `<id>`，多場地 `targetPath` 也只使用正規值。既有 alias 列會在下一次處理該範圍時原子正規化；若資料庫已存在兩份 alias 不同但邏輯範圍相同的有效核准稿，操作回 `409` 並要求人工處理，不再核准第三份。已固化的 legacy export 不改寫其 `targetPath`；live scope 仍存在時，非正規路徑的重試匯出會回 `409`，由管理者人工處理；live scope 日後移除或改名時，既有 immutable export 仍可下載。每份草稿有固定 ID 與單調遞增 revision；修改與提交都必須帶 `expectedRevision`，落後的版本回 `409`，不覆寫較新的內容。
 
 狀態機為：
 
@@ -80,7 +80,7 @@
 
 匯出只在私人 D1 寫入不可變的候選、`targetPath`、SHA-256 與相對於目前 reviewed public snapshot 的語意差異，並提供管理者下載；它不呼叫 GitHub、不寫 event-data repository，也不改變任何匿名公開 endpoint。候選仍須經 event-data repository 的 schema、review 與 pin 流程才能發布。
 
-只有一組「活動日 × venue-space」的活動，`targetPath` 是 `map.json`；有多組的（含**單一場館空間但多個活動日**，例如兩天各自重排的場地）是 `maps/<periodKey>/<venueSpaceId>.json`，並由該活動的 `map-manifest.json` 索引。兩者的路徑由 [`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts) 與 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 決定，reader、staging、pin 與離線清單都已支援，見[活動地圖契約](./event-map.md)。
+只有一組「活動日 × venue-space」的活動，`targetPath` 是 `map.json`；有多組的（含**單一場地但多個活動日**，例如兩天各自重排的場地）是 `maps/<periodKey>/<venueSpaceId>.json`，並由該活動的 `map-manifest.json` 索引。兩者的路徑由 [`app/event-authoring-scope.ts`](../../app/event-authoring-scope.ts) 與 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 決定，reader、staging、pin 與離線清單都已支援，見[活動地圖契約](./event-map.md)。
 
 ## 官方來源檔
 

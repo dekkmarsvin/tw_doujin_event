@@ -2,7 +2,7 @@
 
 把配置圖辨識成向量 layout、人工微調，成為候選活動的地圖草稿，經審閱後匯出為公開靜態快照。
 
-**地圖畫在[主辦單位工作區](../contracts/organizer-workspace.md)。** 候選活動的每一組「活動日 × 場館空間」各建立一份地圖草稿，從空白或描摹起點開始。
+**地圖畫在[主辦單位工作區](../contracts/organizer-workspace.md)。** 候選活動的每一組「活動日 × 場地」各建立一份地圖草稿，從空白或描摹起點開始。
 
 本機曾經有一套獨立的 `/editor` authoring 環境，寫入本機 D1 再以 `map:snapshot` 匯出。它已依 [ADR-0049](../adr/0049-the-local-authoring-backup-is-withdrawn.md) 移除：實際共用的只有 `MapLayoutEditor` 一個 component，其餘是一整套為它獨存的 build 與持久化堆疊，而那條備援路徑從未被驗證過。控制面不可用時的復原路徑改為直接編輯 data repository 中的靜態快照。
 
@@ -22,7 +22,7 @@ npm run dev:portal
 
 以 Organizer 身分登入 `/organizer`，開啟候選活動的「地圖」區。地圖區需要攤位匯入已完成，因為候選地圖的 `allowedBoothCodes` 與 `requiredBoothCodes` 都由該 scope 實際匯入的攤位代碼推導（[`resolveCandidateAuthoringScope()`](../../app/event-authoring-scope.ts)）。
 
-每一組「活動日 × 場館空間」各一份地圖草稿；缺任何一份在驗證時是 error，不是 warning。
+每一組「活動日 × 場地」各一份地圖草稿；缺任何一份在驗證時是 error，不是 warning。
 
 ### 2. 辨識
 

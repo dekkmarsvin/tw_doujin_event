@@ -92,14 +92,14 @@ export function validateOrganizerImportedRowsAgainstDraft(
     const assignment = spaces.get(row.venueSpaceId);
     if (!assignment) {
       add(`space\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-        ...issueBase, code: "stale_import_space", message: "既有清單的使用空間已不在活動設定中，請修正清單並儲存。",
+        ...issueBase, code: "stale_import_space", message: "既有清單的場地已不在活動設定中，請修正清單並儲存。",
       });
       continue;
     }
     if (assignment.areaMode === "none") {
       if (row.areaId !== "ALL") {
         add(`area-mode\u0000${row.dayId}\u0000${row.venueSpaceId}\u0000${row.areaId}`, {
-          ...issueBase, code: "stale_import_area_mode", message: "使用空間已改為無分區，請重新儲存清單以套用無分區設定。",
+          ...issueBase, code: "stale_import_area_mode", message: "場地已改為無分區，請重新儲存清單以套用無分區設定。",
         });
       }
     } else if (!assignment.areaIds.includes(row.areaId)) {
@@ -147,7 +147,7 @@ export function getOrganizerWorkspacePrerequisiteIssues(input: {
         step: "import",
         code: "missing_space_import",
         target: assignment.venueSpaceId,
-        message: "匯入資料沒有包含其中一個已選取使用空間的攤位。",
+        message: "匯入資料沒有包含其中一個已選取場地的攤位。",
       });
     }
   }
@@ -159,7 +159,7 @@ export function getOrganizerWorkspacePrerequisiteIssues(input: {
           step: "map",
           code: "missing_map",
           target: `${day.id}/${assignment.venueSpaceId}`,
-          message: `缺少 ${day.label}其中一個已選取使用空間的地圖。`,
+          message: `缺少 ${day.label}其中一個已選取場地的地圖。`,
         });
       }
     }

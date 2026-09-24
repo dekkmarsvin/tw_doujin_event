@@ -82,7 +82,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
 | [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效；「結果」的本機備援由 0049 取代；決策 5 的推進方式由 0062 改寫 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
-| [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場館空間 | 生效 |
+| [0048](./0048-a-map-covers-one-day-in-one-hall.md) | 一份地圖涵蓋一個活動日的一個場地 | 生效 |
 | [0049](./0049-the-local-authoring-backup-is-withdrawn.md) | 本機 authoring 備援退場，只留控制面一條路 | 生效 |
 | [0050](./0050-the-candidate-map-keeps-its-layout-plan.md) | 候選地圖保存它所依據的配置圖，存私人 bucket 不進 revision | 生效 |
 | [0051](./0051-three-circle-facets-move-to-fixed-options.md) | 創作者類型、作品類型與年齡分級改為固定選項，作品類型改講取向 | 生效 |

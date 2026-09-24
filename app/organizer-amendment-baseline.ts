@@ -104,7 +104,7 @@ export function planOrganizerAmendmentCandidate(baseline: OrganizerAmendmentBase
   for (const day of plan.official.days) for (const booth of day.booths) {
     const areaId = booth.areaId ?? baseline.event.areas[0].id;
     const venue = baseline.draft.venue.assignments.find((assignment) => assignment.areaIds.includes(areaId));
-    if (!venue) throw new Error("修正攤位沒有對應的場館空間。");
+    if (!venue) throw new Error("修正攤位沒有對應的場地。");
     rows.push({ sourceRow: rows.length + 1, dayId: String(day.day), venueSpaceId: venue.venueSpaceId,
       areaId, codes: [...booth.codes], circleName: booth.name, stableKey: null, identityGroup: null });
   }

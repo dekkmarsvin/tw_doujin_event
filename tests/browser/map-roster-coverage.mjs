@@ -26,7 +26,7 @@ async function open(surface) {
   ].map(map => ({ ...map, status: "draft", mapRevision: 1, updatedAt: now, authoring: { guides: [] } }));
   const summary = { id: "coverage", tentativeName: "清單地圖對照", status: "draft", operation: "CREATE", version: 1, role: "owner", updatedAt: now, workspaceMode: "binder" };
   const detail = { event: summary, publicationAvailable: false, publication: null, revisions: [],
-    venueCatalog: { venues: [{ id: "hall", name: "測試場館", spaces: [{ id: "hall-a", name: "甲空間" }, { id: "hall-b", name: "乙空間" }] }] },
+    venueCatalog: { venues: [{ id: "hall", name: "測試場館", spaces: [{ id: "hall-a", name: "甲場地" }, { id: "hall-b", name: "乙場地" }] }] },
     draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: "清單地圖對照", days: [{ id: "1", label: "第一天", date: "2026-11-07" }, { id: "2", label: "第二天", date: "2026-11-08" }] },
       venue: { assignments: ["hall-a", "hall-b"].map(venueSpaceId => ({ venueId: "hall", venueSpaceId, areaIds: ["A"], areaMode: "imported", mapTemplate: "SAMPLE" })) },
       officialSource: { label: "測試來源", url: "https://organizer.example/" } },
@@ -132,12 +132,12 @@ try {
       await saved.getByText("已畫 2/2", { exact: true }).waitFor();
       await saved.locator("tbody tr").filter({ hasText: "首日甲社" }).getByRole("button", { name: "定位 A02", exact: true }).click();
       await comparison.getByText("選取 A02：首日甲社", { exact: true }).waitFor();
-      await page.getByRole("button", { name: "第二天・測試場館・甲空間", exact: true }).click();
+      await page.getByRole("button", { name: "第二天・測試場館・甲場地", exact: true }).click();
     } else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).nth(1).click();
     await comparison.getByText("清單 1 碼・已畫 0 碼・待畫 1 碼", { exact: true }).waitFor();
     await comparison.getByText("次日乙社", { exact: true }).waitFor();
     assert.doesNotMatch(await comparison.innerText(), /首日甲社/);
-    if (surface === "organizer") await page.getByRole("button", { name: "第一天・測試場館・乙空間", exact: true }).click();
+    if (surface === "organizer") await page.getByRole("button", { name: "第一天・測試場館・乙場地", exact: true }).click();
     else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).nth(2).click();
     await comparison.getByText("清單 1 碼・已畫 1 碼・待畫 0 碼", { exact: true }).waitFor();
     await comparison.getByRole("combobox", { name: "對照顯示" }).selectOption("all");

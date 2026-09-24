@@ -59,7 +59,7 @@ test("only the first date is asked for; the rest of a day needs no editing", () 
   assert.deepEqual(validateOrganizerEventDraft(draft).filter((issue) => issue.step === "event"), []);
 });
 
-// #222: 「新增使用空間」 used to choose a venue and a space on the owner's
+// #222: 「新增場地」 used to choose a venue and a space on the owner's
 // behalf, so 請選擇場館 was an option the list could never show as chosen and
 // the event carried a space nobody had picked. A new row is now empty, which
 // means an unfilled row has to name itself rather than be read as a deletion.
@@ -74,8 +74,8 @@ test("an unchosen venue row names itself and is never read as a deleted one", ()
 
   const pending = organizerPendingVenueSelections(draft([blank]));
   assert.deepEqual(pending.map((issue) => issue.code), ["missing_venue_selection", "missing_venue_space_selection"]);
-  assert.equal(pending[0].message, "使用空間 1：尚未選擇場館，請從清單選擇或建立新場館。");
-  assert.equal(pending[1].message, "使用空間 1：尚未選擇場館內的空間，請從清單選擇或新增使用空間。");
+  assert.equal(pending[0].message, "場地 1：尚未選擇場館，請從清單選擇或建立新場館。");
+  assert.equal(pending[1].message, "場地 1：尚未選擇場館內的場地，請從清單選擇或新增場地。");
   // The row is named, so a second pending row is telling apart from the first.
   assert.deepEqual(organizerPendingVenueSelections(draft([{ ...blank, venueId: "expo", venueSpaceId: "hall-a" }, blank]))
     .map((issue) => issue.row), [2, 2]);

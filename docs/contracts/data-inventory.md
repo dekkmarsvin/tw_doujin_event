@@ -135,13 +135,13 @@
 | `organizer_event_invitations` | 尚未接受的邀請：**明文電子郵件**、角色、邀請人，以及接受或撤銷紀錄 |
 | `organizer_event_reviews` | 送審與管理決策的狀態轉換、actor、note 與時間。immutable |
 | `organizer_import_sources` | 匯入來源 metadata：**主辦私人試算表的檔名與工作表名**、原始檔 SHA-256、來源說明與欄位 mapping |
-| `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場館空間、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
+| `organizer_import_rows` | 主辦確認過的正規化攤位列：活動日、場地、展區、攤位代碼、**社團名稱**、stable key 與 identity group |
 | `organizer_submission_snapshots` | 送審當下固定的完整內容與其 SHA-256（approval hash）。immutable |
 | `organizer_amendments` | 修正候選對應的來源候選／版本／published job、固定公開基準 JSON 及 SHA-256；包含已公開活動、名單、身分及地圖，不保存原私人試算表檔名或递迴嵌入歷史 snapshot |
 | `organizer_amendment_changes` | 每次明確修正宣告的不可變 JSON、candidate version、對應 revision ID 與時間；社團名稱與攤位變動隨候選保存，不直接公開此控制面紀錄 |
 | `organizer_venues` | 主辦工作區建立的場館：名稱、正規化名稱鍵、來源 URL、建立者與時間 |
-| `organizer_venue_spaces` | 場館內的使用空間：所屬場館、名稱、正規化名稱鍵、來源 URL、預設展區模式、建立者與時間 |
-| `organizer_reference_records` | 主辦／分類／場館／空間的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
+| `organizer_venue_spaces` | 場館內的場地：所屬場館、名稱、正規化名稱鍵、來源 URL、預設展區模式、建立者與時間 |
+| `organizer_reference_records` | 主辦／分類／場館／場地的 canonical 公開來源記錄、固定擷取時間與建立者；建立目錄不等於公開发布，完整選定 bytes 封入送審 snapshot |
 | `organizer_publication_jobs` | 發布工作的狀態、步驟、PR 編號、head／merge SHA、workflow run id、錯誤訊息、failure_code、retryable 與 sticky `remote_write_intent_at`；重試保留原 job 與核准 snapshot，退回修改後舊 job 標為不可重試歷史 |
 | `organizer_publication_lease` | 全域同時只允許一個發布工作前進的租約 |
 | `github_webhook_deliveries` | GitHub webhook 的 delivery id、事件、payload SHA-256 與處理結果；用於去重 |
@@ -160,7 +160,7 @@
 
 ### `map_drafts` 與 `map_draft_revisions` — 私人地圖草稿
 
-`map_drafts` 保存活動、period、場館空間、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](./map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
+`map_drafts` 保存活動、period、場地、owner、狀態、目前 revision、活動／決定時間、內部 transition token、清除 claim 與 `candidate_id`。**`candidate_id` 是兩條管線的分界**：非 NULL 的列屬於主辦單位工作區的候選活動，公開地圖貢獻流程的每一句 SQL 都要求它是 NULL（見[地圖貢獻控制面契約](./map-contributions.md)）。`map_draft_revisions` 保存每版私人 JSON、作者與建立時間。每次修改新增 revision；落後版本不得覆寫。partial unique index 保證同一 `event_id + period_key + venue_space_id` 最多一份仍有效的 `approved`／`exported`；核准替代稿時，同一 D1 batch 會先把明確指定的既有稿轉為 `withdrawn`。
 
 **目的**：允許平行整理與可重現審閱，不直接改寫公開快照。**保存期**：`draft` 180 天無活動後整份刪除；`changes_requested` 180 天無活動後刪除 revisions 並將 owner 去識別化；`submitted` 審閱前不自動刪除。已審內容的後續處置見下兩類。
 

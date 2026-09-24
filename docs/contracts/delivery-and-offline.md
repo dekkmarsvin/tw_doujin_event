@@ -96,7 +96,7 @@ Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.
 ## 驗收條件
 
 - `dist/index.html` 存在；`dist/_worker.js` 與 `dist/server/index.js` 不存在。
-- 每個已發布活動的 `dist/data/events/<event>/event.json`、`circles.json` 與地圖 artifacts 的 event ID 一致，且每一份 map 都通過該活動 template 的完整 layout 驗證；多場館空間活動的 manifest 必須恰好覆蓋每個活動日 × 場館空間一次。
+- 每個已發布活動的 `dist/data/events/<event>/event.json`、`circles.json` 與地圖 artifacts 的 event ID 一致，且每一份 map 都通過該活動 template 的完整 layout 驗證；多場地活動的 manifest 必須恰好覆蓋每個活動日 × 場地一次。
 - 主 bundle 不含場刊資料字面值。
 - 公開 bundle 不包含 `/api/events/`、地圖管理匯入器或管理發布文案。
 - `dist/sw.js` 的 precache 清單涵蓋所有離線必要檔案：**每一個**已發布活動的 `circles.json` 與其全部地圖 artifacts。選了第二場活動再離線的讀者不得拿到空殼。

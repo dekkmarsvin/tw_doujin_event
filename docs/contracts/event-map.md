@@ -4,7 +4,7 @@
 
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
 **測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-map-facilities.mjs`
-**活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場館空間」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
+**活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場地」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
 **流程**：[地圖 authoring](../runbooks/map-authoring.md)
 
 一般使用者不上傳圖片、看不到管理入口。公開頁面只讀取隨 build 發布的已驗證靜態快照——決策見 [ADR-0008](../adr/0008-static-public-reading-path.md)。原始配置圖只供 authoring 階段辨識與對照，**不作為前台底圖**。
@@ -28,23 +28,23 @@
 - 因此**已發布快照本身無法區分人工繪製與滿分辨識**，追溯只靠 `sourceName` 的文字。要在資料層真正區分，需要另加 provenance 欄位；該取捨與延後理由見 [ADR-0035](../adr/0035-new-event-onboarding-is-data-driven.md)。
 - **辨識是選配。** 沒有註冊辨識 adapter 的 template 仍可 authoring：上傳的配置圖成為描摹底圖，攤位由「新增一排」建立。缺少 adapter 不是錯誤狀態。
 
-**場館、場館空間與展區是三件事**，見 [`CONTEXT.md`](../../CONTEXT.md)。場館與場館空間名稱由 event definition 選取的 pinned reference records 投影；展區是活動在某個場館空間內定義的攤位／展示分區。**契約不寫死當期名稱**——那是每場活動各自的 verified reference data。
+**場館、場地與展區是三件事**，見 [`CONTEXT.md`](../../CONTEXT.md)。場館與場地名稱由 event definition 選取的 pinned reference records 投影；展區是活動在某個場地內定義的攤位／展示分區。**契約不寫死當期名稱**——那是每場活動各自的 verified reference data。
 
-**展區切換只在活動跨多個場館空間時出現。** `areaMode` 是發布時由「攤位名單出現過幾個展區代碼」推導出來的，回答的是資料長什麼樣，不是讀者有沒有地方可去——主辦的名單若沒有真正的分區欄，實務上填進去的是攤位代碼的排號字首。因此讀者端不看 `areaMode`，只看 `venueAssignments` 是否多於一個。
+**展區切換只在活動跨多個場地時出現。** `areaMode` 是發布時由「攤位名單出現過幾個展區代碼」推導出來的，回答的是資料長什麼樣，不是讀者有沒有地方可去——主辦的名單若沒有真正的分區欄，實務上填進去的是攤位代碼的排號字首。因此讀者端不看 `areaMode`，只看 `venueAssignments` 是否多於一個。
 
-**展區由攤位名單推導，因此活動定義裡不會有代表「全部」的展區。** 讀者自行提供 `ALL`（全區）：它是介面的展區代碼而不是資料的一筆，永遠指目前場館空間的全部展區，並且是進站時的預設。單一場館空間的活動只有這一個可達狀態。
+**展區由攤位名單推導，因此活動定義裡不會有代表「全部」的展區。** 讀者自行提供 `ALL`（全區）：它是介面的展區代碼而不是資料的一筆，永遠指目前場地的全部展區，並且是進站時的預設。單一場地的活動只有這一個可達狀態。
 
-FF47 的活動定義登錄三個展區：`ALL`（全區）與 `A`（A–K 區）、`B`（L–W 區）。三者全在**同一個場館空間**內，`A`／`B` 是活動分區而不是場館空間，介面**不出現展區切換，也不呈現 A–K／L–W 分區**——它只有一個場館空間。`areaMode` 已不參與這個判斷；它留在 schema 裡描述展區是如何推導出來的，場館空間歸屬則一向由 `venueAssignments` 獨立決定。
+FF47 的活動定義登錄三個展區：`ALL`（全區）與 `A`（A–K 區）、`B`（L–W 區）。三者全在**同一個場地**內，`A`／`B` 是活動分區而不是場地，介面**不出現展區切換，也不呈現 A–K／L–W 分區**——它只有一個場地。`areaMode` 已不參與這個判斷；它留在 schema 裡描述展區是如何推導出來的，場地歸屬則一向由 `venueAssignments` 獨立決定。
 
-**地圖 artifact 的單位是「活動日 × 場館空間」，不是場館空間。** 同一個場館空間可能隔夜重新配置——CWT*K51 高雄場兩天的攤位排法與格數都不同——所以「幾份地圖」由這兩者的組合數決定，見 [`eventUsesScopedMaps()`](../../app/event-catalog.ts)。它與 `eventUsesVenueSpaceSwitcher()` 是兩件事：後者只決定 reader 要不要出現場館空間切換，單一場館的活動無論幾天都是 false。
+**地圖 artifact 的單位是「活動日 × 場地」，不是場地。** 同一個場地可能隔夜重新配置——CWT*K51 高雄場兩天的攤位排法與格數都不同——所以「幾份地圖」由這兩者的組合數決定，見 [`eventUsesScopedMaps()`](../../app/event-catalog.ts)。它與 `eventUsesVenueSpaceSwitcher()` 是兩件事：後者只決定 reader 要不要出現場地切換，單一場地的活動無論幾天都是 false。
 
 形狀由 [`app/event-map-manifest.ts`](../../app/event-map-manifest.ts) 與 [`app/staged-event-data.ts`](../../app/staged-event-data.ts) 決定：
 
-- **只有一組「活動日 × 場館空間」**：一份 event-level `map.json`。
+- **只有一組「活動日 × 場地」**：一份 event-level `map.json`。
 - **多組**：`map-manifest.json`（`event-map-manifest/1`）列出每一組及其 `maps/<periodKey>/<venueSpaceId>.json` 路徑。reader 依目前的 period 與 venue space 取用對應的一份。
 - **多組但沒有 manifest**：退回單一 `map.json`，視為每一天共用同一份配置。這是 scoped map 出現以前發布的活動（FF47 與 fixtures）的形狀，**不是**可以省略 manifest 的許可。
 
-manifest 一旦存在，規則就是 fail closed：`eventId` 必須與活動相符，`path` 必須恰好等於由 scope 推導出的路徑，scope 不得重複，且必須**恰好覆蓋**每個活動日 × 每個場館空間一次。缺一份、多一份或路徑不符都在 staging 階段就失敗，不會產生一份假裝涵蓋多組 scope 的 layout。多場館空間的活動仍然**必須**提供 manifest；退回 `map.json` 只適用於單一場館空間。
+manifest 一旦存在，規則就是 fail closed：`eventId` 必須與活動相符，`path` 必須恰好等於由 scope 推導出的路徑，scope 不得重複，且必須**恰好覆蓋**每個活動日 × 每個場地一次。缺一份、多一份或路徑不符都在 staging 階段就失敗，不會產生一份假裝涵蓋多組 scope 的 layout。多場地的活動仍然**必須**提供 manifest；退回 `map.json` 只適用於單一場地。
 
 `Booth["hall"]` 存的也是展區代碼，不是場館。欄位名是讀取模型的歷史遺留；公開 catalog v3 使用 `placement.area`，文件一律用「展區」。
 
@@ -89,7 +89,7 @@ type AccessibleEventMapRendererProps = {
 - 手機完整資訊在同一底部面板展開；收合、摘要、完整三段均保留橫向把手，可拖曳、點按或使用上下方向鍵。完整內容獨立捲動，把手收合保留選取；取消選取仍依 ADR-0063。桌機完整資訊沿用 dialog。
 - `prefers-reduced-motion` 時停用轉場；拖曳與縮放維持直接跟手，不加入彈性或慣性動畫。
 - **點兩下放大**：在空白地圖區於 350ms 內、24px 內點兩下（滑鼠或觸控皆同），以第二下的位置為中心放大一級，級距與放大按鈕相同；已到上限時不動作。按下後移動超過 3px 算拖曳，不算點按；攤位、按鈕與浮層上的點按不計入，所以攤位點兩下仍是選取。
-- **設施清單**：地圖有具名出入口、服務設施或具名非一般攤位區時，固定控制器多一個「設施」按鈕；沒有就不顯示。清單列出每個具名出入口、每個服務設施（依類型排在一起，沒有名稱的以類型稱呼），以及名稱只出現一次的非一般攤位區；多個區塊共用的名稱（例如一整片「企業攤」）只在圖例說明一次。圖例只列這張地圖畫出的東西（入口、出口、出入兩用、各類服務設施、柱子、共用名稱）。開啟時焦點移到第一項；Escape 關閉並回焦按鈕；外部按壓關閉清單但不攔下那次地圖操作，按壓結束時焦點若沒有移到別處（攤位、欄位、按鈕）就回到按鈕。選一項後關閉清單、回焦按鈕，地圖**只移動不改倍率**把該設施移到可用矩形中央並畫外框；不改攤位選取、URL 或規劃資料。外框保留到下一次地圖操作（按下地圖、滾輪、縮放按鈕、查看全場、選取攤位）；換日、換展區或場館空間、上一頁恢復都清除外框並關閉清單。手機的按鈕在「查看全場」左側，不加高右側控制欄；開啟清單時工作面板先收合，面板展開到最高段時清單關閉。
+- **設施清單**：地圖有具名出入口、服務設施或具名非一般攤位區時，固定控制器多一個「設施」按鈕；沒有就不顯示。清單列出每個具名出入口、每個服務設施（依類型排在一起，沒有名稱的以類型稱呼），以及名稱只出現一次的非一般攤位區；多個區塊共用的名稱（例如一整片「企業攤」）只在圖例說明一次。圖例只列這張地圖畫出的東西（入口、出口、出入兩用、各類服務設施、柱子、共用名稱）。開啟時焦點移到第一項；Escape 關閉並回焦按鈕；外部按壓關閉清單但不攔下那次地圖操作，按壓結束時焦點若沒有移到別處（攤位、欄位、按鈕）就回到按鈕。選一項後關閉清單、回焦按鈕，地圖**只移動不改倍率**把該設施移到可用矩形中央並畫外框；不改攤位選取、URL 或規劃資料。外框保留到下一次地圖操作（按下地圖、滾輪、縮放按鈕、查看全場、選取攤位）；換日、換展區或場地、上一頁恢復都清除外框並關閉清單。手機的按鈕在「查看全場」左側，不加高右側控制欄；開啟清單時工作面板先收合，面板展開到最高段時清單關閉。
 
 ### 設施標示
 
@@ -124,7 +124,7 @@ type AccessibleEventMapRendererProps = {
 
 ## 使用者流程
 
-1. 選擇活動與日期。活動跨多個場館空間時顯示展區切換，第一項是「全區」且為預設。單一場館空間的活動不出現展區切換，讀者看到整個場館空間。
+1. 選擇活動與日期。活動跨多個場地時顯示展區切換，第一項是「全區」且為預設。單一場地的活動不出現展區切換，讀者看到整個場地。
 2. 以拖曳、滾輪、觸控手勢或固定控制器平移和縮放；「重設」回到完整可用範圍。
 3. 搜尋攤位代碼或社團名稱，選取結果後地圖直接移動到對應攤位。
 4. 點選攤位後同步高亮 SVG slot、更新 URL，並開啟同一份社團資料的地圖側欄。共用攤位以緊密清單切換社團；側欄代表圖可直接開啟完整詳情。

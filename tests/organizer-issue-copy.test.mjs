@@ -28,7 +28,7 @@ test("one sentence per problem, whichever shape the workspace is holding it in",
   assert.notEqual(organizerIssueMessage(sidebar, catalog, draft), validatorWording);
 
   const unknown = { section: "map", code: "unknown_booth", message: "含有 2 個主辦攤位資料未出現的代碼。", target: "1/hall-a", count: 2 };
-  assert.match(organizerIssueMessage(unknown, catalog, draft), /地圖有 2 個攤位代碼未出現在同一天、同一場館空間的匯入資料。/);
+  assert.match(organizerIssueMessage(unknown, catalog, draft), /地圖有 2 個攤位代碼未出現在同一天、同一場地的匯入資料。/);
 
   // A response that carried neither still says what happened rather than
   // printing a bare undefined at the reader.

@@ -7,10 +7,10 @@
 | 資料 | 權威 |
 |---|---|
 | 活動名稱、日期與活動官方頁 | data repo `events/<eventId>/event.json` |
-| 主辦 official URL、分類目錄、場館與場館空間 | data repo `references/` 的 pinned revision |
+| 主辦 official URL、分類目錄、場館與場地 | data repo `references/` 的 pinned revision |
 | 官方社團名與攤位配置 | data repo `events/<eventId>/official-booths.json`，來源為活動主辦單位 |
 | 同活動 identity grouping | data repo `events/<eventId>/circle-identity-groups.json` |
-| 向量地圖 | data repo `events/<eventId>/map.json`（單一場館空間），或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多場館空間），由人工審閱的 authoring revision 匯出 |
+| 向量地圖 | data repo `events/<eventId>/map.json`（單一場地），或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多場地），由人工審閱的 authoring revision 匯出 |
 | 永久社團 ID | 本 repo `data/circle-identities/allocations.json` |
 | booth 到永久 ID 的證據 | 本 repo `data/circle-identities/evidence.json` |
 | 社團介紹、作品、連結、代表圖 | 社團本人透過 overlay 提供 |
@@ -149,7 +149,7 @@ npm run event:onboard -- <eventId> <40-char-data-commit>
 }
 ```
 
-多場館空間的活動改列 `map-manifest.json` 與其指向的每一份 `maps/<periodKey>/<venueSpaceId>.json`，`map.json` 不再是必要檔。兩者**不得並存**：只有 manifest 而沒有 artifacts、或有 artifacts 而沒有 manifest，pin 解析都會失敗。
+多場地的活動改列 `map-manifest.json` 與其指向的每一份 `maps/<periodKey>/<venueSpaceId>.json`，`map.json` 不再是必要檔。兩者**不得並存**：只有 manifest 而沒有 artifacts、或有 artifacts 而沒有 manifest，pin 解析都會失敗。
 
 不得手動 pin branch、tag 或未逐檔核對的內容。逐活動 pin 表示更新一場活動不會把其他活動的變更帶進部署；格式與 fail-closed 行為見[共享 reference 選擇契約](../contracts/reference-selection.md)。
 
