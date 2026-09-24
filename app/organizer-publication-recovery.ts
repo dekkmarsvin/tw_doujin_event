@@ -34,11 +34,10 @@ export function createPublicationRecoveryAuditor(options: Pick<GitHubAdapterOpti
     const page = await adapter.listPullRequestsPage(repo, branch, 1);
     if (!Array.isArray(page.body) || page.headers.has("link") || page.body.length > 1) refuse();
     const ref = await adapter.readRef(repo, branch);
-    if (number === null && head === null) {
-      if (page.body.length || ref !== null) refuse();
-      return;
-    }
-    if (number === null || head === null || page.body.length !== 1 || page.body[0].number !== number || (ref !== null && ref !== head)) refuse();
+    // The data repository automatically deletes merged branches. Its exact
+    // merged PR remains authoritative; the unmerged main branch must remain.
+    if (number === null || head === null || page.body.length !== 1 || page.body[0].number !== number
+      || (ref !== head && !(stage === "data" && ref === null))) refuse();
     const pull = await adapter.readPullRequest(repo, number);
     pullIdentity(pull, repo, number);
     if (pull.head.ref !== branch || pull.head.sha !== head || !pull.user?.login?.endsWith("[bot]")

@@ -318,6 +318,7 @@ test("unknown remote state, changed public baseline, and already merged main kee
 for(const [name,change] of [
   ['expired lease',()=>db.prepare("UPDATE organizer_publication_lease SET expires_at=0").run()],
   ['revoked Admin',()=>db.prepare("DELETE FROM admins WHERE email='admin@example.test'").run()],
+  ['disabled Admin',()=>db.prepare("UPDATE accounts SET disabled_at=1 WHERE email='admin@example.test'").run()],
   ['changed checkpoint',()=>db.prepare("UPDATE organizer_publication_jobs SET data_head_sha=?1 WHERE status='failed'").bind('f'.repeat(40)).run()],
   ['changed candidate version',()=>db.prepare("UPDATE organizer_event_candidates SET current_version=3 WHERE status='failed'").run()],
 ]) test(`recovery CAS refuses ${name} during remote audit without writing retirement evidence`,async()=>{

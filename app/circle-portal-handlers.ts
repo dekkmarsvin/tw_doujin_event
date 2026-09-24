@@ -2266,7 +2266,8 @@ export function createCirclePortalHandlers({
       recoveryAvailable: Boolean(access.admin && auditPublicationRecovery && loadPublishedAmendmentBaseline
         && candidate.publication_operation === "AMEND" && candidate.status === "failed"
         && publication?.status === "failed" && publication.candidate_version === candidate.current_version
-        && publication.data_merge_sha && !publication.main_merge_sha && !publication.workflow_run_id),
+        && publication.data_merge_sha && publication.main_pr_number && publication.main_head_sha
+        && !publication.main_merge_sha && !publication.workflow_run_id),
       publication: publication ? {
         id: publication.id,
         status: publication.status,

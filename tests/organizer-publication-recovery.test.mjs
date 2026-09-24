@@ -62,6 +62,11 @@ for(const [name,change] of [
   ['open main PR',s=>s.main.pulls.get(375).state='open'],
   ['merged main without checkpoint',s=>s.main.pulls.get(375).merged=true],
   ['changed original data head',s=>s.data.pulls.get(6).head.sha='b'.repeat(40)],
+  ['missing original main branch',s=>s.main.refs.delete(`organizer/${s.input.job.id}/main`)],
+  ['main PR never created',s=>{
+    s.input.job.main_pr_number=null;s.input.job.main_head_sha=null;
+    s.main.refs.delete(`organizer/${s.input.job.id}/main`);s.main.pulls.clear();
+  }],
   ['changed original approval',s=>s.data.pulls.get(6).body='other approval'],
   ['ambiguous original main PR',s=>s.main.pulls.set(376,{...s.main.pulls.get(375),number:376})],
   ['unmerged restoration',s=>s.data.pulls.get(9).merged=false],
@@ -89,6 +94,13 @@ test('unrelated later data changes are preserved, but changes to this restored e
   await s.audit(s.input);
   base=s.data.refs.get('main');files=s.remote.filesAt(s.data,base);files.set('events/event-alpha/event.json','{}');
   s.data.refs.set('main',s.remote.commit(s.data,s.remote.tree(s.data,files),[base],'Changed event'));
+  await assert.rejects(s.audit(s.input));
+});
+
+test('automatic deletion of the merged data branch still requires the exact retained PR and merge SHA',async()=>{
+  const s=await setup();s.data.refs.delete(`organizer/${s.input.job.id}/data`);
+  await s.audit(s.input);
+  s.data.pulls.get(6).merge_commit_sha='d'.repeat(40);
   await assert.rejects(s.audit(s.input));
 });
 

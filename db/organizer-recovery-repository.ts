@@ -4,11 +4,12 @@ export function createOrganizerRecoveryRepository(database: D1Database, ensureTa
   const eligible = `c.status = 'failed' AND c.publication_operation = 'AMEND'
     AND c.approved_at IS NOT NULL AND c.current_version = j.candidate_version
     AND j.status = 'failed' AND j.data_pr_number IS NOT NULL AND j.data_head_sha IS NOT NULL
-    AND j.data_merge_sha IS NOT NULL AND j.main_merge_sha IS NULL AND j.workflow_run_id IS NULL
+    AND j.data_merge_sha IS NOT NULL AND j.main_pr_number IS NOT NULL AND j.main_head_sha IS NOT NULL
+    AND j.main_merge_sha IS NULL AND j.workflow_run_id IS NULL
     AND j.remote_write_intent_at IS NOT NULL
     AND j.snapshot_id = s.id AND j.approval_hash = s.sha256
     AND EXISTS (SELECT 1 FROM accounts actor JOIN admins ON admins.email = actor.email
-      WHERE actor.id = ?3 AND actor.deletion_started_at IS NULL)`;
+      WHERE actor.id = ?3 AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL)`;
 
   async function claimOrganizerRecoveryLease(input: { candidateId: string; expectedVersion: number; actorAccountId: string; now: number }) {
     await ensureTables();
