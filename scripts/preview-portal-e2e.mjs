@@ -89,6 +89,8 @@ try {
   if (existingOverlay.overrides?.some(item => item.circleId === circle.id)) {
     throw new Error("The preview circle already has content; preserve it and choose an unused fixture.");
   }
+  await request("/api/preview/mail", { method: "POST", previewToken: true,
+    body: { runId: fixture.runId, eventId: "ff47", circleId: circle.id } });
 
   const { payload: claim } = await request("/api/claims", { method: "POST", cookie: circleCookie, body: { circleId: circle.id, evidenceNote: "preview E2E" } });
   await request("/api/admin/claims", { method: "POST", cookie: adminCookie, body: { claimId: claim.id, decision: "approve" } });

@@ -77,6 +77,31 @@ test("remote cleanup preserves another run, manual preview data and all R2 objec
   assert.equal(objects.size, 1);
 });
 
+test("fixture readiness refuses hidden source data, historical claims and orphan images before product mutations", async () => {
+  await seed();
+  await db.prepare("UPDATE circle_claims SET status='revoked' WHERE circle_id='c-000003'").run();
+  await db.prepare("UPDATE circle_overrides SET status='takendown' WHERE circle_id='c-000003'").run();
+  assert.equal((await repository.listLiveOverrides("ff47", "during")).some(row => row.circle_id === "c-000003"), false);
+  const target = { runId: a.runId, eventId: "ff47", circleId: "c-000003" };
+  assert.equal((await onRequestPost({ request: request("POST", target), env })).status, 409);
+  assert.equal((await repository.getOverride("ff47", "c-000003")).fields_json, JSON.stringify({ saleInfo: "human@example.com" }));
+  await db.prepare("DELETE FROM circle_overrides WHERE circle_id='c-000003'").run();
+  assert.equal((await onRequestPost({ request: request("POST", target), env })).status, 409, "even a revoked claim reserves this human fixture");
+  const prefix = "events/ff47/circles/c-000009/";
+  const key = prefix+"orphan.png";
+  objects.set(key, "manual image");
+  const readinessEnv = { ...env, THUMBNAILS: { ...bucket, list: async options => {
+    assert.deepEqual(options, { prefix, limit: 1 });
+    return { objects: [...objects.keys()].filter(k => k.startsWith(options.prefix)).map(key => ({ key })), truncated: false };
+  } } };
+  const emptyTarget = { ...target, circleId: "c-000009" };
+  assert.equal((await onRequestPost({ request: request("POST", emptyTarget), env: readinessEnv })).status, 409);
+  assert.equal(objects.get(key), "manual image");
+  objects.delete(key);
+  assert.equal((await onRequestPost({ request: request("POST", emptyTarget), env: readinessEnv })).status, 200);
+  assert.equal((await onRequestPost({ request: request("POST", { ...emptyTarget, eventId: "../ff47" }), env: readinessEnv })).status, 400);
+});
+
 test("resource selection rejects overlap and deployed metadata drift; origin must be immutable preview", () => {
   const envConfig = (id, suffix) => ({ d1_databases: [{ binding: "DB", database_id: id.repeat(8)+"-"+id.repeat(4)+"-"+id.repeat(4)+"-"+id.repeat(4)+"-"+id.repeat(12) }],
     r2_buckets: ["THUMBNAILS", "MAP_CONTRIBUTIONS"].map(binding => ({ binding, bucket_name: binding.toLowerCase().replaceAll("_", "-")+suffix })) });

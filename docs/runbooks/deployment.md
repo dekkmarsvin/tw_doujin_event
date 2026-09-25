@@ -194,7 +194,7 @@ main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本
 
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
 - PR 在 workflow 層取消同 PR 的舊 run；main 不自動取消，使用 `queue: max` 保留最多 100 個 pending run。GitHub 依進入鎖的順序執行，不保證 dispatch 順序；部署前另查 main，舊 checkout 已被取代就失敗，避免延遲 run 回退 production。滿佇列仍可能取消，不能把排隊等同交付。[GitHub concurrency 規則](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
-- 分類也在 workflow 鎖內；文件更新若仍含未交付產品差異，會承接完整 gate。publication 維持原 SHA／attempt 與必要 smoke；舊 run 失敗且 main 已前進，或 origin 已確認換成最新 main 時，回不可重試 superseded，交由管理者核對，不能反覆重跑舊 checkout 或自動算成 published。
+- 分類也在 workflow 鎖內；文件更新若仍含未交付產品差異，會承接完整 gate。publication 維持原 SHA／attempt 與必要 smoke；舊 run 失敗且 main 已前進，或 origin commit 已由 GitHub ancestry 證明是本 SHA 之後、目前 main 歷史中的版本時，回不可重試 superseded，交由管理者核對，不能反覆重跑舊 checkout 或自動算成 published。後續只有文件更新而未部署時也適用。
 - Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 使用 repository root 的 `wrangler.jsonc`；獨立 Worker 使用各自目錄的設定。
 - **preview 環境不繼承 production 的 secrets。** preview 的 session、pepper、E2E token 與 Mailgun 金鑰都必須用 `--env preview` 設定；preview 的寄件網域是 `verify.kotoban.top`。
@@ -202,7 +202,7 @@ main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本
 - `Full preview portal E2E` 使用該 run 的 immutable deployment URL，排隊期間即使 PR branch alias 已前進，也不會改驗另一版本。共用 preview 資源的 E2E 仍以同一個全域鎖序列執行；不代表每個 PR 擁有獨立 D1。
 - `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
 - E2E 先讀 Cloudflare 的本次 deployment 快照，核對 deployment ID、immutable URL、commit、preview 環境、成功狀態，以及 `DB` UUID／兩個 R2 bucket 名稱均符合 preview 設定、與 production 不重疊；失敗時不開始產品操作。不查 production 資料筆數，也不寫額外隔離探針。
-- 每個 run／attempt 使用保留的 `preview-admin+e2e-<runId>@example.test`、`preview-circle+e2e-<runId>@example.test`。只有對應 base 地址已列入 preview sink allowlist 才可使用；受 token 保護的 POST 建立該 run 的 admin。已有內容／已認領社團不覆寫。
+- 每個 run／attempt 使用保留的 `preview-admin+e2e-<runId>@example.test`、`preview-circle+e2e-<runId>@example.test`。只有對應 base 地址已列入 preview sink allowlist 才可使用；受 token 保護的 POST 建立該 run 的 admin。選定社團後再以 POST 核對原始 D1，任何狀態的 claims／overrides、或該社團 R2 prefix 中任一物件均拒絕；公開投影空白不代表原始資料不存在。通過後才走正常認領與編輯。
 - 流程 finally 及 CI always cleanup 使用 `DELETE /api/preview/mail` 加 JSON `{ "runId": "…" }`，只清除該 run 的帳號、登入資料、claims、自己最後更新的 overrides、對應通知／audit／captured mail 及臨時 admin。公開文件以同一交易移除相關項目，保留其他資料；此 journey 不建立 R2 物件，因此遠端 cleanup 不列舉或刪除 R2。空 body 的遠端 reset 拒絕；完整 reset 僅限 `LOCAL_PORTAL_DISPOSABLE=true` 且 HTTP loopback 的本機環境。
 - Runner 強制終止或網路持續失敗仍可能留下該 run 的資料；失敗保留 runId 於 log／runner 狀態檔，可針對同一 run 重做 cleanup，不得用整庫 reset 解決。七天 artifact 只供診斷，必要驗收摘要貼回 issue／PR。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。

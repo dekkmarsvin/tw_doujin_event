@@ -334,8 +334,8 @@ jobs:
           echo "::warning::Public production custom domain returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401. The Pages deployment passed separately, so inspect Cloudflare Security Events using the captured cf-ray values."
 
 
-  # Every PR uses the same disposable preview D1. A separate globally serialized
-  # job prevents one PR's cleanup from deleting another PR's in-flight fixture.
+  # Preview D1 is shared with manual acceptance. Serialize the circle journey;
+  # run-scoped cleanup retains other runs and manual data even on cancellation.
   preview-e2e:
     name: Full preview portal E2E
     if: needs.scope.outputs.profile == 'full' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

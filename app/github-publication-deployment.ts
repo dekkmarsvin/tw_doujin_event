@@ -105,14 +105,18 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
       proof = await verifyPublicationOrigin({ mainSha: sha, dataSha: input.job.data_merge_sha, eventId, eventIds, fetch: options.originFetch });
     } catch (error) {
       // A queued or cached older artifact is still retryable. Only a confirmed
-      // newer main already at the origin makes retrying this checkpoint futile.
+      // newer main-line commit already at the origin makes retry futile. A later
+      // docs-only main may legitimately leave that deployed commit unchanged.
       const latestMain = await adapter.readRef(repository, "main");
       if (latestMain !== sha) {
         const response = await (options.originFetch ?? fetch)(`${PAGES_PRODUCTION_ORIGIN}${DEPLOYMENT_MANIFEST_PATH}`, {
           redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(8_000),
         }).catch(() => null);
         const current = response?.status === 200 ? await response.json().catch(() => null) as { schema?: string; commit?: string } | null : null;
-        if (current?.schema === "publication-deployment/1" && current.commit === latestMain) {
+        if (current?.schema === "publication-deployment/1" && /^[a-f0-9]{40}$/.test(current.commit ?? "")
+          && current.commit !== sha && latestMain
+          && await adapter.isAncestor(repository, sha, current.commit!)
+          && await adapter.isAncestor(repository, current.commit!, latestMain)) {
           fail("publication_deployment_superseded", "main 已有較新的版本，不能重跑舊版本部署。");
         }
       }

@@ -29,10 +29,10 @@ export const onRequestGet: PagesFunction<PortalEnv> = async ({ request, env }) =
 };
 
 async function requestedFixture(request: Request, env: PortalEnv) {
-  const body = await request.json().catch(() => null) as { runId?: unknown } | null;
+  const body = await request.json().catch(() => null) as { runId?: unknown; eventId?: unknown; circleId?: unknown } | null;
   const fixture = previewFixture(body?.runId);
   if (!fixture || !previewSinkRecipientAllowed(env, fixture.adminEmail) || !previewSinkRecipientAllowed(env, fixture.circleEmail)) return null;
-  return fixture;
+  return { ...fixture, eventId: body?.eventId, circleId: body?.circleId };
 }
 
 /** CI verifies the immutable deployment's bindings before using this endpoint. */
@@ -40,7 +40,23 @@ export const onRequestPost: PagesFunction<PortalEnv> = async ({ request, env }) 
   if (!previewE2eAuthorized(env, request)) return json({ error: "not found" }, 404);
   const fixture = await requestedFixture(request, env);
   if (!fixture) return json({ error: "a reserved preview fixture run is required" }, 400);
-  await repositoryFor(env).addAdmin(fixture.adminEmail, `preview-e2e:${fixture.runId}`, Date.now());
+  const repository = repositoryFor(env);
+  if (fixture.eventId !== undefined || fixture.circleId !== undefined) {
+    const { eventId, circleId } = fixture;
+    if (typeof eventId !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(eventId)
+      || typeof circleId !== "string" || !/^[a-z0-9][a-z0-9-]{0,199}$/.test(circleId)) return json({ error: "a valid fixture target is required" }, 400);
+    await repository.ensureTables();
+    // Public projections hide withdrawn/taken-down content. Check retained
+    // source rows and even orphan thumbnail objects before normal product PUT
+    // can replace those rows or prune that circle's unreferenced images.
+    const existing = await env.DB.prepare(`SELECT 1 FROM circle_claims WHERE event_id = ?1 AND circle_id = ?2
+      UNION ALL SELECT 1 FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2 LIMIT 1`).bind(eventId, circleId).first();
+    if (existing) return json({ error: "fixture target has existing preview data" }, 409);
+    const objects = await env.THUMBNAILS.list({ prefix: `events/${encodeURIComponent(eventId)}/circles/${encodeURIComponent(circleId)}/`, limit: 1 });
+    if (objects.objects.length || objects.truncated) return json({ error: "fixture target has existing preview images" }, 409);
+    return json({ ok: true, runId: fixture.runId, eventId, circleId });
+  }
+  await repository.addAdmin(fixture.adminEmail, `preview-e2e:${fixture.runId}`, Date.now());
   return json({ ok: true, runId: fixture.runId });
 };
 
