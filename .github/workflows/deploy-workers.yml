@@ -9,6 +9,7 @@ on:
         options:
           - all
           - publication-production
+          - publication-preview
           - retention-production
           - retention-preview
         default: all

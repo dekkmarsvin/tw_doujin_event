@@ -8,9 +8,16 @@ export function previewFixture(runId: unknown) {
   };
 }
 
+const reservedAddress = /^(preview-admin|preview-circle)\+e2e-([a-z0-9][a-z0-9-]{7,43})@example\.test$/;
+
 export function previewFixtureAddressBase(address: string) {
-  const match = /^(preview-admin|preview-circle)\+e2e-([a-z0-9][a-z0-9-]{7,43})@example\.test$/.exec(address);
+  const match = reservedAddress.exec(address);
   return match ? `${match[1]}@example.test` : null;
+}
+
+/** The run that owns a reserved address; null for every other address. */
+export function previewFixtureRunId(address: string) {
+  return reservedAddress.exec(address)?.[2] ?? null;
 }
 
 export function localPreviewResetAllowed(env: PortalEnv, request: Request) {

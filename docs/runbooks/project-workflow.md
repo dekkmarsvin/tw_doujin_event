@@ -165,9 +165,9 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 | 項目 | 內容 | 證據等級 |
 |---|---|---|
 | Pages | `tw-catalog`：靜態閱讀與 Pages Functions，Direct Upload（無 Git 連線） | 已測量 |
-| 已部署 Worker | `tw-catalog-publication-dispatch`、`tw-catalog-retention-purge`、`tw-catalog-retention-purge-preview` | 已測量（API） |
-| 未部署 | `publication-dispatch` 的 preview 環境在設定檔中存在，但帳號上**沒有**對應 Worker | 已測量（API） |
-| 排程角色 | publication-dispatch 每分鐘；retention-purge 每日 `17 3 * * *`（production／preview 各一） | 設定檔 |
+| 已部署 Worker | `tw-catalog-publication-dispatch`、`tw-catalog-publication-dispatch-preview`、`tw-catalog-retention-purge`、`tw-catalog-retention-purge-preview` | 已測量（API，2026-09-25） |
+| preview 通知 Worker | `tw-catalog-publication-dispatch-preview` 於 2026-09-23 由 [PR #349](https://github.com/dekkmarsvin/tw_doujin_event/pull/349) 記錄的授權 Direct Upload 建立，綁 preview D1、publication 停用；觀測設定與 production 相同，7.3 第 6 點的 events 估算未含它 | 已測量（API）／設定檔 |
+| 排程角色 | publication-dispatch 每分鐘、retention-purge 每日 `17 3 * * *`，兩者 production／preview 各一 | 設定檔 |
 | D1 | production `3,014,656` bytes、preview `532,480` bytes | 已測量（API） |
 | R2 | thumbnails、map-contributions，production／preview 各一，共 4 個 bucket | 已測量（API） |
 | 觀測 | 兩個獨立 Worker 的 Logs 與 Traces 均為全量取樣（`head_sampling_rate: 1`） | 設定檔 |

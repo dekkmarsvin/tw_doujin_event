@@ -1,7 +1,24 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { sourceFingerprint, inputDigest, activeWorkerVersion, assertWorkerConfiguration, inspectWorker } from "../scripts/worker-delivery.mjs";
+import ts from "typescript";
+import { WORKER_TARGETS, sourceFingerprint, inputDigest, activeWorkerVersion, assertWorkerConfiguration, inspectWorker } from "../scripts/worker-delivery.mjs";
 import { cloudflareApi } from "../scripts/cloudflare-api.mjs";
+
+test("delivery covers each existing Worker once, built from a declared environment of its config", async () => {
+  // The account's independent Workers. Adding one is a deliberate decision.
+  assert.deepEqual(WORKER_TARGETS.map(target => target.name).sort(), ["tw-catalog-publication-dispatch",
+    "tw-catalog-publication-dispatch-preview", "tw-catalog-retention-purge", "tw-catalog-retention-purge-preview"]);
+  assert.equal(new Set(WORKER_TARGETS.map(target => target.id)).size, WORKER_TARGETS.length);
+  const workflow = await readFile(new URL("../.github/workflows/deploy-workers.yml", import.meta.url), "utf8");
+  for (const target of WORKER_TARGETS) {
+    const parsed = ts.parseConfigFileTextToJson(target.config, await readFile(new URL(`../${target.config}`, import.meta.url), "utf8"));
+    assert.ok(!parsed.error);
+    assert.ok(!target.env || parsed.config.env?.[target.env], `${target.id} must name a declared environment`);
+    assert.equal(target.name, target.env ? `${parsed.config.name}-${target.env}` : parsed.config.name);
+    assert.match(workflow, new RegExp(`^ {10}- ${target.id}$`, "m"), `${target.id} must be selectable in the manual workflow`);
+  }
+});
 
 test("Worker source identity is stable across checkout line endings and input order, but tracks dependency and environment changes", () => {
   assert.equal(inputDigest("app/handler.ts", Buffer.from("a\r\nb\r\n")), inputDigest("app/handler.ts", Buffer.from("a\nb\n")));

@@ -1,4 +1,20 @@
-import { previewFixture } from "../app/preview-fixture";
+import { previewFixture, previewFixtureRunId } from "../app/preview-fixture";
+
+/** Runs that still own reserved rows. The remote journey runs under one global
+ * CI lock, so when a run starts every run listed here has already ended —
+ * including one whose own cleanup never landed. Manual data never matches. */
+export async function listPreviewFixtureRuns(database: D1Database) {
+  const found = await database.batch<{ email: string }>(["accounts", "login_tokens", "preview_mail_sink", "admins"]
+    .map(table => database.prepare(`SELECT email FROM ${table} WHERE email LIKE 'preview-%+e2e-%@example.test'`)));
+  const runs = new Set<string>();
+  for (const { results } of found) {
+    for (const { email } of results) {
+      const runId = previewFixtureRunId(email);
+      if (runId) runs.add(runId);
+    }
+  }
+  return [...runs].sort();
+}
 
 /** Only data created by the remote circle journey. Full resets stay local.
  * Overlay edits and deletes share a transaction, retaining unrelated edits. */
