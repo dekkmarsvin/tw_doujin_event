@@ -193,7 +193,7 @@ main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本
 | `workflow_dispatch` | 從 GitHub Actions 頁面手動重跑目前 branch |
 
 - **只有一次部署，沒有先發到開發環境再晉升的流程。**
-- PR 在 workflow 層取消同 PR 的舊 run；main 不自動取消，使用 `queue: max` 保留最多 100 個 pending run。GitHub 依進入鎖的順序執行，不保證 dispatch 順序；部署前另查 main，舊 checkout 已被取代就失敗，避免延遲 run 回退 production。滿佇列仍可能取消，不能把排隊等同交付。[GitHub concurrency 規則](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
+- PR 在 workflow 層取消同 PR 的舊 run；main 不自動取消，使用 `queue: max` 保留最多 100 個 pending run。GitHub 依進入鎖的順序執行，不保證 dispatch 順序。分類 job 先查 main：開始時已被取代的 run 在測試與 browser 之前結束，不長時間占住鎖；部署前再查一次，涵蓋只重跑失敗 job 時沿用舊分類結果的情況，避免延遲 run 回退 production。滿佇列仍可能取消，不能把排隊等同交付。[GitHub concurrency 規則](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
 - 分類也在 workflow 鎖內；文件更新若仍含未交付產品差異，會承接完整 gate。publication 維持原 SHA／attempt 與必要 smoke；舊 run 失敗且 main 已前進，或 origin commit 已由 GitHub ancestry 證明是本 SHA 之後、目前 main 歷史中的版本時，回不可重試 superseded，交由管理者核對，不能反覆重跑舊 checkout 或自動算成 published。後續只有文件更新而未部署時也適用。
 - Node.js `24.20.0`（`.nvmrc`）、npm `11.19.0`、`npm ci`、Wrangler `4.120.1`，build output 固定為 `dist`。
 - Pages 使用 repository root 的 `wrangler.jsonc`；獨立 Worker 使用各自目錄的設定。

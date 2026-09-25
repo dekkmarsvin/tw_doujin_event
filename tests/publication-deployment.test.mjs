@@ -187,6 +187,19 @@ test("queued deployment keeps its checkpoint; a superseded failure never offers 
   assert.equal(cancelled.state.writes, 0);
 });
 
+test("a run the scope gate stopped before verification reads as superseded, not as an identity failure", async () => {
+  for (const step of ["waiting_deployment", "verifying_production"]) {
+    const { state, input, driver } = fixture();
+    input.step = step;
+    state.run.conclusion = "failure";
+    // GitHub lists a job skipped by a failed dependency with no steps.
+    Object.assign(state.jobs[0], { conclusion: "skipped", steps: [] });
+    state.latestMain = "a".repeat(40);
+    await assert.rejects(driver.run(input), error => error.code === "publication_deployment_superseded" && !error.retryable);
+    assert.equal(state.writes, 0);
+  }
+});
+
 test("only a confirmed newer main at production is superseded; an older origin stays retryable", async () => {
   for (const confirmed of [false, true]) {
     const { state, input, driver, origin } = fixture();

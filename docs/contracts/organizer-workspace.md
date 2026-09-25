@@ -313,7 +313,7 @@ CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部�
 
 部署或 workflow smoke 失敗記錄 retryable `publication_deployment_failed`；既有 Owner／Admin retry 交易僅授權原 run 的下一個 attempt，保留 snapshot、data／main SHA、PR 與原 stage。Adapter 重跑原 run，接受 GitHub 空 body 201，回應遺失後先 reconcile 已出現的下一 attempt；未經 retry 的 attempt 改變 fail closed。重跑前在既有 lease／remote intent 下重查 main，若已前進就拒絕部署舊 checkout。只有 origin 檢查失敗則重驗 origin，不重新建立 PR 或主動重部署。模擬 GitHub／本機 D1 證據不能代替真正的發布失敗恢復。
 
-main CI 採保留 pending run 的序列佇列，不主動取消已開始的部署；部署前拒絕已被 main 取代的 checkout。排隊中的固定 run／attempt 維持 pending。部署 job 已失敗且 main 已前進，或必要 origin 驗證失敗後另以 GitHub ancestry 確認公開 manifest commit 位於本 SHA 之後且屬目前 main 歷史，回不可重試 `publication_deployment_superseded`，保留 checkpoint 交由管理者核對，不提供無效的舊版本重試，也不把新版本的成功當成本 job 的 published 證據。較新部署後又有純文件 main 前進也適用。只讀到較舊 cache、其他分支或無法確認新版本時，保留原本 origin 失敗的重驗邊界。
+main CI 採保留 pending run 的序列佇列，不主動取消已開始的部署；分類 job 與部署前都拒絕已被 main 取代的 checkout，分類時拒絕的部署 job 為 skipped，同樣是未成功。排隊中的固定 run／attempt 維持 pending。部署 job 未成功且 main 已前進，或必要 origin 驗證失敗後另以 GitHub ancestry 確認公開 manifest commit 位於本 SHA 之後且屬目前 main 歷史，回不可重試 `publication_deployment_superseded`，保留 checkpoint 交由管理者核對，不提供無效的舊版本重試，也不把新版本的成功當成本 job 的 published 證據。較新部署後又有純文件 main 前進也適用。只讀到較舊 cache、其他分支或無法確認新版本時，保留原本 origin 失敗的重驗邊界。
 
 既有純函式邊界保留：
 

@@ -34,6 +34,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      # main queues rather than cancels. A run that starts after main has moved
+      # on ends here, before tests or browser journeys hold the lock; publication
+      # reads its skipped deployment as superseded.
+      - name: Reject a superseded main run
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          latest="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "::error::main is at $latest; this run for $GITHUB_SHA was superseded before it started and will not verify or deploy."
+            exit 1
+          fi
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
@@ -134,8 +146,9 @@ jobs:
           echo "::add-mask::$token"
           printf 'token=%s\n' "$token" >> "$GITHUB_OUTPUT"
 
-      # FIFO is based on arrival at the concurrency lock, not dispatch time.
-      # A delayed old run must never replace a newer production checkout.
+      # The scope job stops runs superseded before they start, but re-running
+      # failed jobs reuses its result. An old checkout must never replace a
+      # newer production deployment, so check again right before deploying.
       - name: Reject a superseded production checkout
         if: github.event_name != 'pull_request' && github.ref_name == 'main'
         shell: bash
