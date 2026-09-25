@@ -456,8 +456,14 @@ test("a venue record without an address is completed once through an editable ca
   }
   await database.prepare("UPDATE organizer_event_candidates SET status = 'draft' WHERE id = ?1").bind(candidateId).run();
   // A venue this candidate does not use is not completed through it.
-  await withoutAddress(VENUE_ID);
-  assert.equal((await complete({ ...input, referenceId: VENUE_ID })).status, 409);
+  const unrelatedVenue = (await repository.listOrganizerReferenceRecords()).find(({ id }) => id === VENUE_ID);
+  try {
+    await withoutAddress(VENUE_ID);
+    assert.equal((await complete({ ...input, referenceId: VENUE_ID })).status, 409);
+  } finally {
+    await database.prepare("UPDATE organizer_reference_records SET public_reference_json = ?1 WHERE path = ?2")
+      .bind(unrelatedVenue.publicReferenceJson, unrelatedVenue.path).run();
+  }
 
   assert.equal((await complete()).status, 201);
   const completed = (await repository.listOrganizerReferenceRecords()).find(({ id }) => id === venue.id);
