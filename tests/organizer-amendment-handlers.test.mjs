@@ -457,7 +457,6 @@ test("a correction can give a published event its picture, which approval then m
   const id = await create();
   const form = new FormData();
   form.append("file", await eventPng(1200, 675));
-  form.append("rightsConfirmed", "true");
   const uploaded = await handlers.putOrganizerEventImage(new Request(`${origin}/api/organizer/events/${id}/image`,
     { method: "PUT", headers: { origin, cookie: owner }, body: form }), id);
   assert.equal(uploaded.status, 200, await uploaded.clone().text());

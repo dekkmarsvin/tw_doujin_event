@@ -4,11 +4,13 @@
 // evidence of a production amendment or GitHub App publication.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "vite";
 import { amendmentFixture } from "../support/organizer-amendment-fixture.mjs";
 import { planCircleIdentityRegistryUpdate } from "../../app/circle-identity-registry.mjs";
 import { planOrganizerAmendment } from "../../app/organizer-amendment.mjs";
-import { base, start } from "./support/journey.mjs";
+import { base, output, start } from "./support/journey.mjs";
+import { png } from "./support/png.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const fixture = await amendmentFixture(vite.environments.ssr.runner);
@@ -210,5 +212,50 @@ try {
   assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");
   assert.equal(delayed.state.otherVersion, 2);
   await moving.close();
+
+  // Equal dimensions must not hide which picture a saved correction replaces.
+  // The previous image is public, while the replacement still needs its
+  // authenticated candidate preview. These are UI fixtures, not publication.
+  const oldBytes = png(1200, 630, 0x40), newBytes = png(1200, 630, 0xb8);
+  const image = (bytes) => {
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    return { sha256, url: `https://thumbs.example/event-images/${sha256}.png`, contentType: "image/png", width: 1200, height: 630 };
+  };
+  const oldImage = image(oldBytes), newImage = image(newBytes);
+  baseline.draft.event.image = oldImage;
+  baseline.event.image = { url: oldImage.url, width: 1200, height: 630 };
+  const imageRoutes = fixtureRoutes("owner", true);
+  imageRoutes.state.settings = { image: newImage };
+  const publicReads = [];
+  const pictures = await journey.page({ url: `${base}/organizer`, routes: async (page) => {
+    await imageRoutes.routes(page);
+    await page.route("https://thumbs.example/**", (route) => {
+      publicReads.push(route.request().url());
+      return route.fulfill({ contentType: "image/png", body: route.request().url() === oldImage.url ? oldBytes : newBytes });
+    });
+    await page.route("**/api/organizer/events/amendment/image?**", (route) => route.fulfill({ contentType: "image/png", body: newBytes }));
+  } });
+  const imageImpact = pictures.getByRole("region", { name: "已儲存的活動設定更正" });
+  const beforeImage = imageImpact.getByRole("img", { name: "原本的活動圖片", exact: true });
+  const afterImage = imageImpact.getByRole("img", { name: "修正後的活動圖片", exact: true });
+  await beforeImage.waitFor(); await afterImage.waitFor();
+  await pictures.waitForFunction(() => [...document.querySelectorAll('img[alt$="的活動圖片"]')].every((image) => image.complete && image.naturalWidth === 1200));
+  assert.equal(await beforeImage.getAttribute("src"), oldImage.url);
+  assert.match(await afterImage.getAttribute("src"), new RegExp(`/api/organizer/events/amendment/image\\?sha256=${newImage.sha256}`));
+  assert.ok(!publicReads.includes(newImage.url), "the saved replacement is previewed without requesting its unpublished public address");
+  await imageImpact.scrollIntoViewIfNeeded();
+  await journey.capture(pictures, "organizer-amendment-image-comparison");
+  await imageImpact.screenshot({ path: `${output}/organizer-amendment-image-comparison-detail.png` });
+  await pictures.getByRole("button", { name: "移除圖片", exact: true }).click();
+  await pictures.getByText("活動設定尚未儲存；下方顯示的影響仍是上次儲存內容。", { exact: true }).waitFor();
+  await pictures.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
+  await imageImpact.getByText("無", { exact: true }).waitFor();
+  assert.equal(await imageImpact.getByRole("img").count(), 1, "removal shows the previous image and no replacement");
+  assert.equal(imageRoutes.state.settings.image, null);
+  await pictures.getByRole("button", { name: "改回已發布的圖片", exact: true }).click();
+  await pictures.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
+  await imageImpact.getByText("目前已儲存的內容沒有活動設定變動。", { exact: true }).waitFor();
+  assert.equal(imageRoutes.state.settings, null);
+  await pictures.close();
   await journey.finish();
 } catch (error) { await journey.abort(error); }

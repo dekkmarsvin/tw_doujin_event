@@ -285,7 +285,6 @@ export function saveOrganizerMap(candidateId: string, draftId: string, input: {
 export function uploadOrganizerEventImage(candidateId: string, file: File) {
   const form = new FormData();
   form.append("file", file);
-  form.append("rightsConfirmed", "true");
   return organizerCall<{ ok: true; image: EventImage }>(
     `/api/organizer/events/${encodeURIComponent(candidateId)}/image`, { method: "PUT", body: form },
   );
