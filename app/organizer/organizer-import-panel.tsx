@@ -434,6 +434,7 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
 }) {
   const [venueName, setVenueName] = useState("");
   const [venueUrl, setVenueUrl] = useState("");
+  const [venueAddress, setVenueAddress] = useState("");
   const [spaceName, setSpaceName] = useState("");
   const [spaceUrl, setSpaceUrl] = useState("");
   const [defaultAreaMode, setDefaultAreaMode] = useState<OrganizerVenueSpaceAreaMode>("imported");
@@ -446,7 +447,7 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
   const inheritedUrl = venue?.sourceUrl ?? venueUrl.trim();
   /* noValidate because the browser bubble is not this app's error surface:
    * every other field on this page answers inline, under the field it is
-   * about. Owning the check here means owning all four, not two. */
+   * about. Owning the check here means owning all five, not two. */
   return <form className={styles.catalogCreator} noValidate onSubmit={(event) => {
     event.preventDefault();
     const errors: Record<string, string> = {};
@@ -454,6 +455,7 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
       if (!venueName.trim()) errors.venueName = "請填寫場館名稱。";
       const source = normalizeOrganizerVenueSourceUrl(venueUrl);
       if (!source) errors.venueUrl = source === undefined ? "場館官方網址必須是 https:// 開頭的網址。" : "請填寫場館官方網址。";
+      if (!venueAddress.trim()) errors.venueAddress = "請填寫場館地址。";
     }
     if (!spaceName.trim()) errors.spaceName = "請填寫場地名稱。";
     if (normalizeOrganizerVenueSourceUrl(spaceUrl) === undefined) {
@@ -468,6 +470,7 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
       : createOrganizerVenue(candidateId, {
         name: venueName,
         sourceUrl: venueUrl,
+        address: venueAddress,
         initialSpace: { name: spaceName, sourceUrl: spaceUrl, defaultAreaMode },
       }).then(({ venue: created, space }) => ({ venue: { ...created, spaces: [space] }, space }));
     void action.then(({ venue: created, space }) => {
@@ -480,6 +483,8 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
       {!venue && <>
         <label>場館名稱<input maxLength={120} aria-invalid={fieldErrors.venueName ? true : undefined} value={venueName} onChange={(event) => setVenueName(event.target.value)} />{fieldErrors.venueName && <small className={styles.fieldError}>{fieldErrors.venueName}</small>}</label>
         <label>場館官方網址<input type="url" placeholder="https://" aria-invalid={fieldErrors.venueUrl ? true : undefined} value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} />{fieldErrors.venueUrl && <small className={styles.fieldError}>{fieldErrors.venueUrl}</small>}</label>
+        <label>場館地址<input maxLength={200} aria-invalid={fieldErrors.venueAddress ? true : undefined} value={venueAddress} onChange={(event) => setVenueAddress(event.target.value)} />
+          {fieldErrors.venueAddress ? <small className={styles.fieldError}>{fieldErrors.venueAddress}</small> : <small>貼上場館官方網站上的完整地址。</small>}</label>
       </>}
       <label>場地名稱<input maxLength={120} placeholder="例如：全館、1F 展場" aria-invalid={fieldErrors.spaceName ? true : undefined} value={spaceName} onChange={(event) => setSpaceName(event.target.value)} />{fieldErrors.spaceName && <small className={styles.fieldError}>{fieldErrors.spaceName}</small>}</label>
       <label>場地官方網址（選填）<input type="url" placeholder="https://" aria-invalid={fieldErrors.spaceUrl ? true : undefined} value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} />

@@ -24,6 +24,25 @@ ${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xm
 ${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}</head><body class="discovery"><header>${link("/", "場刊 Map")}</header><main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
 }
 
+// Postal code, country, city or county, postal code, district, the rest.
+const TAIWAN_ADDRESS = /^(?:(\d{3}(?:\d{2,3})?) ?)?(?:(?:中華民國|[臺台]灣) ?)?([臺台]北市|新北市|桃園市|[臺台]中市|[臺台]南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|[臺台]東縣|澎湖縣|金門縣|連江縣) ?(?:(\d{3}(?:\d{2,3})?) ?)?(?:([^\s\d]{1,3}?[區鄉鎮市]) ?)?(.+)$/u;
+
+/**
+ * The venue's address as schema.org wants it, split from the one line the
+ * venue's official page prints (#395). Taiwanese addresses name the city or
+ * county, then the district, and put the postal code in front of either; a
+ * line that does not read that way is still an address, and goes out whole
+ * as the street rather than being dropped or guessed at.
+ */
+export function venuePostalAddress(address: string) {
+  const [, leadingCode, region, innerCode, locality, street] = TAIWAN_ADDRESS.exec(address) ?? [];
+  const postalCode = leadingCode ?? innerCode;
+  return region ? {
+    "@type": "PostalAddress", streetAddress: street, ...(locality ? { addressLocality: locality } : {}), addressRegion: region,
+    ...(postalCode ? { postalCode } : {}), addressCountry: "TW",
+  } : { "@type": "PostalAddress", streetAddress: address, addressCountry: "TW" };
+}
+
 function eventFacts(event: EventDefinition) {
   const calendar = eventCalendar(event);
   const venues = [...new Set(event.venueAssignments.map((venue) => venue.venueName))];
@@ -65,7 +84,8 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
     // page's og:image also names; Search Console asks for one either way.
     image: [pageMetadata(event).image.url],
     startDate: [...dates].sort()[0], endDate: [...dates].sort().at(-1),
-    location: [...new Map(event.venueAssignments.map((venue) => [venue.venueId, { "@type": "Place", name: venue.venueName, url: venue.venueOfficialUrl }])).values()],
+    location: [...new Map(event.venueAssignments.map((venue) => [venue.venueId, { "@type": "Place", name: venue.venueName, url: venue.venueOfficialUrl,
+      ...(venue.venueAddress ? { address: venuePostalAddress(venue.venueAddress) } : {}) }])).values()],
     organizer: event.organizerAssignments.map((organizer) => ({ "@type": "Organization", name: organizer.name, url: organizer.officialUrl })),
   } : undefined;
   const aliases = event.aliases?.length ? `<p>別稱：${escapeHtml(event.aliases.join("、"))}</p>` : "";

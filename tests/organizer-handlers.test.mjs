@@ -238,10 +238,23 @@ test("an event organizer can list and immediately extend the shared venue catalo
   ), candidateId);
   assert.equal(missingSource.status, 400);
 
+  // #395: a venue always has an address, and whitespace is not one.
+  for (const address of [undefined, "", "   "]) {
+    const missingAddress = await handlers.createOrganizerVenue(request(
+      `/api/organizer/events/${candidateId}/venues`, "POST", {
+        name: "沒有地址的場館", sourceUrl: "https://venue.example/no-address", address,
+        initialSpace: { name: "全館", sourceUrl: null, defaultAreaMode: "none" },
+      }, ownerCookie,
+    ), candidateId);
+    assert.equal(missingAddress.status, 400);
+    assert.equal((await missingAddress.json()).error, "請填寫場館地址。");
+  }
+
   const createdVenue = await handlers.createOrganizerVenue(request(
     `/api/organizer/events/${candidateId}/venues`, "POST", {
       name: "松山文創園區",
       sourceUrl: "https://venue.example/songshan",
+      address: "  110 臺北市信義區光復南路133號 ",
       initialSpace: {
         name: "1 號倉庫",
         sourceUrl: "https://venue.example/songshan/1",
@@ -254,6 +267,11 @@ test("an event organizer can list and immediately extend the shared venue catalo
   assert.match(createdVenueBody.venue.id, /^venue-[0-9a-f-]{36}$/u);
   assert.match(createdVenueBody.space.id, /^venue-space-[0-9a-f-]{36}$/u);
   assert.equal(createdVenueBody.space.venueId, createdVenueBody.venue.id);
+  const createdRecord = JSON.parse((await repository.listOrganizerReferenceRecords())
+    .find(({ id }) => id === createdVenueBody.venue.id).publicReferenceJson);
+  assert.equal(createdRecord.address, "110 臺北市信義區光復南路133號");
+  assert.deepEqual(createdRecord.provenance["/address"], ["official-source"]);
+  assert.equal((await repository.listOrganizerVenueCatalog()).venues.some(({ name }) => name === "沒有地址的場館"), false);
 
   // #219: 「全館」 rarely has a page of its own and an organizer usually has
   // one official address, so a blank space URL inherits the venue rather than
@@ -262,6 +280,7 @@ test("an event organizer can list and immediately extend the shared venue catalo
     `/api/organizer/events/${candidateId}/venues`, "POST", {
       name: "三重體育館",
       sourceUrl: "https://venue.example/sanchong",
+      address: "新北市三重區集美街212號",
       initialSpace: { name: "全館", sourceUrl: "", defaultAreaMode: "none" },
     }, ownerCookie,
   ), candidateId);
@@ -333,7 +352,7 @@ test("legacy venue references are explicitly completed without replacing records
   const { candidateId } = await created.json();
   const path = `/api/organizer/events/${candidateId}`;
   const venueResponse = await handlers.createOrganizerVenue(request(`${path}/venues`, "POST", {
-    name: "舊場館", sourceUrl: "https://venue.example/legacy",
+    name: "舊場館", sourceUrl: "https://venue.example/legacy", address: "100 臺北市中正區舊場館路1號",
     initialSpace: { name: "全館", sourceUrl: "https://venue.example/legacy/1f", defaultAreaMode: "none" },
   }, cookie), candidateId);
   const { venue, space } = await venueResponse.json();
@@ -349,13 +368,15 @@ test("legacy venue references are explicitly completed without replacing records
   const before = await getDetail();
   assert.deepEqual(before.missingVenueReferences.map(({ id }) => id).sort(), [venue.id, space.id].sort());
   assert.equal(before.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "needs_attention");
-  const input = { expectedVersion: 2, kind: "venue", referenceId: venue.id, name: "正式場館名稱", sourceUrl: "https://venue.example/official" };
+  const input = { expectedVersion: 2, kind: "venue", referenceId: venue.id, name: "正式場館名稱", sourceUrl: "https://venue.example/official",
+    address: "100 臺北市中正區正式路1號" };
   const complete = (body = input, session = cookie) => handlers.createOrganizerReferenceEntry(request(`${path}/references`, "POST", body, session), candidateId);
   assert.equal((await complete(input, "")).status, 401);
   const stranger = await signIn("stranger@example.test", "organizer");
   assert.equal((await complete(input, stranger)).status, 404);
   assert.equal((await complete({ ...input, expectedVersion: 1 })).status, 409);
   assert.equal((await complete({ ...input, sourceUrl: "http://venue.example/" })).status, 400);
+  assert.equal((await complete({ ...input, address: " " })).status, 400);
   for (const status of ["submitted", "approved", "failed", "published"]) {
     await database.prepare("UPDATE organizer_event_candidates SET status = ?1 WHERE id = ?2").bind(status, candidateId).run();
     assert.equal((await complete()).status, 409, status);
@@ -367,6 +388,7 @@ test("legacy venue references are explicitly completed without replacing records
   assert.equal((await complete()).status, 201);
   const canonical = (await repository.listOrganizerReferenceRecords()).find((item) => item.id === venue.id);
   assert.equal(JSON.parse(canonical.publicReferenceJson).name, input.name);
+  assert.equal(JSON.parse(canonical.publicReferenceJson).address, input.address);
   assert.equal(canonical.sourceCapturedAt, now);
   const auditCount = async () => (await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE subject_id = ?1 AND action = 'organizer_reference.created'").bind(venue.id).first()).total;
   assert.equal(await auditCount(), 1);
@@ -381,6 +403,89 @@ test("legacy venue references are explicitly completed without replacing records
   assert.deepEqual(after.draft, before.draft);
   assert.equal(after.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "complete");
   assert.equal(after.venueCatalog.venues.find((item) => item.id === venue.id).name, "舊場館");
+});
+
+// #395: records written before venues had addresses gain one, in place, and
+// nothing else about them moves.
+test("a venue record without an address is completed once through an editable candidate", async () => {
+  const cookie = await signIn("admin@example.test", "organizer");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "補上地址", ownerEmail: "admin@example.test" }, cookie));
+  const { candidateId } = await created.json();
+  const path = `/api/organizer/events/${candidateId}`;
+  const { venue, space } = await (await handlers.createOrganizerVenue(request(`${path}/venues`, "POST", {
+    name: "沒地址的舊場館", sourceUrl: "https://venue.example/old", address: "暫時的地址",
+    initialSpace: { name: "全館", sourceUrl: null, defaultAreaMode: "none" },
+  }, cookie), candidateId)).json();
+  // Reproduce a record saved before #395: the same facts without an address.
+  const withoutAddress = async (id) => {
+    const row = (await repository.listOrganizerReferenceRecords()).find((item) => item.id === id);
+    const value = JSON.parse(row.publicReferenceJson);
+    const { "/address": pointer, ...provenance } = value.provenance;
+    const cited = new Set(Object.values(provenance).flat());
+    const old = { ...value, sources: value.sources.filter((source) => cited.has(source.id) || !pointer.includes(source.id)), provenance };
+    delete old.address;
+    await database.prepare("UPDATE organizer_reference_records SET public_reference_json = ?1 WHERE path = ?2")
+      .bind(`${JSON.stringify(old, null, 2)}\n`, row.path).run();
+    return { row, old };
+  };
+  const { row: stored, old } = await withoutAddress(venue.id);
+  const references = await createReferenceSelection(candidateId, cookie);
+  const draft = { schema: "organizer-event-draft/1",
+    event: { id: "old-venue-address", name: "補上地址", days: [{ id: "1", label: "第 1 日", date: "2026-10-09" }] },
+    venue: { assignments: [{ venueId: venue.id, venueSpaceId: space.id, areaMode: "none", areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1" }] },
+    officialSource: { label: "主辦提供", url: "https://organizer.example/event" }, references };
+  assert.equal((await handlers.updateOrganizerCandidate(request(path, "PATCH", { expectedVersion: 1, draft }, cookie), candidateId)).status, 200);
+  const getDetail = async () => (await handlers.getOrganizerCandidate(request(path, "GET", undefined, cookie), candidateId)).json();
+  const before = await getDetail();
+  assert.deepEqual(before.missingVenueAddresses, [{ id: venue.id, name: "沒地址的舊場館" }]);
+  assert.deepEqual(before.missingVenueReferences, []);
+  assert.equal(before.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "needs_attention");
+  assert.ok(before.workspace.readiness.blockers.some((blocker) => blocker.code === "missing_venue_address" && blocker.section === "venue"));
+
+  const input = { expectedVersion: 2, kind: "venue-address", referenceId: venue.id, address: " 100 臺北市中正區新路1號 " };
+  const complete = (body = input, session = cookie) => handlers.createOrganizerReferenceEntry(request(`${path}/references`, "POST", body, session), candidateId);
+  assert.equal((await complete(input, "")).status, 401);
+  assert.equal((await complete(input, await signIn("stranger@example.test", "organizer"))).status, 404);
+  assert.equal((await complete({ ...input, address: "  " })).status, 400);
+  assert.equal((await complete({ ...input, referenceId: "venue-missing" })).status, 404);
+  assert.equal((await complete({ ...input, expectedVersion: 1 })).status, 409);
+  for (const status of ["submitted", "approved", "published"]) {
+    await database.prepare("UPDATE organizer_event_candidates SET status = ?1 WHERE id = ?2").bind(status, candidateId).run();
+    assert.equal((await complete()).status, 409, status);
+  }
+  await database.prepare("UPDATE organizer_event_candidates SET status = 'draft' WHERE id = ?1").bind(candidateId).run();
+  // A venue this candidate does not use is not completed through it.
+  const unrelatedVenue = (await repository.listOrganizerReferenceRecords()).find(({ id }) => id === VENUE_ID);
+  try {
+    await withoutAddress(VENUE_ID);
+    assert.equal((await complete({ ...input, referenceId: VENUE_ID })).status, 409);
+  } finally {
+    await database.prepare("UPDATE organizer_reference_records SET public_reference_json = ?1 WHERE path = ?2")
+      .bind(unrelatedVenue.publicReferenceJson, unrelatedVenue.path).run();
+  }
+
+  assert.equal((await complete()).status, 201);
+  const completed = (await repository.listOrganizerReferenceRecords()).find(({ id }) => id === venue.id);
+  const record = JSON.parse(completed.publicReferenceJson);
+  assert.equal(record.address, "100 臺北市中正區新路1號");
+  assert.deepEqual(record.sources.map(({ id }) => id), ["official-source", "address-source"]);
+  assert.deepEqual(record.sources[0], old.sources[0]);
+  assert.deepEqual(record.sources[1], { id: "address-source", kind: "venue-official", url: "https://venue.example/old", retrievedAt: new Date(now).toISOString() });
+  assert.deepEqual(record.provenance, { ...old.provenance, "/address": ["address-source"] });
+  assert.equal(completed.sourceCapturedAt, stored.sourceCapturedAt);
+  const auditCount = async () => (await database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE subject_id = ?1 AND action = 'organizer_reference.address_completed'").bind(venue.id).first()).total;
+  assert.equal(await auditCount(), 1);
+  // Once there is an address, it is not replaced through this path.
+  assert.equal((await complete({ ...input, address: "另一個地址" })).status, 409);
+  assert.equal(await auditCount(), 1);
+  assert.equal((await repository.listOrganizerReferenceRecords()).find(({ id }) => id === venue.id).publicReferenceJson, completed.publicReferenceJson);
+
+  const after = await getDetail();
+  assert.deepEqual(after.missingVenueAddresses, []);
+  assert.equal(after.event.version, before.event.version);
+  assert.deepEqual(after.draft, before.draft);
+  assert.equal(after.workspace.readiness.sections.find((item) => item.id === "venue")?.state, "complete");
 });
 
 test("candidate updates reject missing and mismatched venue catalog references", async () => {

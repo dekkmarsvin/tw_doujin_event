@@ -14,6 +14,7 @@ if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR 
 const runner = vite.environments.ssr.runner;
 const builder = await runner.import("/app/publication-artifacts.ts");
 const catalog = await runner.import("/app/organizer-reference-catalog.ts");
+const { pinnedVenue } = await runner.import("/app/organizer-reference-seeds.ts");
 const { validateStagedEventArtifacts } = await runner.import("/app/staged-event-data.ts");
 after(() => vite.close());
 const hash = (text) => createHash("sha256").update(text).digest("hex");
@@ -128,6 +129,36 @@ test("existing references preserve original bytes and pin the actual merged form
   }
   existing.references.delete(reference.path);
   await assert.rejects(builder.buildPublicationDataStage(approved, existing), /尚未核對/);
+});
+
+// #395: FF47 published 爭艷館 without an address. The next event there
+// publishes the record with its address added, over the old one, and every
+// other difference is still refused.
+test("an existing venue record is replaced only by the same record with its address added", async () => {
+  const snapshot = await sample();
+  const approved = source(snapshot);
+  const venuePath = "references/venues/taipei-expo-park-zhengyan-hall.json";
+  const completed = snapshot.references.files.find((file) => file.path === venuePath);
+  assert.equal(JSON.parse(completed.content).address, "10452 臺北市中山區玉門街1號");
+  const existing = base(snapshot);
+  existing.references.set(venuePath, pinnedVenue);
+  const data = await builder.buildPublicationDataStage(approved, existing);
+  assert.equal(data.files.find((file) => file.path === venuePath)?.text, completed.content);
+  assert.equal(data.allFiles.find((file) => file.path === venuePath).text, completed.content);
+  const main = await builder.buildPublicationMainStage(approved, mainInput(data.allFiles));
+  const pin = JSON.parse(main.files.find((file) => file.path.includes("event-data-pins/")).text);
+  assert.equal(pin.files.find((file) => file.path === venuePath).sha256, hash(completed.content));
+  // FF47's own pin names the old bytes at its own commit and does not move.
+  assert.equal(await readFile("data/event-data-pins/ff47.json", "utf8"), ff47PinBefore);
+
+  const renamed = JSON.parse(pinnedVenue);
+  renamed.name = "爭艷館（舊名）";
+  const otherAddress = JSON.parse(completed.content);
+  otherAddress.address = "臺北市中山區另一個地址";
+  for (const value of [JSON.stringify(renamed), JSON.stringify(otherAddress)]) {
+    const conflict = base(snapshot); conflict.references.set(venuePath, value);
+    await assert.rejects(builder.buildPublicationDataStage(approved, conflict), (error) => error.code === "reference_conflict");
+  }
 });
 
 test("legacy, altered approvals, collisions, missing maps and merged-data drift fail before a write set", async () => {

@@ -13,7 +13,7 @@ import { VenueCatalogCreator } from "./organizer-import-panel";
 import { OrganizerReferencePanel } from "./organizer-reference-panel";
 import { EventImageField } from "./organizer-event-image";
 import { GUIDED_LABEL, TASK_QUESTION, mapTemplatePreview, message, organizerGuidedDraftIssues } from "./organizer-shared";
-import { OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
+import { OrganizerVenueAddressPanel, OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
 import { useCallback, useEffect, useState } from "react";
@@ -181,6 +181,11 @@ export function DraftForm({
       {detail.missingVenueReferences?.map((entry) => <OrganizerVenueReferencePanel key={entry.id}
         entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
         disabled={!editable || dirty} onCreated={onChanged} />)}
+      {/* The address belongs to the shared venue record, not to this event's
+        * settings, so a correction can add it while those stay read-only. */}
+      {detail.missingVenueAddresses?.map((entry) => <OrganizerVenueAddressPanel key={entry.id}
+        entry={entry} candidateId={detail.event.id} expectedVersion={expectedVersion}
+        disabled={dirty || (detail.event.status !== "draft" && detail.event.status !== "changes_requested")} onCreated={onChanged} />)}
       <div className={styles.panelHead}>
         <h4>活動場館與場地</h4>
         <button type="button" className={styles.ghost} disabled={!editable} onClick={() => setCatalogAction({ kind: "venue" })}>建立新場館</button>

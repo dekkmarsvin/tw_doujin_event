@@ -215,7 +215,7 @@ D1 保存草稿 revision、私人 object key、官方來源 URL、文件日期�
 - 帳號：`account.disabled`、`account.deleted`（刪除完成後只留下已塗銷紀錄）
 - 地圖貢獻：`map_contributor.grant`／`map_contributor.revoke`／`map_contributor.suspend`、`map_draft.created`、`map_draft.submitted`、`map_draft.commented`、`map_draft.changes_requested`／`map_draft.reject`／`map_draft.approve`、`map_draft.exported`、`map_draft.purged`、`map_draft.content_purged`、`map_draft.raw_purged`
 - 主辦單位工作區：`organizer_event.created`、`organizer_event.owner_granted_on_create`（建立者即負責人時的直接授予）、`organizer_event.invitation_failed`、`organizer_event.updated`、`organizer_event.onboarding_completed`、`organizer_event.import_replaced`、`organizer_event.map_created`／`organizer_event.map_updated`／`organizer_event.map_background_updated`、`organizer_event.owner_invite`／`organizer_event.owner_revoke`／`organizer_event.editor_invite`／`organizer_event.editor_revoke`、`organizer_event.submitted`、`organizer_event.approved`／`organizer_event.changes_requested`／`organizer_event.reopened`、`organizer_publication.retried`
-- 場館與 reference：`organizer_venue.created`、`organizer_venue_space.created`、`organizer_reference.created`
+- 場館與 reference：`organizer_venue.created`、`organizer_venue_space.created`、`organizer_reference.created`、`organizer_reference.address_completed`（場館記錄補上地址；只記候選 id 與記錄種類，不複製地址）
 - 已發布活動修正：`organizer.amendment.create`、`organizer.amendment.save`（在修正 revision 的同一 batch 寫入）
 - 活動申請審核：`organizer_application.approved`／`organizer_application.rejected`（同一 batch，只記審核者、申請識別與動作；不複製理由或申請內容）；核准授權沿用 `organizer_event.owner_granted_on_create`。
 - 排程清除：`retention.purged`（由排程 Worker 寫入，`actor_role` 為 `system`）

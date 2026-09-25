@@ -77,10 +77,39 @@ export function createCategoryReference(input: { name: unknown; sourceUrl: unkno
     ...provenance(url, now, "organizer-official", pointers) }, `references/category-catalogs/${organizerId}/${id}/${revision}.json`, name, now);
 }
 
-export function createVenueReference(input: { id: string; name: string; sourceUrl: string | null }, now: number) {
+function venueValue(input: { id: string; name: string; sourceUrl: string }, now: number, address?: string) {
+  return { schema: "venue/1", id: input.id, name: input.name, officialUrl: input.sourceUrl, ...(address ? { address } : {}),
+    ...provenance(input.sourceUrl, now, "venue-official", ["/name", "/officialUrl", ...(address ? ["/address"] : [])]) };
+}
+
+/** A venue always has an address (#395); it is read off the same official page as the name. */
+export function createVenueReference(input: { id: string; name: string; sourceUrl: string | null; address: string | null }, now: number) {
   if (!input.sourceUrl) throw new Error("場館缺少官方來源網址。");
-  return record("venue", { schema: "venue/1", id: input.id, name: input.name, officialUrl: input.sourceUrl,
-    ...provenance(input.sourceUrl, now, "venue-official", ["/name", "/officialUrl"]) }, `references/venues/${input.id}.json`, input.name, now);
+  if (!input.address) throw new Error("請填寫場館地址。");
+  return record("venue", venueValue({ ...input, sourceUrl: input.sourceUrl }, now, input.address),
+    `references/venues/${input.id}.json`, input.name, now);
+}
+
+export function venueReferenceNeedsAddress(row: OrganizerReferenceRecord) {
+  return row.kind === "venue" && (JSON.parse(row.publicReferenceJson) as { address?: unknown }).address === undefined;
+}
+
+/**
+ * The venue record as it was, plus the address (#395). The address cites the
+ * venue's own official page, read at `now`, as a source of its own: the name
+ * and link were checked at an earlier time, and that time stays theirs.
+ * Nothing the record already said changes, which is the one kind of change
+ * publication accepts for a record that already exists.
+ */
+export function completeVenueAddress(existing: OrganizerReferenceRecord, address: string, now: number) {
+  const value = parseReferenceRecord(JSON.parse(existing.publicReferenceJson), existing.path);
+  if (value.schema !== "venue/1" || value.address !== undefined) throw new Error("這個場館已經有地址。");
+  const sourceId = "address-source";
+  if (value.sources.some((source: { id: string }) => source.id === sourceId)) throw new Error("場館來源記錄無法加上地址。");
+  const { sources, provenance: cited, ...facts } = value;
+  return record("venue", { ...facts, address,
+    sources: [...sources, { id: sourceId, kind: "venue-official", url: value.officialUrl, retrievedAt: new Date(now).toISOString() }],
+    provenance: { ...cited, "/address": [sourceId] } }, existing.path, existing.displayName, existing.sourceCapturedAt);
 }
 
 export function createVenueSpaceReference(input: { id: string; venueId: string; name: string; sourceUrl: string | null }, now: number) {
@@ -90,17 +119,21 @@ export function createVenueSpaceReference(input: { id: string; venueId: string; 
 }
 
 /** #248 pinned adoption: bytes from FF47 data commit 8c645303fa6838383549fbe8433ece081c514e1e;
- * other seed sources were checked at 2026-09-14T10:31:38Z (issuecomment-5662643892). */
+ * other seed sources were checked at 2026-09-14T10:31:38Z (issuecomment-5662643892).
+ * The seed addresses were read off the same official pages at 2026-09-24T15:50:00Z (#395). */
 export function initialVenueReferences() {
   const capturedAt = Date.parse("2026-09-14T10:31:38Z");
+  const addressCheckedAt = Date.parse("2026-09-24T15:50:00Z");
   return INITIAL_ORGANIZER_VENUE_CATALOG.flatMap((venue) => {
+    const path = `references/venues/${venue.id}.json`;
     if (venue.id === "taipei-expo-park-zhengyan-hall") {
-      return [record("venue", JSON.parse(pinnedVenue), `references/venues/${venue.id}.json`, venue.name,
-        Date.parse("2026-08-25T03:43:00Z"), pinnedVenue),
-      record("venue-space", JSON.parse(pinnedSpace), "references/venue-spaces/zhengyan-exhibition-area.json", "全館",
-        Date.parse("2026-08-25T03:43:00Z"), pinnedSpace)];
+      const pinned = record("venue", JSON.parse(pinnedVenue), path, venue.name, Date.parse("2026-08-25T03:43:00Z"), pinnedVenue);
+      return [completeVenueAddress(pinned, venue.address, addressCheckedAt),
+        record("venue-space", JSON.parse(pinnedSpace), "references/venue-spaces/zhengyan-exhibition-area.json", "全館",
+          Date.parse("2026-08-25T03:43:00Z"), pinnedSpace)];
     }
-    return [createVenueReference(venue, capturedAt), ...venue.spaces.map((space) => createVenueSpaceReference({ ...space, venueId: venue.id,
+    const checked = record("venue", venueValue({ ...venue, sourceUrl: venue.sourceUrl! }, capturedAt), path, venue.name, capturedAt);
+    return [completeVenueAddress(checked, venue.address, addressCheckedAt), ...venue.spaces.map((space) => createVenueSpaceReference({ ...space, venueId: venue.id,
       sourceUrl: venue.id === "taipei-hakka-cultural-center" ? venue.sourceUrl : space.sourceUrl }, capturedAt))];
   });
 }
@@ -163,6 +196,9 @@ export async function resolveOrganizerReferences(draft: OrganizerEventDraft, rec
         target: item.id, code: "missing_venue_reference",
         message: "所選場館或場地尚未保存完整來源，請在「場館與場地」補齊官方來源。" });
     }
+    const selected = records.find((record) => record.path === venue.path);
+    if (selected && venueReferenceNeedsAddress(selected)) issues.push({ severity: "error", step: "venue",
+      target: venue.id, code: "missing_venue_address", message: `「${selected.displayName}」尚未填寫地址，請在「場館與場地」補上。` });
   }
   if (issues.length) return { issues, snapshot: null };
   try {

@@ -26,7 +26,7 @@
 
 - pin schema、完整 commit 與安全 path；
 - 每個檔案的 SHA-256；
-- organizer、category catalog、venue、venue-space schema；
+- organizer、category catalog、venue、venue-space schema（`venue/1` 可有 `address`，有時必須列 `/address` provenance；沒有地址的既有記錄仍然有效）；
 - selection 的 stable ID、catalog revision 與關聯。
 
 pin 列出的每個 `references/` 檔案必須恰好被 selection 使用一次，不接受未選取的額外記錄，也不接受 selection 指名卻未 pin 的檔案。任一檢查失敗都不替換上一份已驗證資料；驗證成功後才把整棵 tree 放到忽略版控的 `.event-data/<eventId>/`，其中活動自身檔案在根層，`references/` 保留 repository 路徑。

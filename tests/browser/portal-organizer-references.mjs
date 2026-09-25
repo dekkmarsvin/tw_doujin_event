@@ -141,6 +141,7 @@ try {
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByText("請填寫場館名稱。", { exact: true }).waitFor();
   await page.getByText("請填寫場館官方網址。", { exact: true }).waitFor();
+  await page.getByText("請填寫場館地址。", { exact: true }).waitFor();
   await page.getByText("請填寫場地名稱。", { exact: true }).waitFor();
   await journey.capture(page, "venue-creator-inline-errors");
   await page.getByLabel(/^場館名稱/).fill("三重體育館");
@@ -148,6 +149,13 @@ try {
   await page.getByLabel(/^場地名稱/).fill("全館");
   await page.getByText("留空沿用場館網址：https://venue.example/sanchong", { exact: true }).waitFor();
   await journey.capture(page, "venue-creator-inherited-url");
+  // #395: whitespace is not an address; the rest of the form now answers clean.
+  await page.getByLabel(/^場館地址/).fill("   ");
+  await page.getByRole("button", { name: "建立並選取", exact: true }).click();
+  await page.getByText("請填寫場館地址。", { exact: true }).waitFor();
+  assert.equal(await page.getByText("請填寫場館名稱。", { exact: true }).count(), 0);
+  await journey.capture(page, "venue-creator-blank-address");
+  await page.getByLabel(/^場館地址/).fill("新北市三重區集美街212號");
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByRole("button", { name: "建立並選取", exact: true }).waitFor({ state: "hidden" });
   await page.getByRole("combobox", { name: /^場館/ }).waitFor();
