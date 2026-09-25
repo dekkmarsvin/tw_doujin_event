@@ -839,7 +839,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? "已選取 " + hintedCode : "選取攤位查看社團"}</div>
   </>;
 
-  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
+  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
 
   const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{event.dateRangeLabel}</span><span>{event.venue}</span></div>}</div>;
   const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href="/" onClick={(click) => {

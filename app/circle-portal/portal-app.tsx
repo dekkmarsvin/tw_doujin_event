@@ -277,7 +277,14 @@ export default function CirclePortalApp() {
     <header className={styles.masthead}>
       <div>
         <h1>社團資料</h1>
-        <p>{event.name}・{event.dateRangeLabel}</p>
+        {/* The event is the page's context, not a task of its own: the picker
+            sits where its name would, and one event needs no picker at all. */}
+        {session && PUBLISHED_EVENTS.length > 1
+          ? <EventPicker
+            eventId={event.id}
+            onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
+          />
+          : <p>{event.name}・{event.dateRangeLabel}</p>}
         <p className={styles.backLink}><a href={mapHref(event.id)}>返回活動地圖</a></p>
       </div>
       {session && <div className={styles.identity}>
@@ -295,52 +302,55 @@ export default function CirclePortalApp() {
 
     {!ready ? <p className={styles.notice}>載入中…</p>
       : !session ? <SignIn circleId={targetCircleId} />
-        : <>
-          {/* One event: no choice to make, so the portal opens straight into it. */}
-          {PUBLISHED_EVENTS.length > 1 && <EventPicker
-            eventId={event.id}
-            onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
-          />}
+        : <div className={styles.workspace}>
           {/* Keyed on the event: claims, drafts and editor drafts all belong to
               one event, and carrying them across a switch would show one
               event's work under another's name. */}
           <Fragment key={event.id}>
-            <ClaimList claims={claims} onChanged={refreshClaims} />
-            {targetCircleId
-              ? <ClaimDestination circleId={targetCircleId} claims={claims} ready={claimsLoadedFor === event.id} failed={claimsFailedFor === event.id} onChanged={refreshClaims} />
-              : <ClaimForm onCreated={refreshClaims} />}
+            {/* Two columns on a desktop, cut on the editor's own lines below:
+                the list over the form, the claim over the preview. */}
+            <div className={claims.length > 0 ? styles.claimRow : styles.claimSolo}>
+              <ClaimList claims={claims} onChanged={refreshClaims} />
+              <div className={styles.claimColumn}>
+                {targetCircleId
+                  ? <ClaimDestination circleId={targetCircleId} claims={claims} ready={claimsLoadedFor === event.id} failed={claimsFailedFor === event.id} onChanged={refreshClaims} />
+                  : <ClaimForm firstClaim={claimsLoadedFor === event.id && claims.length === 0} onCreated={refreshClaims} />}
+              </div>
+            </div>
             {claims.filter((claim) => claim.status === "verified").sort((a, b) => Number(b.circleId === targetCircleId) - Number(a.circleId === targetCircleId)).map((claim) => <CircleEditor key={claim.circleId} event={event} claim={claim} />)}
             {session.isMapContributor && <MapContributorPanel event={event} />}
-            <AccountDeletion session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
           </Fragment>
-        </>}
+          {/* Account-wide, so after the event's work rather than inside it
+              (ADR-0043); still keyed on the event so its notice never outlives
+              a switch. */}
+          <AccountDeletion key={`account-${event.id}`} session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
+        </div>}
 
   </div>;
 }
 
 function EventPicker({ eventId, onChoose }: { eventId: string; onChoose: (eventId: string) => void }) {
-  return <section className={styles.card}>
-    <h2>活動</h2>
-    <label htmlFor="portal-event">活動</label>
+  return <div className={styles.eventPicker}>
+    <label htmlFor="portal-event" className={styles.visuallyHidden}>活動</label>
     <select id="portal-event" value={eventId} onChange={(event) => onChoose(event.target.value)}>
       {PUBLISHED_EVENTS.map((item) => <option key={item.id} value={item.id}>{item.name}・{item.dateRangeLabel}</option>)}
     </select>
-    <p className={styles.editorHint}>選擇要編輯的活動。</p>
-  </section>;
+  </div>;
 }
 
 function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDeleted: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [status, setStatus] = useState<Status>(IDLE);
-  return <section className={styles.card}>
-    <h2>刪除帳號</h2>
-    <p>刪除帳號會一併刪除你的認領與自行填寫的資料。場刊中的社團與攤位資料不受影響。</p>
+  return <section className={styles.accountZone} aria-label="帳號">
+    <details className={styles.danger}>
+    <summary>刪除帳號</summary>
+    <p>刪除帳號會一併刪除你在所有活動的認領與自行填寫的資料。場刊中的社團與攤位資料不受影響。</p>
     {session.isAdmin
-      ? <p className={styles.notice}>管理者需先由另一位管理者移出名單，才能刪除帳號。</p>
+      ? <p>管理者需先由另一位管理者移出名單，才能刪除帳號。</p>
       : <>
         <label htmlFor="delete-account-confirm">輸入完整 email 確認：{session.email}</label>
         <input id="delete-account-confirm" type="email" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
-        <button type="button" disabled={confirm !== session.email || status.kind === "busy"} onClick={() => {
+        <button type="button" className={styles.dangerButton} disabled={confirm !== session.email || status.kind === "busy"} onClick={() => {
           setStatus({ kind: "busy", message: "刪除中…" });
           void deleteMyAccount(session.email)
             .then(() => { onDeleted(); })
@@ -348,6 +358,7 @@ function AccountDeletion({ session, onDeleted }: { session: PortalSession; onDel
         }}>永久刪除帳號</button>
       </>}
     {status.kind === "error" && <p className={styles.error}>{status.message}</p>}
+    </details>
   </section>;
 }
 
@@ -419,6 +430,7 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
           <b>{claim.circleName}</b>
           <small>{claim.circleId}</small>
         </div>
+        {claim.status === "verified" && <a href={`#circle-editor-${claim.circleId}`}>編輯資料</a>}
         <span className={styles[`claim_${claim.status}`]}>{
           { pending: "審核中", verified: "已通過", rejected: "已婉拒", revoked: "已撤銷", withdrawn: "已撤回" }[claim.status]
         }</span>
@@ -501,10 +513,32 @@ function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
   if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{result.error}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>重新讀取</button></section>;
   // Same words as the refusal `createClaim` would give after the form was filled in.
   if (result.circle?.claimed) return <section className={styles.card}><h2>{result.circle.name}</h2><p>此社團已有通過的認領。若這是你的社團，請聯絡管理者。</p></section>;
-  return <>{!result.circle && <p className={styles.notice}>在這個活動找不到指定社團，請重新搜尋。</p>}<ClaimForm key={result.circle?.id ?? "search"} initialCircle={result.circle} onCreated={(answer) => { setCreated(answer); onChanged(); }} /></>;
+  return <>{!result.circle && <p className={styles.notice}>在這個活動找不到指定社團，請重新搜尋。</p>}<ClaimForm key={result.circle?.id ?? "search"} initialCircle={result.circle} firstClaim={claims.length === 0} onCreated={(answer) => { setCreated(answer); onChanged(); }} /></>;
 }
 
-function ClaimForm({ onCreated, initialCircle = null }: { onCreated: (answer: Awaited<ReturnType<typeof createClaim>>) => void; initialCircle?: CircleMatch | null }) {
+/**
+ * Where a circle with nothing claimed in this event starts. Everything else on
+ * the page appears only once a claim exists, so on its own the form did not
+ * say it was the first of three steps, or that it was the place to begin.
+ */
+const FIRST_CLAIM_STEPS = ["認領社團", "驗證身分", "編輯社團資料"] as const;
+
+function FirstClaimSteps() {
+  return <ol className={styles.startSteps} aria-label="開始使用">
+    {FIRST_CLAIM_STEPS.map((step, index) => <li key={step} aria-current={index === 0 ? "step" : undefined}>
+      <span aria-hidden="true">{index + 1}</span>
+      <b>{step}</b>
+      {index === 0 && <small>從這裡開始</small>}
+    </li>)}
+  </ol>;
+}
+
+function ClaimForm({ onCreated, initialCircle = null, firstClaim = false }: {
+  onCreated: (answer: Awaited<ReturnType<typeof createClaim>>) => void;
+  initialCircle?: CircleMatch | null;
+  /** Only once the claims have answered: a guess before then flashes the steps at a circle that has one. */
+  firstClaim?: boolean;
+}) {
   const [query, setQuery] = useState(initialCircle?.name ?? "");
   const [selected, setSelected] = useState<CircleMatch | null>(initialCircle);
   const [targetUrl, setTargetUrl] = useState("");
@@ -517,6 +551,7 @@ function ClaimForm({ onCreated, initialCircle = null }: { onCreated: (answer: Aw
 
   return <section className={styles.card}>
     <h2>認領社團</h2>
+    {firstClaim && <FirstClaimSteps />}
     <p>搜尋你的社團，並選擇一個可用來驗證身分的連結。沒有可用連結時會改由人工確認。</p>
 
     <label htmlFor="portal-search">社團名稱</label>

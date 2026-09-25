@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { UiIcon } from "./ui-icons";
 import styles from "./reader-help.module.css";
 
-export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLabel: string }) {
+export default function ReaderHelp({ eventId, dataLastUpdatedLabel }: { eventId: string; dataLastUpdatedLabel: string }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -54,7 +54,9 @@ export default function ReaderHelp({ dataLastUpdatedLabel }: { dataLastUpdatedLa
       </ol>
       <section className={styles.circleEntry} aria-labelledby="reader-circle-entry-title">
         <h3 id="reader-circle-entry-title">你是參展社團嗎？</h3>
-        <p>到<a href="/circle">社團專區</a>驗證身分後，即可補充販售資訊、連結與代表圖。</p>
+        {/* Names the event on screen: without it the portal opens on the last event
+            this browser maintained, or the nearest by date, not the one being read. */}
+        <p>到<a href={`/circle?${new URLSearchParams({ event: eventId })}`}>社團專區</a>驗證身分後，即可補充販售資訊、連結與代表圖。</p>
       </section>
       <section className={styles.about} aria-labelledby="reader-about-title">
         <h3 id="reader-about-title">關於本頁</h3>
