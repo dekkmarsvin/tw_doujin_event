@@ -2860,7 +2860,6 @@ export function createCirclePortalHandlers({
     try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
     const file = form.get("file");
     if (!(file instanceof File)) return json({ error: "請選擇活動圖片。" }, 400);
-    if (form.get("rightsConfirmed") !== "true") return json({ error: "請先確認你有權公開這張圖片。" }, 400);
     let prepared: Awaited<ReturnType<typeof prepareEventImage>>;
     try { prepared = await prepareEventImage(file, thumbnailStore.url); }
     catch (error) { return json({ error: error instanceof Error ? error.message : "活動圖片格式無效。" }, 400); }
@@ -2870,7 +2869,7 @@ export function createCirclePortalHandlers({
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access),
       action: "organizer_event.image_uploaded", subjectType: "organizer_event", subjectId: candidateId,
-      detail: { sha256: prepared.image.sha256, sizeBytes: file.size, width: prepared.image.width, height: prepared.image.height, rightsConfirmed: true },
+      detail: { sha256: prepared.image.sha256, sizeBytes: file.size, width: prepared.image.width, height: prepared.image.height },
       ipHash: await clientIpHash(request),
     });
     return json({ ok: true, image: prepared.image });

@@ -88,7 +88,9 @@ draft → submitted → approved → publishing → published
 
 選填（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)）。`event.image` 為 `{ url, sha256, contentType, width, height }`，`url` 必須等於公開 bucket 的 `event-images/<sha256>.<ext>`，由 `app/event-image.ts` 檢查。
 
-- `PUT /api/organizer/events/:candidateId/image`（multipart：`file`、`rightsConfirmed=true`）由可編輯候選的 Owner／Editor／Admin 上傳；只在 `draft`、`changes_requested` 接受。JPEG、PNG 或 WebP，5 MiB 以內，寬度至少 1200 px，不限比例，結構檢查沿用配置圖。沒有勾選確認權利時 400。上傳只寫入非公開 bucket 的 `organizer-event-images/<candidateId>/<sha256>.<ext>` 並回傳 `image`，**不修改草稿**；主辦儲存草稿（或修正宣告）後才生效。未綁定 bucket 時 503。
+- `PUT /api/organizer/events/:candidateId/image`（multipart：`file`）由可編輯候選的 Owner／Editor／Admin 上傳；只在 `draft`、`changes_requested` 接受。JPEG、PNG 或 WebP，5 MiB 以內，寬度至少 1200 px，不限比例，結構檢查沿用配置圖。上傳不要求另行勾選權利聲明。上傳只寫入非公開 bucket 的 `organizer-event-images/<candidateId>/<sha256>.<ext>` 並回傳 `image`，**不修改草稿**；主辦儲存草稿（或修正宣告）後才生效。未綁定 bucket 時 503。
+- 圖片與其他欄位共用表單的儲存狀態，不另顯示「已上傳／已移除，尚未儲存」。儲存成功而後續讀取失敗時，仍以已儲存呈現；上傳進度、格式限制與可處理的錯誤保留在圖片欄位。
+- 修正影響以原圖與修正後圖片供主辦核對，不以尺寸代替圖片。原圖讀已發布網址；修正後圖片先讀此候選的非公開預覽，已有公開圖片時可回退至公開網址。新增或移除的一側顯示「無」。
 - `GET /api/organizer/events/:candidateId/image?sha256=&contentType=` 供候選的 Owner／Editor／Admin 預覽暫存圖片，回應 `private, no-store`、`nosniff` 與 sandbox CSP；已公開的圖片直接讀公開網址。
 - 儲存草稿或修正宣告時，若圖片與上次儲存不同，伺服器重新讀取暫存位元組並重新檢查，雜湊、類型與尺寸都必須相符，否則 422；相同時不讀 bucket。
 - 送審成功後刪除此候選送審內容沒有使用的暫存。只在送審後清理：草稿可編輯時，協作者的儲存隨時可能指向任何一張暫存。清理失敗不影響送審。
