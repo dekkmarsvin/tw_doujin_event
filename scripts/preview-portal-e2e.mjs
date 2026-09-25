@@ -74,23 +74,38 @@ async function requireAdmin(cookie, email) {
   ].join("\n  "));
 }
 
+/** Manual preview data is never overwritten: skip every circle that has any. */
+async function unusedCircle(circles, overlay, runId) {
+  for (const circle of circles) {
+    if (!circle?.id || overlay.overrides?.some(item => item.circleId === circle.id)) continue;
+    const response = await fetch(`${baseUrl}/api/preview/mail`, previewRequestInit(baseUrl, {
+      method: "POST", accessHeaders, e2eToken, body: { runId, eventId: "ff47", circleId: circle.id } }));
+    rejectAccessLogin(response, `POST /api/preview/mail readiness for ${circle.id}`);
+    if (response.status === 409) continue;
+    if (!response.ok) throw new Error(`Fixture readiness for ${circle.id} returned ${response.status}.`);
+    return circle;
+  }
+  throw new Error(`All ${circles.length} preview search results already have preview data; preserve it and choose another fixture query.`);
+}
+
 const fixture = await preparePreviewFixture({ baseUrl, deploymentId: process.env.PREVIEW_DEPLOYMENT_ID, sha: process.env.GITHUB_SHA });
 const { adminEmail, circleEmail } = fixture;
 try {
+  // This job holds the global preview E2E lock, so reserved fixtures still in
+  // preview D1 belong to runs that have ended. Clearing them first keeps one
+  // failed cleanup from blocking every later run; manual data never matches.
+  const { payload: swept } = await request("/api/preview/mail", { method: "DELETE", previewToken: true,
+    body: { runId: fixture.runId, finishedRuns: true } });
+  if (swept.cleared?.length) console.log(`Cleared reserved fixtures left by finished runs: ${swept.cleared.join(", ")}.`);
   await request("/api/preview/mail", { method: "POST", previewToken: true, body: { runId: fixture.runId } });
   console.log(`Preview D1 and both R2 bindings proved for ${fixture.runId}.`);
   const adminCookie = await signIn(adminEmail);
   await requireAdmin(adminCookie, adminEmail);
   const circleCookie = await signIn(circleEmail);
   const { payload: search } = await request(`/api/circle/search?q=${encodeURIComponent("33号")}`, { cookie: circleCookie });
-  const circle = search.circles?.[0];
-  if (!circle?.id) throw new Error("Preview catalog search returned no circle fixture.");
+  if (!search.circles?.length) throw new Error("Preview catalog search returned no circle fixture.");
   const { payload: existingOverlay } = await request(`/data/events/ff47/overrides.json?e2e=${fixture.runId}`);
-  if (existingOverlay.overrides?.some(item => item.circleId === circle.id)) {
-    throw new Error("The preview circle already has content; preserve it and choose an unused fixture.");
-  }
-  await request("/api/preview/mail", { method: "POST", previewToken: true,
-    body: { runId: fixture.runId, eventId: "ff47", circleId: circle.id } });
+  const circle = await unusedCircle(search.circles, existingOverlay, fixture.runId);
 
   const { payload: claim } = await request("/api/claims", { method: "POST", cookie: circleCookie, body: { circleId: circle.id, evidenceNote: "preview E2E" } });
   await request("/api/admin/claims", { method: "POST", cookie: adminCookie, body: { claimId: claim.id, decision: "approve" } });

@@ -1,7 +1,7 @@
 import { previewE2eAuthorized, previewSinkRecipientAllowed, repositoryFor } from "../../_portal";
 import { deleteObjectKeys } from "../../../app/hosted-thumbnails";
 import { localPreviewResetAllowed, previewFixture } from "../../../app/preview-fixture";
-import { clearPreviewFixture } from "../../../db/preview-fixtures";
+import { clearPreviewFixture, listPreviewFixtureRuns } from "../../../db/preview-fixtures";
 import { emailAuditSubjectId } from "../../../app/circle-portal-handlers";
 
 function json(body: unknown, status = 200) {
@@ -29,10 +29,10 @@ export const onRequestGet: PagesFunction<PortalEnv> = async ({ request, env }) =
 };
 
 async function requestedFixture(request: Request, env: PortalEnv) {
-  const body = await request.json().catch(() => null) as { runId?: unknown; eventId?: unknown; circleId?: unknown } | null;
+  const body = await request.json().catch(() => null) as { runId?: unknown; eventId?: unknown; circleId?: unknown; finishedRuns?: unknown } | null;
   const fixture = previewFixture(body?.runId);
   if (!fixture || !previewSinkRecipientAllowed(env, fixture.adminEmail) || !previewSinkRecipientAllowed(env, fixture.circleEmail)) return null;
-  return { ...fixture, eventId: body?.eventId, circleId: body?.circleId };
+  return { ...fixture, eventId: body?.eventId, circleId: body?.circleId, finishedRuns: body?.finishedRuns };
 }
 
 /** CI verifies the immutable deployment's bindings before using this endpoint. */
@@ -60,16 +60,29 @@ export const onRequestPost: PagesFunction<PortalEnv> = async ({ request, env }) 
   return json({ ok: true, runId: fixture.runId });
 };
 
-/** Full disposal is local-only; remote runs delete only their own fixture rows. */
+/** Full disposal is local-only; remote runs delete only reserved fixture rows:
+ * their own at the end, and those of already finished runs at the start. */
 export const onRequestDelete: PagesFunction<PortalEnv> = async ({ request, env }) => {
   if (!previewE2eAuthorized(env, request)) return json({ error: "not found" }, 404);
   if (!localPreviewResetAllowed(env, request)) {
     const fixture = await requestedFixture(request, env);
-    if (!fixture || !env.HASH_PEPPER) return json({ error: "a reserved preview fixture run is required" }, 400);
-    await clearPreviewFixture(env.DB, { runId: fixture.runId, now: Date.now(), emailDigests: await Promise.all(
-      [fixture.adminEmail, fixture.circleEmail].map(email => emailAuditSubjectId(env.HASH_PEPPER!, email)),
-    ) });
-    return json({ ok: true, runId: fixture.runId });
+    const pepper = env.HASH_PEPPER;
+    if (!fixture || !pepper || (fixture.finishedRuns !== undefined && fixture.finishedRuns !== true)) {
+      return json({ error: "a reserved preview fixture run is required" }, 400);
+    }
+    const clear = async (runId: string) => {
+      const { adminEmail, circleEmail } = previewFixture(runId)!;
+      await clearPreviewFixture(env.DB, { runId, now: Date.now(),
+        emailDigests: await Promise.all([adminEmail, circleEmail].map(email => emailAuditSubjectId(pepper, email))) });
+    };
+    if (fixture.finishedRuns !== true) {
+      await clear(fixture.runId);
+      return json({ ok: true, runId: fixture.runId });
+    }
+    await repositoryFor(env).ensureTables();
+    const cleared = (await listPreviewFixtureRuns(env.DB)).filter(runId => runId !== fixture.runId);
+    for (const runId of cleared) await clear(runId);
+    return json({ ok: true, runId: fixture.runId, cleared });
   }
   if (!env.MAP_CONTRIBUTIONS) return json({ error: "private map storage is not configured" }, 503);
   const repository = repositoryFor(env);

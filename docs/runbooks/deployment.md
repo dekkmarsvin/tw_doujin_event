@@ -202,9 +202,10 @@ main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本
 - `Full preview portal E2E` 使用該 run 的 immutable deployment URL，排隊期間即使 PR branch alias 已前進，也不會改驗另一版本。共用 preview 資源的 E2E 仍以同一個全域鎖序列執行；不代表每個 PR 擁有獨立 D1。
 - `map.kotoban.top` 的匿名觀測是獨立 advisory job。它成功時補上 custom domain、公開 Access 邊界與 Functions 的讀者視角；失敗時留下 warning 與 `cf-ray` 診斷，不把已由 production origin 證明成功的部署標成失敗。決策見 [ADR-0034](../adr/0034-production-origin-gates-deployment.md)。
 - E2E 先讀 Cloudflare 的本次 deployment 快照，核對 deployment ID、immutable URL、commit、preview 環境、成功狀態，以及 `DB` UUID／兩個 R2 bucket 名稱均符合 preview 設定。另讀 project 的 canonical production deployment，確認 preview 同時與 repo 宣告及實際 production 資源不重疊，避免 PR 誤改宣告掩蓋重疊；失敗時不開始產品操作。不查 production 資料筆數，也不寫額外隔離探針。
-- 每個 run／attempt 使用保留的 `preview-admin+e2e-<runId>@example.test`、`preview-circle+e2e-<runId>@example.test`。只有對應 base 地址已列入 preview sink allowlist 才可使用；受 token 保護的 POST 建立該 run 的 admin。選定社團後再以 POST 核對原始 D1，任何狀態的 claims／overrides、或該社團 R2 prefix 中任一物件均拒絕；公開投影空白不代表原始資料不存在。通過後才走正常認領與編輯。
-- 流程 finally 及 CI always cleanup 使用 `DELETE /api/preview/mail` 加 JSON `{ "runId": "…" }`，只清除該 run 的帳號、登入資料、claims、自己最後更新的 overrides、對應通知／audit／captured mail 及臨時 admin。公開文件以同一交易移除相關項目，保留其他資料；此 journey 不建立 R2 物件，因此遠端 cleanup 不列舉或刪除 R2。空 body 的遠端 reset 拒絕；完整 reset 僅限 `LOCAL_PORTAL_DISPOSABLE=true` 且 HTTP loopback 的本機環境。
-- Runner 強制終止或網路持續失敗仍可能留下該 run 的資料；失敗保留 runId 於 log／runner 狀態檔，可針對同一 run 重做 cleanup，不得用整庫 reset 解決。七天 artifact 只供診斷，必要驗收摘要貼回 issue／PR。
+- 每個 run／attempt 使用保留的 `preview-admin+e2e-<runId>@example.test`、`preview-circle+e2e-<runId>@example.test`。只有對應 base 地址已列入 preview sink allowlist 才可使用；受 token 保護的 POST 建立該 run 的 admin。社團依搜尋結果順序逐一以 POST 核對原始 D1，任何狀態的 claims／overrides、或該社團 R2 prefix 中任一物件均略過；公開投影空白不代表原始資料不存在。取第一個沒有資料的社團走正常認領與編輯，全部都有資料時失敗，不覆寫人工資料。
+- 流程開始時以 `DELETE /api/preview/mail` 加 JSON `{ "runId": "…", "finishedRuns": true }` 清除已結束 run 留下的保留 fixture：E2E job 持有全域 `preview-portal-e2e` 鎖，所以此時仍在 D1 的保留身分都屬於已結束的 run，包含自己的 cleanup 沒完成的 run。只比對上述保留地址，人工資料與相似但不在保留格式內的地址一律不動。遠端 journey 只在該 CI job 內執行，不另外手動對 preview 跑，以免繞過這個鎖。
+- 流程 finally 及 CI always cleanup 使用同一 endpoint 加 JSON `{ "runId": "…" }`，只清除該 run 的帳號、登入資料、claims、自己最後更新的 overrides、對應通知／audit／captured mail 及臨時 admin。公開文件以同一交易移除相關項目，保留其他資料；此 journey 不建立 R2 物件，因此遠端 cleanup 不列舉或刪除 R2。空 body 的遠端 reset 拒絕；完整 reset 僅限 `LOCAL_PORTAL_DISPOSABLE=true` 且 HTTP loopback 的本機環境。
+- Runner 強制終止或網路持續失敗仍可能留下該 run 的資料；下一個 run 開始時會清除，log 會列出被清除的 runId。不得用整庫 reset 解決。七天 artifact 只供診斷，必要驗收摘要貼回 issue／PR。
 - **preview 與 production 使用不同的 D1 資料庫**，見下節。設定 preview secrets **之前**必須先確認這件事已經生效——順序顛倒會讓 PR 上的測試寫進正式資料。
 
 ## 首次啟用

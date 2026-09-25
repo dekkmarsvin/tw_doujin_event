@@ -77,6 +77,37 @@ test("remote cleanup preserves another run, manual preview data and all R2 objec
   assert.equal(objects.size, 1);
 });
 
+test("a new run clears reserved fixtures left by finished runs, never manual or lookalike data", async () => {
+  await seed();
+  const current = previewFixture("run-333333-1"), orphan = previewFixture("run-444444-1");
+  // Only readiness may list its circle's image prefix; the sweep never lists R2.
+  const readiness = () => onRequestPost({ request: request("POST", { runId: current.runId, eventId: "ff47", circleId: "c-000001" }),
+    env: { ...env, THUMBNAILS: { ...bucket, list: async () => ({ objects: [], truncated: false }) } } });
+  // A finished run whose cleanup never landed blocks its circle for every later run.
+  assert.equal((await readiness()).status, 409);
+  // A run that ended before any account existed still left a link and captured mail.
+  await repository.createLoginToken({ tokenHash: "orphan-hash", email: orphan.circleEmail, now: 3, expiresAt: 4, ipHash: null });
+  await repository.storePreviewMail({ email: orphan.adminEmail, subject: "login", text: "orphan", now: 3 });
+  const lookalikes = ["preview-circle+someone@example.test", "human+e2e-12345678@example.test", "preview-circle+e2e-12345678@example.com"];
+  for (const email of lookalikes) await repository.upsertAccount(email, 1);
+  const sweep = () => onRequestDelete({ request: request("DELETE", { runId: current.runId, finishedRuns: true }), env });
+  const response = await sweep();
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).cleared, [a.runId, b.runId, orphan.runId]);
+  assert.deepEqual((await db.prepare("SELECT email FROM accounts ORDER BY email").all()).results.map(row => row.email), ["human@example.com", ...lookalikes].sort());
+  assert.deepEqual((await db.prepare("SELECT circle_id FROM circle_claims").all()).results.map(row => row.circle_id), ["c-000003"]);
+  assert.deepEqual(JSON.parse((await repository.getOverridesDoc("ff47")).json).overrides.map(row => row.circleId), ["c-000003"]);
+  assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM login_tokens").first()).n, 0);
+  assert.equal((await repository.latestPreviewMail(orphan.adminEmail)), null);
+  assert.equal((await repository.latestPreviewMail("human@example.com")).text, "keep scoped");
+  assert.equal(objects.get("human/map.png"), "keep");
+  assert.equal((await readiness()).status, 200, "the finished run no longer blocks its circle");
+  assert.deepEqual((await (await sweep()).json()).cleared, []);
+  for (const finishedRuns of [false, "yes"]) {
+    assert.equal((await onRequestDelete({ request: request("DELETE", { runId: current.runId, finishedRuns }), env })).status, 400);
+  }
+});
+
 test("fixture readiness refuses hidden source data, historical claims and orphan images before product mutations", async () => {
   await seed();
   await db.prepare("UPDATE circle_claims SET status='revoked' WHERE circle_id='c-000003'").run();
