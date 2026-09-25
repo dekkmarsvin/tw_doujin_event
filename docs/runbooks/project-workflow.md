@@ -96,6 +96,8 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 
 需要附圖時，截圖提交在 PR 分支的 `.evidence/<主題>/`，以該 commit 的 `https://raw.githubusercontent.com/dekkmarsvin/tw_doujin_event/<commit SHA>/.evidence/…` 嵌入 PR 本文或主票留言；合併前最後一個 commit 刪除 `.evidence/`，main 不保存證據圖。含證據的 commit 之後不再改寫或 force-push，否則固定連結會失效。含登入帳號、email 或其他個人資料的畫面不上傳。
 
+新增截圖與移除截圖的兩個 commit 在本機備妥後同批 push，保留固定 commit 連結但避免為搬圖再觸發一輪 CI。受測內容／環境未變時沿用既有有效證據，註明對應版本；不為更新 PR 文字重拍相同畫面。Actions 的七天 artifact 用於診斷，不能取代 issue／PR 上持續可查的驗收紀錄；本階段沿用此保存方式，不新增儲存服務。
+
 主辦活動發布的完整流程：
 
 **建立 → 匯入 → 地圖 → 驗證 → Reader 預覽 → 送審 → 核准並發布 → 自動發布 → production smoke → Reader**。
@@ -163,9 +165,9 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 | 項目 | 內容 | 證據等級 |
 |---|---|---|
 | Pages | `tw-catalog`：靜態閱讀與 Pages Functions，Direct Upload（無 Git 連線） | 已測量 |
-| 已部署 Worker | `tw-catalog-publication-dispatch`、`tw-catalog-retention-purge`、`tw-catalog-retention-purge-preview` | 已測量（API） |
-| 未部署 | `publication-dispatch` 的 preview 環境在設定檔中存在，但帳號上**沒有**對應 Worker | 已測量（API） |
-| 排程角色 | publication-dispatch 每分鐘；retention-purge 每日 `17 3 * * *`（production／preview 各一） | 設定檔 |
+| 已部署 Worker | `tw-catalog-publication-dispatch`、`tw-catalog-publication-dispatch-preview`、`tw-catalog-retention-purge`、`tw-catalog-retention-purge-preview` | 已測量（API，2026-09-25） |
+| preview 通知 Worker | `tw-catalog-publication-dispatch-preview` 於 2026-09-23 由 [PR #349](https://github.com/dekkmarsvin/tw_doujin_event/pull/349) 記錄的授權 Direct Upload 建立，綁 preview D1、publication 停用；觀測設定與 production 相同，7.3 第 6 點的 events 估算未含它 | 已測量（API）／設定檔 |
+| 排程角色 | publication-dispatch 每分鐘、retention-purge 每日 `17 3 * * *`，兩者 production／preview 各一 | 設定檔 |
 | D1 | production `3,014,656` bytes、preview `532,480` bytes | 已測量（API） |
 | R2 | thumbnails、map-contributions，production／preview 各一，共 4 個 bucket | 已測量（API） |
 | 觀測 | 兩個獨立 Worker 的 Logs 與 Traces 均為全量取樣（`head_sampling_rate: 1`） | 設定檔 |

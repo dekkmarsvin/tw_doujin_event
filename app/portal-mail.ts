@@ -1,3 +1,5 @@
+import { previewFixtureAddressBase } from "./preview-fixture";
+
 export type MailEnvironment = Pick<PortalEnv, "MAILGUN_API_KEY" | "MAILGUN_DOMAIN" | "MAILGUN_SENDER" |
   "PREVIEW_MAIL_SINK" | "PREVIEW_TEST_RECIPIENTS" | "PREVIEW_SANDBOX_RECIPIENTS">;
 /** `html`, when present, goes alongside `text`; the text part must stand on its own. */
@@ -29,6 +31,8 @@ export function previewMailRouteFor(env: MailEnvironment, email: string): "sink"
   if (env.PREVIEW_MAIL_SINK !== "d1") return null;
   const address = email.normalize("NFKC").trim().toLowerCase();
   if (addressList(env.PREVIEW_TEST_RECIPIENTS).has(address)) return "sink";
+  const base = previewFixtureAddressBase(address);
+  if (base && addressList(env.PREVIEW_TEST_RECIPIENTS).has(base)) return "sink";
   if (addressList(env.PREVIEW_SANDBOX_RECIPIENTS).has(address)) return "sandbox";
   return null;
 }

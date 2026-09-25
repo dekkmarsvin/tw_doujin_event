@@ -1,6 +1,6 @@
 # 排程清除 Worker
 
-`workers/retention-purge/` 是獨立部署的 Worker，不隨 Pages 一起上線。保存期限的權威定義在[資料 inventory](../contracts/data-inventory.md)。
+`workers/retention-purge/` 是獨立部署的 Worker，不隨 Pages 一起上線。版本查核與日後工程交付優先使用[獨立 Worker 手動 workflow](./deployment.md#獨立-worker-的版本與條件交付)，預設唯讀；以下直接 Wrangler 指令供已授權的首次／人工操作。保存期限的權威定義在[資料 inventory](../contracts/data-inventory.md)。
 
 
 保存期限要有東西去執行，而 **Pages 沒有 Cron Trigger**——那是 Workers 的功能。因此 `workers/retention-purge/` 是一個**獨立的部署單位**，與 Pages project 分開，綁同一個 D1、該環境的縮圖 R2 bucket 與私人地圖來源 bucket（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）。
@@ -51,5 +51,5 @@ npm run purge:dev
 
 ### 兩件容易踩到的事
 
-- **它不在 GitHub Actions 的部署流程裡。** Pages 的 CI 不會連帶更新這個 Worker；改了 `db/retention-purge.ts` 之後要自己重跑 `npm run purge:deploy`。
+- **Pages CI 不會連帶部署它。** Pages 只提供 dry build 與來源 fingerprint；改了 `db/retention-purge.ts` 等 Worker 輸入後，用獨立手動 workflow 查 active version，再於已授權範圍選入條件交付。
 - **bindings 不會被 named environment 繼承。** `env.preview` 必須自己宣告 `d1_databases`、`THUMBNAILS` 與 `MAP_CONTRIBUTIONS`，理由與 Pages 的 `wrangler.jsonc` 完全相同；漏掉的話 preview 那份會直接少資源。

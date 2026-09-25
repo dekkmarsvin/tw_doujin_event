@@ -73,7 +73,7 @@ function fixture() {
     run_attempt: 1, status: "completed", conclusion: "success", repository: { full_name: "dekkmarsvin/tw_doujin_event" } },
   jobs: [{ id: 60, run_id: 55, run_attempt: 1, head_sha: sha, name: "Verify and deploy", status: "completed", conclusion: "success",
     steps: ["Deploy to Cloudflare Pages", "Smoke test production deployment"].map((name) => ({ name, status: "completed", conclusion: "success" })) }],
-  writes: 0, leaseChecks: 0, intents: 0, latestMain: sha, lostResponse: false, noRun: false };
+  writes: 0, leaseChecks: 0, intents: 0, latestMain: sha, lostResponse: false, noRun: false, ancestors: [] };
   const input = { job: { id: "job", main_merge_sha: sha, data_merge_sha: dataSha, workflow_run_id: 55, workflow_run_attempt: 1, workflow_retry_attempt: null },
     snapshot: { eventId: "ch-20" }, step: "verifying_production", assertLease: async () => { state.leaseChecks += 1; },
     beginRemoteWrite: async () => { state.intents += 1; } };
@@ -93,6 +93,11 @@ function fixture() {
       if (path.endsWith("/runs/55")) return Response.json(state.run);
       if (/\/attempts\/\d+\/jobs$/.test(path)) return Response.json({ total_count: state.jobs.length, jobs: state.jobs });
       if (path.endsWith("/git/ref/heads/main")) return Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: state.latestMain } });
+      if (path.includes("/compare/")) {
+        const [base, head] = path.split("/compare/")[1].split("...");
+        const ahead = (base === sha && head === state.latestMain) || state.ancestors.some(([a, b]) => a === base && b === head);
+        return Response.json({ status: ahead ? "ahead" : "behind", base_commit: { sha: base }, merge_base_commit: { sha: ahead ? base : head } });
+      }
       if (path.endsWith(`/git/commits/${sha}`)) return Response.json({ sha, tree: { sha: "a".repeat(40) }, parents: [{ sha: "e".repeat(40) }], message: "main" });
       if (path.endsWith(`/git/trees/${"a".repeat(40)}`)) return Response.json({ sha: "a".repeat(40), truncated: false, tree: [{ path: "data/published-events.json", sha: "f".repeat(40), mode: "100644", type: "blob" }] });
       if (path.endsWith(`/git/blobs/${"f".repeat(40)}`)) return Response.json({ sha: "f".repeat(40), encoding: "base64", content: Buffer.from(JSON.stringify({ schema: "published-events/1", events: ["ff47", "ch-20"] })).toString("base64") });
@@ -167,4 +172,56 @@ test("retry cannot redeploy a superseded main commit or continue after losing it
   input.assertLease = async () => { throw new Error("lost lease"); };
   await assert.rejects(driver.run(input), /lost lease/);
   assert.equal(state.writes, 0);
+});
+
+test("queued deployment keeps its checkpoint; a superseded failure never offers a futile rerun", async () => {
+  const { state, input, driver } = fixture();
+  const checkpoint = structuredClone(input.job);
+  state.run.status = "queued"; state.run.conclusion = null; state.jobs = [];
+  assert.deepEqual(await driver.run(input), { pending: true });
+  assert.deepEqual(input.job, checkpoint);
+  const cancelled = fixture();
+  cancelled.state.jobs[0].conclusion = "cancelled";
+  cancelled.state.latestMain = "a".repeat(40);
+  await assert.rejects(cancelled.driver.run(cancelled.input), error => error.code === "publication_deployment_superseded" && !error.retryable);
+  assert.equal(cancelled.state.writes, 0);
+});
+
+test("a run the scope gate stopped before verification reads as superseded, not as an identity failure", async () => {
+  for (const step of ["waiting_deployment", "verifying_production"]) {
+    const { state, input, driver } = fixture();
+    input.step = step;
+    state.run.conclusion = "failure";
+    // GitHub lists a job skipped by a failed dependency with no steps.
+    Object.assign(state.jobs[0], { conclusion: "skipped", steps: [] });
+    state.latestMain = "a".repeat(40);
+    await assert.rejects(driver.run(input), error => error.code === "publication_deployment_superseded" && !error.retryable);
+    assert.equal(state.writes, 0);
+  }
+});
+
+test("only a confirmed newer main at production is superseded; an older origin stays retryable", async () => {
+  for (const confirmed of [false, true]) {
+    const { state, input, driver, origin } = fixture();
+    state.latestMain = "a".repeat(40);
+    origin.manifest.commit = confirmed ? state.latestMain : "e".repeat(40);
+    const checkpoint = structuredClone(input.job);
+    await assert.rejects(driver.run(input), error => confirmed
+      ? error.code === "publication_deployment_superseded" && !error.retryable
+      : error.code === "production_smoke_failed" && error.retryable);
+    assert.deepEqual(input.job, checkpoint);
+    assert.equal(state.writes, 0);
+  }
+});
+
+test("a newer deployed ancestor remains superseded after a docs-only main advance", async () => {
+  const { state, input, driver, origin } = fixture();
+  const deployed = "c".repeat(40);
+  state.latestMain = "a".repeat(40);
+  origin.manifest.commit = deployed;
+  state.ancestors = [[sha, deployed], [deployed, state.latestMain]];
+  await assert.rejects(driver.run(input), error => error.code === "publication_deployment_superseded" && !error.retryable);
+  assert.equal(state.writes, 0);
+  state.ancestors = [[sha, deployed]]; // A different branch's artifact is not proof.
+  await assert.rejects(driver.run(input), error => error.code === "production_smoke_failed" && error.retryable);
 });
