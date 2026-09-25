@@ -218,7 +218,7 @@ main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本
 
 ## 獨立 Worker 的版本與條件交付
 
-Pages 完整 CI 另執行 `node scripts/worker-delivery.mjs --build-only`：使用鎖定 Wrangler dry build，從實際打包的傳遞依賴、lockfile、Node 版本及有效環境設定產生 fingerprint。結果是「built-not-deployed」，不代表線上 Worker 已更新。只涵蓋既有 publication production、retention production／preview 三個目標，不建立 publication preview Worker。
+Pages 完整 CI 另執行 `node scripts/worker-delivery.mjs --build-only`：使用鎖定 Wrangler dry build，從實際打包的傳遞依賴、lockfile、Node 版本及有效環境設定產生 fingerprint。結果是「built-not-deployed」，不代表線上 Worker 已更新。涵蓋帳號上既有的四個 Worker：publication production／preview、retention production／preview；不為其他環境建立新的 Worker。
 
 `Inspect or deploy independent Workers` 是手動 workflow，預設 `apply=false`：查 active deployment 的唯一 100% version，記錄 target、environment、commit、fingerprint、deployment ID／version ID。尚無 fingerprint tag 的既有版本記為 `source-unverified`，不推定它落後。相同來源標記只證明程式對應，不代替 cron 執行、郵件送達或產品驗收。
 

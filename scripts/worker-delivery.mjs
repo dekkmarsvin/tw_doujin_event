@@ -10,6 +10,7 @@ import { cloudflareApi, normalizeCloudflareToken } from "./cloudflare-api.mjs";
 
 export const WORKER_TARGETS = [
   { id: "publication-production", name: "tw-catalog-publication-dispatch", config: "workers/publication-dispatch/wrangler.jsonc", env: "" },
+  { id: "publication-preview", name: "tw-catalog-publication-dispatch-preview", config: "workers/publication-dispatch/wrangler.jsonc", env: "preview" },
   { id: "retention-production", name: "tw-catalog-retention-purge", config: "workers/retention-purge/wrangler.jsonc", env: "" },
   { id: "retention-preview", name: "tw-catalog-retention-purge-preview", config: "workers/retention-purge/wrangler.jsonc", env: "preview" },
 ];
