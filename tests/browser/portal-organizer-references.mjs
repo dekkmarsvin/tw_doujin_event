@@ -6,6 +6,16 @@ import { ADMIN, clearMail, signIn } from "./support/portal.mjs";
 import { output, start } from "./support/journey.mjs";
 import { png } from "./support/png.mjs";
 
+// The "1200 × 630 px" caption renders from saved metadata before the bytes
+// arrive, so wait for the picture itself before reading its width.
+async function loadedWidth(page) {
+  const loaded = await page.waitForFunction(() => {
+    const image = document.querySelector('img[alt="活動圖片"]');
+    return image?.complete && { width: image.naturalWidth };
+  });
+  return (await loaded.jsonValue()).width;
+}
+
 const journey = await start("portal-organizer-references");
 try {
   await clearMail();
@@ -38,7 +48,7 @@ try {
   await page.getByText("尚有未儲存變更", { exact: true }).waitFor();
   const preview = page.getByRole("img", { name: "活動圖片", exact: true });
   await preview.waitFor();
-  assert.equal(await preview.evaluate((image) => image.complete && image.naturalWidth), 1200, "the private upload is what the preview shows");
+  assert.equal(await loadedWidth(page), 1200, "the private upload is what the preview shows");
   await page.getByText("1200 × 630 px", { exact: true }).waitFor();
   await journey.capture(page, "event-image-staged");
   await page.getByRole("button", { name: "建立主辦單位", exact: true }).click();
@@ -70,7 +80,7 @@ try {
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
   assert.equal(await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).locator("option:checked").textContent(), "測試主辦");
   await page.getByText("1200 × 630 px", { exact: true }).waitFor();
-  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).evaluate((image) => image.complete && image.naturalWidth), 1200, "the saved picture survives a reload");
+  assert.equal(await loadedWidth(page), 1200, "the saved picture survives a reload");
   assert.equal(await page.getByRole("combobox", { name: "主辦分類目錄", exact: true }).locator("option:checked").textContent(), "作品分類（2 個分類）");
   await journey.capture(page, "references-persisted");
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("partner");
