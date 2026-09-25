@@ -17,7 +17,7 @@ export function previewOrigin(url) {
   return parsed.origin;
 }
 
-export function previewResources(config, deployment, { deploymentId, baseUrl, sha }) {
+export function previewResources(config, deployment, { deploymentId, baseUrl, sha, productionDeployment }) {
   const origin = previewOrigin(baseUrl);
   assert.match(deploymentId, /^[a-f0-9-]{36}$/);
   assert.match(sha, /^[a-f0-9]{40}$/);
@@ -45,9 +45,25 @@ export function previewResources(config, deployment, { deploymentId, baseUrl, sh
   const production = select(config), preview = select(config.env.preview);
   assert.notEqual(preview.databaseId, production.databaseId, "preview D1 must differ from production");
   assert.ok(preview.buckets.every(bucket => !production.buckets.includes(bucket)), "preview buckets must differ from production");
+  // A PR can also change the declared production config. Its declarations
+  // alone cannot exclude overlap with the deployment actually serving users.
+  assert.equal(productionDeployment?.project_name, "tw-catalog");
+  assert.equal(productionDeployment?.environment, "production");
+  assert.match(productionDeployment?.id ?? "", /^[a-f0-9-]{36}$/);
+  assert.equal(productionDeployment?.latest_stage?.name, "deploy");
+  assert.equal(productionDeployment?.latest_stage?.status, "success");
+  const activeProductionDb = productionDeployment.d1_databases?.DB?.id;
+  assert.match(activeProductionDb ?? "", /^[a-f0-9-]{36}$/);
+  assert.notEqual(preview.databaseId, activeProductionDb, "preview D1 overlaps active production");
+  const activeProductionBuckets = names.map(name => {
+    const bucket = productionDeployment.r2_buckets?.[name]?.name;
+    assert.match(bucket ?? "", /^[a-z0-9-]+$/);
+    return bucket;
+  });
+  assert.ok(preview.buckets.every(bucket => !activeProductionBuckets.includes(bucket)), "preview buckets overlap active production");
   assert.equal(deployment.d1_databases?.DB?.id, preview.databaseId, "deployed DB binding mismatch");
   for (let i = 0; i < names.length; i++) assert.equal(deployment.r2_buckets?.[names[i]]?.name, preview.buckets[i], `deployed ${names[i]} mismatch`);
-  return { deploymentId, ...preview };
+  return { deploymentId, productionDeploymentId: productionDeployment.id, ...preview };
 }
 
 const statePath = () => path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), `tw-preview-${process.env.GITHUB_RUN_ID ?? "local"}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}.json`);
@@ -57,7 +73,9 @@ export async function preparePreviewFixture({ baseUrl, deploymentId, sha, api = 
   const parsed = ts.parseConfigFileTextToJson("wrangler.jsonc", await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
   if (parsed.error) throw new Error("Cannot parse Pages bindings.");
   const deployment = await api(`pages/projects/tw-catalog/deployments/${deploymentId}`);
-  const proof = previewResources(parsed.config, deployment, { deploymentId, baseUrl, sha });
+  const project = await api("pages/projects/tw-catalog");
+  assert.equal(project.name, "tw-catalog");
+  const proof = previewResources(parsed.config, deployment, { deploymentId, baseUrl, sha, productionDeployment: project.canonical_deployment });
   const fixture = previewFixture(`run-${process.env.GITHUB_RUN_ID ?? randomUUID()}-${process.env.GITHUB_RUN_ATTEMPT ?? 1}`);
   assert.ok(fixture);
   await writeFile(statePath(), JSON.stringify({ ...fixture, baseUrl: previewOrigin(baseUrl) }));

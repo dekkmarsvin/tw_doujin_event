@@ -109,10 +109,17 @@ test("resource selection rejects overlap and deployed metadata drift; origin mus
   const config = { ...production, env: { preview } };
   const deployed = c => ({ d1_databases: { DB: { id: c.d1_databases[0].database_id } }, r2_buckets: Object.fromEntries(c.r2_buckets.map(b => [b.binding, { name: b.bucket_name }])) });
   const expected = { deploymentId: "a".repeat(8)+"-"+"a".repeat(4)+"-"+"a".repeat(4)+"-"+"a".repeat(4)+"-"+"a".repeat(12), baseUrl: "https://abcd1234.tw-catalog.pages.dev", sha: "f".repeat(40) };
+  expected.productionDeployment = { ...deployed(production), id: expected.deploymentId, project_name: "tw-catalog", environment: "production",
+    latest_stage: { name: "deploy", status: "success" } };
   const deployment = { ...deployed(preview), id: expected.deploymentId, project_name: "tw-catalog", environment: "preview", url: expected.baseUrl,
     deployment_trigger: { metadata: { commit_hash: expected.sha } }, latest_stage: { name: "deploy", status: "success" } };
   assert.equal(previewResources(config, deployment, expected).databaseId, preview.d1_databases[0].database_id);
   assert.throws(() => previewResources({ ...config, env: { preview: production } }, deployment, expected));
+  assert.throws(() => previewResources(config, deployment, { ...expected, productionDeployment: null }));
+  for (const field of ["d1_databases", "r2_buckets"]) {
+    const active = { ...expected.productionDeployment, [field]: deployed(preview)[field] };
+    assert.throws(() => previewResources(config, deployment, { ...expected, productionDeployment: active }), "repo declarations cannot hide overlap with actual production");
+  }
   for (const mutate of [d => { d.d1_databases.DB.id = production.d1_databases[0].database_id; },
     d => { d.r2_buckets.THUMBNAILS.name = "wrong"; }, d => { delete d.r2_buckets.MAP_CONTRIBUTIONS; },
     d => { d.environment = "production"; }, d => { d.url = "https://tw-catalog.pages.dev"; },
