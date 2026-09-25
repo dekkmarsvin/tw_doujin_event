@@ -77,7 +77,7 @@ npm run build:production
 
 ## 共同 gate
 
-程式改動的完整 gate 使用以下指令；本機驗證範圍依 [review-fix loop](../agents/review-loop.md#相稱的驗證)判斷，純文件變更見[下一節](#純文件變更)。Required CI 仍照常執行。
+產品程式、建置輸入、依賴與 CI／測試基礎設施的完整 gate 由 CI 執行以下指令。本機預設只跑本次重現與受影響回歸；需要診斷環境差異、CI 無法提供有效結果或改動跨越多個邊界時，才補跑完整 gate，並記錄理由。未改變的有效結果依 [review-fix loop](../agents/review-loop.md#相稱的驗證)沿用，純文件變更見[下一節](#純文件變更)。
 
 ```bash
 npm ci
@@ -96,14 +96,15 @@ npx tsc --noEmit --incremental false
 
 ### 純文件變更
 
-只改 Markdown、不動程式與測試時，本機跑這兩項即可，PR 註明未跑程式測試的理由：
+只改內部說明文件、不動產品或建置輸入時，本機跑以下一項即可，PR 註明適用範圍。`docs/policy/privacy-notice.md` 會產生公開頁面，仍屬產品變更。
 
 ```bash
 node --test tests/contribution-files.test.mjs
-node scripts/check-doc-map.mjs --check
 ```
 
-前者檢查每個相對連結與錨點、ADR 索引與 `docs/design/` 的檔案範圍，後者檢查契約開頭的實作／測試清單與[契約索引](../contracts/INDEX.md)一致。改了契約的實作或測試清單時，先跑一次不帶 `--check` 的 `node scripts/check-doc-map.mjs` 重新產生索引。兩者都包含在 `npm test` 裡，CI 照常執行。
+這項測試檢查相對連結與錨點、ADR 索引、`docs/design/` 的檔案範圍，並已執行 `check-doc-map --check` 核對契約清單與[契約索引](../contracts/INDEX.md)，不需再跑一次。改了契約的實作或測試清單時，先跑不帶 `--check` 的 `node scripts/check-doc-map.mjs` 重新產生索引。
+
+CI 以 [ci-scope.mjs](../../scripts/ci-scope.mjs) 的保守 allowlist 分類：內部文件、證據與已列出的開發工具跑文件檢查；開發工具另查 Claude 設定 JSON、hook shell 語法與非遠端模式。這些變更不部署，也不執行產品 Node／browser／remote preview E2E。未知路徑、混合產品變更、測試／CI 基礎設施、公開文件、依賴或無法核對的比較歷史都走完整 gate；手動 dispatch 同樣完整執行。精確 CI 行為見[部署 runbook](./deployment.md#ci-行為)。
 
 ### 開發途中只跑相關的測試
 
@@ -143,6 +144,15 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 `npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
+聚焦驗證用 `--journey` 指定檔名（可省略 `.mjs`），可重複提供多個名稱；只準備選定旅程需要的資料與伺服器。未指定時仍跑全部旅程。
+
+```bash
+npm run test:browser -- --journey reader-thumbnails
+npm run test:browser -- --journey portal-admin-entry --journey portal-organizer-entry
+```
+
+未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；CI 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收。
+
 ### journey 與它需要的資料
 
 journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runner 掃描該目錄，並從每支 journey 自己的原始碼讀出它需要哪一組 staged 資料，與 `scripts/run-tests.mjs` 推導 tier 的原則相同。檔案開頭宣告：
@@ -171,21 +181,23 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 `fixture` journey 以攔截 `circles.json` 與 `overrides.json` 的方式供應情境資料，不修改 `fixtures/` 內任何檔案；圖片只接受 https，所以 journey 自行應答該來源，藉此區分「沒有圖」與「有圖但讀不到」。共用工具在 `tests/browser/support/`，該子目錄不會被當成 journey 執行。
 
-瀏覽器**刻意不列入 `package.json`**——`npm ci` 與整套 Node 測試必須能在沒有瀏覽器的機器上執行。第一次跑之前安裝一次：
+Playwright 套件在 `package.json` 使用精確版本並納入 lockfile；`npm ci` 安裝套件，不下載瀏覽器二進位，Node 測試仍能在沒有瀏覽器的機器執行。第一次跑 browser 或升級 Playwright 後，安裝對應的 Chromium：
 
 ```bash
 npm run test:browser:install
 ```
 
-它使用 `--no-save`，所以不會動到 `package.json`；下一次 `npm ci` 之後需要重跑。已經有 Playwright 的話，改設 `PLAYWRIGHT_MODULE` 指向它即可。
+這條命令只安裝已鎖定套件所需的 Chromium。Claude 雲端 hook 沿用 `npm ci` 與同一安裝命令，不另裝另一個 Playwright 版本。`PLAYWRIGHT_MODULE` 僅供刻意使用其他 runtime 的診斷或 runner fixture；若用它取得驗收證據，須記錄該版本與環境，不能冒充 locked CI 結果。
 
 代表性尺寸是 PR gate（CI 的 `Browser acceptance` job），完整矩陣是 QA／release 前的檢查。要對既有的伺服器或 preview 部署執行，設 `MAP_TEST_URL`；此時資料與伺服器由呼叫者負責，腳本不會 staging，因此**只會執行 `pinned` journey**——部署提供的是已發布活動，不是 fixture。`BROWSER_CHANNEL` 可改用系統安裝的 Chrome 通道。
+
+若明確選取 fixture／portal journey 且同時設了 `MAP_TEST_URL`，runner 會拒絕執行；請移除該環境變數，由 runner 建立隔離環境。篩選後沒有任何可執行旅程也會失敗。
 
 操作失敗時，共用 journey 的 `browser-report-<journey>.json` 與地圖 viewport 的 `browser-report-<matrix>.json` 都保留原始錯誤，並附最多五個開啟頁面的畫面文字、失敗截圖路徑與最近二十筆請求結果。請求只記 method、path、status／網路錯誤，不記 query、headers 或 body；診斷取不到的項目如實標示，不覆蓋原始失敗。先用當時畫面與狀態判斷等待條件，再決定是否重跑。
 
 **注意**：`npm run test:browser` 會改寫 staging（最後一組是 fixture `sample` + `sample-two`）。之後跑 `npm test` 會自動換回單一 fixture，但開發途中若直接執行 `npm run dev:pages`，看到的會是上一次驗收留下的 staging。
 
-**程式變更交付前仍然要跑一次完整的 `npm test`**，分層只是開發途中的捷徑。
+**產品程式交付須有對應版本的完整 CI 結果**，不要求本機再重複執行同一完整套件。PR 記錄本機聚焦測試、CI run、commit 與環境；改動或新證據使結果失效時，重跑對應範圍。
 
 ## 額外檢查
 
@@ -196,7 +208,7 @@ npm run test:browser:install
 
 ## 人工瀏覽器實測
 
-`npm run test:browser` 已涵蓋地圖 viewport、選取、焦點與 URL 狀態的自動驗收。以下仍需人工操作，自動測試不取代：
+`npm run test:browser` 已涵蓋地圖 viewport、選取、焦點與 URL 狀態。人工驗收按本次受影響任務選取以下範圍，確認視覺品質、真實部署或自動化尚未證明的操作；不把每個 PR 都重做完整清單列為 gate：
 
 - 桌機探索／行程左欄與詳情浮層，以及行動版探索／行程兩入口與獨立社團摘要；
 - 鍵盤焦點、Escape 與焦點復原；
