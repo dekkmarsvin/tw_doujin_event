@@ -1,0 +1,60 @@
+name: Inspect or deploy independent Workers
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Existing Worker to inspect or update
+        type: choice
+        options:
+          - all
+          - publication-production
+          - retention-production
+          - retention-preview
+        default: all
+      apply:
+        description: Deploy changed source after configuration checks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: independent-worker-delivery
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  workers:
+    name: Worker version evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Inspect active versions or deploy changed Workers
+        env:
+          WORKER_TARGET: ${{ inputs.target }}
+          APPLY: ${{ inputs.apply }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          mode=--audit
+          if [ "$APPLY" = true ]; then
+            test "$GITHUB_REF" = refs/heads/main
+            mode=--apply
+          fi
+          node scripts/worker-delivery.mjs "$mode" --target "$WORKER_TARGET"
+      - name: Upload Worker version evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-delivery-evidence
+          path: .wrangler/worker-delivery.json
+          retention-days: 7

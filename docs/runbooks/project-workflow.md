@@ -96,6 +96,8 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 
 需要附圖時，截圖提交在 PR 分支的 `.evidence/<主題>/`，以該 commit 的 `https://raw.githubusercontent.com/dekkmarsvin/tw_doujin_event/<commit SHA>/.evidence/…` 嵌入 PR 本文或主票留言；合併前最後一個 commit 刪除 `.evidence/`，main 不保存證據圖。含證據的 commit 之後不再改寫或 force-push，否則固定連結會失效。含登入帳號、email 或其他個人資料的畫面不上傳。
 
+新增截圖與移除截圖的兩個 commit 在本機備妥後同批 push，保留固定 commit 連結但避免為搬圖再觸發一輪 CI。受測內容／環境未變時沿用既有有效證據，註明對應版本；不為更新 PR 文字重拍相同畫面。Actions 的七天 artifact 用於診斷，不能取代 issue／PR 上持續可查的驗收紀錄；本階段沿用此保存方式，不新增儲存服務。
+
 主辦活動發布的完整流程：
 
 **建立 → 匯入 → 地圖 → 驗證 → Reader 預覽 → 送審 → 核准並發布 → 自動發布 → production smoke → Reader**。

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { previewRequestInit } from "../scripts/preview-transport.mjs";
 import test, { after, beforeEach } from "node:test";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -199,39 +199,30 @@ test("every client call sends the session cookie", async () => {
 /**
  * The E2E script is the third party to this contract, and the one with no
  * browser filling in the blanks: it must state `Origin` itself, and it cannot
- * key the content type on having a body, because its first call is a bodyless
- * DELETE. It got both wrong and nobody noticed for weeks — the job that runs it
- * was skipped on every PR, so the script had never actually executed.
- *
- * Checked at the source level: the script runs the whole flow on import against
- * a live preview host, so a test cannot call into it. The headers it builds are
- * then replayed through the real middleware below, which is the part that
- * matters — agreement with the gate, not the presence of a string.
+ * key the content type on having a body. Exercise the same transport used by
+ * the journey and its cleanup against the actual gate.
  */
 test("the preview E2E script shapes mutations the way the gate demands", async () => {
-  const source = await readFile(new URL("../scripts/preview-portal-e2e.mjs", import.meta.url), "utf8");
-
-  const headerBlock = source.match(/const MUTATION_HEADERS = (\{[^}]*\});/)?.[1];
-  assert.ok(headerBlock, "the script must build its mutation headers in one named place");
-  // `new URL(baseUrl).origin` cannot be evaluated here; the assertion is that
-  // whatever it resolves to is sent as `origin`, so substitute this test's.
-  const headers = Object.fromEntries(
-    [...headerBlock.matchAll(/(?:"([^"]+)"|([a-z-]+)):\s*(?:"([^"]+)"|[^,}]+)/g)]
-      .map((match) => [match[1] ?? match[2], match[3] ?? ORIGIN]),
-  );
-
-  assert.deepEqual(Object.keys(headers).sort(), ["content-type", "origin"]);
-  assert.equal(headers["content-type"], "application/json");
-
-  // The gate itself is the judge.
   for (const method of ["POST", "DELETE"]) {
-    const response = await onRequest(context(request(method, "/api/preview/mail", headers)));
-    assert.equal(response.status, 200, `${method} shaped by the script must pass the gate`);
+    for (const body of [undefined, { runId: "run-test-123" }]) {
+      const init = previewRequestInit(ORIGIN, { method, body, e2eToken: "test-token", cookie: "session=test",
+        accessHeaders: { "cf-access-client-id": "service-id" } });
+      assert.equal(init.redirect, "manual");
+      assert.equal(init.headers["x-preview-e2e-token"], "test-token");
+      assert.equal(init.headers.cookie, "session=test");
+      assert.equal(init.headers["cf-access-client-id"], "service-id");
+      assert.equal(init.body, body === undefined ? undefined : JSON.stringify(body));
+      const response = await onRequest(context(new Request(`${ORIGIN}/api/preview/mail`, init)));
+      assert.equal(response.status, 200, `${method} shaped by the script must pass the gate`);
+    }
   }
-
-  // And the reads must stay unshaped, or the script would send a content type
-  // on a GET the client is tested never to send one on.
-  assert.match(source, /method === "GET" \|\| method === "HEAD" \? \{\} : MUTATION_HEADERS/);
+  for (const method of ["GET", "HEAD"]) {
+    const init = previewRequestInit(ORIGIN, { method });
+    assert.equal(init.headers["content-type"], undefined);
+    assert.equal(init.headers.origin, undefined);
+    assert.equal(init.headers["x-preview-e2e-token"], undefined);
+    assert.equal((await onRequest(context(new Request(`${ORIGIN}/api/preview/mail`, init)))).status, 200);
+  }
 });
 
 /**

@@ -23,6 +23,7 @@ const mapContributionObjects = new Set(["events/ff47/map-drafts/draft-1/file-1/s
 
 const env = {
   PREVIEW_MAIL_SINK: "d1",
+  LOCAL_PORTAL_DISPOSABLE: "true",
   PREVIEW_TEST_RECIPIENTS: "preview-admin@example.test, preview-circle@example.test",
   PREVIEW_SANDBOX_RECIPIENTS: "maintainer@example.com",
   PREVIEW_E2E_TOKEN: "a-private-preview-token",
@@ -81,7 +82,7 @@ test("preview route reads and clears captured mail only with its dedicated token
   const hidden = await onRequestGet({ request: new Request(authorized.url), env });
   assert.equal(hidden.status, 404);
 
-  const cleared = await onRequestDelete({ request: new Request("https://preview.example/api/preview/mail", {
+  const cleared = await onRequestDelete({ request: new Request("http://127.0.0.1/api/preview/mail", {
     method: "DELETE",
     headers: { "x-preview-e2e-token": env.PREVIEW_E2E_TOKEN },
   }), env });
@@ -96,7 +97,7 @@ test("preview reset fails before deleting anything when private map storage is m
   previewObjects.add("events/ff47/circles/c-000001/keep.png");
   await repositoryFor(env).storePreviewMail({ email: "preview-circle@example.test", subject: "login", text: "keep", now: 1_786_500_000_001 });
   const response = await onRequestDelete({
-    request: new Request("https://preview.example/api/preview/mail", {
+    request: new Request("http://127.0.0.1/api/preview/mail", {
       method: "DELETE", headers: { "x-preview-e2e-token": env.PREVIEW_E2E_TOKEN },
     }),
     env: { ...env, MAP_CONTRIBUTIONS: undefined },

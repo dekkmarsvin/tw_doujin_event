@@ -168,3 +168,30 @@ test("retry cannot redeploy a superseded main commit or continue after losing it
   await assert.rejects(driver.run(input), /lost lease/);
   assert.equal(state.writes, 0);
 });
+
+test("queued deployment keeps its checkpoint; a superseded failure never offers a futile rerun", async () => {
+  const { state, input, driver } = fixture();
+  const checkpoint = structuredClone(input.job);
+  state.run.status = "queued"; state.run.conclusion = null; state.jobs = [];
+  assert.deepEqual(await driver.run(input), { pending: true });
+  assert.deepEqual(input.job, checkpoint);
+  const cancelled = fixture();
+  cancelled.state.jobs[0].conclusion = "cancelled";
+  cancelled.state.latestMain = "a".repeat(40);
+  await assert.rejects(cancelled.driver.run(cancelled.input), error => error.code === "publication_deployment_superseded" && !error.retryable);
+  assert.equal(cancelled.state.writes, 0);
+});
+
+test("only a confirmed newer main at production is superseded; an older origin stays retryable", async () => {
+  for (const confirmed of [false, true]) {
+    const { state, input, driver, origin } = fixture();
+    state.latestMain = "a".repeat(40);
+    origin.manifest.commit = confirmed ? state.latestMain : "e".repeat(40);
+    const checkpoint = structuredClone(input.job);
+    await assert.rejects(driver.run(input), error => confirmed
+      ? error.code === "publication_deployment_superseded" && !error.retryable
+      : error.code === "production_smoke_failed" && error.retryable);
+    assert.deepEqual(input.job, checkpoint);
+    assert.equal(state.writes, 0);
+  }
+});
