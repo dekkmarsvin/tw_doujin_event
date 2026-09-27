@@ -82,11 +82,15 @@ const missingAssets = reader.filter((path) => !files.includes(path));
 if (missingAssets.length > 0) throw new Error(`index.html references missing assets: ${missingAssets.join(", ")}`);
 
 // The portal is a separate entry that readers never load; precaching it would
-// push its bundle onto every visitor.
-for (const entry of ["circle", "organizer", "admin"]) {
-  const portalHtml = await readFile(resolve(dist, `${entry}.html`), "utf8").catch(() => "");
-  const portalOnly = readerAssets(portalHtml).filter((path) => !reader.includes(path));
-  const leaked = precache.filter((path) => portalOnly.includes(path));
+// push its bundle onto every visitor. A circle introduction page is not the
+// map either: its navigation is network-only, so its own script has no
+// business in the offline shell. Every circle page carries the same tags, so
+// the first one stands for all of them.
+const circlePage = files.find((path) => /^\/events\/[^/]+\/circles\/[^/]+\/index\.html$/.test(path));
+for (const [entry, path] of [["circle", "/circle.html"], ["organizer", "/organizer.html"], ["admin", "/admin.html"], ["circle page", circlePage]]) {
+  const portalHtml = path ? await readFile(resolve(dist, path.slice(1)), "utf8").catch(() => "") : "";
+  const portalOnly = readerAssets(portalHtml).filter((asset) => !reader.includes(asset));
+  const leaked = precache.filter((asset) => portalOnly.includes(asset));
   if (leaked.length > 0) throw new Error(`Refusing to precache ${entry} assets: ${leaked.join(", ")}`);
 }
 

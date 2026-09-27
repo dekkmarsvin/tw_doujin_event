@@ -13,7 +13,8 @@ import {
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail,
 } from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem, THUMBNAIL_NOT_AN_IMAGE } from "../circle-override-messages";
-import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
+import { CircleDetails } from "../event-workspace-panels";
+import { LINK_KIND_LABEL } from "../circle-presentation";
 import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
@@ -21,6 +22,7 @@ import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../ev
 import { nearestEvent, taipeiDate } from "../event-calendar";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
+import { CirclePageShare } from "./circle-page-share";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
 import styles from "./portal.module.css";
 
@@ -710,6 +712,22 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const reviewActions = useRef<HTMLDivElement | null>(null);
   const expandedPreview = useRef<HTMLDivElement | null>(null);
   const previewRequestGeneration = useRef(0);
+  // The official records behind the share text. A failed first read is kept
+  // apart from a pending one so the share panel can say which it is.
+  const [baselineFailed, setBaselineFailed] = useState(false);
+  const baselineRetry = useRef(0);
+  // Its own counter: a retry must not cancel a review preview already in flight.
+  const retryBaseline = () => {
+    const attempt = ++baselineRetry.current;
+    setBaselineFailed(false);
+    void previewOverride(claim.circleId, savedFields)
+      .then((result) => {
+        if (attempt !== baselineRetry.current) return;
+        setBaseRecords((current) => current ?? result.baseRecords as CircleViewRecord[]);
+        setProjectedAt((current) => current || result.projectedAt);
+      })
+      .catch(() => { if (attempt === baselineRetry.current) setBaselineFailed(true); });
+  };
 
   // State contains only fields the author has deliberately touched. Empty
   // strings/arrays and a null thumbnail are tombstones, not values to discard.
@@ -745,11 +763,24 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         setSaved(result.status !== "none");
         setHydrated(true);
         const requestGeneration = ++previewRequestGeneration.current;
+        setBaselineFailed(false);
         void previewOverride(claim.circleId, initialFields).then((previewResult) => {
-          if (requestGeneration !== previewRequestGeneration.current) return;
-          setBaseRecords(previewResult.baseRecords as CircleViewRecord[]);
-          setProjectedAt(previewResult.projectedAt);
-        }).catch(() => undefined);
+          const baseline = previewResult.baseRecords as CircleViewRecord[];
+          if (requestGeneration === previewRequestGeneration.current) {
+            setBaseRecords(baseline);
+            setProjectedAt(previewResult.projectedAt);
+            return;
+          }
+          // A review opened meanwhile owns the preview now, but if its own
+          // request failed nothing else will fill the official records in —
+          // and the share panel would wait on them forever.
+          setBaseRecords((current) => current ?? baseline);
+          setProjectedAt((current) => current || previewResult.projectedAt);
+        // Editing goes on without the baseline; only sharing needs it, and it
+        // offers its own retry rather than posting text with no booths. The
+        // panel shows the failure only while no records have arrived by any
+        // path, so a later request that succeeded is never shown as failed.
+        }).catch(() => { if (active) setBaselineFailed(true); });
       })
       // Not hydrated: `savedFields` never arrived, so every comparison against
       // it would read as "same as the server" and take the draft away from an
@@ -1224,6 +1255,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {status.message}
       {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}
     </p>}
+    {saved && hydrated && <CirclePageShare
+      event={event} circle={{ id: claim.circleId, name: claim.circleName }}
+      records={baseRecords} failed={baselineFailed && !baseRecords} onRetry={retryBaseline}
+    />}
       </fieldset>
       </div>
 

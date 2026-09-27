@@ -2,8 +2,8 @@
 
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
-**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
+**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`
@@ -173,6 +173,17 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - `<= 760px`：「預覽並送出」進入全畫面檢查頁，只能返回修改或確認儲存，沒有直接儲存動作。
 - `761–959px`：表單保持單欄，以明確動作在同頁開啟可返回的檢查區。
 - `>= 960px`：左側表單、右側 sticky 即時公開卡預覽；準備儲存時，右側切換成 server preview 確認。
+
+## 分享公開頁
+
+這個社團在這場活動已有儲存的內容時，編輯器在儲存結果下方提供「分享公開頁」：「查看公開頁」開啟[社團介紹頁](./circle-catalog.md#社團介紹頁)，「複製宣傳文字與連結」複製一段現成的貼文，瀏覽器支援系統分享時另有「分享」。
+
+- 宣傳文字只由官方資料組成：社團名稱（官方配置目前的名稱，不是認領當時的快照）、活動名稱（有別稱時附第一個別稱）、每個可前往日期的攤位與場館，最後一行是社團頁的網址（以目前網站的網址為前綴）。只有一個場館時在全部日期之後寫一次；跨多個場館時每個日期寫出自己的場館與該場館的攤位。已取消或已移動的攤位不寫入。
+- 帳號、email、登入連結、認領狀態、控制面網址與未儲存的草稿都不是這段文字的輸入，因此不可能出現在裡面。
+- 攤位來自編輯器讀取的官方配置。配置尚未取得時不產生文字，「查看公開頁」「複製」與「分享」都停用並顯示正在準備；讀取失敗時說明無法取得攤位資料並提供「重新取得」，不以缺少日期與攤位的文字代替。
+- 社團介紹頁只為在該活動有配置的社團產生（見[資料傳輸與離線契約](./delivery-and-offline.md#公開搜尋介紹頁)）。已認領但本場沒有任何配置的社團沒有公開頁，不顯示分享區塊。
+- 文字同時顯示在唯讀文字框。剪貼簿拒絕時選取整段文字並請作者自行複製；關閉系統分享面板不算失敗，不顯示錯誤。
+- 分享預覽（`og:*`）沿用社團頁既有的靜態 metadata：標題含社團名稱、活動簡稱與攤位，圖片是品牌分享圖。本頁不產生社團專屬的分享圖。
 
 ## 標示
 

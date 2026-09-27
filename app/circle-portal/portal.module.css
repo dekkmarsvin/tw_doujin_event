@@ -641,3 +641,18 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .card .queueRowActions button, .card .queueActions button:not(:where(.inlineButton)) { min-height: 44px; }
   .queueActions { width: 100%; }
 }
+
+/* The page a circle shares once something is published. Its own section, not
+   a line of the save notice: it stays after the notice clears. */
+.sharePanel { margin-top: 18px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.sharePanel h3 { margin: 0; font-size: 13px; }
+.sharePanel textarea { font-size: 14px; line-height: 1.6; }
+.shareActions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
+.shareLink { display: inline-flex; align-items: center; min-height: 38px; margin-top: 14px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-decoration: none; }
+.shareLink:hover { background: var(--paper); }
+.shareLink:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
+.shareResult { min-height: 1.6em; margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+@media (max-width: 760px) {
+  .shareActions > * { flex: 1 1 100%; justify-content: center; }
+  .shareLink, .shareActions button { min-height: 44px; }
+}

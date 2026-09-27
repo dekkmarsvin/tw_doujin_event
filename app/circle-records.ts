@@ -3,7 +3,7 @@ import { indexCircleOverrides } from "./circle-overrides";
 import type { CircleOverride, CircleOverridesPayload } from "./circle-overrides";
 import type { Booth, Tone } from "./booth";
 
-const CIRCLE_CATALOG_SCHEMA = "circle-catalog/3" as const;
+export const CIRCLE_CATALOG_SCHEMA = "circle-catalog/3" as const;
 
 type SourceStatus = "linked" | "stale" | "unavailable" | "unverified";
 export type SourceContentType = "official" | "circle" | "catalog" | "social" | "media";

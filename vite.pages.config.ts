@@ -50,6 +50,10 @@ export default defineConfig({
         organizer: resolve(import.meta.dirname, "organizer.html"),
         // Existing moderation tools share the session; sign-in stays in /circle.
         admin: resolve(import.meta.dirname, "admin.html"),
+        // A circle introduction page's own script: the circle's live content
+        // and the planning actions. A template, not a page — the discovery
+        // build copies its asset tags into the static pages and removes it.
+        circlePage: resolve(import.meta.dirname, "circle-page.html"),
       },
     },
   },

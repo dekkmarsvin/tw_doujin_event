@@ -172,6 +172,21 @@ try {
   await circle.locator('aside[aria-label="即時公開預覽"]').waitFor();
   await journey.capture(circle, "portal-saved");
 
+  // 6b. What a circle does next is take its page somewhere else. The ready-made
+  //     post is the official facts and the page's stable address; nothing about
+  //     the account, the sign-in or the claim can be in it.
+  const pageUrl = new URL(`/events/sample/circles/${CIRCLE_ID}/`, base).toString();
+  const share = circle.getByRole("region", { name: "分享公開頁" });
+  await share.waitFor();
+  const promotion = await share.getByRole("textbox", { name: "宣傳文字" }).inputValue();
+  assert.match(promotion, new RegExp(CIRCLE_NAME), "the post names the circle");
+  assert.match(promotion, /S01/, "and its booth");
+  assert.ok(promotion.endsWith(pageUrl), "and ends with the page's stable address");
+  assert.doesNotMatch(promotion, new RegExp(CIRCLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the post never names the account");
+  assert.doesNotMatch(promotion, /login=|\/circle\?|\/api\//, "the post carries no sign-in or portal address");
+  assert.equal(await share.getByRole("link", { name: "查看公開頁" }).getAttribute("href"), pageUrl);
+  await journey.capture(circle, "portal-share");
+
   // 7. What was saved survives a reload — the reader's copy is not a local draft.
   await circle.reload();
   await penField(circle).waitFor();
@@ -182,6 +197,52 @@ try {
     .catch(() => { throw new Error(`the saved pen name did not come back from the server (field held "${""}")`); });
   for (const rating of ["全年齡", "R15", "R18"]) assert.equal(await circle.getByRole("checkbox", { name: rating, exact: true }).isChecked(), true);
   assert.equal(await circle.locator('input[id^="specialTags-"]').inputValue(), "自由題材");
+
+  // 7b. The post waits for the official booths. A failed read offers to fetch
+  //     them again instead of a post with no dates or booths in it.
+  let previewFails = true;
+  await circle.route(`**/api/circle/${CIRCLE_ID}/preview**`, (route) => (previewFails
+    ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "測試中的讀取失敗" }) })
+    : route.continue()));
+  await circle.reload();
+  const sharing = circle.getByRole("region", { name: "分享公開頁" });
+  await sharing.getByText("無法取得攤位資料，宣傳文字暫時無法產生。").waitFor();
+  assert.equal(await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).isDisabled(), true, "nothing to copy without booths");
+  assert.equal(await sharing.getByRole("textbox", { name: "宣傳文字" }).count(), 0, "and no partial post to copy by hand");
+  await journey.capture(circle, "portal-share-baseline-failed");
+  previewFails = false;
+  await sharing.getByRole("button", { name: "重新取得", exact: true }).click();
+  assert.match(await sharing.getByRole("textbox", { name: "宣傳文字" }).inputValue(), /S01/, "the retry brings the booths back");
+  assert.equal(await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).isDisabled(), false);
+
+  // 7c. A browser with no Clipboard API at all falls back to a selected post,
+  //     the same as one that refuses the write.
+  await circle.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true }));
+  await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).click();
+  await sharing.getByText("無法自動複製，文字已選取，請自行複製。", { exact: true }).waitFor();
+
+  // 7d. The first read is still in flight when the author opens a review, and
+  //     the review's own read fails. The first answer must still fill the
+  //     share panel rather than being dropped as superseded.
+  await circle.unroute(`**/api/circle/${CIRCLE_ID}/preview**`);
+  let releaseFirstRead;
+  const firstRead = new Promise((resolve) => { releaseFirstRead = resolve; });
+  let previewReads = 0;
+  await circle.route(`**/api/circle/${CIRCLE_ID}/preview**`, async (route) => {
+    previewReads += 1;
+    if (previewReads === 1) {
+      await firstRead;
+      return route.continue();
+    }
+    return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "測試中的讀取失敗" }) });
+  });
+  await circle.reload();
+  await sharing.getByText("正在準備宣傳文字…", { exact: true }).waitFor();
+  await circle.getByRole("button", { name: "預覽並送出", exact: true }).click();
+  await circle.getByText("測試中的讀取失敗").first().waitFor();
+  assert.equal(previewReads, 2, "the review asked for its own preview while the first read was held");
+  releaseFirstRead();
+  assert.match(await sharing.getByRole("textbox", { name: "宣傳文字" }).inputValue(), /S01/, "the held first read still supplies the booths");
   await circle.close();
 
   // 8. And it reaches the public overlay every reader downloads.
@@ -196,6 +257,16 @@ try {
   // The overlay is what every anonymous reader downloads, so it must not carry
   // who wrote it.
   assert.doesNotMatch(JSON.stringify(payload), new RegExp(CIRCLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the public overlay never names the account that wrote it");
+
+  // 9. The page a stranger opens from that post, in a fresh browser with no
+  //    session: what the circle wrote is there without opening the map.
+  const stranger = await journey.page({ url: pageUrl, viewport: { width: 390, height: 844 } });
+  await stranger.getByRole("heading", { name: "社團介紹", exact: true }).waitFor();
+  const strangerText = await stranger.locator("main").innerText();
+  assert.match(strangerText, new RegExp(PEN_NAME), "the public page shows what the circle saved");
+  assert.match(strangerText, /由社團填寫 · 最後更新 \d{4}\.\d{2}\.\d{2}/, "with who wrote it and when");
+  await journey.capture(stranger, "circle-page-published");
+  await stranger.close();
 
   // Anonymous Reader consumes the saved overlay, applies each rating, and
   // restores the shared R15 condition rather than guessing a highest rating.

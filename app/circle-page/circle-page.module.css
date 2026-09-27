@@ -1,0 +1,56 @@
+/* Sits inside the static introduction page, so it inherits discovery.css:
+   the same paper ground, ink, 960px column and link colour. */
+.content,.planning { margin-top:32px; }
+.content h2,.planning h2 { margin:0 0 12px; }
+.content h3 { margin:24px 0 6px; font-size:16px; }
+
+.picture { margin:0; }
+/* A circle's picture is shown whole: cropping it to a frame would cut the
+   words a sale sheet is made of. */
+.picture img { display:block; max-width:100%; max-height:min(70vh,720px); height:auto; border:1px solid #dfe3df; border-radius:12px; background:#f2f0e8; object-fit:contain; }
+.picture figcaption { margin-top:6px; color:#626b73; font-size:14px; }
+
+.saleInfo { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+
+.details { display:grid; gap:10px; margin:20px 0 0; }
+.details div { display:grid; grid-template-columns:7em 1fr; gap:12px; align-items:baseline; }
+.details dt { color:#626b73; font-size:14px; }
+.details dd { display:flex; flex-wrap:wrap; gap:6px; margin:0; }
+.details dd { overflow-wrap:anywhere; }
+.tag { padding:2px 8px; border-radius:5px; background:#eceee8; font-size:14px; }
+
+.links { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.links a { display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 0; border-bottom:1px solid #dfe3df; text-decoration:none; }
+.links a span { font-weight:700; overflow-wrap:anywhere; }
+.links a small { color:#626b73; font-size:13px; }
+.links a svg { flex-shrink:0; margin-left:auto; }
+
+.source { margin:20px 0 0; color:#626b73; font-size:14px; }
+.muted { color:#626b73; }
+
+.skeleton { display:grid; gap:10px; padding:4px 0; }
+.skeleton span { display:block; height:14px; border-radius:5px; background:#eceee8; }
+.skeleton span:first-child { width:40%; height:20px; }
+.skeleton span:last-child { width:70%; }
+
+.unavailable { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0; }
+
+.actions { display:flex; flex-wrap:wrap; gap:10px; }
+.actions button,.unavailable button,.feedback button { min-height:44px; display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:1px solid #cfd5cf; border-radius:7px; background:#f9faf8; color:#202a35; font:inherit; font-weight:700; cursor:pointer; }
+.actions button:hover:not(:disabled),.unavailable button:hover,.feedback button:hover { background:#f0f2ef; }
+.actions button:focus-visible,.unavailable button:focus-visible,.feedback button:focus-visible { outline:3px solid #d99b44; outline-offset:2px; }
+.actions button:disabled { border-color:#dfe3df; background:#eceee8; color:#6f7873; cursor:not-allowed; }
+.actions button svg { color:#b9b1ad; }
+.actions .saved svg { color:#e86f5d; }
+.actions .planned,.actions .saved { border-color:#202a35; }
+
+.feedback { min-height:44px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-top:8px; }
+.error { padding:10px 12px; border:1px solid #e3b4ab; border-radius:7px; background:#fbeeeb; color:#8c2f22; }
+
+.visuallyHidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+
+@media (max-width:540px) {
+  .details div { grid-template-columns:1fr; gap:4px; }
+  .actions button { flex:1 1 100%; justify-content:center; }
+}
+@media (prefers-reduced-motion:reduce) { * { transition:none!important; } }

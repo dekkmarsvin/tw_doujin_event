@@ -3,6 +3,7 @@ import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
 import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
+import { CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
@@ -18,10 +19,10 @@ ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><m
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(metadata.title)}"><meta name="twitter:description" content="${escapeHtml(metadata.description)}">`;
 }
 
-function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, schema?: unknown) {
+function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, schema?: unknown, assets = "") {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 ${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/fonts/geist.css"><link rel="stylesheet" href="/discovery.css">
-${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}</head><body class="discovery"><header>${link("/", "場刊 Map")}</header><main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
+${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}${assets}</head><body class="discovery"><header>${link("/", "場刊 Map")}</header><main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
 }
 
 // Postal code, country, city or county, postal code, district, the rest.
@@ -61,8 +62,14 @@ export function homepageSummary(events: readonly EventDefinition[]) {
   return `<main class="discovery-summary"><h1>${escapeHtml(SITE_TITLE)}</h1><p>選擇活動，查看日期、場館、社團與攤位。</p><ul>${events.map((event) => `<li>${link(eventPath(event.id), event.name)} · ${escapeHtml(eventCalendar(event).label)} · ${escapeHtml(event.venue)}</li>`).join("")}</ul></main>`;
 }
 
-/** Only the reviewed base is accepted; no overlay fields are projected into HTML. */
-export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPayload) {
+/**
+ * Only the reviewed base is accepted; no overlay fields are projected into HTML.
+ *
+ * `circlePageAssets` is the tags that load a circle page's own script, which
+ * reads the circle's content live and offers the planning actions. The page is
+ * complete without it: name, every placement and its map link are static.
+ */
+export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPayload, { circlePageAssets = "" }: { circlePageAssets?: string } = {}) {
   if (catalog.eventId !== event.id) throw new Error("Discovery catalog must belong to its event.");
   const pages = new Map<string, string>();
   const circles = catalog.circles.filter((circle) => catalog.placements.some((placement) => placement.circleId === circle.id));
@@ -128,9 +135,12 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
       return `<li><div><strong>${escapeHtml(placement.boothCode)}</strong>${status ? ` <span class="status">${escapeHtml(status)}</span>` : ""}
 <p>${escapeHtml([date ? dayDateLabel(date) : day?.dateLabel, venue?.venueName, venue?.venueSpaceName, area?.label].filter(Boolean).join(" · "))}</p></div>${link(readerLink(event, placement), "在地圖查看")}</li>`;
     }).join("");
+    const claim = `/circle?${new URLSearchParams({ event: event.id, circle: circle.id })}`;
     pages.set(circlePath(event.id, circle.id), documentHtml(pageMetadata(event, circle, placements), `<nav aria-label="活動">${link(eventPath(event.id), event.name)}</nav>
 <h1>${escapeHtml(circle.name)}</h1><p>${escapeHtml(event.name)} · ${escapeHtml(calendar.label)}</p><h2>參展攤位</h2><ul class="placements">${rows}</ul>
-<p>${link(eventPath(event.id), "全部參展社團")}</p><p>${link(event.officialData.eventUrl, "活動網站")}</p>`));
+<div id="${CIRCLE_PAGE_ROOT_ID}"></div>${circlePageDataHtml(circlePageData(catalog, circle.id))}
+<p class="claim">這是你的社團嗎？${link(claim, "認領／管理資料")}</p>
+<p>${link(eventPath(event.id), "全部參展社團")}</p><p>${link(event.officialData.eventUrl, "活動網站")}</p>`, undefined, circlePageAssets));
   }
   return pages;
 }

@@ -280,7 +280,13 @@ test("introduction pages link only to final addresses, and the homepage names th
   for (const html of discoveryPages(event, catalog).values()) {
     const internal = nodes(parse(html)).filter((node) => node.tagName === "a").map((node) => attr(node, "href")).filter((href) => href.startsWith("/"));
     assert.ok(internal.includes("/privacy/"));
-    for (const href of internal) assert.ok(new URL(href, "https://map.kotoban.top").pathname.endsWith("/"), href);
+    // Directories answer at their trailing slash. `/circle` is `circle.html`,
+    // which Pages serves at the extensionless path (it is `/circle/` that
+    // redirects); the map's own claim link uses the same address.
+    for (const href of internal) {
+      const { pathname } = new URL(href, "https://map.kotoban.top");
+      assert.ok(pathname.endsWith("/") || pathname === "/circle", href);
+    }
   }
   const script = nodes(parse(websiteSchemaHtml())).find((node) => attr(node, "type") === "application/ld+json");
   assert.deepEqual(JSON.parse(script.childNodes[0].value), { "@context": "https://schema.org", "@type": "WebSite", name: "場刊 Map", url: "https://map.kotoban.top/" });
