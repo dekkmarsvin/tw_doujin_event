@@ -132,7 +132,7 @@ export function DayItinerary({ day, entries, recordsById, variant = "compact", o
   </section>;
 }
 
-function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onActiveIndex, onOpenFull }: {
+export function CircleMediaGallery({ media, activeIndex: requestedIndex, compact, readOnly = false, onActiveIndex, onOpenFull }: {
   media: CircleMedia[];
   activeIndex: number;
   compact: boolean;
@@ -140,7 +140,11 @@ function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onA
   onActiveIndex: (index: number) => void;
   onOpenFull?: () => void;
 }) {
-  const activeMedia = media[Math.min(activeIndex, media.length - 1)];
+  // The list can shrink under a stored selection — an author removing the
+  // page they were looking at in the portal preview — so every part of the
+  // gallery reads the same clamped position.
+  const activeIndex = Math.max(0, Math.min(requestedIndex, media.length - 1));
+  const activeMedia = media[activeIndex];
   if (!activeMedia) return null;
   // A side panel shows a sale-sheet page at card size, so it loads the card
   // preview; the full view loads the page itself.

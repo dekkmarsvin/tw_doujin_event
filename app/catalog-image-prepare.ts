@@ -1,14 +1,19 @@
 import { CATALOG_IMAGE_RULES } from "./circle-overrides";
 
 /**
- * The readable image's size: the original when it is within the pixel
- * budget, otherwise scaled down to it, never enlarged. A cap on pixels rather
- * than on the long edge keeps a tall strip at the width its small print needs.
- * Flooring each side keeps the product under the cap the upload route checks.
+ * The readable image's size: the original when it is within budget, otherwise
+ * scaled down to it, never enlarged. The budget is total pixels rather than
+ * the long edge, which keeps a tall strip at the width its small print needs —
+ * plus the per-side limit the field accepts, which only an extreme strip meets.
+ * Flooring each side keeps the result inside both limits the upload checks.
  */
 export function catalogImageSize(width: number, height: number) {
-  if (width * height <= CATALOG_IMAGE_RULES.maxPixels) return { width, height };
-  const scale = Math.sqrt(CATALOG_IMAGE_RULES.maxPixels / (width * height));
+  const scale = Math.min(
+    1,
+    Math.sqrt(CATALOG_IMAGE_RULES.maxPixels / (width * height)),
+    CATALOG_IMAGE_RULES.maxDimension / Math.max(width, height),
+  );
+  if (scale === 1) return { width, height };
   return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
 }
 

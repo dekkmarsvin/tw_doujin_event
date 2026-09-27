@@ -32,6 +32,9 @@ test("the readable image keeps a strip's width and brings a print sheet under th
     assert.ok(Math.abs(size.width / size.height - width / height) < 0.01, "and keeps its proportions");
   }
   assert.deepEqual(catalogImageSize(5787, 4093), { width: 2658, height: 1880 });
+  // Under the pixel budget but longer than the field accepts on one side.
+  assert.deepEqual(catalogImageSize(100, 25_000), { width: 80, height: 20_000 }, "an extreme strip is brought within the side limit");
+  assert.deepEqual(catalogImageSize(250, 20_000), { width: 250, height: 20_000 }, "exactly at the limit is left alone");
 });
 
 test("the card preview is a fixed width, and only the top of a very tall sheet", () => {
@@ -65,6 +68,7 @@ test("the upload route holds a prepared page to the same rules the browser prepa
 
   const refused = async (input, message) => assert.rejects(prepareHostedCatalogImage({ eventId: "ff47", circleId: "c-000001", ...input }), message);
   await refused({ file: file(jpeg(5787, 4093)), preview: file(jpeg(640, 453)) }, /尺寸超過上限/);
+  await refused({ file: file(jpeg(100, 25_000)), preview: file(jpeg(3, 960)) }, /尺寸超過上限/, "a side the field would refuse is refused here too");
   await refused({ file: file(jpeg(2658, 1880)), preview: file(jpeg(641, 453)) }, /預覽圖尺寸超過上限/);
   await refused({ file: file(jpeg(2658, 1880)), preview: file(jpeg(640, 961)) }, /預覽圖尺寸超過上限/);
   await refused({ file: file(jpeg(100, 100), "image/png"), preview: file(jpeg(64, 64)) }, /格式無效/);

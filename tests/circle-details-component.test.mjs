@@ -7,7 +7,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { CircleDetails, DayItinerary, SearchResults } = await environment.runner.import("/app/event-workspace-panels.tsx");
+const { CircleDetails, CircleMediaGallery, DayItinerary, SearchResults } = await environment.runner.import("/app/event-workspace-panels.tsx");
 after(() => vite.close());
 
 const source = {
@@ -81,6 +81,31 @@ test("sale-sheet pages load card previews where they are small and open whole wh
   const panel = render([page], { compact: true, floating: true });
   assert.match(panel, /<img src="https:\/\/image\.example\/page-card\.jpg"/, "the side panel loads the card preview");
   assert.doesNotMatch(panel, /page\.jpg"/);
+});
+
+test("a selection past the end of a shrunk gallery reads as its last picture everywhere", () => {
+  const item = (n) => ({ id: `p${n}`, kind: "catalog", url: `https://image.example/${n}.jpg`, previewUrl: `https://image.example/${n}-card.jpg`, sourceUrl: "", provider: "", alt: `第 ${n} 張` });
+  // Page 3 was selected, then removed in the editor.
+  const markup = renderToStaticMarkup(React.createElement(CircleMediaGallery, {
+    media: [item(1), item(2)], activeIndex: 2, compact: false, onActiveIndex() {},
+  }));
+  assert.match(markup, />2 \/ 2</, "the counter never runs past the list");
+  assert.match(markup, /<img src="https:\/\/image\.example\/2\.jpg"/);
+  const pressed = [...markup.matchAll(/aria-label="顯示第 (\d) 張圖片" aria-pressed="(true|false)"/g)].map(([, n, state]) => [n, state]);
+  assert.deepEqual(pressed, [["1", "false"], ["2", "true"]], "and the rail marks the picture shown");
+
+  const moves = [];
+  const gallery = CircleMediaGallery({ media: [item(1), item(2)], activeIndex: 2, compact: false, onActiveIndex: (index) => moves.push(index) });
+  const controls = [];
+  const collect = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach(collect);
+    if (node.props?.["aria-label"] === "上一張圖片" || node.props?.["aria-label"] === "下一張圖片") controls.push(node);
+    collect(node.props?.children);
+  };
+  collect(gallery);
+  controls.forEach((control) => control.props.onClick());
+  assert.deepEqual(moves, [0, 0], "both arrows step from the picture shown, not from the stale position");
 });
 
 test("informative results identify circle-authored summaries without trust wording", () => {

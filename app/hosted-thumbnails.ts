@@ -147,7 +147,11 @@ export async function prepareHostedCatalogImage(input: { eventId: string; circle
   };
   const full = await read(input.file, CATALOG_IMAGE_RULES.maxBytes, "品書圖片");
   const preview = await read(input.preview, CATALOG_IMAGE_RULES.previewMaxBytes, "品書預覽圖");
-  if (full.dimensions.width * full.dimensions.height > CATALOG_IMAGE_RULES.maxPixels) throw new Error("品書圖片尺寸超過上限，請重新選擇檔案。");
+  // The same two limits the field accepts, so a page staged here can be saved.
+  if (full.dimensions.width * full.dimensions.height > CATALOG_IMAGE_RULES.maxPixels
+    || Math.max(full.dimensions.width, full.dimensions.height) > CATALOG_IMAGE_RULES.maxDimension) {
+    throw new Error("品書圖片尺寸超過上限，請重新選擇檔案。");
+  }
   if (preview.dimensions.width > CATALOG_IMAGE_RULES.previewWidth || preview.dimensions.height > CATALOG_IMAGE_RULES.previewMaxHeight) {
     throw new Error("品書預覽圖尺寸超過上限，請重新選擇檔案。");
   }

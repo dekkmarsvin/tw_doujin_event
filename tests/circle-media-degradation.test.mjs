@@ -36,7 +36,9 @@ test("the detail panel drops the gallery column instead of leaving it empty", as
 
   // The gallery returns null on an empty list, so both densities that mount it
   // — full details and the compact map sidebar — render nothing at all.
-  assert.match(panels, /const activeMedia = media\[Math\.min\(activeIndex, media\.length - 1\)\];\s*\r?\n\s*if \(!activeMedia\) return null;/);
+  // The position is clamped first (a list can shrink under it), so on an empty
+  // list there is no picture and the gallery returns before rendering a frame.
+  assert.match(panels, /const activeIndex = Math\.max\(0, Math\.min\(requestedIndex, media\.length - 1\)\);\s*\r?\n\s*const activeMedia = media\[activeIndex\];\s*\r?\n\s*if \(!activeMedia\) return null;/);
   assert.match(panels, /record\.circle\.media\.length > 0 \? styles\.detailsWithMedia : ""/);
 
   // Without media the body is a single centred column rather than a widowed
