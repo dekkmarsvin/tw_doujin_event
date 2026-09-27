@@ -664,6 +664,39 @@ test("organizer detail uses formal map validation for readiness", async () => {
   assert.equal(missing.target, `1/${VENUE_SPACE_ID}`);
 });
 
+test("saved cross-day imports expose the shared circle grouping in Reader preview", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "跨日分組測試", ownerEmail: "cross-day-owner@example.test" }, adminCookie));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("cross-day-owner@example.test", "organizer");
+  const draft = {
+    references: await createReferenceSelection(candidateId, ownerCookie), schema: "organizer-event-draft/1",
+    event: { id: "cross-day-circle-test", name: "跨日分組測試", days: [
+      { id: "fri", label: "第一日", date: "2026-11-07" }, { id: "sat", label: "第二日", date: "2026-11-08" },
+    ] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "none" }] },
+    officialSource: { label: "主辦提供名單", url: "https://organizer.example/cross-day" },
+  };
+  assert.equal((await handlers.updateOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "PATCH",
+    { expectedVersion: 1, draft }, ownerCookie), candidateId)).status, 200);
+  const rows = [
+    { dayId: "fri", codes: ["A01", "A02"], circleName: "跨日社團" },
+    { dayId: "sat", codes: ["B07"], circleName: "跨日社團" },
+    { dayId: "sat", codes: ["A01"], circleName: "另一社團" },
+  ].map((row, index) => ({ ...row, sourceRow: index + 2, venueSpaceId: VENUE_SPACE_ID, areaId: "ALL", stableKey: null, identityGroup: null }));
+  assert.equal((await handlers.putOrganizerImport(request(`/api/organizer/events/${candidateId}/imports`, "PUT", {
+    expectedVersion: 2, source: { fileName: "cross-day.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "主辦提供", mapping: {} }, rows,
+  }, ownerCookie), candidateId)).status, 200);
+  const response = await handlers.previewOrganizerCandidate(request(`/api/organizer/events/${candidateId}/preview`, "POST", {}, ownerCookie), candidateId);
+  const { preview } = await response.json();
+  assert.equal(preview.placements.length, 4);
+  assert.equal(new Set(preview.placements.slice(0, 3).map(row => row.identityGroup)).size, 1);
+  assert.notEqual(preview.placements[3].identityGroup, preview.placements[0].identityGroup);
+  assert.deepEqual(preview.placements.map(row => [row.dayId, row.boothCode]), [["fri", "A01"], ["fri", "A02"], ["sat", "B07"], ["sat", "A01"]]);
+  assert.ok((await repository.getOrganizerImport(candidateId)).rows.every(row => row.stable_key === null), "derived grouping never manufactures internal identifiers");
+});
+
 test("owner and editor use one validated optimistic workflow while only admin approves", async (t) => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request(
@@ -773,7 +806,7 @@ test("owner and editor use one validated optimistic workflow while only admin ap
   ), candidateId);
   assert.equal(submitted.status, 200);
   const submissionSnapshot = JSON.parse((await repository.getOrganizerSubmissionSnapshot(candidateId, 5)).snapshot_json);
-  assert.equal(submissionSnapshot.schema, "organizer-submission-snapshot/3");
+  assert.equal(submissionSnapshot.schema, "organizer-submission-snapshot/5");
   assert.deepEqual(submissionSnapshot.import.rows[0].codes, ["A01", "A02"]);
   assert.equal(Object.hasOwn(submissionSnapshot.import.rows[0], "boothCode"), false);
   const referenceFiles = new Map(submissionSnapshot.references.files.map((file) => [file.path, new TextEncoder().encode(file.content)]));

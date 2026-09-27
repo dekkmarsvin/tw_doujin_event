@@ -92,6 +92,8 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     selected: row.boothCode === selectedCode,
   }])), [placements, selectedCode]);
   const selectedPlacement = placements.find((row) => row.boothCode === selectedCode);
+  const circlePlacements = selectedPlacement?.identityGroup
+    ? preview.placements.filter(row => row.identityGroup === selectedPlacement.identityGroup) : [];
   return <div className={styles.readerPreview}>
     <p>{(preview.references ?? []).filter((record) => record.schema === "organizer/1").map((record) => record.name).join("、")}</p>
     <p>{(preview.references ?? []).filter((record) => record.schema === "venue/1" || record.schema === "venue-space/1").map((record) => record.name).join("・")}</p>
@@ -100,6 +102,11 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     <p className={styles.previewSelection} role="status">{selectedPlacement
       ? <><strong>{selectedPlacement.boothCode}</strong> · {selectedPlacement.circleName}</>
       : "選取攤位，核對攤位代碼與社團名稱。"}</p>
+    {new Set(circlePlacements.map(row => row.dayId)).size > 1 && <ul aria-label="社團各日攤位">
+      {circlePlacements.map(row => <li key={`${row.dayId}/${row.venueSpaceId}/${row.boothCode}`}>
+        {organizerDayLabel(preview.event.days, row.dayId)} · {organizerVenueSpaceLabel(venueCatalog, row.venueSpaceId)} · {row.boothCode}
+      </li>)}
+    </ul>}
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} areaLabels={preview.venueAssignments.find((assignment) => assignment.venueSpaceId === selected.venueSpaceId)?.areaLabels} onSelect={setSelectedCode} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;

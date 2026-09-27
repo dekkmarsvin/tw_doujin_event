@@ -70,7 +70,7 @@ Importer 可接 CSV、TSV 或單一 HTML table；每個輸入批次都要明確�
 }
 ```
 
-`kind` 可為 `organizer-stable-key` 或 `manual-organizer-evidence`。只有名稱相同不得合併；不同活動即使同名也配發新的全域 ID。名稱只用來檢查官方資料與 evidence 是否漂移。
+`kind` 可為 `organizer-stable-key` 或 `manual-organizer-evidence`。只有名稱相同不得由 generator 擅自合併。主辦在匯入預覽確認的跨日同名群組依 [ADR-0071](../adr/0071-organizer-review-confirms-cross-day-circle-grouping.md) 產生 `manual-organizer-evidence`；維護者也可用官方錄取列核對各日攤數後明確宣告。不同活動即使同名也配發新的全域 ID。
 
 `event:onboard` 會在隔離 workspace 內執行產生器。需要單獨檢查已驗證 workspace 時，預設命令只輸出結構化 dry-run 摘要，不寫檔：
 

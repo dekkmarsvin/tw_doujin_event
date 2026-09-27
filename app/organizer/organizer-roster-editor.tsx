@@ -9,6 +9,7 @@ import { message, organizerDayLabel, organizerVenueSpaceLabel } from "./organize
 import { AreaNameFields, type AreaNames } from "./organizer-area-names";
 import { RosterCell } from "./organizer-roster-cell";
 import { RosterDialog } from "./organizer-roster-dialog";
+import { CrossDayCircles } from "./organizer-cross-day-circles";
 import styles from "./organizer.module.css";
 
 type Entry = { key: number; row: OrganizerNormalizedImportRow };
@@ -64,6 +65,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const toolbarRef = useRef<HTMLDivElement>(null);
   const editable = detail.event.operation !== "AMEND" && ["draft", "changes_requested"].includes(detail.event.status);
   const aliasesDirty = Object.keys(labels).length > 0;
+  const circleRows = useMemo(() => entries.map(entry => entry.row), [entries]);
   const anyDirty = dirty || aliasesDirty;
   if (!anyDirty && loadedVersion !== detail.event.version && detail.event.version >= expectedVersion) {
     const next = entriesOf(detail.import?.rows ?? []);
@@ -197,6 +199,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
         }}>新增攤位</button>
         <button type="button" className={styles.secondary} disabled={!editable || !!busy || !hasAreas || refreshRequired} onClick={() => request("aliases")}>展區名稱</button>
       </div></div>
+      <CrossDayCircles rows={circleRows} detail={detail} />
       {(!showDay || !showSpace) && <p className={styles.rosterContext}>{!showDay && days[0]?.label}{!showDay && !showSpace && " · "}{!showSpace && organizerVenueSpaceLabel(detail.venueCatalog, assignments[0].venueSpaceId)}</p>}
       <div className={styles.rosterFilters}>
         <label className={styles.rosterSearch}>搜尋<input type="search" value={query} placeholder="社團、攤位或主辦內部編號" onChange={event => { setQuery(event.target.value); rescope(); }} /></label>

@@ -3,6 +3,7 @@ import { AmendmentSettingsError, applyAmendmentSettings, normalizeAmendmentSetti
 import { eventDateFields } from "./event-calendar";
 import { publishedEventImage } from "./event-image";
 import type { OrganizerNormalizedImportRow } from "./organizer-import";
+import { buildOrganizerCircleGrouping } from "./organizer-circle-groups.mjs";
 import type { OrganizerReferenceSnapshot } from "./organizer-reference-catalog";
 import { parseEventDefinition } from "./event-catalog";
 import { buildMapCandidate, validateMapContributionDraft } from "./map-contribution-draft";
@@ -112,7 +113,7 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
   try {
     if (await sha256Hex(source.snapshotJson) !== source.approvalHash) fail("核准 snapshot 的內容與 hash 不符。", "snapshot_mismatch");
     const snapshot = JSON.parse(source.snapshotJson) as Snapshot;
-    if (!["organizer-submission-snapshot/3", "organizer-submission-snapshot/4"].includes(snapshot.schema)) fail("此歷史 snapshot 缺少完整發布資料，請重新整理並送審。");
+    if (!["organizer-submission-snapshot/3", "organizer-submission-snapshot/4", "organizer-submission-snapshot/5"].includes(snapshot.schema)) fail("此歷史 snapshot 缺少完整發布資料，請重新整理並送審。");
     const operation = snapshot.schema === "organizer-submission-snapshot/4" ? "AMEND" as const : "CREATE" as const;
     if (operation === "AMEND" ? snapshot.operation !== "AMEND" || !snapshot.amendment
       : (snapshot.operation !== undefined && snapshot.operation !== "CREATE") || snapshot.amendment !== undefined) fail("snapshot 的發布操作不符。", "snapshot_mismatch");
@@ -172,16 +173,12 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
     const official = { schemaVersion: 1, days: draft.event.days.map((day) => ({ day: day.id, url: officialUrl,
       booths: snapshot.import.rows.filter((row) => row.dayId === day.id).map((row) => ({ codes: row.codes, name: row.circleName, areaId: row.areaId })) })) };
     parseOfficialBoothData(official, event);
-    const groups = new Map<string, { sources: string[]; linkage?: { kind: string; value: string; reference: string } }>();
-    snapshot.import.rows.forEach((row, index) => {
-      const key = row.stableKey ? `stable:${row.stableKey}` : `row:${index}`;
-      const group: { sources: string[]; linkage?: { kind: string; value: string; reference: string } } = groups.get(key) ?? { sources: [], ...(row.stableKey ? { linkage: {
-        kind: "organizer-stable-key", value: row.stableKey, reference: officialUrl,
-      } } : {}) };
-      group.sources.push(...row.codes.map((code) => `${row.dayId}:${code}`));
-      groups.set(key, group);
-    });
-    let grouping: PublicationArtifacts["grouping"] = { schema: "circle-identity-groups/1", eventId: snapshot.eventId, groups: [...groups.values()] };
+    // The snapshot version fixes the grouping rule. Never reinterpret bytes
+    // already approved before organizer-reviewed cross-day grouping existed.
+    let grouping: PublicationArtifacts["grouping"] = buildOrganizerCircleGrouping(
+      snapshot.eventId, snapshot.import.rows, officialUrl,
+      { mergeCrossDayNames: snapshot.schema === "organizer-submission-snapshot/5" },
+    );
     if (amendment) {
       const plan = planOrganizerAmendment({ ...amendment.baseline, changes: amendment.changes, today: () => snapshot.contentUpdatedAt.slice(0, 10) });
       if (snapshot.import.rows.some((row) => row.stableKey !== null || row.identityGroup !== null)
