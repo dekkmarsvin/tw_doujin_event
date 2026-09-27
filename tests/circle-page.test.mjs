@@ -9,7 +9,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite test environment missing.");
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
 const { discoveryPages } = await environment.runner.import("/app/static-discovery.ts");
-const { CIRCLE_PAGE_DATA_ID, CIRCLE_PAGE_ROOT_ID, circlePageData, readCirclePageData } = await environment.runner.import("/app/circle-page-data.ts");
+const { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_DATA_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, readCirclePageData } = await environment.runner.import("/app/circle-page-data.ts");
 const { circlePromotion, visitableDays } = await environment.runner.import("/app/circle-share.ts");
 after(() => vite.close());
 
@@ -52,6 +52,40 @@ test("the slice survives the page it is embedded in, and nothing else is accepte
   assert.equal(readCirclePageData(""), null);
   assert.equal(readCirclePageData("{not json"), null);
   assert.equal(readCirclePageData(JSON.stringify(catalog)), null, "a whole catalog is not one circle's page");
+});
+
+test("booths read as one card per day and place, with one plan slot per day", () => {
+  const busy = structuredClone(catalog);
+  const at = (id, day, area, boothCode, status = "active", tone = "mint") => ({ id, circleId: "c-900001", day, area, boothCode, status, tone });
+  busy.placements = [
+    at("2-s01", 2, "north", "S01", "moved"),
+    at("1-s02", 1, "north", "S02"),
+    at("1-s05", 1, "south", "S05", "active", "blue"),
+    at("2-s03", 2, "north", "S03"),
+    at("1-s01", 1, "north", "S01"),
+    { ...catalog.placements.find((placement) => placement.circleId === "c-900002") },
+  ];
+  const elements = nodes(parse(discoveryPages(event, busy).get("/events/sample/circles/c-900001/")));
+  const cards = elements.filter((node) => node.tagName === "li" && (attr(node, "class") ?? "").split(" ").includes("booth-card"));
+  const read = (card) => {
+    const inside = nodes(card);
+    const find = (name) => inside.find((node) => attr(node, "class") === name);
+    return {
+      when: text(find("booth-when")),
+      codes: inside.filter((node) => (attr(node, "class") ?? "").startsWith("booth-code ")).map((node) => [text(node), attr(node, "class").split(" ")[1]]),
+      status: find("status") ? text(find("status")) : "",
+      retired: attr(card, "class").includes("retired"),
+      plan: inside.find((node) => attr(node, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE) !== undefined) ? attr(inside.find((node) => attr(node, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE) !== undefined), CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE) : null,
+      map: inside.filter((node) => node.tagName === "a").map((node) => new URL(attr(node, "href"), "https://example.test").searchParams.get("selectedBooth")),
+    };
+  };
+  assert.deepEqual(cards.map(read), [
+    { when: "9月1日（二）", codes: [["S01", "tone-mint"], ["S02", "tone-mint"]], status: "", retired: false, plan: "1", map: ["S01"] },
+    { when: "9月1日（二）", codes: [["S05", "tone-blue"]], status: "", retired: false, plan: null, map: ["S05"] },
+    { when: "9月2日（三）", codes: [["S03", "tone-mint"]], status: "", retired: false, plan: "2", map: ["S03"] },
+    { when: "9月2日（三）", codes: [["S01", "tone-mint"]], status: "已移動攤位", retired: true, plan: null, map: ["S01"] },
+  ], "booths side by side share a card, another place or a retired booth gets its own, and each day offers one plan action");
+  assert.ok(elements.some((node) => attr(node, "id") === CIRCLE_PAGE_ACTIONS_ID), "the bar under the name has its place");
 });
 
 test("only circle pages load the page script", () => {

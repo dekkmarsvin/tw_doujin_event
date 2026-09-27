@@ -3,6 +3,10 @@ import { CIRCLE_CATALOG_SCHEMA, isCircleCatalogPayload, type CircleCatalogPayloa
 /** Where a circle's introduction page carries its own slice of the reviewed base. */
 export const CIRCLE_PAGE_DATA_ID = "circle-page-data";
 export const CIRCLE_PAGE_ROOT_ID = "circle-page-root";
+/** Where the page script puts the favourite and share actions, under the name. */
+export const CIRCLE_PAGE_ACTIONS_ID = "circle-page-actions";
+/** Marks the one booth card per day that holds that day's plan action; the value is the day id. */
+export const CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE = "data-circle-plan-day";
 
 /**
  * The one circle a page is about, as a catalog of one.

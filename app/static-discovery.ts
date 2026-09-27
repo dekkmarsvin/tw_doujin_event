@@ -3,7 +3,7 @@ import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
 import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
-import { CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
+import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
@@ -126,23 +126,69 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   }
   for (const circle of circles) {
     const placements = placementsOf(circle.id);
-    const rows = placements.map((placement) => {
-      const day = event.days.find((candidate) => String(candidate.id) === String(placement.day));
-      const venue = event.venueAssignments.find((assignment) => assignment.areaIds.includes(placement.area));
-      const area = event.areas.find((candidate) => candidate.id === placement.area);
-      const status = placementStatusLabel(placement.status);
-      const date = eventDayCalendarDate(event, placement.day);
-      return `<li><div><strong>${escapeHtml(placement.boothCode)}</strong>${status ? ` <span class="status">${escapeHtml(status)}</span>` : ""}
-<p>${escapeHtml([date ? dayDateLabel(date) : day?.dateLabel, venue?.venueName, venue?.venueSpaceName, area?.label].filter(Boolean).join(" · "))}</p></div>${link(readerLink(event, placement), "在地圖查看")}</li>`;
-    }).join("");
+    const cards = boothCards(event, placements);
+    const venues = [...new Set(cards.filter((card) => card.status === "active").map((card) => card.venueName).filter(Boolean))];
     const claim = `/circle?${new URLSearchParams({ event: event.id, circle: circle.id })}`;
     pages.set(circlePath(event.id, circle.id), documentHtml(pageMetadata(event, circle, placements), `<nav aria-label="活動">${link(eventPath(event.id), event.name)}</nav>
-<h1>${escapeHtml(circle.name)}</h1><p>${escapeHtml(event.name)} · ${escapeHtml(calendar.label)}</p><h2>參展攤位</h2><ul class="placements">${rows}</ul>
+<h1>${escapeHtml(circle.name)}</h1><p class="eyebrow">${escapeHtml([calendar.label, ...venues].join(" · "))}</p>
+<div id="${CIRCLE_PAGE_ACTIONS_ID}"></div>
+<h2>參展攤位</h2><ol class="booth-cards">${cards.map((card) => boothCardHtml(event, card)).join("")}</ol>
 <div id="${CIRCLE_PAGE_ROOT_ID}"></div>${circlePageDataHtml(circlePageData(catalog, circle.id))}
 <p class="claim">這是你的社團嗎？${link(claim, "認領／管理資料")}</p>
 <p>${link(eventPath(event.id), "全部參展社團")}</p><p>${link(event.officialData.eventUrl, "活動網站")}</p>`, undefined, circlePageAssets));
   }
   return pages;
+}
+
+type CardPlacement = CircleCatalogPayload["placements"][number];
+type BoothCard = { day: CardPlacement["day"]; when: string; where: string; venueName: string; status: CardPlacement["status"]; placements: CardPlacement[]; planSlot: boolean };
+
+/**
+ * A circle's placements as a reader goes looking for them: one card per day
+ * and place, the booth codes large. Booths the circle holds side by side on
+ * one day share a card; a booth it moved away from or cancelled gets its own,
+ * so the status words never sit beside a booth that is still the destination.
+ *
+ * The first card the circle can actually be visited at on each day carries the
+ * slot the page script fills with that day's plan action — one per day, as a
+ * plan is one per day. Without the script the card is still complete.
+ */
+function boothCards(event: EventDefinition, placements: readonly CardPlacement[]) {
+  const cards = new Map<string, BoothCard & { date: string | null; order: number }>();
+  for (const placement of placements) {
+    const order = event.days.findIndex((candidate) => String(candidate.id) === String(placement.day));
+    const date = eventDayCalendarDate(event, placement.day);
+    const venue = event.venueAssignments.find((assignment) => assignment.areaIds.includes(placement.area));
+    const area = event.areas.find((candidate) => candidate.id === placement.area);
+    const where = [venue?.venueName, venue?.venueSpaceName, area?.label].filter(Boolean).join(" · ");
+    const key = `${String(placement.day)}\u0000${where}\u0000${placement.status}`;
+    const card = cards.get(key) ?? {
+      day: placement.day, when: date ? dayDateLabel(date) : event.days[order]?.dateLabel ?? String(placement.day),
+      where, venueName: venue?.venueName ?? "", status: placement.status, placements: [], planSlot: false, date, order,
+    };
+    card.placements.push(placement);
+    cards.set(key, card);
+  }
+  const sorted = [...cards.values()].sort((a, b) => (a.date && b.date ? a.date.localeCompare(b.date) : 0) || a.order - b.order
+    || Number(a.status !== "active") - Number(b.status !== "active")
+    || a.placements[0].boothCode.localeCompare(b.placements[0].boothCode, "en", { numeric: true }));
+  const planned = new Set<string>();
+  for (const card of sorted) {
+    card.placements.sort((a, b) => a.boothCode.localeCompare(b.boothCode, "en", { numeric: true }));
+    if (card.status === "active" && !planned.has(String(card.day))) {
+      card.planSlot = true;
+      planned.add(String(card.day));
+    }
+  }
+  return sorted;
+}
+
+function boothCardHtml(event: EventDefinition, card: BoothCard) {
+  const status = placementStatusLabel(card.status);
+  const codes = card.placements.map((placement) => `<span class="booth-code tone-${escapeHtml(placement.tone)}">${escapeHtml(placement.boothCode)}</span>`).join("");
+  return `<li class="booth-card${status ? " retired" : ""}"><p class="booth-when">${escapeHtml(card.when)}</p><p class="booth-codes">${codes}</p>
+${card.where ? `<p class="booth-where">${escapeHtml(card.where)}</p>` : ""}${status ? `<p class="status">${escapeHtml(status)}</p>` : ""}
+<div class="booth-actions">${link(readerLink(event, card.placements[0]), "在地圖查看", "booth-map")}${card.planSlot ? `<span class="booth-plan" ${CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE}="${escapeHtml(String(card.day))}"></span>` : ""}</div></li>`;
 }
 
 export function sitemapHtml(paths: readonly string[]) {

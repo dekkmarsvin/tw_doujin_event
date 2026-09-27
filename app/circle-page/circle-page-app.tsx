@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { createCatalogPublication } from "../catalog-publication";
+import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE } from "../circle-page-data";
 import { CIRCLE_OVERRIDE_LIST_FIELDS } from "../circle-overrides";
 import { LINK_KIND_LABEL, sourceDateLabel } from "../circle-presentation";
 import { representativeMedia, type CircleCatalogPayload } from "../circle-records";
@@ -61,6 +63,14 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
     return () => window.clearTimeout(timeout);
   }, [undo]);
 
+  // The places the static page left for the actions: one bar under the name,
+  // and one slot on the first card of each day the circle can be visited.
+  const [targets] = useState(() => ({
+    bar: document.getElementById(CIRCLE_PAGE_ACTIONS_ID),
+    days: [...document.querySelectorAll<HTMLElement>(`[${CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE}]`)]
+      .map((element) => ({ element, key: element.getAttribute(CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE) ?? "" })),
+  }));
+
   if (!event) return null;
   const favorite = planning.document.favorites.find((item) => item.eventId === eventId && item.circleId === circleId) ?? null;
   const planned = (day: EventDayKey) => planning.document.visitPlans.some((item) => item.eventId === eventId && item.day === day && item.circleId === circleId);
@@ -77,22 +87,22 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
     setUndo(null);
     setNotice(wasPlanned ? `已從 ${label}行程移除。` : `已加入 ${label}行程。`);
   };
+  // The page's own address, as the reader has it: this origin, no query.
+  const share = () => {
+    const url = `${window.location.origin}${window.location.pathname}`;
+    const copy = () => Promise.resolve().then(() => navigator.clipboard.writeText(url))
+      .then(() => setNotice("已複製連結。"), () => setNotice("無法自動複製，請從網址列複製。"));
+    setUndo(null);
+    if (typeof navigator.share === "function") {
+      void navigator.share({ title: document.title, url })
+        // Closing the share sheet is a choice, not a failure.
+        .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) void copy(); });
+    } else void copy();
+  };
 
   return <>
-    <CircleContent state={state} circle={circle} onRetry={() => { void publication.retry(eventId); }} />
-    <section className={styles.planning} aria-labelledby="circle-page-planning">
-      <h2 id="circle-page-planning">收藏與行程</h2>
+    {targets.bar && createPortal(<div className={styles.actionBar} role="group" aria-label="收藏與分享">
       {planning.storageError && <p className={styles.error} role="alert">{planning.storageError}</p>}
-      <div className={styles.actions}>
-        <button type="button" className={favorite ? styles.saved : ""} disabled={!writable} onClick={toggleFavoriteHere}>
-          <UiIcon name="heart" />{favorite ? "取消收藏" : "收藏社團"}
-        </button>
-        {days.map(({ day, label }) => <button key={String(day)} type="button" className={planned(day) ? styles.planned : ""} disabled={!writable} onClick={() => togglePlan(day, label)}>
-          {planned(day) ? `從 ${label}行程移除` : `加入 ${label}行程`}
-        </button>)}
-        {state.status === "ready" && days.length === 0 && <button type="button" disabled>加入行程</button>}
-      </div>
-      {state.status === "ready" && days.length === 0 && <p className={styles.muted}>這個社團目前沒有可前往的攤位。</p>}
       <div className={styles.feedback} role="status" aria-live="polite">
         {undo ? <><span>已取消收藏。</span><button type="button" onClick={() => {
           planning.update((current) => restoreFavorite(current, undo));
@@ -100,7 +110,26 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
           setNotice("已復原收藏。");
         }}>復原收藏</button></> : notice}
       </div>
-    </section>
+      <div className={styles.barButtons}>
+        <button type="button" className={favorite ? styles.saved : ""} disabled={!writable} onClick={toggleFavoriteHere}>
+          <UiIcon name="heart" />{favorite ? "取消收藏" : "收藏社團"}
+        </button>
+        <button type="button" onClick={share}>分享</button>
+      </div>
+    </div>, targets.bar)}
+    {targets.days.map(({ element, key }) => {
+      const day = days.find((candidate) => String(candidate.day) === key);
+      if (!day) return null;
+      const isPlanned = planned(day.day);
+      const text = isPlanned ? "從這天行程移除" : "加入這天行程";
+      // The card already names the date; the accessible name says it too, so
+      // the button still makes sense heard on its own.
+      return createPortal(<button
+        type="button" className={isPlanned ? styles.planned : styles.plan} disabled={!writable}
+        aria-label={`${text}（${day.label}）`} onClick={() => togglePlan(day.day, day.label)}
+      >{text}</button>, element, key);
+    })}
+    <CircleContent state={state} circle={circle} onRetry={() => { void publication.retry(eventId); }} />
   </>;
 }
 
@@ -119,13 +148,13 @@ function CircleContent({ state, circle, onRetry }: { state: CatalogSnapshot; cir
   if (state.status !== "ready" || state.overlayStatus === "idle" || state.overlayStatus === "loading") {
     return <section className={styles.content} aria-busy="true" aria-label="社團介紹">
       <span className={styles.visuallyHidden}>正在讀取社團介紹…</span>
-      <div className={styles.skeleton} aria-hidden="true"><span /><span /><span /></div>
+      <div className={`${styles.card} ${styles.skeleton}`} aria-hidden="true"><span /><span /><span /></div>
     </section>;
   }
   if (state.overlayStatus === "unavailable") {
     return <section className={styles.content} aria-labelledby="circle-page-content">
       <h2 id="circle-page-content">社團介紹</h2>
-      <p className={styles.unavailable}>社團介紹暫時無法顯示。<button type="button" onClick={onRetry}>重新讀取</button></p>
+      <p className={`${styles.card} ${styles.unavailable}`}>社團介紹暫時無法顯示。<button type="button" onClick={onRetry}>重新讀取</button></p>
     </section>;
   }
   const authored = circle?.sources.find((source) => source.contentType === "circle");
@@ -142,55 +171,65 @@ function CircleContent({ state, circle, onRetry }: { state: CatalogSnapshot; cir
   ].filter(({ values }) => values.length > 0);
   if (!picture && pages.length === 0 && !circle.saleInfo && details.length === 0 && circle.externalLinks.length === 0) return null;
 
+  // Each kind of content is its own card; the sale sheet and the links run
+  // the full width, the shorter cards pair up where there is room.
   return <section className={styles.content} aria-labelledby="circle-page-content">
     <h2 id="circle-page-content">社團介紹</h2>
-    {/* The sale sheet first: it is what a shared link is opened for. Each page
-        is shown whole at up to its own size — the page itself can be zoomed —
-        and its size is reserved before it arrives. */}
-    {pages.length > 0 && <>
-      <h3>本次品書</h3>
-      <ol className={styles.catalog}>
-        {pages.map((page, index) => <li key={page.id}>
-          {broken.has(page.url)
-            ? <p className={styles.muted}>第 {index + 1} 張品書暫時無法顯示。</p>
-            : <figure className={styles.page}>
-              <img
-                src={page.url} alt={page.alt} width={page.width} height={page.height}
-                loading={index === 0 ? undefined : "lazy"} referrerPolicy="no-referrer" onError={() => markBroken(page.url)}
-              />
-              <figcaption><a href={page.url} target="_blank" rel="noreferrer">開啟原圖</a></figcaption>
-            </figure>}
-        </li>)}
-      </ol>
-    </>}
-    {picture && (broken.has(picture.url)
-      ? <p className={styles.muted}>圖片暫時無法顯示。</p>
-      : <figure className={styles.picture}>
-        <img src={picture.url} alt={picture.alt} referrerPolicy="no-referrer" onError={() => markBroken(picture.url)} />
-        {/* Provenance is optional on a circle's own upload (ADR-0053): a link
-            when there is one, the credit alone when not, nothing otherwise. */}
-        {picture.sourceUrl
-          ? <figcaption><a href={picture.sourceUrl} target="_blank" rel="noreferrer">{picture.provider ? `${picture.provider} · ` : ""}原始來源</a></figcaption>
-          : picture.provider ? <figcaption>{picture.provider}</figcaption> : null}
-      </figure>)}
-    {circle.saleInfo && <>
-      <h3>販售資訊</h3>
-      <p className={styles.saleInfo}>{circle.saleInfo}</p>
-    </>}
-    {details.length > 0 && <dl className={styles.details}>
-      {details.map(({ label, values, list }) => <div key={label}>
-        <dt>{label}</dt>
-        <dd>{list ? values.map((value) => <span key={value} className={styles.tag}>{value}</span>) : values[0]}</dd>
-      </div>)}
-    </dl>}
-    {circle.externalLinks.length > 0 && <>
-      <h3>更多資訊</h3>
-      <ul className={styles.links}>
-        {circle.externalLinks.map((link) => <li key={`${link.kind}-${link.provider}-${link.url}`}>
-          <a href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>
-        </li>)}
-      </ul>
-    </>}
+    <div className={styles.cards}>
+      {/* The sale sheet first: it is what a shared link is opened for. Each
+          page is shown whole at up to its own size — the page itself can be
+          zoomed — and its size is reserved before it arrives. */}
+      {pages.length > 0 && <div className={`${styles.card} ${styles.wide}`}>
+        <h3>本次品書</h3>
+        <ol className={styles.catalog}>
+          {pages.map((page, index) => <li key={page.id}>
+            {broken.has(page.url)
+              ? <p className={styles.muted}>第 {index + 1} 張品書暫時無法顯示。</p>
+              : <figure className={styles.page}>
+                <img
+                  src={page.url} alt={page.alt} width={page.width} height={page.height}
+                  loading={index === 0 ? undefined : "lazy"} referrerPolicy="no-referrer" onError={() => markBroken(page.url)}
+                />
+                <figcaption><a href={page.url} target="_blank" rel="noreferrer">開啟原圖</a></figcaption>
+              </figure>}
+          </li>)}
+        </ol>
+      </div>}
+      {circle.saleInfo && <div className={styles.card}>
+        <h3>販售資訊</h3>
+        <p className={styles.saleInfo}>{circle.saleInfo}</p>
+      </div>}
+      {details.length > 0 && <div className={styles.card}>
+        <h3>作者與作品</h3>
+        <dl className={styles.details}>
+          {details.map(({ label, values, list }) => <div key={label}>
+            <dt>{label}</dt>
+            <dd>{list ? values.map((value) => <span key={value} className={styles.tag}>{value}</span>) : values[0]}</dd>
+          </div>)}
+        </dl>
+      </div>}
+      {picture && <div className={styles.card}>
+        <h3>代表圖</h3>
+        {broken.has(picture.url)
+          ? <p className={styles.muted}>圖片暫時無法顯示。</p>
+          : <figure className={styles.picture}>
+            <img src={picture.url} alt={picture.alt} referrerPolicy="no-referrer" onError={() => markBroken(picture.url)} />
+            {/* Provenance is optional on a circle's own upload (ADR-0053): a
+                link when there is one, the credit alone when not, nothing otherwise. */}
+            {picture.sourceUrl
+              ? <figcaption><a href={picture.sourceUrl} target="_blank" rel="noreferrer">{picture.provider ? `${picture.provider} · ` : ""}原始來源</a></figcaption>
+              : picture.provider ? <figcaption>{picture.provider}</figcaption> : null}
+          </figure>}
+      </div>}
+      {circle.externalLinks.length > 0 && <div className={`${styles.card} ${styles.wide}`}>
+        <h3>更多資訊</h3>
+        <ul className={styles.links}>
+          {circle.externalLinks.map((link) => <li key={`${link.kind}-${link.provider}-${link.url}`}>
+            <a href={link.url} target="_blank" rel="noreferrer"><span>{link.provider}</span><small>{LINK_KIND_LABEL[link.kind]}</small><UiIcon name="external" /></a>
+          </li>)}
+        </ul>
+      </div>}
+    </div>
     <p className={styles.source}>{authored.provider} · {sourceDateLabel(authored)}</p>
   </section>;
 }
