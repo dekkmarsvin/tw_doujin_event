@@ -72,8 +72,19 @@ try {
   assert.deepEqual(detail.import.rows.slice(0, 2).map(row => row.codes), [["A01", "A02"], ["B07"]]);
   await list.locator("summary").filter({ hasText: "跨日整合：1 個社團" }).click();
   await journey.capture(page, "cross-day-saved-desktop");
+  await list.getByLabel("顯示主辦內部編號", { exact: true }).check();
+  const secondNamedCircle = list.locator('[data-roster-key="3"]');
+  await secondNamedCircle.getByRole("button", { name: "編輯 C01 主辦內部編號", exact: true }).click();
+  await secondNamedCircle.getByRole("textbox", { name: "C01 主辦內部編號", exact: true }).fill(" one ");
+  await list.locator("summary").filter({ hasText: "跨日整合：2 個社團" }).waitFor();
+  assert.equal(writes, 1, "edited grouping previews the normalized key before saving");
+  await list.getByRole("button", { name: "儲存變更", exact: true }).click();
+  await list.getByText("名單已儲存。", { exact: true }).waitFor();
+  assert.equal(writes, 2);
+  assert.equal(detail.import.rows[3].stableKey, "one");
+  await list.locator("summary").filter({ hasText: "跨日整合：2 個社團" }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByText("請改用桌機", { exact: true }).waitFor();
-  journey.report.checks.push("import preview and saved roster share cross-day grouping; explicit conflicting keys stay separate; date/booth rows remain intact; supported desktop widths wrap long names; existing mobile gate remains");
+  journey.report.checks.push("import preview and saved roster share cross-day grouping; explicit conflicting keys stay separate; normalized edited keys preview before save; date/booth rows remain intact; supported desktop widths wrap long names; existing mobile gate remains");
   await journey.finish();
 } catch (error) { await journey.abort(error); }
