@@ -765,12 +765,22 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         const requestGeneration = ++previewRequestGeneration.current;
         setBaselineFailed(false);
         void previewOverride(claim.circleId, initialFields).then((previewResult) => {
-          if (requestGeneration !== previewRequestGeneration.current) return;
-          setBaseRecords(previewResult.baseRecords as CircleViewRecord[]);
-          setProjectedAt(previewResult.projectedAt);
+          const baseline = previewResult.baseRecords as CircleViewRecord[];
+          if (requestGeneration === previewRequestGeneration.current) {
+            setBaseRecords(baseline);
+            setProjectedAt(previewResult.projectedAt);
+            return;
+          }
+          // A review opened meanwhile owns the preview now, but if its own
+          // request failed nothing else will fill the official records in —
+          // and the share panel would wait on them forever.
+          setBaseRecords((current) => current ?? baseline);
+          setProjectedAt((current) => current || previewResult.projectedAt);
         // Editing goes on without the baseline; only sharing needs it, and it
-        // offers its own retry rather than posting text with no booths.
-        }).catch(() => { if (requestGeneration === previewRequestGeneration.current) setBaselineFailed(true); });
+        // offers its own retry rather than posting text with no booths. The
+        // panel shows the failure only while no records have arrived by any
+        // path, so a later request that succeeded is never shown as failed.
+        }).catch(() => { if (active) setBaselineFailed(true); });
       })
       // Not hydrated: `savedFields` never arrived, so every comparison against
       // it would read as "same as the server" and take the draft away from an

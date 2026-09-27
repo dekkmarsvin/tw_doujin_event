@@ -8,6 +8,16 @@ import type { CircleViewRecord } from "../circle-records";
 import styles from "./portal.module.css";
 
 /**
+ * A browser without the Clipboard API — an insecure page, an older engine —
+ * has no `navigator.clipboard` at all, and reading `.writeText` off it throws
+ * before any promise exists. Starting from a resolved promise turns that into
+ * the same rejection a refused write gives, so one fallback handles both.
+ */
+export function writeClipboard(text: string) {
+  return Promise.resolve().then(() => navigator.clipboard.writeText(text));
+}
+
+/**
  * Where a circle takes its page once something is published: open it, copy a
  * ready-made post, or hand it to the device's share sheet.
  *
@@ -42,7 +52,7 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
   };
   const copy = () => {
     if (!promotion) return;
-    void navigator.clipboard.writeText(promotion.full)
+    void writeClipboard(promotion.full)
       .then(() => setResult("已複製宣傳文字與連結。"))
       .catch(() => {
         selectText();

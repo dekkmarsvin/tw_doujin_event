@@ -214,6 +214,35 @@ try {
   await sharing.getByRole("button", { name: "重新取得", exact: true }).click();
   assert.match(await sharing.getByRole("textbox", { name: "宣傳文字" }).inputValue(), /S01/, "the retry brings the booths back");
   assert.equal(await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).isDisabled(), false);
+
+  // 7c. A browser with no Clipboard API at all falls back to a selected post,
+  //     the same as one that refuses the write.
+  await circle.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true }));
+  await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).click();
+  await sharing.getByText("無法自動複製，文字已選取，請自行複製。", { exact: true }).waitFor();
+
+  // 7d. The first read is still in flight when the author opens a review, and
+  //     the review's own read fails. The first answer must still fill the
+  //     share panel rather than being dropped as superseded.
+  await circle.unroute(`**/api/circle/${CIRCLE_ID}/preview**`);
+  let releaseFirstRead;
+  const firstRead = new Promise((resolve) => { releaseFirstRead = resolve; });
+  let previewReads = 0;
+  await circle.route(`**/api/circle/${CIRCLE_ID}/preview**`, async (route) => {
+    previewReads += 1;
+    if (previewReads === 1) {
+      await firstRead;
+      return route.continue();
+    }
+    return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "測試中的讀取失敗" }) });
+  });
+  await circle.reload();
+  await sharing.getByText("正在準備宣傳文字…", { exact: true }).waitFor();
+  await circle.getByRole("button", { name: "預覽並送出", exact: true }).click();
+  await circle.getByText("測試中的讀取失敗").first().waitFor();
+  assert.equal(previewReads, 2, "the review asked for its own preview while the first read was held");
+  releaseFirstRead();
+  assert.match(await sharing.getByRole("textbox", { name: "宣傳文字" }).inputValue(), /S01/, "the held first read still supplies the booths");
   await circle.close();
 
   // 8. And it reaches the public overlay every reader downloads.

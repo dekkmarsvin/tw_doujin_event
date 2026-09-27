@@ -7,7 +7,7 @@ import { createServer, isRunnableDevEnvironment } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
-const { CirclePageShare } = await environment.runner.import("/app/circle-portal/circle-page-share.tsx");
+const { CirclePageShare, writeClipboard } = await environment.runner.import("/app/circle-portal/circle-page-share.tsx");
 const { getEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
 after(() => vite.close());
 
@@ -41,4 +41,13 @@ test("with the booths in hand the full post is ready to copy", () => {
   assert.match(post, /9月1日（二） S01／9月2日（三） S01/);
   assert.match(post, /https:\/\/map\.kotoban\.top\/events\/sample\/circles\/c-900001\/$/);
   assert.doesNotMatch(copyButton(markup), /disabled/);
+});
+
+// A browser with no Clipboard API must reach the same manual-copy fallback as
+// one that refuses the write, so the absence has to arrive as a rejection.
+test("a missing clipboard rejects instead of throwing", async () => {
+  assert.equal(globalThis.navigator.clipboard, undefined, "this runtime has no Clipboard API, like an insecure page");
+  let pending;
+  assert.doesNotThrow(() => { pending = writeClipboard("text"); });
+  await assert.rejects(pending, TypeError);
 });
