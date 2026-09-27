@@ -2,7 +2,7 @@
 // Real shared editor through both control surfaces; synthetic API persistence.
 // Authorization/version enforcement remains covered by handler and D1 tests.
 import assert from "node:assert/strict";
-import { start } from "./support/journey.mjs";
+import { PIXEL, start } from "./support/journey.mjs";
 import { openSurface, source } from "./support/map-authoring.mjs";
 
 const journey = await start("map-authoring-placement");
@@ -119,6 +119,25 @@ try {
     assert.equal(await editor.getByRole("textbox", { name: "顯示名稱", exact: true }).inputValue(), "出入口");
     assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "both");
     await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+    if (surface === "organizer") {
+      // A plan still uploading when the canvas is cleared finishes on the
+      // server, but must not put its image or its "已儲存" line back on the
+      // blank canvas that replaced it.
+      let release, uploading;
+      const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { uploading = resolve; });
+      await page.route("**/background", async route => {
+        if (route.request().method() === "PUT") { uploading(); await gate; }
+        await route.fallback();
+      });
+      await page.locator("input[type=file][accept*='image/png']").setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: PIXEL });
+      await started;
+      await page.getByRole("button", { name: "空白畫布", exact: true }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "清空重來", exact: true }).click();
+      const uploaded = page.waitForResponse(response => response.url().endsWith("/background") && response.request().method() === "PUT");
+      release(); await uploaded; await page.waitForTimeout(200);
+      assert.equal(await svg.locator("image").count(), 0, "a stale upload does not bring its plan back");
+      assert.equal(await page.getByText("配置圖已儲存。", { exact: true }).count(), 0, "a stale upload does not report itself");
+    }
     await page.close();
   }
   await journey.finish();

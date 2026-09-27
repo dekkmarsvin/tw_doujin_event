@@ -19,8 +19,10 @@ export type ActionFeedback = {
   /** True while this action is in flight; other controls stay usable. */
   pending: boolean;
   /** Runs one action and reports it here. Starting replaces whatever the
-   * previous action left, which is what keeps two states off the screen. */
-  run: <T>(work: Promise<T>, success: string | ((value: T) => string)) => Promise<boolean>;
+   * previous action left, which is what keeps two states off the screen.
+   * `isCurrent` lets the owner drop a result nobody is waiting for any more,
+   * such as an upload for a map the reader has since closed. */
+  run: <T>(work: Promise<T>, success: string | ((value: T) => string), isCurrent?: () => boolean) => Promise<boolean>;
   clear: () => void;
   /** For a refusal this control knows about before any request is made. */
   fail: (reason: string) => void;
@@ -31,16 +33,16 @@ export type ActionFeedback = {
 export function useActionFeedback(onUnauthorized?: () => void): ActionFeedback {
   const [notice, setNotice] = useState<Notice>(IDLE);
   const [pending, setPending] = useState(false);
-  const run = useCallback(async <T,>(work: Promise<T>, success: string | ((value: T) => string)) => {
+  const run = useCallback(async <T,>(work: Promise<T>, success: string | ((value: T) => string), isCurrent: () => boolean = () => true) => {
     setPending(true);
     setNotice({ kind: "busy", message: "處理中…" });
     try {
       const value = await work;
-      setNotice({ kind: "ok", message: typeof success === "function" ? success(value) : success });
+      if (isCurrent()) setNotice({ kind: "ok", message: typeof success === "function" ? success(value) : success });
       return true;
     } catch (error) {
       if (error instanceof PortalError && error.status === 401) onUnauthorized?.();
-      setNotice({ kind: "error", message: message(error) });
+      if (isCurrent()) setNotice({ kind: "error", message: message(error) });
       return false;
     } finally {
       setPending(false);

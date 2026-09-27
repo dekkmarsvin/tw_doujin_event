@@ -95,7 +95,13 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   // switcher, so "地圖已儲存，尚未公開。" was still there two steps later (#220).
   const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
   const planFeedback = useActionFeedback();
-  const clearPlanNotice = planFeedback.clear;
+  const { clear: clearPlanFeedback } = planFeedback;
+  // Every reset of the canvas, and every new pick, starts a new generation. A
+  // plan still being read or uploaded from an earlier one finishes on its own
+  // but no longer touches the screen: otherwise the map opened in the meantime
+  // would get the previous map's image and its "已儲存" line.
+  const planGeneration = useRef(0);
+  const clearPlanNotice = useCallback(() => { planGeneration.current += 1; clearPlanFeedback(); }, [clearPlanFeedback]);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingMap, setSavingMap] = useState(false);
   const [confirm, setConfirm] = useState<
@@ -183,13 +189,15 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
    * changes the plan behind it; building a layout from the image — by
    * recognition or as a blank sheet its size — belongs to the empty editor,
    * where there is no work to lose. */
-  const runFile = async (file: File) => {
+  const runFile = async (file: File, generation: number) => {
+    const current = () => planGeneration.current === generation;
     if (!assignment) throw new Error("請先選擇場地。");
     if (file.size > MAP_IMAGE_MAX_BYTES || !MAP_PLAN_TYPES.includes(file.type)) {
       throw new Error("配置圖需為 JPG、PNG 或 WebP，且不可超過 10MB。");
     }
     const source = await imageDataUrl(file);
     const image = await loadOrganizerMapImage(source);
+    if (!current()) return "";
     // A map built from the image is a new map, so the upload that follows can
     // only wait for the first save even if another map was open a moment ago.
     const target = layout ? selected : null;
@@ -212,7 +220,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     // that does not. A failed upload therefore changes nothing on screen.
     if (target) {
       await uploadOrganizerMapBackground(detail.event.id, target.id, file);
-      setBackground(source);
+      if (current()) setBackground(source);
       return `${traced}配置圖已儲存。`;
     }
     setBackground(source);
@@ -288,7 +296,8 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
         event.target.value = "";
         if (!file) return;
         const load = () => {
-          void planFeedback.run(runFile(file), (done) => done);
+          const generation = ++planGeneration.current;
+          void planFeedback.run(runFile(file, generation), (done) => done, () => planGeneration.current === generation);
         };
         if (!background) { load(); return; }
         setConfirm({
