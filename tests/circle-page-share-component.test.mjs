@@ -19,12 +19,19 @@ const record = (day, boothCode, name = circle.name) => ({ circle: { id: circle.i
 const render = (props) => renderToStaticMarkup(React.createElement(CirclePageShare, { event, circle, onRetry() {}, ...props }));
 const copyButton = (markup) => markup.match(/<button[^>]*>複製宣傳文字與連結<\/button>/)[0];
 
-test("no post is offered before the booths are known, but the page link works", () => {
+test("nothing is offered before the booths are known, not even the page link", () => {
   const markup = render({ records: null, failed: false });
   assert.match(markup, /正在準備宣傳文字…/);
   assert.doesNotMatch(markup, /<textarea/, "no half-made post to copy by hand either");
   assert.match(copyButton(markup), /disabled=""/);
-  assert.match(markup, /href="https:\/\/map\.kotoban\.top\/events\/sample\/circles\/c-900001\/"[^>]*>查看公開頁/);
+  // A circle with no booth has no page, and until the records arrive this
+  // could be one: the link stays in place but cannot be followed yet.
+  assert.doesNotMatch(markup, /href="https:\/\/map\.kotoban\.top\/events\//);
+  assert.match(markup, /<button[^>]*disabled=""[^>]*>查看公開頁<\/button>/);
+});
+
+test("a circle with no booth in this event has no page, so nothing is shared", () => {
+  assert.equal(render({ records: [], failed: false }), "");
 });
 
 test("a failed read says so and offers to fetch again, still without a post", () => {
@@ -41,6 +48,7 @@ test("with the booths in hand the full post is ready to copy", () => {
   assert.match(post, /9月1日（二） S01／9月2日（三） S01/);
   assert.match(post, /https:\/\/map\.kotoban\.top\/events\/sample\/circles\/c-900001\/$/);
   assert.doesNotMatch(copyButton(markup), /disabled/);
+  assert.match(markup, /href="https:\/\/map\.kotoban\.top\/events\/sample\/circles\/c-900001\/"[^>]*>查看公開頁/);
 });
 
 // The claim keeps the name it was made under; the post follows the official one.

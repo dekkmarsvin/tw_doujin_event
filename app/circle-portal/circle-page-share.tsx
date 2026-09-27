@@ -27,7 +27,10 @@ export function writeClipboard(text: string) {
  *
  * The post is only offered once the official records have arrived: without
  * them it would go out with no date, booth or venue, which is most of what a
- * reader needs from it. Until then the page link still works.
+ * reader needs from it. The page link waits too: a circle with no booth in
+ * this event has no introduction page, and until the records say otherwise
+ * that could be this one. With no booth at all there is nothing to share, so
+ * the panel is not shown.
  */
 export function CirclePageShare({ event, circle, records, failed, onRetry }: {
   event: EventDefinition;
@@ -70,6 +73,8 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
       .catch((error: unknown) => setResult(error instanceof DOMException && error.name === "AbortError" ? "" : "無法開啟分享，請改用複製。"));
   };
 
+  // `discoveryPages` writes a page only for circles with a placement.
+  if (records?.length === 0) return null;
   return <section className={styles.sharePanel} aria-labelledby={`${id}-title`}>
     <h3 id={`${id}-title`}>分享公開頁</h3>
     {promotion
@@ -81,7 +86,9 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
         ? <p className={styles.shareResult} role="alert">無法取得攤位資料，宣傳文字暫時無法產生。<button type="button" className={styles.inlineButton} onClick={onRetry}>重新取得</button></p>
         : <p className={styles.shareResult} role="status">正在準備宣傳文字…</p>}
     <div className={styles.shareActions}>
-      <a className={styles.shareLink} href={pageUrl} target="_blank" rel="noreferrer">查看公開頁</a>
+      {records
+        ? <a className={styles.shareLink} href={pageUrl} target="_blank" rel="noreferrer">查看公開頁</a>
+        : <button type="button" className={styles.secondaryButton} disabled>查看公開頁</button>}
       <button type="button" disabled={!promotion} onClick={copy}>複製宣傳文字與連結</button>
       {canShare && <button type="button" className={styles.secondaryButton} disabled={!promotion} onClick={share}>分享</button>}
     </div>
