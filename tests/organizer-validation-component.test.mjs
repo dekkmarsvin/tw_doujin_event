@@ -50,5 +50,5 @@ test("amendment map advice points to the declaration panel instead of a replacem
     issue: { step: "map", code: "missing_booth", severity: "error", target: "1/hall", boothCodes: ["A02"] },
   }));
   assert.match(html, /「名單修正」調整並儲存/);
-  assert.doesNotMatch(html, /「攤位匯入」/);
+  assert.doesNotMatch(html, /「攤位匯入」|「攤位名單」/);
 });
