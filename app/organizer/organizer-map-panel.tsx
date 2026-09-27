@@ -310,7 +310,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => loadFailed(message(error))); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>
-      <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout} scope={scope} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
+      <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step

@@ -54,6 +54,6 @@ export function VenueLayerGuide({ open = false }: { open?: boolean }) {
     <ul>{EXAMPLES.map((example) => <li key={example.event}>{example.event}：{example.why}</li>)}</ul>
     <p>是否分區要依這場活動的官方公告決定，不能只從場館名稱判斷。
       <b>大多數單一場地的活動不需要展區。</b></p>
-    <p>活動使用多個場地時，設定展區可讓讀者在地圖頁面依展區篩選攤位；只有一個場地時不顯示展區篩選。</p>
+    <p>展區代碼由攤位名單匯入，可選填顯示名稱；地圖可為展區畫範圍底色。讀者以場地切換查看各場地的全部攤位。</p>
   </details>;
 }

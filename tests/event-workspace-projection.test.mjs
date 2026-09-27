@@ -331,26 +331,22 @@ test("all areas covers every area of the reader's space and none of another's", 
     ...defaults, ...changes,
   });
 
-  assert.deepEqual(project({ area: "ALL" }).filtered.map((item) => item.circle.id), ["c-a", "c-b"]);
-  assert.deepEqual(project({ area: "B" }).filtered.map((item) => item.circle.id), ["c-b"]);
-  assert.deepEqual(project({ area: "ALL", venueSpaceId: "annex" }).filtered.map((item) => item.circle.id), ["c-s"]);
-  assert.equal(project({ area: "ALL" }).genreCounts.get("全部類別"), 2);
-  assert.equal(project({ area: "B" }).genreCounts.get("全部類別"), 1);
-  assert.equal(project({ area: "ALL", venueSpaceId: "annex" }).genreCounts.get("全部類別"), 1);
+  assert.deepEqual(project({}).filtered.map((item) => item.circle.id), ["c-a", "c-b"]);
+  assert.deepEqual(project({ venueSpaceId: "annex" }).filtered.map((item) => item.circle.id), ["c-s"]);
+  assert.equal(project({}).genreCounts.get("全部類別"), 2);
+  assert.equal(project({ venueSpaceId: "annex" }).genreCounts.get("全部類別"), 1);
 });
 
-test("the area chip appears for a chosen area and not for all of them", () => {
-  // Two venue spaces, because that is the only event whose reader can choose an
-  // area at all; a chip for a state nobody can reach would prove nothing.
+test("area filter chips are absent across venue spaces", () => {
   const derivedEvent = {
     ...event("event-a"),
     areas: ["A", "B", "S"].map((id) => ({ id, label: `${id} 區`, shortLabel: id })),
     venueAssignments: [{ venueSpaceId: "main", areaIds: ["A", "B"] }, { venueSpaceId: "annex", areaIds: ["S"] }],
   };
-  const project = (area) => projectEventWorkspace({
-    event: derivedEvent, records, recordsById, recordsByCircleId, planning, ...defaults, area,
+  const project = (venueSpaceId) => projectEventWorkspace({
+    event: derivedEvent, records, recordsById, recordsByCircleId, planning, ...defaults, venueSpaceId,
   }).activeFilterDescriptors.filter((filter) => filter.kind === "area");
 
-  assert.deepEqual(project("ALL"), []);
-  assert.deepEqual(project("A").map((filter) => filter.label), ["A 區"]);
+  assert.deepEqual(project("main"), []);
+  assert.deepEqual(project("annex"), []);
 });

@@ -62,6 +62,7 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
   const [boothCodeWidth, setBoothCodeWidth] = useState("");
   const [stableColumn, setStableColumn] = useState<number | null>(null);
   const [previewRequested, setPreviewRequested] = useState(false);
+  const [areaLabels, setAreaLabels] = useState<Record<string, Record<string, string>>>({});
   const [overrides, setOverrides] = useState<OrganizerImportOverrides>({});
   const [excluded, setExcluded] = useState<readonly ExcludedImportRow[]>([]);
   const [metadata, setMetadata] = useState<Awaited<ReturnType<typeof buildOrganizerImportMetadata>> | null>(null);
@@ -84,6 +85,12 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
   const header = useMemo(() => sheet?.rows[headerRow - 1]?.cells ?? [], [sheet, headerRow]);
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   const assignments = detail.draft.venue.assignments;
+  const displayAlias = (spaceId: string, areaId: string) => {
+    const edited = Object.hasOwn(areaLabels, spaceId) ? areaLabels[spaceId] : undefined;
+    if (edited && Object.hasOwn(edited, areaId)) return edited[areaId];
+    const saved = assignments.find((assignment) => assignment.venueSpaceId === spaceId)?.areaLabels;
+    return saved && Object.hasOwn(saved, areaId) ? saved[areaId] : "";
+  };
   const catalog = detail.venueCatalog;
   const days = detail.draft.event.days;
   const requiresAreaMapping = assignments.some((assignment) => assignment.areaMode !== "none");
@@ -285,7 +292,7 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
           // The areas this file names are written to the draft first, because
           // the import API refuses any row whose area the event never declared
           // — and this file is where those areas come from.
-          const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows);
+          const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows, areaLabels);
           const declared = JSON.stringify(withAreas) === JSON.stringify(detail.draft)
             ? Promise.resolve(detail.event.version)
             : saveOrganizerEvent(detail.event.id, detail.event.version, withAreas).then((saved) => saved.version);
@@ -304,7 +311,12 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
           {derived.map((space) => <div key={space.venueSpaceId} className={space.declared ? undefined : styles.issueError}>
             <strong>{organizerVenueSpaceLabel(catalog, space.venueSpaceId)}</strong>
             {space.declared
-              ? <span>{space.areas.map((area) => `${areaModeByVenueSpace[space.venueSpaceId] === "none" ? "無分區" : area.id}（${area.rows} 列）${area.valid ? "" : "・代碼不可用"}`).join("、")}</span>
+              ? <div>{space.areas.map((area) => areaModeByVenueSpace[space.venueSpaceId] === "none"
+                ? <span key={area.id}>無分區（{area.rows} 列）</span>
+                : <label key={area.id}>{area.id}（{area.rows} 列）{area.valid ? "" : "・代碼不可用"} · 顯示名稱（選填）
+                  <input maxLength={60} value={displayAlias(space.venueSpaceId, area.id)} placeholder={area.id} onChange={(event) => setAreaLabels((current) => ({ ...current, [space.venueSpaceId]: { ...(Object.hasOwn(current, space.venueSpaceId) ? current[space.venueSpaceId] : {}), [area.id]: event.target.value } }))} />
+                  <small>代碼 {area.id} · 顯示為 {displayAlias(space.venueSpaceId, area.id).trim() || area.id}</small>
+                </label>)}</div>
               : <span>這個場地不在活動設定裡，請先到「場館與場地」新增，或修正來源檔。</span>}
           </div>)}
           {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}

@@ -10,6 +10,7 @@ const {
   resolveCanonicalMapPeriod, validateMapContributionDraft,
 } = await environment.runner.import("/app/map-contribution-draft.ts");
 const { generateRowSlotsFromRect } = await environment.runner.import("/app/map-layout-editor-geometry.ts");
+const { validateEventMapLayout } = await environment.runner.import("/app/event-map.ts");
 after(async () => { await vite.close(); });
 
 const layout = {
@@ -35,12 +36,29 @@ const scope = {
   periodKey: "1",
   periodAliases: ["1", "day-1"],
   venueSpaceId: "sample-hall",
+  areaIds: ["A", "B"],
   mapTemplate: "SAMPLE",
   allowedBoothCodes: ["S01", "S02", "S03"],
   requiredBoothCodes: ["S01", "S02"],
   allowsUnallocatedBooths: false,
   targetPath: "map.json",
 };
+
+test("area polygons allow irregular and repeated pieces, but enforce scope and one color per area", () => {
+  const regions = [
+    { id: "piece-1", areaId: "A", color: "mint", points: [{ x: 4, y: 5 }, { x: 80, y: 5 }, { x: 60, y: 30 }, { x: 5, y: 60 }] },
+    { id: "piece-2", areaId: "A", color: "mint", points: [{ x: 100, y: 5 }, { x: 190, y: 5 }, { x: 190, y: 30 }] },
+  ];
+  const valid = { ...layout, areaRegions: regions };
+  assert.equal(validateMapContributionDraft(content(valid), scope).ok, true);
+  const wrongColor = { ...valid, areaRegions: [regions[0], { ...regions[1], color: "sky" }] };
+  assert.equal(validateMapContributionDraft(content(wrongColor), scope).ok, false);
+  const unknown = { ...valid, areaRegions: [{ ...regions[0], areaId: "OTHER" }] };
+  assert.equal(validateMapContributionDraft(content(unknown), scope).ok, false);
+  const outside = { ...valid, areaRegions: [{ ...regions[0], points: [{ x: -1, y: 5 }, ...regions[0].points.slice(1)] }] };
+  assert.equal(validateMapContributionDraft(content(outside), scope).ok, false);
+  assert.equal(validateEventMapLayout({ ...valid, areaRegions: [{ ...regions[0], points: [null, ...regions[0].points.slice(1)] }] }).ok, false, "malformed published coordinates fail validation without throwing");
+});
 
 test("period aliases resolve to one canonical storage and target key", () => {
   const days = [{ id: 1, label: "Day 1" }, { id: "special", label: "Special" }];

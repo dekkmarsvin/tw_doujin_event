@@ -4,6 +4,7 @@ export type MapBoothGroup = { circleName: string; codes: readonly string[] };
 export type MapBoothScope = {
   periodKey: string;
   venueSpaceId: string;
+  areaIds?: readonly string[];
   requiredBoothCodes: readonly string[];
   allowedBoothCodes: readonly string[];
   allowsUnallocatedBooths: boolean;

@@ -59,7 +59,7 @@ function snapshotEvent(snapshot: Snapshot, draft: NonNullable<ReturnType<typeof 
     dataUpdatedAt: snapshot.contentUpdatedAt, eventEndsAt,
     mapTemplate: templates[0], areaMode: areaIds.length === 1 ? "single" : "switchable",
     days: draft.event.days.map((day) => ({ id: day.id, label: day.label, dateLabel: day.date })),
-    areas: areaIds.map((id) => ({ id, label: id, shortLabel: id })),
+    areas: areaIds.map((id) => { const labels = draft.venue.assignments.find((assignment) => assignment.areaIds.includes(id))?.areaLabels; return { id, label: labels && Object.hasOwn(labels, id) ? labels[id] : id, shortLabel: id }; }),
     organizerAssignments: draft.references!.organizerAssignments, categoryCatalog: draft.references!.categoryCatalog,
     venueAssignments: draft.venue.assignments.map(({ venueId, venueSpaceId, areaIds }) => ({ venueId, venueSpaceId, areaIds })),
     officialData: { adapter: "organizer-import/1", eventUrl: officialUrl,

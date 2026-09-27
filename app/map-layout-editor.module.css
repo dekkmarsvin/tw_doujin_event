@@ -21,6 +21,17 @@
 .addTools button:hover { border-color:#79857d; background:#f2f4f1; }
 .addTools button:active { background:#e4e8e3; }
 .addTools button:focus-visible,.remove:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
+.areaStatus { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 14px; background:#eaf4ef; color:#274a40; font-size:calc(10px * var(--ui-font-scale,1)); }
+.areaStatus label,.areaPanel label { display:grid; gap:3px; }
+.areaRegion { opacity:.72; pointer-events:none; }
+.areaDraft { fill:none; stroke:#267660; stroke-width:3; stroke-dasharray:7 4; pointer-events:none; }
+.areaVertex { fill:#267660; stroke:#fff; stroke-width:2; pointer-events:none; }
+.areaPanel { display:grid; gap:7px; padding:10px; margin-bottom:12px; border:1px solid #cdd3ce; border-radius:8px; background:#fff; font-size:calc(10px * var(--ui-font-scale,1)); }
+.areaPanel p { margin:0; line-height:1.4; }
+.areaPanel select { min-width:0; width:100%; }
+.areaVertices { display:grid; gap:5px; max-height:160px; overflow:auto; }
+.areaVertices>div { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto; gap:3px; align-items:center; }
+.areaVertices input { min-width:0; width:100%; box-sizing:border-box; }
 /* A definite height, not a minimum: both columns then scroll inside
    themselves. With a minimum the taller column (the inspector, which
    grows with the row list) set the row height, and the canvas kept its

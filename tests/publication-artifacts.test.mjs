@@ -90,6 +90,19 @@ test("aliases publish only when the organizer set them", async () => {
   assert.deepEqual({ ...artifacts.event, aliases: undefined }, { ...plain.event, aliases: undefined });
 });
 
+test("imported area labels and drawn regions survive approval and publication", async () => {
+  const snapshot = await sample();
+  snapshot.draft.venue.assignments[0].areaLabels = { A: "版攤活動", B: "巴哈市集" };
+  snapshot.maps[0].content.layout.areaRegions = [
+    { id: "region-a", areaId: "A", color: "mint", points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }] },
+  ];
+  const artifacts = await builder.buildApprovedPublicationArtifacts(source(snapshot));
+  assert.equal(artifacts.event.areas.find((area) => area.id === "A").label, "版攤活動");
+  assert.equal(artifacts.event.areas.find((area) => area.id === "B").label, "巴哈市集");
+  const publishedMap = JSON.parse(artifacts.files.find((file) => file.path.endsWith("/map.json")).text);
+  assert.deepEqual(publishedMap.layout.areaRegions, snapshot.maps[0].content.layout.areaRegions);
+});
+
 test("scoped maps retain every day and explicit stable-key linkage without name guessing", async () => {
   const snapshot = await sample({ days: 2 });
   for (const row of snapshot.import.rows.filter((row) => row.codes[0] === "S01")) { row.stableKey = "circle-1"; row.identityGroup = "stable:circle-1"; }

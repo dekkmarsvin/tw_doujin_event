@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
-import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
@@ -65,6 +65,7 @@ type Props = {
   authoring?: MapAuthoringState;
   focusTarget?: MapEditorFocusTarget | null;
   scope?: MapBoothScope | null;
+  areaLabels?: Record<string, string>;
   onChange: (layout: EventMapLayout, authoring: MapAuthoringState) => void;
 };
 
@@ -191,6 +192,7 @@ function cloneLayout(layout: EventMapLayout): EventMapLayout {
     accessPoints: layout.accessPoints.map((point) => ({ ...point })),
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: { ...landmark.rect } })),
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map((point) => ({ ...point })) } : {}),
+    ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map((point) => ({ ...point })) })) } : {}),
   };
 }
 
@@ -211,7 +213,8 @@ function findFocusSelection(layout: EventMapLayout, target: MapEditorFocusTarget
 
 type EditorSnapshot = { layout: EventMapLayout; authoring: MapAuthoringState };
 
-export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, scope, onChange }: Props) {
+export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, scope, areaLabels = {}, onChange }: Props) {
+  const areaName = (id: string) => Object.hasOwn(areaLabels, id) ? areaLabels[id] : id;
   const [preferences, setPreferences] = useState(() => readMapEditorPreferences(mapEditorPreferenceStorage()));
   // Held in a ref as well as in state: the pointer handler below runs on the
   // capture phase of the same gesture the key started, and React has not
@@ -269,6 +272,12 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   const [slotDrawForm, setSlotDrawForm] = useState<SlotDrawFormState | null>(null);
   const [slotDraftRect, setSlotDraftRect] = useState<MapRect | null>(null);
   const [facilityTool, setFacilityTool] = useState<FacilityTool | null>(null);
+  const [areaTool, setAreaTool] = useState(false);
+  const [areaDraft, setAreaDraft] = useState<MapPoint[]>([]);
+  const [areaId, setAreaId] = useState(scope?.areaIds?.[0] ?? "");
+  const [areaColor, setAreaColor] = useState<MapAreaColor>("mint");
+  const [selectedAreaRegionId, setSelectedAreaRegionId] = useState("");
+  const selectedAreaRegion = layout.areaRegions?.find((region) => region.id === selectedAreaRegionId);
   // Which service the 服務設施 tool places next; it stays between placements.
   const [serviceKind, setServiceKind] = useState<MapServicePointKind>("toilet");
   const [facilityDraft, setFacilityDraft] = useState<MapRect | null>(null);
@@ -420,6 +429,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     drag.current = null;
     if (active && svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
     setFacilityTool(null);
+    setAreaTool(false);
+    setAreaDraft([]);
     setGuideTool(null);
     setGuidePreview(null);
     setFacilityDraft(null);
@@ -454,7 +465,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         setSharedEdgeDraft(null);
         return;
       }
-      if (event.key === "Escape" && (placementTool || anchors)) {
+      if (event.key === "Escape" && (placementTool || areaTool || anchors)) {
         event.preventDefault();
         event.stopPropagation();
         cancelPlacement();
@@ -550,6 +561,36 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       x: (event.clientX - bounds.left) * layout.width / bounds.width,
       y: (event.clientY - bounds.top) * layout.height / bounds.height,
     };
+  };
+
+  const startAreaDrawing = () => {
+    if (!scope?.areaIds?.length) return;
+    cancelPlacement();
+    setSelections([]);
+    setAreaId(scope.areaIds.includes(areaId) ? areaId : scope.areaIds[0]);
+    setAreaTool(true);
+  };
+  const finishAreaDrawing = () => {
+    if (!areaId || areaDraft.length < 3) return;
+    const color = layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor;
+    const points = areaDraft.map((point) => ({ ...point }));
+    const doubleArea = points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]; return sum + point.x * next.y - next.x * point.y; }, 0);
+    if (Math.abs(doubleArea) < 1) return;
+    const id = globalThis.crypto.randomUUID();
+    commit((draft) => { draft.areaRegions = [...(draft.areaRegions ?? []), { id, areaId, color, points }]; });
+    setSelectedAreaRegionId(id);
+    setAreaDraft([]);
+    setAreaTool(false);
+  };
+  const updateAreaRegion = (patch: Partial<NonNullable<EventMapLayout["areaRegions"]>[number]>) => {
+    if (!selectedAreaRegion) return;
+    commit((draft) => {
+      draft.areaRegions = draft.areaRegions?.map((region) => {
+        if (region.id === selectedAreaRegion.id) return { ...region, ...patch };
+        if (patch.color && !patch.areaId && region.areaId === selectedAreaRegion.areaId) return { ...region, color: patch.color };
+        return region;
+      });
+    });
   };
 
   const activateFacility = (tool: FacilityTool) => {
@@ -1435,7 +1476,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
 
   return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
     <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵依步進微移，Shift 加速 10 倍；Space 拖曳或中鍵平移畫布。</p>
-      {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button className={placementTool === "row" ? styles.drawActive : ""} aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button>{FACILITY_TOOLS.map((tool) => <button key={tool} aria-pressed={placementTool === tool} className={placementTool === tool ? styles.drawActive : ""} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} className={guideTool === axis ? styles.drawActive : ""} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</div></header>
+      {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button disabled={!scope?.areaIds?.length} className={areaTool ? styles.drawActive : ""} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button><button className={placementTool === "row" ? styles.drawActive : ""} aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button>{FACILITY_TOOLS.map((tool) => <button key={tool} aria-pressed={placementTool === tool} className={placementTool === tool ? styles.drawActive : ""} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} className={guideTool === axis ? styles.drawActive : ""} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</div></header>
+    {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
     {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
     <div className={styles.workspace}>
       <div className={styles.canvas}>
@@ -1450,10 +1492,11 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${layout.width * renderScale}px`, height: `${layout.height * renderScale}px` }}>
-        <svg ref={svgRef} className={`${placementTool ? styles.drawing : ""} ${preferences.tracing ? styles.tracing : ""} ${spaceHeld || panning ? styles.panReady : ""} ${panning ? styles.panning : ""}`} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onBlur={() => holdSpace(false)} onPointerDownCapture={startPan} onAuxClick={event => { if (event.button === 1) event.preventDefault(); }} onPointerLeave={() => { if (!drag.current) { setFacilityDraft(null); setGuidePreview(null); } }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
+        <svg ref={svgRef} className={`${placementTool || areaTool ? styles.drawing : ""} ${preferences.tracing ? styles.tracing : ""} ${spaceHeld || panning ? styles.panReady : ""} ${panning ? styles.panning : ""}`} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onBlur={() => holdSpace(false)} onPointerDownCapture={startPan} onAuxClick={event => { if (event.button === 1) event.preventDefault(); }} onPointerLeave={() => { if (!drag.current) { setFacilityDraft(null); setGuidePreview(null); } }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} style={{ opacity: preferences.backgroundOpacity / 100, visibility: preferences.showBackground ? "visible" : "hidden" }} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
           <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />
+          {layout.areaRegions?.map((region) => <polygon key={region.id} className={styles.areaRegion} points={region.points.map((point) => `${point.x},${point.y}`).join(" ")} fill={MAP_AREA_COLORS[region.color]} stroke={region.id === selectedAreaRegionId ? "#365a77" : "none"} />)}
           {/* The outline, not the hall's whole area, is what drags: a floor that
               fills the sheet would otherwise swallow every click on blank paper. */}
           <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
@@ -1495,11 +1538,18 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
             ["se", handleBounds.x + handleBounds.width, handleBounds.y + handleBounds.height],
             ["sw", handleBounds.x, handleBounds.y + handleBounds.height],
           ] as const).map(([corner, x, y]) => <g key={corner} data-resize-corner={corner} className={`${styles.resizeHandle} ${corner === "nw" || corner === "se" ? styles.resizeNwSe : styles.resizeNeSw}`} aria-hidden="true" onPointerDown={handleResizePointerDown}><circle className={styles.resizeHitArea} cx={x} cy={y} r={resizeHitRadius} /><rect className={styles.resizeKnob} x={x - resizeKnobHalfSize} y={y - resizeKnobHalfSize} width={resizeKnobHalfSize * 2} height={resizeKnobHalfSize * 2} rx={2 * layoutUnitsPerPixel} /></g>)}
+          {areaTool && <><polyline className={styles.areaDraft} points={areaDraft.map((point) => `${point.x},${point.y}`).join(" ")} />{areaDraft.map((point, index) => <circle key={index} className={styles.areaVertex} cx={point.x} cy={point.y} r={Math.max(3, layoutUnitsPerPixel * 4)} />)}<rect x={0} y={0} width={layout.width} height={layout.height} fill="transparent" style={{ cursor: "crosshair" }} onPointerDown={(event) => { if (event.button !== 0 || spaceHeldRef.current || drag.current?.mode === "pan") return; event.preventDefault(); event.stopPropagation(); const bounds = event.currentTarget.ownerSVGElement!.getBoundingClientRect(); setAreaDraft((current) => [...current, { x: clamp((event.clientX - bounds.left) * layout.width / bounds.width, 0, layout.width), y: clamp((event.clientY - bounds.top) * layout.height / bounds.height, 0, layout.height) }]); }} /></>}
         </svg>
         </div>
         </div>
       </div>
       <aside className={styles.inspector} aria-label="選取元素屬性">
+        <div className={styles.areaPanel}><b>展區範圍（{layout.areaRegions?.length ?? 0}）</b><p>同一展區的多塊範圍使用相同底色；底色會在 Reader 放大後隱藏。</p>
+          {!!layout.areaRegions?.length && <label>選取範圍<select value={selectedAreaRegionId} onChange={(event) => setSelectedAreaRegionId(event.target.value)}><option value="">請選擇</option>{layout.areaRegions.map((region, index) => <option key={region.id} value={region.id}>{region.areaId} · {areaName(region.areaId)} · 第 {index + 1} 塊</option>)}</select></label>}
+          {selectedAreaRegion && <><label>展區<select value={selectedAreaRegion.areaId} onChange={(event) => { const nextAreaId = event.target.value; updateAreaRegion({ areaId: nextAreaId, color: layout.areaRegions?.find((region) => region.areaId === nextAreaId)?.color ?? selectedAreaRegion.color }); }}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>底色<select value={selectedAreaRegion.color} onChange={(event) => updateAreaRegion({ color: event.target.value as MapAreaColor })}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label>
+            <div className={styles.areaVertices}>{selectedAreaRegion.points.map((point, index) => <div key={index}><span>點 {index + 1}</span><input type="number" aria-label={`點 ${index + 1} X`} value={Number(point.x.toFixed(1))} onChange={(event) => { const x = Number(event.target.value); if (!Number.isFinite(x)) return; updateAreaRegion({ points: selectedAreaRegion.points.map((item, position) => position === index ? { ...item, x: clamp(x, 0, layout.width) } : item) }); }} /><input type="number" aria-label={`點 ${index + 1} Y`} value={Number(point.y.toFixed(1))} onChange={(event) => { const y = Number(event.target.value); if (!Number.isFinite(y)) return; updateAreaRegion({ points: selectedAreaRegion.points.map((item, position) => position === index ? { ...item, y: clamp(y, 0, layout.height) } : item) }); }} /><button disabled={selectedAreaRegion.points.length <= 3} onClick={() => updateAreaRegion({ points: selectedAreaRegion.points.filter((_, position) => position !== index) })}>移除</button></div>)}</div>
+            <button className={styles.remove} onClick={() => { commit((draft) => { draft.areaRegions = draft.areaRegions?.filter((region) => region.id !== selectedAreaRegion.id); }); setSelectedAreaRegionId(""); }}>刪除範圍</button></>}
+        </div>
         {scope && <MapBoothList key={`${scope.periodKey}:${scope.venueSpaceId}`} layout={layout} scope={scope} selectedCode={selectedSlot?.code} onLocate={focusSlotCode} />}
         {!!snapGuides.length && <output className={styles.snapReadout} aria-live="polite">吸附：{snapGuides.map(guide => `${guide.axis.toUpperCase()} ${Number(guide.position.toFixed(2))}`).join("、")}</output>}
         {!!authoring.guides.length && <div className={styles.guidePanel}><label>選取輔助線<select aria-label="選取輔助線" value={selectedGuideId ?? ""} onChange={event => { cancelPlacement(); setSelectedGuideId(event.target.value || null); setSelections([]); setActiveSegment(null); }}><option value="">請選擇</option>{authoring.guides.map(guide => <option key={guide.id} value={guide.id}>{guide.axis === "x" ? "垂直 X" : "水平 Y"} {Number(guide.position.toFixed(2))}{guide.locked ? "（已鎖定）" : ""}</option>)}</select></label>
