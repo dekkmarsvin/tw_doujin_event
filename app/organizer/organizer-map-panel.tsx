@@ -95,6 +95,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   // switcher, so "地圖已儲存，尚未公開。" was still there two steps later (#220).
   const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
   const planFeedback = useActionFeedback();
+  const clearPlanNotice = planFeedback.clear;
   const [saveResult, setSaveResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingMap, setSavingMap] = useState(false);
   const [confirm, setConfirm] = useState<
@@ -146,10 +147,10 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     setSelected(next); setPeriodKey(next.periodKey); setVenueSpaceId(next.venueSpaceId);
     // Cleared before the read, not after: a failed read must not leave the map
     // that was open a moment ago showing its plan behind this one.
-    setLayout(next.layout); setAuthoring(next.authoring ?? EMPTY_MAP_AUTHORING); setPendingBackground(null); setEdited(false); setBackground("");
+    setLayout(next.layout); setAuthoring(next.authoring ?? EMPTY_MAP_AUTHORING); setPendingBackground(null); setEdited(false); setBackground(""); clearPlanNotice();
     const plan = await readOrganizerMapBackground(detail.event.id, map.id);
     if (plan) setBackground(await imageDataUrl(plan));
-  }, [detail.event.id]);
+  }, [detail.event.id, clearPlanNotice]);
   useEffect(() => {
     if (!location || location.candidateId !== detail.event.id) return;
     let ignore = false;
@@ -164,7 +165,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   const startBlank = () => {
     if (!assignment) return;
     const blank = () => {
-      setSelected(null); setPendingBackground(null); setEdited(false); setBackground("");
+      setSelected(null); setPendingBackground(null); setEdited(false); setBackground(""); clearPlanNotice();
       setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000)); setAuthoring(EMPTY_MAP_AUTHORING);
     };
     if (!layoutHasContent(layout) && authoring.guides.length === 0 && !background) { blank(); return; }
@@ -220,7 +221,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   };
 
   const closeEditor = () => {
-    setConfirmingClose(false); setEdited(false); setPendingBackground(null);
+    setConfirmingClose(false); setEdited(false); setPendingBackground(null); clearPlanNotice();
     setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setSelected(null); setBackground("");
   };
 
@@ -273,11 +274,11 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     <div className={styles.mapToolbar}>
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
-        discarding(() => { setPeriodKey(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
+        discarding(() => { setPeriodKey(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); clearPlanNotice(); });
       }}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
       <label>場地<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
-        discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
+        discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); clearPlanNotice(); });
       }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
       <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
@@ -296,17 +297,21 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
           confirmLabel: "換成新的",
           run: load,
         });
-      }} /><ActionNotice notice={planFeedback.notice} /></label>
+      }} /></label>
       <label>從同場地複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
         if (!map) return;
         discarding(() => {
           void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
             setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setAuthoring(structuredClone(source.authoring ?? EMPTY_MAP_AUTHORING));
-            setPendingBackground(null); setBackground(""); setEdited(false);
+            setPendingBackground(null); setBackground(""); setEdited(false); clearPlanNotice();
           }).catch((error) => loadFailed(message(error)));
         });
       }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{organizerDayLabel(detail.draft.event.days, item.periodKey)}</option>)}</select></label>
+      {/* The plan's result sits on its own line under the toolbar rather than
+          inside the upload label: inside, it grew the label into a notice box
+          that no longer looked like a button, and outlived a blank canvas. */}
+      <div className={styles.mapToolbarNotice}><ActionNotice notice={planFeedback.notice} /></div>
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => loadFailed(message(error))); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>

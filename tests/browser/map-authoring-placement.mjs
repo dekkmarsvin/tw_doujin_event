@@ -32,7 +32,7 @@ try {
     assert.equal(await editor.getByRole("button", { name: "復原上一步編輯" }).isDisabled(), true);
     await drag([.25, .2], [.3, .3], true);
     assert.equal(await count(), before, "Escape during drag cancels creation");
-    await activate("舞台"); await activate("出口");
+    await activate("舞台"); await activate("出入口");
     assert.equal(await count(), before, "switching tools creates nothing");
     const cancelledPoint = await at(.4, .4);
     await page.mouse.move(cancelledPoint.x, cancelledPoint.y); await page.mouse.down();
@@ -49,8 +49,15 @@ try {
     assert.equal(await count(), before, "one undo removes the entire placement");
     assert.equal(await editor.getByRole("button", { name: "復原上一步編輯" }).isDisabled(), true);
     await editor.getByRole("button", { name: "重做已復原的編輯" }).click();
+    // An area has no size worth guessing: a click leaves the tool armed and
+    // places nothing, and the outline has to be dragged.
+    const beforeArea = await count();
     await activate("企業攤"); await click(.65, .25);
-    await activate("入口"); await click(.75, .8);
+    assert.equal(await count(), beforeArea, "a click does not place a default-sized area");
+    assert.equal(await editor.getByRole("button", { name: "新增企業攤", exact: true }).getAttribute("aria-pressed"), "true");
+    await drag([.6, .2], [.7, .3]);
+    assert.equal(await count(), beforeArea + 1);
+    await activate("出入口"); await click(.75, .8);
     assert.match(await picker.inputValue(), /^access:/);
     // A service point is a click too; its type is chosen before placing and its
     // name is optional.
@@ -69,6 +76,7 @@ try {
     near(rect.width, source.width * .05); near(rect.height, source.height * .1);
     near(region.x + region.width / 2, source.width * .65); near(region.y + region.height / 2, source.height * .25);
     near(point.x, source.width * .75); near(point.y, source.height * .8); assert.equal(point.direction, "north");
+    assert.equal(point.kind, "entrance"); assert.equal(point.label, "入口");
     const service = state.layout.servicePoints.at(-1);
     assert.equal(service.kind, "first-aid"); assert.equal(service.label, "北側");
     near(service.x, source.width * .55); near(service.y, source.height * .8);
@@ -90,12 +98,27 @@ try {
     await editor.getByRole("combobox", { name: "所屬排標籤", exact: true }).fill("T");
     await drag([.05, .03], [.1, .15], true);
     assert.equal(await count(), beforeRow, "manual slot cancellation leaves no element");
-    for (const label of ["舞台", "其他區域", "出口", "服務設施"]) {
+    for (const label of ["舞台", "其他區域"]) {
+      await activate(label); await click(.45, .55);
+      assert.equal(await count(), beforeRow, `a click places no ${label}`);
+      await drag([.4, .5], [.5, .6]);
+      assert.equal(await count(), beforeRow + 1);
+      await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+      assert.equal(await count(), beforeRow);
+    }
+    for (const label of ["出入口", "服務設施"]) {
       await activate(label); await click(.45, .55);
       assert.equal(await count(), beforeRow + 1);
       await editor.getByRole("button", { name: "復原上一步編輯" }).click();
       assert.equal(await count(), beforeRow);
     }
+    // The access tool keeps the type chosen for it, as the service tool does.
+    await activate("出入口");
+    await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption("both");
+    await click(.45, .55);
+    assert.equal(await editor.getByRole("textbox", { name: "顯示名稱", exact: true }).inputValue(), "出入口");
+    assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "both");
+    await editor.getByRole("button", { name: "復原上一步編輯" }).click();
     await page.close();
   }
   await journey.finish();

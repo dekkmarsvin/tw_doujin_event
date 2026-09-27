@@ -12,13 +12,16 @@ const glyph = { fill: "none", stroke: "#fff", strokeWidth: 2.2, strokeLinecap: "
  * An access point's badge in screen pixels around (0, 0), about 22px across.
  * An entrance is round, an exit square and a doorway used both ways a diamond,
  * so they differ in shape and not only in colour; the arrow shows which way
- * people walk through it. The map and the facility list draw the same badge.
+ * people walk through it. A doorway used both ways carries two arrows side by
+ * side, one in and one out, rather than one line headed at both ends, which
+ * read as up-and-down and sat too close to the elevator badge. The map, the
+ * editor and the facility list draw the same badge.
  */
 export function MapAccessBadge({ kind, direction }: Pick<MapAccessPoint, "kind" | "direction">) {
   const rotation = ROTATION[direction] ? `rotate(${ROTATION[direction]})` : undefined;
   if (kind === "both") return <>
     <path d="M0-11.5 11.5 0 0 11.5-11.5 0Z" fill={MAP_BOTH_WAYS_COLOR} stroke="#fff" strokeWidth={1.5} />
-    <path transform={rotation} d="M0 5.5V-5.5M-3.5-2 0-5.5 3.5-2M-3.5 2 0 5.5 3.5 2" {...glyph} />
+    <path transform={rotation} d="M-3 5.5V-5.5M-6-2.5-3-5.5 0-2.5M3-5.5V5.5M0 2.5 3 5.5 6 2.5" {...glyph} strokeWidth={2} />
   </>;
   return <>
     {kind === "exit"
