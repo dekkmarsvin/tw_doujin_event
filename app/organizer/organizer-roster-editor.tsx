@@ -15,6 +15,13 @@ type Entry = { key: number; row: OrganizerNormalizedImportRow };
 const entriesOf = (rows: readonly OrganizerNormalizedImportRow[]) => rows.map((row, key) => ({ key, row }));
 const scopeKey = (day: string, space: string) => JSON.stringify([day, space]);
 const areaKey = (space: string, area: string) => JSON.stringify([space, area]);
+type PageSize = 25 | 50 | 100 | "all";
+// Every row re-renders on each keystroke, so showing everything stays fast only for a short list.
+const ALL_ROWS_LIMIT = 500;
+const PAGE_SIZE_KEY = "organizer-roster-page-size";
+const readPageSize = (): PageSize => {
+  try { const saved = localStorage.getItem(PAGE_SIZE_KEY); return saved === "all" ? "all" : saved === "25" ? 25 : saved === "50" ? 50 : 100; } catch { return 100; }
+};
 
 export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady, onLocate, onImport }: {
   detail: OrganizerEventDetail; onChanged: () => Promise<void>; onDirtyChange: (dirty: boolean) => void;
@@ -42,6 +49,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const [mapState, setMapState] = useState("");
   const [descending, setDescending] = useState(false);
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(readPageSize);
   const [showInternal, setShowInternal] = useState(false);
   const [maps, setMaps] = useState<OrganizerMapSummary[] | null>(null);
   const [coverageError, setCoverageError] = useState("");
@@ -96,6 +104,9 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const normalized = useMemo(() => entries.map(entry => normalizeRosterRow(entry.row, detail.draft)), [entries, detail.draft]);
   const errors = useMemo(() => rosterFieldIssues(normalized, detail.draft), [normalized, detail.draft]);
   const needsAreaUpdate = normalized.some((row, index) => row.areaId !== entries[index].row.areaId);
+  // Only the saved list counts as finished; pending edits and issues already say so beside their own controls.
+  const done = !anyDirty && !needsAreaUpdate && !conflict && !refreshRequired && errors.size === 0
+    && detail.workspace.readiness.sections.some(item => item.id === "import" && item.state === "complete");
   const limitError = useMemo(() => normalized.length > 20_000 ? "名單最多 20,000 筆。"
     : new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024 ? "名單超過 8 MB，請縮短欄位內容。" : null, [normalized]);
   const save = useCallback(async () => {
@@ -151,7 +162,9 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   }, [viewEntries, query, day, space, area, mapState, descending, coverageOf]);
   const byKey = useMemo(() => new Map(entries.map((entry, index) => [entry.key, { ...entry, index }])), [entries]);
   const visible = filtered.filter(entry => byKey.has(entry.key));
-  const pages = Math.max(1, Math.ceil(visible.length / 100)), shownPage = Math.min(page, pages - 1);
+  const sizeFor = (count: number) => pageSize !== "all" ? pageSize : count <= ALL_ROWS_LIMIT ? Math.max(1, count) : 100;
+  const size = sizeFor(visible.length);
+  const pages = Math.max(1, Math.ceil(visible.length / size)), shownPage = Math.min(page, pages - 1);
   const chosen = entries.filter(entry => selected.includes(entry.key));
   const chosenRows = chosen.map(entry => normalizeRosterRow(entry.row, detail.draft));
   const mergeError = rosterMergeError(chosenRows);
@@ -168,14 +181,14 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const focusError = (index: number) => {
     const entry = entries[index]; clearFilters();
     const sorted = [...entries].sort((a, b) => (descending ? -1 : 1) * (a.row.codes[0] ?? "").localeCompare(b.row.codes[0] ?? "", "zh-Hant", { numeric: true }));
-    setPage(Math.floor(sorted.findIndex(item => item.key === entry.key) / 100));
+    setPage(Math.floor(sorted.findIndex(item => item.key === entry.key) / sizeFor(entries.length)));
     const field = Object.keys(errors.get(index) ?? {})[0];
     requestAnimationFrame(() => tableRef.current?.querySelector<HTMLButtonElement>(`[data-roster-cell="${entry.key}-${field}"]`)?.click());
   };
   return <section aria-label="攤位名單" className={styles.rosterWorkspace}>
     <div ref={toolbarRef}>
-      <div className={styles.panelHead}><div><h3>攤位名單</h3><span>{entries.length.toLocaleString()} 筆</span></div><div className={styles.row}>
-        <button type="button" disabled={!editable || !!busy || refreshRequired} onClick={() => request("import")}>匯入檔案</button>
+      <div className={styles.panelHead}><div><h3>攤位名單</h3><span>{entries.length.toLocaleString()} 筆</span>{done && <span className={styles.rosterDone}> · 已完成</span>}</div><div className={styles.row}>
+        <button type="button" className={styles.secondary} disabled={!editable || !!busy || refreshRequired} onClick={() => request("import")}>匯入檔案</button>
         <button type="button" className={styles.secondary} disabled={!editable || !!busy || entries.length >= 20_000 || conflict || refreshRequired} onClick={() => {
           const assignment = assignments.length === 1 ? assignments[0] : assignments.find(item => item.venueSpaceId === space);
           const row = { sourceRow: 0, dayId: day || (days.length === 1 ? days[0].id : ""), venueSpaceId: assignment?.venueSpaceId ?? "", areaId: assignment?.areaMode === "none" ? "ALL" : assignment?.areaIds.length === 1 ? assignment.areaIds[0] : "", codes: [], circleName: "", stableKey: null, identityGroup: null };
@@ -193,7 +206,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
         <label>地圖狀態<select aria-label="地圖狀態" value={mapState} onChange={event => { setMapState(event.target.value); rescope(); }}><option value="">全部狀態</option>{["待畫", "部分已畫", "已畫", "尚未取得"].map(state => <option key={state}>{state}</option>)}</select></label>
         <label>攤位排序<select aria-label="攤位排序" value={descending ? "desc" : "asc"} onChange={event => { setDescending(event.target.value === "desc"); rescope(); }}><option value="asc">代碼由小到大</option><option value="desc">代碼由大到小</option></select></label>
       </div>
-      <div className={styles.rosterTools}><span role="status">符合 {visible.length.toLocaleString()} 筆 · 第 {shownPage + 1} / {pages} 頁</span>
+      <div className={styles.rosterTools}><span role="status">符合 {visible.length.toLocaleString()} 筆</span>
         {(query || day || space || area || mapState) && <button type="button" className={styles.textButton} onClick={clearFilters}>清除篩選</button>}
         <label className={styles.rosterChoice}><input type="checkbox" checked={showInternal} onChange={event => setShowInternal(event.target.checked)} />顯示主辦內部編號</label>
         {selected.length > 0 && <><span>已選取 {selected.length} 筆</span><button type="button" className={styles.secondary} disabled={!!mergeError || !!busy || conflict || refreshRequired} onClick={() => { setAction({ kind: "merge" }); setMergeName(names.length === 1 ? names[0] : ""); }}>合併選取</button><button type="button" className={styles.textButton} onClick={() => setSelected([])}>清除選取</button></>}
@@ -210,7 +223,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
       {conflict && <p role="alert">名單已被更新，本次修改仍保留。請先複製需要保留的內容，再放棄變更並重新載入。</p>}
     </div>
     <div ref={tableRef} className={styles.rosterTable}><table><thead><tr>{editable && <th aria-label="選取" />}<th>攤位代碼</th><th className={styles.circleColumn}>社團名稱</th>{showDay && <th>活動日</th>}{showSpace && <th>場地</th>}<th>展區</th>{showInternal && <th>主辦內部編號</th>}<th>地圖狀態</th><th>操作</th></tr></thead>
-      <tbody>{visible.slice(shownPage * 100, (shownPage + 1) * 100).map(({ key }) => {
+      <tbody>{visible.slice(shownPage * size, (shownPage + 1) * size).map(({ key }) => {
         const { row, index } = byKey.get(key)!;
         const saved = coverageByScope.get(scopeKey(row.dayId, row.venueSpaceId)), coverage = coverageOf(row);
         const disabled = !editable || !!busy || conflict || refreshRequired;
@@ -233,7 +246,15 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
           <td><button type="button" className={styles.ghost} onClick={() => setAction({ kind: "details", key })}>明細</button>{editable && <><button type="button" className={styles.textButton} disabled={disabled || row.codes.length < 2 || entries.length >= 20_000 || errors.has(index)} onClick={() => { setSplitCodes([]); setAction({ kind: "split", key }); }}>拆分</button><button type="button" className={styles.textButton} disabled={disabled} onClick={() => setAction({ kind: "delete", key })}>刪除</button></>}</td>
         </tr>;
       })}</tbody></table>{visible.length === 0 && <p className={styles.emptyRoster}>沒有符合條件的攤位。</p>}</div>
-    <div className={styles.rosterFooter}><div className={styles.row}><button type="button" className={styles.ghost} disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={shownPage + 1 >= pages} onClick={() => setPage(shownPage + 1)}>下一頁</button></div>
+    <div className={styles.rosterFooter}><div className={styles.row}>
+      <label className={styles.rosterChoice}>每頁<select aria-label="每頁筆數" value={pageSize === "all" && visible.length > ALL_ROWS_LIMIT ? "100" : String(pageSize)} onChange={event => {
+        const next: PageSize = event.target.value === "all" ? "all" : Number(event.target.value) as 25 | 50 | 100;
+        // Stay on the stretch of the list already in view.
+        setPageSize(next); setPage(next === "all" ? 0 : Math.floor(shownPage * size / next));
+        try { localStorage.setItem(PAGE_SIZE_KEY, String(next)); } catch { /* The choice is a convenience; the list works without it. */ }
+      }}>{[25, 50, 100].map(item => <option key={item} value={item}>{item} 筆</option>)}<option value="all" disabled={visible.length > ALL_ROWS_LIMIT}>{visible.length > ALL_ROWS_LIMIT ? `全部（${ALL_ROWS_LIMIT} 筆以內）` : "全部"}</option></select></label>
+      {visible.length > 0 && <span>第 {(shownPage * size + 1).toLocaleString()}–{Math.min(visible.length, (shownPage + 1) * size).toLocaleString()} 筆，共 {visible.length.toLocaleString()} 筆</span>}
+      <button type="button" className={styles.ghost} disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一頁</button><span>{shownPage + 1} / {pages}</span><button type="button" className={styles.ghost} disabled={shownPage + 1 >= pages} onClick={() => setPage(shownPage + 1)}>下一頁</button></div>
       {(dirty || needsAreaUpdate || conflict) && <div className={styles.row}><span>尚未儲存</span><button type="button" disabled={!editable || !!busy || conflict || refreshRequired || errors.size > 0 || !!limitError} onClick={() => void save()}>{busy === "save" ? "儲存中…" : "儲存變更"}</button><button type="button" className={styles.secondary} disabled={!!busy} onClick={() => setPending("discard")}>{busy === "reload" ? "重新讀取中…" : "放棄變更"}</button></div>}
     </div>
     {pending && <RosterDialog title="尚有未儲存變更" busy={!!busy} onClose={() => setPending(null)}><p>{pending === "discard" ? "放棄目前修改並重新讀取名單？" : "先儲存目前修改，再繼續操作。"}</p><div className={styles.row}>

@@ -188,7 +188,8 @@ try {
     await organizer.getByRole("dialog").waitFor({ state: "hidden" });
   };
   const save = list.getByRole("button", { name: "儲存變更", exact: true });
-  await status("符合 20,000 筆 · 第 1 / 200 頁");
+  await status("符合 20,000 筆");
+  await status("第 1–100 筆，共 20,000 筆");
   assert.equal(await rowsOnPage.count(), 100);
   assert.equal(await rowsOnPage.first().locator("td").nth(1).innerText(), "A00001");
   assert.equal(await rowsOnPage.first().locator("td").nth(5).innerText(), "ALL");
@@ -205,9 +206,17 @@ try {
   await organizer.setViewportSize({ width: 1600, height: 1000 });
   const next = list.getByRole("button", { name: "下一頁", exact: true });
   for (let page = 2; page <= 200; page++) await next.click();
-  await status("符合 20,000 筆 · 第 200 / 200 頁");
+  await status("第 19,901–20,000 筆，共 20,000 筆");
   assert.equal(await rowsOnPage.last().locator("td").nth(1).innerText(), "B20000");
   assert.equal(await next.isDisabled(), true);
+  // A smaller page keeps the stretch already in view; a long list cannot show every row at once.
+  const perPage = list.getByLabel("每頁筆數", { exact: true });
+  await perPage.selectOption("25");
+  await status("第 19,901–19,925 筆，共 20,000 筆");
+  assert.equal(await rowsOnPage.count(), 25);
+  assert.deepEqual(await perPage.locator('option[value="all"]').evaluate(option => [option.disabled, option.textContent]), [true, "全部（500 筆以內）"]);
+  await perPage.selectOption("100");
+  await status("第 19,901–20,000 筆，共 20,000 筆");
   const sort = list.getByLabel("攤位排序", { exact: true });
   await sort.selectOption("desc");
   assert.equal(await rowsOnPage.first().locator("td").nth(1).innerText(), "B20000");
@@ -215,10 +224,16 @@ try {
   await list.getByLabel("活動日", { exact: true }).selectOption("day-1");
   await list.getByLabel("場地", { exact: true }).selectOption("space-b");
   await search.fill("B01235-SECOND");
-  await status("符合 1 筆 · 第 1 / 1 頁");
+  await status("符合 1 筆");
   assert.match(await rowsOnPage.first().innerText(), /B01235、B01235-SECOND/);
   assert.equal(await rowsOnPage.first().locator("td").nth(5).innerText(), "無分區");
+  await perPage.selectOption("all");
+  await status("第 1–1 筆，共 1 筆");
   await list.getByRole("button", { name: "清除篩選", exact: true }).click();
+  // Past the limit, 全部 falls back to pages of 100.
+  assert.equal(await perPage.inputValue(), "100");
+  assert.equal(await rowsOnPage.count(), 100);
+  await perPage.selectOption("100");
 
   // Cell editing preserves the view, Escape restores just that edit, and Tab advances.
   const first = list.locator('tr[data-roster-key="0"]');
