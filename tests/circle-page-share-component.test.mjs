@@ -15,7 +15,7 @@ after(() => vite.close());
 globalThis.window = { location: { origin: "https://map.kotoban.top" } };
 const event = getEventDefinition("sample");
 const circle = { id: "c-900001", name: "北風畫室" };
-const record = (day, boothCode) => ({ placement: { id: `${day}-${boothCode}`, eventId: "sample", circleId: circle.id, day, area: "north", boothCode, status: "active", tone: "mint" } });
+const record = (day, boothCode, name = circle.name) => ({ circle: { id: circle.id, name }, placement: { id: `${day}-${boothCode}`, eventId: "sample", circleId: circle.id, day, area: "north", boothCode, status: "active", tone: "mint" } });
 const render = (props) => renderToStaticMarkup(React.createElement(CirclePageShare, { event, circle, onRetry() {}, ...props }));
 const copyButton = (markup) => markup.match(/<button[^>]*>複製宣傳文字與連結<\/button>/)[0];
 
@@ -41,6 +41,13 @@ test("with the booths in hand the full post is ready to copy", () => {
   assert.match(post, /9月1日（二） S01／9月2日（三） S01/);
   assert.match(post, /https:\/\/map\.kotoban\.top\/events\/sample\/circles\/c-900001\/$/);
   assert.doesNotMatch(copyButton(markup), /disabled/);
+});
+
+// The claim keeps the name it was made under; the post follows the official one.
+test("the post names the circle as the official records do now", () => {
+  const markup = render({ records: [record(1, "S01", "北風畫室（更正）")], failed: false });
+  const post = markup.match(/<textarea[^>]*>([\s\S]*?)<\/textarea>/)[1];
+  assert.match(post, /^北風畫室（更正）｜/);
 });
 
 // A browser with no Clipboard API must reach the same manual-copy fallback as

@@ -39,18 +39,27 @@ export function visitableDays<T extends SharedPlacement>(event: EventDefinition,
 /**
  * The words a circle pastes into its own post. Only the official facts and the
  * page's stable address go in — the account, the claim and any unsaved draft
- * are not inputs, so none of them can reach it.
+ * are not inputs, so none of them can reach it. `circle.name` is the official
+ * record's current name, not the one captured when the claim was made.
+ *
+ * One venue is named once, after every date. Across several venues each date
+ * names its own, grouping that day's booths under it: a list of venues after a
+ * list of dates would not say which venue a reader goes to on which day.
  */
 export function circlePromotion(event: EventDefinition, circle: { id: string; name: string }, placements: readonly SharedPlacement[], origin: string) {
   const url = `${origin}${circlePath(event.id, circle.id)}`;
   const days = visitableDays(event, placements);
-  const booths = days.map(({ label, placements: onDay }) => `${label} ${onDay.map((placement) => placement.boothCode).join("、")}`).join("／");
-  const venues = [...new Set(days.flatMap(({ placements: onDay }) => onDay.flatMap((placement) =>
-    event.venueAssignments.filter((venue) => venue.areaIds.includes(placement.area)).map((venue) => venue.venueName))))].join("、");
+  const venueOf = (placement: SharedPlacement) => event.venueAssignments.find((venue) => venue.areaIds.includes(placement.area))?.venueName ?? "";
+  const codes = (onVenue: readonly SharedPlacement[]) => onVenue.map((placement) => placement.boothCode).join("、");
+  const venues = [...new Set(days.flatMap(({ placements: onDay }) => onDay.map(venueOf)))];
+  const booths = venues.length > 1
+    ? days.map(({ label, placements: onDay }) => `${label} ${[...new Set(onDay.map(venueOf))]
+      .map((venue) => `${venue ? `${venue} ` : ""}${codes(onDay.filter((placement) => venueOf(placement) === venue))}`).join("；")}`).join("／")
+    : `${days.map(({ label, placements: onDay }) => `${label} ${codes(onDay)}`).join("／")}${venues[0] ? `｜${venues[0]}` : ""}`;
   const alias = event.aliases?.[0];
   const text = [
     `${circle.name}｜${event.name}${alias && alias !== event.name ? `（${alias}）` : ""}`,
-    booths && `${booths}${venues ? `｜${venues}` : ""}`,
+    days.length > 0 && booths,
   ].filter(Boolean).join("\n");
   return { text, url, full: `${text}\n${url}` };
 }

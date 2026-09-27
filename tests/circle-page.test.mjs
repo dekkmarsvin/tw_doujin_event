@@ -91,3 +91,15 @@ test("the ready-made post is official facts and the page address only", () => {
   const aliased = circlePromotion({ ...event, aliases: ["範例市集"] }, { id: "c-900001", name: "北風畫室" }, [], "https://map.kotoban.top");
   assert.equal(aliased.text, `北風畫室｜${event.name}（範例市集）`, "no placements, no booth line");
 });
+
+test("across venues, each date names the venue its booths are in", () => {
+  const [assignment] = event.venueAssignments;
+  const split = { ...event, venueAssignments: [
+    { ...assignment, venueName: "甲館", areaIds: ["north"] },
+    { ...assignment, venueId: "venue-b", venueName: "乙館", areaIds: ["south"] },
+  ] };
+  const booths = (placements) => circlePromotion(split, { id: "c-900001", name: "北風畫室" }, placements, "https://map.kotoban.top").text.split("\n")[1];
+  assert.equal(booths([placement(1, "S01"), placement(2, "S02", "active", "south")]), "9月1日（二） 甲館 S01／9月2日（三） 乙館 S02");
+  assert.equal(booths([placement(1, "S01"), placement(1, "S03"), placement(1, "S02", "active", "south")]), "9月1日（二） 甲館 S01、S03；乙館 S02", "one day in two venues keeps each booth with its venue");
+  assert.equal(booths([placement(1, "S01"), placement(2, "S01")]), "9月1日（二） S01／9月2日（三） S01｜甲館", "one venue is named once");
+});

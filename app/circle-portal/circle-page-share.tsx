@@ -40,9 +40,12 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
   const box = useRef<HTMLTextAreaElement>(null);
   const [result, setResult] = useState("");
   const pageUrl = `${window.location.origin}${circlePath(event.id, circle.id)}`;
+  // The claim keeps the name as it was when it was made; an organizer can have
+  // corrected it since, and the post has to name the circle the page does.
+  const name = records?.[0]?.circle.name ?? circle.name;
   const promotion = useMemo(
-    () => records ? circlePromotion(event, circle, records.map((record) => record.placement), window.location.origin) : null,
-    [circle, event, records],
+    () => records ? circlePromotion(event, { id: circle.id, name }, records.map((record) => record.placement), window.location.origin) : null,
+    [circle.id, event, name, records],
   );
   const canShare = typeof navigator.share === "function";
 
@@ -61,7 +64,7 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
   };
   const share = () => {
     if (!promotion) return;
-    void navigator.share({ title: circle.name, text: promotion.text, url: promotion.url })
+    void navigator.share({ title: name, text: promotion.text, url: promotion.url })
       .then(() => setResult(""))
       // Closing the share sheet is a choice, not a failure.
       .catch((error: unknown) => setResult(error instanceof DOMException && error.name === "AbortError" ? "" : "無法開啟分享，請改用複製。"));
