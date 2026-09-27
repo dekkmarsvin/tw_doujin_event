@@ -112,6 +112,29 @@ try {
     return { position: getComputedStyle(node).position, bottom: Math.round(innerHeight - box.bottom) };
   });
   assert.deepEqual(footBar, { position: "fixed", bottom: 0 }, "the bar is pinned to the foot of a phone screen");
+
+  // 4b. A bar grown taller — here by a storage warning above its buttons —
+  //     still leaves the page's last line reachable above it.
+  const cramped = await journey.page({
+    url: pageOf(ONE_DAY),
+    viewport: { width: 390, height: 844 },
+    routes: routes(overridesRoute("sample", []), (target) => target.addInitScript(() => {
+      localStorage.setItem("event-map-planning-v1", JSON.stringify({ schemaVersion: 1 }));
+    })),
+  });
+  const crampedBar = cramped.getByRole("group", { name: "收藏與分享" });
+  await crampedBar.getByRole("alert").waitFor();
+  await cramped.waitForFunction(() => document.documentElement.style.getPropertyValue("--circle-action-bar-height") !== "");
+  await cramped.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const overlap = await cramped.evaluate(() => {
+    const bar = document.querySelector('[aria-label="收藏與分享"]').getBoundingClientRect();
+    const last = [...document.querySelectorAll("footer a")].at(-1).getBoundingClientRect();
+    return { barHeight: Math.round(bar.height), gap: Math.round(bar.top - last.bottom) };
+  });
+  assert.ok(overlap.barHeight > 120, `the warning makes the bar taller than the old fixed allowance (${overlap.barHeight}px)`);
+  assert.ok(overlap.gap >= 0, `the footer's last link clears the bar (${overlap.gap}px)`);
+  await journey.capture(cramped, "circle-page-mobile-tall-bar");
+  await cramped.close();
   // Nothing written is nothing shown: no empty section, no placeholder picture.
   assert.equal(await single.getByRole("heading", { name: "社團介紹" }).count(), 0, "a circle that wrote nothing has no content section");
   await journey.capture(single, "circle-page-mobile-no-content");

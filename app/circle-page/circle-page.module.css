@@ -73,8 +73,9 @@
 @media (max-width:540px) {
   .actionBar { position:fixed; z-index:5; left:0; right:0; bottom:0; margin:0; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid #dfe3df; background:#f8f7f2; }
   .barButtons button { flex:1 1 0; }
-  /* The bar must never cover the page's last lines. */
-  :global(.discovery):has(.actionBar) :global(footer) { padding-bottom:120px; }
+  /* The bar must never cover the page's last lines: the script measures it
+     as it grows, and 120px stands in until the first measurement. */
+  :global(.discovery):has(.actionBar) :global(footer) { padding-bottom:calc(var(--circle-action-bar-height,120px) + 24px); }
   .details div { grid-template-columns:1fr; gap:4px; }
 }
 @media (prefers-reduced-motion:reduce) { * { transition:none!important; } }

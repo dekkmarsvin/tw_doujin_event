@@ -20,6 +20,8 @@ import styles from "./circle-page.module.css";
 /** Same windows as the reader: a plan change is announced, an unfavourite can be undone. */
 const NOTICE_MS = 4000;
 const UNDO_MS = 7000;
+/** The measured height of the favourite and share bar; the stylesheet reserves it on a phone. */
+const ACTION_BAR_HEIGHT = "--circle-action-bar-height";
 
 /**
  * A circle's introduction page, once its script runs.
@@ -71,6 +73,21 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
       .map((element) => ({ element, key: element.getAttribute(CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE) ?? "" })),
   }));
 
+  // On a phone the bar is pinned over the page, and its height is not fixed:
+  // an error, an undo line or enlarged text all make it taller. The page keeps
+  // exactly that much room below its last line, so nothing ends up under it.
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!bar) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => root.style.setProperty(ACTION_BAR_HEIGHT, `${Math.ceil(bar.getBoundingClientRect().height)}px`));
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty(ACTION_BAR_HEIGHT);
+    };
+  }, [bar]);
+
   if (!event) return null;
   const favorite = planning.document.favorites.find((item) => item.eventId === eventId && item.circleId === circleId) ?? null;
   const planned = (day: EventDayKey) => planning.document.visitPlans.some((item) => item.eventId === eventId && item.day === day && item.circleId === circleId);
@@ -101,7 +118,7 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   };
 
   return <>
-    {targets.bar && createPortal(<div className={styles.actionBar} role="group" aria-label="收藏與分享">
+    {targets.bar && createPortal(<div ref={setBar} className={styles.actionBar} role="group" aria-label="收藏與分享">
       {planning.storageError && <p className={styles.error} role="alert">{planning.storageError}</p>}
       <div className={styles.feedback} role="status" aria-live="polite">
         {undo ? <><span>已取消收藏。</span><button type="button" onClick={() => {
