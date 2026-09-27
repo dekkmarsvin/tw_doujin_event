@@ -343,6 +343,9 @@
 .mapToolbar { display: grid; grid-template-columns: 1fr 1fr auto auto 1.2fr; gap: 10px; align-items: end; margin: 18px 0; }
 .fileButton { border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; background: var(--surface); color: var(--ink); cursor: pointer; }
 .fileButton input { display: none; }
+.fileButton:has(input:disabled) { cursor: not-allowed; opacity: .46; }
+.mapToolbarNotice { grid-column: 1 / -1; }
+.mapToolbarNotice:empty { display: none; }
 .mapTabs { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .mapTabs button { display: grid; gap: 3px; }
 .mapTabs small { font-weight: 400; opacity: .75; }

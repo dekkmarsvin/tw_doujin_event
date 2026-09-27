@@ -6,9 +6,18 @@ const vite = await createServer({ configFile: false, server: { middlewareMode: t
 const { resolveFacilityPlacement: place } = await vite.environments.ssr.runner.import("/app/map-placement-tool.ts");
 after(() => vite.close());
 
-test("click jitter keeps the original centre; edge placement stays inside the map", () => {
+test("a pillar click keeps the original centre and stays inside the map", () => {
   assert.deepEqual(place("pillar", { x: 400, y: 250 }, { x: 401, y: 251 }, { x: 1, y: 1 }, { width: 1000, height: 500 }), { x: 385, y: 242.5, width: 30, height: 15 });
-  assert.deepEqual(place("stage", { x: 0, y: 500 }, { x: 0, y: 500 }, { x: 0, y: 0 }, { width: 1000, height: 500 }), { x: 0, y: 450, width: 160, height: 50 });
+  assert.deepEqual(place("pillar", { x: 0, y: 500 }, { x: 0, y: 500 }, { x: 0, y: 0 }, { width: 1000, height: 500 }), { x: 0, y: 485, width: 30, height: 15 });
+});
+
+test("areas are drawn by dragging; a click places no default-sized block", () => {
+  const bounds = { width: 1000, height: 500 }, point = { x: 400, y: 250 };
+  for (const tool of ["enterprise", "stage", "other"]) {
+    assert.equal(place(tool, point, point, { x: 0, y: 0 }, bounds), null, tool);
+    assert.equal(place(tool, point, { x: 401, y: 251 }, { x: 1, y: 1 }, bounds), null, `${tool} jitter`);
+    assert.deepEqual(place(tool, point, { x: 500, y: 300 }, { x: 100, y: 50 }, bounds), { x: 400, y: 250, width: 100, height: 50 }, `${tool} drag`);
+  }
 });
 
 test("drag threshold is independent of map zoom and reverse drags retain their bounds", () => {
@@ -19,10 +28,10 @@ test("drag threshold is independent of map zoom and reverse drags retain their b
   }
 });
 
-test("access points use clicks only and a cancelled-looking drag cannot create an entrance", () => {
+test("access points use clicks only and a cancelled-looking drag cannot create one", () => {
   const point = { x: 120, y: 70 }, bounds = { width: 200, height: 100 };
-  assert.deepEqual(place("exit", point, point, { x: 0, y: 0 }, bounds), { ...point, width: 0, height: 0 });
-  assert.equal(place("entrance", point, { x: 140, y: 70 }, { x: 20, y: 0 }, bounds), null);
+  assert.deepEqual(place("access", point, point, { x: 0, y: 0 }, bounds), { ...point, width: 0, height: 0 });
+  assert.equal(place("access", point, { x: 140, y: 70 }, { x: 20, y: 0 }, bounds), null);
   assert.deepEqual(place("service", point, point, { x: 1, y: 1 }, bounds), { ...point, width: 0, height: 0 }, "a service point is placed by a click too");
   assert.equal(place("service", point, { x: 140, y: 70 }, { x: 20, y: 0 }, bounds), null);
 });

@@ -57,6 +57,11 @@ try {
       for (const control of [showBackground, opacity, resetOpacity]) assert.equal(await control.isDisabled(), true, "background controls stay disabled without a plan");
       await page.locator("input[type=file][accept*='image/png']").setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: PIXEL });
       await page.getByText("配置圖已儲存。", { exact: true }).waitFor();
+      // The result has its own line: inside the label it turned the upload
+      // button into a notice box, and the plan could no longer be replaced.
+      const planButton = page.locator("label").filter({ has: page.locator("input[type=file][accept*='image/png']") });
+      assert.equal((await planButton.textContent()).trim(), "更換配置圖", "the upload button keeps its own label after an upload");
+      await journey.capture(page, "organizer-plan-uploaded");
       const plan = svg.locator("image");
       await plan.waitFor();
       for (const control of [showBackground, opacity, resetOpacity]) assert.equal(await control.isDisabled(), false);

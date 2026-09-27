@@ -95,6 +95,13 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   // switcher, so "地圖已儲存，尚未公開。" was still there two steps later (#220).
   const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
   const planFeedback = useActionFeedback();
+  const { clear: clearPlanFeedback } = planFeedback;
+  // Every reset of the canvas, and every new pick, starts a new generation. A
+  // plan still being read or uploaded from an earlier one finishes on its own
+  // but no longer touches the screen: otherwise the map opened in the meantime
+  // would get the previous map's image and its "已儲存" line.
+  const planGeneration = useRef(0);
+  const clearPlanNotice = useCallback(() => { planGeneration.current += 1; clearPlanFeedback(); }, [clearPlanFeedback]);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingMap, setSavingMap] = useState(false);
   const [confirm, setConfirm] = useState<
@@ -146,10 +153,10 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     setSelected(next); setPeriodKey(next.periodKey); setVenueSpaceId(next.venueSpaceId);
     // Cleared before the read, not after: a failed read must not leave the map
     // that was open a moment ago showing its plan behind this one.
-    setLayout(next.layout); setAuthoring(next.authoring ?? EMPTY_MAP_AUTHORING); setPendingBackground(null); setEdited(false); setBackground("");
+    setLayout(next.layout); setAuthoring(next.authoring ?? EMPTY_MAP_AUTHORING); setPendingBackground(null); setEdited(false); setBackground(""); clearPlanNotice();
     const plan = await readOrganizerMapBackground(detail.event.id, map.id);
     if (plan) setBackground(await imageDataUrl(plan));
-  }, [detail.event.id]);
+  }, [detail.event.id, clearPlanNotice]);
   useEffect(() => {
     if (!location || location.candidateId !== detail.event.id) return;
     let ignore = false;
@@ -164,7 +171,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   const startBlank = () => {
     if (!assignment) return;
     const blank = () => {
-      setSelected(null); setPendingBackground(null); setEdited(false); setBackground("");
+      setSelected(null); setPendingBackground(null); setEdited(false); setBackground(""); clearPlanNotice();
       setLayout(createBlankEventMapLayout(assignment.mapTemplate, 1600, 1000)); setAuthoring(EMPTY_MAP_AUTHORING);
     };
     if (!layoutHasContent(layout) && authoring.guides.length === 0 && !background) { blank(); return; }
@@ -182,13 +189,15 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
    * changes the plan behind it; building a layout from the image — by
    * recognition or as a blank sheet its size — belongs to the empty editor,
    * where there is no work to lose. */
-  const runFile = async (file: File) => {
+  const runFile = async (file: File, generation: number) => {
+    const current = () => planGeneration.current === generation;
     if (!assignment) throw new Error("請先選擇場地。");
     if (file.size > MAP_IMAGE_MAX_BYTES || !MAP_PLAN_TYPES.includes(file.type)) {
       throw new Error("配置圖需為 JPG、PNG 或 WebP，且不可超過 10MB。");
     }
     const source = await imageDataUrl(file);
     const image = await loadOrganizerMapImage(source);
+    if (!current()) return "";
     // A map built from the image is a new map, so the upload that follows can
     // only wait for the first save even if another map was open a moment ago.
     const target = layout ? selected : null;
@@ -211,7 +220,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     // that does not. A failed upload therefore changes nothing on screen.
     if (target) {
       await uploadOrganizerMapBackground(detail.event.id, target.id, file);
-      setBackground(source);
+      if (current()) setBackground(source);
       return `${traced}配置圖已儲存。`;
     }
     setBackground(source);
@@ -220,7 +229,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
   };
 
   const closeEditor = () => {
-    setConfirmingClose(false); setEdited(false); setPendingBackground(null);
+    setConfirmingClose(false); setEdited(false); setPendingBackground(null); clearPlanNotice();
     setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setSelected(null); setBackground("");
   };
 
@@ -273,21 +282,26 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     <div className={styles.mapToolbar}>
       <label>活動日<select value={periodKey} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
-        discarding(() => { setPeriodKey(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
+        discarding(() => { setPeriodKey(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); clearPlanNotice(); });
       }}>{detail.draft.event.days.map((day) => <option value={day.id} key={day.id}>{day.label}</option>)}</select></label>
       <label>場地<select value={venueSpaceId} disabled={!!selected} onChange={(event) => {
         const next = event.target.value;
-        discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); });
+        discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); clearPlanNotice(); });
       }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
-      <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
+      {/* One plan in flight at a time. Every upload for a map writes the same
+          object, so two at once could land in either order and leave the older
+          image stored behind the newer one on screen; a save carrying a waiting
+          plan is an upload too. */}
+      <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment || planFeedback.pending || savingMap} onChange={(event) => {
         const file = event.target.files?.[0];
         // Cleared so picking the same plan again still counts as a change,
         // which is what putting one map's plan behind the next one takes.
         event.target.value = "";
         if (!file) return;
         const load = () => {
-          void planFeedback.run(runFile(file), (done) => done);
+          const generation = ++planGeneration.current;
+          void planFeedback.run(runFile(file, generation), (done) => done, () => planGeneration.current === generation);
         };
         if (!background) { load(); return; }
         setConfirm({
@@ -296,17 +310,21 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
           confirmLabel: "換成新的",
           run: load,
         });
-      }} /><ActionNotice notice={planFeedback.notice} /></label>
+      }} /></label>
       <label>從同場地複製<select value="" onChange={(event) => {
         const map = maps.find((item) => item.id === event.target.value);
         if (!map) return;
         discarding(() => {
           void readOrganizerMap(detail.event.id, map.id).then(({ map: source }) => {
             setSelected(null); setPeriodKey(periodKey); setLayout(structuredClone(source.layout)); setAuthoring(structuredClone(source.authoring ?? EMPTY_MAP_AUTHORING));
-            setPendingBackground(null); setBackground(""); setEdited(false);
+            setPendingBackground(null); setBackground(""); setEdited(false); clearPlanNotice();
           }).catch((error) => loadFailed(message(error)));
         });
       }}><option value="">選擇既有地圖</option>{maps.filter((item) => item.venueSpaceId === venueSpaceId && item.periodKey !== periodKey).map((item) => <option value={item.id} key={item.id}>{organizerDayLabel(detail.draft.event.days, item.periodKey)}</option>)}</select></label>
+      {/* The plan's result sits on its own line under the toolbar rather than
+          inside the upload label: inside, it grew the label into a notice box
+          that no longer looked like a button, and outlived a blank canvas. */}
+      <div className={styles.mapToolbarNotice}><ActionNotice notice={planFeedback.notice} /></div>
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => loadFailed(message(error))); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>

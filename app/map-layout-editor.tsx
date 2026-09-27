@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
-import { mapAccessArrowTransform, resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_ACCESS_KINDS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
@@ -12,8 +12,8 @@ import { EMPTY_MAP_AUTHORING, MAX_MAP_GUIDES, scaleMapAuthoringState, type MapAu
 import { DEFAULT_BACKGROUND_OPACITY, NUDGE_STEPS, mapEditorPreferenceStorage, readMapEditorPreferences, saveMapEditorPreferences, type MapEditorPreferences } from "./map-editor-preferences";
 import { editSegmentFrame, replaceSegment, segmentCodeRange, segmentNaming, type SegmentNaming } from "./map-segment-edit";
 import { UiIcon } from "./ui-icons";
-import { FACILITY_TOOLS, PLACEMENT_LABELS, isPointFacilityTool, resolveFacilityPlacement, type FacilityTool, type PlacementTool } from "./map-placement-tool";
-import { MapServiceBadge } from "./map-marker-icons";
+import { FACILITY_TOOLS, PLACEMENT_LABELS, isAreaFacilityTool, isPointFacilityTool, resolveFacilityPlacement, type FacilityTool, type PlacementTool } from "./map-placement-tool";
+import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
 import styles from "./map-layout-editor.module.css";
 
@@ -182,6 +182,9 @@ const MAX_EDITOR_ZOOM = 8;
 const EDITOR_ZOOM_STEP = .5;
 const SNAP_THRESHOLD_PX = 8;
 const ACCESS_DIRECTION_LABELS: Record<MapAccessDirection, string> = { north: "向北", south: "向南", east: "向東", west: "向西" };
+// The name a new doorway starts with; the type list says 出入兩用 for the last
+// kind, but on the map a doorway used both ways is simply called 出入口.
+const ACCESS_DEFAULT_LABELS: Record<MapAccessKind, string> = { entrance: "入口", exit: "出口", both: "出入口" };
 
 function cloneLayout(layout: EventMapLayout): EventMapLayout {
   return {
@@ -280,6 +283,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   const selectedAreaRegion = layout.areaRegions?.find((region) => region.id === selectedAreaRegionId);
   // Which service the 服務設施 tool places next; it stays between placements.
   const [serviceKind, setServiceKind] = useState<MapServicePointKind>("toilet");
+  // Which doorway the 出入口 tool places next, likewise kept between placements.
+  const [accessKind, setAccessKind] = useState<MapAccessKind>("entrance");
   const [facilityDraft, setFacilityDraft] = useState<MapRect | null>(null);
   const [guideTool, setGuideTool] = useState<MapGuide["axis"] | null>(null);
   const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null);
@@ -1242,10 +1247,11 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       const id = uniqueId("pillar", layout.pillars.map(({ id }) => id));
       commit((draft) => draft.pillars.push({ id, ...rect }));
       setSelections([{ kind: "pillar", itemIndex }]);
-    } else if (tool === "entrance" || tool === "exit") {
+    } else if (tool === "access") {
       const itemIndex = layout.accessPoints.length;
-      const id = uniqueId(tool, layout.accessPoints.map(({ id }) => id));
-      commit((draft) => draft.accessPoints.push({ id, kind: tool, direction: "north", x: rect.x, y: rect.y, label: PLACEMENT_LABELS[tool] }));
+      const kind = accessKind;
+      const id = uniqueId(kind, layout.accessPoints.map(({ id }) => id));
+      commit((draft) => draft.accessPoints.push({ id, kind, direction: "north", x: rect.x, y: rect.y, label: ACCESS_DEFAULT_LABELS[kind] }));
       setSelections([{ kind: "access", itemIndex }]);
     } else if (tool === "service") {
       const itemIndex = layout.servicePoints?.length ?? 0;
@@ -1478,7 +1484,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
     <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵依步進微移，Shift 加速 10 倍；Space 拖曳或中鍵平移畫布。</p>
       {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button disabled={!scope?.areaIds?.length} className={areaTool ? styles.drawActive : ""} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button><button className={placementTool === "row" ? styles.drawActive : ""} aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button>{FACILITY_TOOLS.map((tool) => <button key={tool} aria-pressed={placementTool === tool} className={placementTool === tool ? styles.drawActive : ""} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} className={guideTool === axis ? styles.drawActive : ""} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</div></header>
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
-    {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
+    {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "access" && <label className={styles.serviceKindPicker}>類型<select value={accessKind} onChange={(event) => setAccessKind(event.target.value as MapAccessKind)}>{MAP_ACCESS_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.guideToolbar}><label><input type="checkbox" checked={showGuides} onChange={event => setShowGuides(event.target.checked)} />顯示輔助線</label><label><input type="checkbox" checked={snappingEnabled} onChange={event => setSnappingEnabled(event.target.checked)} />啟用吸附</label><span>Alt 暫停本次吸附</span></div>
@@ -1508,8 +1514,8 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} data-slot-code={slot.code} className={`${styles.editable} ${overlapping.has(slot.code) ? styles.overlapping : ""} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
           {layout.servicePoints?.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.service} ${selectedKeys.has(`service:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "service", itemIndex })}><g transform={`translate(${point.x} ${point.y})`}><MapServiceBadge kind={point.kind} /></g><text x={point.x} y={point.y + 24}>{point.label || MAP_FACILITY_TYPE_LABELS[point.kind]}</text></g>)}
-          {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "exit" ? styles.exit : point.kind === "both" ? styles.bothWays : styles.entrance} ${selectedKeys.has(`access:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><circle cx={point.x} cy={point.y} r={12} /><path transform={mapAccessArrowTransform(point)} d={`M ${point.x} ${point.y + 8} V ${point.y - 8} M ${point.x - 5} ${point.y - 3} L ${point.x} ${point.y - 9} L ${point.x + 5} ${point.y - 3}`} /><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
-          {facilityTool && facilityDraft && <g className={styles.facilityPreview} aria-hidden="true">{facilityTool === "service" ? <rect x={facilityDraft.x - 10.5} y={facilityDraft.y - 10.5} width={21} height={21} rx={5} /> : facilityTool === "entrance" || facilityTool === "exit" ? <><circle cx={facilityDraft.x} cy={facilityDraft.y} r={12} /><path transform={mapAccessArrowTransform({ x: facilityDraft.x, y: facilityDraft.y, direction: "north" })} d={`M ${facilityDraft.x} ${facilityDraft.y + 8} V ${facilityDraft.y - 8} M ${facilityDraft.x - 5} ${facilityDraft.y - 3} L ${facilityDraft.x} ${facilityDraft.y - 9} L ${facilityDraft.x + 5} ${facilityDraft.y - 3}`} /></> : <rect {...facilityDraft} />}</g>}
+          {layout.accessPoints.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.access} ${point.kind === "exit" ? styles.exit : point.kind === "both" ? styles.bothWays : styles.entrance} ${selectedKeys.has(`access:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "access", itemIndex })}><g transform={`translate(${point.x} ${point.y})`}><MapAccessBadge kind={point.kind} direction={point.direction} /></g><text x={point.x} y={point.y + 24}>{point.label}</text></g>)}
+          {facilityTool && facilityDraft && <g className={styles.facilityPreview} aria-hidden="true">{facilityTool === "service" ? <rect x={facilityDraft.x - 10.5} y={facilityDraft.y - 10.5} width={21} height={21} rx={5} /> : facilityTool === "access" ? <g transform={`translate(${facilityDraft.x} ${facilityDraft.y})`}><MapAccessBadge kind={accessKind} direction="north" /></g> : <rect {...facilityDraft} />}</g>}
           {showGuides && authoring.guides.map(guide => {
             const visible = guidePreview?.id === guide.id ? guidePreview : guide;
             const line = visible.axis === "x" ? { x1: visible.position, x2: visible.position, y1: 0, y2: layout.height } : { x1: 0, x2: layout.width, y1: visible.position, y2: visible.position };

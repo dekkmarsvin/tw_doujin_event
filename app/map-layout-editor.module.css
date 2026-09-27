@@ -80,7 +80,8 @@
    selection overlay and the guide preview keep their own `pointer-events:none`
    and go on ignoring the pointer. */
 .canvasViewport svg.tracing :is(.slot,.landmark,.pillar) { fill:none; pointer-events:visible; }
-.canvasViewport svg.tracing .access circle { fill:none; pointer-events:visible; }
+.canvasViewport svg.tracing .access g > :first-child { fill:none; stroke:var(--access-color); pointer-events:visible; }
+.canvasViewport svg.tracing .access g > path:not(:first-child) { stroke:var(--access-color); }
 .canvasViewport svg.tracing .service rect { fill:none; stroke:#2e6b5a; pointer-events:visible; }
 .canvasViewport svg.tracing .service :is(path,circle) { display:none; }
 .canvasViewport svg.tracing :is(.editable text,.rowLabel) { display:none; }
@@ -100,12 +101,14 @@
 .landmark { fill:#e7e1d3cc; stroke:#7c725e; stroke-width:2; }
 .landmark+text { font-size:11px; }
 .pillar { fill:#202a35; stroke:#fff; stroke-width:1; }
-.access circle { fill:#fff; stroke-width:3; }
-.access path { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+/* The badge itself comes from `map-marker-icons.tsx`, the same one the reader
+   map and the facility list draw; only the colour its label and tracing
+   outline take lives here. */
+.access g > path:not(:first-child) { pointer-events:none; }
 .access text { font-family:var(--font-geist),sans-serif; font-size:9px; }
-.entrance circle,.entrance path { stroke:#267cad; }.entrance text { fill:#276b92; }
-.exit circle,.exit path { stroke:#d25b50; }.exit text { fill:#ad453d; }
-.bothWays circle,.bothWays path { stroke:#5b5fa8; }.bothWays text { fill:#4a4e94; }
+.entrance { --access-color:#267cad; }.entrance text { fill:#276b92; }
+.exit { --access-color:#c8493e; }.exit text { fill:#ad453d; }
+.bothWays { --access-color:#5b5fa8; }.bothWays text { fill:#4a4e94; }
 .service > text { font-family:var(--font-geist),sans-serif; font-size:9px; fill:#245446; text-anchor:middle; }
 .service g text { fill:#fff; font-family:system-ui,sans-serif; font-size:9px; }
 /* Selection recolours the element and is otherwise drawn beside it. Widening
@@ -114,6 +117,7 @@
    line and the number printed inside it -- exactly what the maintainer is
    looking at while correcting the placement. */
 .selected :is(rect,circle),rect.selected { stroke:#e86f5d!important; }
+.selected.access g > path:first-child { stroke:#e86f5d; }
 .selected text { fill:#9b352a; font-weight:900; }
 /* One thin dashed ring per selected element, plus one around the group. Sits
    above the elements and below the handles, and never takes a pointer. */
@@ -206,7 +210,8 @@
 .serviceKindPicker { display:flex; align-items:center; gap:6px; }
 .serviceKindPicker select { padding:4px 6px; border:1px solid #8fa899; border-radius:6px; background:white; color:inherit; font:inherit; }
 .facilityPreview { pointer-events:none; }
-.facilityPreview rect,.facilityPreview circle,.facilityPreview path { fill:#e9f0ec55; stroke:#3f7a5e; stroke-width:1.5; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; }
+.facilityPreview > g { opacity:.65; }
+.facilityPreview > :is(rect,circle,path) { fill:#e9f0ec55; stroke:#3f7a5e; stroke-width:1.5; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; }
 
 .guideToolbar { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:8px 12px; color:#53625a; font-size:11px; }
 .guideToolbar label { display:flex; align-items:center; gap:5px; }

@@ -77,7 +77,7 @@ try {
     await editor.getByRole("textbox", { name: "結束編號", exact: true }).fill("4");
     await editor.getByRole("combobox", { name: "方向", exact: true }).selectOption("horizontal");
     await drag([width * .5, top + 2], [width * .9, top + height * .05]); await svg.press("Escape");
-    await editor.getByRole("button", { name: "新增入口", exact: true }).click(); await click(secondX + 2, bottom + 2);
+    await editor.getByRole("button", { name: "新增出入口", exact: true }).click(); await click(secondX + 2, bottom + 2);
     await journey.capture(page, `${surface}-guides-opposite-columns`);
     const save = page.getByRole("button", { name: surface === "organizer" ? "儲存地圖變更" : "儲存新版本", exact: true });
     await save.click(); await page.getByText(surface === "organizer" ? "地圖已儲存，尚未公開。" : "草稿已儲存。", { exact: true }).waitFor();
@@ -112,7 +112,8 @@ try {
     await editor.getByRole("checkbox", { name: "顯示輔助線", exact: true }).uncheck();
     assert.equal(await editor.locator("[data-guide-id]").count(), 0);
     await editor.getByRole("checkbox", { name: "顯示輔助線", exact: true }).check();
-    await editor.getByRole("button", { name: "新增出口", exact: true }).click();
+    await editor.getByRole("button", { name: "新增出入口", exact: true }).click();
+    await editor.getByRole("status").filter({ hasText: "目前工具" }).getByRole("combobox", { name: "類型", exact: true }).selectOption("exit");
     await page.keyboard.down("Alt"); await click(secondX + 2, bottom + 2); await page.keyboard.up("Alt");
     const inspector = editor.getByRole("complementary", { name: "選取元素屬性" });
     near(Number(await inspector.getByRole("spinbutton", { name: "X", exact: true }).inputValue()), secondX + 2);
