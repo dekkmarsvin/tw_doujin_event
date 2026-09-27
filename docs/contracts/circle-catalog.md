@@ -55,7 +55,7 @@ type CircleCatalogPayload = {
 - **已公開發布**的 ID 是只增不減、不重排、不重用的 `c-xxxxxx` 配發序號。尚未公開的候選 registry／pin 沒有 Reader 連結、收藏或認領依賴，可以整組捨棄並重跑；首次公開發布才是不可回頭的邊界。見 [ADR-0010](../adr/0010-circle-identity-is-an-allocated-serial.md) 與 [ADR-0044](../adr/0044-an-accepted-circle-list-is-not-yet-catalogable.md)。
 - 同一活動中，經主辦穩定鍵或可追溯主辦證據連結的同一社團可在同日或跨日有多筆 placement，仍使用同一 ID。不同活動不建立 identity linkage。
 - `evidence.json` 的正式活動證據為 `{ eventId, kind: "organizer-booth", value: "<day>:<booth>" }`。
-- 同名不是合併依據；一個 booth 證據對到多個 ID、官方群組內的 booth 對到不同 ID、或目前名稱與官方名稱漂移時一律 fail closed。
+- 名稱相同本身不是合併依據；新活動由主辦在預覽確認的跨日分組依 [ADR-0071](../adr/0071-organizer-review-confirms-cross-day-circle-grouping.md) 保存為明確 linkage；一個 booth 證據對到多個 ID、官方群組內的 booth 對到不同 ID、或目前名稱與官方名稱漂移時一律 fail closed。
 - **已發布名單的變動由人工宣告後套用，不由差異推論**，見 [ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)。`circle-identity-groups/2` 的 `transitions` 宣告 `withdrawn`／`moved`／`released`；未宣告的差異維持 fail closed。
 - **攤位換手時，新的社團拿到新的 ID。** 前一個社團的 `c-xxxxxx` 留在前一個社團身上——收藏與分享連結帶的正是它，讓 ID 跟著攤位走會使讀者收藏的社團某天變成別人。移動則相反：ID 跟著社團到新攤位。
 - 退役的攤位證據保存在 evidence 的 `retiredSources`（`circle-identity-evidence/2`，只在真的有退役時寫入）。
@@ -69,7 +69,7 @@ type CircleCatalogPayload = {
 
 - `c-xxxxxx` 仍由單一全域 ledger 配發；已公開發布的序號永不重用，不同活動不會出現相同 ID。
 - 新活動的每個同活動 identity group 配發新 ID；不得因其他活動有相同名稱而沿用或要求 adjudication。
-- 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。名稱只用於 drift 檢查，不得作為跨日合併依據；沒有 grouping 證據時必須 fail closed。
+- 一個 identity group 可以包含同活動不同日期的主辦攤位群組，但必須由主辦來源的穩定鍵或人工確認的主辦證據明確連結。主辦匯入預覽可按跨日同名自動分組並確認，核准 snapshot 固定此宣告與來源（ADR-0071）；一般 generator 不從名稱自行猜測，沒有 grouping 證據時仍 fail closed。
 - 同一活動已存在的 reviewed source 重跑必須回到原 ID；一個 identity group 的所有 `<day>:<booth>` sources 只配發一個 ID，並逐一保存 source。
 - 現行 repository pipeline 把新活動的 `allocations.json`／`evidence.json` 差異與該活動 pin 放在同一張 main PR；builder 的 evidence exact-coverage gate 不變。
 - 首次公開發布前，registry 與 pin 都是候選，可一起捨棄並由同一份 reviewed source 重建；不得把工作樹中間配號誤寫成已發布相容性承諾。公開後若主辦名單退出、換手、移動或重編號，generator 不由差異推論，而要求人工宣告後套用（[ADR-0045](../adr/0045-list-changes-are-declared-not-inferred.md)）；宣告由[主辦單位工作區的修正候選](./organizer-workspace.md#已發布名單的明確修正宣告)填寫，維護者的 JSON／CLI 路徑見[社團資料更新](../runbooks/catalog-data-update.md)。
@@ -96,7 +96,7 @@ data repo 的 `events/<eventId>/circle-identity-groups.json` 明列每個 identi
 }
 ```
 
-每個官方 booth source 必須恰好出現一次，同一官方群組不得拆分。合併兩個以上官方群組時，`linkage.kind` 只能是 `organizer-stable-key` 或 `manual-organizer-evidence`，並提供非空 `value` 與 `https` 主辦證據位置；名稱相同本身不符合 linkage。
+每個官方 booth source 必須恰好出現一次，同一官方群組不得拆分。合併兩個以上官方群組時，`linkage.kind` 只能是 `organizer-stable-key` 或 `manual-organizer-evidence`，並提供非空 `value` 與 `https` 主辦證據位置；名稱相同本身不符合 linkage；主辦在匯入預覽確認的跨日分組使用 `manual-organizer-evidence`，reference 指向核准官方來源。
 
 ## 社團 overlay
 

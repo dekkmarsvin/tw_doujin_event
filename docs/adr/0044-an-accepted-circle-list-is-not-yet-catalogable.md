@@ -1,6 +1,7 @@
 # ADR-0044：錄取名單不等於可編目，身分等主辦攤位證據
 
 - 狀態：已定案（2026-08-30）
+- **部分被取代**：主辦可在匯入預覽確認同活動跨日同名分組，見 [ADR-0071](./0071-organizer-review-confirms-cross-day-circle-grouping.md)；沒有攤位編號的錄取名單仍不能配號。
 - 相關 issue：[#137](https://github.com/dekkmarsvin/tw_doujin_event/issues/137)、[#139](https://github.com/dekkmarsvin/tw_doujin_event/issues/139)、[#104](https://github.com/dekkmarsvin/tw_doujin_event/issues/104)
 - **部分取代**：[ADR-0012](./0012-first-party-sources-only.md)「活動事實只由主辦官網 transport」的限制。非主辦第三方來源仍禁止；依最新 PRODUCT，通過驗證的 Organizer 直接匯入可在 #104 完成身分、provenance、validation、草稿與發布契約後成為第一方輸入。
 - 延續：[ADR-0010](./0010-circle-identity-is-an-allocated-serial.md)、[ADR-0013](./0013-drop-the-legacy-circle-id-compatibility-path.md)、[ADR-0039](./0039-one-data-repo-for-events-and-references.md)、[ADR-0041](./0041-scope-is-bounded-by-shippable-features.md)

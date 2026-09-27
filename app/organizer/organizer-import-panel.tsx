@@ -10,6 +10,7 @@ import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
 import { SavedImportList } from "./organizer-roster-editor";
+import { CrossDayCircles } from "./organizer-cross-day-circles";
 import { AreaNameFields } from "./organizer-area-names";
 import { RosterDialog } from "./organizer-roster-dialog";
 import { PortalError } from "../circle-editor-client";
@@ -335,6 +336,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
       {prepared && !prepared.ok && <p role="alert">{prepared.message}</p>}
       {result && <>
         <div className={styles.validationSummary}><b>{result.rows.length} 筆可匯入 · {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 筆待修正</span><span>{excluded.length} 筆已排除</span></div>
+        <CrossDayCircles rows={result.rows} detail={detail} />
         {requiresAreaMapping && <details className={styles.areaNamePreview}><summary>展區顯示名稱（選填）</summary>
           <AreaNameFields detail={detail} spaces={derived.filter(space => space.declared).map(space => ({ venueSpaceId: space.venueSpaceId, areaIds: space.areas.map(area => area.id) }))} labels={areaLabels}
             onChange={(spaceId, areaId, label) => setAreaLabels(current => ({ ...current, [spaceId]: { ...current[spaceId], [areaId]: label } }))} />
