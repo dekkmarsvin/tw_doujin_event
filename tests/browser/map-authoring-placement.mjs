@@ -129,14 +129,19 @@ try {
         if (route.request().method() === "PUT") { uploading(); await gate; }
         await route.fallback();
       });
-      await page.locator("input[type=file][accept*='image/png']").setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: PIXEL });
+      const planInput = page.locator("input[type=file][accept*='image/png']");
+      await planInput.setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: PIXEL });
       await started;
+      // Uploads for one map share one stored object, so a second may not start
+      // until the first has settled, or they could land in either order.
+      assert.equal(await planInput.isDisabled(), true, "no second upload while one is in flight");
       await page.getByRole("button", { name: "空白畫布", exact: true }).click();
       await page.getByRole("dialog").getByRole("button", { name: "清空重來", exact: true }).click();
       const uploaded = page.waitForResponse(response => response.url().endsWith("/background") && response.request().method() === "PUT");
       release(); await uploaded; await page.waitForTimeout(200);
       assert.equal(await svg.locator("image").count(), 0, "a stale upload does not bring its plan back");
       assert.equal(await page.getByText("配置圖已儲存。", { exact: true }).count(), 0, "a stale upload does not report itself");
+      assert.equal(await planInput.isDisabled(), false, "the upload button returns once the upload settles");
     }
     await page.close();
   }

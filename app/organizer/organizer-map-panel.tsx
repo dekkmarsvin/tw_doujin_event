@@ -289,7 +289,11 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
         discarding(() => { setVenueSpaceId(next); setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setPendingBackground(null); setBackground(""); clearPlanNotice(); });
       }}>{detail.draft.venue.assignments.map((item) => <option value={item.venueSpaceId} key={item.venueSpaceId}>{organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId)}</option>)}</select></label>
       <button type="button" className={styles.ghost} disabled={!editable || !assignment} onClick={startBlank}>空白畫布</button>
-      <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment} onChange={(event) => {
+      {/* One plan in flight at a time. Every upload for a map writes the same
+          object, so two at once could land in either order and leave the older
+          image stored behind the newer one on screen; a save carrying a waiting
+          plan is an upload too. */}
+      <label className={styles.fileButton}>{!layout ? "上傳配置圖並編輯" : background ? "更換配置圖" : "上傳配置圖"}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!editable || !assignment || planFeedback.pending || savingMap} onChange={(event) => {
         const file = event.target.files?.[0];
         // Cleared so picking the same plan again still counts as a change,
         // which is what putting one map's plan behind the next one takes.
