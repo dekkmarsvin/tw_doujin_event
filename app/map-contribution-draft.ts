@@ -17,6 +17,7 @@ export type MapContributionScope = {
   /** Accepted request/storage aliases which all normalize to periodKey. */
   periodAliases: readonly string[];
   venueSpaceId: string;
+  areaIds?: readonly string[];
   mapTemplate: string;
   allowedBoothCodes: readonly string[];
   requiredBoothCodes: readonly string[];
@@ -99,7 +100,7 @@ function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
 }
 
 function strictLayoutShape(layout: Record<string, unknown>) {
-  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints"])) return false;
+  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions"])) return false;
   if (!record(layout.floor) || !onlyKeys(layout.floor, ["x", "y", "width", "height"])) return false;
   if (!Array.isArray(layout.rows) || !layout.rows.every((row) => record(row)
     && onlyKeys(row, ["label", "orientation", "confidence", "slots"])
@@ -111,6 +112,9 @@ function strictLayoutShape(layout: Record<string, unknown>) {
     && onlyKeys(point, ["id", "kind", "direction", "x", "y", "label"]))) return false;
   if (layout.servicePoints !== undefined && !(Array.isArray(layout.servicePoints) && layout.servicePoints.every((point) => record(point)
     && onlyKeys(point, ["id", "kind", "x", "y", "label"])))) return false;
+  if (layout.areaRegions !== undefined && !(Array.isArray(layout.areaRegions) && layout.areaRegions.every((region) => record(region)
+    && onlyKeys(region, ["id", "areaId", "color", "points"])
+    && Array.isArray(region.points) && region.points.every((point) => record(point) && onlyKeys(point, ["x", "y"]))))) return false;
   return Array.isArray(layout.landmarks) && layout.landmarks.every((landmark) => record(landmark)
     && onlyKeys(landmark, ["id", "kind", "rect", "label"])
     && record(landmark.rect) && onlyKeys(landmark.rect, ["x", "y", "width", "height"]));
@@ -182,7 +186,7 @@ export function validateMapContributionDraft(
   if (!content) return { ok: false, content: null, problems: [{ code: "invalid_content", message: "草稿格式或尺寸限制無效。" }] };
 
   const problems: MapDraftProblem[] = [];
-  const base = validateEventMapLayout(content.layout);
+  const base = validateEventMapLayout(content.layout, scope.areaIds);
   if (!base.ok) problems.push(...base.errors.slice(0, 50).map((message) => ({ code: "invalid_layout" as const, message })));
   if (content.layout.template !== scope.mapTemplate) {
     // TAIWAN_GENERIC_V1 is a stored value, not a name anyone was ever shown.
@@ -239,6 +243,7 @@ export type MapCandidateDiff = {
   changedLandmarkIds: string[];
   /** Missing on candidates built before service points existed. */
   changedServicePointIds?: string[];
+  changedAreaRegionIds?: string[];
 };
 
 function same(valueA: unknown, valueB: unknown) {
@@ -269,6 +274,7 @@ function buildMapCandidateDiff(previous: PublishedEventMap | null, candidate: Pu
     changedAccessPointIds: changedKeys(previous?.layout.accessPoints ?? [], candidate.layout.accessPoints, (point) => point.id),
     changedLandmarkIds: changedKeys(previous?.layout.landmarks ?? [], candidate.layout.landmarks, (landmark) => landmark.id),
     changedServicePointIds: changedKeys(previous?.layout.servicePoints ?? [], candidate.layout.servicePoints ?? [], (point) => point.id),
+    changedAreaRegionIds: changedKeys(previous?.layout.areaRegions ?? [], candidate.layout.areaRegions ?? [], (region) => region.id),
   };
 }
 

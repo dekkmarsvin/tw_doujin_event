@@ -11,6 +11,7 @@ type CandidateAuthoringScope = {
   periodKey: string;
   venueSpaceId: string;
   mapTemplate: string;
+  areaIds: readonly string[];
   allowedBoothCodes: string[];
   requiredBoothCodes: string[];
   /** Whether this scope expects booths that no circle occupies. See
@@ -43,6 +44,7 @@ export function resolveCandidateAuthoringScope(input: {
   return {
     kind: "candidate", candidateId: input.candidateId, eventId: input.draft.event.id,
     periodKey: period.id, venueSpaceId: assignment.venueSpaceId, mapTemplate: assignment.mapTemplate,
+    areaIds: assignment.areaIds,
     allowedBoothCodes: boothCodes, requiredBoothCodes: boothCodes,
     // The first map of an event is traced from the official plan, and a plan
     // shows every booth on the floor -- including the ones nobody bought, which
@@ -90,6 +92,7 @@ export function resolvePublishedAuthoringScope(input: {
     periodKey: String(period.id),
     venueSpaceId: assignment.venueSpaceId,
     mapTemplate: input.event.mapTemplate,
+    areaIds: assignment.areaIds,
     allowedBoothCodes,
     // A published event already has a reviewed snapshot, and `existingBoothCodes`
     // carries its empty booths forward, so a code outside both that and the

@@ -2,6 +2,9 @@
 .map text { user-select:none; -webkit-user-select:none; }
 .paper { fill:#f7f5ef; }
 .floor { fill:#fff; stroke:#8b918b; stroke-width:3; }
+.areaRegions { pointer-events:none; }
+.areaRegions polygon { opacity:.78; }
+.areaName { fill:#263a37; stroke:#fff; stroke-width:3px; paint-order:stroke; font-size:15px; font-weight:800; dominant-baseline:middle; }
 .landmark { fill:#f0eee7; stroke:#89918b; stroke-width:2; }
 .slot { outline:none; }
 .slotSurface { vector-effect:non-scaling-stroke; stroke-width:1; }

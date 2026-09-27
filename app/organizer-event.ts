@@ -28,6 +28,8 @@ type OrganizerVenueAssignment = {
   venueId: string;
   venueSpaceId: string;
   areaIds: string[];
+  /** Optional names keyed by the imported code, never a replacement for it. */
+  areaLabels?: Record<string, string>;
   mapTemplate: string;
   /** Event-specific. The catalog only supplies a default for a new assignment. */
   areaMode?: "imported" | "none";
@@ -140,6 +142,7 @@ export function nextOrganizerEventDay(days: readonly OrganizerEventDay[], now: D
 export function withOrganizerImportedAreaIds(
   draft: OrganizerEventDraft,
   rows: readonly { venueSpaceId: string; areaId: string }[],
+  labels: Record<string, Record<string, string>> = {},
 ): OrganizerEventDraft {
   const bySpace = new Map<string, Set<string>>();
   for (const row of rows) {
@@ -150,12 +153,20 @@ export function withOrganizerImportedAreaIds(
   return {
     ...draft,
     venue: {
-      assignments: draft.venue.assignments.map((assignment) => ({
-        ...assignment,
-        areaIds: assignment.areaMode === "none"
+      assignments: draft.venue.assignments.map((assignment) => {
+        const areaIds = assignment.areaMode === "none"
           ? ["ALL"]
-          : [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en")),
-      })),
+          : [...(bySpace.get(assignment.venueSpaceId) ?? [])].sort((a, b) => a.localeCompare(b, "en"));
+        const areaLabels = Object.fromEntries(areaIds.flatMap((id) => {
+          const supplied = Object.hasOwn(labels, assignment.venueSpaceId) ? labels[assignment.venueSpaceId] : undefined;
+          const label = (supplied && Object.hasOwn(supplied, id) ? supplied[id]
+            : assignment.areaLabels && Object.hasOwn(assignment.areaLabels, id) ? assignment.areaLabels[id] : "").trim();
+          return label ? [[id, label]] : [];
+        }));
+        const rest = { ...assignment };
+        delete rest.areaLabels;
+        return { ...rest, areaIds, ...(Object.keys(areaLabels).length ? { areaLabels } : {}) };
+      }),
     },
   };
 }
@@ -190,11 +201,15 @@ export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | 
     const hasAreaMode = Object.prototype.hasOwnProperty.call(assignment, "areaMode");
     if (hasAreaMode && assignment.areaMode !== "imported" && assignment.areaMode !== "none") return null;
     const areaIds = assignment.areaIds.map(text);
+    if (assignment.areaLabels !== undefined && (!record(assignment.areaLabels)
+      || Object.entries(assignment.areaLabels).some(([id, label]) => !areaIds.includes(id) || typeof label !== "string"))) return null;
+    const areaLabels = Object.fromEntries(Object.entries(assignment.areaLabels ?? {}).map(([id, label]) => [id, text(label)]).filter(([, label]) => label));
     if (assignment.areaMode === "none" && (areaIds.length !== 1 || areaIds[0] !== "ALL")) return null;
     assignments.push({
       venueId: text(assignment.venueId),
       venueSpaceId: text(assignment.venueSpaceId),
       areaIds,
+      ...(Object.keys(areaLabels).length ? { areaLabels } : {}),
       mapTemplate: text(assignment.mapTemplate) || "TAIWAN_GENERIC_V1",
       ...(assignment.areaMode === "imported" || assignment.areaMode === "none"
         ? { areaMode: assignment.areaMode }
@@ -285,6 +300,9 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
     }
     if (assignment.areaIds.some((area) => !AREA_ID.test(area))) {
       add({ severity: "error", step: "venue", code: "invalid_area", row: row + 1, target: `venue.assignments.${row}.areaIds`, message: "匯入的展區代碼格式無效。" });
+    }
+    if (Object.entries(assignment.areaLabels ?? {}).some(([id, label]) => !assignment.areaIds.includes(id) || !label.trim() || label.length > 60)) {
+      add({ severity: "error", step: "venue", code: "invalid_area_label", row: row + 1, target: `venue.assignments.${row}.areaLabels`, message: "展區顯示名稱須對應已匯入的代碼，且不超過 60 字。" });
     }
     // Two rows still waiting on a choice are two pending items, not the same
     // space chosen twice; blank only collides with blank (#222).

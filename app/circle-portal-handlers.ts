@@ -1126,6 +1126,7 @@ export function createCirclePortalHandlers({
       comments,
       scope: scope ? {
         periodKey: scope.periodKey, venueSpaceId: scope.venueSpaceId,
+        areaIds: scope.areaIds,
         allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
         allowsUnallocatedBooths: scope.allowsUnallocatedBooths, groups: scope.groups,
       } : null,
@@ -2503,6 +2504,7 @@ export function createCirclePortalHandlers({
           {
             eventId: draft.event.id ?? candidateId, periodKey: scope.periodKey, periodAliases: [scope.periodKey],
             venueSpaceId: scope.venueSpaceId, mapTemplate: scope.mapTemplate,
+            areaIds: scope.areaIds,
             allowedBoothCodes: scope.allowedBoothCodes, requiredBoothCodes: scope.requiredBoothCodes,
             allowsUnallocatedBooths: scope.allowsUnallocatedBooths,
             targetPath: `candidate://${candidateId}/${scope.periodKey}/${scope.venueSpaceId}`,

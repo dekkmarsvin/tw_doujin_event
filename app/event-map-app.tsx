@@ -37,8 +37,8 @@ import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
 import { calculatePinchMapView, clampMapZoom, mapViewFromWheel, MOBILE_SUMMARY_PEEK_HEIGHT, shouldShowMapMedia, zoomOffsetAroundPoint, type MapPinchOrigin } from "./map-viewport";
 import {
-  areaOptionsForVenueSpace, defaultAreaForVenueSpace, eventUsesAreaSwitcher, eventUsesScopedMaps, venueAssignmentForArea,
-  venueAssignmentForVenueSpace, visibleAreaIds, type EventAreaDefinition, type EventDayDefinition, type EventDefinition,
+  eventUsesScopedMaps, venueAssignmentForArea,
+  venueAssignmentForVenueSpace, type EventDayDefinition, type EventDefinition,
 } from "./event-catalog";
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
@@ -48,7 +48,6 @@ import { mapFacilityDirectory, type MapFacilityEntry } from "./map-facility-dire
 import MapFacilityPanel from "./map-facility-panel";
 import styles from "./event-map-app.module.css";
 
-type Hall = EventAreaDefinition["id"];
 type EventDay = EventDayDefinition["id"];
 type MobilePanel = "filters" | "results" | "details" | "plan";
 type MobileSheetLevel = "peek" | "half" | "full";
@@ -86,16 +85,10 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const eventId = event.id;
   const genres: readonly string[] = event.genres;
   const urlDefaults = defaultEventUrlState(event);
-  const showAreaSwitcher = eventUsesAreaSwitcher(event);
   const { catalog, status: catalogStatus, error: catalogError } = useCircleCatalog(eventId);
   const { records: circleRecords, recordsById: circleRecordsById, recordsByCircleId: circleRecordsByCircleId } = catalog;
   const catalogReady = catalogStatus === "ready";
   const [day, setDay] = useState<EventDay>(urlDefaults.day);
-  const [hall, setHall] = useState<Hall>(urlDefaults.area);
-  // The venue space is held rather than inferred from the area. "All areas" is
-  // the reader's own id and belongs to no space in particular, so deriving the
-  // space from it would put a multi-space reader in the first space whichever
-  // one they were actually looking at.
   const [venueSpaceId, setVenueSpaceId] = useState<string>(urlDefaults.venueSpaceId);
   const [genre, setGenre] = useState<string>(event.genres[0]);
   const [query, setQuery] = useState("");
@@ -257,7 +250,6 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       setRestoreVersion((current) => current + 1);
       if (fromHistory) suppressUrlWrite.current = true;
       setDay(state.day);
-      setHall(state.area);
       setVenueSpaceId(state.venueSpaceId);
       setQuery(state.query);
       setGenre(state.genre);
@@ -397,7 +389,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     }
     const selected = circleRecordsById.get(selectedRecordId ?? "");
     const url = serializeEventUrlState(event, {
-      eventId: event.id, day, area: hall, venueSpaceId: venueAssignment.venueSpaceId,
+      eventId: event.id, day, venueSpaceId: venueAssignment.venueSpaceId,
       query, genre, favoriteOnly, advancedSearch, planningDisplay,
       selection: { day, circleId: selected?.circle.id ?? null, boothCode: selected?.code ?? null },
     }, window.location.href);
@@ -405,7 +397,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     if (method === "none") return;
     window.history[method](null, "", url);
     historyIntent.current = "replace";
-  }, [advancedSearch, catalogStatus, circleRecordsById, day, event, favoriteOnly, genre, hall, planningDisplay, query, selectedRecordId, urlReady, venueAssignment]);
+  }, [advancedSearch, catalogStatus, circleRecordsById, day, event, favoriteOnly, genre, planningDisplay, query, selectedRecordId, urlReady, venueAssignment]);
 
   const workspace = useMemo(() => projectEventWorkspace({
     event: event,
@@ -414,7 +406,6 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     recordsByCircleId: circleRecordsByCircleId,
     planning,
     day,
-    area: hall,
     venueSpaceId: venueAssignment.venueSpaceId,
     genre,
     query,
@@ -423,7 +414,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     planningDisplay,
     navigationMode,
     selectedRecordId,
-  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, hall, navigationMode, planning, planningDisplay, query, selectedRecordId, venueAssignment]);
+  }), [advancedSearch, circleRecords, circleRecordsByCircleId, circleRecordsById, day, event, favoriteOnly, genre, navigationMode, planning, planningDisplay, query, selectedRecordId, venueAssignment]);
   const {
     favorites, favoriteIds, favoriteGroupLabels, dayPlan, plansById, dayRecordsByCircleId,
     selected, selectedFavorite, selectedPlan, selectedMovedDestination, nextRecord, navigationTargetRecord,
@@ -463,47 +454,34 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     setMobileSheetLevel("half");
     const destination = venueAssignmentForArea(event, record.hall);
     if (record.day !== day) setDay(record.day);
-    // A list reaches further than the area filter does -- the itinerary spans the
-    // whole space, and a shared link names a booth directly -- so a booth outside
-    // the current area would otherwise be selected with no marker to show it.
-    // Widening to the space's default keeps the surrounding results instead of
-    // swapping the list for the destination area's own.
     if (destination.venueSpaceId !== venueAssignment.venueSpaceId) {
       setVenueSpaceId(destination.venueSpaceId);
-      setHall(defaultAreaForVenueSpace(event, destination) ?? record.hall);
-    } else if (!visibleAreaIds(venueAssignment, hall).includes(record.hall)) {
-      setHall(defaultAreaForVenueSpace(event, venueAssignment) ?? record.hall);
     }
     const destinationScope = eventUsesScopedMaps(event) ? `${String(record.day)}\u0000${destination.venueSpaceId}` : eventId;
     focusCode(record.code, destinationScope);
-  }, [day, event, eventId, focusCode, hall, rememberMobileResultScroll, setDay, setHall, setDesktopDetailsOpen, setLocatedFacility, setSelectedRecordId, setMobilePanel, setMobileSheetLevel, venueAssignment]);
+  }, [day, event, eventId, focusCode, rememberMobileResultScroll, setDay, setDesktopDetailsOpen, setLocatedFacility, setSelectedRecordId, setMobilePanel, setMobileSheetLevel, venueAssignment]);
 
   useEffect(() => {
-    const key = `${day}|${hall}|${genre}|${favoriteOnly}|${query.trim()}|${filtered[0]?.recordId ?? ""}`;
+    const key = `${day}|${venueSpaceId}|${genre}|${favoriteOnly}|${query.trim()}|${filtered[0]?.recordId ?? ""}`;
     if (!autoSelectSearch.current || !query.trim() || filtered.length !== 1 || lastAutoSelection.current === key) return;
     lastAutoSelection.current = key;
     selectRecord(filtered[0], "details", false);
-  }, [day, favoriteOnly, filtered, genre, hall, query, selectRecord]);
+  }, [day, favoriteOnly, filtered, genre, venueSpaceId, query, selectRecord]);
 
-  const changeArea = (next: Hall, nextVenueSpaceId = venueAssignment.venueSpaceId) => {
+  const changeVenueSpace = (nextVenueSpaceId: string) => {
     historyIntent.current = "push";
     cancelPosition();
     setLocatedFacility(null);
     setFacilityListOpen(false);
     pendingSelection.current = null;
     pendingRestoreCode.current = null;
-    setHall(next);
     setVenueSpaceId(nextVenueSpaceId);
     setSelectedRecordId(null);
     if (mobilePanel === "details") { setMobilePanel(mobileWorkspace === "plan" ? "plan" : "results"); setMobileSheetLevel("peek"); }
     setDesktopDetailsOpen(false);
     setShowFullDetail(false);
   };
-  const resetAreaFilter = () => {
-    if (venueAssignment.venueSpaceId !== urlDefaults.venueSpaceId) changeArea(urlDefaults.area, urlDefaults.venueSpaceId);
-    else setHall(urlDefaults.area);
-  };
-  const clearResultFilters = () => { historyIntent.current = "push"; setGenre(urlDefaults.genre); setFavoriteOnly(false); resetAreaFilter(); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
+  const clearResultFilters = () => { historyIntent.current = "push"; setGenre(urlDefaults.genre); setFavoriteOnly(false); setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); setPlanningDisplay(DEFAULT_PLANNING_DISPLAY_FILTERS); };
   const clearFilters = () => { clearResultFilters(); setQuery(""); };
   const resetAdvancedSearch = () => { historyIntent.current = "push"; setAdvancedSearch(DEFAULT_ADVANCED_CIRCLE_SEARCH); };
   const resetMap = () => {
@@ -731,12 +709,11 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const fullItineraryPanel = <DayItinerary {...itineraryProps} variant="full" />;
   const planningControls = <PlanningDisplayControls value={planningDisplay} groups={planning.favoriteGroups} onApply={(next) => { historyIntent.current = "push"; setPlanningDisplay(next); }} />;
   const planningPanel = <div className={styles.planningPanel}>{planningControls}{fullItineraryPanel}</div>;
-  const resultSetKey = `${day}|${hall}|${genre}|${favoriteOnly}|${advancedSearch.creatorType}|${advancedSearch.workTopics.join(",")}|${advancedSearch.workTopicMode}|${advancedSearch.excludedWorkTopics.join(",")}|${advancedSearch.workType}|${advancedSearch.adultContent}|${planningDisplay.favoriteGroupId}|${planningDisplay.visitStatus}|${planningDisplay.sort}|${planningDisplay.density}|${planningDisplay.mediaCount}|${query}`;
+  const resultSetKey = `${day}|${venueSpaceId}|${genre}|${favoriteOnly}|${advancedSearch.creatorType}|${advancedSearch.workTopics.join(",")}|${advancedSearch.workTopicMode}|${advancedSearch.excludedWorkTopics.join(",")}|${advancedSearch.workType}|${advancedSearch.adultContent}|${planningDisplay.favoriteGroupId}|${planningDisplay.visitStatus}|${planningDisplay.sort}|${planningDisplay.density}|${planningDisplay.mediaCount}|${query}`;
   const activeResultFilters: ActiveResultFilter[] = activeFilterDescriptors.map((filter) => ({
     ...filter,
     onClear: () => {
       historyIntent.current = "push";
-      if (filter.kind === "area") resetAreaFilter();
       if (filter.kind === "genre") setGenre(event.genres[0]);
       if (filter.kind === "favorite") setFavoriteOnly(false);
       if (filter.kind === "creator") setAdvancedSearch((current) => ({ ...current, creatorType: "ALL" }));
@@ -792,11 +769,6 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     requestAnimationFrame(() => requestAnimationFrame(() => target.scrollIntoView({ block: "center" })));
   };
 
-  const venueAreas = areaOptionsForVenueSpace(event, venueAssignment);
-  const changeVenueSpace = (nextVenueSpaceId: string) => {
-    const next = venueAssignmentForVenueSpace(event, nextVenueSpaceId);
-    changeArea(defaultAreaForVenueSpace(event, next) ?? next.areaIds[0], next.venueSpaceId);
-  };
   const changeDay = (next: EventDay) => {
     historyIntent.current = "push";
     cancelPosition();
@@ -831,7 +803,6 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>
       <label className={styles.dateSelect}>日期<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}<small>{event.days.find((item) => item.id === day)?.dateLabel}</small></span><select aria-label="活動日期" value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.dateLabel}</option>)}</select></label>
       {event.venueAssignments.length > 1 ? <label>場地<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
-      {showAreaSwitcher && (venueAreas.length > 1 ? <label>展區<select value={hall} onChange={(change) => changeArea(change.target.value)}>{venueAreas.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}</select></label> : <span className={styles.venueName}>{venueAreas[0]?.label}</span>)}
 
     </div>
     {navigationMode && <div className={styles.navigationBanner} role="status"><span><UiIcon name="locate" /></span><div><b>導航模式 · 地圖只顯示 DAY {day} 行程</b><small>已走訪 {visitedCount} 站 · 剩餘 {Math.max(0, dayPlan.length - visitedCount)} 站{navigationTarget ? ` · 目前目標 ${navigationTarget.code}` : ""}</small></div>{!desktop && <button onClick={toggleNavigationMode}>退出</button>}</div>}
@@ -868,7 +839,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       <section className="map-region" aria-label="攤位地圖">
         <div ref={mapRef} className={`map ${styles.mapCanvas}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerEnd} onPointerCancel={handlePointerEnd} onLostPointerCapture={handlePointerEnd}>
           <div ref={toolsRef} className={styles.mapTools} data-map-tools>{renderMapTools()}</div>{desktop && <div ref={fitToolsRef} className={`${styles.mapTools} ${styles.fitTools}`} inert aria-hidden="true" data-map-tools>{renderMapTools(true)}</div>}
-          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
+          {publishedMap ? <div ref={floorRef} className={`floor ${styles.vectorFloor} ${mapGestureActive ? styles.mapGestureActive : ""}`} style={{ width: `${floorWidth}px`, height: `${floorHeight}px`, transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}><AccessibleEventMapRenderer eventName={event.name} layout={publishedMap.layout} slots={slots} showMedia={shouldShowMapMedia(zoom)} showAreaRegions={!shouldShowMapMedia(zoom)} areaLabels={Object.fromEntries(event.areas.map((area) => [area.id, area.label]))} labelPresentation={desktop ? { screenScale: floorHeight / publishedMap.layout.height * zoom, targetPx: 12 * fontScale, paddingPx: 2 } : undefined} markerPresentation={{ screenScale: floorHeight / publishedMap.layout.height * zoom, fontScale }} locatedMarker={locatedFacility?.scope === mapScopeKey ? locatedFacility.key : null} onFocusCode={setFocusedCode} onSelect={(code) => { const marker = markersByCode.get(code); if (marker) selectRecord(marker.records[0]); }} /></div> : <div className={styles.mapState}><b>{mapLoading ? "正在讀取活動地圖…" : "活動地圖讀取失敗"}</b><span className={mapError ? styles.mapError : ""}>{mapError || "請稍候"}</span>{!mapLoading && <button onClick={() => setMapRetry((value) => value + 1)}>重新讀取地圖</button>}</div>}
           {selectedMapPoint && selected && <><span className={styles.mobileMapMarker} style={selectedMapPoint} aria-hidden="true" /><div className={styles.mobileMapSelection} style={selectedMapPointStyle}><b>{selected.code}</b><span>{selected.name}</span></div></>}
           <div ref={controlsRef} className="controls" data-navigation={desktop && navigationMode || undefined} aria-label="地圖縮放控制"><button type="button" onClick={() => stepZoom(.1)} aria-label="放大地圖"><UiIcon name="plus" /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => stepZoom(-.1)} aria-label="縮小地圖"><UiIcon name="minus" /></button><button type="button" className={styles.fitButton} onClick={resetMap} aria-label="查看全場"><UiIcon name="locate" />{!desktop && <span className={styles.fitLabel}>查看全場</span>}</button>{facilityDirectory?.entries.length ? <button ref={facilityTriggerRef} type="button" className={styles.facilityTrigger} aria-expanded={facilityListOpen} aria-controls={facilityListOpen ? facilityPanelId : undefined} onClick={toggleFacilityList}>{desktop && <UiIcon name="map-pin" />}設施</button> : null}{desktop && navigationMode && <button className={styles.exitNavigation} onClick={toggleNavigationMode}>退出導航模式</button>}</div>{facilityListOpen && facilityDirectory?.entries.length ? <MapFacilityPanel id={facilityPanelId} entries={facilityDirectory.entries} legend={facilityDirectory.legend} triggerRef={facilityTriggerRef} onClose={closeFacilityList} onLocate={locateFacility} /> : null}<div className="compass"><small>N</small><UiIcon name="north" /></div>
           {desktop && selected && desktopDetailsOpen && <aside ref={detailsRef} className={styles.rightRail} aria-label="已選社團詳情" onKeyDownCapture={(keyEvent) => { if (keyEvent.key === "Escape" && !showFullDetail) { keyEvent.stopPropagation(); closeDetails(); } }}><span className={styles.selectionAnnouncement} role="status">{selected.code} · {selected.name} 詳情已更新</span><button type="button" className={styles.returnToSearch} onClick={closeDetails}>{desktopPanel === "plan" ? "回行程" : "回搜尋"}</button><div className={styles.detailSlot}>{detailsPanel}</div></aside>}

@@ -239,12 +239,14 @@ export function DraftForm({
             next.venue.assignments[index].venueSpaceId = space?.id ?? "";
             next.venue.assignments[index].areaMode = space?.defaultAreaMode ?? "imported";
             next.venue.assignments[index].areaIds = space?.defaultAreaMode === "none" ? ["ALL"] : [];
+            delete next.venue.assignments[index].areaLabels;
             return next;
           })}><option value="">請選擇場地</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原場地已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個場地一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到場地？立即新增</button></label>
           <label>攤位名單有另外區分展區嗎？<select disabled={!editable || !selectedSpace} value={assignment.areaMode ?? "imported"} onChange={(event) => updateVenue((next) => {
             const areaMode = event.target.value as OrganizerVenueSpaceAreaMode;
             next.venue.assignments[index].areaMode = areaMode;
             next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
+            delete next.venue.assignments[index].areaLabels;
             return next;
           })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個場地沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
           {!guidedTask && <label>地圖模板<select disabled={!editable || !selectedSpace} value={assignment.mapTemplate} onChange={(event) => updateVenue((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>

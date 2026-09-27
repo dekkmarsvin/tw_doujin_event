@@ -7,12 +7,8 @@
 // the rest of the hall drawn as empty slots, with no way back to the whole
 // thing.
 //
-// Two things are asserted here, and they are one decision seen from both sides:
-// a reader inside a single hall sees all of it, and is offered no control for
-// dividing it. Booth rows are not places a visitor navigates between, so a
-// switcher listing them would be a control that does nothing. The area filter
-// survives only where an event spans more than one venue space, which no
-// fixture has; that case is covered in tests/event-url-state.test.mjs.
+// A reader inside a venue space sees all its booth codes. The old area URL
+// parameter only helps identify a venue space and is removed on serialization.
 //
 // It is asserted through the map because the empty slots are what made the old
 // state look broken: a booth with nobody on it and a booth filtered away are
@@ -30,7 +26,7 @@ const area = (page) => new URL(page.url()).searchParams.get("area");
 try {
   const page = await journey.mapPage();
 
-  assert.equal(area(page), "ALL", "one hall has one reachable state: all of it");
+  assert.equal(area(page), null, "new URLs carry no area filter");
   assert.deepEqual(await codes(page), ["S01", "S02"],
     "day 1 has a booth in each of the fixture's two area codes and both are on the map");
   assert.equal(await tools(page).getByRole("combobox", { name: "展區", exact: true }).count(), 0,
@@ -40,7 +36,7 @@ try {
   // A link shared from the state this fixes still opens, and opens on the whole
   // hall rather than on the block it was captured in.
   const shared = await journey.mapPage({ params: "&area=north" });
-  assert.equal(area(shared), "ALL");
+  assert.equal(area(shared), null);
   assert.deepEqual(await codes(shared), ["S01", "S02"]);
   await journey.capture(shared, "area-legacy-link-widened");
 

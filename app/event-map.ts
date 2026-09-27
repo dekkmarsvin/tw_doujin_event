@@ -1,6 +1,10 @@
 export const EVENT_MAP_VERSION = 2 as const;
 
 export type MapRect = { x: number; y: number; width: number; height: number };
+export type MapPoint = { x: number; y: number };
+export const MAP_AREA_COLORS = { mint: "#d9f4e1", sky: "#dceeff", peach: "#ffe6d5", lilac: "#eee2fa", lemon: "#fff4cc", rose: "#fbe0e8" } as const;
+export type MapAreaColor = keyof typeof MAP_AREA_COLORS;
+export type MapAreaRegion = { id: string; areaId: string; color: MapAreaColor; points: MapPoint[] };
 export type MapOrientation = "vertical" | "horizontal";
 
 export type BoothSlot = {
@@ -122,6 +126,8 @@ export type EventMapLayout = {
   landmarks: MapLandmark[];
   /** Absent on every layout published before service points existed. */
   servicePoints?: MapServicePoint[];
+  /** Optional for maps published before organizer-drawn area overlays. */
+  areaRegions?: MapAreaRegion[];
 };
 
 /** Rescales every coordinate onto a new canvas size. A canvas is only ever the
@@ -152,6 +158,7 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
     accessPoints: layout.accessPoints.map(scalePoint),
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: scaleRect(landmark.rect) })),
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map(scalePoint) } : {}),
+    ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map(scalePoint) })) } : {}),
   };
 }
 
@@ -203,7 +210,7 @@ function finiteRect(rect: MapRect, width: number, height: number) {
     rect.width > 0 && rect.height > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width + 1 && rect.y + rect.height <= height + 1;
 }
 
-export function validateEventMapLayout(value: unknown): LayoutValidation {
+export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly string[]): LayoutValidation {
   const errors: string[] = [];
   if (!value || typeof value !== "object") return { ok: false, errors: ["layout 必須是物件。"] };
   const layout = value as Partial<EventMapLayout>;
@@ -290,6 +297,30 @@ export function validateEventMapLayout(value: unknown): LayoutValidation {
       if (point.label !== undefined && (typeof point.label !== "string" || point.label.length > MAP_SERVICE_POINT_LABEL_LIMIT)) errors.push(`服務設施 ${point.id || "未命名"} 的名稱必須是 ${MAP_SERVICE_POINT_LABEL_LIMIT} 字以內的文字。`);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`服務設施 ${point.id || "未命名"} 的座標無效。`);
     });
+  }
+  if (layout.areaRegions !== undefined && !Array.isArray(layout.areaRegions)) errors.push("areaRegions 必須是陣列。");
+  if (Array.isArray(layout.areaRegions)) {
+    const ids = new Set<string>();
+    const colors = new Map<string, MapAreaColor>();
+    for (const candidate of layout.areaRegions) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("展區範圍必須是物件。"); continue; }
+      const region = candidate as Partial<MapAreaRegion>;
+      if (typeof region.id !== "string" || !region.id.trim() || ids.has(region.id)) errors.push("展區範圍 id 缺漏或重複。");
+      else ids.add(region.id);
+      if (typeof region.areaId !== "string" || !region.areaId.trim() || (allowedAreaIds && !allowedAreaIds.includes(region.areaId))) errors.push(`展區範圍 ${region.id || "未命名"} 未對應此場地的展區代碼。`);
+      if (typeof region.color !== "string" || !Object.hasOwn(MAP_AREA_COLORS, region.color)) errors.push(`展區範圍 ${region.id || "未命名"} 的顏色無效。`);
+      else if (region.areaId) {
+        if (colors.has(region.areaId) && colors.get(region.areaId) !== region.color) errors.push(`展區 ${region.areaId} 的範圍須使用相同顏色。`);
+        colors.set(region.areaId, region.color);
+      }
+      if (!Array.isArray(region.points) || region.points.length < 3 || region.points.length > 100) { errors.push(`展區範圍 ${region.id || "未命名"} 至少需要 3 個頂點，最多 100 個。`); continue; }
+      if (region.points.some((point) => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.y < 0 || point.x > width || point.y > height)) {
+        errors.push(`展區範圍 ${region.id || "未命名"} 的頂點超出地圖。`);
+        continue;
+      }
+      const doubleArea = region.points.reduce((sum, point, index) => { const next = region.points![ (index + 1) % region.points!.length ]; return sum + point.x * next.y - next.x * point.y; }, 0);
+      if (!Number.isFinite(doubleArea) || Math.abs(doubleArea) < 1) errors.push(`展區範圍 ${region.id || "未命名"} 的面積無效。`);
+    }
   }
 
   return errors.length ? { ok: false, errors } : { ok: true, errors: [] };

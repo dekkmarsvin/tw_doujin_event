@@ -36,7 +36,7 @@ test("candidate scope resolves one day and venue-space with only its imported bo
   }, "1", "hall-a");
   assert.deepEqual(resolved, {
     kind: "candidate", candidateId: "candidate-pf", eventId: "pf45", periodKey: "1",
-    venueSpaceId: "hall-a", mapTemplate: "TAIWAN_GENERIC_V1",
+    venueSpaceId: "hall-a", mapTemplate: "TAIWAN_GENERIC_V1", areaIds: ["A"],
     allowedBoothCodes: ["A01", "A03"], requiredBoothCodes: ["A01", "A03"],
     allowsUnallocatedBooths: true, targetPath: null,
   });
@@ -74,7 +74,7 @@ test("published scope resolves the same multi-space path contract used by Reader
   }, "1", "hall-b");
   assert.deepEqual(resolved, {
     kind: "published", eventId: "pf45", periodKey: "1", venueSpaceId: "hall-b",
-    mapTemplate: "GENERIC", allowedBoothCodes: ["B00", "B01", "B02"],
+    mapTemplate: "GENERIC", areaIds: ["B"], allowedBoothCodes: ["B00", "B01", "B02"],
     allowsUnallocatedBooths: false,
     requiredBoothCodes: ["B01"], targetPath: "maps/1/hall-b.json",
   });

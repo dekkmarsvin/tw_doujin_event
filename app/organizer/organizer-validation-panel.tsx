@@ -100,7 +100,7 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     <p className={styles.previewSelection} role="status">{selectedPlacement
       ? <><strong>{selectedPlacement.boothCode}</strong> · {selectedPlacement.circleName}</>
       : "選取攤位，核對攤位代碼與社團名稱。"}</p>
-    {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} onSelect={setSelectedCode} /> : <p>尚無可預覽的地圖。</p>}
+    {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} areaLabels={preview.venueAssignments.find((assignment) => assignment.venueSpaceId === selected.venueSpaceId)?.areaLabels} onSelect={setSelectedCode} /> : <p>尚無可預覽的地圖。</p>}
     <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;
 }

@@ -298,7 +298,7 @@ test("the three venue layers are explained by real published events", async () =
   assert.match(app, /三重綜合體育館/);
 
   // Explain what the choice enables, including the reader's current boundary.
-  assert.match(app, /設定展區可讓讀者在地圖頁面依展區篩選攤位/);
-  assert.match(app, /只有一個場地時不顯示展區篩選/);
+  assert.match(app, /地圖可為展區畫範圍底色/);
+  assert.match(app, /讀者以場地切換查看各場地的全部攤位/);
 
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { type EventMapLayout } from "./event-map";
+import { MAP_AREA_COLORS, type EventMapLayout } from "./event-map";
 import styles from "./event-map-renderer.module.css";
 import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
@@ -27,6 +27,8 @@ type AccessibleEventMapRendererProps = {
   layout: EventMapLayout;
   slots: Record<string, MapSlotView>;
   showMedia?: boolean;
+  showAreaRegions?: boolean;
+  areaLabels?: Record<string, string>;
   labelPresentation?: MapLabelPresentation;
   /** Sizes access point badges and row, access point and area names on screen. */
   markerPresentation?: MapMarkerPresentation;
@@ -36,7 +38,7 @@ type AccessibleEventMapRendererProps = {
   onSelect: (code: string) => void;
 };
 
-export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, labelPresentation, markerPresentation = DEFAULT_MAP_MARKER_PRESENTATION, locatedMarker = null, onFocusCode, onSelect }: AccessibleEventMapRendererProps) {
+export default function AccessibleEventMapRenderer({ eventName, layout, slots, showMedia = false, showAreaRegions = true, areaLabels = {}, labelPresentation, markerPresentation = DEFAULT_MAP_MARKER_PRESENTATION, locatedMarker = null, onFocusCode, onSelect }: AccessibleEventMapRendererProps) {
   const clipPrefix = useId().replaceAll(":", "");
   const interactiveSlots = useMemo(() => layout.rows.flatMap((row) => row.slots).filter((slot) => !!slots[slot.code]), [layout.rows, slots]);
   const selectedCode = interactiveSlots.find((slot) => slots[slot.code]?.selected)?.code;
@@ -132,11 +134,20 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     {(showMedia || labelPresentation) && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => labelPresentation || slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
     <rect className={styles.floor} x={layout.floor.x} y={layout.floor.y} width={layout.floor.width} height={layout.floor.height} />
+    {showAreaRegions && !!layout.areaRegions?.length && <g className={styles.areaRegions} aria-label="展區範圍">{layout.areaRegions.map((region) => {
+      const name = Object.hasOwn(areaLabels, region.areaId) ? areaLabels[region.areaId] : region.areaId;
+      return <polygon key={region.id} role="img" aria-label={`${region.areaId} · ${name}`} points={region.points.map((point) => `${point.x},${point.y}`).join(" ")} fill={MAP_AREA_COLORS[region.color]} />;
+    })}</g>}
     <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><rect className={styles.landmark} {...landmark.rect} /></g>)}</g>
     <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>
     <g aria-label="場內柱子">{layout.pillars.map((pillar) => <rect key={pillar.id} className={styles.pillar} x={pillar.x} y={pillar.y} width={pillar.width} height={pillar.height} rx="1" />)}</g>
+    {showAreaRegions && <g className={styles.areaRegions} aria-hidden="true">{layout.areaRegions?.map((region) => {
+      const x = region.points.reduce((sum, point) => sum + point.x, 0) / region.points.length;
+      const y = region.points.reduce((sum, point) => sum + point.y, 0) / region.points.length;
+      return <g key={region.id} transform={screenGroup(x, y)}><text className={styles.areaName} textAnchor="middle">{Object.hasOwn(areaLabels, region.areaId) ? areaLabels[region.areaId] : region.areaId}</text></g>;
+    })}</g>}
     <g className={styles.markerLayer} aria-hidden="true">
       {layout.landmarks.map((landmark) => {
         const key = mapMarkerLabelKey("landmark", landmark.id);

@@ -115,7 +115,7 @@ try {
   const layers = page.getByRole("group", { name: "場館、場地、展區的填寫依據" });
   await layers.getByText("A–K 區、L–W 區", { exact: true }).waitFor();
   await layers.getByText("沒有分區", { exact: true }).waitFor();
-  await layers.getByText("活動使用多個場地時，設定展區可讓讀者在地圖頁面依展區篩選攤位；只有一個場地時不顯示展區篩選。", { exact: true }).waitFor();
+  await layers.getByText("展區代碼由攤位名單匯入，可選填顯示名稱；地圖可為展區畫範圍底色。讀者以場地切換查看各場地的全部攤位。", { exact: true }).waitFor();
   await journey.capture(page, "venue-layer-examples");
   // An untouched placeholder must not open an unsaved-changes dialog. Dates
   // reflect the previous step after saving changes there.

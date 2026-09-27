@@ -64,6 +64,19 @@ test("derivation replaces the previous set rather than accumulating stale areas"
   assert.deepEqual(second.venue.assignments[0].areaIds, ["A"]);
 });
 
+test("optional display names follow their imported codes across replacement imports", () => {
+  const original = draft([space("hall-a")]);
+  const first = withOrganizerImportedAreaIds(original, [row("hall-a", "A"), row("hall-a", "B")], { "hall-a": { A: "版攤活動", B: "巴哈市集" } });
+  assert.deepEqual(first.venue.assignments[0].areaLabels, { A: "版攤活動", B: "巴哈市集" });
+  assert.deepEqual(parseOrganizerEventDraft(first), first);
+  const replaced = withOrganizerImportedAreaIds(first, [row("hall-a", "A"), row("hall-a", "C")]);
+  assert.deepEqual(replaced.venue.assignments[0].areaIds, ["A", "C"]);
+  assert.deepEqual(replaced.venue.assignments[0].areaLabels, { A: "版攤活動" });
+  const cleared = withOrganizerImportedAreaIds(replaced, [row("hall-a", "A")], { "hall-a": { A: "" } });
+  assert.equal(Object.hasOwn(cleared.venue.assignments[0], "areaLabels"), false);
+  assert.equal(parseOrganizerEventDraft(draft([{ ...space("hall-a", ["A"]), areaLabels: { B: "失效" } }])), null);
+});
+
 test("area ids stay url-safe, so a derived value can still be rejected", () => {
   assert.equal(isOrganizerAreaId("A"), true);
   assert.equal(isOrganizerAreaId("ALL_2"), true);

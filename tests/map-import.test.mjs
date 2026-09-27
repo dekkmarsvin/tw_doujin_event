@@ -315,6 +315,7 @@ test("resizing the canvas keeps rows, pillars, access points and landmarks in pl
     pillars: [{ id: "pillar-1", x: 90, y: 60, width: 40, height: 28 }],
     accessPoints: [{ id: "entrance-1", kind: "entrance", direction: "north", x: 100, y: 95, label: "入口" }],
     landmarks: [{ id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 140, y: 20, width: 40, height: 28 } }],
+    areaRegions: [{ id: "region-a", areaId: "A", color: "mint", points: [{ x: 10, y: 5 }, { x: 180, y: 5 }, { x: 180, y: 70 }] }],
   };
   assert.equal(validateEventMapLayout(layout).ok, true);
 
@@ -326,6 +327,7 @@ test("resizing the canvas keeps rows, pillars, access points and landmarks in pl
   assert.deepEqual(scaled.pillars[0], { id: "pillar-1", x: 180, y: 180, width: 80, height: 84 });
   assert.deepEqual(scaled.accessPoints[0], { id: "entrance-1", kind: "entrance", direction: "north", x: 200, y: 285, label: "入口" });
   assert.deepEqual(scaled.landmarks[0], { id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 280, y: 60, width: 80, height: 84 } });
+  assert.deepEqual(scaled.areaRegions[0].points, [{ x: 20, y: 15 }, { x: 360, y: 15 }, { x: 360, y: 210 }]);
 
   // Relative placement is the invariant, so scaling back lands on the original,
   // and the layout handed in is never mutated.

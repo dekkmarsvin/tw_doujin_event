@@ -39,13 +39,14 @@ test("full URL state round-trips through one schema while defaults are omitted",
   assert.equal(serialized.searchParams.get("keep"), "x", "unowned URL state is preserved");
 
   const defaults = codec.serializeEventUrlState(eventA, codec.defaultEventUrlState(eventA), "https://map.example/?genre=stale&hall=EAST");
-  assert.equal(defaults.search, "?event=event-a&day=7&area=ALL");
+  assert.equal(defaults.search, "?event=event-a&day=7");
+  assert.equal(serialized.searchParams.has("area"), false);
 });
 
 test("invalid values use event-derived defaults and a foreign event fails closed", () => {
   const invalid = codec.parseEventUrlState(eventA, "https://map.example/?event=event-a&day=1&area=WEST&genre=bad&visit=bad&media=2");
   assert.equal(invalid.state.day, 7);
-  assert.equal(invalid.state.area, "ALL");
+  assert.equal(invalid.state.venueSpaceId, "hall-a");
   assert.equal(invalid.state.genre, "全部");
   assert.equal(invalid.state.planningDisplay.visitStatus, "ALL");
   assert.equal(invalid.state.planningDisplay.mediaCount, 0);
@@ -64,19 +65,21 @@ test("invalid values use event-derived defaults and a foreign event fails closed
   const foreign = codec.parseEventUrlState(eventB, "https://map.example/?event=event-a&day=8&query=must-not-leak&selectedCircle=c-000001");
   assert.equal(foreign.eventMatched, false);
   assert.equal(foreign.state.day, "sat-am");
-  assert.equal(foreign.state.area, "NORTH");
+  assert.equal(foreign.state.venueSpaceId, "hall-b");
   assert.equal(foreign.state.query, "");
   assert.equal(foreign.state.selection.circleId, null);
 });
 
-test("legacy hall alias parses but serialization emits only area", () => {
-  // Read on an event that offers a choice of areas, so the alias is what the
-  // assertion is about rather than the widening a single-space event applies.
-  const parsed = codec.parseEventUrlState(eventMulti, "https://map.example/?event=event-m&day=7&hall=N2");
-  assert.equal(parsed.state.area, "N2");
-  const url = codec.serializeEventUrlState(eventMulti, parsed.state, "https://map.example/?hall=N2");
-  assert.equal(url.searchParams.get("area"), "N2");
-  assert.equal(url.searchParams.has("hall"), false);
+test("legacy area and hall infer only a venue space and disappear on serialization", () => {
+  for (const legacy of ["area=S2", "hall=S2"]) {
+    const parsed = codec.parseEventUrlState(eventMulti, `https://map.example/?event=event-m&day=7&${legacy}`);
+    assert.equal(parsed.state.venueSpaceId, "south-floor");
+    assert.equal(Object.hasOwn(parsed.state, "area"), false);
+    const url = codec.serializeEventUrlState(eventMulti, parsed.state, `https://map.example/?${legacy}`);
+    assert.equal(url.searchParams.get("venueSpaceId"), "south-floor");
+    assert.equal(url.searchParams.has("area"), false);
+    assert.equal(url.searchParams.has("hall"), false);
+  }
 });
 
 test("R15 shares and reloads while legacy rating links and unrelated state retain their meaning", () => {
@@ -91,12 +94,12 @@ test("R15 shares and reloads while legacy rating links and unrelated state retai
   }
 });
 
-test("URL defaults follow event area order rather than assignment order", () => {
+test("URL defaults follow venue assignment order", () => {
   const reversedAreas = {
     ...eventA,
     venueAssignments: [{ venueId: "venue-a", venueSpaceId: "hall-a", areaIds: ["EAST", "ALL"] }],
   };
-  assert.equal(codec.defaultEventUrlState(reversedAreas).area, "ALL");
+  assert.equal(codec.defaultEventUrlState(reversedAreas).venueSpaceId, "hall-a");
 
   const reversedAssignments = {
     ...eventA,
@@ -107,11 +110,10 @@ test("URL defaults follow event area order rather than assignment order", () => 
     ],
   };
   const defaults = codec.defaultEventUrlState(reversedAssignments);
-  assert.equal(defaults.area, "NORTH");
-  assert.equal(defaults.venueSpaceId, "north-floor");
+  assert.equal(defaults.venueSpaceId, "south-floor");
 });
 
-test("venue space is shareable only for multi-space events and invalid pairs fail closed", () => {
+test("explicit valid venue space wins over legacy area; an invalid space falls back to legacy inference", () => {
   const multiSpace = {
     ...eventA,
     areas: [{ id: "NORTH", label: "北館", shortLabel: "北" }, { id: "SOUTH", label: "南館", shortLabel: "南" }],
@@ -122,28 +124,22 @@ test("venue space is shareable only for multi-space events and invalid pairs fai
   };
   const south = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor&area=SOUTH");
   assert.equal(south.state.venueSpaceId, "south-floor");
-  assert.equal(south.state.area, "SOUTH");
   const serialized = codec.serializeEventUrlState(multiSpace, south.state, "https://map.example/");
   assert.equal(serialized.searchParams.get("venueSpaceId"), "south-floor");
 
   const mismatched = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=north-floor&area=SOUTH");
   assert.equal(mismatched.state.venueSpaceId, "north-floor");
-  assert.equal(mismatched.state.area, "NORTH");
 
   const reversedMismatch = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor&area=NORTH");
-  assert.equal(reversedMismatch.state.venueSpaceId, "north-floor");
-  assert.equal(reversedMismatch.state.area, "NORTH");
+  assert.equal(reversedMismatch.state.venueSpaceId, "south-floor");
 
   const invalidSpace = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=missing&area=SOUTH");
-  assert.equal(invalidSpace.state.venueSpaceId, "north-floor");
-  assert.equal(invalidSpace.state.area, "NORTH");
+  assert.equal(invalidSpace.state.venueSpaceId, "south-floor");
   const unknownArea = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor&area=BOGUS");
-  assert.equal(unknownArea.state.venueSpaceId, "north-floor");
-  assert.equal(unknownArea.state.area, "NORTH");
+  assert.equal(unknownArea.state.venueSpaceId, "south-floor");
   const missingArea = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-a&day=7&venueSpaceId=south-floor");
-  assert.equal(missingArea.state.venueSpaceId, "north-floor");
-  assert.equal(missingArea.state.area, "NORTH");
-  assert.equal(codec.serializeEventUrlState(multiSpace, invalidSpace.state, "https://map.example/?venueSpaceId=missing").searchParams.get("venueSpaceId"), "north-floor");
+  assert.equal(missingArea.state.venueSpaceId, "south-floor");
+  assert.equal(codec.serializeEventUrlState(multiSpace, invalidSpace.state, "https://map.example/?venueSpaceId=missing").searchParams.get("venueSpaceId"), "south-floor");
   const singleSpace = codec.serializeEventUrlState(eventA, codec.defaultEventUrlState(eventA), "https://map.example/?venueSpaceId=stale");
   assert.equal(singleSpace.searchParams.has("venueSpaceId"), false);
 });
@@ -195,18 +191,11 @@ test("a URL naming a published event resolves to it, whichever it is", () => {
   assert.equal(state.eventMatched, true);
   assert.equal(state.state.day, 8);
   assert.equal(state.state.selection.circleId, "c-000001");
-  // The event, the day and the selection are what the link promised, and they
-  // all survive. The area does not: a single-space event offers no way to pick
-  // one, so the filter widens to the whole space. That direction is the point
-  // -- nothing the recipient could see before is missing, and the alternative
-  // is the state this widening exists to escape, a reader held inside one block
-  // with no control to leave it by.
-  assert.equal(state.state.area, "ALL");
+  assert.equal(state.state.venueSpaceId, "hall-a");
 
   const sharedArea = "https://map.example/?event=event-m&day=8&venueSpaceId=south-floor&area=S2&selectedCircle=c-000001";
   const multi = codec.parseEventUrlState(eventMulti, sharedArea);
-  assert.deepEqual([multi.state.area, multi.state.venueSpaceId], ["S2", "south-floor"],
-    "where the reader can choose an area, a link naming one still lands on it exactly");
+  assert.equal(multi.state.venueSpaceId, "south-floor");
 });
 
 test("only an unpublished event fails closed; naming none is not an error", () => {
@@ -232,40 +221,31 @@ test("only an unpublished event fails closed; naming none is not an error", () =
   assert.equal(single.event.id, "event-a");
 });
 
-/**
- * The shape of every event published since areas became derived from the
- * organizer's booth list: each id is a code that appeared in that list, so none
- * of them means "all of them". Landing on the first one leaves the reader
- * filtered to one block of a hall they have chosen nothing about yet.
- */
-test("an event whose areas are all derived codes still opens on all of them", () => {
+test("derived area codes never become reader filter state", () => {
   const derived = {
     ...eventA,
     areas: [{ id: "A", label: "A", shortLabel: "A" }, { id: "B", label: "B", shortLabel: "B" }],
     venueAssignments: [{ venueId: "venue-a", venueSpaceId: "hall-a", areaIds: ["A", "B"] }],
   };
   const defaults = codec.defaultEventUrlState(derived);
-  assert.equal(defaults.area, "ALL");
   assert.equal(defaults.venueSpaceId, "hall-a");
-  assert.equal(codec.serializeEventUrlState(derived, defaults, "https://map.example/").search, "?event=event-a&day=7&area=ALL");
-  assert.equal(codec.parseEventUrlState(derived, "https://map.example/?event=event-a&day=7&area=ALL").state.area, "ALL");
-  assert.equal(codec.parseEventUrlState(derived, "https://map.example/?event=event-a&day=7&area=B").state.area, "ALL",
-    "one hall offers no area to pick, so naming one widens rather than filters");
+  assert.equal(codec.serializeEventUrlState(derived, defaults, "https://map.example/").search, "?event=event-a&day=7");
+  assert.equal(codec.parseEventUrlState(derived, "https://map.example/?event=event-a&day=7&area=B").state.venueSpaceId, "hall-a");
+  assert.equal(Object.hasOwn(defaults, "area"), false);
 });
 
-test("a space with one area offers no all-areas state to land in or restore", () => {
-  assert.equal(codec.defaultEventUrlState(eventB).area, "NORTH");
+test("a single-space event still opens its whole space", () => {
+  assert.equal(codec.defaultEventUrlState(eventB).venueSpaceId, "hall-b");
   const requested = codec.parseEventUrlState(eventB, "https://map.example/?event=event-b&day=sat-am&area=ALL");
-  assert.equal(requested.state.area, "NORTH", "all of one area is that area, not a filter matching nothing");
+  assert.equal(requested.state.venueSpaceId, "hall-b");
 });
 
-test("all areas is scoped to the venue space the URL names", () => {
+test("venue space is retained when legacy area is ALL", () => {
   const multiSpace = eventMulti;
   const defaults = codec.defaultEventUrlState(multiSpace);
-  assert.deepEqual([defaults.area, defaults.venueSpaceId], ["ALL", "north-floor"]);
+  assert.equal(defaults.venueSpaceId, "north-floor");
 
   const south = codec.parseEventUrlState(multiSpace, "https://map.example/?event=event-m&day=7&venueSpaceId=south-floor&area=ALL");
-  assert.deepEqual([south.state.area, south.state.venueSpaceId], ["ALL", "south-floor"],
-    "the sentinel names no space of its own, so the one the URL names has to survive");
+  assert.equal(south.state.venueSpaceId, "south-floor");
   assert.equal(codec.serializeEventUrlState(multiSpace, south.state, "https://map.example/").searchParams.get("venueSpaceId"), "south-floor");
 });

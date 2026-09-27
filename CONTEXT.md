@@ -27,13 +27,13 @@
 |---|---|---|
 | **場館**（venue） | 活動實際舉辦的建築；由活動定義選取 pinned venue record | 花博公園爭艷館 |
 | **場地**（venue space） | 場館內可穩定識別的館別、樓層或展場；地圖 layout 掛在這一層 | 爭艷館展區 |
-| **展區**（area） | 活動在場地內定義的攤位／展示分區，供篩選與定位使用 | `ALL`（全區）、`A`（A–K 區）、`B`（L–W 區） |
+| **展區**（area） | 活動在場地內定義的攤位／展示分區；匯入代碼用於配置歸屬，地圖可畫範圍底色 | `ALL`（全區）、`A`（A–K 區）、`B`（L–W 區） |
 
 中文介面與文件統一稱「場地」，對應既有的 venue space。程式欄位 `venueSpaceId`、資料種類 `venue-space`、資料庫欄位 `venue_space_id` 與既有 stable ID 維持不變。
 
 **場館與場地屬於 pinned reference data，不寫死在程式或文件裡。** 活動定義只保存 stable ID assignment；production pipeline 先驗證 reference commit／hash／selection，parser 再驗證 staged records 與 assignments 後投影名稱。
 
-展區由主辦的攤位名單推導，所以活動定義裡的 `areas` 只有名單出現過的代碼，**沒有一個代表「全部展區」**。FF47 自行宣告的 `ALL` 是它資料的一部分，不是通例。讀者介面自己補上 `ALL`（全區）作為預設，語意固定是**目前場地**的全部展區。**展區也不是一定會給讀者篩的維度**：只有跨多個場地的活動才出現展區切換。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/event-map.md`](docs/contracts/event-map.md)）。
+展區代碼由主辦的攤位名單推導，匯入預覽可為每個代碼選填顯示別名；代碼本身維持配置身分。沒有分區的場地使用 `ALL`，FF47 自行宣告的 `ALL` 也維持原資料語意。Reader 顯示所選場地的全部攤位，不提供展區篩選；舊網址的 `area`／`hall` 只協助找場地。主辦的名單沒有真正的分區欄時，填進展區欄的往往是攤位代碼的排號字首——那是排，不是展區（見 [`docs/contracts/event-map.md`](docs/contracts/event-map.md)）。
 
 `area` 與 `venueSpaceId` 不得互換。FF47 的 `A` 與 `B` 是同一個爭艷館展區內的活動分區，**不是兩個場地**。公開切換與逐場地地圖的行為見[活動地圖契約](docs/contracts/event-map.md)。
 
