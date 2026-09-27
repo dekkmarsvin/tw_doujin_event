@@ -9,7 +9,7 @@
 
 ## 責任邊界
 
-- 規劃 store 是收藏、群組與行程的**唯一讀寫 seam**；清單卡、完整詳情與地圖不得各自保存 `isFavorite`。
+- 規劃 store 是收藏、群組與行程的**唯一讀寫 seam**；清單卡、完整詳情、地圖與社團介紹頁不得各自保存 `isFavorite`。社團介紹頁與地圖是不同文件，同一瀏覽器內靠同一個 `localStorage` key 與 `storage` 事件保持一致；它可加入的日期見[社團目錄契約](./circle-catalog.md#社團介紹頁)。
 - 行程狀態不因收藏切換而自動新增或移除項目。
 - 頁面 controller 把 store 狀態投影到社團清單、詳情與地圖 renderer；renderer 只呈現狀態並回報互動。
 - UI 元件負責顯示與收集意圖，不直接理解 `localStorage` key、序列化版本或未來的帳號 API。

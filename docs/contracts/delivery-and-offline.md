@@ -2,13 +2,13 @@
 
 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。
 
-**實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)
-**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`
+**實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)、[`app/circle-page-data.ts`](../../app/circle-page-data.ts)、[`app/circle-page/`](../../app/circle-page)
+**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`、`tests/circle-page.test.mjs`、`tests/browser/circle-page.mjs`
 **設定**：[`public/_headers`](../../public/_headers)
 
 ## 公開搜尋介紹頁
 
-`scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
+`scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。HTML 僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
 
 介紹頁由 Pages 靜態直送，不經 Function，不新增資料寫入。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
 
@@ -16,7 +16,18 @@
 
 首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
 
-介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。原 query 地圖仍使用既有離線行為。介紹頁及 sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證，避免舊活動／配置長期停留在瀏覽器；這不新增輪詢。
+介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。社團介紹頁腳本自己的資產同樣不進 precache（`scripts/build-service-worker.mjs` 與 `tests/public-artifact.test.mjs` 把關），與 Reader 共用的 chunk 除外。原 query 地圖仍使用既有離線行為。介紹頁及 sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證，避免舊活動／配置長期停留在瀏覽器；這不新增輪詢。
+
+### 社團介紹頁的頁面腳本
+
+社團介紹頁（`circlePath`）是可分享的出展頁。靜態 HTML 已列出社團名稱、每一筆配置與「在地圖查看」；未執行 JS 時仍是完整的官方頁面。頁面另外載入自己的入口 `circlePage`（Vite 以 `circle-page.html` 為模板建置，discovery build 把資產標籤複製到每個社團頁後移除模板），只做靜態 HTML 做不到的兩件事：
+
+- **即時讀取社團填寫的內容。** 經既有的 `/data/events/:eventId/overrides.json` 讀取，與地圖使用同一條路徑、同一個 publication module 與同一個 `buildCircleCatalog` 投影；不是新的公開讀取路徑。可撤下的社團內容因此不會寫進 build 產物。每次開啟頁面讀一次 overlay，不輪詢；已開啟頁面的更新時機同下方「更新可見性」。
+- **收藏與行程。** 經既有 planning store 寫入，與地圖是同一份資料，見[收藏與走訪規劃契約](./planning.md#責任邊界)。
+
+頁面腳本需要的官方資料不另外請求：該社團在 reviewed base 中的名稱與全部 placement，以 `circle-catalog/3` 格式（只有這一個社團）寫在 HTML 的 `application/json` 區塊（`#circle-page-data`）。欄位逐一複製，不帶其他屬性；`day` 保持原型別，行程才會與地圖寫入的鍵一致。整份 `circles.json` 不因開啟一個社團頁而下載。
+
+載入行為沿用下方「base first、overlay optional」：overlay 讀取中顯示保留版面的 skeleton；讀取失敗時保留官方配置，明說社團介紹暫時無法顯示並提供重新讀取，不表示成社團沒有填寫；overlay 可用但該社團沒有內容時不顯示介紹區塊，也不放佔位圖。頁面腳本不載入 session、Turnstile 或任何寫入端點。
 
 ## Payload 邊界
 

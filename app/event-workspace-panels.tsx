@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { MouseEvent } from "react";
 import { placementStatusLabel } from "./circle-records";
-import type { CircleCatalogStatus, CircleMedia, CircleViewRecord, SourceContentType } from "./circle-records";
+import type { CircleCatalogStatus, CircleMedia, CircleViewRecord } from "./circle-records";
+import { LINK_KIND_LABEL, sourceDateLabel } from "./circle-presentation";
 import type { CircleMatchReason } from "./circle-search";
 import type { EventDayKey, FavoriteGroup, FavoriteRecord, VisitPlanEntry } from "./planning-store";
 import { UiIcon } from "./ui-icons";
@@ -22,26 +23,6 @@ const SOURCE_STATUS_NOTE = {
   unverified: "",
 } as const;
 
-/** Shared with the circle portal so an author picks kinds by the name readers see. */
-export const LINK_KIND_LABEL = {
-  social: "社群與作者",
-  support: "贊助平台",
-  website: "網站與其他連結",
-  announcement: "本次預告",
-  catalog: "品書",
-  store: "預購／通販",
-  sample: "試閱",
-} as const;
-
-function sourceDate(value: string) {
-  const date = value.slice(0, 10).replaceAll("-", ".");
-  return date || "時間不明";
-}
-
-/** Organizer rows were imported; circle rows were typed here, so they read as an update. */
-function sourceDateLabel(source: { contentType: SourceContentType; fetchedAt: string }) {
-  return `${source.contentType === "circle" ? "最後更新" : "匯入"} ${sourceDate(source.fetchedAt)}`;
-}
 
 export function SearchResults({ records, circleCount, catalogStatus, catalogError, selectedId, favoriteIds, favoriteGroupLabels, plans, density, mediaCount, query, activeFilters, matchReasons, advancedSearchActive, onSelect, onToggleFavorite, onResetAdvancedSearch, onClearFilters, onClearQuery }: {
   records: CircleViewRecord[];

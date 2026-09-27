@@ -18,3 +18,4 @@
 .placements a { flex-shrink:0; padding:12px 0; }
 .status { color:#a43e30; }
 @media(max-width:540px) { .placements li { align-items:flex-start; flex-direction:column; gap:0; } }
+.discovery .claim { margin-top:32px; }

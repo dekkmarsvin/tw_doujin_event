@@ -13,7 +13,8 @@ import {
   type CircleOverrideFieldKey, type CircleOverrideFields, type CircleOverrideThumbnail,
 } from "../circle-overrides";
 import { linkUrlProblem, thumbnailUrlProblem, THUMBNAIL_NOT_AN_IMAGE } from "../circle-override-messages";
-import { CircleDetails, LINK_KIND_LABEL } from "../event-workspace-panels";
+import { CircleDetails } from "../event-workspace-panels";
+import { LINK_KIND_LABEL } from "../circle-presentation";
 import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
@@ -21,6 +22,7 @@ import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../ev
 import { nearestEvent, taipeiDate } from "../event-calendar";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
+import { CirclePageShare } from "./circle-page-share";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
 import styles from "./portal.module.css";
 
@@ -1224,6 +1226,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {status.message}
       {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}
     </p>}
+    {saved && hydrated && <CirclePageShare event={event} circle={{ id: claim.circleId, name: claim.circleName }} records={baseRecords} />}
       </fieldset>
       </div>
 

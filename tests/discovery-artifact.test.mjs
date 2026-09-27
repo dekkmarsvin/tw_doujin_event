@@ -28,8 +28,14 @@ test("built sitemap covers exactly the staged introductions and grouped circles"
     assert.equal(attr(elements.find((node) => attr(node, "rel") === "canonical"), "href"), url);
     assert.equal(attr(elements.find((node) => attr(node, "property") === "og:url"), "content"), url);
     assert.ok(elements.some((node) => node.tagName === "h1"));
-    assert.doesNotMatch(html, /type="module"|overrides\.json/);
+    // The circle's own content is read live, never written into the page.
+    assert.doesNotMatch(html, /overrides\.json/);
+    const modules = elements.filter((node) => node.tagName === "script" && attr(node, "type") === "module").map((node) => attr(node, "src"));
+    if (url.includes("/circles/")) assert.deepEqual(modules.map((src) => /^\/assets\/circlePage-[\w-]+\.js$/.test(src)), [true], `${url} loads only the circle page script`);
+    else assert.deepEqual(modules, [], `${url} loads no script`);
   }
+  // The template Vite built that script from is not a page of its own.
+  await assert.rejects(read("circle-page.html"), { code: "ENOENT" });
 });
 
 // #361: every introduction is its own search result.

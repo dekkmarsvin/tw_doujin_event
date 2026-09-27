@@ -155,6 +155,9 @@ async function preparePortal() {
   run("stage-event-data.mjs", ["--fixture", "sample"]);
   const build = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "vite", "bin", "vite.js"), "build", "--config", "vite.pages.config.ts"], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });
   if (build.status !== 0) process.exit(build.status ?? 1);
+  // The circle introduction pages exist only once this step writes them, and
+  // it is also what takes the page script's template back out of dist.
+  run("build-discovery-pages.mjs", []);
   run("build-service-worker.mjs", []);
   run("build-privacy-page.mjs", []);
 

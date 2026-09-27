@@ -172,6 +172,21 @@ try {
   await circle.locator('aside[aria-label="即時公開預覽"]').waitFor();
   await journey.capture(circle, "portal-saved");
 
+  // 6b. What a circle does next is take its page somewhere else. The ready-made
+  //     post is the official facts and the page's stable address; nothing about
+  //     the account, the sign-in or the claim can be in it.
+  const pageUrl = new URL(`/events/sample/circles/${CIRCLE_ID}/`, base).toString();
+  const share = circle.getByRole("region", { name: "分享公開頁" });
+  await share.waitFor();
+  const promotion = await share.getByRole("textbox", { name: "宣傳文字" }).inputValue();
+  assert.match(promotion, new RegExp(CIRCLE_NAME), "the post names the circle");
+  assert.match(promotion, /S01/, "and its booth");
+  assert.ok(promotion.endsWith(pageUrl), "and ends with the page's stable address");
+  assert.doesNotMatch(promotion, new RegExp(CIRCLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the post never names the account");
+  assert.doesNotMatch(promotion, /login=|\/circle\?|\/api\//, "the post carries no sign-in or portal address");
+  assert.equal(await share.getByRole("link", { name: "查看公開頁" }).getAttribute("href"), pageUrl);
+  await journey.capture(circle, "portal-share");
+
   // 7. What was saved survives a reload — the reader's copy is not a local draft.
   await circle.reload();
   await penField(circle).waitFor();
@@ -196,6 +211,16 @@ try {
   // The overlay is what every anonymous reader downloads, so it must not carry
   // who wrote it.
   assert.doesNotMatch(JSON.stringify(payload), new RegExp(CIRCLE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the public overlay never names the account that wrote it");
+
+  // 9. The page a stranger opens from that post, in a fresh browser with no
+  //    session: what the circle wrote is there without opening the map.
+  const stranger = await journey.page({ url: pageUrl, viewport: { width: 390, height: 844 } });
+  await stranger.getByRole("heading", { name: "社團介紹", exact: true }).waitFor();
+  const strangerText = await stranger.locator("main").innerText();
+  assert.match(strangerText, new RegExp(PEN_NAME), "the public page shows what the circle saved");
+  assert.match(strangerText, /由社團填寫 · 最後更新 \d{4}\.\d{2}\.\d{2}/, "with who wrote it and when");
+  await journey.capture(stranger, "circle-page-published");
+  await stranger.close();
 
   // Anonymous Reader consumes the saved overlay, applies each rating, and
   // restores the shared R15 condition rather than guessing a highest rating.

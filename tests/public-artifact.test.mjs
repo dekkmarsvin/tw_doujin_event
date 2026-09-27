@@ -98,6 +98,30 @@ test("keeps the reader separate from the control surfaces but linked to them", a
   assert.match(readerJs, /\/circle/, "the reader must link circles to their portal");
 });
 
+/**
+ * A circle introduction page is public like the reader, so it must carry none
+ * of the control surfaces' code either — and it is not the map, so its own
+ * script stays out of the map's offline shell.
+ */
+test("the circle page script is its own public entry, outside the offline shell", async () => {
+  const dist = (path) => new URL(`../dist/${path}`, import.meta.url);
+  const sitemap = await readFile(dist("sitemap.xml"), "utf8");
+  const circlePage = new URL([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(([, loc]) => loc).find((loc) => loc.includes("/circles/"))).pathname;
+  const pageAssets = assetsIn(await readFile(dist(`${circlePage.slice(1)}index.html`), "utf8"));
+  const readerAssets = assetsIn(await readFile(dist("index.html"), "utf8"));
+  const own = pageAssets.filter((asset) => !readerAssets.includes(asset));
+  assert.ok(own.some((asset) => /\/circlePage-[\w-]+\.js$/.test(asset)), "the page has its own entry chunk");
+
+  const pageJs = (await Promise.all(pageAssets.filter((path) => path.endsWith(".js")).map((path) => readFile(dist(path.slice(1)), "utf8")))).join("\n");
+  assert.doesNotMatch(pageJs, /\/api\/auth\/|\/api\/claims|\/api\/admin\/|\/api\/organizer\/|\/api\/circle\//, "the page must not carry write endpoints");
+  assert.doesNotMatch(pageJs, /challenges\.cloudflare\.com|寄出登入連結|__Host-ff47_session/, "nor sign-in");
+  assert.match(pageJs, /overrides\.json/, "it reads the circle's content from the public overlay");
+
+  const manifest = JSON.parse((await readFile(dist("sw.js"), "utf8")).match(/const PRECACHE_MANIFEST = (\[[^\]]*\]);/)[1]);
+  for (const asset of own) assert.equal(manifest.includes(asset), false, `circle page asset ${asset} must not be precached`);
+  assert.equal(manifest.includes(circlePage), false);
+});
+
 test("admin is a noindex entry with no private assets in the reader precache", async () => {
   const dist = path => new URL(`../dist/${path}`, import.meta.url);
   const admin = await readFile(dist("admin.html"), "utf8");

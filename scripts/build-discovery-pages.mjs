@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -14,6 +14,13 @@ try {
   const { isCircleCatalogPayload } = await environment.runner.import("/app/circle-records.ts");
   const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
   const { pageMetadata } = await environment.runner.import("/app/seo.ts");
+  // Vite built the circle page's script from a template; its tags are all the
+  // template is for. Every circle page carries them, and the template itself is
+  // removed so it is never served as a page of its own.
+  const templatePath = resolve(dist, "circle-page.html");
+  const template = await readFile(templatePath, "utf8");
+  const circlePageAssets = [...template.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/assets\/[^"]+"[^>]*>(?:<\/script>)?/g)].map(([tag]) => tag).join("");
+  if (!/<script\b[^>]*type="module"/.test(circlePageAssets)) throw new Error("circle-page.html references no module script.");
   const paths = ["/"];
   const events = [];
   for (const { eventId } of entries) {
@@ -24,7 +31,7 @@ try {
     const catalog = await read("circles.json");
     if (event.id !== eventId || !isCircleCatalogPayload(catalog)) throw new Error(`Invalid discovery input: ${eventId}`);
     events.push(event);
-    for (const [path, html] of discoveryPages(event, catalog)) {
+    for (const [path, html] of discoveryPages(event, catalog, { circlePageAssets })) {
       const file = resolve(dist, `.${path}`, "index.html");
       if (!file.startsWith(dist + "/") && !file.startsWith(dist + "\\")) throw new Error("Discovery output escapes dist.");
       await mkdir(dirname(file), { recursive: true });
@@ -40,5 +47,6 @@ try {
     .replace('<div id="root"></div>', `<div id="root">${homepageSummary(events)}</div>`);
   await writeFile(indexPath, html);
   await writeFile(resolve(dist, "sitemap.xml"), sitemapHtml(paths));
+  await rm(templatePath);
   console.log(`Generated ${paths.length - 1} static discovery pages and sitemap.`);
 } finally { await vite.close(); }
