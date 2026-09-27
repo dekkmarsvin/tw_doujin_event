@@ -18,7 +18,7 @@ export const IDLE: Notice = { kind: "idle", message: "" };
 export const SECTION_LABEL: Record<OrganizerWorkspaceSection, string> = {
   event: "活動",
   venue: "場館與場地",
-  import: "攤位匯入",
+  import: "攤位名單",
   map: "地圖",
   validate: "檢查與預覽",
   review: "送審與發布",
@@ -59,7 +59,7 @@ export const ROLE_LABEL: Record<string, string> = { owner: "負責人", editor: 
 export const STEP_LABEL: Record<OrganizerValidationIssue["step"], string> = {
   event: "活動",
   venue: "場館與場地",
-  import: "攤位匯入",
+  import: "攤位名單",
   map: "地圖",
   preview: "預覽",
 };

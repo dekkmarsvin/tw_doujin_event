@@ -15,31 +15,39 @@ export function normalizeRosterRow(row: Row, draft: OrganizerEventDraft): Row {
 }
 
 /** Row positions are local editor addresses, not invented source-file lines. */
-export function rosterIssues(rows: readonly Row[], draft: OrganizerEventDraft) {
-  const errors = new Map<number, string[]>();
-  const add = (index: number, message: string) => errors.set(index, [...(errors.get(index) ?? []), message]);
+export type RosterField = "dayId" | "venueSpaceId" | "areaId" | "circleName" | "codes" | "stableKey";
+export function rosterFieldIssues(rows: readonly Row[], draft: OrganizerEventDraft) {
+  const errors = new Map<number, Partial<Record<RosterField, string[]>>>();
+  const add = (index: number, field: RosterField, message: string) => {
+    const fields = errors.get(index) ?? {};
+    errors.set(index, { ...fields, [field]: [...(fields[field] ?? []), message] });
+  };
   const days = new Set(draft.event.days.map(day => day.id));
   const spaces = new Map(draft.venue.assignments.map(space => [space.venueSpaceId, space]));
   const placements = new Map<string, number>();
   rows.forEach((original, index) => {
     const row = normalizeRosterRow(original, draft);
-    if (!days.has(row.dayId)) add(index, "請選擇活動設定中的活動日。");
+    if (!days.has(row.dayId)) add(index, "dayId", "請選擇活動設定中的活動日。");
     const space = spaces.get(row.venueSpaceId);
-    if (!space) add(index, "請選擇活動設定中的場地。");
-    if (space && space.areaMode !== "none" && !isOrganizerAreaId(row.areaId)) add(index, "展區只能使用英數字、底線與連字號。");
-    if (!row.circleName || row.circleName.length > 200) add(index, "請填寫 200 字以內的社團名稱。");
-    if (!row.codes.length || row.codes.some(code => !code || code.length > 80)) add(index, "每組至少一個攤位代碼，每碼最多 80 字。");
+    if (!space) add(index, "venueSpaceId", "請選擇活動設定中的場地。");
+    if (space && space.areaMode !== "none" && !isOrganizerAreaId(row.areaId)) add(index, "areaId", "展區只能使用英數字、底線與連字號。");
+    if (!row.circleName || row.circleName.length > 200) add(index, "circleName", "請填寫 200 字以內的社團名稱。");
+    if (!row.codes.length || row.codes.some(code => !code || code.length > 80)) add(index, "codes", "每組至少一個攤位代碼，每碼最多 80 字。");
     for (const code of row.codes) {
       if (!code) continue;
       const key = `${row.dayId}\u0000${row.venueSpaceId}\u0000${code.toLocaleLowerCase("en-US")}`;
       const previous = placements.get(key);
       if (previous !== undefined) {
-        add(index, `攤位 ${code} 在同一活動日與場地重複。`);
-        if (previous !== index) add(previous, `攤位 ${code} 在同一活動日與場地重複。`);
+        add(index, "codes", `攤位 ${code} 在同一活動日與場地重複。`);
+        if (previous !== index) add(previous, "codes", `攤位 ${code} 在同一活動日與場地重複。`);
       } else placements.set(key, index);
     }
   });
   return errors;
+}
+
+export function rosterIssues(rows: readonly Row[], draft: OrganizerEventDraft) {
+  return new Map([...rosterFieldIssues(rows, draft)].map(([index, fields]) => [index, Object.values(fields).flat()]));
 }
 
 export function suspiciousRosterCodes(row: Row) {

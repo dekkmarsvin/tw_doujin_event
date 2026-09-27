@@ -337,7 +337,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
           section, so the button goes there (#221 Phase 5). */}
       {importedRows === 0 ? <>
         <p>先匯入{organizerDayLabel(detail.draft.event.days, periodKey)}的攤位名單，才知道這張地圖要畫哪些攤位。</p>
-        <button type="button" onClick={() => onSection("import")}>前往攤位匯入</button>
+        <button type="button" onClick={() => onSection("import")}>前往攤位名單</button>
       </> : <>
         <p>{organizerDayLabel(detail.draft.event.days, periodKey)}・{organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}尚未建立地圖。</p>
         <button type="button" disabled={!editable || !assignment} onClick={startBlank}>建立這張地圖</button>

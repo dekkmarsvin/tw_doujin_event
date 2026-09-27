@@ -467,6 +467,7 @@ function WorkspaceSurface({
   persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
 }) {
   const guided = detail.workspace.mode === "guided" && !showAllTasks;
+  const wideRoster = section === "import" && detail.event.operation !== "AMEND";
   const [liveDraft, setLiveDraft] = useState(detail.draft);
   const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
   const [mapLocation, setMapLocation] = useState<OrganizerMapLocation | null>(null);
@@ -496,7 +497,8 @@ function WorkspaceSurface({
         <div><strong>你正在查看全部項目</strong><p>下次登入仍會回到上次的基本設定步驟。</p></div>
         <button type="button" className={styles.secondary} onClick={onReturnToGuide}>回到基本設定</button>
       </div>}
-      <div className={styles.workspaceGrid}>
+      {wideRoster && <RosterNavigation detail={detail} current={section} onSection={onSection} />}
+      <div className={wideRoster ? styles.workspaceRoster : styles.workspaceGrid}>
         {/* The wrapper is always here, so the panel keeps its place in the tree
             when the handoff line comes and goes. Any control pressed in the
             panel is a new action, and the line describes the one before it. */}
@@ -522,7 +524,7 @@ function WorkspaceSurface({
             onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
           />
         </div>
-        <ReadinessRail detail={detail} current={section} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />
+        {!wideRoster && <ReadinessRail detail={detail} current={section} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />}
       </div>
     </>}
   </>;
@@ -540,7 +542,7 @@ function OnboardingHandoff({ detail, section }: { detail: OrganizerEventDetail; 
   return <div ref={line} tabIndex={-1} role="status" className={styles.handoff}>
     <strong>基本設定完成</strong>
     <p>{section === "import"
-      ? "接下來匯入攤位名單。之後的地圖、檢查與送審，從右側「準備進度」進入。"
+      ? "接下來匯入攤位名單。地圖、檢查與送審可從「活動項目」進入。"
       : `接下來處理「${organizerSectionLabel(detail, section)}」。其餘項目從右側「準備進度」進入。`}</p>
   </div>;
 }
@@ -611,6 +613,24 @@ function GuidedTaskStation({
     />
     <div className={styles.exploreRow}><button type="button" className={styles.textButton} onClick={onShowAll}>查看全部項目</button><span>可以先看後面的項目，不會影響目前進度。</span></div>
   </section>;
+}
+
+function RosterNavigation({ detail, current, onSection }: { detail: OrganizerEventDetail; current: OrganizerWorkspaceSection; onSection: (section: OrganizerWorkspaceSection) => void }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => { if (menu.current && !menu.current.contains(event.target as Node)) menu.current.open = false; };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && menu.current?.open && menu.current.contains(document.activeElement)) {
+        event.preventDefault(); menu.current.open = false; menu.current.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", escape); };
+  }, []);
+  return <details ref={menu} className={styles.rosterNavigation}><summary>活動項目 · 準備進度 {detail.workspace.readiness.completed}/{detail.workspace.readiness.total}</summary>
+    <ReadinessRail detail={detail} current={current} onSection={section => { if (menu.current) menu.current.open = false; onSection(section); }} />
+  </details>;
 }
 
 function ReadinessRail({ detail, current, onSection, compact = false, liveDraft, liveVenueCatalog, liveDirty = false, liveSection }: {

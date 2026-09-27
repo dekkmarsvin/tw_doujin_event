@@ -213,24 +213,28 @@ try {
   await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
   // Finishing opens the work that comes next, not the first of the three forms
   // just completed, and the next visit resumes there too.
-  await page.getByRole("heading", { name: "攤位與社團名單匯入", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "攤位名單", exact: true }).waitFor();
   assert.equal((await remembered).postDataJSON().lastSection, "import");
   const handoff = page.getByRole("status").filter({ hasText: "基本設定完成" });
-  await handoff.getByText("接下來匯入攤位名單。之後的地圖、檢查與送審，從右側「準備進度」進入。", { exact: true }).waitFor();
+  await handoff.getByText("接下來匯入攤位名單。地圖、檢查與送審可從「活動項目」進入。", { exact: true }).waitFor();
   assert.equal(await handoff.evaluate((node) => node === document.activeElement), true, "focus follows the unmounted button to the line");
   assert.equal(await staleNotice.count(), 0, "an earlier step's failure does not stand above the handoff");
+  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
   const sections = page.getByRole("group", { name: "活動項目" });
-  assert.equal(await sections.getByRole("button", { name: /^攤位匯入/ }).getAttribute("aria-current"), "page");
+  assert.equal(await sections.getByRole("button", { name: /^攤位名單/ }).getAttribute("aria-current"), "page");
   assert.equal(await page.getByRole("button", { name: /^下一步：/ }).count(), 0, "no 下一步 to the section already open");
   await journey.capture(page, "onboarding-handoff");
+  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
   // Reaching for a control in the panel starts the next action; the line
   // about the previous one does not stay beside it. Moving away clears it
   // through the same navigation step every other notice uses.
-  await page.getByRole("spinbutton", { name: /^標題列/ }).click();
+  await page.getByRole("button", { name: "匯入檔案", exact: true }).click();
+  await page.getByRole("button", { name: "返回名單", exact: true }).click();
   assert.equal(await handoff.count(), 0, "acting in the panel retires the handoff");
+  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
   await sections.getByRole("button", { name: /^活動/ }).click();
   assert.equal(await sections.getByRole("button", { name: /^活動/ }).getAttribute("aria-current"), "page");
-  await page.getByRole("button", { name: "下一步：攤位匯入", exact: true }).waitFor();
+  await page.getByRole("button", { name: "下一步：攤位名單", exact: true }).waitFor();
   await page.getByLabel(/^活動名稱/).fill("  分類目錄驗收  ");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();
@@ -292,33 +296,30 @@ try {
   await page.getByLabel(/^攤位名單有另外區分展區嗎？/).selectOption("none");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();
-  await sections.getByRole("button", { name: /^攤位匯入/ }).click();
+  await sections.getByRole("button", { name: /^攤位名單/ }).click();
+  await page.getByRole("button", { name: "匯入檔案", exact: true }).click();
   await page.getByLabel("來源檔案", { exact: true }).setInputFiles({ name: "feedback.csv", mimeType: "text/csv", buffer: Buffer.from("攤位,社團\nA01,驗收社團\n") });
+  await page.getByRole("button", { name: "下一步：欄位對照", exact: true }).click();
   await page.getByLabel(/^攤位代碼(?!格式)/).selectOption("0");
   await page.getByLabel(/^社團名稱/).selectOption("1");
   await page.getByRole("button", { name: "預覽對應結果", exact: true }).click();
-  await page.getByText("無分區（1 列）", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "可匯入 1", exact: true }).click();
+  await page.getByRole("cell", { name: "驗收社團", exact: true }).waitFor();
+  assert.equal(await page.getByRole("columnheader", { name: "展區", exact: true }).count(), 0, "a wholly undivided import needs no area column");
   let releaseImport;
   const heldImport = new Promise((resolve) => { releaseImport = resolve; });
   const delayImport = async (route) => { await heldImport; await route.continue(); };
   await page.route("**/api/organizer/events/*/imports", delayImport);
-  await page.getByRole("button", { name: "確認並儲存 1 列", exact: true }).click();
-  await page.getByRole("button", { name: "儲存中…", exact: true }).waitFor();
-  assert.equal(await page.getByLabel("來源檔案", { exact: true }).isDisabled(), true, "an import cannot change its file while saving");
-  assert.equal(await page.getByLabel(/^攤位代碼(?!格式)/).isDisabled(), true, "an import cannot change its mapping while saving");
+  await page.getByRole("button", { name: "匯入名單", exact: true }).click();
+  await page.getByRole("button", { name: "匯入中…", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "上一步", exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole("button", { name: "返回名單", exact: true }).isDisabled(), true);
   releaseImport();
-  const importSaved = page.getByText("匯入資料已儲存；原始檔沒有上傳。", { exact: true });
-  await importSaved.waitFor();
+  await page.getByRole("region", { name: "攤位名單", exact: true }).waitFor();
   await page.unroute("**/api/organizer/events/*/imports", delayImport);
-  assert.equal(await page.getByLabel(/^攤位代碼(?!格式)/).isEnabled(), true);
-  await page.getByRole("region", { name: "已儲存的攤位清單" }).getByRole("cell", { name: "無分區", exact: true }).waitFor();
+  await page.getByRole("region", { name: "攤位名單", exact: true }).getByRole("cell", { name: "無分區", exact: true }).waitFor();
   await journey.capture(page, "import-save-feedback");
-  await page.getByLabel(/^攤位代碼格式/).selectOption("delimited");
-  assert.equal(await importSaved.count(), 0, "changing mapping clears the previous import success");
-  await page.getByRole("button", { name: "確認並儲存 1 列", exact: true }).click();
-  await importSaved.waitFor();
-  // #221: one navigation. The numbered strip above the panel is gone; the
-  // readiness rail was always carrying the same six sections.
+  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
   await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與預覽/ }).click();
   await page.getByRole("button", { name: "執行檢查", exact: true }).click();
   await page.getByText("檢查完成。", { exact: true }).waitFor();
