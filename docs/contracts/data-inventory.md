@@ -104,13 +104,13 @@
 
 | 欄位 | 內容 |
 |---|---|
-| `fields_json` | 社團自填內容（販售資訊、筆名、連結、縮圖、標籤）。上限見[社團自助控制面契約](./circle-portal.md#欄位上限) |
+| `fields_json` | 社團自填內容（販售資訊、本次品書的圖片網址與尺寸、筆名、連結、縮圖、標籤）。上限見[社團自助控制面契約](./circle-portal.md#欄位上限) |
 | `previous_fields_json` | **前一版內容，保留一份** |
 | `revision`、`created_at`、`updated_at`、`updated_by` | 版本與作者 |
 | `status`、`takedown_reason`、`takendown_by`、`takendown_at` | 管理者撤下紀錄 |
 | `post_event_hidden` | 活動後退出旗標 |
 | `retention_choice`、`retention_expires_at` | 保存期限：社團自選 `keep`／`purge`，NULL 為尚未表態；到期時間自活動結束起算並存在列上（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。**控制面自 ADR-0054 起不再提供這個選擇**，新資料列一律為 NULL；既有的 `purge` 列仍照到期日清除；活動發布（含發布後更正改期）時，該活動的到期日依新的活動結束時間重算（[ADR-0068](../adr/0068-published-event-settings-are-declared-amendments.md)） |
-| `hosted_thumbnail_key` | 目前代管縮圖的 R2 object key；公開 URL 仍在 `fields_json`，這欄只供更換與刪除生命週期使用 |
+| `hosted_thumbnail_key` | 目前代管縮圖的 R2 object key；公開 URL 仍在 `fields_json`，這欄只供更換與刪除生命週期使用。品書沒有對應欄位：它的物件鍵由 `fields_json` 中的網址推回 |
 
 **目的**：讓社團在主辦攤位資料之外供應自己的即時內容。**撤下與活動後退出都是改欄位，不是刪列**——內容立刻離開公開文件，但仍留在資料庫。 **保存期**：不設期限；[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 之前選了 `purge` 的既有列，仍在活動結束滿 90 天時由排程 Worker **刪除資料列**。社團**隨時可自行刪除**，不必等期限。 **處置**：刪除，公開文件同步失去該筆；`audit_log` 只留下刪除發生過與是誰做的。 內容由社團本人維護。
 
@@ -119,6 +119,10 @@
 選擇檔案只上傳草稿物件，不改寫 `circle_overrides` 或 `overrides_doc`；一般的單一編輯流程會保留目前已發布的代表圖與最新一張未確認草稿，再次上傳會取代前一張草稿。確認儲存時會驗證 object key 確實屬於該活動與社團，發布新圖後刪除舊圖與當時可見的其他未引用草稿。社團不確認的草稿會在後續上傳、儲存、自助刪除、刪除帳號、管理者撤下、保存期限清除或 preview reset 時掃描對應 prefix／bucket 並移除；它不進入公開 overlay。
 
 同一社團若在多個分頁並行上傳或清理，R2 與 D1 之間沒有跨服務交易鎖，短時間內可能多留草稿，或讓其中一個分頁需要重新上傳。這不會發布未確認的物件；下一次上述生命週期動作會再次掃描。若產品要提供多分頁無衝突保證，需另以可序列化的 staged pointer 協調，不能把目前的 prefix 掃描描述成強一致上限。
+
+### R2 代管品書
+
+社團上傳的本次品書（[ADR-0072](../adr/0072-sale-sheet-pages-are-prepared-in-the-browser-and-hosted-as-a-set.md)）與代表圖同一個公開 `THUMBNAILS` bucket，放在社團目錄下的 `catalog/`，每張一個可閱讀圖與一個卡片預覽圖，皆以內容雜湊命名、帶一年 immutable 快取。圖片在上傳前已於瀏覽器重新編碼，EXIF、XMP、IPTC 不會保存。草稿、儲存、自助刪除、刪除帳號、管理者撤下與保存期限清除的處置同上方代表圖的生命週期，差別只在草稿以一組計：上傳時保留草稿仍引用的品書，其餘未發布的品書物件刪除。
 
 ### R2 活動圖片
 

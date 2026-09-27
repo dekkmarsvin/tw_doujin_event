@@ -270,6 +270,22 @@ export function uploadThumbnail(circleId: string, file: File, sourceUrl: string,
   );
 }
 
+/**
+ * Stage one prepared sale-sheet page. `keep` is every image address the draft
+ * still names; the route treats any other unpublished sale-sheet object of
+ * this circle as abandoned.
+ */
+export function uploadCatalogImage(circleId: string, file: Blob, preview: Blob, keep: readonly string[]) {
+  const body = new FormData();
+  body.set("file", file, "catalog.jpg");
+  body.set("preview", preview, "catalog-preview.jpg");
+  for (const url of keep) body.append("keep", url);
+  return call<{ ok: true; image: NonNullable<CircleOverrideFields["catalogImages"]>[number] }>(
+    `/api/circle/${encodeURIComponent(circleId)}/catalog-image`,
+    { method: "POST", body },
+  );
+}
+
 export function disableAccount(email: string) {
   return call<{ ok: true }>("/api/admin/accounts", { method: "POST", body: JSON.stringify({ email }) });
 }

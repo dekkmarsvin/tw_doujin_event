@@ -8,7 +8,10 @@ import { mailFailure, type PortalMail } from "./portal-mail";
 import { hmacSign, hmacVerify, isEmailShaped, normalizeEmail, peppered, randomChallengeCode, randomToken, sha256Hex } from "./portal-crypto";
 import type { ClaimMethod, IdentityRepository, OverridesPhase } from "../db/identity-repository";
 import { DYNAMIC_OVERLAY_CACHE_POLICY } from "./catalog-publication";
-import { deleteObjectKeys, hostedThumbnailFields, prepareHostedThumbnail, type HostedThumbnailStore } from "./hosted-thumbnails";
+import {
+  catalogKeyOf, catalogKeysOf, catalogObjectPrefix, circleObjectPrefix, deleteObjectKeys, hostedCatalogImage, hostedThumbnailFields,
+  prepareHostedCatalogImage, prepareHostedThumbnail, type HostedThumbnailStore,
+} from "./hosted-thumbnails";
 import {
   mapContributionObjectKey, organizerMapBackgroundObjectKey, prepareMapContributionFile, prepareMapImageFile,
   type MapContributionFileStore, type PreparedMapImage,
@@ -186,6 +189,16 @@ function mapDraftConflictMessage(conflict: MapDraftConflict) {
   if (conflict.cause === "permission") return "沒有有效的地圖貢獻者權限。";
   if (conflict.cause === "status") return "草稿狀態已變更。";
   return `草稿已更新至版本 ${conflict.revision}。`;
+}
+
+/** Whether a stored row publishes any sale-sheet page, and so owns hosted objects. */
+function hasCatalogImages(row: { fields_json: string } | null | undefined) {
+  if (!row) return false;
+  try {
+    return ((JSON.parse(row.fields_json) as CircleOverrideFields).catalogImages?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
 }
 
 function readCookie(request: Request, name: string) {
@@ -816,6 +829,19 @@ export function createCirclePortalHandlers({
       && thumbnailUrl === thumbnailStore.url(previousKey));
     const nextHostedKey = uploadedKey ?? (keepsHostedThumbnail ? previousKey : null);
     if (previousKey && previousKey !== nextHostedKey && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    // Sale-sheet images are hosted only. Each URL must name an object this
+    // circle uploaded that is still there — published before or staged since;
+    // the key is in the URL, so no separate upload token is needed.
+    const catalogImages = (fields as CircleOverrideFields).catalogImages ?? [];
+    if ((catalogImages.length > 0 || hasCatalogImages(previous)) && !thumbnailStore) {
+      return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    }
+    const nextCatalogKeys = thumbnailStore ? catalogKeysOf(thumbnailStore, fields as CircleOverrideFields, config.eventId, circleId) : [];
+    if (nextCatalogKeys.some((key) => key === null)) return json({ error: "品書圖片需要在這裡上傳，請重新選擇檔案。" }, 400);
+    if (nextCatalogKeys.length > 0) {
+      const stored = new Set(await thumbnailStore!.list(catalogObjectPrefix(config.eventId, circleId)));
+      if (nextCatalogKeys.some((key) => !stored.has(key!))) return json({ error: "有品書圖片已不存在，請重新選擇檔案。" }, 400);
+    }
     const saved = await repository.putOverride({
       accountId: current.accountId, eventId: config.eventId, circleId,
       fieldsJson: JSON.stringify(fields), updatedBy: current.accountId, now, retention,
@@ -827,7 +853,10 @@ export function createCirclePortalHandlers({
     }
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
     if (thumbnailStore) {
-      const unusedKeys = (await thumbnailStore.list(uploadPrefix)).filter((key) => key !== nextHostedKey);
+      // Whatever the saved row no longer names — a replaced picture, a removed
+      // sale-sheet page, a draft never confirmed — goes now.
+      const kept = new Set([nextHostedKey, ...nextCatalogKeys]);
+      const unusedKeys = (await thumbnailStore.list(uploadPrefix)).filter((key) => !kept.has(key));
       await deleteObjectKeys(thumbnailStore, unusedKeys);
     }
     await repository.writeAudit({
@@ -885,8 +914,10 @@ export function createCirclePortalHandlers({
     const thumbnail = hostedThumbnailFields(thumbnailStore, prepared);
 
     const previousKey = (await repository.getOverride(config.eventId, circleId))?.hosted_thumbnail_key ?? null;
-    const staleDraftKeys = (await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`))
-      .filter((key) => key !== previousKey && key !== prepared.key);
+    // Only the one-picture slot: sale-sheet pages are a set with rules of their own.
+    const catalogPrefix = catalogObjectPrefix(config.eventId, circleId);
+    const staleDraftKeys = (await thumbnailStore.list(circleObjectPrefix(config.eventId, circleId)))
+      .filter((key) => key !== previousKey && key !== prepared.key && !key.startsWith(catalogPrefix));
     await deleteObjectKeys(thumbnailStore, staleDraftKeys);
     await thumbnailStore.put(prepared.key, prepared.value, prepared.contentType);
     if (!await repository.isAccountWritable(current.accountId)) {
@@ -894,6 +925,58 @@ export function createCirclePortalHandlers({
       return json({ error: "此帳號正在刪除，無法上傳圖片。" }, 409);
     }
     return json({ ok: true, thumbnail, uploadKey: prepared.key });
+  }
+
+  /**
+   * Stage one sale-sheet page: the readable image and its card preview, both
+   * already resized in the browser. Like a thumbnail upload this publishes
+   * nothing; the page appears once a save names it.
+   *
+   * Pages are a set, so an upload cannot simply replace "the" draft. The
+   * editor sends the keys its draft still holds (`keep`); besides those, the
+   * published pages and this upload, every sale-sheet object is an abandoned
+   * draft and is removed here, which bounds what an editor can leave behind.
+   */
+  async function uploadCatalogImage(request: Request, circleId: string) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    if (!await repository.ownsCircle(current.accountId, config.eventId, circleId)) {
+      return json({ error: "你尚未通過這個社團的認領。" }, 403);
+    }
+    if (!thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return json({ error: "上傳格式無效。" }, 400);
+    }
+    const file = form.get("file");
+    const preview = form.get("preview");
+    if (!(file instanceof File) || !(preview instanceof File)) return json({ error: "請選擇圖片。" }, 400);
+    // Addresses, not keys: only an address that is one of this circle's own
+    // sale-sheet objects can keep anything.
+    const keep = form.getAll("keep").flatMap((url) => typeof url === "string" ? [catalogKeyOf(thumbnailStore, url, config.eventId, circleId)] : []);
+
+    let prepared: Awaited<ReturnType<typeof prepareHostedCatalogImage>>;
+    try {
+      prepared = await prepareHostedCatalogImage({ eventId: config.eventId, circleId, file, preview });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "品書圖片格式無效。" }, 400);
+    }
+
+    const previous = await repository.getOverride(config.eventId, circleId);
+    const published = catalogKeysOf(thumbnailStore, previous ? JSON.parse(previous.fields_json) as CircleOverrideFields : null, config.eventId, circleId);
+    const retained = new Set([...published, ...keep, prepared.full.key, prepared.preview.key]);
+    const abandoned = (await thumbnailStore.list(catalogObjectPrefix(config.eventId, circleId))).filter((key) => !retained.has(key));
+    await deleteObjectKeys(thumbnailStore, abandoned);
+    await thumbnailStore.put(prepared.full.key, prepared.full.value, "image/jpeg");
+    await thumbnailStore.put(prepared.preview.key, prepared.preview.value, "image/jpeg");
+    if (!await repository.isAccountWritable(current.accountId)) {
+      await deleteObjectKeys(thumbnailStore, [prepared.full.key, prepared.preview.key]);
+      return json({ error: "此帳號正在刪除，無法上傳圖片。" }, 409);
+    }
+    return json({ ok: true, image: hostedCatalogImage(thumbnailStore, prepared) });
   }
 
   /**
@@ -925,9 +1008,9 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if ((previous?.hosted_thumbnail_key || hasCatalogImages(previous)) && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
     if (thumbnailStore) {
-      const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
+      const keys = await thumbnailStore.list(circleObjectPrefix(config.eventId, circleId));
       await deleteObjectKeys(thumbnailStore, keys);
     }
     if (!await repository.deleteOverride({ accountId: current.accountId, eventId: config.eventId, circleId })) {
@@ -1804,13 +1887,19 @@ export function createCirclePortalHandlers({
 
     const now = config.now();
     const previous = await repository.getOverride(config.eventId, circleId);
-    if (previous?.hosted_thumbnail_key && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
+    if ((previous?.hosted_thumbnail_key || hasCatalogImages(previous)) && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
     if (thumbnailStore) {
-      const keys = await thumbnailStore.list(`events/${encodeURIComponent(config.eventId)}/circles/${encodeURIComponent(circleId)}/`);
+      const keys = await thumbnailStore.list(circleObjectPrefix(config.eventId, circleId));
       await deleteObjectKeys(thumbnailStore, keys);
     }
-    const fieldsJson = previous?.hosted_thumbnail_key
-      ? JSON.stringify({ ...(JSON.parse(previous.fields_json) as CircleOverrideFields), thumbnail: null })
+    // The bytes are gone, so the row must stop naming them: a later edit would
+    // otherwise republish addresses that answer nothing.
+    const fieldsJson = previous?.hosted_thumbnail_key || hasCatalogImages(previous)
+      ? JSON.stringify({
+        ...(JSON.parse(previous!.fields_json) as CircleOverrideFields),
+        ...(previous!.hosted_thumbnail_key ? { thumbnail: null } : {}),
+        ...(hasCatalogImages(previous) ? { catalogImages: [] } : {}),
+      })
       : undefined;
     const ok = await repository.takedownOverride({ eventId: config.eventId, circleId, reason, by: gate.session.email, now, fieldsJson });
     if (ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
@@ -3458,6 +3547,7 @@ export function createCirclePortalHandlers({
     getMyOverride: eventScoped(getMyOverride),
     putOverride: eventScoped(putOverride),
     uploadThumbnail: eventScoped(uploadThumbnail),
+    uploadCatalogImage: eventScoped(uploadCatalogImage),
     deleteMyOverride: eventScoped(deleteMyOverride),
     previewOverride: eventScoped(previewOverride),
     setPostEventVisibility: eventScoped(setPostEventVisibility),

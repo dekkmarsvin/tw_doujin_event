@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { createCatalogPublication } from "../catalog-publication";
 import { CIRCLE_OVERRIDE_LIST_FIELDS } from "../circle-overrides";
 import { LINK_KIND_LABEL, sourceDateLabel } from "../circle-presentation";
-import type { CircleCatalogPayload } from "../circle-records";
+import { representativeMedia, type CircleCatalogPayload } from "../circle-records";
 import { visitableDays } from "../circle-share";
 import { getEventDefinition } from "../event-catalog";
 import {
@@ -113,7 +113,9 @@ type PageCircle = NonNullable<CatalogSnapshot["catalog"]["circles"][number]>;
  * nothing", which is not what happened.
  */
 function CircleContent({ state, circle, onRetry }: { state: CatalogSnapshot; circle?: PageCircle; onRetry: () => void }) {
-  const [brokenImage, setBrokenImage] = useState("");
+  // Addresses whose bytes never arrived; each one fails alone.
+  const [broken, setBroken] = useState<ReadonlySet<string>>(new Set());
+  const markBroken = (url: string) => setBroken((current) => new Set([...current, url]));
   if (state.status !== "ready" || state.overlayStatus === "idle" || state.overlayStatus === "loading") {
     return <section className={styles.content} aria-busy="true" aria-label="社團介紹">
       <span className={styles.visuallyHidden}>正在讀取社團介紹…</span>
@@ -129,7 +131,8 @@ function CircleContent({ state, circle, onRetry }: { state: CatalogSnapshot; cir
   const authored = circle?.sources.find((source) => source.contentType === "circle");
   if (!circle || !authored) return null;
 
-  const picture = circle.media[0];
+  const picture = representativeMedia(circle.media);
+  const pages = circle.media.filter((item) => item.kind === "catalog");
   // One value reads as text; a list reads as tags. Labels are the editor's own,
   // so an author finds each answer under the name they filled it in under.
   const details = [
@@ -137,14 +140,33 @@ function CircleContent({ state, circle, onRetry }: { state: CatalogSnapshot; cir
     { label: "社團主題", values: circle.circleCategory ? [circle.circleCategory] : [], list: false },
     ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => ({ label, values: circle[key], list: true })),
   ].filter(({ values }) => values.length > 0);
-  if (!picture && !circle.saleInfo && details.length === 0 && circle.externalLinks.length === 0) return null;
+  if (!picture && pages.length === 0 && !circle.saleInfo && details.length === 0 && circle.externalLinks.length === 0) return null;
 
   return <section className={styles.content} aria-labelledby="circle-page-content">
     <h2 id="circle-page-content">社團介紹</h2>
-    {picture && (brokenImage === picture.url
+    {/* The sale sheet first: it is what a shared link is opened for. Each page
+        is shown whole at up to its own size — the page itself can be zoomed —
+        and its size is reserved before it arrives. */}
+    {pages.length > 0 && <>
+      <h3>本次品書</h3>
+      <ol className={styles.catalog}>
+        {pages.map((page, index) => <li key={page.id}>
+          {broken.has(page.url)
+            ? <p className={styles.muted}>第 {index + 1} 張品書暫時無法顯示。</p>
+            : <figure className={styles.page}>
+              <img
+                src={page.url} alt={page.alt} width={page.width} height={page.height}
+                loading={index === 0 ? undefined : "lazy"} referrerPolicy="no-referrer" onError={() => markBroken(page.url)}
+              />
+              <figcaption><a href={page.url} target="_blank" rel="noreferrer">開啟原圖</a></figcaption>
+            </figure>}
+        </li>)}
+      </ol>
+    </>}
+    {picture && (broken.has(picture.url)
       ? <p className={styles.muted}>圖片暫時無法顯示。</p>
       : <figure className={styles.picture}>
-        <img src={picture.url} alt={picture.alt} referrerPolicy="no-referrer" onError={() => setBrokenImage(picture.url)} />
+        <img src={picture.url} alt={picture.alt} referrerPolicy="no-referrer" onError={() => markBroken(picture.url)} />
         {/* Provenance is optional on a circle's own upload (ADR-0053): a link
             when there is one, the credit alone when not, nothing otherwise. */}
         {picture.sourceUrl

@@ -1,5 +1,5 @@
 import type { MapSlotView } from "./accessible-event-map-renderer";
-import { circleSearchText, placementStatusLabel, type CircleViewRecord } from "./circle-records";
+import { circleSearchText, placementStatusLabel, representativeMedia, type CircleViewRecord } from "./circle-records";
 import { ageRatingFilterLabel, buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import { venueAssignmentForVenueSpace, type EventDefinition } from "./event-catalog";
@@ -164,7 +164,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
       next: planEntries.some((entry) => entry.status === "next"),
       visited: planEntries.some((entry) => entry.status === "visited"),
       retired,
-      thumbnailUrl: representative.circle.media[0]?.url,
+      thumbnailUrl: representativeMedia(representative.circle.media)?.url,
     }];
   }));
   const includedTopics = normalizeWorkTopics(advancedSearch.workTopics);

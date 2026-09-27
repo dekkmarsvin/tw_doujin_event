@@ -54,3 +54,11 @@
   .actions button { flex:1 1 100%; justify-content:center; }
 }
 @media (prefers-reduced-motion:reduce) { * { transition:none!important; } }
+
+/* Sale-sheet pages at up to their own size, never cropped: small print is the
+   point of them, and the browser's zoom works on the page as it stands. */
+.catalog { display:grid; gap:18px; margin:0; padding:0; list-style:none; }
+.page { margin:0; }
+.page img { display:block; max-width:100%; height:auto; border:1px solid #dfe3df; border-radius:12px; background:#ffffff; }
+.page figcaption { margin-top:6px; font-size:14px; }
+.page figcaption a { display:inline-flex; align-items:center; min-height:44px; }
