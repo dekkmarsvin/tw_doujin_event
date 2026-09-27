@@ -2,7 +2,7 @@ import { createGitHubPublicationAdapter, type GitHubAdapterOptions, type GitHubW
 import { PublicationFailure, type PublicationDriver } from "./organizer-publication";
 import { GITHUB_PUBLICATION_OWNER, GITHUB_PUBLICATION_REPOSITORIES } from "./github-remote-auditor";
 import { parsePublishedEvents } from "./published-events.mjs";
-import { verifyPublicationOrigin } from "./publication-origin";
+import { DEPLOYMENT_MANIFEST_PATH, PAGES_PRODUCTION_ORIGIN, verifyPublicationOrigin } from "./publication-origin";
 
 export const PUBLICATION_WORKFLOW_ID = 331570396;
 const repository = GITHUB_PUBLICATION_REPOSITORIES[1];
@@ -75,6 +75,9 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
     const job = deployJob(await adapter.readWorkflowAttemptJobs(repository, run.id, run.run_attempt), run);
     if (!job) return { pending: true };
     if (job.status === "completed" && job.conclusion !== "success") {
+      if (await adapter.readRef(repository, "main") !== sha) {
+        fail("publication_deployment_superseded", "main 已有較新的版本，不能重跑舊版本部署。");
+      }
       fail("publication_deployment_failed", "正式部署或其必要 smoke 失敗，可重試同一發布工作。", true);
     }
     if (input.step === "waiting_deployment") {
@@ -97,7 +100,28 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
     try { eventIds = [...parsePublishedEvents(JSON.parse(await adapter.readBlob(repository, entry.sha)))]; }
     catch { fail("publication_deployment_identity", "固定 main commit 的公開活動清單無效。"); }
     const eventId = (input.snapshot as { eventId: string }).eventId;
-    const proof = await verifyPublicationOrigin({ mainSha: sha, dataSha: input.job.data_merge_sha, eventId, eventIds, fetch: options.originFetch });
+    let proof;
+    try {
+      proof = await verifyPublicationOrigin({ mainSha: sha, dataSha: input.job.data_merge_sha, eventId, eventIds, fetch: options.originFetch });
+    } catch (error) {
+      // A queued or cached older artifact is still retryable. Only a confirmed
+      // newer main-line commit already at the origin makes retry futile. A later
+      // docs-only main may legitimately leave that deployed commit unchanged.
+      const latestMain = await adapter.readRef(repository, "main");
+      if (latestMain !== sha) {
+        const response = await (options.originFetch ?? fetch)(`${PAGES_PRODUCTION_ORIGIN}${DEPLOYMENT_MANIFEST_PATH}`, {
+          redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(8_000),
+        }).catch(() => null);
+        const current = response?.status === 200 ? await response.json().catch(() => null) as { schema?: string; commit?: string } | null : null;
+        if (current?.schema === "publication-deployment/1" && /^[a-f0-9]{40}$/.test(current.commit ?? "")
+          && current.commit !== sha && latestMain
+          && await adapter.isAncestor(repository, sha, current.commit!)
+          && await adapter.isAncestor(repository, current.commit!, latestMain)) {
+          fail("publication_deployment_superseded", "main 已有較新的版本，不能重跑舊版本部署。");
+        }
+      }
+      throw error;
+    }
     return { productionVerified: true, metadata: { production_manifest_sha256: proof.manifestSha256 } };
   } };
 }

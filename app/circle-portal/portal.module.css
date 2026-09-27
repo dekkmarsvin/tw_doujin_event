@@ -3,6 +3,12 @@
    reason. Shares the reader's paper/ink language so it still reads as one site. */
 
 .page {
+  /* The editor's preview column and the card edge around it. The claim row
+     above the editor is cut on the same lines, so both rows share one grid. */
+  --preview-column: 430px;
+  /* `.card`: 18px padding inside a 1px border. */
+  --card-inset: 19px;
+  --column-gap: 24px;
   --ink: #202a35;
   --muted: #707a82;
   --line: #dfe3df;
@@ -39,6 +45,22 @@
 .backLink { margin-top: 6px; }
 .backLink a { color: var(--ink); text-underline-offset: 2px; }
 
+/* Replaces the event name under the title rather than adding a card for one
+   control. 16px for the same iOS zoom reason as the form fields. */
+.eventPicker { margin-top: 4px; }
+.eventPicker select {
+  max-width: 100%;
+  padding: 5px 30px 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+}
+.eventPicker select:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
+
 .identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); }
 .identity a { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
 
@@ -53,6 +75,38 @@
   background: var(--surface);
 }
 .editorCard { max-width: none; }
+/* Signed in, every section spans the same column as the masthead; only the
+   lone sign-in card stays narrow and centred. */
+.workspace .card { max-width: none; margin-right: 0; margin-left: 0; }
+.claimRow, .claimSolo { display: grid; gap: 18px; margin-top: 18px; }
+:is(.claimRow, .claimSolo, .claimColumn) > .card { margin-top: 0; }
+.claimColumn { display: grid; gap: 12px; min-width: 0; }
+.claimColumn > .notice { margin-top: 0; }
+/* Alone, the claim form is the page's one task: full row, readable measure. */
+.claimSolo .card > * { max-width: 640px; }
+
+/* Nothing claimed yet: the claim is step one of three, and says so. */
+.startSteps { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.startSteps li {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: #fff; color: var(--muted); font-size: 12px;
+}
+.startSteps li > span {
+  display: grid; place-items: center; flex: 0 0 22px; height: 22px;
+  border: 1px solid var(--line); border-radius: 50%; background: var(--paper);
+  font: 700 10px "Geist Mono", ui-monospace, monospace;
+}
+.startSteps [aria-current="step"] { border-color: var(--coral); color: var(--ink); }
+.startSteps [aria-current="step"] > span { border-color: var(--ink); background: var(--ink); color: #fff; }
+.startSteps small {
+  margin-left: auto; padding: 2px 7px; border-radius: 5px;
+  background: #fff3f1; color: var(--danger); font-size: 10px; font-weight: 800; white-space: nowrap;
+}
+.card > .startSteps + p { margin-top: 10px; }
+@media (min-width: 560px) {
+  .startSteps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .card h2 { font-size: 14px; }
 .card > p { margin-top: 6px; color: var(--muted); font-size: 11px; }
 
@@ -307,6 +361,16 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .danger label { margin-top: 10px; }
 .danger code { padding: 1px 5px; border-radius: 4px; background: #f4e3df; font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
 .dangerSummary { margin: 6px 0 0; padding-left: 18px; color: var(--ink); font-size: 11px; line-height: 1.7; }
+.accountZone { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.accountZone .danger { margin-top: 0; }
+.accountZone .danger > :not(summary) { max-width: 640px; }
+/* Outside any card, so it carries the card's field and button look itself. */
+.accountZone input {
+  width: 100%; margin-top: 5px; padding: 9px 10px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 16px;
+}
+.accountZone label { display: block; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.accountZone .dangerButton { display: block; min-height: 38px; padding: 8px 14px; border: 1px solid; border-radius: 7px; font-size: 11px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
 /* Scoped through `.danger` so it outranks `.card button`, which would otherwise
    paint the only irreversible action in the portal the same ink as Save. */
 .danger .dangerButton { margin-top: 10px; border-color: var(--danger); background: var(--danger); color: #fff; }
@@ -378,7 +442,8 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 }
 
 @media (min-width: 960px) {
-  .editorLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 430px); gap: 24px; align-items: start; }
+  .editorLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, var(--preview-column)); gap: var(--column-gap); align-items: start; }
+  .claimRow { grid-template-columns: minmax(0, 1fr) calc(var(--preview-column) + var(--card-inset)); gap: var(--column-gap); align-items: start; }
   .previewColumn { display: block; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
   .previewColumn.reviewOpen { display: block; }
 }

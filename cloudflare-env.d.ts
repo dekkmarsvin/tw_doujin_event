@@ -94,6 +94,8 @@ interface PortalEnv {
    * personal addresses and the repository is public. */
   PREVIEW_SANDBOX_RECIPIENTS?: string;
   PREVIEW_E2E_TOKEN?: string;
+  /** Only the explicit loopback portal may reset its entire disposable store. */
+  LOCAL_PORTAL_DISPOSABLE?: string;
   /** Defaults disabled. Production enablement follows ADR-0058; fake is accepted
    * only with the isolated preview mail sink. */
   ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github";

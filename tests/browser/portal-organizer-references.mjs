@@ -3,23 +3,17 @@
 // SSR-only test cannot catch differences in the Functions bundler's imports.
 import assert from "node:assert/strict";
 import { ADMIN, clearMail, signIn } from "./support/portal.mjs";
-import { start } from "./support/journey.mjs";
-import { crc32, deflateSync } from "node:zlib";
+import { output, start } from "./support/journey.mjs";
+import { png } from "./support/png.mjs";
 
-/** A real PNG the upload accepts: the server reads its structure, not its pixels. */
-function png(width, height) {
-  const chunk = (type, data) => {
-    const length = Buffer.alloc(4); length.writeUInt32BE(data.length);
-    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
-    return Buffer.concat([length, body, crc]);
-  };
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
-  const rows = Buffer.alloc((width + 1) * height, 0x9c);
-  for (let row = 0; row < height; row += 1) rows[row * (width + 1)] = 0;
-  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header),
-    chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+// The "1200 × 630 px" caption renders from saved metadata before the bytes
+// arrive, so wait for the picture itself before reading its width.
+async function loadedWidth(page) {
+  const loaded = await page.waitForFunction(() => {
+    const image = document.querySelector('img[alt="活動圖片"]');
+    return image?.complete && { width: image.naturalWidth };
+  });
+  return (await loaded.jsonValue()).width;
 }
 
 const journey = await start("portal-organizer-references");
@@ -47,16 +41,14 @@ try {
   // #396: the picture is optional, staged privately, and part of the draft
   // only once saved. The preview comes from the private upload.
   await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "narrow.png", mimeType: "image/png", buffer: png(800, 450) });
-  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
   await page.getByRole("button", { name: "上傳", exact: true }).click();
   await page.getByRole("alert").getByText("活動圖片寬度至少要 1200 px，這張是 800 px。", { exact: true }).waitFor();
   await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "event.png", mimeType: "image/png", buffer: png(1200, 630) });
-  await page.getByLabel("我有權公開這張圖片", { exact: true }).check();
   await page.getByRole("button", { name: "上傳", exact: true }).click();
-  await page.getByRole("status").getByText("已上傳，尚未儲存。", { exact: true }).waitFor();
+  await page.getByText("尚有未儲存變更", { exact: true }).waitFor();
   const preview = page.getByRole("img", { name: "活動圖片", exact: true });
   await preview.waitFor();
-  assert.equal(await preview.evaluate((image) => image.complete && image.naturalWidth), 1200, "the private upload is what the preview shows");
+  assert.equal(await loadedWidth(page), 1200, "the private upload is what the preview shows");
   await page.getByText("1200 × 630 px", { exact: true }).waitFor();
   await journey.capture(page, "event-image-staged");
   await page.getByRole("button", { name: "建立主辦單位", exact: true }).click();
@@ -88,7 +80,7 @@ try {
   await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).waitFor();
   assert.equal(await page.getByRole("combobox", { name: "主辦單位 1", exact: true }).locator("option:checked").textContent(), "測試主辦");
   await page.getByText("1200 × 630 px", { exact: true }).waitFor();
-  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).evaluate((image) => image.complete && image.naturalWidth), 1200, "the saved picture survives a reload");
+  assert.equal(await loadedWidth(page), 1200, "the saved picture survives a reload");
   assert.equal(await page.getByRole("combobox", { name: "主辦分類目錄", exact: true }).locator("option:checked").textContent(), "作品分類（2 個分類）");
   await journey.capture(page, "references-persisted");
   await page.getByRole("combobox", { name: "主辦角色 1", exact: true }).selectOption("partner");
@@ -159,6 +151,7 @@ try {
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByText("請填寫場館名稱。", { exact: true }).waitFor();
   await page.getByText("請填寫場館官方網址。", { exact: true }).waitFor();
+  await page.getByText("請填寫場館地址。", { exact: true }).waitFor();
   await page.getByText("請填寫場地名稱。", { exact: true }).waitFor();
   await journey.capture(page, "venue-creator-inline-errors");
   await page.getByLabel(/^場館名稱/).fill("三重體育館");
@@ -166,6 +159,13 @@ try {
   await page.getByLabel(/^場地名稱/).fill("全館");
   await page.getByText("留空沿用場館網址：https://venue.example/sanchong", { exact: true }).waitFor();
   await journey.capture(page, "venue-creator-inherited-url");
+  // #395: whitespace is not an address; the rest of the form now answers clean.
+  await page.getByLabel(/^場館地址/).fill("   ");
+  await page.getByRole("button", { name: "建立並選取", exact: true }).click();
+  await page.getByText("請填寫場館地址。", { exact: true }).waitFor();
+  assert.equal(await page.getByText("請填寫場館名稱。", { exact: true }).count(), 0);
+  await journey.capture(page, "venue-creator-blank-address");
+  await page.getByLabel(/^場館地址/).fill("新北市三重區集美街212號");
   await page.getByRole("button", { name: "建立並選取", exact: true }).click();
   await page.getByRole("button", { name: "建立並選取", exact: true }).waitFor({ state: "hidden" });
   await page.getByRole("combobox", { name: /^場館/ }).waitFor();
@@ -237,6 +237,9 @@ try {
   assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收", "saved canonical input is adopted without remounting away the success");
   await page.getByLabel(/^活動名稱/).fill("分類目錄驗收更新");
   assert.equal(await page.getByText("已儲存。", { exact: true }).count(), 0, "editing clears the earlier save result");
+  await page.getByLabel("更換圖片", { exact: true }).setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: png(1200, 800) });
+  await page.getByRole("button", { name: "上傳", exact: true }).click();
+  await page.getByText("1200 × 800 px", { exact: true }).waitFor();
   // A successful write followed by a failed refresh must remain retryable at
   // its new version. During that refresh the submitted fields cannot change.
   let releaseRefresh;
@@ -257,10 +260,29 @@ try {
   releaseRefresh();
   await page.getByText(/^已儲存，但後續動作未完成：/).waitFor();
   await page.unroute(detailRoute, refuseRefresh);
+  assert.equal(await page.getByText("已上傳，尚未儲存。", { exact: true }).count(), 0, "an image has no stale second save state when refresh fails");
+  assert.equal(await page.getByText("尚有未儲存變更", { exact: true }).count(), 0);
+  const savedImage = await page.evaluate(async () => {
+    const list = await (await fetch("/api/organizer/events")).json();
+    const candidate = list.events.find((event) => event.eventId?.startsWith("references-"));
+    return (await (await fetch(`/api/organizer/events/${candidate.id}`)).json()).draft.event.image;
+  });
+  assert.equal(savedImage.height, 800, "the successful write already saved the replacement, despite failed refresh");
+  await page.getByRole("img", { name: "活動圖片", exact: true }).scrollIntoViewIfNeeded();
+  await journey.capture(page, "image-save-refresh-failed");
+  await page.getByRole("group", { name: "活動基本資料欄位", exact: true }).locator("..").screenshot({ path: `${output}/image-save-refresh-failed-form.png` });
   assert.equal(await page.getByLabel(/^活動名稱/).inputValue(), "分類目錄驗收更新", "failed refresh does not revert the saved input");
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await page.getByText("已儲存。", { exact: true }).waitFor();
   await journey.capture(page, "binder-save-feedback");
+  await page.getByRole("button", { name: "移除圖片", exact: true }).click();
+  await page.getByText("尚有未儲存變更", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await page.getByText("已儲存。", { exact: true }).waitFor();
+  await page.reload();
+  await page.getByLabel("選擇圖片", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("img", { name: "活動圖片", exact: true }).count(), 0, "removing and saving the picture survives reload");
 
   await sections.getByRole("button", { name: /^場館與場地/ }).click();
   assert.equal(await page.getByRole("combobox", { name: /^場館/ }).count(), 1);

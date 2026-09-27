@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isVenueAddressCompletion,
+  parseReferenceRecord,
   parseReferenceSelection,
   referenceSelectionPaths,
   selectEventReferenceRecords,
@@ -138,6 +140,38 @@ test("verification fails closed for schema, stable-id, source and provenance mis
     organizerBytes.subarray(offset + organizerName.length),
   ])]]);
   assert.throws(() => verifyReferenceFiles(selection, malformedUtf8), /not valid JSON/);
+});
+
+// #395: a venue record may carry the address its official page prints, and
+// must then cite where it came from. Records pinned before stay valid.
+test("a venue record's address is optional, a string when present, and cited", () => {
+  const venuePath = selection.venues[0].path;
+  const venue = JSON.parse(records.get(venuePath).toString("utf8"));
+  const addressSource = { ...venueSource, id: "address-source", retrievedAt: "2026-02-01T00:00:00Z" };
+  const addressed = { ...venue, address: "100 臺北市中正區範例路1號", sources: [...venue.sources, addressSource],
+    provenance: { ...venue.provenance, "/address": [addressSource.id] } };
+  assert.equal(parseReferenceRecord(venue, venuePath).address, undefined);
+  assert.equal(parseReferenceRecord(addressed, venuePath).address, addressed.address);
+  assert.throws(() => parseReferenceRecord({ ...addressed, address: " " }, venuePath), /address is invalid/);
+  assert.throws(() => parseReferenceRecord({ ...addressed, address: 100 }, venuePath), /address is invalid/);
+  const uncited = { ...addressed.provenance };
+  delete uncited["/address"];
+  assert.throws(() => parseReferenceRecord({ ...addressed, provenance: uncited }, venuePath), /missing provenance for \/address/);
+  const spacePath = selection.venues[0].spaces[0].path;
+  const space = JSON.parse(records.get(spacePath).toString("utf8"));
+  assert.throws(() => parseReferenceRecord({ ...space, address: "不屬於場地" }, spacePath), /unknown property address/);
+
+  // Adding an address, with or without a source of its own, is the one change
+  // that completes a record; anything else changed alongside it is not.
+  assert.equal(isVenueAddressCompletion(venue, addressed, venuePath), true);
+  const sameSource = { ...venue, address: addressed.address, provenance: { ...venue.provenance, "/address": [venue.sources[0].id] } };
+  assert.equal(isVenueAddressCompletion(venue, sameSource, venuePath), true);
+  assert.equal(isVenueAddressCompletion(addressed, { ...addressed, address: "另一個地址" }, venuePath), false);
+  assert.equal(isVenueAddressCompletion(addressed, venue, venuePath), false);
+  assert.equal(isVenueAddressCompletion(venue, { ...addressed, name: "改名的場館" }, venuePath), false);
+  assert.equal(isVenueAddressCompletion(venue, { ...addressed, sources: [{ ...venue.sources[0], retrievedAt: "2026-03-01T00:00:00Z" }, addressSource] }, venuePath), false);
+  assert.equal(isVenueAddressCompletion(venue, { ...addressed, sources: [...addressed.sources, { ...addressSource, id: "unused-source" }] }, venuePath), false);
+  assert.equal(isVenueAddressCompletion(space, { ...space, address: "不屬於場地" }, spacePath), false);
 });
 
 test("the pinned reference files and the selection must be the same set", () => {

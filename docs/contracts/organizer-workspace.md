@@ -88,7 +88,9 @@ draft → submitted → approved → publishing → published
 
 選填（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)）。`event.image` 為 `{ url, sha256, contentType, width, height }`，`url` 必須等於公開 bucket 的 `event-images/<sha256>.<ext>`，由 `app/event-image.ts` 檢查。
 
-- `PUT /api/organizer/events/:candidateId/image`（multipart：`file`、`rightsConfirmed=true`）由可編輯候選的 Owner／Editor／Admin 上傳；只在 `draft`、`changes_requested` 接受。JPEG、PNG 或 WebP，5 MiB 以內，寬度至少 1200 px，不限比例，結構檢查沿用配置圖。沒有勾選確認權利時 400。上傳只寫入非公開 bucket 的 `organizer-event-images/<candidateId>/<sha256>.<ext>` 並回傳 `image`，**不修改草稿**；主辦儲存草稿（或修正宣告）後才生效。未綁定 bucket 時 503。
+- `PUT /api/organizer/events/:candidateId/image`（multipart：`file`）由可編輯候選的 Owner／Editor／Admin 上傳；只在 `draft`、`changes_requested` 接受。JPEG、PNG 或 WebP，5 MiB 以內，寬度至少 1200 px，不限比例，結構檢查沿用配置圖。上傳不要求另行勾選權利聲明。上傳只寫入非公開 bucket 的 `organizer-event-images/<candidateId>/<sha256>.<ext>` 並回傳 `image`，**不修改草稿**；主辦儲存草稿（或修正宣告）後才生效。未綁定 bucket 時 503。
+- 圖片與其他欄位共用表單的儲存狀態，不另顯示「已上傳／已移除，尚未儲存」。儲存成功而後續讀取失敗時，仍以已儲存呈現；上傳進度、格式限制與可處理的錯誤保留在圖片欄位。
+- 修正影響以原圖與修正後圖片供主辦核對，不以尺寸代替圖片。原圖讀已發布網址；修正後圖片先讀此候選的非公開預覽，已有公開圖片時可回退至公開網址。新增或移除的一側顯示「無」。
 - `GET /api/organizer/events/:candidateId/image?sha256=&contentType=` 供候選的 Owner／Editor／Admin 預覽暫存圖片，回應 `private, no-store`、`nosniff` 與 sandbox CSP；已公開的圖片直接讀公開網址。
 - 儲存草稿或修正宣告時，若圖片與上次儲存不同，伺服器重新讀取暫存位元組並重新檢查，雜湊、類型與尺寸都必須相符，否則 422；相同時不讀 bucket。
 - 送審成功後刪除此候選送審內容沒有使用的暫存。只在送審後清理：草稿可編輯時，協作者的儲存隨時可能指向任何一張暫存。清理失敗不影響送審。
@@ -96,7 +98,7 @@ draft → submitted → approved → publishing → published
 
 新增活動日時，第一日的日期留空；之後以最後一個有效日期加一天，若已有列但皆無有效日期才回退為作者當地的今天。新活動日的 id 取最小尚未使用的序號。這是可覆寫的預設值，不是驗證規則。
 
-`venueId` 與 `venueSpaceId` 是系統保存的 stable ID，介面不要求主辦輸入。主辦先從共用場館目錄選擇場館，再從該場館的場地下拉選擇；找不到時可以立即建立新場館與第一個場地，或在既有場館立即新增場地。每筆目錄資料都要求官方 HTTPS 來源，但場地的來源網址可以留空——留空時沿用它所屬場館的網址，因為「全館」這類場地通常沒有自己的官方頁面，而主辦通常只有一條官方網址。格式錯誤的網址仍然退回；沿用是補齊，不是豁免。建立與 audit 在同一個 D1 transaction；新資料只是候選控制面的來源記錄，不會因此自動成為已發布 reference pin。
+`venueId` 與 `venueSpaceId` 是系統保存的 stable ID，介面不要求主辦輸入。主辦先從共用場館目錄選擇場館，再從該場館的場地下拉選擇；找不到時可以立即建立新場館與第一個場地，或在既有場館立即新增場地。每筆目錄資料都要求官方 HTTPS 來源，但場地的來源網址可以留空——留空時沿用它所屬場館的網址，因為「全館」這類場地通常沒有自己的官方頁面，而主辦通常只有一條官方網址。格式錯誤的網址仍然退回；沿用是補齊，不是豁免。建立場館另要求地址：主辦貼上場館官方網頁上的完整地址，NFKC 正規化並合併空白後須為 1–200 字，空白或只有空格時退回「請填寫場館地址。」地址只寫入場館的公開 `venue/1` 記錄（`address`，出處指向同一官方來源），不另存於 `organizer_venues`；場地沒有地址。建立與 audit 在同一個 D1 transaction；新資料只是候選控制面的來源記錄，不會因此自動成為已發布 reference pin。
 
 場館表單直接列出已設定的活動日期（唯讀），場館與場地共用於所有活動日。尚無選擇時直接顯示第一組空白選擇器，不因此產生未儲存變更；選好後可「再選一個場地」。「建立新場館」只保留一個入口，建立後優先填入空白選擇列，沒有空白列才加入一列。
 
@@ -154,13 +156,15 @@ planner 產出既有 `circle-identity-groups/2`，只套用本次 transitions；
 
 活動設定的 `references` 保存 `organizerAssignments[]`（organizerId／lead、co-organizer、partner）與 `categoryCatalog`（id／organizerId／revision）。必須恰好一位 lead，單位不可重複；分類目錄屬於已選單位且至少含一個有效分類。建立及選取共用 Reader 分類驗證，分類名稱不可使用其保留名稱「全部類別」。未選可以儲存未完成草稿，但 validate／submit 會阻擋；明確選入的錯誤 reference 在 save 即拒絕。
 
-`POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。Owner／Editor／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
+`POST /api/organizer/events/:candidateId/references` 接受 expectedVersion、kind、名稱、HTTPS 官方來源；分類目錄另含所屬主辦與分類 label／選填 description。Owner／Editor／Admin 可在 draft／changes_requested 建立，舊版本或已鎖定狀態拒絕；建立與 audit 原子完成，候選內容不因目錄建立而前進版本。使用者選取後以原本的草稿 save 套用。除了下方的場館補上地址，沒有原地修改既有 reference 的 API；不提供猜測分類或 stable ID 輸入欄。
 
 建立分類目錄時，「分類官方來源網址」預填活動設定的官方公告網址（分類通常公布在活動公告裡），可以修改；活動尚未填網址時留空。
 
-`organizer_reference_records` 保存 canonical public_reference_json 與 source_captured_at。場館／場地正常建立在同交易固定 canonical 記錄；seed adoption 依 [ADR-0061](../adr/0061-organizer-snapshot-pins-complete-reference-records.md) 的已核對來源與時間，只補缺少記錄，既有 metadata 不一致時不強行採用。控制面名稱「全館」與公開名稱「爭艷館展區」分開保存。
+`organizer_reference_records` 保存 canonical public_reference_json 與 source_captured_at。場館／場地正常建立在同交易固定 canonical 記錄；seed adoption 依 [ADR-0061](../adr/0061-organizer-snapshot-pins-complete-reference-records.md) 的已核對來源與時間，只補缺少記錄，既有 metadata 不一致時不強行採用。控制面名稱「全館」與公開名稱「爭艷館展區」分開保存。四個 seed 場館的地址取自各自官方來源頁，以 `address-source`（核對時間 2026-09-24T15:50:00Z）另列出處；FF47 固定 bytes 的名稱與網址出處不變。已存在的 seed 記錄不在初始化時補地址，走下方的補上地址。
 
-既有非 seed 場館／場地缺少 canonical 記錄時，「場館與場地」列出待補來源。使用者核對並輸入公開名稱與官方 HTTPS 網址後，以同一 references endpoint 的 `venue`／`venue-space` kind 補齊。僅能處理已儲存在該候選的 assignment；同交易檢查角色、可編輯狀態、expectedVersion、場館關係與 path 未存在，建立／audit 原子完成。保存固定本次核對時間，不改目錄友善名稱、candidate revision 或任何既有 snapshot；既有 canonical 記錄不能由此覆寫。之後仍須重新檢查、預覽與送審。
+既有非 seed 場館／場地缺少 canonical 記錄時，「場館與場地」列出待補來源。使用者核對並輸入公開名稱與官方 HTTPS 網址（場館另含地址）後，以同一 references endpoint 的 `venue`／`venue-space` kind 補齊。僅能處理已儲存在該候選的 assignment；同交易檢查角色、可編輯狀態、expectedVersion、場館關係與 path 未存在，建立／audit 原子完成。保存固定本次核對時間，不改目錄友善名稱、candidate revision 或任何既有 snapshot；既有 canonical 記錄不能由此覆寫。之後仍須重新檢查、預覽與送審。
+
+**補上地址**（#395）：候選已選的場館有 canonical 記錄但沒有 `address` 時，detail 的 `missingVenueAddresses` 列出它，resolver 以 `missing_venue_address`（venue 步驟 error）阻擋檢查、預覽與送審。「場館與場地」為每個這樣的場館顯示地址欄；以同一 references endpoint 的 `venue-address` kind（`referenceId`、`address`、expectedVersion）送出。這是 canonical 記錄唯一的原地修改：記錄加上 `address`、一個出處為場館 `officialUrl`、核對時間為本次的 `address-source`，以及 `/address` provenance，其餘位元組語意不變。同一 D1 batch 檢查角色、draft／changes_requested（發布後修正亦同，因為地址屬於共用場館記錄而非本活動設定）、expectedVersion、場館在候選 assignment 中、記錄仍是讀取時的 bytes 且尚無地址，並寫入 `organizer_reference.address_completed` audit。已有地址時回 409，不能由此改地址。候選版本、revision、目錄友善名稱與既有 snapshot 都不變。
 
 validate／preview／submit 共用 selected-reference resolver。`organizer-reader-preview/1.references` 是所選 canonical 公開記錄，介面呈現主辦、分類與正式場館名稱；選單仍使用原本 venueCatalog 的友善名稱。公開 schema／檔案選取 parser 與 CLI 共用 `app/reference-selection.mjs`。
 
@@ -285,11 +289,11 @@ GitHub App token provider 使用 WebCrypto RS256 簽署 App JWT（`iat = now - 6
 
 `app/publication-artifacts.ts` 消費 CREATE snapshot/3，或明確 `operation: AMEND` 的 snapshot/4，以及其核准 hash。資料產生不讀即時 catalog、時鐘或網路：內容時間取 contentUpdatedAt；活動結束取最後日期台灣時間 23:59:59；草稿有活動別稱時 `event.json` 才帶 `aliases`（緊接在 `name` 後），有活動圖片時才在最後帶 `image: { url, width, height }`，沒有時都不出現這些鍵，已核准 snapshot 因此重建出相同位元組；活動與逐日攤位表網址皆取已核准 officialSource.url，統一經 URL canonicalization（合法的大寫 HTTPS scheme 轉小寫），snapshot bytes/hash 不改写。地圖保留每個 day × venue-space 的內容，單一範圍產生 map.json，多範圍產生完整 manifest。現行公開格式要求同活動模板一致、展區由場地唯一持有；不相容 snapshot 明確拒絕，不取第一個場地猜值。
 
-`buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
+`buildPublicationDataStage` 要求固定 data base commit、活動目錄不存在的觀測，以及每個 selected reference 的既有 bytes 或明確 null。缺失觀測不可當不存在；語意相同的 JSON 保留既有 bytes 並不加入寫入清單，不同或損壞拒絕。唯一例外是場館記錄補上地址：既有記錄沒有 `address`，而核准記錄只多了地址、其 provenance 與僅供地址引用的出處時，寫入核准記錄（`isVenueAddressCompletion`）。其他活動的 pin 仍在自己的 commit 讀舊 bytes，不因此改變。`buildPublicationMainStage` 要求實際 data merge commit／檔案 bytes 與固定 main base 資料；事件內容必須與 snapshot 產物完全相同，reference 可只有 JSON 格式差異，pin 的 hash 一律取實際 bytes。
 
 main 清單保留原 events 順序追加；已存在活動或 pin 拒絕 CREATE。沿用同一份 event-local identity 配號器追加 allocations／evidence，不因同名猜 linkage，不動既有活動 pin；身分群組使用 codes[]，只有 snapshot 的 stableKey 能合併多個官方群組。完整產物再經 publication allowlist。這些純函式不建立或合併 PR；GitHub driver 將其結果寫入固定工作分支。
 
-AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha256`、明確 `changes[]`，以及選填的正規化 `settings`。產檔以 baseline 草稿重新正規化 `settings`，結果必須與保存內容完全相同，否則以 `snapshot_mismatch` 退件；生效草稿是 baseline 草稿套上 `settings`。`event.json` 必須等於 baseline 活動資料套上宣告值（名稱、別稱、逐日 `dateLabel`，以及依新日期重算的 `dateRangeLabel`／`eventEndsAt`），除 `dataUpdatedAt` 外任何差異都退件。產檔核對 baseline、活動設定及 reference，重算宣告後必須與衍生匯入列一致；身分由已核准 grouping／宣告決定，不能以匯入列重新配舊 Circle ID。地圖仍逐範圍驗證，內容時間取此修正版的 immutable revision。
+AMEND snapshot/4 額外保存不可變 `amendment.baselineJson`／`baselineSha256`、明確 `changes[]`，以及選填的正規化 `settings`。產檔以 baseline 草稿重新正規化 `settings`，結果必須與保存內容完全相同，否則以 `snapshot_mismatch` 退件；生效草稿是 baseline 草稿套上 `settings`。`event.json` 必須等於 baseline 活動資料套上宣告值（名稱、別稱、逐日 `dateLabel`，以及依新日期重算的 `dateRangeLabel`／`eventEndsAt`），除 `dataUpdatedAt` 外任何差異都退件。產檔核對 baseline、活動設定及 reference，reference 除場館補上地址外必須與 baseline 相同，重算宣告後必須與衍生匯入列一致；身分由已核准 grouping／宣告決定，不能以匯入列重新配舊 Circle ID。地圖仍逐範圍驗證，內容時間取此修正版的 immutable revision。
 
 AMEND data 產檔要求固定 base 的完整 event-directory leaves，逐檔核對原 pin hash，含 NOTICE 的存在／內容與檔案集合；缺失、額外或漂移拒絕。Main 產檔要求原 published event／pin 完全一致，保留 published-events 原 bytes／順序，僅更新該活動 pin。使用此 main base 的最新 global ledger 配新 ID，容許其他活動在編輯期間取得配號；原活動的身份與退出歷史不能變更。兩階段仍驗實際合併 bytes 與 allowlist，不影響其他活動 pin。
 
@@ -314,6 +318,8 @@ Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不
 CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部署 commit、所有 published event 的 data pin commit 與實際輸出 JSON SHA-256；production smoke 同時核對部署 commit。Runtime 僅查固定 `https://tw-catalog.pages.dev`、不帶認證且不接受 redirect，核對本次 main SHA／data SHA、固定 main commit 的完整公開活動清單、全部列出的活動 JSON bytes（含既有活動、地圖）、Reader HTML 與匿名 session 401，最後重讀 manifest 確認驗證途中未換版。通過後保存 manifest SHA-256 才可 published。這不取代 CH20 真實 Reader UI 驗收。
 
 部署或 workflow smoke 失敗記錄 retryable `publication_deployment_failed`；既有 Owner／Admin retry 交易僅授權原 run 的下一個 attempt，保留 snapshot、data／main SHA、PR 與原 stage。Adapter 重跑原 run，接受 GitHub 空 body 201，回應遺失後先 reconcile 已出現的下一 attempt；未經 retry 的 attempt 改變 fail closed。重跑前在既有 lease／remote intent 下重查 main，若已前進就拒絕部署舊 checkout。只有 origin 檢查失敗則重驗 origin，不重新建立 PR 或主動重部署。模擬 GitHub／本機 D1 證據不能代替真正的發布失敗恢復。
+
+main CI 採保留 pending run 的序列佇列，不主動取消已開始的部署；分類 job 與部署前都拒絕已被 main 取代的 checkout，分類時拒絕的部署 job 為 skipped，同樣是未成功。排隊中的固定 run／attempt 維持 pending。部署 job 未成功且 main 已前進，或必要 origin 驗證失敗後另以 GitHub ancestry 確認公開 manifest commit 位於本 SHA 之後且屬目前 main 歷史，回不可重試 `publication_deployment_superseded`，保留 checkpoint 交由管理者核對，不提供無效的舊版本重試，也不把新版本的成功當成本 job 的 published 證據。較新部署後又有純文件 main 前進也適用。只讀到較舊 cache、其他分支或無法確認新版本時，保留原本 origin 失敗的重驗邊界。
 
 既有純函式邊界保留：
 

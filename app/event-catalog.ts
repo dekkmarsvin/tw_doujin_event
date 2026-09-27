@@ -19,6 +19,8 @@ type VenueAssignment<TArea extends string = string> = {
   venueId: string;
   venueName: string;
   venueOfficialUrl: string;
+  /** The venue's address as its official page prints it; absent in data pinned before #395. */
+  venueAddress?: string;
   venueSpaceId: string;
   venueSpaceName: string;
   areaIds: readonly TArea[];
@@ -226,7 +228,8 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
     requireOnlyKeys(assignment, ["venueId", "venueSpaceId", "areaIds"], `Event venue assignment ${index}`);
     const venue = findReference(records, "venue/1", assignment.venueId);
     const venueSpace = findReference(records, "venue-space/1", assignment.venueSpaceId);
-    if (venueSpace.venueId !== assignment.venueId || !nonempty(venue.name) || !https(venue.officialUrl) || !nonempty(venueSpace.name)) {
+    if (venueSpace.venueId !== assignment.venueId || !nonempty(venue.name) || !https(venue.officialUrl) || !nonempty(venueSpace.name)
+      || (venue.address !== undefined && !nonempty(venue.address))) {
       throw new Error(`Event venue assignment ${index} does not match pinned data.`);
     }
     assignedAreaIds.push(...assignment.areaIds);
@@ -234,6 +237,7 @@ export function parseEventDefinition(value: unknown, references: unknown): Event
       venueId: assignment.venueId,
       venueName: venue.name,
       venueOfficialUrl: venue.officialUrl,
+      ...(nonempty(venue.address) ? { venueAddress: venue.address } : {}),
       venueSpaceId: assignment.venueSpaceId,
       venueSpaceName: venueSpace.name,
       areaIds: [...assignment.areaIds] as string[],

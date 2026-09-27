@@ -133,11 +133,15 @@ export function parseReferenceRecord(value, relativePath) {
     return record;
   }
   if (record.schema === "venue/1") {
-    requireKeys(record, ["schema", "id", "name", "officialUrl", "sources", "provenance"], ["schema", "id", "name", "officialUrl", "sources", "provenance"], relativePath);
+    requireKeys(record, ["schema", "id", "name", "officialUrl", "sources", "provenance"], ["schema", "id", "name", "officialUrl", "address", "sources", "provenance"], relativePath);
     requireString(record.id, `${relativePath}.id`, ID);
     requireString(record.name, `${relativePath}.name`);
     requireHttpsUrl(record.officialUrl, `${relativePath}.officialUrl`);
-    validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`), ["/name", "/officialUrl"], `${relativePath}.provenance`);
+    // Optional only because records pinned before #395 have none; a new venue
+    // always carries one, and one that does must say where it came from.
+    if (record.address !== undefined) requireString(record.address, `${relativePath}.address`);
+    validateProvenance(record.provenance, validateSources(record.sources, `${relativePath}.sources`),
+      ["/name", "/officialUrl", ...(record.address !== undefined ? ["/address"] : [])], `${relativePath}.provenance`);
     if (relativePath !== `references/venues/${record.id}.json`) fail(`${relativePath} does not match venue stable ID ${record.id}.`);
     return record;
   }
@@ -151,6 +155,39 @@ export function parseReferenceRecord(value, relativePath) {
     return record;
   }
   fail(`${relativePath} uses unsupported reference schema ${record.schema ?? "(missing)"}.`);
+}
+
+function semanticJson(value) {
+  return JSON.stringify(value, (_key, child) => isRecord(child)
+    ? Object.fromEntries(Object.entries(child).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : child);
+}
+
+/** The venue record as it read before its address was added: without the
+ * address, its provenance, or a source only the address cites. */
+function withoutVenueAddress(record) {
+  const { "/address": addressSources = [], ...provenance } = record.provenance;
+  const cited = new Set(Object.values(provenance).flat());
+  const before = { ...record, provenance,
+    sources: record.sources.filter((source) => cited.has(source.id) || !addressSources.includes(source.id)) };
+  delete before.address;
+  return before;
+}
+
+/**
+ * Whether `after` is `before` with an address added and nothing else changed
+ * (#395). This is the one change a canonical venue record may take once it
+ * exists: records written before venues had addresses are completed in place,
+ * and every other difference is still a conflict.
+ */
+export function isVenueAddressCompletion(beforeValue, afterValue, relativePath) {
+  try {
+    const before = parseReferenceRecord(beforeValue, relativePath);
+    const after = parseReferenceRecord(afterValue, relativePath);
+    return before.schema === "venue/1" && after.schema === "venue/1" && before.address === undefined
+      && after.address !== undefined && semanticJson(withoutVenueAddress(after)) === semanticJson(before);
+  } catch {
+    return false;
+  }
 }
 
 function parseIdPath(value, label, category = false) {

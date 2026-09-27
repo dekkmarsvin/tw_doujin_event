@@ -18,10 +18,12 @@
 
 Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，繼續由 Cloudflare Access 保護。CI 使用 Service Auth token 穿過 Access 後，才執行隔離 preview D1 上的完整流程；人工測試則使用維護者身分登入 Access。production 公開、preview 閘控的決策見 [ADR-0029](../adr/0029-public-production-gated-preview.md)，驗證方式見[部署 runbook](../runbooks/first-time-setup.md#cloudflare-accessproduction-公開preview-閘控)。
 
+遠端 E2E 在開始前核對固定 deployment 的實際 D1／R2 binding identity、環境與 commit，不以 production 筆數未變證明隔離。每 run 的保留帳號只在對應 preview sink allowlist 下成立；受 token 保護的 fixture POST／DELETE 只建立及清理保留 fixture：每 run 結束時清自己的，開始時在全域 E2E 鎖下清除已結束 run 的遺留；人工資料一律保留，不清空共用 R2。完整 reset 僅供明確啟用的 HTTP loopback 本機 disposable 環境。細節見[CI 行為](../runbooks/deployment.md#ci-行為)。
+
 ## 入口分離
 
 - **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。
-- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/public-artifact.test.mjs` 把關。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
+- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/public-artifact.test.mjs` 把關。連結帶目前閱讀的活動（`/circle?event=<eventId>`），控制面因此開在同一場，不落到瀏覽器上次維護或依日期選出的那場。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
 - [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle，也不出現在公開導覽。
 - `/admin` 是獨立且 noindex 的管理入口，沿用同一 session；沒有登入表單，未登入時連向 `/circle`。非管理者不載入管理內容。`/circle` 只保留管理者身分與管理連結，不掛載管理面板或發出其管理 API 呼叫。管理資產不進 Reader precache，Reader 不新增管理導覽。

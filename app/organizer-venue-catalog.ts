@@ -21,6 +21,8 @@ export type OrganizerVenueCatalog = {
 };
 
 type OrganizerVenueCatalogSeed = Omit<OrganizerVenueCatalogVenue, "spaces"> & {
+  /** As printed on the venue's official page at `sourceUrl` (#395). */
+  address: string;
   spaces: Array<Omit<OrganizerVenueCatalogSpace, "venueId">>;
 };
 
@@ -29,6 +31,7 @@ export const INITIAL_ORGANIZER_VENUE_CATALOG: readonly OrganizerVenueCatalogSeed
     id: "taipei-nangang-exhibition-center-hall-1",
     name: "台北南港展覽館 1 館",
     sourceUrl: "https://www.tainex.com.tw/venue/showgrounds/1/1",
+    address: "台北市 11568 南港區經貿二路 1 號",
     spaces: [
       {
         id: "taipei-nangang-exhibition-center-hall-1-1f",
@@ -48,6 +51,7 @@ export const INITIAL_ORGANIZER_VENUE_CATALOG: readonly OrganizerVenueCatalogSeed
     id: "taipei-nangang-exhibition-center-hall-2",
     name: "台北南港展覽館 2 館",
     sourceUrl: "https://www.tainex.com.tw/venue/showgrounds/2/1",
+    address: "台北市 11568 南港區經貿二路 2 號",
     spaces: [
       {
         id: "taipei-nangang-exhibition-center-hall-2-1f",
@@ -67,6 +71,7 @@ export const INITIAL_ORGANIZER_VENUE_CATALOG: readonly OrganizerVenueCatalogSeed
     id: "taipei-hakka-cultural-center",
     name: "客家文化中心",
     sourceUrl: "https://ssl.thcp.org.tw/rental",
+    address: "100 臺北市中正區汀州路三段2號",
     spaces: [
       {
         id: "taipei-hakka-cultural-center-5f-exhibition-hall",
@@ -82,6 +87,7 @@ export const INITIAL_ORGANIZER_VENUE_CATALOG: readonly OrganizerVenueCatalogSeed
     id: "taipei-expo-park-zhengyan-hall",
     name: "花博公園爭艷館",
     sourceUrl: "https://www.expopark.taipei/FieldInfo_Detail.aspx?n=205&s=1",
+    address: "10452 臺北市中山區玉門街1號",
     spaces: [
       {
         id: "zhengyan-exhibition-area",
@@ -97,6 +103,13 @@ export function normalizeOrganizerVenueName(value: unknown) {
   if (typeof value !== "string") return null;
   const normalized = value.normalize("NFKC").trim().replace(/\s+/g, " ");
   return normalized.length > 0 && normalized.length <= 120 ? normalized : null;
+}
+
+/** One line, as pasted from the venue's official page. */
+export function normalizeOrganizerVenueAddress(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.normalize("NFKC").trim().replace(/\s+/g, " ");
+  return normalized.length > 0 && normalized.length <= 200 ? normalized : null;
 }
 
 export function organizerVenueNameKey(value: string) {

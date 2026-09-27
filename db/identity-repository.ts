@@ -250,6 +250,39 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return results[0].meta.changes === 1;
   }
 
+  /**
+   * The one in-place change a canonical record takes (#395): a venue record
+   * written before venues had addresses gains one. It is conditional on the
+   * bytes the caller completed still being the stored bytes, so nothing else
+   * about the record can move with it, and on the same candidate access the
+   * reference endpoint requires to create records.
+   */
+  async function completeOrganizerVenueAddress(input: {
+    previous: OrganizerReferenceRecord; record: OrganizerReferenceRecord; candidateId: string; expectedVersion: number;
+    actorAccountId: string; actorRole: IdentityAuditEntry["actorRole"]; admin: boolean; now: number;
+  }) {
+    await ensureTables();
+    const results = await database.batch([
+      database.prepare(`UPDATE organizer_reference_records SET public_reference_json = ?3
+        WHERE path = ?1 AND kind = 'venue' AND reference_id = ?2 AND public_reference_json = ?4
+          AND json_extract(public_reference_json, '$.address') IS NULL
+          AND EXISTS (SELECT 1 FROM organizer_event_candidates c
+            WHERE c.id = ?5 AND c.current_version = ?6 AND c.status IN ('draft', 'changes_requested')
+              AND (?7 = 1 OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = c.id
+                AND g.account_id = ?8 AND g.revoked_at IS NULL AND g.role IN ('owner', 'editor')))
+              AND EXISTS (SELECT 1 FROM json_each(c.current_draft_json, '$.venue.assignments') a
+                WHERE json_extract(a.value, '$.venueId') = ?2))`)
+        .bind(input.record.path, input.record.id, input.record.publicReferenceJson, input.previous.publicReferenceJson,
+          input.candidateId, input.expectedVersion, input.admin ? 1 : 0, input.actorAccountId),
+      database.prepare(`INSERT INTO audit_log (id, at, actor_account_id, actor_role, action, subject_type, subject_id, detail_json, ip_hash)
+        SELECT ?1, ?2, ?3, ?4, 'organizer_reference.address_completed', 'organizer_reference', ?5, ?6, NULL
+        WHERE changes() = 1`)
+        .bind(crypto.randomUUID(), input.now, input.actorAccountId, input.actorRole, input.record.id,
+          JSON.stringify({ candidateId: input.candidateId, kind: "venue" })),
+    ]);
+    return results[0].meta.changes === 1;
+  }
+
   async function listAdmins() {
     await ensureTables();
     const result = await database.prepare("SELECT email, added_by, added_at FROM admins ORDER BY added_at ASC")
@@ -1665,6 +1698,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     id: string;
     name: string;
     sourceUrl: string | null;
+    address: string;
     createdByAccountId: string;
     now: number;
     initialSpace: {
@@ -3470,7 +3504,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
     listOrganizerVenueCatalog, createOrganizerVenue, createOrganizerVenueSpace,
-    listOrganizerReferenceRecords, createOrganizerReferenceRecord,
+    listOrganizerReferenceRecords, createOrganizerReferenceRecord, completeOrganizerVenueAddress,
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,
     countOrganizerInvitationsSince,
     listOrganizerCandidatesForAccount, getOrganizerCandidate, listOrganizerCandidateRevisions,

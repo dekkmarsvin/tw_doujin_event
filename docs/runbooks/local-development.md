@@ -173,6 +173,8 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 
 清空是必要的：帳號、認領、收信與**登入連結速率限制**都存在那個 D1。journey 會斷言「這個社團尚未被認領」並固定登入幾次，沿用上一輪的資料會第一次通過、之後因為與程式無關的原因失敗。
 
+完整 `DELETE /api/preview/mail` reset 另要求本機設定的 `LOCAL_PORTAL_DISPOSABLE=true` 與 HTTP loopback URL；不可把此旗標加入遠端環境。遠端 CI 使用每 run 的保留帳號與定向清理，見[部署 runbook](./deployment.md#ci-行為)。
+
 因此 `portal` journey 需要 8788 埠。若你自己的 `npm run dev:portal` 正在跑，runner 會直接停下並說明，不會半跑在你的資料上。
 
 `pinned` 每次都重新下載並驗證目前 pin 的 FF47 資料，即使 `.event-data/ff47` 已存在，避免切換分支或更新 pin 後仍驗收舊資料；下載或驗證失敗即停止，不沿用舊資料繼續測試。因此 `pinned` 需要 GitHub 網路，`fixture` 則完全離線。

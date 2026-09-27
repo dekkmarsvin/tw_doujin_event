@@ -42,7 +42,7 @@ yarn-error.log*
 .vercel
 
 /dist/
-/.wrangler/
+.wrangler/
 /.event-data/
 /.event-data-stage.json
 /public/data/events/

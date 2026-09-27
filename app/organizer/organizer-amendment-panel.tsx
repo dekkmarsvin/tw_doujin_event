@@ -7,7 +7,7 @@ import {
   type OrganizerAmendmentImpact, type OrganizerAmendmentSettingsImpact, type OrganizerEventDetail,
 } from "../organizer-client";
 import type { EventImage } from "../event-image";
-import { EventImageField } from "./organizer-event-image";
+import { EventImageField, EventImagePreview } from "./organizer-event-image";
 import styles from "./organizer.module.css";
 
 const KIND_LABEL = { withdrawn: "退出", released: "換手", moved: "移動／重編號", added: "新增" };
@@ -105,7 +105,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
     {!loaded ? <><p>正在讀取已發布名單…</p>{notice && <button type="button" onClick={() => void reload()}>重新讀取修正</button>}</> : <>
       <p>來源：第 {loaded.baseline.sourceVersion} 版，{new Date(loaded.baseline.publishedAt).toLocaleString("zh-TW")} 發布。此修正尚未變更公開活動。</p>
       {conflict && <div className={styles.subpanel}><p>其他人已修改內容或權限已變更。你的輸入仍保留在此頁，請先核對；重新讀取會捨棄尚未儲存的修正。</p><button type="button" disabled={busy} onClick={() => void reload()}>捨棄未儲存修正並讀取最新版本</button></div>}
-      {settings && <SettingsFields candidateId={detail.event.id} baseline={loaded.baseline} saved={loaded.settings?.image} value={settings} disabled={!editable || busy || conflict} onChange={setSettings} />}
+      {settings && <SettingsFields candidateId={detail.event.id} baseline={loaded.baseline} value={settings} disabled={!editable || busy || conflict} onChange={setSettings} />}
       {editable && <AmendmentForm key={formKey} baseline={loaded.baseline} initial={editing === null ? null : changes[editing]}
         disabled={busy || conflict} onDirty={setFormDirty}
         onCancel={resetForm} onAdd={(change) => {
@@ -125,7 +125,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
         {settingsDirty && <p className={styles.warning}>活動設定尚未儲存；下方顯示的影響仍是上次儲存內容。</p>}
         {formDirty && <p className={styles.warning}>表單尚未加入清單。</p>}
       </div>
-      <SettingsImpact impact={loaded.settingsImpact} />
+      <SettingsImpact candidateId={detail.event.id} impact={loaded.settingsImpact} />
       <AmendmentImpact impact={loaded.impact} />
     </>}
   </section>;
@@ -210,19 +210,17 @@ function Destination({ title, baseline, value, onChange }: {
 
 /** Only the settings ADR-0068 allows a correction to change. Days keep their
  * number and ids; only each day's date can move. */
-function SettingsFields({ candidateId, baseline, saved, value, disabled, onChange }: {
-  candidateId: string; baseline: OrganizerAmendmentDetail["baseline"]; saved: EventImage | null | undefined;
+function SettingsFields({ candidateId, baseline, value, disabled, onChange }: {
+  candidateId: string; baseline: OrganizerAmendmentDetail["baseline"];
   value: SettingsForm; disabled: boolean; onChange: (value: SettingsForm) => void;
 }) {
   const set = (mutate: (next: SettingsForm) => void) => { const next = structuredClone(value); mutate(next); onChange(next); };
   return <fieldset className={`${styles.subpanel} ${styles.amendmentFields}`} disabled={disabled} aria-label="活動設定">
     <h4>活動設定</h4>
-    <p>可更正活動名稱、活動別稱、各活動日的日期與活動圖片。</p>
     <label>活動名稱<input value={value.name} onChange={(event) => set((next) => { next.name = event.target.value; })} /></label>
     <div><div className={styles.row}><strong>活動別稱</strong>
       <button type="button" className={styles.ghost} disabled={value.aliases.length >= EVENT_ALIAS_MAX_COUNT}
         onClick={() => set((next) => { next.aliases.push(""); })}>新增別稱</button></div>
-      {value.aliases.length === 0 && <p>沒有別稱。</p>}
       {value.aliases.map((alias, index) => <div className={styles.row} key={index}>
         <label>別稱 {index + 1}<input value={alias} onChange={(event) => set((next) => { next.aliases[index] = event.target.value; })} /></label>
         <button type="button" className={styles.dangerText} aria-label={`移除別稱 ${index + 1}`}
@@ -231,21 +229,26 @@ function SettingsFields({ candidateId, baseline, saved, value, disabled, onChang
     </div>
     {baseline.event.days.map((day) => <label key={day.id}>{day.label}日期<input type="date" value={value.days[String(day.id)] ?? ""}
       onChange={(event) => set((next) => { next.days[String(day.id)] = event.target.value; })} /></label>)}
-    <EventImageField candidateId={candidateId} image={value.image} saved={saved} published={baseline.event.image} editable={!disabled}
+    <EventImageField candidateId={candidateId} image={value.image} published={baseline.event.image} editable={!disabled}
       onChange={(image) => set((next) => { if (image === undefined) delete next.image; else next.image = image; })} />
   </fieldset>;
 }
 
-function SettingsImpact({ impact }: { impact: OrganizerAmendmentSettingsImpact[] }) {
+function SettingsImpact({ candidateId, impact }: { candidateId: string; impact: OrganizerAmendmentSettingsImpact[] }) {
   const label = (item: OrganizerAmendmentSettingsImpact) => item.field === "name" ? "活動名稱" : item.field === "aliases" ? "活動別稱"
     : item.field === "image" ? "活動圖片" : `${item.label}日期`;
-  const text = (value: string | string[] | EventImage | null) => value === null ? "無" : Array.isArray(value) ? value.join("、") || "無"
-    : typeof value === "string" ? value : `${value.width} × ${value.height} px`;
+  const value = (item: OrganizerAmendmentSettingsImpact, side: "before" | "after") => {
+    const content = item[side];
+    return content !== null && typeof content === "object" && !Array.isArray(content)
+      ? <EventImagePreview key={content.url} candidateId={side === "after" ? candidateId : undefined} image={content}
+        alt={side === "before" ? "原本的活動圖片" : "修正後的活動圖片"} />
+      : <p>{content === null ? "無" : Array.isArray(content) ? content.join("、") || "無" : content}</p>;
+  };
   return <section className={styles.subpanel} aria-label="已儲存的活動設定更正"><h4>已儲存的活動設定更正</h4>
-    {impact.length === 0 ? <p>目前已儲存的內容沒有活動設定變動。</p> : impact.map((item, index) => <div key={index} className={styles.amendmentImpact}>
+    {impact.length === 0 ? <p>目前已儲存的內容沒有活動設定變動。</p> : impact.map((item, index) => <div key={index} className={`${styles.amendmentImpact} ${item.field === "image" ? styles.imageImpact : ""}`}>
       <h5>{label(item)}</h5>
-      <div><strong>原本</strong><p>{text(item.before)}</p></div>
-      <div><strong>修正後</strong><p>{text(item.after)}</p></div>
+      <div><strong>原本</strong>{value(item, "before")}</div>
+      <div><strong>修正後</strong>{value(item, "after")}</div>
     </div>)}
   </section>;
 }

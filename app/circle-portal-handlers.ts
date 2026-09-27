@@ -35,6 +35,7 @@ import {
 } from "./organizer-workspace";
 import { resolveCandidateAuthoringScope } from "./event-authoring-scope";
 import { createOrganizerReference, createCategoryReference, createVenueReference, createVenueSpaceReference, projectReferenceCatalog,
+  completeVenueAddress, venueReferenceNeedsAddress,
   resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
 import { PublicationFailure, publicationHasStarted } from "./organizer-publication";
 import { buildApprovedPublicationArtifacts } from "./publication-artifacts";
@@ -44,6 +45,7 @@ import { AmendmentSettingsError, amendmentSettingsImpact, applyAmendmentSettings
   approvedEventDraft, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
 import {
   isOrganizerVenueSpaceAreaMode,
+  normalizeOrganizerVenueAddress,
   normalizeOrganizerVenueName,
   normalizeOrganizerVenueSourceUrl,
   validateOrganizerVenueCatalogAssignments,
@@ -1907,6 +1909,7 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     if (!Number.isSafeInteger(body?.expectedVersion) || (body!.expectedVersion as number) < 1) return json({ error: "版本資訊無效，請重新載入。" }, 400);
     const now = config.now();
+    if (body?.kind === "venue-address") return completeOrganizerVenueAddressEntry(access, body, candidateId, now);
     let record: OrganizerReferenceRecord;
     try {
       if (body?.kind === "organizer") record = createOrganizerReference({ name: body.name, sourceUrl: body.sourceUrl }, now);
@@ -1916,11 +1919,13 @@ export function createCirclePortalHandlers({
         const name = normalizeOrganizerVenueName(body.name);
         const sourceUrl = normalizeOrganizerVenueSourceUrl(body.sourceUrl);
         if (!name || !sourceUrl) return json({ error: "請填寫公開名稱與有效的 HTTPS 官方來源網址。" }, 400);
+        const address = normalizeOrganizerVenueAddress(body.address);
+        if (body.kind === "venue" && !address) return json({ error: "請填寫場館地址。" }, 400);
         const catalog = await repository.listOrganizerVenueCatalog();
         const venue = catalog.venues.find((item) => body.kind === "venue" ? item.id === body.referenceId : item.spaces.some((space) => space.id === body.referenceId));
         if (!venue) return json({ error: "找不到場館或場地。" }, 404);
         record = body.kind === "venue"
-          ? createVenueReference({ id: venue.id, name, sourceUrl }, now)
+          ? createVenueReference({ id: venue.id, name, sourceUrl, address }, now)
           : createVenueSpaceReference({ id: body.referenceId, venueId: venue.id, name, sourceUrl }, now);
       } else return json({ error: "請選擇要建立的主辦或分類目錄。" }, 400);
     } catch (error) { return json({ error: error instanceof Error ? error.message : "主辦或分類資料無效。" }, 400); }
@@ -1933,6 +1938,25 @@ export function createCirclePortalHandlers({
       catalog: projectReferenceCatalog(await repository.listOrganizerReferenceRecords()) }, 201);
   }
 
+  /** Adds the address to a venue whose public record predates addresses (#395). */
+  async function completeOrganizerVenueAddressEntry(access: { admin: boolean; role: "owner" | "editor" | "admin"; current: { accountId: string } },
+    body: Record<string, unknown>, candidateId: string, now: number) {
+    const address = normalizeOrganizerVenueAddress(body.address);
+    if (!address) return json({ error: "請填寫場館地址。" }, 400);
+    const previous = typeof body.referenceId === "string"
+      ? (await repository.listOrganizerReferenceRecords()).find((row) => row.kind === "venue" && row.id === body.referenceId) : undefined;
+    if (!previous) return json({ error: "找不到場館。" }, 404);
+    if (!venueReferenceNeedsAddress(previous)) return json({ error: "這個場館已經有地址，請重新載入。" }, 409);
+    const record = completeVenueAddress(previous, address, now);
+    const completed = await repository.completeOrganizerVenueAddress({
+      previous, record, candidateId, expectedVersion: body.expectedVersion as number,
+      actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access), admin: access.admin, now,
+    });
+    if (!completed) return json({ error: "活動版本、編輯權限、狀態或場館資料已變更，請重新載入。" }, 409);
+    return json({ created: { id: record.id, organizerId: null, revision: null },
+      catalog: projectReferenceCatalog(await repository.listOrganizerReferenceRecords()) }, 201);
+  }
+
   async function createOrganizerVenue(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
@@ -1941,6 +1965,7 @@ export function createCirclePortalHandlers({
       ? body.initialSpace as Record<string, unknown> : null;
     const name = normalizeOrganizerVenueName(body?.name);
     const sourceUrl = normalizeOrganizerVenueSourceUrl(body?.sourceUrl);
+    const address = normalizeOrganizerVenueAddress(body?.address);
     const spaceName = normalizeOrganizerVenueName(initialSpace?.name);
     /* null is blank and undefined is malformed, and the two answer
      * differently: 「全館」 rarely has a page of its own, so a blank space URL
@@ -1953,6 +1978,7 @@ export function createCirclePortalHandlers({
       || !isOrganizerVenueSpaceAreaMode(defaultAreaMode)) {
       return json({ error: "請填寫場館名稱、場地名稱與有效的 HTTPS 來源網址。" }, 400);
     }
+    if (!address) return json({ error: "請填寫場館地址。" }, 400);
     const spaceSourceUrl = requestedSpaceUrl ?? sourceUrl;
     const venueId = `venue-${crypto.randomUUID()}`;
     const venueSpaceId = `venue-space-${crypto.randomUUID()}`;
@@ -1961,6 +1987,7 @@ export function createCirclePortalHandlers({
       id: venueId,
       name,
       sourceUrl,
+      address,
       createdByAccountId: access.current.accountId,
       now,
       initialSpace: { id: venueSpaceId, name: spaceName, sourceUrl: spaceSourceUrl, defaultAreaMode },
@@ -2249,6 +2276,7 @@ export function createCirclePortalHandlers({
       venueCatalog,
       referenceCatalog: workspaceValidation.referenceCatalog,
       missingVenueReferences: workspaceValidation.missingVenueReferences,
+      missingVenueAddresses: workspaceValidation.missingVenueAddresses,
       revisions: revisions.map((revision) => ({
         version: revision.version,
         eventId: revision.event_id,
@@ -2502,7 +2530,13 @@ export function createCirclePortalHandlers({
       ...venue.spaces.map((space) => ({ kind: "venue-space" as const, id: space.id, name: `${venue.name}・${space.name}`, sourceUrl: space.sourceUrl })),
     ]).filter((item) => !referenceRecords.some((record) => record.kind === item.kind && record.id === item.id)
       && draft.venue.assignments.some((assignment) => item.kind === "venue" ? assignment.venueId === item.id : assignment.venueSpaceId === item.id));
-    return { issues, imported, maps, contents, venueCatalog, referenceCatalog, missingVenueReferences, referenceSnapshot: resolved.snapshot };
+    // A venue with no public record yet is asked for its address in the form
+    // above; these have a record, written before venues had addresses.
+    const missingVenueAddresses = referenceRecords.filter((record) => venueReferenceNeedsAddress(record)
+      && draft.venue.assignments.some((assignment) => assignment.venueId === record.id))
+      .map((record) => ({ id: record.id, name: venueCatalog.venues.find((venue) => venue.id === record.id)?.name ?? record.displayName }));
+    return { issues, imported, maps, contents, venueCatalog, referenceCatalog, missingVenueReferences, missingVenueAddresses,
+      referenceSnapshot: resolved.snapshot };
   }
 
   async function putOrganizerImport(request: Request, candidateId: string) {
@@ -2862,7 +2896,6 @@ export function createCirclePortalHandlers({
     try { form = await request.formData(); } catch { return json({ error: "上傳格式無效。" }, 400); }
     const file = form.get("file");
     if (!(file instanceof File)) return json({ error: "請選擇活動圖片。" }, 400);
-    if (form.get("rightsConfirmed") !== "true") return json({ error: "請先確認你有權公開這張圖片。" }, 400);
     let prepared: Awaited<ReturnType<typeof prepareEventImage>>;
     try { prepared = await prepareEventImage(file, thumbnailStore.url); }
     catch (error) { return json({ error: error instanceof Error ? error.message : "活動圖片格式無效。" }, 400); }
@@ -2872,7 +2905,7 @@ export function createCirclePortalHandlers({
     await repository.writeAudit({
       at: config.now(), actorAccountId: access.current.accountId, actorRole: organizerAuditRole(access),
       action: "organizer_event.image_uploaded", subjectType: "organizer_event", subjectId: candidateId,
-      detail: { sha256: prepared.image.sha256, sizeBytes: file.size, width: prepared.image.width, height: prepared.image.height, rightsConfirmed: true },
+      detail: { sha256: prepared.image.sha256, sizeBytes: file.size, width: prepared.image.width, height: prepared.image.height },
       ipHash: await clientIpHash(request),
     });
     return json({ ok: true, image: prepared.image });

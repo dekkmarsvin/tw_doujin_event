@@ -15,7 +15,10 @@ permissions:
 
 concurrency:
   group: cloudflare-pages-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref }}
-  cancel-in-progress: true
+  # Keep every main SHA/attempt available to publication checkpoints. PRs still
+  # replace obsolete verification; their always-cleanup removes only that run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
 
 jobs:
   scope:
@@ -31,6 +34,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      # main queues rather than cancels. A run that starts after main has moved
+      # on ends here, before tests or browser journeys hold the lock; publication
+      # reads its skipped deployment as superseded.
+      - name: Reject a superseded main run
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          latest="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "::error::main is at $latest; this run for $GITHUB_SHA was superseded before it started and will not verify or deploy."
+            exit 1
+          fi
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
@@ -68,6 +83,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       preview-url: ${{ steps.deploy.outputs.deployment-url }}
+      preview-id: ${{ steps.deploy.outputs.pages-deployment-id }}
 
     steps:
       - name: Check out repository
@@ -90,6 +106,17 @@ jobs:
 
       - name: Type-check
         run: npx tsc --noEmit --incremental false
+
+      - name: Build independent Workers and record source fingerprints
+        run: node scripts/worker-delivery.mjs --build-only
+
+      - name: Upload Worker build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-build-evidence
+          path: .wrangler/worker-delivery.json
+          retention-days: 7
 
       - name: Build pinned production event
         env:
@@ -118,6 +145,19 @@ jobs:
           fi
           echo "::add-mask::$token"
           printf 'token=%s\n' "$token" >> "$GITHUB_OUTPUT"
+
+      # The scope job stops runs superseded before they start, but re-running
+      # failed jobs reuses its result. An old checkout must never replace a
+      # newer production deployment, so check again right before deploying.
+      - name: Reject a superseded production checkout
+        if: github.event_name != 'pull_request' && github.ref_name == 'main'
+        shell: bash
+        run: |
+          latest="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "::error::This production checkout was superseded by main; deploy the current main run."
+            exit 1
+          fi
 
       - name: Ensure Pages Functions fail open at quota exhaustion
         env:
@@ -307,8 +347,8 @@ jobs:
           echo "::warning::Public production custom domain returned /=$static_code and /api/auth/session=$session_code; expected 200 and 401. The Pages deployment passed separately, so inspect Cloudflare Security Events using the captured cf-ray values."
 
 
-  # Every PR uses the same disposable preview D1. A separate globally serialized
-  # job prevents one PR's cleanup from deleting another PR's in-flight fixture.
+  # Preview D1 is shared with manual acceptance. Serialize the circle journey;
+  # run-scoped cleanup retains other runs and manual data even on cancellation.
   preview-e2e:
     name: Full preview portal E2E
     if: needs.scope.outputs.profile == 'full' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -340,6 +380,7 @@ jobs:
           # Queued runs must test their own deployment, even if a newer PR
           # update has already moved the shared branch alias.
           PREVIEW_BASE_URL: ${{ needs.deploy.outputs.preview-url }}
+          PREVIEW_DEPLOYMENT_ID: ${{ needs.deploy.outputs.preview-id }}
           PREVIEW_E2E_TOKEN: ${{ secrets.PREVIEW_E2E_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
@@ -363,46 +404,14 @@ jobs:
           fi
           echo "::add-mask::$token"
           export CLOUDFLARE_API_TOKEN="$token"
-          # Capture rather than pipe. Piping wrangler straight into jq replaces
-          # whatever wrangler said — success payload or error payload — with a jq
-          # parse error, so a failed remote call is reported as an unrelated jq
-          # message and the reason never reaches the log.
-          fingerprint() {
-            # `|| status=$?` and not a bare assignment: under `set -e` a failing
-            # command substitution aborts the step immediately, which would skip
-            # the reporting below and reproduce the very blindness being fixed.
-            local raw status=0
-            raw="$(npx wrangler d1 execute tw-catalog-identity --remote --json --command \
-              "SELECT (SELECT COUNT(*) FROM accounts) AS accounts, (SELECT COUNT(*) FROM circle_claims) AS claims, (SELECT COUNT(*) FROM circle_overrides) AS overrides, COALESCE((SELECT SUM(revision) FROM overrides_doc), 0) AS revisions")" || status=$?
-            if [ "$status" -ne 0 ]; then
-              echo "::error::Could not read the production D1 fingerprint; wrangler exited $status. Anything it wrote to stderr is above." >&2
-              [ -n "$raw" ] && { echo "wrangler stdout was:" >&2; printf '%s\n' "$raw" >&2; }
-              return "$status"
-            fi
-            # A successful single statement comes back as a one-element array.
-            # Anything else — notably an error payload, which is a bare object —
-            # must be printed rather than blindly indexed.
-            printf '%s' "$raw" | jq -ce 'if type == "array" then .[0].results[0] else error("not a d1 result array") end' || {
-              echo "::error::wrangler --json returned a shape this check does not understand; it was expected to be a one-element array of statement results. Its stdout follows." >&2
-              printf '%s\n' "$raw" >&2
-              return 1
-            }
-          }
-          production_before="$(fingerprint)"
-          set +e
           node scripts/preview-portal-e2e.mjs
-          e2e_status=$?
-          set -e
-          production_after="$(fingerprint)"
-          if [ "$production_before" != "$production_after" ]; then
-            echo "::error::Preview E2E changed production D1 counts or revisions."
-            exit 1
-          fi
-          if [ "$e2e_status" -ne 0 ]; then
-            echo "::error::Preview portal E2E failed; production fingerprint remained unchanged."
-            exit "$e2e_status"
-          fi
-          echo "Preview E2E used isolated D1; production fingerprint is unchanged."
+      - name: Clean up this preview run after interruption
+        if: always()
+        env:
+          PREVIEW_E2E_TOKEN: ${{ secrets.PREVIEW_E2E_TOKEN }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node scripts/preview-e2e-resources.mjs --cleanup
 
 
   # Browser acceptance is its own job rather than a step inside `deploy` so a
