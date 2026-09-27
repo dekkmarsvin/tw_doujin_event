@@ -3,7 +3,7 @@
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
 **實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`
@@ -180,6 +180,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 - 宣傳文字只由官方資料組成：社團名稱、活動名稱（有別稱時附第一個別稱）、每個可前往日期的攤位與場館，最後一行是社團頁的網址（以目前網站的網址為前綴）。已取消或已移動的攤位不寫入。
 - 帳號、email、登入連結、認領狀態、控制面網址與未儲存的草稿都不是這段文字的輸入，因此不可能出現在裡面。
+- 攤位來自編輯器讀取的官方配置。配置尚未取得時不產生文字，「複製」與「分享」停用並顯示正在準備；讀取失敗時說明無法取得攤位資料並提供「重新取得」，不以缺少日期與攤位的文字代替。「查看公開頁」不依賴配置，一直可用。
 - 文字同時顯示在唯讀文字框。剪貼簿拒絕時選取整段文字並請作者自行複製；關閉系統分享面板不算失敗，不顯示錯誤。
 - 分享預覽（`og:*`）沿用社團頁既有的靜態 metadata：標題含社團名稱、活動簡稱與攤位，圖片是品牌分享圖。本頁不產生社團專屬的分享圖。
 

@@ -197,6 +197,23 @@ try {
     .catch(() => { throw new Error(`the saved pen name did not come back from the server (field held "${""}")`); });
   for (const rating of ["全年齡", "R15", "R18"]) assert.equal(await circle.getByRole("checkbox", { name: rating, exact: true }).isChecked(), true);
   assert.equal(await circle.locator('input[id^="specialTags-"]').inputValue(), "自由題材");
+
+  // 7b. The post waits for the official booths. A failed read offers to fetch
+  //     them again instead of a post with no dates or booths in it.
+  let previewFails = true;
+  await circle.route(`**/api/circle/${CIRCLE_ID}/preview**`, (route) => (previewFails
+    ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "測試中的讀取失敗" }) })
+    : route.continue()));
+  await circle.reload();
+  const sharing = circle.getByRole("region", { name: "分享公開頁" });
+  await sharing.getByText("無法取得攤位資料，宣傳文字暫時無法產生。").waitFor();
+  assert.equal(await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).isDisabled(), true, "nothing to copy without booths");
+  assert.equal(await sharing.getByRole("textbox", { name: "宣傳文字" }).count(), 0, "and no partial post to copy by hand");
+  await journey.capture(circle, "portal-share-baseline-failed");
+  previewFails = false;
+  await sharing.getByRole("button", { name: "重新取得", exact: true }).click();
+  assert.match(await sharing.getByRole("textbox", { name: "宣傳文字" }).inputValue(), /S01/, "the retry brings the booths back");
+  assert.equal(await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).isDisabled(), false);
   await circle.close();
 
   // 8. And it reaches the public overlay every reader downloads.

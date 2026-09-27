@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useRef, useState } from "react";
 import { circlePromotion } from "../circle-share";
+import { circlePath } from "../seo";
 import type { EventDefinition } from "../event-catalog";
 import type { CircleViewRecord } from "../circle-records";
 import styles from "./portal.module.css";
@@ -13,19 +14,24 @@ import styles from "./portal.module.css";
  * The text is shown in a read-only box, not only behind a button, because a
  * clipboard can refuse — and then the author still has the words in front of
  * them, already selected, to copy by hand.
+ *
+ * The post is only offered once the official records have arrived: without
+ * them it would go out with no date, booth or venue, which is most of what a
+ * reader needs from it. Until then the page link still works.
  */
-export function CirclePageShare({ event, circle, records }: {
+export function CirclePageShare({ event, circle, records, failed, onRetry }: {
   event: EventDefinition;
   circle: { id: string; name: string };
   records: CircleViewRecord[] | null;
+  failed: boolean;
+  onRetry: () => void;
 }) {
   const id = useId();
   const box = useRef<HTMLTextAreaElement>(null);
   const [result, setResult] = useState("");
-  // Booths come from the official records the preview already loaded; before
-  // they arrive the post still names the circle, the event and the address.
+  const pageUrl = `${window.location.origin}${circlePath(event.id, circle.id)}`;
   const promotion = useMemo(
-    () => circlePromotion(event, circle, (records ?? []).map((record) => record.placement), window.location.origin),
+    () => records ? circlePromotion(event, circle, records.map((record) => record.placement), window.location.origin) : null,
     [circle, event, records],
   );
   const canShare = typeof navigator.share === "function";
@@ -35,6 +41,7 @@ export function CirclePageShare({ event, circle, records }: {
     box.current?.select();
   };
   const copy = () => {
+    if (!promotion) return;
     void navigator.clipboard.writeText(promotion.full)
       .then(() => setResult("已複製宣傳文字與連結。"))
       .catch(() => {
@@ -43,6 +50,7 @@ export function CirclePageShare({ event, circle, records }: {
       });
   };
   const share = () => {
+    if (!promotion) return;
     void navigator.share({ title: circle.name, text: promotion.text, url: promotion.url })
       .then(() => setResult(""))
       // Closing the share sheet is a choice, not a failure.
@@ -51,12 +59,18 @@ export function CirclePageShare({ event, circle, records }: {
 
   return <section className={styles.sharePanel} aria-labelledby={`${id}-title`}>
     <h3 id={`${id}-title`}>分享公開頁</h3>
-    <label htmlFor={`${id}-text`}>宣傳文字</label>
-    <textarea id={`${id}-text`} ref={box} readOnly rows={5} value={promotion.full} onFocus={(event) => event.currentTarget.select()} />
+    {promotion
+      ? <>
+        <label htmlFor={`${id}-text`}>宣傳文字</label>
+        <textarea id={`${id}-text`} ref={box} readOnly rows={5} value={promotion.full} onFocus={(event) => event.currentTarget.select()} />
+      </>
+      : failed
+        ? <p className={styles.shareResult} role="alert">無法取得攤位資料，宣傳文字暫時無法產生。<button type="button" className={styles.inlineButton} onClick={onRetry}>重新取得</button></p>
+        : <p className={styles.shareResult} role="status">正在準備宣傳文字…</p>}
     <div className={styles.shareActions}>
-      <a className={styles.shareLink} href={promotion.url} target="_blank" rel="noreferrer">查看公開頁</a>
-      <button type="button" onClick={copy}>複製宣傳文字與連結</button>
-      {canShare && <button type="button" className={styles.secondaryButton} onClick={share}>分享</button>}
+      <a className={styles.shareLink} href={pageUrl} target="_blank" rel="noreferrer">查看公開頁</a>
+      <button type="button" disabled={!promotion} onClick={copy}>複製宣傳文字與連結</button>
+      {canShare && <button type="button" className={styles.secondaryButton} disabled={!promotion} onClick={share}>分享</button>}
     </div>
     <p className={styles.shareResult} role="status">{result}</p>
   </section>;

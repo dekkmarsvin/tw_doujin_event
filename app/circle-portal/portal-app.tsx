@@ -712,6 +712,22 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const reviewActions = useRef<HTMLDivElement | null>(null);
   const expandedPreview = useRef<HTMLDivElement | null>(null);
   const previewRequestGeneration = useRef(0);
+  // The official records behind the share text. A failed first read is kept
+  // apart from a pending one so the share panel can say which it is.
+  const [baselineFailed, setBaselineFailed] = useState(false);
+  const baselineRetry = useRef(0);
+  // Its own counter: a retry must not cancel a review preview already in flight.
+  const retryBaseline = () => {
+    const attempt = ++baselineRetry.current;
+    setBaselineFailed(false);
+    void previewOverride(claim.circleId, savedFields)
+      .then((result) => {
+        if (attempt !== baselineRetry.current) return;
+        setBaseRecords((current) => current ?? result.baseRecords as CircleViewRecord[]);
+        setProjectedAt((current) => current || result.projectedAt);
+      })
+      .catch(() => { if (attempt === baselineRetry.current) setBaselineFailed(true); });
+  };
 
   // State contains only fields the author has deliberately touched. Empty
   // strings/arrays and a null thumbnail are tombstones, not values to discard.
@@ -747,11 +763,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         setSaved(result.status !== "none");
         setHydrated(true);
         const requestGeneration = ++previewRequestGeneration.current;
+        setBaselineFailed(false);
         void previewOverride(claim.circleId, initialFields).then((previewResult) => {
           if (requestGeneration !== previewRequestGeneration.current) return;
           setBaseRecords(previewResult.baseRecords as CircleViewRecord[]);
           setProjectedAt(previewResult.projectedAt);
-        }).catch(() => undefined);
+        // Editing goes on without the baseline; only sharing needs it, and it
+        // offers its own retry rather than posting text with no booths.
+        }).catch(() => { if (requestGeneration === previewRequestGeneration.current) setBaselineFailed(true); });
       })
       // Not hydrated: `savedFields` never arrived, so every comparison against
       // it would read as "same as the server" and take the draft away from an
@@ -1226,7 +1245,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {status.message}
       {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}
     </p>}
-    {saved && hydrated && <CirclePageShare event={event} circle={{ id: claim.circleId, name: claim.circleName }} records={baseRecords} />}
+    {saved && hydrated && <CirclePageShare
+      event={event} circle={{ id: claim.circleId, name: claim.circleName }}
+      records={baseRecords} failed={baselineFailed && !baseRecords} onRetry={retryBaseline}
+    />}
       </fieldset>
       </div>
 
