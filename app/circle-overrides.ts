@@ -23,6 +23,14 @@ export const CIRCLE_OVERRIDES_SCHEMA = "circle-overrides/1" as const;
  */
 export type CircleOverrideThumbnail = { sourceUrl: string; url: string; provider: string };
 
+/**
+ * One page of this event's sale sheet (品書). Always hosted here: the upload
+ * writes both the readable image and a small preview for cards, so the field
+ * only ever points at objects this circle owns. Width and height are the
+ * readable image's, so a reader can reserve its space before it loads.
+ */
+export type CircleCatalogImage = { url: string; previewUrl: string; width: number; height: number };
+
 export type CircleOverrideFields = {
   pen?: string;
   saleInfo?: string;
@@ -40,6 +48,8 @@ export type CircleOverrideFields = {
    * accepted so an editor clearing the field is never answered with a 400.
    */
   thumbnail?: CircleOverrideThumbnail | null;
+  /** In reading order. An empty list is the tombstone, as for every list. */
+  catalogImages?: CircleCatalogImage[];
 };
 
 export type CircleOverride = {
@@ -64,6 +74,28 @@ export const OVERRIDE_LIMITS = {
   listItemLength: 60,
   links: 12,
   serializedFields: 8192,
+  catalogImages: 3,
+} as const;
+
+/**
+ * The sale-sheet image rules the browser prepares to and the upload route
+ * checks against (#413): measured on real sale sheets, where a cap on total
+ * pixels keeps a tall strip at its readable width and still brings a 350 dpi
+ * A3 sheet down to about 2659×1881. The preview is what a card shows: fixed
+ * width, and only the top of a very tall sheet.
+ */
+export const CATALOG_IMAGE_RULES = {
+  maxPixels: 5_000_000,
+  maxBytes: 2 * 1024 * 1024,
+  quality: 0.88,
+  previewWidth: 640,
+  previewMaxHeight: 960,
+  previewMaxBytes: 512 * 1024,
+  previewQuality: 0.75,
+  /** Below this short edge small print tends to stop being readable. */
+  readableShortEdge: 800,
+  /** Guards only against nonsense values reaching the public document. */
+  maxDimension: 20_000,
 } as const;
 
 /**
@@ -130,7 +162,7 @@ const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
 const TEXT_FIELDS = ["pen", "saleInfo"] as const;
 
 /** One editable-scope authority shared by validation, editor controls and tests. */
-export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, "circleCategory", ...LIST_FIELDS, "links", "thumbnail"] as const satisfies readonly (keyof CircleOverrideFields)[];
+export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, "circleCategory", ...LIST_FIELDS, "links", "thumbnail", "catalogImages"] as const satisfies readonly (keyof CircleOverrideFields)[];
 
 export type CircleOverrideFieldKey = (typeof CIRCLE_OVERRIDE_FIELD_KEYS)[number];
 type CircleOverrideFieldMode = "inherit" | "replace" | "clear";
@@ -152,6 +184,7 @@ export function inheritCircleOverrideField(fields: CircleOverrideFields, key: Ci
 export function clearCircleOverrideField(fields: CircleOverrideFields, key: CircleOverrideFieldKey): CircleOverrideFields {
   if (key === "thumbnail") return { ...fields, thumbnail: null };
   if (key === "links") return { ...fields, links: [] };
+  if (key === "catalogImages") return { ...fields, catalogImages: [] };
   if (LIST_FIELDS.includes(key as (typeof LIST_FIELDS)[number])) return { ...fields, [key]: [] };
   return { ...fields, [key]: "" };
 }
@@ -205,6 +238,16 @@ function isThumbnail(value: unknown): value is CircleOverrideThumbnail {
     && isBoundedString(thumbnail.provider, OVERRIDE_LIMITS.listItemLength);
 }
 
+function isCatalogImage(value: unknown): value is CircleCatalogImage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const image = value as Record<string, unknown>;
+  const dimension = (candidate: unknown) => Number.isInteger(candidate)
+    && (candidate as number) > 0 && (candidate as number) <= CATALOG_IMAGE_RULES.maxDimension;
+  return Object.keys(image).every((key) => ["url", "previewUrl", "width", "height"].includes(key))
+    && isHttpsUrl(image.url) && isHttpsUrl(image.previewUrl)
+    && dimension(image.width) && dimension(image.height);
+}
+
 /**
  * Why the payload is refused, or `null` when it is fine.
  *
@@ -238,6 +281,10 @@ export function circleOverrideFieldsProblem(
   }
   if ("thumbnail" in fields && fields.thumbnail !== null && !isThumbnail(fields.thumbnail)) {
     return "代表圖需要 https:// 的圖片網址；出處頁面若要填寫也必須是 https。";
+  }
+  if ("catalogImages" in fields && !(Array.isArray(fields.catalogImages)
+    && fields.catalogImages.length <= OVERRIDE_LIMITS.catalogImages && fields.catalogImages.every(isCatalogImage))) {
+    return `品書最多 ${OVERRIDE_LIMITS.catalogImages} 張，請重新上傳品書圖片。`;
   }
 
   return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields

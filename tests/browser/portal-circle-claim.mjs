@@ -19,6 +19,7 @@
 import assert from "node:assert/strict";
 import { ADMIN, CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
 import { base, start } from "./support/journey.mjs";
+import { png } from "./support/png.mjs";
 
 const CIRCLE_NAME = "北風畫室";
 const CIRCLE_ID = "c-900001";
@@ -197,6 +198,31 @@ try {
     .catch(() => { throw new Error(`the saved pen name did not come back from the server (field held "${""}")`); });
   for (const rating of ["全年齡", "R15", "R18"]) assert.equal(await circle.getByRole("checkbox", { name: rating, exact: true }).isChecked(), true);
   assert.equal(await circle.locator('input[id^="specialTags-"]').inputValue(), "自由題材");
+
+  // 7a. A sale-sheet page: nothing can be chosen before the age confirmation,
+  //     a PDF is named rather than refused vaguely, and a print-size image is
+  //     resized in the browser and sent as a JPEG within the pixel budget.
+  //     Saving it is not exercised here: the local portal hosts images over
+  //     http, which the https-only field rule rightly refuses — the route test
+  //     covers the save.
+  const catalogPicker = circle.getByLabel("新增品書圖片", { exact: true });
+  assert.equal(await catalogPicker.isDisabled(), true, "choosing a page waits for the confirmation");
+  await circle.getByRole("checkbox", { name: "我確認這些圖片適合所有年齡的讀者觀看。" }).check();
+  await catalogPicker.setInputFiles({ name: "品書.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await circle.getByText("PDF 請先匯出成 JPG 或 PNG 再上傳。", { exact: true }).waitFor();
+  const staged = circle.waitForResponse((response) => new URL(response.url()).pathname === `/api/circle/${CIRCLE_ID}/catalog-image`);
+  await catalogPicker.setInputFiles({ name: "sheet.png", mimeType: "image/png", buffer: png(3000, 2000) });
+  const stagedResponse = await staged;
+  assert.equal(stagedResponse.status(), 200, "the prepared page is accepted");
+  const { image } = await stagedResponse.json();
+  assert.ok(image.width * image.height <= 5_000_000 && image.width < 3000, `a 6 MP sheet arrives resized (${image.width}×${image.height})`);
+  assert.ok(Math.abs(image.width / image.height - 1.5) < 0.01, "in proportion");
+  await circle.getByText("品書已上傳，儲存後公開。", { exact: true }).waitFor();
+  await circle.getByText("第 1 張", { exact: true }).waitFor();
+  await journey.capture(circle, "portal-catalog-staged");
+  // Back to what is saved, so the rest of the journey starts from it.
+  await circle.getByRole("button", { name: "移除第 1 張品書", exact: true }).click();
+  await circle.getByRole("button", { name: "恢復未提供", exact: true }).click();
 
   // 7b. The post waits for the official booths. A failed read offers to fetch
   //     them again instead of a post with no dates or booths in it.

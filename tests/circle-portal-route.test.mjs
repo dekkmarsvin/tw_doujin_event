@@ -166,6 +166,23 @@ function thumbnailRequest(circleId, cookie, bytes, type = "image/png") {
   });
 }
 
+/** A JPEG header naming a frame size; `salt` changes the bytes so each page hashes apart. */
+function jpeg(width, height, salt = 0) {
+  const app0 = [0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 1, 1, 0, 0, 1, 0, 1, 0, salt];
+  const frame = [0xff, 0xc0, 0x00, 0x11, 8, height >> 8, height & 0xff, width >> 8, width & 0xff, 3, 1, 0x11, 0, 2, 0x11, 1, 3, 0x11, 1];
+  return Uint8Array.from([0xff, 0xd8, ...app0, ...frame, 0xff, 0xd9]);
+}
+
+function catalogRequest(circleId, cookie, salt, keep = []) {
+  const body = new FormData();
+  body.set("file", new File([jpeg(2000, 1400, salt)], "catalog.jpg", { type: "image/jpeg" }));
+  body.set("preview", new File([jpeg(640, 448, salt)], "catalog-preview.jpg", { type: "image/jpeg" }));
+  for (const url of keep) body.append("keep", url);
+  return new Request(`${ORIGIN}/api/circle/${circleId}/catalog-image`, {
+    method: "POST", headers: { origin: ORIGIN, cookie }, body,
+  });
+}
+
 test("a login request answers identically whether or not the inbox is known", async () => {
   const fresh = await handlers.requestLink(post("/api/auth/request-link", { email: "brand-new@example.com", turnstileToken: "solved" }));
   await handlers.verify(post("/api/auth/verify", { token: decodeURIComponent(sent.at(-1).text.match(/login=([^\s]+)/)[1]) }));
@@ -660,6 +677,61 @@ test("hosted thumbnails stay draft-only until the confirmed save, then follow no
   const takenDownRow = await repository.getOverride("ff47", "ff47-social");
   assert.equal(takenDownRow.hosted_thumbnail_key, null);
   assert.equal(JSON.parse(takenDownRow.fields_json).thumbnail, null, "a later edit cannot republish a deleted hosted URL");
+});
+
+test("sale-sheet pages are a staged set: only the draft's pages survive an upload, only the saved ones survive a save", async () => {
+  const admin = await signIn("admin@example.com");
+  const owner = await signIn("catalog-owner@example.com");
+  await approve(owner, "ff47-site", admin);
+  await approve(owner, "ff47-social", admin);
+  const upload = async (salt, keep) => {
+    const response = await handlers.uploadCatalogImage(catalogRequest("ff47-site", owner, salt, keep), "ff47-site");
+    assert.equal(response.status, 200, `upload ${salt}`);
+    return (await response.json()).image;
+  };
+  const keysOf = (image) => [image.url, image.previewUrl].map((url) => url.slice("https://media-preview.kotoban.top/".length));
+  const save = (catalogImages, extra = {}) => handlers.putOverride(post("/api/circle/ff47-site/overrides", { fields: { catalogImages, ...extra } }, owner), "ff47-site");
+  const published = async () => (await (await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47")).json()).overrides.find((entry) => entry.circleId === "ff47-site")?.fields.catalogImages;
+
+  const a = await upload(1);
+  assert.match(a.url, /^https:\/\/media-preview\.kotoban\.top\/events\/ff47\/circles\/ff47-site\/catalog\/[a-f0-9]{64}\.jpg$/);
+  assert.deepEqual({ width: a.width, height: a.height }, { width: 2000, height: 1400 });
+  assert.equal(await repository.getOverride("ff47", "ff47-site"), null, "staging publishes nothing");
+
+  // The one-picture slot's own draft rule must not reach the pages.
+  const thumbnail = await handlers.uploadThumbnail(thumbnailRequest("ff47-site", owner, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]), "ff47-site");
+  assert.equal(thumbnail.status, 200);
+  assert.ok(keysOf(a).every((key) => thumbnailObjects.keys.has(key)), "a thumbnail upload leaves staged pages alone");
+
+  const b = await upload(2, [a.url, a.previewUrl]);
+  assert.ok(keysOf(a).every((key) => thumbnailObjects.keys.has(key)), "a page the draft still names is kept");
+  const c = await upload(3);
+  assert.ok([...keysOf(a), ...keysOf(b)].every((key) => !thumbnailObjects.keys.has(key)), "pages the draft dropped are abandoned");
+
+  for (const [catalogImages, message] of [
+    [[{ ...c, url: c.url.replace("ff47-site", "ff47-social") }], "another circle's page"],
+    [[{ ...c, url: `https://media-preview.kotoban.top/events/ff47/circles/ff47-site/catalog/${"b".repeat(64)}.jpg` }], "a page that was never uploaded"],
+    [[{ ...c, url: "https://elsewhere.example/page.jpg" }], "a page hosted elsewhere"],
+    [[{ ...c, url: c.url.replace("https:", "http:") }], "an insecure address"],
+  ]) assert.equal((await save(catalogImages)).status, 400, message);
+
+  assert.equal((await save([c])).status, 200);
+  assert.deepEqual(await published(), [c]);
+  assert.equal(thumbnailObjects.keys.size, 2, "the save removed the unsaved thumbnail draft and kept only the saved page");
+
+  const d = await upload(4);
+  assert.ok(keysOf(c).every((key) => thumbnailObjects.keys.has(key)), "a published page survives an upload that did not name it");
+  assert.equal((await save([d, c])).status, 200);
+  assert.deepEqual(await published(), [d, c], "order is the circle's");
+  assert.equal((await save([])).status, 200);
+  assert.deepEqual(await published(), [], "an empty list withdraws the pages");
+  assert.equal(thumbnailObjects.keys.size, 0, "and their objects go with it");
+
+  const e = await upload(5);
+  assert.equal((await save([e])).status, 200);
+  assert.equal((await handlers.adminTakedown(post("/api/admin/overrides", { circleId: "ff47-site", reason: "權利人要求" }, admin))).status, 200);
+  assert.equal(thumbnailObjects.keys.size, 0, "a takedown deletes the pages");
+  assert.deepEqual(JSON.parse((await repository.getOverride("ff47", "ff47-site")).fields_json).catalogImages, [], "and the row stops naming them");
 });
 
 test("an unknown event cannot masquerade as an empty reviewed overlay", async () => {

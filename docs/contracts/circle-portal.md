@@ -2,8 +2,8 @@
 
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
-**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/catalog-image-prepare.ts`](../../app/catalog-image-prepare.ts)、[`app/hosted-thumbnails.ts`](../../app/hosted-thumbnails.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
+**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`
@@ -100,7 +100,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 ## 可編輯範圍
 
-**可編輯，儲存後寫入公開 overlay**：販售資訊、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。已開啟頁面的更新時機與尚未達成的一分鐘可見性要求統一見[資料傳輸契約](./delivery-and-offline.md#更新可見性)。
+**可編輯，儲存後寫入公開 overlay**：販售資訊、本次品書（`catalogImages`，只能經本站上傳，見下方[媒體安全](#媒體安全)）、筆名、連結、縮圖、主辦分類目錄中的一項社團主題（`circleCategory`），以及作品／標籤類欄位（`creatorTypes`、`ageRatings`、`workTypes`、`referencedWorks`、`specialTags`）。已開啟頁面的更新時機與尚未達成的一分鐘可見性要求統一見[資料傳輸契約](./delivery-and-offline.md#更新可見性)。
 
 `creatorTypes` 與 `ageRatings`（可複選）、`workTypes`（選一項）也不是自由文字：選項是 `circle-overrides.ts` 的固定清單，公開端搜尋讀同一份。寫入驗證只檢查長度與筆數，不檢查是否屬於清單——同一個驗證函式也是讀取端守門，收緊會讓既有帶舊值的資料列整列從公開文件消失（[ADR-0051](../adr/0051-three-circle-facets-move-to-fixed-options.md)）。`referencedWorks` 與 `specialTags` 仍是自由填寫。
 
@@ -142,6 +142,7 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 | 清單類欄位項目數 | 20 |
 | 清單類單項長度 | 60 字 |
 | 連結數 | 12 |
+| 本次品書 | 3 張 |
 | 序列化後總長度 | 8192 bytes |
 
 ## 儲存前預覽
@@ -305,6 +306,14 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 代表圖採**本站代管為主、外部網址為輔**的雙線。已驗證的社團可上傳 JPEG／PNG／WebP，單檔上限 5 MiB（[ADR-0053](../adr/0053-the-thumbnail-upload-asks-for-the-picture-only.md)），每個社團每個活動一張；伺服器驗證宣告 MIME 與檔案特徵，物件末段以內容 SHA-256 命名，不在 Worker 內重編碼。公開 URL 由 production `media.kotoban.top` 或 preview `media-preview.kotoban.top` 的 R2 custom domain 提供，帶一年 immutable 快取，**不經 Pages Function**。
 
 檔案上傳只建立草稿物件並回填預覽，不直接改寫 overlay；經 server preview 與使用者確認儲存後，才把該物件連同其他欄位發布。更換圖片時先發布新物件與欄位，再移除舊物件；改用外部網址或清除欄位時會解除並刪除舊的代管物件。若代管線與外部網址都不可用，閱讀端維持文字卡。實作追蹤於 [#65](https://github.com/dekkmarsvin/tw_doujin_event/issues/65)。
+
+**本次品書只接受本站代管**，規則見 [ADR-0072](../adr/0072-sale-sheet-pages-are-prepared-in-the-browser-and-hosted-as-a-set.md)：
+
+- 勾選「我確認這些圖片適合所有年齡的讀者觀看。」後才能選擇檔案。PDF 與 PSD 會被點名，請社團先匯出成圖片；其他不是 JPG、PNG、WebP 的檔案直接拒絕。
+- 瀏覽器先把圖片縮到約 5 MP 以內（不放大），鋪白底後存成 JPEG 並去除中繼資料，另產生寬 640、高至多 960 的預覽圖；縮圖後短邊小於 800 px 時提示分成多張。上傳路由 `POST /api/circle/:circleId/catalog-image` 只接受 JPEG，讀檔頭確認可閱讀圖不超過像素上限與 2 MiB、預覽圖不超過其尺寸與 512 KiB，物件放在社團目錄下的 `catalog/` 並以內容 SHA-256 命名。
+- 上傳只建立草稿。請求附上草稿目前引用的圖片網址；已發布的品書、這些網址與本次上傳之外的品書物件視為放棄的草稿並刪除。代表圖的上傳不動品書物件。
+- 儲存時每張品書的兩個網址都必須是本社團 `catalog/` 下仍存在的物件，否則拒絕並請社團重新上傳；儲存後刪除儲存內容沒有引用的物件（含代表圖草稿）。
+- 自助刪除、帳號刪除、管理者撤下與保存期限清除都刪除整個社團目錄，包含品書。管理者撤下時同時把 `catalogImages` 改成空陣列。
 
 ## 聯絡窗口
 

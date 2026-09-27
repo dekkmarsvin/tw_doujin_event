@@ -63,6 +63,26 @@ test("a picture with no stated source shows the credit alone, or nothing", () =>
   assert.match(gallery(circle.media[0]), /原始來源/);
 });
 
+test("sale-sheet pages load card previews where they are small and open whole where they are read", () => {
+  const cut = { id: "cut", kind: "thumbnail", url: "https://image.example/cut.png", sourceUrl: "", provider: "", alt: "代表圖" };
+  const page = { id: "page", kind: "catalog", url: "https://image.example/page.jpg", previewUrl: "https://image.example/page-card.jpg", width: 2000, height: 1400, sourceUrl: "", provider: "", alt: "品書第 1 張" };
+  const render = (media, extra = {}) => renderToStaticMarkup(React.createElement(CircleDetails, {
+    record: { ...record, circle: { ...circle, media } }, sharedRecords: [], favorite: null, plan: null, groups: [], ...callbacks, ...extra,
+  }));
+
+  const full = render([cut, page]);
+  const rail = full.split("galleryRail")[1].split("</div>")[0];
+  assert.deepEqual([...rail.matchAll(/<img src="([^"]+)"/g)].map(([, src]) => src), [cut.url, page.previewUrl], "the rail shows each page's card preview");
+
+  const reading = render([page]);
+  assert.match(reading, /<img src="https:\/\/image\.example\/page\.jpg"/, "the full view loads the page itself");
+  assert.match(reading, /href="https:\/\/image\.example\/page\.jpg"[^>]*><span>品書<\/span><span>開啟原圖<\/span>/, "and offers it at full size");
+
+  const panel = render([page], { compact: true, floating: true });
+  assert.match(panel, /<img src="https:\/\/image\.example\/page-card\.jpg"/, "the side panel loads the card preview");
+  assert.doesNotMatch(panel, /page\.jpg"/);
+});
+
 test("informative results identify circle-authored summaries without trust wording", () => {
   const circleSource = {
     provider: "由社團填寫", contentType: "circle", label: "", url: "",

@@ -656,3 +656,15 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .shareActions > * { flex: 1 1 100%; justify-content: center; }
   .shareLink, .shareActions button { min-height: 44px; }
 }
+
+/* The sale sheet: one row per page, its card preview beside the controls that
+   move, replace or remove it. The preview is the card crop, not the page. */
+.catalogList { display: grid; gap: 10px; margin: 10px 0 0; padding: 0; list-style: none; }
+.catalogList li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.catalogList img { display: block; width: 96px; max-height: 144px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); object-fit: contain; }
+.catalogItem { min-width: 0; }
+.catalogItem b { font-size: 12px; }
+.catalogItem .notice { margin-top: 6px; }
+.catalogItem .linkActions { flex-wrap: wrap; }
+/* A sentence the author has to read, not a field caption. */
+.catalogField .confirmCheck { margin-top: 14px; color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }

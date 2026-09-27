@@ -64,6 +64,7 @@ test("a mutating request must declare json, which no html form can send", async 
 test("multipart is admitted only for the same-origin private upload routes", async () => {
   for (const [method, path] of [
     ["POST", "/api/circle/ff47-demo/thumbnail"],
+    ["POST", "/api/circle/ff47-demo/catalog-image"],
     ["POST", "/api/map-contributions/files"],
     ["PUT", "/api/organizer/events/candidate-a/maps/draft-a/background"],
   ]) {
@@ -83,6 +84,10 @@ test("multipart is admitted only for the same-origin private upload routes", asy
     "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
   })));
   assert.equal(wrongMethod.status, 415);
+  const nested = await onRequest(context(request("POST", "/api/circle/ff47-demo/catalog-image/extra", {
+    "content-type": "multipart/form-data; boundary=test", origin: ORIGIN,
+  })));
+  assert.equal(nested.status, 415, "only the exact upload paths take a form");
   const foreign = await onRequest(context(request("POST", "/api/circle/ff47-demo/thumbnail", {
     "content-type": "multipart/form-data; boundary=test", origin: "https://evil.example",
   })));

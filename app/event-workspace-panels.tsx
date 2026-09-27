@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { MouseEvent } from "react";
-import { placementStatusLabel } from "./circle-records";
+import { placementStatusLabel, representativeMedia } from "./circle-records";
 import type { CircleCatalogStatus, CircleMedia, CircleViewRecord } from "./circle-records";
 import { LINK_KIND_LABEL, sourceDateLabel } from "./circle-presentation";
 import type { CircleMatchReason } from "./circle-search";
@@ -58,7 +58,7 @@ export function SearchResults({ records, circleCount, catalogStatus, catalogErro
     </div> : records.length === 0 ? <div className={styles.empty}><b>找不到符合條件的社團</b><p>{query.trim() ? <>保留搜尋「{query.trim()}」，可先移除下列篩選條件。</> : <>試著移除已套用的篩選條件。</>}</p>{activeFilters.length > 0 && <div className={styles.emptyFilters} aria-label="已套用篩選">{activeFilters.map((filter) => <button key={filter.id} onClick={filter.onClear} aria-label={`移除篩選：${filter.label}`}>{filter.label}<UiIcon name="close" /></button>)}</div>}<button onClick={activeFilters.length > 0 ? onClearFilters : onClearQuery}>{activeFilters.length > 0 ? "清除所有篩選（保留搜尋）" : "清除搜尋"}</button></div> : <div className={styles.resultList}>
       {records.slice(0, visibleCount).map((record) => {
         const plan = plans.get(record.circle.id);
-        const thumbnail = record.circle.media[0];
+        const thumbnail = representativeMedia(record.circle.media);
         const circleSummary = [record.circle.circleCategory, record.circle.creatorTypes.join("、"), record.circle.work].filter(Boolean);
         const showsCircleAuthoredContent = record.sources.some((source) => source.contentType === "circle")
           && (circleSummary.length > 0 || (mediaCount > 0 && !!thumbnail));
@@ -142,7 +142,9 @@ function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onA
 }) {
   const activeMedia = media[Math.min(activeIndex, media.length - 1)];
   if (!activeMedia) return null;
-  const image = <img src={activeMedia.url} alt={activeMedia.alt} referrerPolicy="no-referrer" loading={compact ? "lazy" : undefined} />;
+  // A side panel shows a sale-sheet page at card size, so it loads the card
+  // preview; the full view loads the page itself.
+  const image = <img src={compact ? activeMedia.previewUrl ?? activeMedia.url : activeMedia.url} alt={activeMedia.alt} referrerPolicy="no-referrer" loading={compact ? "lazy" : undefined} />;
   const move = (delta: number) => onActiveIndex((activeIndex + delta + media.length) % media.length);
   return <div className={`${styles.mediaGallery} ${compact ? styles.compactGallery : styles.fullGallery}`} role="group" aria-label="社團圖片">
     {compact && onOpenFull
@@ -151,15 +153,19 @@ function CircleMediaGallery({ media, activeIndex, compact, readOnly = false, onA
     {!compact && <div className={styles.galleryFooter}>
       {media.length > 1 && <div className={styles.galleryControls} role="group" aria-label="圖片幻燈片控制">
         <button type="button" disabled={readOnly} onClick={() => move(-1)} aria-label="上一張圖片"><UiIcon name="chevron-left" /></button>
-        <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" disabled={readOnly} key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
+        <div><span aria-live="polite">{activeIndex + 1} / {media.length}</span><div className={styles.galleryRail}>{media.map((item, index) => <button type="button" disabled={readOnly} key={item.id} className={index === activeIndex ? styles.activeMedia : ""} onClick={() => onActiveIndex(index)} aria-label={`顯示第 ${index + 1} 張圖片`} aria-pressed={index === activeIndex}><img src={item.previewUrl ?? item.url} alt="" referrerPolicy="no-referrer" loading="lazy" /></button>)}</div></div>
         <button type="button" disabled={readOnly} onClick={() => move(1)} aria-label="下一張圖片"><UiIcon name="chevron-right" /></button>
       </div>}
       {/* Provenance is optional on a circle's own upload (ADR-0053). With no
           link there is nothing to point at, so the row shows the credit alone —
           and nothing at all when there is no credit either (ADR-0036). */}
-      {activeMedia.sourceUrl
-        ? <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>原始來源</span><UiIcon name="external" /></a>
-        : activeMedia.provider ? <div className={styles.mediaSource}><span>{activeMedia.provider}</span></div> : null}
+      {/* A sale-sheet page is the circle's own and has no other source; what a
+          reader needs is the page at full size, where the browser can zoom. */}
+      {activeMedia.kind === "catalog"
+        ? <a className={styles.mediaSource} href={activeMedia.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>品書</span><span>開啟原圖</span><UiIcon name="external" /></a>
+        : activeMedia.sourceUrl
+          ? <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>原始來源</span><UiIcon name="external" /></a>
+          : activeMedia.provider ? <div className={styles.mediaSource}><span>{activeMedia.provider}</span></div> : null}
     </div>}
   </div>;
 }

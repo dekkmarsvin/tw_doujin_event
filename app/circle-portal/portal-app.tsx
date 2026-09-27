@@ -23,6 +23,7 @@ import { nearestEvent, taipeiDate } from "../event-calendar";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
+import { CatalogImagesField } from "./catalog-images-field";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
 import styles from "./portal.module.css";
 
@@ -628,6 +629,7 @@ function deletionSummary(fields: CircleOverrideFields) {
   }
   if (fields.links?.length) lines.push(`連結 ${fields.links.length} 條`);
   if (fields.thumbnail) lines.push("代表圖 1 張");
+  if (fields.catalogImages?.length) lines.push(`品書 ${fields.catalogImages.length} 張`);
   return lines;
 }
 
@@ -662,6 +664,7 @@ function ReviewSummary({ fields }: { fields: CircleOverrideFields }) {
   const rows = [
     ["筆名", value(fields.pen)],
     ["販售資訊", value(fields.saleInfo)],
+    ["本次品書", fields.catalogImages?.length ? `${fields.catalogImages.length} 張` : "未提供"],
     ["社團主題", value(fields.circleCategory)],
     ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(fields[key])]),
     ["連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
@@ -1024,6 +1027,19 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       onChange={(event) => setFields((current) => ({ ...current, saleInfo: event.target.value }))}
     />
     <FieldModeControls mode={modeFor("saleInfo")} label="販售資訊" onInherit={() => inheritField("saleInfo")} onClear={() => clearField("saleInfo")} />
+
+    <h3 className={styles.editorSection}>本次品書</h3>
+    {/* The organizer's data has no sale sheet, so "inherit" is "none yet",
+        the same way the category field reads. */}
+    <FieldModeControls
+      mode={modeFor("catalogImages")} label="品書" inheritStatus="目前未提供" inheritAction="恢復未提供"
+      onInherit={() => inheritField("catalogImages")} onClear={() => clearField("catalogImages")}
+    />
+    <CatalogImagesField
+      circleId={claim.circleId} images={fields.catalogImages ?? []} busy={status.kind === "busy"}
+      onUpdate={(update) => setFields((current) => ({ ...current, catalogImages: update(current.catalogImages ?? []) }))}
+      onUploading={(active) => setStatus(active ? { kind: "busy", message: "上傳品書中…" } : IDLE)}
+    />
 
     <label htmlFor={`circle-category-${claim.circleId}`}>社團主題</label>
     <select

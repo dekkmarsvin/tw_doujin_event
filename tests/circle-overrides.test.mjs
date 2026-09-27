@@ -221,7 +221,7 @@ test("R15 and unknown legacy ratings preserve the whole overlay and its other fi
 
 test("one field authority defines inherit, replace and clear encodings", () => {
   assert.deepEqual(overrides.CIRCLE_OVERRIDE_FIELD_KEYS, [
-    "pen", "saleInfo", "circleCategory", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail",
+    "pen", "saleInfo", "circleCategory", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail", "catalogImages",
   ]);
 
   let fields = {};
@@ -236,6 +236,7 @@ test("one field authority defines inherit, replace and clear encodings", () => {
   assert.deepEqual(overrides.clearCircleOverrideField({}, "links"), { links: [] });
   assert.deepEqual(overrides.clearCircleOverrideField({}, "thumbnail"), { thumbnail: null });
   assert.deepEqual(overrides.clearCircleOverrideField({}, "specialTags"), { specialTags: [] });
+  assert.deepEqual(overrides.clearCircleOverrideField({}, "catalogImages"), { catalogImages: [] });
 });
 
 test("every editable field projects empty base, replace and clear from the same authority", () => {
@@ -250,8 +251,10 @@ test("every editable field projects empty base, replace and clear from the same 
     ageRatings: (circle) => circle.ageRatings,
     specialTags: (circle) => circle.specialTags,
     links: (circle) => circle.externalLinks,
-    thumbnail: (circle) => circle.media.map(({ url, sourceUrl, provider }) => ({ url, sourceUrl, provider })),
+    thumbnail: (circle) => circle.media.filter(({ kind }) => kind === "thumbnail").map(({ url, sourceUrl, provider }) => ({ url, sourceUrl, provider })),
+    catalogImages: (circle) => circle.media.filter(({ kind }) => kind === "catalog").map(({ url, previewUrl, width, height }) => ({ url, previewUrl, width, height })),
   };
+  const replacementPage = { url: "https://media.example/page.jpg", previewUrl: "https://media.example/page-card.jpg", width: 2000, height: 1400 };
   const replacement = {
     pen: "replacement pen",
     saleInfo: "replacement sale",
@@ -263,8 +266,9 @@ test("every editable field projects empty base, replace and clear from the same 
     specialTags: ["replacement tag"],
     links: [{ provider: "replacement", kind: "website", url: "https://example.com/replacement" }],
     thumbnail: replacementThumbnail,
+    catalogImages: [replacementPage],
   };
-  const emptyBase = { pen: "", saleInfo: "", circleCategory: "", referencedWorks: [], creatorTypes: [], workTypes: [], ageRatings: [], specialTags: [], links: [], thumbnail: [] };
+  const emptyBase = { pen: "", saleInfo: "", circleCategory: "", referencedWorks: [], creatorTypes: [], workTypes: [], ageRatings: [], specialTags: [], links: [], thumbnail: [], catalogImages: [] };
 
   for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS) {
     const inherited = records.buildCircleCatalog(payload, withFields(placed.id, {})).circlesById.get(placed.id);

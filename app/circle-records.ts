@@ -17,14 +17,28 @@ export type SourceLink = {
   status: SourceStatus;
 };
 
+/**
+ * `thumbnail` is the circle's one representative picture — the only kind a
+ * list card or a map slot may show, cropped to fit. `catalog` is a page of
+ * this event's sale sheet, shown whole and never cropped; it carries the card
+ * preview and its own size.
+ */
 export type CircleMedia = {
   id: string;
-  kind: "thumbnail";
+  kind: "thumbnail" | "catalog";
   url: string;
   sourceUrl: string;
   provider: string;
   alt: string;
+  previewUrl?: string;
+  width?: number;
+  height?: number;
 };
+
+/** The representative picture, never a sale-sheet page standing in for it. */
+export function representativeMedia(media: readonly CircleMedia[]) {
+  return media.find((item) => item.kind === "thumbnail");
+}
 
 export type CircleTemplateLinkKind = "social" | "support" | "website" | "announcement" | "catalog" | "store" | "sample";
 
@@ -190,16 +204,30 @@ function projectCircleDraft(base: CircleRecord, fields: CircleOverride["fields"]
     .some((key) => Object.hasOwn(fields, key));
   const workChanged = Object.hasOwn(fields, "referencedWorks") || Object.hasOwn(fields, "creatorTypes");
   const thumbnail = fields.thumbnail;
-  const media = thumbnail === undefined
-    ? base.media.map((item) => ({ ...item }))
+  const representative: CircleMedia[] = thumbnail === undefined
+    ? base.media.filter((item) => item.kind === "thumbnail").map((item) => ({ ...item }))
     : thumbnail === null ? [] : [{
       id: `${base.id}-thumbnail`,
-      kind: "thumbnail" as const,
+      kind: "thumbnail",
       url: thumbnail.url,
       sourceUrl: thumbnail.sourceUrl,
       provider: thumbnail.provider,
       alt: `${base.name} 社團縮圖`,
     }];
+  // Sale-sheet pages follow the representative picture, in the circle's order.
+  const pages = fields.catalogImages ?? base.media.filter((item) => item.kind === "catalog");
+  const catalog: CircleMedia[] = pages.map((page, index) => "kind" in page ? { ...page } : {
+    id: `${base.id}-catalog-${index + 1}`,
+    kind: "catalog",
+    url: page.url,
+    previewUrl: page.previewUrl,
+    width: page.width,
+    height: page.height,
+    sourceUrl: "",
+    provider: "",
+    alt: `${base.name} 品書第 ${index + 1} 張`,
+  });
+  const media = [...representative, ...catalog];
   return {
     ...base,
     description: saleInfo,
