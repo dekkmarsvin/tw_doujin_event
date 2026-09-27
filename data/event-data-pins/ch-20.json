@@ -2,7 +2,7 @@
   "schema": "event-data-pin/2",
   "eventId": "ch-20",
   "repository": "dekkmarsvin/tw_doujin_event-data",
-  "commit": "669391446c93c7fa34c5e92aec44b176f5b02309",
+  "commit": "a14fcf1b1fbe92f08729a77560f050ce61d25cdb",
   "files": [
     {
       "path": "events/ch-20/circle-identity-groups.json",
@@ -10,11 +10,11 @@
     },
     {
       "path": "events/ch-20/event.json",
-      "sha256": "7fd9c00d937096bf97c6be02c200f7cb594c3feb586383481ba4af3ae97df8c5"
+      "sha256": "8ab55bcb3aaebcd2fbe97a55c0dfc17e8d0c464760a0c0f28f8cd5fffb73c797"
     },
     {
       "path": "events/ch-20/map.json",
-      "sha256": "61565992b98d318009665a3bf61baff6cec37499dac5bd72103db8089c08e384"
+      "sha256": "c838ac0e16dd7b902b8a339e04dde8dab43218f892a55fa143d9d9d3365a9b72"
     },
     {
       "path": "events/ch-20/official-booths.json",
@@ -38,7 +38,7 @@
     },
     {
       "path": "references/venues/venue-c2a522f0-e534-4a91-ba1d-b347c112e092.json",
-      "sha256": "1eebe222a834234ac03d0ec6cbc0f4e8e4e6d3373097cb5b5a538f4820698883"
+      "sha256": "42674a0ef59268384b991d2444b25f1c688f26cbe8fa77c61aa10d5848583e75"
     }
   ]
 }
