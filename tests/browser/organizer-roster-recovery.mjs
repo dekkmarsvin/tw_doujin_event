@@ -66,12 +66,13 @@ try {
     await list.getByRole("button", { name: "重新讀取名單", exact: true }).waitFor({ state: "hidden" });
   };
   await row.waitFor();
-  for (const width of [1040, 1440]) {
+  for (const width of [1040, 1280, 1440, 1920, 2560]) {
     await page.setViewportSize({ width, height: 1000 });
     await journey.capture(page, `roster-recovery-${width}`);
     // Only the workspace is retained for PR evidence; the account header is outside it.
     await list.screenshot({ path: path.join(output, `roster-workspace-${width}.png`) });
   }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await aliases.click();
   await aliasField("東一館", "A").fill("版攤活動");
   await aliasField("西一館", "A").fill("巴哈市集");
@@ -86,6 +87,7 @@ try {
   assert.equal(await aliasField("東一館", "A").inputValue(), "版攤活動");
   assert.equal(await aliasField("西一館", "A").inputValue(), "巴哈市集");
   await aliasField("東一館", "B").fill("遊戲試玩");
+  await dialog.screenshot({ path: path.join(output, "roster-area-names.png") });
   await saveAliases();
   await list.getByText("展區名稱已儲存。", { exact: true }).waitFor();
   assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "版攤活動");
@@ -114,6 +116,7 @@ try {
   await input.dispatchEvent("compositionend");
   await input.press("Enter");
   assert.equal(await input.count(), 0);
+  await list.screenshot({ path: path.join(output, "roster-draft-workspace.png") });
   await edit("展區", "C");
   const checkpointPatches = patchCount;
   failNextPut = true;
@@ -143,6 +146,7 @@ try {
   await page.getByRole("button", { name: "預覽對應結果", exact: true }).click();
   await page.getByRole("cell", { name: "新名單社團", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "可匯入 1", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.locator("section").filter({ has: page.getByRole("heading", { name: "匯入攤位名單", exact: true }) }).last().screenshot({ path: path.join(output, "roster-import-confirm.png") });
   const previousPuts = putCount;
   // The declaration PATCH succeeds, then only the final detail GET fails.
   failNextRead = true;
