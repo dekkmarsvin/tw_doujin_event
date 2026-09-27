@@ -28,6 +28,8 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const [nextKey, setNextKey] = useState(entries.length);
   const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
   const [loadedVersion, setLoadedVersion] = useState(detail.event.version);
+  const [writeDraft, setWriteDraft] = useState(detail.draft);
+  const [refreshRequired, setRefreshRequired] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [busy, setBusy] = useState<"save" | "reload" | "aliases" | null>(null);
@@ -60,6 +62,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     setBaseline(new Map(next.map(entry => [entry.key, entry.row])));
     setEntries(next); setViewEntries(next); setNextKey(next.length);
     setExpectedVersion(detail.event.version); setLoadedVersion(detail.event.version);
+    setWriteDraft(detail.draft);
     setSelected([]); setAction(null);
   }
   useEffect(() => {
@@ -96,28 +99,29 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const limitError = useMemo(() => normalized.length > 20_000 ? "名單最多 20,000 筆。"
     : new TextEncoder().encode(JSON.stringify(normalized)).byteLength > 8 * 1024 * 1024 ? "名單超過 8 MB，請縮短欄位內容。" : null, [normalized]);
   const save = useCallback(async () => {
-    if (!detail.import || !editable || busy || conflict || aliasesOpen) return false;
+    if (!detail.import || !editable || busy || conflict || aliasesOpen || refreshRequired) return false;
     if (errors.size || limitError) { setNotice("請先修正標記的欄位。"); return false; }
     if (!dirty && !needsAreaUpdate) return true;
     setBusy("save"); setNotice("");
     try {
-      const withAreas = withOrganizerImportedAreaIds(detail.draft, normalized);
+      const withAreas = withOrganizerImportedAreaIds(writeDraft, normalized);
       let version = expectedVersion;
-      if (JSON.stringify(withAreas) !== JSON.stringify(detail.draft)) {
+      if (JSON.stringify(withAreas) !== JSON.stringify(writeDraft)) {
         version = (await saveOrganizerEvent(detail.event.id, version, withAreas)).version;
         setExpectedVersion(version);
+        setWriteDraft(withAreas);
       }
       const saved = await putOrganizerImport(detail.event.id, { expectedVersion: version, source: detail.import.source, rows: normalized });
       setExpectedVersion(saved.version);
       const next = entries.map((entry, index) => ({ ...entry, row: normalized[index] }));
       setBaseline(new Map(next.map(entry => [entry.key, entry.row])));
       setEntries(next); setViewEntries(next); setDirty(false); onDirtyChange(false); setNotice("名單已儲存。");
-      try { await onChanged(); } catch (error) { setNotice(`名單已儲存，但重新讀取失敗：${message(error)}`); }
+      try { await onChanged(); } catch (error) { setPending(null); setRefreshRequired(true); setNotice(`名單已儲存，但重新讀取失敗：${message(error)}`); return false; }
       return true;
     } catch (error) {
       setNotice(message(error)); if (error instanceof PortalError && error.status === 409) setConflict(true); return false;
     } finally { setBusy(null); }
-  }, [detail, editable, busy, conflict, aliasesOpen, errors.size, limitError, dirty, needsAreaUpdate, normalized, entries, expectedVersion, onDirtyChange, onChanged]);
+  }, [detail, editable, busy, conflict, aliasesOpen, refreshRequired, writeDraft, errors.size, limitError, dirty, needsAreaUpdate, normalized, entries, expectedVersion, onDirtyChange, onChanged]);
   useEffect(() => { onSaveReady(save); return () => onSaveReady(null); }, [save, onSaveReady]);
   const change = (next: Entry[]) => {
     const restored = next.map(entry => {
@@ -171,14 +175,14 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   return <section aria-label="攤位名單" className={styles.rosterWorkspace}>
     <div ref={toolbarRef}>
       <div className={styles.panelHead}><div><h3>攤位名單</h3><span>{entries.length.toLocaleString()} 筆</span></div><div className={styles.row}>
-        <button type="button" disabled={!editable || !!busy} onClick={() => request("import")}>匯入檔案</button>
-        <button type="button" className={styles.secondary} disabled={!editable || !!busy || entries.length >= 20_000 || conflict} onClick={() => {
+        <button type="button" disabled={!editable || !!busy || refreshRequired} onClick={() => request("import")}>匯入檔案</button>
+        <button type="button" className={styles.secondary} disabled={!editable || !!busy || entries.length >= 20_000 || conflict || refreshRequired} onClick={() => {
           const assignment = assignments.length === 1 ? assignments[0] : assignments.find(item => item.venueSpaceId === space);
           const row = { sourceRow: 0, dayId: day || (days.length === 1 ? days[0].id : ""), venueSpaceId: assignment?.venueSpaceId ?? "", areaId: assignment?.areaMode === "none" ? "ALL" : assignment?.areaIds.length === 1 ? assignment.areaIds[0] : "", codes: [], circleName: "", stableKey: null, identityGroup: null };
           const next = [...entries, { key: nextKey, row }]; clearFilters(); setDescending(false); change(next); setViewEntries(next); setNextKey(nextKey + 1);
           requestAnimationFrame(() => tableRef.current?.querySelector<HTMLButtonElement>(`[data-roster-cell="${nextKey}-codes"]`)?.click());
         }}>新增攤位</button>
-        <button type="button" className={styles.secondary} disabled={!editable || !!busy || !hasAreas} onClick={() => request("aliases")}>展區名稱</button>
+        <button type="button" className={styles.secondary} disabled={!editable || !!busy || !hasAreas || refreshRequired} onClick={() => request("aliases")}>展區名稱</button>
       </div></div>
       {(!showDay || !showSpace) && <p className={styles.rosterContext}>{!showDay && days[0]?.label}{!showDay && !showSpace && " · "}{!showSpace && organizerVenueSpaceLabel(detail.venueCatalog, assignments[0].venueSpaceId)}</p>}
       <div className={styles.rosterFilters}>
@@ -192,10 +196,14 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
       <div className={styles.rosterTools}><span role="status">符合 {visible.length.toLocaleString()} 筆 · 第 {shownPage + 1} / {pages} 頁</span>
         {(query || day || space || area || mapState) && <button type="button" className={styles.textButton} onClick={clearFilters}>清除篩選</button>}
         <label className={styles.rosterChoice}><input type="checkbox" checked={showInternal} onChange={event => setShowInternal(event.target.checked)} />顯示主辦內部編號</label>
-        {selected.length > 0 && <><span>已選取 {selected.length} 筆</span><button type="button" className={styles.secondary} disabled={!!mergeError || !!busy || conflict} onClick={() => { setAction({ kind: "merge" }); setMergeName(names.length === 1 ? names[0] : ""); }}>合併選取</button><button type="button" className={styles.textButton} onClick={() => setSelected([])}>清除選取</button></>}
+        {selected.length > 0 && <><span>已選取 {selected.length} 筆</span><button type="button" className={styles.secondary} disabled={!!mergeError || !!busy || conflict || refreshRequired} onClick={() => { setAction({ kind: "merge" }); setMergeName(names.length === 1 ? names[0] : ""); }}>合併選取</button><button type="button" className={styles.textButton} onClick={() => setSelected([])}>清除選取</button></>}
       </div>
       {chosen.length > 1 && mergeError && <p role="status">{mergeError}</p>}
       {notice && <p role="status">{notice}</p>}
+      {refreshRequired && <button type="button" disabled={!!busy} onClick={() => {
+        setBusy("reload");
+        void onChanged().then(() => { setRefreshRequired(false); setNotice(""); setPending(null); }).catch(error => setNotice(`重新讀取失敗：${message(error)}`)).finally(() => setBusy(null));
+      }}>{busy === "reload" ? "重新讀取中…" : "重新讀取名單"}</button>}
       {coverageError && <p role="status">無法讀取地圖狀態：{coverageError}</p>}
       {limitError && <p role="alert">{limitError}</p>}
       {errors.size > 0 && <div className={styles.rosterErrors} role="alert"><strong>{errors.size} 筆待修正</strong>{[...errors].slice(0, 5).map(([index]) => <button type="button" className={styles.textButton} key={entries[index].key} onClick={() => focusError(index)}>{entries[index].row.codes.join("、") || "未填代碼"}：前往修正</button>)}</div>}
@@ -205,7 +213,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
       <tbody>{visible.slice(shownPage * 100, (shownPage + 1) * 100).map(({ key }) => {
         const { row, index } = byKey.get(key)!;
         const saved = coverageByScope.get(scopeKey(row.dayId, row.venueSpaceId)), coverage = coverageOf(row);
-        const disabled = !editable || !!busy || conflict;
+        const disabled = !editable || !!busy || conflict || refreshRequired;
         const cell = (field: RosterField, title: string, value: string, display?: string, options?: { value: string; label: string }[]) => <RosterCell key={field} focusKey={`${key}-${field}`} label={`${row.codes.join("、") || "新增攤位"} ${title}`} value={value} display={display} options={options} disabled={disabled} errors={errors.get(index)?.[field]}
           onRestore={() => update(key, row)} onChange={value => {
             if (field === "codes") update(key, { codes: value.split(/[、,，;；/\s]+/u) });
@@ -221,12 +229,12 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
           {showSpace && cell("venueSpaceId", "場地", row.venueSpaceId, organizerVenueSpaceLabel(detail.venueCatalog, row.venueSpaceId), assignments.map(item => ({ value: item.venueSpaceId, label: organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId) })))}
           {assignments.some(item => item.venueSpaceId === row.venueSpaceId && item.areaMode === "none") ? <td>無分區</td> : cell("areaId", "展區", row.areaId, areaLabel(row.venueSpaceId, row.areaId))}
           {showInternal && cell("stableKey", "主辦內部編號", row.stableKey ?? "")}
-          <td>{coverage ? <><span>{coverage.label} {coverage.completed}/{coverage.total}</span>{row.codes.filter(code => saved?.drawn?.has(code)).map(code => <button type="button" className={styles.textButton} key={code} disabled={dirty || !!busy || conflict} onClick={() => onLocate({ candidateId: detail.event.id, mapId: saved!.map.id, code, nonce: Date.now() })}>定位 {code}</button>)}</> : "尚未取得"}</td>
+          <td>{coverage ? <><span>{coverage.label} {coverage.completed}/{coverage.total}</span>{row.codes.filter(code => saved?.drawn?.has(code)).map(code => <button type="button" className={styles.textButton} key={code} disabled={dirty || !!busy || conflict || refreshRequired} onClick={() => onLocate({ candidateId: detail.event.id, mapId: saved!.map.id, code, nonce: Date.now() })}>定位 {code}</button>)}</> : "尚未取得"}</td>
           <td><button type="button" className={styles.ghost} onClick={() => setAction({ kind: "details", key })}>明細</button>{editable && <><button type="button" className={styles.textButton} disabled={disabled || row.codes.length < 2 || entries.length >= 20_000 || errors.has(index)} onClick={() => { setSplitCodes([]); setAction({ kind: "split", key }); }}>拆分</button><button type="button" className={styles.textButton} disabled={disabled} onClick={() => setAction({ kind: "delete", key })}>刪除</button></>}</td>
         </tr>;
       })}</tbody></table>{visible.length === 0 && <p className={styles.emptyRoster}>沒有符合條件的攤位。</p>}</div>
     <div className={styles.rosterFooter}><div className={styles.row}><button type="button" className={styles.ghost} disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={shownPage + 1 >= pages} onClick={() => setPage(shownPage + 1)}>下一頁</button></div>
-      {(dirty || needsAreaUpdate || conflict) && <div className={styles.row}><span>尚未儲存</span><button type="button" disabled={!editable || !!busy || conflict || errors.size > 0 || !!limitError} onClick={() => void save()}>{busy === "save" ? "儲存中…" : "儲存變更"}</button><button type="button" className={styles.secondary} disabled={!!busy} onClick={() => setPending("discard")}>{busy === "reload" ? "重新讀取中…" : "放棄變更"}</button></div>}
+      {(dirty || needsAreaUpdate || conflict) && <div className={styles.row}><span>尚未儲存</span><button type="button" disabled={!editable || !!busy || conflict || refreshRequired || errors.size > 0 || !!limitError} onClick={() => void save()}>{busy === "save" ? "儲存中…" : "儲存變更"}</button><button type="button" className={styles.secondary} disabled={!!busy} onClick={() => setPending("discard")}>{busy === "reload" ? "重新讀取中…" : "放棄變更"}</button></div>}
     </div>
     {pending && <RosterDialog title="尚有未儲存變更" busy={!!busy} onClose={() => setPending(null)}><p>{pending === "discard" ? "放棄目前修改並重新讀取名單？" : "先儲存目前修改，再繼續操作。"}</p><div className={styles.row}>
       {pending !== "discard" && <button type="button" disabled={!!busy || conflict || errors.size > 0 || !!limitError} onClick={() => { void save().then(ok => { if (ok) perform(pending); }); }}>儲存並繼續</button>}
@@ -240,14 +248,14 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
           return { ...assignment, areaLabels: Object.fromEntries(Object.entries(names).map(([key, value]) => [key, value.trim()]).filter(([, value]) => value)) };
         }) } };
         void saveOrganizerEvent(detail.event.id, expectedVersion, draft).then(async saved => {
-          setExpectedVersion(saved.version); setLabels({}); setAliasesOpen(false); setNotice("展區名稱已儲存。");
-          try { await onChanged(); } catch (error) { setNotice(`展區名稱已儲存，但重新讀取失敗：${message(error)}`); }
+          setExpectedVersion(saved.version); setWriteDraft(draft); setLabels({}); setAliasesOpen(false); setNotice("展區名稱已儲存。");
+          try { await onChanged(); } catch (error) { setRefreshRequired(true); setNotice(`展區名稱已儲存，但重新讀取失敗：${message(error)}`); }
         }).catch(error => { setNotice(message(error)); if (error instanceof PortalError && error.status === 409) setConflict(true); }).finally(() => setBusy(null));
       }}>{busy === "aliases" ? "儲存中…" : "儲存展區名稱"}</button><button type="button" className={styles.ghost} disabled={!!busy} onClick={() => { setLabels({}); setAliasesOpen(false); }}>取消</button></div>
     </RosterDialog>}
     {aliasCloseRequested && <RosterDialog title="放棄展區名稱變更？" onClose={() => setAliasCloseRequested(false)}><div className={styles.row}><button type="button" onClick={() => { setLabels({}); setAliasesOpen(false); setAliasCloseRequested(false); }}>放棄變更</button><button type="button" className={styles.secondary} onClick={() => setAliasCloseRequested(false)}>繼續編輯</button></div></RosterDialog>}
     {action && <RosterDialog title={action.kind === "merge" ? "合併攤位" : `${action.kind === "details" ? "攤位明細" : action.kind === "split" ? "拆分攤位" : "刪除攤位"} · ${active?.row.codes.join("、") || "新增攤位"}`} onClose={() => setAction(null)}>
-      {action.kind === "details" && active && <><p>{active.row.circleName}</p><dl><dt>來源列</dt><dd>{active.row.sourceRow || "手動新增／合併"}</dd><dt>主辦內部編號</dt><dd>{active.row.stableKey || "—"}</dd></dl>{suspiciousRosterCodes(active.row) && editable && <button type="button" disabled={!!busy || conflict} onClick={() => {
+      {action.kind === "details" && active && <><p>{active.row.circleName}</p><dl><dt>來源列</dt><dd>{active.row.sourceRow || "手動新增／合併"}</dd><dt>主辦內部編號</dt><dd>{active.row.stableKey || "—"}</dd></dl>{suspiciousRosterCodes(active.row) && editable && <button type="button" disabled={!!busy || conflict || refreshRequired} onClick={() => {
         const width = suspiciousRosterCodes(active.row)!;
         update(active.key, { codes: active.row.codes.flatMap(code => [...code].length % width === 0 ? Array.from({ length: [...code].length / width }, (_, i) => [...code].slice(i * width, (i + 1) * width).join("")) : [code]) }); setAction(null);
       }}>確認每 {suspiciousRosterCodes(active.row)} 字拆成一碼</button>}</>}

@@ -158,7 +158,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   [sheet, boothColumn, headerRow]);
   const excludedRows = useMemo(() => excluded.map((row) => row.sourceRow), [excluded]);
   const prepared = useMemo(() => {
-    if (!previewRequested || !sheet || !mapping) return null;
+    if (!sheet || !mapping) return null;
     // prepareOrganizerImport rejects an unusable header row by throwing. The
     // preview now recomputes as the organizer types, so that refusal is shown
     // in place instead of raised as one notice per keystroke.
@@ -167,8 +167,8 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     } catch (error) {
       return { ok: false as const, message: message(error) };
     }
-  }, [previewRequested, sheet, headerRow, mapping, areaModeByVenueSpace, overrides, excludedRows]);
-  const result = prepared?.ok ? prepared : null;
+  }, [sheet, headerRow, mapping, areaModeByVenueSpace, overrides, excludedRows]);
+  const result = previewRequested && prepared?.ok ? prepared : null;
 
   const derived = useMemo(() => {
     const spaces = new Map<string, Map<string, number>>();
@@ -329,16 +329,16 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
         </label>}
       </div>
 
-      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(1)}>上一步</button><button type="button" disabled={!mapping} onClick={() => { setPreviewRequested(true); setPreviewGroup("rejected"); setPreviewPage(0); setStep(3); }}>預覽對應結果</button></div>
+      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(1)}>上一步</button><button type="button" disabled={!mapping} onClick={() => { setPreviewRequested(true); setPreviewGroup(prepared?.ok && !prepared.rejected.length ? "ready" : "rejected"); setPreviewPage(0); setStep(3); }}>預覽對應結果</button></div>
     </>}
     {step === 3 && <>
       {prepared && !prepared.ok && <p role="alert">{prepared.message}</p>}
       {result && <>
         <div className={styles.validationSummary}><b>{result.rows.length} 筆可匯入 · {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 筆待修正</span><span>{excluded.length} 筆已排除</span></div>
-        <details className={styles.areaNamePreview}><summary>展區顯示名稱（選填）</summary>
+        {requiresAreaMapping && <details className={styles.areaNamePreview}><summary>展區顯示名稱（選填）</summary>
           <AreaNameFields detail={detail} spaces={derived.filter(space => space.declared).map(space => ({ venueSpaceId: space.venueSpaceId, areaIds: space.areas.map(area => area.id) }))} labels={areaLabels}
             onChange={(spaceId, areaId, label) => setAreaLabels(current => ({ ...current, [spaceId]: { ...current[spaceId], [areaId]: label } }))} />
-        </details>
+        </details>}
         {derived.filter(space => !space.declared).map(space => <p role="alert" key={space.venueSpaceId}>請先在「場館與場地」加入 {space.venueSpaceId}，或修正來源欄位。</p>)}
         {derived.some(space => space.areas.some(area => !area.valid)) && <p role="alert">展區代碼只能使用英數字、底線與連字號。</p>}
         {result.issues.filter(issue => issue.severity === "warning").slice(0, 10).map(issue => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}

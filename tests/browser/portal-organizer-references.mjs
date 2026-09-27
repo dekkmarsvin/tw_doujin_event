@@ -304,7 +304,8 @@ try {
   await page.getByLabel(/^社團名稱/).selectOption("1");
   await page.getByRole("button", { name: "預覽對應結果", exact: true }).click();
   await page.getByRole("button", { name: "可匯入 1", exact: true }).click();
-  await page.getByRole("cell", { name: "無分區", exact: true }).waitFor();
+  await page.getByRole("cell", { name: "驗收社團", exact: true }).waitFor();
+  assert.equal(await page.getByRole("columnheader", { name: "展區", exact: true }).count(), 0, "a wholly undivided import needs no area column");
   let releaseImport;
   const heldImport = new Promise((resolve) => { releaseImport = resolve; });
   const delayImport = async (route) => { await heldImport; await route.continue(); };
