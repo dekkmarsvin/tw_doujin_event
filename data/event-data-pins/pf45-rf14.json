@@ -2,11 +2,11 @@
   "schema": "event-data-pin/2",
   "eventId": "pf45-rf14",
   "repository": "dekkmarsvin/tw_doujin_event-data",
-  "commit": "fcc02adaa468725d89910d754c7a2ae06666a92c",
+  "commit": "6d60fe0d07229962dde5d8779b17beb1a085477a",
   "files": [
     {
       "path": "events/pf45-rf14/circle-identity-groups.json",
-      "sha256": "0defdddaa4e3be989fc429e778c0f718b5ec1c495ed5189f4203ae7fa6751fe2"
+      "sha256": "8d0ef85447229079e4e2c8e526efb4881856a126ccb9763e2ea38c17c63151e8"
     },
     {
       "path": "events/pf45-rf14/event.json",

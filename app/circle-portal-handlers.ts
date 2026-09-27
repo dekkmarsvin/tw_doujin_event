@@ -1,5 +1,6 @@
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
+import { groupOrganizerCircles } from "./organizer-circle-groups.mjs";
 import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
 import { loginLinkLetter, organizerInvitationLetter } from "./mail-letter";
@@ -2963,6 +2964,11 @@ export function createCirclePortalHandlers({
     // the declared settings applied.
     const amendment = candidate.publication_operation === "AMEND" ? await readAmendment(candidateId) : null;
     const shown = amendment ? applyAmendmentSettings(draft, amendment.settings) : draft;
+    const previewRows = (imported?.rows ?? []).map(row => ({
+      dayId: row.day_id, circleName: row.circle_name, codes: row.codes, stableKey: row.stable_key,
+    }));
+    const circleGroups = new Map(groupOrganizerCircles(previewRows).flatMap(group =>
+      group.rowIndexes.map(index => [index, group.key] as const)));
     const mapArtifacts = maps.map((map) => {
       const stored = contents.get(map.id);
       const content = stored ? parseMapContributionDraftContent(JSON.parse(stored) as unknown) : null;
@@ -2978,10 +2984,10 @@ export function createCirclePortalHandlers({
         schema: "organizer-reader-preview/1",
         event: shown.event, venueAssignments: draft.venue.assignments, officialSource: draft.officialSource,
         references: referenceSnapshot ? referenceSnapshot.files.map((file) => JSON.parse(file.content) as unknown) : [],
-        placements: (imported?.rows ?? []).flatMap((row) => row.codes.map((boothCode) => ({
+        placements: (imported?.rows ?? []).flatMap((row, index) => row.codes.map((boothCode) => ({
           sourceRow: row.source_row, dayId: row.day_id, venueSpaceId: row.venue_space_id,
           areaId: row.area_id, boothCode, circleName: row.circle_name,
-          identityGroup: row.identity_group,
+          identityGroup: amendment ? row.identity_group : circleGroups.get(index),
         }))),
         maps: mapArtifacts.filter(Boolean),
       },
@@ -3080,7 +3086,7 @@ export function createCirclePortalHandlers({
       };
     });
     const snapshotJson = JSON.stringify({
-      schema: amendment ? "organizer-submission-snapshot/4" : "organizer-submission-snapshot/3", candidateId, candidateVersion: expectedVersion,
+      schema: amendment ? "organizer-submission-snapshot/4" : "organizer-submission-snapshot/5", candidateId, candidateVersion: expectedVersion,
       ...(amendment ? { operation: "AMEND", amendment: { baselineJson: amendment.stored.baseline_json,
         baselineSha256: amendment.stored.baseline_sha256, changes: amendment.changes,
         ...(amendment.settings ? { settings: amendment.settings } : {}) } } : {}),

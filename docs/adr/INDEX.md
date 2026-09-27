@@ -19,9 +19,9 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 |---|---|
 | 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051、0055、0056、0063、0064 |
 | 收藏與行程規劃 | 0002、0004、0005 |
-| 社團身分與目錄 | 0010、0013、0030、0044、0045 |
+| 社團身分與目錄 | 0010、0013、0030、0044、0045、0071 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054 |
-| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0059、0062、0066、0068、0069、0070 |
+| 主辦工作區與發布 | 0035、0037、0038、0046、0047、0050、0057、0058、0059、0062、0066、0068、0069、0070、0071 |
 | 地圖貢獻 | 0033 |
 | 活動資料與 reference | 0012、0014、0026、0028、0032、0039、0068、0070 |
 | 保存期限與個資 | 0018、0021、0022、0027、0054、0068 |
@@ -78,7 +78,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0041](./0041-scope-is-bounded-by-shippable-features.md) | 交付範圍以可實現功能為界 | 生效 |
 | [0042](./0042-the-public-entry-is-an-event-chooser.md) | 公開入口支援多活動選擇，既有 deep link 保持有效 | 生效 |
 | [0043](./0043-the-circle-portal-is-event-agnostic.md) | Circle portal 是通用入口，claim 逐活動隔離 | 生效 |
-| [0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目，身分等主辦攤位證據 | 生效 |
+| [0044](./0044-an-accepted-circle-list-is-not-yet-catalogable.md) | 錄取名單不等於可編目，身分等主辦攤位證據 | **部分被取代** — 跨日同名分組由 0071 改採主辦預覽確認；錄取名單不可單獨配號仍有效 |
 | [0045](./0045-list-changes-are-declared-not-inferred.md) | 名單變動要宣告，不從差異推論 | 生效 |
 | [0046](./0046-approved-organizer-publications-may-merge-app-owned-pull-requests.md) | 已核准的 Organizer publication 可合併 App 自己建立的 PR | **部分被取代** — 決策 4 的三項 ruleset 前置由 0058 放寬，只保留「App 不得列為 bypass actor」；合併 app-owned PR 的授權本身仍有效；「結果」的本機備援由 0049 取代；決策 5 的推進方式由 0062 改寫 |
 | [0047](./0047-organizer-onboarding-opens-into-a-resumable-workspace.md) | Organizer onboarding 先引導，完成後開放為可續作工作區 | 生效 |
@@ -105,3 +105,4 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0068](./0068-published-event-settings-are-declared-amendments.md) | 活動別稱是活動資料，已發布活動的設定以宣告更正 | 生效；延續 0045、0028 |
 | [0069](./0069-restored-unpublished-amendments-retain-failed-history.md) | 還原未公開修正後，保留失敗紀錄並重新送審 | 生效；延續 0059、0068 |
 | [0070](./0070-event-images-are-published-by-approval-under-their-hash.md) | 活動圖片由核准公開，以內容雜湊命名 | 生效；延續 0017、0057，擴充 0068 的更正允許清單 |
+| [0071](./0071-organizer-review-confirms-cross-day-circle-grouping.md) | 主辦在匯入預覽確認跨日同名社團 | 生效；部分取代 0044 |

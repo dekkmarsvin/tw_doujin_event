@@ -43,6 +43,27 @@ async function sample({ days = 1 } = {}) {
 const base = (snapshot) => ({ commit: "a".repeat(40), eventDirectoryExists: false, references: new Map(snapshot.references.files.map((file) => [file.path, null])) });
 const mainInput = (files) => ({ dataCommit: "b".repeat(40), dataFiles: new Map(files.map((file) => [file.path, file.text])), mainCommit: "c".repeat(40), publishedEventsJson: '{"schema":"published-events/1","events":["ff47"]}', existingPinJson: null, allocationsJson, evidenceJson });
 
+test("new approvals publish the same cross-day grouping reviewed at import without changing placements", async () => {
+  const snapshot = await sample({ days: 2 });
+  snapshot.schema = "organizer-submission-snapshot/5";
+  const approved = source(snapshot);
+  const data = await builder.buildPublicationDataStage(approved, base(snapshot));
+  const artifacts = await builder.buildApprovedPublicationArtifacts(approved);
+  assert.equal(artifacts.grouping.groups.length, 1);
+  assert.equal(artifacts.grouping.groups[0].linkage.kind, "manual-organizer-evidence");
+  assert.equal(artifacts.grouping.groups[0].linkage.reference, snapshot.draft.officialSource.url);
+  assert.deepEqual(artifacts.grouping.groups[0].sources, ["1:S01", "1:S02", "2:S01", "2:S02"]);
+  const main = await builder.buildPublicationMainStage(approved, mainInput(data.allFiles));
+  const evidence = JSON.parse(main.files.find(file => file.path.endsWith("/evidence.json")).text);
+  const catalog = buildOfficialCatalogPayload({ eventId: "next-event", event: artifacts.event, official: artifacts.official, evidence });
+  assert.equal(catalog.circles.length, 1);
+  assert.equal(catalog.placements.length, 4);
+  assert.deepEqual(catalog.placements.map(p => [p.day, p.boothCode]), [["1", "S01"], ["1", "S02"], ["2", "S01"], ["2", "S02"]]);
+  // Approval version is part of the evidence: past approvals are not regrouped.
+  snapshot.schema = "organizer-submission-snapshot/3";
+  assert.equal((await builder.buildApprovedPublicationArtifacts(source(snapshot))).grouping.groups.length, 4);
+});
+
 test("approved snapshot produces deterministic two-stage files and stages through the real Reader pipeline", async () => {
   const snapshot = await sample();
   const approved = source(snapshot);
