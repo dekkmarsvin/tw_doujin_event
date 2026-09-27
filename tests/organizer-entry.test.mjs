@@ -283,7 +283,8 @@ test("finishing the basic settings opens the next section and marks where the re
 
   // The rail says where the reader is, and does not offer a step they are on.
   assert.ok(app.includes('aria-current={item.id === current ? "page" : undefined}'), "the open section is marked");
-  assert.ok(app.includes("{showNext && <button"), "no 下一步 to the panel already open");
+  assert.ok(app.includes("{showNext && showNextAction && <button"), "no 下一步 to the panel already open");
+  assert.ok(app.includes("{suggestedNextSection !== current && <button"), "nor beside the roster heading");
 });
 // #298: 場館／場地／展區 are near-synonyms in everyday Chinese, and the
 // glossary that tells them apart is written for developers. The explanation

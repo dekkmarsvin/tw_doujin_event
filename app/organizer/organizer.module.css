@@ -258,8 +258,10 @@
 .importPreview, .sampleTable { margin-top: 18px; overflow: auto; }
 .sampleTable { margin-top: 0; }
 .workspaceRoster { min-width: 0; }
-.rosterNavigation { position: relative; width: fit-content; margin: 0 0 12px auto; font-size: 12px; }
+.rosterProgress { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; font-size: 12px; }
+.rosterNavigation { position: relative; }
 .rosterNavigation > summary { cursor: pointer; padding: 9px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.rosterDone { color: var(--success); font-weight: 700; }
 .rosterNavigation > aside { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 300px; max-height: 70vh; overflow: auto; box-shadow: 0 12px 36px #202a3526; }
 .rosterWorkspace { min-width: 0; padding: 16px 18px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 12px; }
 .rosterWorkspace h3 { margin: 0 0 4px; font-size: 16px; }
@@ -292,6 +294,8 @@
 .rosterTable td > .textButton { display: block; white-space: nowrap; }
 .rosterTable td:last-child > .textButton { display: inline-block; }
 .rosterFooter { position: sticky; bottom: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 60px; padding: 10px 0; background: var(--surface); }
+.rosterFooter .rosterChoice { white-space: nowrap; font-weight: 400; }
+.rosterFooter select { width: auto; min-height: 34px; padding: 6px 8px; }
 .emptyRoster { padding: 20px; }
 .rosterDialog { width: min(680px, calc(100vw - 48px)); max-height: calc(100dvh - 64px); overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 22px; color: var(--ink); background: var(--surface); box-shadow: 0 18px 50px #202a3533; }
 .rosterDialog::backdrop { background: #202a3566; }

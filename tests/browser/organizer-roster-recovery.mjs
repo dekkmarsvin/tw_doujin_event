@@ -66,6 +66,10 @@ try {
     await list.getByRole("button", { name: "重新讀取名單", exact: true }).waitFor({ state: "hidden" });
   };
   await row.waitFor();
+  // The next step stands beside the heading rather than inside the progress menu.
+  await page.locator("summary").filter({ hasText: "準備進度 3/6" }).waitFor();
+  await page.getByRole("button", { name: "下一步：地圖", exact: true }).waitFor();
+  assert.equal(await list.getByText("· 已完成").count(), 0, "a list whose section is not complete is not marked finished");
   for (const width of [1040, 1280, 1440, 1920, 2560]) {
     await page.setViewportSize({ width, height: 1000 });
     await journey.capture(page, `roster-recovery-${width}`);

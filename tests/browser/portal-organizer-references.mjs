@@ -216,22 +216,22 @@ try {
   await page.getByRole("heading", { name: "攤位名單", exact: true }).waitFor();
   assert.equal((await remembered).postDataJSON().lastSection, "import");
   const handoff = page.getByRole("status").filter({ hasText: "基本設定完成" });
-  await handoff.getByText("接下來匯入攤位名單。地圖、檢查與送審可從「活動項目」進入。", { exact: true }).waitFor();
+  await handoff.getByText("接下來匯入攤位名單。其餘項目從右上「準備進度」進入。", { exact: true }).waitFor();
   assert.equal(await handoff.evaluate((node) => node === document.activeElement), true, "focus follows the unmounted button to the line");
   assert.equal(await staleNotice.count(), 0, "an earlier step's failure does not stand above the handoff");
-  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
+  await page.locator("summary").filter({ hasText: "準備進度" }).click();
   const sections = page.getByRole("group", { name: "活動項目" });
   assert.equal(await sections.getByRole("button", { name: /^攤位名單/ }).getAttribute("aria-current"), "page");
   assert.equal(await page.getByRole("button", { name: /^下一步：/ }).count(), 0, "no 下一步 to the section already open");
   await journey.capture(page, "onboarding-handoff");
-  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
+  await page.locator("summary").filter({ hasText: "準備進度" }).click();
   // Reaching for a control in the panel starts the next action; the line
   // about the previous one does not stay beside it. Moving away clears it
   // through the same navigation step every other notice uses.
   await page.getByRole("button", { name: "匯入檔案", exact: true }).click();
   await page.getByRole("button", { name: "返回名單", exact: true }).click();
   assert.equal(await handoff.count(), 0, "acting in the panel retires the handoff");
-  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
+  await page.locator("summary").filter({ hasText: "準備進度" }).click();
   await sections.getByRole("button", { name: /^活動/ }).click();
   assert.equal(await sections.getByRole("button", { name: /^活動/ }).getAttribute("aria-current"), "page");
   await page.getByRole("button", { name: "下一步：攤位名單", exact: true }).waitFor();
@@ -319,7 +319,7 @@ try {
   await page.unroute("**/api/organizer/events/*/imports", delayImport);
   await page.getByRole("region", { name: "攤位名單", exact: true }).getByRole("cell", { name: "無分區", exact: true }).waitFor();
   await journey.capture(page, "import-save-feedback");
-  await page.locator("summary").filter({ hasText: "活動項目 · 準備進度" }).click();
+  await page.locator("summary").filter({ hasText: "準備進度" }).click();
   await page.getByRole("group", { name: "活動項目" }).getByRole("button", { name: /^檢查與預覽/ }).click();
   await page.getByRole("button", { name: "執行檢查", exact: true }).click();
   await page.getByText("檢查完成。", { exact: true }).waitFor();
