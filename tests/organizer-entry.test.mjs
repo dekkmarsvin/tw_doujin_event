@@ -169,19 +169,19 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   assert.match(app, /無分區/);
 
   // A rejected row is visible, correctable and removable rather than absent.
-  assert.match(app, /待修正 \{result\.rejected\.length\} 列/);
-  assert.match(app, /填好標記的欄位，這一列就會移到可匯入。/);
-  assert.match(app, /可匯入 \{result\.rows\.length\} 列/);
-  assert.match(app, /已移除 \{excluded\.length\} 列/);
-  assert.match(app, /略過全部待修正的列/);
-  assert.match(app, />移除<\/button>/);
-  assert.match(app, />復原<\/button>/);
+  assert.match(app, /待修正 \{result\.rejected\.length\}/);
+  assert.match(app, /result\.rejected\.slice\(start, start \+ 100\)/);
+  assert.match(app, /可匯入 \{result\.rows\.length\}/);
+  assert.match(app, /已排除 \{excluded\.length\}/);
+  assert.match(app, /排除全部待修正資料/);
+  assert.match(app, />排除<\/button>/);
+  assert.match(app, />恢復<\/button>/);
   assert.match(app, /清除所有手動修改/);
   assert.match(app, /excludedRows/);
 
   // Corrections are keyed by source row, so they cannot outlive the file,
   // sheet or header row that gives a row number its meaning.
-  assert.match(app, /const forgetPreview = \(\) => \{ setPreviewRequested\(false\); setOverrides\(\{\}\); setExcluded\(\[\]\); \};/);
+  assert.match(app, /const forgetPreview = \(\) => \{ setPreviewRequested\(false\); setOverrides\(\{\}\); setExcluded\(\[\]\); setPreviewPage\(0\); \};/);
   assert.equal(app.match(/forgetPreview\(\);/gu).length, 3, "the file, worksheet and header row inputs must each forget the corrections");
 
   // A row keyed by its booth code would remount its input mid-edit.
@@ -197,7 +197,7 @@ test("the workspace stops saying things the organizer cannot act on", async () =
   // The import panel's whole guarantee is that the file never leaves the
   // browser, so 尚未上傳 promised the one thing that guarantee rules out.
   assert.doesNotMatch(app, /尚未上傳/);
-  assert.match(app, /個工作表。`/);
+  assert.doesNotMatch(app, /匯入出處|原檔 SHA-256|原始檔沒有上傳/);
 
   // The organizer is never asked to type an identifier, so saying they need
   // not type one introduces the idea in order to dismiss it.
@@ -240,7 +240,7 @@ test("the workspace carries one navigation, one progress count, and counts only 
 
   // Re-importing replaces the stored list, so the preview says so before it
   // is confirmed rather than behind another dialog.
-  assert.match(app, /這次匯入會取代目前已儲存的/);
+  assert.match(app, /將以 \{result\.rows\.length\} 筆取代目前的/);
 });
 // #221 4.4／4.5 與 Phase 5: the rail reports what is wrong, and every empty
 // state names a job rather than a condition.

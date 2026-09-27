@@ -10,9 +10,12 @@ import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
 import { SavedImportList } from "./organizer-roster-editor";
+import { AreaNameFields } from "./organizer-area-names";
+import { RosterDialog } from "./organizer-roster-dialog";
+import { PortalError } from "../circle-editor-client";
 import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
 
 type MappingChoice = { column: number | null; fixed: string };
@@ -33,16 +36,38 @@ function downloadText(name: string, text: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSaveReady, onLocate }: {
+type ImportPanelProps = {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onSection: (section: "venue") => void;
   onDirtyChange: (dirty: boolean) => void;
   onSaveReady: (save: (() => Promise<boolean>) | null) => void;
   onLocate: (location: OrganizerMapLocation) => void;
-}) {
-  const [rosterDirty, setRosterDirty] = useState(false);
-  const reportRosterDirty = useCallback((dirty: boolean) => { setRosterDirty(dirty); onDirtyChange(dirty); }, [onDirtyChange]);
+};
+
+export function ImportPanel(props: ImportPanelProps) {
+  const [importing, setImporting] = useState(false);
+  const { detail } = props;
+  if (importing) return <ImportWizard {...props} onBack={() => setImporting(false)} />;
+  if (detail.import) return <SavedImportList {...props} onImport={() => setImporting(true)} />;
+  const sample = buildOrganizerImportSample({
+    days: detail.draft.event.days.map(day => ({ id: day.id, label: day.label })),
+    spaces: detail.draft.venue.assignments.map(space => ({ id: space.venueSpaceId, label: organizerVenueSpaceLabel(detail.venueCatalog, space.venueSpaceId), divided: space.areaMode !== "none" })),
+    requiresArea: detail.draft.venue.assignments.some(space => space.areaMode !== "none"),
+  });
+  return <section className={styles.panel}><div className={styles.panelHead}><h3>攤位名單</h3><button type="button" disabled={!["draft", "changes_requested"].includes(detail.event.status)} onClick={() => setImporting(true)}>匯入檔案</button></div>
+    <p>尚未加入攤位名單。</p><ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} /></section>;
+}
+
+function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady, onBack }: ImportPanelProps & { onBack: () => void }) {
+  const [step, setStep] = useState(1);
+  const [leaving, setLeaving] = useState(false);
+  const [expectedVersion, setExpectedVersion] = useState(detail.event.version);
+  const [declaredDraft, setDeclaredDraft] = useState(detail.draft);
+  const [conflict, setConflict] = useState(false);
+  const [committed, setCommitted] = useState(false);
+  const [previewGroup, setPreviewGroup] = useState<"ready" | "rejected" | "excluded">("ready");
+  const [previewPage, setPreviewPage] = useState(0);
   const [fileName, setFileName] = useState("");
   const { notice: loadNotice, fail: loadFailed } = useActionFeedback();
   const readFeedback = useActionFeedback();
@@ -66,10 +91,19 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
   const [overrides, setOverrides] = useState<OrganizerImportOverrides>({});
   const [excluded, setExcluded] = useState<readonly ExcludedImportRow[]>([]);
   const [metadata, setMetadata] = useState<Awaited<ReturnType<typeof buildOrganizerImportMetadata>> | null>(null);
+  useEffect(() => {
+    const dirty = !!bytes;
+    onDirtyChange(dirty);
+    // Import requires the explicit final confirmation, never an implicit navigation save.
+    onSaveReady(async () => !dirty);
+    const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => { onDirtyChange(false); onSaveReady(null); window.removeEventListener("beforeunload", warn); };
+  }, [bytes, onDirtyChange, onSaveReady]);
   // A source row is a physical line in a CSV but a filtered index in a
   // worksheet, so another file, sheet or header row changes what every row
   // number means. Corrections keyed by those numbers cannot survive that.
-  const forgetPreview = () => { setPreviewRequested(false); setOverrides({}); setExcluded([]); };
+  const forgetPreview = () => { setPreviewRequested(false); setOverrides({}); setExcluded([]); setPreviewPage(0); };
 
   const sourceLabel = organizerSourceLabel(detail.draft.officialSource);
   useEffect(() => {
@@ -85,12 +119,6 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
   const header = useMemo(() => sheet?.rows[headerRow - 1]?.cells ?? [], [sheet, headerRow]);
   const editable = detail.event.status === "draft" || detail.event.status === "changes_requested";
   const assignments = detail.draft.venue.assignments;
-  const displayAlias = (spaceId: string, areaId: string) => {
-    const edited = Object.hasOwn(areaLabels, spaceId) ? areaLabels[spaceId] : undefined;
-    if (edited && Object.hasOwn(edited, areaId)) return edited[areaId];
-    const saved = assignments.find((assignment) => assignment.venueSpaceId === spaceId)?.areaLabels;
-    return saved && Object.hasOwn(saved, areaId) ? saved[areaId] : "";
-  };
   const catalog = detail.venueCatalog;
   const days = detail.draft.event.days;
   const requiresAreaMapping = assignments.some((assignment) => assignment.areaMode !== "none");
@@ -213,34 +241,57 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
    * 170 correct rows are noise and risk rather than an affordance (#225). */
   const flagged = new Set((result?.issues ?? []).map((issue) => issue.row).filter((row) => row !== undefined));
 
-  return <section className={styles.panel} onChangeCapture={() => saveFeedback.clear()}>
+  const count = previewGroup === "ready" ? result?.rows.length ?? 0 : previewGroup === "rejected" ? result?.rejected.length ?? 0 : excluded.length;
+  const previewPages = Math.max(1, Math.ceil(count / 100));
+  const currentPage = Math.min(previewPage, previewPages - 1);
+  const start = currentPage * 100;
+  const leave = () => {
+    void onChanged().then(onBack).catch(error => loadFailed(message(error)));
+  };
+  const submit = async () => {
+    if (!result || !metadata || !mapping || conflict || committed) return;
+    const work = async () => {
+      try {
+        const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows, areaLabels);
+        let version = expectedVersion;
+        if (JSON.stringify(withAreas) !== JSON.stringify(declaredDraft)) {
+          version = (await saveOrganizerEvent(detail.event.id, version, withAreas)).version;
+          setExpectedVersion(version); setDeclaredDraft(withAreas);
+        }
+        const saved = await putOrganizerImport(detail.event.id, { expectedVersion: version, source: { ...metadata, mapping }, rows: result.rows });
+        setExpectedVersion(saved.version); setCommitted(true); setBytes(null); onDirtyChange(false);
+      } catch (error) {
+        if (error instanceof PortalError && error.status === 409) setConflict(true);
+        throw error;
+      }
+      try { await onChanged(); } catch (error) { throw new Error(`名單已匯入，但重新讀取失敗：${message(error)}`); }
+    };
+    if (await saveFeedback.run(work(), "名單已匯入。")) onBack();
+  };
+  return <section className={`${styles.panel} ${styles.importWizard}`} onChangeCapture={() => saveFeedback.clear()}>
+    <div className={styles.panelHead}><h3>匯入攤位名單</h3><button type="button" className={styles.ghost} disabled={saveFeedback.pending || readFeedback.pending} onClick={() => bytes ? setLeaving(true) : onBack()}>返回名單</button></div>
+    <ol className={styles.importSteps} aria-label="匯入步驟">{["選擇檔案", "欄位對照", "預覽與確認"].map((name, index) => <li key={name} aria-current={step === index + 1 ? "step" : undefined}>{index + 1} · {name}</li>)}</ol>
     <ActionNotice notice={loadNotice} />
-    <div className={styles.panelHead}><div><h3>攤位與社團名單匯入</h3><p>{detail.import ? "對照欄位後預覽結果，確認無誤再送出名單。" : "尚未加入攤位名單。選一個 CSV 或 Excel 檔，或先下載範本。"}</p></div>{detail.import && <span className={styles.version}>{detail.import.rows.length} 列・{detail.import.source.fileName}</span>}</div>
-    {detail.import && <SavedImportList detail={detail} onChanged={onChanged} onDirtyChange={reportRosterDirty} onSaveReady={onSaveReady} onLocate={onLocate} />}
-    {rosterDirty && <p role="status">先儲存或放棄清單變更，再以新檔案取代。</p>}
-    <fieldset className={styles.formFields} disabled={saveFeedback.pending || rosterDirty} aria-label="匯入檔案與欄位對應">
-    <div className={styles.importGrid}>
-      <label>來源檔案<input type="file" disabled={!editable} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        forgetPreview(); setBoothCodeMode("single"); setBoothCodeWidth("");
-        void readFeedback.run(readOrganizerWorkbook(file).then((workbook) => {
-          setFileName(file.name); setBytes(workbook.bytes); setSheets(workbook.sheets);
-          setSheetName(workbook.sheets[0]?.name ?? ""); setHeaderRow(1);
-          return workbook;
-        }), (workbook) => `已讀取 ${workbook.sheets.length} 個工作表。`);
-      }} /><ActionNotice notice={readFeedback.notice} /></label>
-      <label>工作表<select disabled={sheets.length < 2} value={sheetName} onChange={(event) => { setSheetName(event.target.value); forgetPreview(); }}><option value="">尚未選擇</option>{sheets.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}</select></label>
-      <label>標題列<input type="number" min={1} max={sheet?.rows.length ?? 1} value={headerRow} onChange={(event) => { setHeaderRow(Number(event.target.value)); forgetPreview(); }} /><small>欄位名稱在第幾列。</small></label>
-    </div>
-    {!sheet ? <div className={styles.sample}>
-      <h4>檔案長這樣</h4>
-      <ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} />
-    </div> : <details className={styles.sample}>
-      <summary>查看填寫範例／下載範本</summary>
-      <ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} />
-    </details>}
-    {sheet && <>
+    <fieldset className={styles.formFields} disabled={saveFeedback.pending || !editable || conflict || committed} aria-label="匯入檔案與欄位對應">
+    {step === 1 && <>
+      <div className={styles.importFileFields}>
+        <label>來源檔案<input type="file" disabled={readFeedback.pending} accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={event => {
+          const file = event.target.files?.[0]; if (!file) return;
+          void readFeedback.run(readOrganizerWorkbook(file).then(workbook => {
+            forgetPreview(); setBoothCodeMode("single"); setBoothCodeWidth("");
+            setFileName(file.name); setBytes(workbook.bytes); setSheets(workbook.sheets);
+            setSheetName(workbook.sheets[0]?.name ?? ""); setHeaderRow(1); return workbook;
+          }), "檔案已讀取。");
+        }} />{fileName && <small>{fileName}</small>}<ActionNotice notice={readFeedback.notice} /></label>
+        <label>工作表<select disabled={sheets.length < 2} value={sheetName} onChange={event => { setSheetName(event.target.value); forgetPreview(); }}><option value="">尚未選擇</option>{sheets.map(item => <option key={item.name}>{item.name}</option>)}</select></label>
+        <label>標題列<input type="number" min={1} max={sheet?.rows.length ?? 1} value={headerRow} onChange={event => { setHeaderRow(Number(event.target.value)); forgetPreview(); }} /></label>
+      </div>
+      {!sheet ? <div className={styles.sample}><h4>填寫範例</h4><ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} /></div>
+        : <details className={styles.sample}><summary>查看填寫範例／下載範本</summary><ImportSampleCard sample={sample} fileBase={detail.draft.event.id ?? "event"} /></details>}
+      <button type="button" disabled={!sheet || readFeedback.pending || !Number.isInteger(headerRow) || headerRow < 1 || headerRow >= (sheet?.rows.length ?? 0)} onClick={() => setStep(2)}>下一步：欄位對照</button>
+    </>}
+    {step === 2 && sheet && <>
+      <details className={styles.sample} open><summary>來源資料 · {fileName}</summary><div className={styles.sampleTable}><table><thead><tr>{header.map((name, index) => <th key={index}>{String(name)}</th>)}</tr></thead><tbody>{sheet.rows.slice(headerRow, headerRow + 5).map(row => <tr key={row.sourceRow}>{row.cells.map((cell, index) => <td key={index}>{String(cell ?? "")}</td>)}</tr>)}</tbody></table></div></details>
       <div className={styles.mappingGrid}>
         {select("活動日", day, setDay, "活動日代碼", dayOptions)}
         {select("場地", venueSpace, setVenueSpace, "場地", spaceOptions)}
@@ -258,7 +309,6 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
         </> : <fieldset className={`${styles.derivedField} ${styles.mappingField}`}>
           <legend>展區</legend>
           <div><div className={styles.subLabel}>固定值<strong>無分區</strong></div></div>
-          <small>不需要展區欄，系統會自動帶入。</small>
         </fieldset>}
         <ColumnSelect label="攤位代碼" value={boothColumn} header={header} required onChange={setBoothColumn} />
         <ColumnSelect label="社團名稱" value={circleColumn} header={header} required onChange={setCircleColumn} />
@@ -278,92 +328,41 @@ export function ImportPanel({ detail, onChanged, onSection, onDirtyChange, onSav
           {suggestedWidth !== null && <button type="button" className={styles.ghost} onClick={() => setBoothCodeWidth(String(suggestedWidth))}>確認使用建議的 {suggestedWidth} 個字元</button>}
         </label>}
       </div>
-      {/* 3.4: the preview is the confirmation step, so what confirming does is
-          said here rather than behind another dialog. */}
-      <p>{detail.import?.rows.length
-        ? `這次匯入會取代目前已儲存的 ${detail.import.rows.length} 列攤位資料。`
-        : "儲存後會以這次確認的資料取代目前的攤位名單。"}</p>
-      <div className={styles.row}>
-        <button type="button" disabled={!mapping || saveFeedback.pending} onClick={() => { readFeedback.clear(); saveFeedback.clear(); setPreviewRequested(true); }}>預覽對應結果</button>
-        <button type="button" className={styles.ghost} disabled={saveFeedback.pending || !result || !metadata || !mapping || result.rows.length === 0 || derivedBlocked || result.rejected.length > 0} onClick={() => {
-          if (!result || !metadata || !mapping) return;
-          readFeedback.clear();
 
-          // The areas this file names are written to the draft first, because
-          // the import API refuses any row whose area the event never declared
-          // — and this file is where those areas come from.
-          const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows, areaLabels);
-          const declared = JSON.stringify(withAreas) === JSON.stringify(detail.draft)
-            ? Promise.resolve(detail.event.version)
-            : saveOrganizerEvent(detail.event.id, detail.event.version, withAreas).then((saved) => saved.version);
-          void saveFeedback.run(declared.then((expectedVersion) => putOrganizerImport(detail.event.id, {
-            expectedVersion, source: { ...metadata, mapping }, rows: result.rows,
-          })).then(onChanged), "匯入資料已儲存；原始檔沒有上傳。");
-        }}>{saveFeedback.pending ? "儲存中…" : `確認並儲存 ${result?.rows.length ?? 0} 列`}</button>
-        <ActionNotice notice={saveFeedback.notice} />
-        {(Object.keys(overrides).length > 0 || excluded.length > 0) && <button type="button" className={styles.textButton} onClick={() => { saveFeedback.clear(); setOverrides({}); setExcluded([]); }}>清除所有手動修改</button>}
-      </div>
-      {prepared && !prepared.ok && <p className={styles.issueError}>{prepared.message}</p>}
-      {result && <div className={styles.importPreview}>
-        <div className={styles.validationSummary}><b>{result.rows.length} 列 → {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 列待修正</span><span>{excluded.length} 列已移除</span></div>
-        {derived.length > 0 && <div className={styles.derivedSummary}>
-          <h4>這份檔案裡的場地與展區</h4>
-          {derived.map((space) => <div key={space.venueSpaceId} className={space.declared ? undefined : styles.issueError}>
-            <strong>{organizerVenueSpaceLabel(catalog, space.venueSpaceId)}</strong>
-            {space.declared
-              ? <div>{space.areas.map((area) => areaModeByVenueSpace[space.venueSpaceId] === "none"
-                ? <span key={area.id}>無分區（{area.rows} 列）</span>
-                : <label key={area.id}>{area.id}（{area.rows} 列）{area.valid ? "" : "・代碼不可用"} · 顯示名稱（選填）
-                  <input maxLength={60} value={displayAlias(space.venueSpaceId, area.id)} placeholder={area.id} onChange={(event) => setAreaLabels((current) => ({ ...current, [space.venueSpaceId]: { ...(Object.hasOwn(current, space.venueSpaceId) ? current[space.venueSpaceId] : {}), [area.id]: event.target.value } }))} />
-                  <small>代碼 {area.id} · 顯示為 {displayAlias(space.venueSpaceId, area.id).trim() || area.id}</small>
-                </label>)}</div>
-              : <span>這個場地不在活動設定裡，請先到「場館與場地」新增，或修正來源檔。</span>}
-          </div>)}
-          {derived.some((space) => space.areas.some((area) => !area.valid)) && <p className={styles.issueError}>展區代碼只能使用英數字、底線與連字號，請修正來源檔的展區欄。</p>}
-          {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 沒有出現在這份檔案；儲存後這些場地會變成沒有攤位。</p>}
-          <p>儲存時會把分區場地的展區寫進活動設定；無分區的場地不需要展區欄。沒出現在檔案裡的場地會標示為未匯入。</p>
-        </div>}
-        {result.issues.filter((issue) => issue.severity === "warning").slice(0, 10).map((issue) => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
-        <table>
-          <thead><tr><th>來源列</th><th>活動日</th><th>場地</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
-          {result.rejected.length > 0 && <tbody>
-            <tr className={styles.rowGroup}><td colSpan={columns}>待修正 {result.rejected.length} 列<span>填好標記的欄位，這一列就會移到可匯入。</span></td></tr>
-            {result.rejected.slice(0, 100).map((row) => <RejectedImportRow key={row.sourceRow} row={row} columns={columns}
-              dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping} areaModeByVenueSpace={areaModeByVenueSpace}
-              overrides={overrides[row.sourceRow]}
-              duplicate={result.issues.find((issue) => issue.severity === "error" && issue.row === row.sourceRow)?.message ?? null}
-              onCorrect={(field, value) => correct(row.sourceRow, field, value)} onRemove={() => remove(row)} />)}
-          </tbody>}
-          <tbody>
-            <tr className={styles.rowGroup}><td colSpan={columns}>可匯入 {result.rows.length} 列</td></tr>
-            {result.rows.slice(0, 100).map((row) => <tr key={row.sourceRow}>
-              <td>{row.sourceRow}</td><td>{row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>
-              {requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : row.areaId}</td>}
-              <td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td>
-              <td className={styles.rowAction}>{flagged.has(row.sourceRow)
-                && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>移除</button>}</td>
-            </tr>)}
-          </tbody>
-          {excluded.length > 0 && <tbody>
-            <tr className={styles.rowGroup}><td colSpan={columns}>已移除 {excluded.length} 列</td></tr>
-            {excluded.slice(0, 100).map((row) => <tr key={row.sourceRow} className={styles.excludedRow}>
-              <td>{row.sourceRow}</td><td colSpan={requiresAreaMapping ? 3 : 2} />
-              <td>{row.boothCode}</td><td>{row.circleName}</td><td />
-              <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={() => restore(row.sourceRow)}>復原</button></td>
-            </tr>)}
-          </tbody>}
-        </table>
-        {result.rejected.length > 0 && <div className={styles.sampleActions}>
-          <button type="button" className={styles.secondary} onClick={() => setExcluded((current) => [
-            ...current,
-            ...result.rejected.map((row) => ({ sourceRow: row.sourceRow, boothCode: row.boothCode, circleName: row.circleName })),
-          ])}>略過全部待修正的列</button>
-          <p>待修正的列先顯示 100 列；略過會套用到全部。</p>
-        </div>}
-        {(result.rows.length > 100 || result.rejected.length > 100) && <p>每一組先顯示 100 列；儲存時會包含全部確認列。</p>}
-      </div>}
+      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(1)}>上一步</button><button type="button" disabled={!mapping} onClick={() => { setPreviewRequested(true); setPreviewGroup("rejected"); setPreviewPage(0); setStep(3); }}>預覽對應結果</button></div>
+    </>}
+    {step === 3 && <>
+      {prepared && !prepared.ok && <p role="alert">{prepared.message}</p>}
+      {result && <>
+        <div className={styles.validationSummary}><b>{result.rows.length} 筆可匯入 · {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 筆待修正</span><span>{excluded.length} 筆已排除</span></div>
+        <details className={styles.areaNamePreview}><summary>展區顯示名稱（選填）</summary>
+          <AreaNameFields detail={detail} spaces={derived.filter(space => space.declared).map(space => ({ venueSpaceId: space.venueSpaceId, areaIds: space.areas.map(area => area.id) }))} labels={areaLabels}
+            onChange={(spaceId, areaId, label) => setAreaLabels(current => ({ ...current, [spaceId]: { ...current[spaceId], [areaId]: label } }))} />
+        </details>
+        {derived.filter(space => !space.declared).map(space => <p role="alert" key={space.venueSpaceId}>請先在「場館與場地」加入 {space.venueSpaceId}，或修正來源欄位。</p>)}
+        {derived.some(space => space.areas.some(area => !area.valid)) && <p role="alert">展區代碼只能使用英數字、底線與連字號。</p>}
+        {result.issues.filter(issue => issue.severity === "warning").slice(0, 10).map(issue => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
+        <div className={styles.previewTabs} role="group" aria-label="預覽資料"><button type="button" aria-pressed={previewGroup === "ready"} onClick={() => { setPreviewGroup("ready"); setPreviewPage(0); }}>可匯入 {result.rows.length}</button><button type="button" aria-pressed={previewGroup === "rejected"} onClick={() => { setPreviewGroup("rejected"); setPreviewPage(0); }}>待修正 {result.rejected.length}</button><button type="button" aria-pressed={previewGroup === "excluded"} onClick={() => { setPreviewGroup("excluded"); setPreviewPage(0); }}>已排除 {excluded.length}</button></div>
+        <div className={`${styles.importPreview} ${styles.previewTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>場地</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
+          <tbody>{previewGroup === "rejected" && result.rejected.slice(start, start + 100).map(row => <RejectedImportRow key={row.sourceRow} row={row} columns={columns} dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping} areaModeByVenueSpace={areaModeByVenueSpace} overrides={overrides[row.sourceRow]}
+            duplicate={result.issues.find(issue => issue.severity === "error" && issue.row === row.sourceRow)?.message ?? null} onCorrect={(field, value) => correct(row.sourceRow, field, value)} onRemove={() => remove(row)} />)}
+          {previewGroup === "ready" && result.rows.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td>{days.find(day => day.id === row.dayId)?.label ?? row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>{requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : row.areaId}</td>}<td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td><td>{flagged.has(row.sourceRow) && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>排除</button>}</td></tr>)}
+          {previewGroup === "excluded" && excluded.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td colSpan={requiresAreaMapping ? 3 : 2} /><td>{row.boothCode}</td><td>{row.circleName}</td><td /><td><button type="button" className={styles.ghost} onClick={() => restore(row.sourceRow)}>恢復</button></td></tr>)}
+          </tbody></table>{count === 0 && <p>沒有{previewGroup === "rejected" ? "待修正" : previewGroup === "excluded" ? "已排除" : "可匯入"}的資料。</p>}</div>
+        <div className={styles.rosterTools}><span>第 {currentPage + 1} / {previewPages} 頁</span><button type="button" className={styles.ghost} disabled={currentPage === 0} onClick={() => setPreviewPage(currentPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={currentPage + 1 >= previewPages} onClick={() => setPreviewPage(currentPage + 1)}>下一頁</button>
+          {previewGroup === "rejected" && result.rejected.length > 0 && <button type="button" className={styles.textButton} onClick={() => setExcluded(current => [...current, ...result.rejected.map(row => ({ sourceRow: row.sourceRow, boothCode: row.boothCode, circleName: row.circleName }))])}>排除全部待修正資料</button>}
+          {(Object.keys(overrides).length > 0 || excluded.length > 0) && <button type="button" className={styles.textButton} onClick={() => { setOverrides({}); setExcluded([]); }}>清除所有手動修改</button>}
+        </div>
+        {detail.import && <p className={styles.issueWarning}>將以 {result.rows.length} 筆取代目前的 {detail.import.rows.length} 筆名單。</p>}
+        {uncovered.length > 0 && <p className={styles.issueWarning}>{uncovered.join("、")} 未包含在這份檔案中；匯入後將沒有攤位。</p>}
+      </>}
+      <div className={styles.row}><button type="button" className={styles.secondary} onClick={() => setStep(2)}>上一步</button><button type="button" disabled={!result || !metadata || !mapping || result.rows.length === 0 || derivedBlocked || result.rejected.length > 0} onClick={() => void submit()}>{saveFeedback.pending ? "匯入中…" : detail.import ? "取代名單" : "匯入名單"}</button></div>
     </>}
     </fieldset>
+    <ActionNotice notice={saveFeedback.notice} />
+    {committed && !saveFeedback.pending && <button type="button" onClick={leave}>重新讀取名單</button>}
+    {conflict && <p role="alert">名單已被更新，匯入內容仍保留。請返回名單重新讀取，再確認要匯入的內容。</p>}
+    {leaving && <RosterDialog title="放棄匯入內容？" onClose={() => setLeaving(false)}><p>已儲存的名單不受影響。</p><div className={styles.row}><button type="button" onClick={leave}>放棄並返回名單</button><button type="button" className={styles.secondary} onClick={() => setLeaving(false)}>繼續匯入</button></div></RosterDialog>}
   </section>;
 }
 
@@ -386,7 +385,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
     <td className={row.codes.includes(MISSING_CODE[field]) ? styles.issueCell : undefined}>
       <input aria-label={`來源列 ${row.sourceRow} 的${label}`} defaultValue={shown(field, fallback)}
         onBlur={(event) => onCorrect(field, event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+        onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && event.keyCode !== 229) event.currentTarget.blur(); }} />
     </td>;
   const choice = (field: "dayId" | "venueSpaceId", fallback: string, label: string, options: Array<{ value: string; label: string }>) => {
     const current = shown(field, fallback);
@@ -408,7 +407,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
       {cell("boothCode", row.boothCode, "攤位代碼")}
       {cell("circleName", row.circleName, "社團名稱")}
       <td>{row.stableKey ?? "—"}</td>
-      <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={onRemove}>移除</button></td>
+      <td className={styles.rowAction}><button type="button" className={styles.ghost} onClick={onRemove}>排除</button></td>
     </tr>
     {duplicate && <tr className={styles.duplicateNote}><td colSpan={columns}>{duplicate}</td></tr>}
   </>;
@@ -417,7 +416,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
 function ColumnSelect({ label, value, header, required = false, onChange }: {
   label: string; value: number | null; header: readonly unknown[]; required?: boolean; onChange: (value: number | null) => void;
 }) {
-  return <label className={styles.mappingField}>{label}<select required={required} value={value === null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}><option value="">尚未選擇</option>{header.map((name, index) => <option value={index} key={index}>{index + 1}. {String(name || "（空白）")}</option>)}</select></label>;
+  return <label className={styles.mappingField}>{label}<select aria-label={label} required={required} value={value === null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}><option value="">尚未選擇</option>{header.map((name, index) => <option value={index} key={index}>{index + 1}. {String(name || "（空白）")}</option>)}</select></label>;
 }
 
 /** What this file is supposed to look like. It used to vanish the moment a
@@ -435,7 +434,6 @@ function ImportSampleCard({ sample, fileBase }: { sample: { header: string[]; ro
       <button type="button" className={styles.secondary} onClick={() => downloadText(`${fileBase}-攤位名單.csv`, toOrganizerCsv([sample.header]), "text/csv;charset=utf-8")}>下載空白 CSV</button>
       <button type="button" className={styles.ghost} onClick={() => downloadText(`${fileBase}-攤位名單填寫範例.csv`, toOrganizerCsv([sample.header, ...sample.rows]), "text/csv;charset=utf-8")}>下載填寫範例</button>
     </div>
-    <p>主辦內部編號留空也可以匯入，供主辦自行核對，不代表跨活動社團識別。</p>
   </>;
 }
 export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }: {

@@ -74,7 +74,7 @@ try {
   for (const surface of ["organizer", "circle"]) {
     const { page, maps } = await open(surface);
     if (surface === "organizer") {
-      const saved = page.getByRole("region", { name: "已儲存的攤位清單" });
+      const saved = page.getByRole("region", { name: "攤位名單" });
       await saved.getByText("部分已畫 1/2", { exact: true }).waitFor();
       assert.equal(await saved.getByText("待畫 0/1", { exact: true }).count(), 2, "other day does not borrow A01 from this map");
       assert.equal(await saved.getByText("已畫 1/1", { exact: true }).count(), 1);
@@ -127,8 +127,8 @@ try {
     assert.equal(maps[0].layout.rows[0].slots[1].code, "A02");
 
     if (surface === "organizer") {
-      await page.getByRole("group", { name: "活動項目" }).getByRole("button").filter({ hasText: "攤位匯入" }).click();
-      const saved = page.getByRole("region", { name: "已儲存的攤位清單" });
+      await page.getByRole("group", { name: "活動項目" }).getByRole("button").filter({ hasText: "攤位名單" }).click();
+      const saved = page.getByRole("region", { name: "攤位名單" });
       await saved.getByText("已畫 2/2", { exact: true }).waitFor();
       await saved.locator("tbody tr").filter({ hasText: "首日甲社" }).getByRole("button", { name: "定位 A02", exact: true }).click();
       await comparison.getByText("選取 A02：首日甲社", { exact: true }).waitFor();
