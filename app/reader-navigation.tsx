@@ -11,12 +11,16 @@ export function navigateReader(url: URL) {
 export function ordinaryLinkClick(event: MouseEvent<HTMLAnchorElement>) {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
-export default function ReaderViewTabs({ event, view, beforeNavigate, url }: {
-  event: EventDefinition; view: "map" | "browse"; beforeNavigate?: () => void; url?: URL;
+/**
+ * The map/browse switch. Both views draw the same control, and each header
+ * places it (`className`) beside its tools so it sits in one spot across views.
+ */
+export default function ReaderViewTabs({ event, view, beforeNavigate, url, className }: {
+  event: EventDefinition; view: "map" | "browse"; beforeNavigate?: () => void; url?: URL; className?: string;
 }) {
   const current = url ?? new URL(typeof window === "undefined" ? "https://event.invalid/" : window.location.href);
   const other = switchReaderViewUrl(event, current);
-  return <nav className={styles.tabs} aria-label="閱讀方式">
+  return <nav className={`${styles.tabs} ${className ?? ""}`} aria-label="閱讀方式">
     {(["map", "browse"] as const).map((target) => <a key={target}
       href={(target === view ? current : other).toString()} aria-current={target === view ? "page" : undefined}
       onClick={(pressed) => {

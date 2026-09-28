@@ -1,6 +1,8 @@
-.tabs { grid-column:1/-1; display:flex; align-items:center; gap:20px; min-width:0; }
-.tabs a { display:flex; align-items:center; justify-content:center; min-height:44px; padding:8px 16px; color:var(--muted); border-bottom:2px solid transparent; text-decoration:none; font-size:15px; font-weight:700; white-space:nowrap; }
-.tabs a[aria-current] { color:var(--coral); border-color:var(--coral); }
-.tabs a:hover { background:var(--surface-soft); }
-.tabs a:focus-visible { outline:3px solid #8fac9c; outline-offset:-3px; }
-@media(max-width:760px) { .tabs { grid-row:3; gap:12px; } }
+/* A two-way switch: the current view is filled with ink, the other stays ink text.
+   The 44px exterior matches the header tools; each link's hit area reaches the frame. */
+.tabs { display:inline-flex; align-items:stretch; gap:2px; width:max-content; max-width:100%; min-height:44px; padding:3px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); box-sizing:border-box; }
+.tabs a { position:relative; display:flex; align-items:center; justify-content:center; min-width:52px; padding:0 14px; border-radius:5px; color:var(--ink); text-decoration:none; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; line-height:1.2; white-space:nowrap; }
+.tabs a::after { content:""; position:absolute; inset:-4px -1px; }
+.tabs a[aria-current] { background:var(--ink); color:var(--surface-soft); }
+.tabs a:not([aria-current]):hover { background:var(--cream); }
+.tabs a:focus-visible { outline:3px solid #8fac9c; outline-offset:1px; }

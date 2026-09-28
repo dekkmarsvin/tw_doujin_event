@@ -5,11 +5,14 @@
 .page :is(a,button,input,select,textarea):focus-visible { outline:3px solid #8fac9c; outline-offset:3px; }
 .page button:hover:not(:disabled),.page a:hover { filter:brightness(.92); }
 .header { border-bottom:1px solid var(--line); background:var(--surface-soft); }
-.header>div,.header>nav { max-width:1200px; margin:auto; padding-inline:24px; }
-.identity { display:flex; align-items:center; gap:24px; min-height:76px; padding-block:12px; }
-.brand { display:flex; flex:none; align-items:center; gap:10px; font-weight:800; font-size:22px; text-decoration:none; color:var(--ink); white-space:nowrap; }
+.header>div { max-width:1200px; margin:auto; padding-inline:24px; }
+/* Same order as the map header: brand, event, map/browse switch, then tools. */
+.identity { display:flex; align-items:center; gap:8px; min-height:76px; padding-block:12px; }
+.identity>button { flex:none; min-height:44px; }
+.brand { display:flex; flex:none; align-items:center; gap:10px; margin-right:16px; font-weight:800; font-size:22px; text-decoration:none; color:var(--ink); white-space:nowrap; }
 .brand>span { width:38px; height:38px; }
-.event { min-width:0; flex:1; color:var(--ink); text-decoration:none; font-weight:700; overflow-wrap:anywhere; }
+.event { min-width:0; flex:1; margin-right:16px; color:var(--ink); text-decoration:none; font-weight:700; overflow-wrap:anywhere; }
+.viewSwitch { flex:none; }
 .event small { display:block; font-size:12px; color:var(--muted); font-weight:400; }
 .main { max-width:1200px; margin:auto; padding:20px 24px 80px; }
 .search { display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); }
@@ -74,13 +77,15 @@
 .srOnly { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 @media(max-width:1050px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) {
-  .header>div,.header>nav { padding-inline:14px; }
-  .identity { gap:12px; min-height:56px; padding-block:6px; flex-wrap:wrap; }
-  .brand { font-size:19px; gap:8px; }
+  .header>div { padding-inline:14px; }
+  /* As on the map: the tools keep the top row's right end, the switch gets its own row. */
+  .identity { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:6px 12px; min-height:56px; padding-block:6px 10px; }
+  .brand { font-size:19px; gap:8px; margin-right:0; }
   .brand>span { width:32px; height:32px; font-size:16px; }
-  .identity>.event { font-size:12px; }
+  .identity>.event { margin-right:0; font-size:12px; }
   .identity>.event small { font-size:11px; }
-  .identity>button { margin-left:auto; }
+  .identity>.viewSwitch { grid-column:1 / -1; grid-row:2; justify-self:start; }
+  .identity>button { grid-column:3; grid-row:1; }
   .main { padding:12px 12px 80px; }
   .grid,.textList { grid-template-columns:minmax(0,1fr); }
   .grid { gap:16px; }

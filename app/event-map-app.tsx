@@ -821,11 +821,11 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>同人展逛攤地圖</small>}</div></div>
       <div className="event">{eventIdentity}</div>
       <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
-      {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
-      <ReaderViewTabs event={event} view="map" url={serializeEventUrlState(event, {
+      <ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={serializeEventUrlState(event, {
         eventId, day, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay,
         selection: { day, circleId: null, boothCode: null },
       }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href)} />
+      {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
     </header>
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
       <aside ref={leftRailRef} className={`filters ${styles.leftRail}`}>

@@ -131,8 +131,7 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
   const allScope = state.day === null && state.venueSpaceId === null;
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div className={styles.identity}><a className={`brand ${styles.brand}`} href="/" onClick={savePosition}><span aria-hidden="true">場</span>場刊 Map</a><a className={styles.event} href="/">{event.name}<small>{event.dateRangeLabel}</small></a><PlanningTools eventId={event.id} /></div>
-      <ReaderViewTabs event={event} view="browse" url={url} beforeNavigate={savePosition} />
+      <div className={styles.identity}><a className={`brand ${styles.brand}`} href="/" onClick={savePosition}><span aria-hidden="true">場</span>場刊 Map</a><a className={styles.event} href="/">{event.name}<small>{event.dateRangeLabel}</small></a><ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /></div>
     </header>
     <main className={styles.main}>
       <h1 className={styles.srOnly}>{event.name} 逛品書</h1>
