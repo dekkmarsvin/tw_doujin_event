@@ -9,15 +9,21 @@
 /* Same order as the map header: brand, event, map/browse switch, then tools. */
 .identity { display:flex; align-items:center; gap:8px; min-height:76px; padding-block:12px; }
 .identity>button { flex:none; min-height:44px; }
-.brand { display:flex; flex:none; align-items:center; gap:10px; margin-right:16px; font-weight:800; font-size:22px; text-decoration:none; color:var(--ink); white-space:nowrap; }
+.brand { display:flex; flex:none; align-items:center; gap:10px; margin-right:16px; font-weight:700; font-size:16px; letter-spacing:.08em; color:var(--ink); white-space:nowrap; }
 .brand>span { width:38px; height:38px; }
-.event { min-width:0; flex:1; margin-right:16px; color:var(--ink); text-decoration:none; font-weight:700; overflow-wrap:anywhere; }
+.event { display:flex; align-items:center; gap:12px; min-width:0; min-height:44px; flex:1; margin-right:16px; color:var(--ink); text-decoration:none; font-weight:700; overflow-wrap:anywhere; }
+.event>span:first-child { min-width:0; }
+a.event { justify-content:flex-start; border-radius:7px; }
+a.event:hover>span:first-child { text-decoration:underline; text-underline-offset:3px; }
+.eventSwitch { flex:none; display:flex; align-items:center; gap:3px; white-space:nowrap; font-size:11px; font-weight:400; }
 .viewSwitch { flex:none; }
 .event small { display:block; font-size:12px; color:var(--muted); font-weight:400; }
 .main { max-width:1200px; margin:auto; padding:20px 24px 80px; }
 .search { display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); }
 .search>svg { width:22px; height:22px; color:var(--muted); flex:none; }
 .search input { width:100%; min-width:0; border:0; outline:0; background:transparent; font-size:16px; }
+.page .search input:focus-visible { outline:0; }
+.search:focus-within { border-color:var(--muted); box-shadow:0 0 0 3px #dfe8e3; }
 /* One row of equal controls. iOS Safari ignores min-height on a native select,
    so the selects drop the native look and take an explicit height and arrow. */
 .scope { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:stretch; margin-top:10px; }
@@ -29,8 +35,9 @@
 .scope>section>button>small { display:none; }
 .topics,.filters { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
 .topics button,.filters button { display:flex; align-items:center; gap:8px; max-width:100%; min-height:44px; padding:7px 12px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); overflow-wrap:anywhere; text-align:left; }
-.topics button[aria-pressed=true] { background:var(--coral); color:var(--surface-soft); border-color:var(--coral); }
-.topics small { font-size:11px; }
+.topics button[aria-pressed=true] { border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); color:var(--ink); font-weight:700; }
+.topics svg { flex:none; width:16px; height:16px; }
+.topics small { font-size:12px; font-weight:400; }
 .filters button { min-height:36px; font-size:12px; }
 .filters svg { flex:none; }
 .resultHeader { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:20px 0 8px; min-height:44px; }
@@ -53,23 +60,22 @@
 .cardTitle>button svg { width:20px; height:20px; }
 .tags { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 10px; }
 .tags>span { max-width:100%; padding:3px 7px; background:var(--cream); border-radius:5px; font-size:12px; overflow-wrap:anywhere; }
-.tags>.rating { background:#edf8f3; color:#306d59; }
+.tags>.rating { padding:2px 6px; border:1px solid #cfd4cd; background:transparent; }
 .placements { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:8px 0 0; padding:0; list-style:none; }
 .placements li { min-width:0; }
 .placements a,.placements li>span { display:block; height:100%; min-height:58px; padding:8px; border:1px solid var(--line); border-radius:7px; color:var(--ink); text-decoration:none; overflow-wrap:anywhere; }
-.placements b { font:700 15px var(--font-mono),monospace; }
+.placements b { font:700 16px var(--font-mono),monospace; }
 .placements small { display:block; margin-top:3px; color:var(--muted); font:12px var(--font-geist),system-ui,sans-serif; line-height:1.5; }
 .placements li>span { background:var(--cream); }
-.withoutLink { display:inline-block; margin-bottom:8px; color:var(--muted); font-size:13px; min-height:24px; }
+.withoutLink { display:inline-block; margin-bottom:8px; color:var(--muted); font-size:12px; min-height:24px; }
 .without { margin-top:28px; scroll-margin-top:20px; }
-.without h2 { font-size:16px; margin-bottom:12px; }
+.without h2 { font-size:16px; font-weight:700; margin-bottom:12px; }
 .textList { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.textList .card { border-radius:7px; }
 .more { display:block; min-height:44px; margin:20px auto; padding:10px 16px; background:var(--surface-soft); border:1px solid var(--line); border-radius:7px; }
 .empty { padding:24px 0; }
-.empty h2 { font-size:18px; margin:0 0 12px; }
+.empty h2 { font-size:18px; font-weight:700; margin:0 0 12px; }
 .empty button,.empty a { display:inline-block; min-height:44px; margin-right:12px; padding:10px 12px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); color:var(--ink); text-decoration:none; }
-.error { padding:12px; background:#fff3f1; color:#a43e30; border-radius:7px; }
+.error { padding:12px; border:1px solid #f0cdc6; background:#fff3f1; color:#a43e30; border-radius:9px; }
 .skeleton { min-height:440px; background:var(--cream); border-radius:12px; }
 .manualShare { display:grid; gap:8px; margin-block:12px; }
 .manualShare textarea { width:100%; min-height:100px; padding:12px; border:1px solid var(--line); background:var(--surface-soft); border-radius:7px; }
@@ -83,9 +89,10 @@
   .header>div { padding-inline:14px; }
   /* As on the map: brand, event and tools share the top row; the switch moves to the bottom navigation. */
   .identity { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:6px 12px; min-height:56px; padding-block:6px; }
-  .brand { font-size:19px; gap:8px; margin-right:0; }
-  .brand>span { width:32px; height:32px; font-size:16px; }
-  .identity>.event { margin-right:0; font-size:12px; }
+  .brand { font-size:18px; gap:10px; margin-right:0; }
+  .brand>span { width:34px; height:34px; }
+  .identity>.event { flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; margin-right:0; font-size:12px; }
+  .eventSwitch { font-size:10px; }
   .identity>.event small { font-size:11px; }
   .identity>.viewSwitch { display:none; }
   .mobileNav { position:fixed; z-index:40; inset:auto 0 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); border-top:1px solid var(--line); background:#fff; }
@@ -101,7 +108,6 @@
   .scope>section>button>span { font-size:16px; gap:4px; }
   .scope>section>button svg { display:none; }
   .resultHeader { margin-top:16px; }
-  .resultHeader h2 { font-size:17px; }
   .resultHeader>div { display:block; }
   .resultHeader span { display:block; margin-top:2px; }
 }

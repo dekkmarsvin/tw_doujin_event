@@ -21,7 +21,7 @@ import { sharePublicContent } from "./public-share";
 import type { PublicFilterDescriptor } from "./public-circle-search";
 import styles from "./catalog-browse-app.module.css";
 
-export default function CatalogBrowseApp({ event }: { event: EventDefinition }) {
+export default function CatalogBrowseApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const publication = useCircleCatalog(event.id);
   const planning = useReaderPlanning();
   const [state, setState] = useState(() => parseCatalogBrowseUrl(event, new URL(window.location.href)));
@@ -133,7 +133,7 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
   const allScope = state.day === null && state.venueSpaceId === null;
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div className={styles.identity}><a className={`brand ${styles.brand}`} href="/" onClick={savePosition}><span aria-hidden="true">場</span>場刊 Map</a><a className={styles.event} href="/">{event.name}<small>{event.dateRangeLabel}</small></a><ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /></div>
+      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href="/" onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{event.dateRangeLabel}</small></span><span className={styles.eventSwitch}>切換活動<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{event.dateRangeLabel}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /></div>
     </header>
     <main className={styles.main}>
       <h1 className={styles.srOnly}>{event.name} 逛品書</h1>
@@ -150,7 +150,7 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
           onApply={(advancedSearch, genre) => change({ ...state, advancedSearch, genre: genre ?? state.genre })} />
       </div>
       {ready && projection.topics.length > 0 && <div className={styles.topics} aria-label="作品與題材">
-        {(moreTopics ? projection.topics : projection.topics.slice(0, 2)).map((topic) => <button key={topic.value} type="button" aria-pressed={normalizeWorkTopics(state.advancedSearch.workTopics).includes(topic.value)} onClick={() => chooseTopic(topic.value)}>{topic.value}<small>{topic.count}</small></button>)}
+        {(moreTopics ? projection.topics : projection.topics.slice(0, 2)).map((topic) => { const pressed = normalizeWorkTopics(state.advancedSearch.workTopics).includes(topic.value); return <button key={topic.value} type="button" aria-pressed={pressed} onClick={() => chooseTopic(topic.value)}>{pressed && <UiIcon name="check" />}{topic.value}<small>{topic.count}</small></button>; })}
         {projection.topics.length > 2 && <button type="button" aria-expanded={moreTopics} onClick={() => setMoreTopics(!moreTopics)}>{moreTopics ? "收起題材" : "更多題材"}</button>}
       </div>}
       {hasFilters && <div className={styles.filters} aria-label="已套用條件">
@@ -160,8 +160,8 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
       </div>}
       {planning.storageError && <p className={styles.error} role="alert">{planning.storageError}</p>}
       <div className={styles.resultHeader}>
-        <div aria-live="polite">{ready && <><h2>{projection.withCatalog.length} 個社團有品書</h2><span>{projection.circleCount} 個社團符合 · {projection.placementCount} 筆攤位配置</span></>}</div>
-        <button type="button" onClick={() => void share()}>分享</button>
+        <div aria-live="polite">{ready ? <><h2>{projection.withCatalog.length} 個社團有品書</h2><span>{projection.circleCount} 個社團符合 · {projection.placementCount} 筆攤位配置</span></> : !failed && <span>正在讀取社團資料…</span>}</div>
+        {ready && <button type="button" onClick={() => void share()}>分享</button>}
       </div>
       {notice && <p role="status">{notice}</p>}
       {manualShare && <label className={styles.manualShare}>請複製分享文字與連結<textarea readOnly value={manualShare} onFocus={(e) => e.target.select()} /><small>結果依社團目前公開的內容更新。</small></label>}

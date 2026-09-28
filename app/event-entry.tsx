@@ -74,6 +74,6 @@ export default function EventEntry() {
 function EventReader({ event, view, onChooseEvent }: { event: EventDefinition; view: "map" | "browse"; onChooseEvent?: () => void }) {
   const catalog = useCircleCatalog(event.id);
   return <ReaderPlanningProvider eventId={event.id} settled={catalog.status !== "loading"}>
-    {view === "browse" ? <CatalogBrowseApp event={event} /> : <EventMapApp event={event} onChooseEvent={onChooseEvent} />}
+    {view === "browse" ? <CatalogBrowseApp event={event} onChooseEvent={onChooseEvent} /> : <EventMapApp event={event} onChooseEvent={onChooseEvent} />}
   </ReaderPlanningProvider>;
 }

@@ -69,6 +69,9 @@ try {
     await page.getByRole("heading", { name: "範例創作市集 逛品書", exact: true }).waitFor();
     assert.equal(await page.locator('meta[name="robots"]').count(), 0);
     assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), "https://map.kotoban.top/events/sample/");
+    // Browse follows the map header: with several events the name leads back to the chooser.
+    await page.getByRole("link", { name: /切換活動/ }).click();
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
     await page.close();
   }
 
