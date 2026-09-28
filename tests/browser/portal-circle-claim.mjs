@@ -199,6 +199,16 @@ try {
   for (const rating of ["全年齡", "R15", "R18"]) assert.equal(await circle.getByRole("checkbox", { name: rating, exact: true }).isChecked(), true);
   assert.equal(await circle.locator('input[id^="specialTags-"]').inputValue(), "自由題材");
 
+  // 7-. An edit gone wrong is walked back beside 預覽並送出, without a reload,
+  //     and the walk-back itself can be taken back until the next edit.
+  await penField(circle).fill("打錯的筆名");
+  await circle.getByRole("button", { name: "還原為已儲存的版本", exact: true }).click();
+  assert.equal(await penField(circle).inputValue(), PEN_NAME, "reverting brings back what is saved");
+  await circle.getByRole("button", { name: "取消還原", exact: true }).click();
+  assert.equal(await penField(circle).inputValue(), "打錯的筆名", "and the revert can be undone");
+  await circle.getByRole("button", { name: "還原為已儲存的版本", exact: true }).click();
+  assert.equal(await penField(circle).inputValue(), PEN_NAME);
+
   // 7a. A sale-sheet page: nothing can be chosen before the age confirmation,
   //     a PDF is named rather than refused vaguely, and a print-size image is
   //     resized in the browser and sent as a JPEG within the pixel budget.
@@ -206,8 +216,18 @@ try {
   //     http, which the https-only field rule rightly refuses — the route test
   //     covers the save.
   const catalogPicker = circle.getByLabel("新增品書圖片", { exact: true });
+  const ageCheck = circle.getByRole("checkbox", { name: "我確認這些圖片適合所有年齡的讀者觀看。" });
   assert.equal(await catalogPicker.isDisabled(), true, "choosing a page waits for the confirmation");
-  await circle.getByRole("checkbox", { name: "我確認這些圖片適合所有年齡的讀者觀看。" }).check();
+  // Held back, not dead: the press opens no file dialog and lands on the
+  // confirmation that is in the way. Forced, because Playwright will not press
+  // an aria-disabled control, and that press is what is under test.
+  let dialogOpened = false;
+  circle.once("filechooser", () => { dialogOpened = true; });
+  await circle.locator("label", { hasText: "新增品書圖片" }).click({ force: true });
+  await circle.waitForFunction(() => document.activeElement?.getAttribute("type") === "checkbox");
+  assert.equal(await ageCheck.evaluate((node) => node === document.activeElement), true, "the press leads to the confirmation");
+  assert.equal(dialogOpened, false, "and chooses nothing");
+  await ageCheck.check();
   await catalogPicker.setInputFiles({ name: "品書.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
   await circle.getByText("PDF 請先匯出成 JPG 或 PNG 再上傳。", { exact: true }).waitFor();
   const staged = circle.waitForResponse((response) => new URL(response.url()).pathname === `/api/circle/${CIRCLE_ID}/catalog-image`);

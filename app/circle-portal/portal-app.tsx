@@ -24,6 +24,7 @@ import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
 import { CatalogImagesField } from "./catalog-images-field";
+import { pointTo } from "./point-to";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
 import styles from "./portal.module.css";
 
@@ -728,6 +729,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // The author's own content for a field, put aside when 使用場刊資料 or 不顯示
   // replaced it, so the same button pressed again gives it back. This tab
   // only: it is an undo, not part of the draft.
+  const [revertedDraft, setRevertedDraft] = useState<Pick<StoredDraft, "fields" | "listInputs" | "stagedThumbnailKey"> | null>(null);
   const [ownContent, setOwnContent] = useState<Partial<Record<CircleOverrideFieldKey, {
     value: CircleOverrideFields[CircleOverrideFieldKey];
     listInput: string | undefined;
@@ -784,6 +786,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         setStagedThumbnailKey(restored ? stored.stagedThumbnailKey ?? null : null);
         setDraftRestoredAt(restored ? stored.savedAt : null);
         setOwnContent({});
+        setRevertedDraft(null);
         if (!restored) forgetStoredDraft(claim.circleId);
         setSavedFields(initialFields);
         setHidden(!!result.postEventHidden);
@@ -829,7 +832,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     else writeStoredDraft(claim.circleId, { fields, listInputs, stagedThumbnailKey, savedAt: new Date().toISOString() });
   }, [claim.circleId, draftDiffersFromSaved, fields, hydrated, listInputs, stagedThumbnailKey]);
 
+  // Going back to what is saved throws away unsaved work, so what it replaced
+  // is kept until the next edit: a revert pressed by mistake is undone from the
+  // same place it was made. "Until the next edit" is `fields === savedFields`,
+  // true only between a revert and whatever changes the form after it.
   const discardDraft = () => {
+    setRevertedDraft({ fields, listInputs, stagedThumbnailKey });
+    setStatus(IDLE);
     forgetStoredDraft(claim.circleId);
     setFields(savedFields);
     setListInputs({});
@@ -837,6 +846,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     setDraftRestoredAt(null);
     setOwnContent({});
   };
+  const undoRevert = () => {
+    if (!revertedDraft) return;
+    setFields(revertedDraft.fields);
+    setListInputs(revertedDraft.listInputs);
+    setStagedThumbnailKey(revertedDraft.stagedThumbnailKey);
+    setRevertedDraft(null);
+  };
+  const justReverted = !!revertedDraft && fields === savedFields;
 
   const retryHydration = () => {
     setHydrated(false);
@@ -1045,9 +1062,12 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
   useModalFocus(expanded, expandedPreview, () => setExpanded(false));
 
+  // Reachable with problems outstanding: the press is answered by taking the
+  // author to the first field that needs fixing, rather than by a dead button.
+  const showFirstProblem = () => pointTo(document.getElementById(problems[0]?.id ?? ""));
   const openReview = () => {
     if (problems.length > 0) {
-      document.getElementById(problems[0].id)?.focus();
+      showFirstProblem();
       return;
     }
     const snapshot = draft();
@@ -1086,7 +1106,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
     {draftRestoredAt && draftDiffersFromSaved && <p className={styles.notice} role="status">
       這是你在這台裝置上{DRAFT_TIME.format(new Date(draftRestoredAt))}編輯到一半、還沒儲存的內容。
-      <button type="button" className={styles.inlineButton} onClick={discardDraft}>改用已儲存的版本</button>
+      <button type="button" className={styles.inlineButton} onClick={discardDraft}>還原為已儲存的版本</button>
     </p>}
 
     <div className={styles.editorLayout}>
@@ -1292,9 +1312,16 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           <p className={formMessage?.kind === "error" ? styles.actionError : formMessage ? styles.actionOk : styles.actionState} role="status">
             {formMessage
               ? <>{formMessage.message}{formMessage.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}</>
-              : hydrated && draftDiffersFromSaved ? "尚未儲存" : null}
+              : !hydrated ? null : draftDiffersFromSaved ? "尚未儲存" : justReverted ? "已還原為已儲存的版本" : null}
           </p>
-          <button type="button" disabled={!hydrated || status.kind === "busy" || problems.length > 0 || reviewOpen} onClick={openReview}>
+          {/* Beside the step that publishes, so an edit gone wrong can be
+              walked back where it would otherwise be sent; only once there is
+              a saved version to go back to. */}
+          {hydrated && saved && (draftDiffersFromSaved || justReverted) && <button
+            type="button" className={styles.secondaryButton} disabled={status.kind === "busy" || reviewOpen}
+            onClick={justReverted ? undoRevert : discardDraft}
+          >{justReverted ? "取消還原" : "還原為已儲存的版本"}</button>}
+          <button type="button" disabled={!hydrated || status.kind === "busy" || reviewOpen} aria-disabled={problems.length > 0 || undefined} onClick={openReview}>
             {status.kind === "busy" ? "檢查中…" : "預覽並送出"}
           </button>
         </div>
@@ -1316,7 +1343,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
               {/* Re-checked here, not only when the review opened: an image
                   verdict can arrive after that, and a confirmation taken before
                   it must not be the one that publishes. */}
-              <button type="button" disabled={status.kind === "busy" || problems.length > 0} onClick={() => {
+              <button type="button" disabled={status.kind === "busy"} aria-disabled={problems.length > 0 || undefined} onClick={() => {
+                // A verdict that arrived during the review sends the author
+                // back to the field it is about, not to a button that is dead.
+                if (problems.length > 0) {
+                  closeReview();
+                  requestAnimationFrame(showFirstProblem);
+                  return;
+                }
                 const savingFields = { ...reviewedFields };
                 setStatus({ kind: "busy", message: "儲存中…" });
                 void saveOverride(claim.circleId, savingFields, null, reviewedThumbnailKey ?? undefined)
