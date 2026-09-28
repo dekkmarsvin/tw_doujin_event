@@ -54,6 +54,9 @@
 **場刊**（catalog）
 本站呈現的社團與攤位資料整體。對應公開快照 `circles.json`。
 
+**品書**（sale sheet）
+社團本人提供的本次頒布資訊圖片，對應 `CircleMedia.kind = catalog`；不同於代表圖（thumbnail）與整份場刊（catalog）。「逛品書」以社團為單位瀏覽這些圖片，使用同一份場刊與補充資料，不建立另一套社團名單。
+
 **社團模板**（circle template）
 社團身分由永久配號 registry 與可審閱證據決定。活動中的正式證據是主辦攤位鍵（`eventId + day:booth`）；生成器把它與主辦當日攤位清單接起來，產生 `CircleRecord` 與 `PlacementRecord`。
 

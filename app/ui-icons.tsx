@@ -3,6 +3,7 @@ import type { SVGProps } from "react";
 type UiIconName =
   | "arrow-down"
   | "arrow-up"
+  | "book"
   | "chevron-left"
   | "chevron-right"
   | "check"
@@ -54,6 +55,7 @@ export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSV
     {name === "north" && <><path d="m12 3 5 14-5-3-5 3 5-14Z" /><path d="M12 14v7" /></>}
     {name === "map-pin" && <><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2" /></>}
     {name === "upload" && <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 14v5h14v-5" /></>}
+    {name === "book" && <><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5Z" /><path d="M5 19.5A2.5 2.5 0 0 0 7.5 22H19v-5" /></>}
     {name === "check" && <path d="m5 12 4 4L19 6" />}
     {name === "square" && <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />}
     {name === "check-square" && <><rect x="4.5" y="4.5" width="15" height="15" rx="2.5" /><path d="m8 12 2.6 2.7L16.5 9" /></>}

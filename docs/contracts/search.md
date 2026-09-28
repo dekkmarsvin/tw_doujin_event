@@ -3,12 +3,14 @@
 三組條件的責任切分。它們常被誤放在同一個面板裡，因此邊界必須明寫：**搜尋改變結果集合，規劃篩選投影使用者資料，顯示設定只改變呈現。**
 
 **實作**：[`app/circle-search.ts`](../../app/circle-search.ts)、[`app/advanced-circle-search.tsx`](../../app/advanced-circle-search.tsx)、[`app/display-filter-controls.tsx`](../../app/display-filter-controls.tsx)、[`app/work-topic-aliases.ts`](../../app/work-topic-aliases.ts)
-**測試**：`tests/circle-search.test.mjs`
+**測試**：`tests/circle-search.test.mjs`、`tests/catalog-browse.test.mjs`
 **URL 參數**：見 [URL 檢視狀態契約](./url-state.md)
 
 責任拆分的決策見 [ADR-0006](../adr/0006-split-search-planning-filter-and-display.md)。在此之前這三組條件都塞在一個叫「進階篩選與顯示」的入口下，使用者以為能依作品找社團，打開卻看到收藏管理條件。
 
 ## 一、探索搜尋（常駐）
+
+「逛品書」與地圖透過 `public-circle-search.ts`／`public-search-url.ts` 共用公開條件語意；不套用私人規劃篩選。瀏覽以社團 ID 聚合，地圖仍以配置呈現；同範圍、同公開條件下兩者的社團集合一致。瀏覽的版面、計數與圖片空狀態見[品書瀏覽契約](./catalog-browse.md)。
 
 搜尋社團名、作品名、題材與介紹內容，回傳可比較的結果清單。
 

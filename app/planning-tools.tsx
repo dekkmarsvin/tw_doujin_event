@@ -6,7 +6,7 @@ import { isKnownCircleId } from "./circle-records";
 import { useCircleCatalog } from "./use-circle-catalog";
 import { EMPTY_PLANNING_DOCUMENT, deleteFavoriteGroup, moveFavoriteGroup, moveFavoritesToGroup, removeFromVisitPlan, toggleFavorite, updateFavoriteGroup } from "./planning-store";
 import { exportPlanningCsv, exportPlanningJson } from "./planning-transfer";
-import { usePlanning } from "./use-planning";
+import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import styles from "./planning-tools.module.css";
@@ -21,10 +21,13 @@ function download(name: string, text: string, type: string) {
 }
 
 export default function PlanningTools({ eventId }: { eventId: string }) {
+  const catalog = useCircleCatalog(eventId);
+  return <ReaderPlanningBoundary eventId={eventId} settled={catalog.status !== "loading"}><PlanningToolsContent eventId={eventId} /></ReaderPlanningBoundary>;
+}
+function PlanningToolsContent({ eventId }: { eventId: string }) {
   // Subscribe to the catalog so orphan detection re-runs once records arrive,
   // instead of reporting every favorite as unmatched while the snapshot loads.
-  const { status: catalogStatus } = useCircleCatalog(eventId);
-  const { document, ready, update, replace, storageError, unsupportedRaw } = usePlanning(eventId, catalogStatus !== "loading");
+  const { document, ready, update, replace, storageError, unsupportedRaw } = useReaderPlanning();
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);

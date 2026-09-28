@@ -51,3 +51,9 @@
   .topicRow button { min-height:44px; }
   .chips button { min-height:36px; }
 }
+
+.browseBackdrop { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:16px; background:#202a3566; }
+.browsePanel { width:min(540px,100%); max-height:calc(100dvh - 32px); overflow:auto; padding:20px; border-radius:18px; background:var(--surface-soft); box-shadow:0 28px 80px #11182066; }
+.browsePanel :is(label,legend,small),.browsePanel .field { font-size:14px; }
+.browsePanel :is(input,select,button),.browsePanel .suggestions b { font-size:14px; min-height:44px; }
+.browsePanel footer button,.browsePanel .segments button { font-size:14px; }

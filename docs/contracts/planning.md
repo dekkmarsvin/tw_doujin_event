@@ -2,7 +2,7 @@
 
 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。
 
-**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)
+**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、`app/reader-planning.tsx`
 **測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`
 
 規劃資料只儲存在使用者當下的瀏覽器，不跨裝置同步。這是刻意的隱私姿態，不是尚未完成的功能——決策與代價見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
@@ -11,6 +11,7 @@
 
 - 規劃 store 是收藏、群組與行程的**唯一讀寫 seam**；清單卡、完整詳情、地圖與社團介紹頁不得各自保存 `isFavorite`。社團介紹頁與地圖是不同文件，同一瀏覽器內靠同一個 `localStorage` key 與 `storage` 事件保持一致；它可加入的日期見[社團目錄契約](./circle-catalog.md#社團介紹頁)。
 - 行程狀態不因收藏切換而自動新增或移除項目。
+- 同文件的地圖／逛品書及資料管理使用同一個 event-level planning owner。切換視圖保留寫入失敗的記憶體資料、storageError 與取消收藏的 7 秒復原期限，匯出亦讀取這份狀態；跨活動重新掛載。獨立預覽與社團頁維持原有 store 協定。
 - 頁面 controller 把 store 狀態投影到社團清單、詳情與地圖 renderer；renderer 只呈現狀態並回報互動。
 - UI 元件負責顯示與收集意圖，不直接理解 `localStorage` key、序列化版本或未來的帳號 API。
 

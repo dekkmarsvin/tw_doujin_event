@@ -29,9 +29,11 @@ import {
   toggleFavorite,
   updateFavorite,
   updateVisitPlanPurchase,
-  type FavoriteRecord,
 } from "./planning-store";
-import { usePlanning } from "./use-planning";
+import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
+import ReaderViewTabs, { arrivedOnPlan, forgetArrivalPanel, navigateReader, ordinaryLinkClick } from "./reader-navigation";
+import { switchReaderViewUrl } from "./catalog-browse-url";
+import tabStyles from "./reader-mobile-tabs.module.css";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
@@ -81,7 +83,11 @@ const MAP_DOUBLE_TAP_DISTANCE = 24;
  * this event's defaults, and a stale day or area from the previous event would
  * be indistinguishable from a deliberate choice.
  */
-export default function EventMapApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
+export default function EventMapApp(props: { event: EventDefinition; onChooseEvent?: () => void }) {
+  const catalog = useCircleCatalog(props.event.id);
+  return <ReaderPlanningBoundary eventId={props.event.id} settled={catalog.status !== "loading"}><EventMapWorkspace {...props} /></ReaderPlanningBoundary>;
+}
+function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const eventId = event.id;
   const genres: readonly string[] = event.genres;
   const urlDefaults = defaultEventUrlState(event);
@@ -96,14 +102,17 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const [advancedSearch, setAdvancedSearch] = useState<AdvancedCircleSearch>(DEFAULT_ADVANCED_CIRCLE_SEARCH);
   const [planningDisplay, setPlanningDisplay] = useState<PlanningDisplayFilters>(DEFAULT_PLANNING_DISPLAY_FILTERS);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [mobileWorkspace, setMobileWorkspace] = useState<"explore" | "plan">("explore");
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("results");
-  const [mobileSheetLevel, setMobileSheetLevel] = useState<MobileSheetLevel>("peek");
+  // The browse view's 行程 tab lands here with the plan open; 探索 lands on the map at rest.
+  const [openedOnPlan] = useState(arrivedOnPlan);
+  const keepLandingPanel = useRef(openedOnPlan);
+  const [mobileWorkspace, setMobileWorkspace] = useState<"explore" | "plan">(openedOnPlan ? "plan" : "explore");
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(openedOnPlan ? "plan" : "results");
+  const [mobileSheetLevel, setMobileSheetLevel] = useState<MobileSheetLevel>(openedOnPlan ? "half" : "peek");
   const [mobileSheetDragHeight, setMobileSheetDragHeight] = useState<number | null>(null);
   const [mobileSheetDragging, setMobileSheetDragging] = useState(false);
   const [navigationMode, setNavigationMode] = useState(false);
   const [desktop, setDesktop] = useState(false);
-  const [desktopPanel, setDesktopPanel] = useState<"explore" | "plan">("explore");
+  const [desktopPanel, setDesktopPanel] = useState<"explore" | "plan">(openedOnPlan ? "plan" : "explore");
   const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(false);
   const [focusedCode, setFocusedCode] = useState<string | null>(null);
   const [restoreVersion, setRestoreVersion] = useState(0);
@@ -130,10 +139,9 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const [mapError, setMapError] = useState("");
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
-  const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
   const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
-  const { document: planning, update: updatePlanning, storageError: planningStorageError } = usePlanning(eventId, catalogStatus !== "loading");
+  const { document: planning, update: updatePlanning, storageError: planningStorageError, favoriteUndo, setFavoriteUndo } = useReaderPlanning();
   const searchRef = useRef<HTMLInputElement | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const floorRef = useRef<HTMLDivElement | null>(null);
@@ -278,8 +286,13 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       (circleId) => resolveCircleIdAliases(circleId, eventId),
     );
     setSelectedRecordId(selected?.recordId ?? null);
-    setMobilePanel(selected ? "details" : "results");
-    setMobileSheetLevel(selected ? "half" : "peek");
+    // Arriving from the browse view's 行程 tab there is no selection to show;
+    // that first resolution leaves the plan open instead of resetting it.
+    if (selected || !keepLandingPanel.current) {
+      setMobilePanel(selected ? "details" : "results");
+      setMobileSheetLevel(selected ? "half" : "peek");
+    }
+    keepLandingPanel.current = false;
     setDesktopDetailsOpen(Boolean(selected));
     pendingRestoreCode.current = !restoreInterrupted.current ? selected?.code ?? null : null;
   }, [catalogReady, circleRecords, circleRecordsById, eventId, restoreVersion]);
@@ -300,11 +313,8 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     return () => { cancelled = true; };
   }, [day, event, eventId, venueAssignment, mapScopeKey, mapRetry]);
 
-  useEffect(() => {
-    if (!favoriteUndo) return;
-    const timeout = window.setTimeout(() => setFavoriteUndo(null), 7000);
-    return () => window.clearTimeout(timeout);
-  }, [favoriteUndo]);
+  // Opening on the plan is a one-time landing; a reload of this entry starts at rest.
+  useEffect(() => { if (openedOnPlan) forgetArrivalPanel(); }, [openedOnPlan]);
 
   useEffect(() => {
     if (!planNotice) return;
@@ -395,7 +405,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     }, window.location.href);
     const method = historyMethod(historyIntent.current, false);
     if (method === "none") return;
-    window.history[method](null, "", url);
+    window.history[method]({ ...window.history.state }, "", url);
     historyIntent.current = "replace";
   }, [advancedSearch, catalogStatus, circleRecordsById, day, event, favoriteOnly, genre, planningDisplay, query, selectedRecordId, urlReady, venueAssignment]);
 
@@ -812,6 +822,13 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
 
   const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
 
+  // The map as the reader sees it, without a selection: what the switch and the
+  // phone's 逛品書 tab carry over into the browse view.
+  const readerUrl = serializeEventUrlState(event, {
+    eventId, day, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay,
+    selection: { day, circleId: null, boothCode: null },
+  }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href);
+  const browseUrl = switchReaderViewUrl(event, readerUrl);
   const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{event.dateRangeLabel}</span><span>{event.venue}</span></div>}</div>;
   const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href="/" onClick={(click) => {
     if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
@@ -824,6 +841,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       <div className="brand"><span aria-hidden="true">場</span><div><b>場刊 Map</b>{desktop && <small>同人展逛攤地圖</small>}</div></div>
       <div className="event">{eventIdentity}</div>
       <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
+      <ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={readerUrl} />
       {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
     </header>
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
@@ -875,8 +893,13 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
           <div key={day} className={styles.mobilePanel} hidden={mobilePanel !== "plan"} onFocusCapture={handleMobilePanelFocus}>{navigationButton}{planningPanel}</div>
         </div>
         <div ref={mobileNavRef} className={styles.mobileTabs} role="group" aria-label="行動版工作區">
-          <button aria-pressed={mobileWorkspace === "explore"} aria-expanded={!mobileSummary && mobilePanel !== "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("results")}><UiIcon name="search" /><span>探索</span></button>
-          <button aria-pressed={mobileWorkspace === "plan"} aria-expanded={mobilePanel === "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("plan")}><UiIcon name="check-square" /><span>行程{dayPlan.length > 0 && <small>{dayPlan.length}</small>}</span></button>
+          <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "explore"} aria-expanded={!mobileSummary && mobilePanel !== "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("results")}><UiIcon name="search" /><span>探索</span></button>
+          <button className={tabStyles.tab} aria-pressed={mobileWorkspace === "plan"} aria-expanded={mobilePanel === "plan" && mobileSheetLevel !== "peek"} onClick={() => selectMobilePanel("plan")}><UiIcon name="check-square" /><span>行程{dayPlan.length > 0 && <small>{dayPlan.length}</small>}</span></button>
+          <a className={tabStyles.tab} href={browseUrl.toString()} onClick={(pressed) => {
+            if (!ordinaryLinkClick(pressed)) return;
+            pressed.preventDefault();
+            navigateReader(browseUrl);
+          }}><UiIcon name="book" /><span>逛品書</span></a>
         </div>
       </aside>
     </div>

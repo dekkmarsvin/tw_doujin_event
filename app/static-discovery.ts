@@ -99,7 +99,7 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   const directory = (entries: readonly string[]) => `<ul class="circle-directory">${entries.map((entry) => `<li>${entry}</li>`).join("")}</ul>`;
   const entry = (circle: (typeof circles)[number], status = "") => link(circlePath(event.id, circle.id), `${listed(circle)}${status ? `（${status}）` : ""}`);
   pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${aliases}${eventFacts(event)}
-<p>${link(readerLink(event), "開啟攤位地圖", "primary")}</p>
+<p>${link(readerLink(event), "開啟攤位地圖", "primary")} ${link(readerLink(event) + "&view=browse", "逛品書")}</p>
 <section><h2>參展社團</h2><p>${circles.length} 個社團</p>${event.days.length > 1 ? dayDirectory() : directory(circles.map((circle) => entry(circle)))}</section>`, schema));
   /** A multi-day event lists its circles day by day, the way readers plan and
    * search a day (#364). A circle appears under every day it has a placement,

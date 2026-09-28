@@ -21,6 +21,7 @@ const fixture = async (eventId) => {
 // Read from the fixtures rather than restated here, so adding a fixture event
 // or renaming one cannot leave this journey asserting a name nobody ships.
 const events = await Promise.all(["sample", "sample-two"].map(fixture));
+const mapEntry = (event) => `開啟攤位地圖：${event.name}`;
 
 const journey = await start("reader-event-chooser");
 try {
@@ -28,14 +29,16 @@ try {
     const page = await journey.page({ event: "", params: "" });
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
 
-    // Each published event offers its map and its static introduction.
-    assert.equal(await page.getByRole("link").count(), events.length * 2, "two destinations per published event");
+    // Each published event offers its map, catalog browse and static introduction.
+    assert.equal(await page.getByRole("link").count(), events.length * 3, "three destinations per published event");
     for (const [index, event] of events.entries()) {
-      const entry = page.getByRole("link", { name: new RegExp(event.name) });
+      // Every entry names its event, so each card's links stay distinct out of context.
+      const entry = page.getByRole("link", { name: mapEntry(event), exact: true });
       await entry.waitFor();
       assert.equal(await page.locator(`a[href="/events/${event.id}/"]`).count(), 1, `${event.id} has one introduction link`);
+      assert.equal(await page.locator(`a[href="?event=${event.id}&view=browse"]`).count(), 1, `${event.id} has a browse link`);
       const summary = `${["26.09.01-02", "26.10.01-04"][index]} · ${event.venue}`;
-      assert.equal(await entry.getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
+      assert.equal(await page.getByRole("listitem").filter({ has: entry }).getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
       assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
     }
     await journey.capture(page, "chooser-lists-published-events");
@@ -59,16 +62,23 @@ try {
     assert.ok(!(await page.content()).includes(unknown), "the unknown id does not reach the markup either");
 
     // The way forward is still the list, and it is still only the real events.
-    assert.equal(await page.getByRole("link").count(), events.length * 2, "the list survives a dead link");
+    assert.equal(await page.getByRole("link").count(), events.length * 3, "the list survives a dead link");
     assert.equal(await page.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     await journey.capture(page, "chooser-refuses-unknown-event");
+    await page.locator('a[href="?event=sample&view=browse"]').click();
+    await page.getByRole("heading", { name: "範例創作市集 逛品書", exact: true }).waitFor();
+    assert.equal(await page.locator('meta[name="robots"]').count(), 0);
+    assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), "https://map.kotoban.top/events/sample/");
+    // Browse follows the map header: with several events the name leads back to the chooser.
+    await page.getByRole("link", { name: /切換活動/ }).click();
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
     await page.close();
   }
 
   {
     // The point of the chooser: pressing an entry opens that event, not another.
     const page = await journey.page({ event: "" });
-    await page.getByRole("link", { name: new RegExp(events[1].name) }).click();
+    await page.getByRole("link", { name: mapEntry(events[1]), exact: true }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.match(page.url(), new RegExp(`event=${events[1].id}(&|$)`), "the chosen event is the one that opens");
     assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), `https://map.kotoban.top/events/${events[1].id}/`);
@@ -96,7 +106,7 @@ try {
     assert.equal(page.url(), original, "Back restores the original event and selection");
     await page.goForward();
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
-    await page.getByRole("link", { name: new RegExp(events[1].name) }).click();
+    await page.getByRole("link", { name: mapEntry(events[1]), exact: true }).click();
     await page.locator("[data-slot-code]").first().waitFor();
     assert.equal(new URL(page.url()).searchParams.get("event"), events[1].id);
     for (const name of ["query", "selectedCircle", "selectedBooth"]) assert.equal(new URL(page.url()).searchParams.get(name), null, `${name} does not cross events`);

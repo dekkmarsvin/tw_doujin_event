@@ -17,6 +17,8 @@
 4. 社團本人只透過 `circle-overrides/1` 提供自己在該分類字彙中的一項主要類別、筆名、販售資訊、作品 facet、連結與代表圖。
 5. 收藏、群組、備註與行程屬於使用者，不由 catalog 或 overlay 覆寫。
 
+「逛品書」沿用這份權威邊界：僅將目前範圍與公開條件下的配置依 `CircleRecord.id` 聚合，不按名稱、共攤位置或圖片猜測身分或題材；代表圖不充作本次品書。有／無品書社團均能被找到，詳見[品書瀏覽契約](./catalog-browse.md)。
+
 第三方工作簿不再是輸入、fallback 或補充來源。官方資料與 identity evidence 對不上時，build 必須失敗並要求審閱，不得用名稱猜測或虛構社團內容。
 
 ## 靜態 base：`circle-catalog/3`

@@ -17,7 +17,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 
 | 區域 | 要讀的 ADR |
 |---|---|
-| 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051、0055、0056、0063、0064 |
+| 閱讀端（搜尋、篩選、地圖檢視、多活動入口） | 0001、0006、0008、0042、0051、0055、0056、0063、0064、0075、0076 |
 | 收藏與行程規劃 | 0002、0004、0005 |
 | 社團身分與目錄 | 0010、0013、0030、0044、0045、0071 |
 | 社團控制面 | 0007、0016、0017、0020、0043、0051、0052、0053、0054、0072 |
@@ -90,7 +90,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0053](./0053-the-thumbnail-upload-asks-for-the-picture-only.md) | 代表圖上傳只要圖片，出處與來源標示改為選填，上限 5 MiB | 生效 |
 | [0054](./0054-the-retention-choice-is-withdrawn-publish-or-delete.md) | 保存期限選項退場，社團只決定公開與否，其餘靠手動刪除 | 生效 |
 | [0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) | 桌機地圖採雙區工作區與條件式詳情覆蓋 | **部分被取代** — 關閉保留選取由 0063 取代；手機邊界由 0056 擴充 |
-| [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | **部分被取代** — 摘要關閉保留選取由 0063 取代；三階段完整資訊由 0064 擴充 |
+| [0056](./0056-mobile-map-uses-workspace-and-selection-summary.md) | 手機地圖採探索／行程與獨立社團摘要 | **部分被取代** — 摘要關閉保留選取由 0063 取代；三階段完整資訊由 0064 擴充；底部入口由 0076 擴充為探索／行程／逛品書 |
 | [0057](./0057-approval-starts-create-publication.md) | 核准即開始首次發布，失敗恢復同一 snapshot | 生效；延續 0046 |
 | [0058](./0058-publication-is-enforced-by-the-app-not-the-ruleset.md) | 發布強制點在 App adapter，ruleset 降為維運報告 | 生效；部分取代 0046。第 5 點要求的重新評估已由 0066 完成；第 1 點的作者檢查缺口由 0066 補上 |
 | [0059](./0059-failed-publication-requires-explicit-reopen.md) | 失敗發布退回修改必須是明確且可驗證的動作 | 生效；延續 0057、0058 |
@@ -109,3 +109,5 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0072](./0072-sale-sheet-pages-are-prepared-in-the-browser-and-hosted-as-a-set.md) | 品書在瀏覽器縮圖，以一組代管圖片保存 | 生效；延續 0017、0053 |
 | [0073](./0073-reviewed-grouping-corrections-have-explicit-amendment-baselines.md) | 已核准的身分整合以固定紀錄承接修正基準 | 生效；延續 0071、0069 |
 | [0074](./0074-html-responses-carry-per-request-csp-nonces.md) | HTML 回應使用每次請求的 CSP nonce | 生效；部分取代 0008 的 HTML 直送要求 |
+| [0075](./0075-catalog-browse-shares-the-reader-catalog-and-public-search.md) | 品書瀏覽共用 Reader 場刊與公開搜尋 | 生效 |
+| [0076](./0076-phones-switch-reader-views-from-the-bottom-bar.md) | 手機以底部探索／行程／逛品書切換，桌機切換留在頁首 | 生效；部分取代 0056 |

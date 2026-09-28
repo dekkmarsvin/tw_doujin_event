@@ -8,6 +8,8 @@
 
 ## 公開搜尋介紹頁
 
+「逛品書」使用 Reader 原有 publication，一次載入同活動 base 與 overlay，沒有逐卡查詢或新增輪詢。卡片以既有 preview URL 延遲載入，完整圖片只在社團出展頁讀取；不新增懶載入路由、Service Worker 策略或 precache 名單特例。返回時可重取 overlay，分享結果隨現行公開內容更新；驗收邊界見[品書瀏覽契約](./catalog-browse.md)。
+
 `scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。HTML 僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
 
 介紹頁仍在 build 產生；HTML 經既有 Function 加上每次回應的 CSP nonce，不新增資料讀寫（ADR-0074）。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
