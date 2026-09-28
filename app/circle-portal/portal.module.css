@@ -174,6 +174,15 @@
 .card button:not(:where(.previewFrame *, .inlineButton)):hover { filter: brightness(1.15); }
 .card button:not(:where(.previewFrame *, .inlineButton)):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
 .card button:not(:where(.previewFrame *, .inlineButton)):disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
+/* Held back by another control rather than switched off: it reads as
+   unavailable, but a press still answers by pointing at what is in the way
+   (`pointTo`), so it keeps a pointer and takes no hover. */
+.card button:not(:where(.previewFrame *, .inlineButton))[aria-disabled="true"] { border-color: var(--line); background: var(--paper); color: var(--muted); filter: none; }
+
+/* A control that others wait on is ringed once one of them has been pressed
+   (`pointTo`). Coral, as for the step to start from: it marks where to act,
+   not an error. */
+.card .calledOut, .card .calledOut:focus-visible { outline: 3px solid #f6d3cc; outline-offset: 2px; border-color: var(--coral); }
 
 .identity button {
   min-height: 28px;
@@ -352,6 +361,8 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .saveBarRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
 .saveBarRow > p { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 11px; line-height: 1.6; }
 .card .saveBarRow button { min-width: 200px; margin-top: 0; }
+/* The way back sits beside the step forward, sized to its words. */
+.card .saveBarRow .secondaryButton { min-width: 0; }
 .actionState { color: var(--muted); }
 .actionOk { color: var(--success); }
 .actionError { color: var(--danger); }
@@ -578,8 +589,8 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   font-size: 11px;
   letter-spacing: .04em;
 }
-.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:not(:disabled):hover { border-color: #b9c2bc; background: var(--paper); filter: none; }
-.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:disabled { border-color: var(--line); background: var(--paper); color: #9aa19c; }
+.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:not(:disabled, [aria-disabled="true"]):hover { border-color: #b9c2bc; background: var(--paper); filter: none; }
+.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:is(:disabled, [aria-disabled="true"]) { border-color: var(--line); background: var(--paper); color: #9aa19c; }
 .editorCard .fieldMode button[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); color: var(--ink); }
 .editorCard .thumbnailPreview button { margin-top: 8px; }
 
@@ -776,12 +787,19 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .catalogPageActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; }
 .catalogPage .notice { margin-top: 0; padding: 6px 8px; }
 .catalogAdd { position: relative; display: flex; min-height: 150px; border: 1px dashed #b9c2bc; border-radius: 9px; background: var(--paper); }
-.card .catalogAdd label { display: grid; flex: 1; place-items: center; margin: 0; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-align: center; cursor: pointer; }
-.catalogAdd:has(input:not(:disabled)):hover { border-color: var(--ink); background: #fff; }
+.card .catalogAdd label { display: grid; flex: 1; place-items: center; align-content: center; margin: 0; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-align: center; cursor: pointer; }
+.catalogAdd:has(input:not(:disabled, [aria-disabled="true"])):hover { border-color: var(--ink); background: #fff; }
 .card .catalogAdd:has(input:disabled) label { color: #9aa19c; cursor: not-allowed; }
+/* Held back by the confirmation: muted, but still pressable, and saying why. */
+.card .catalogAdd:has(input[aria-disabled="true"]) label { color: #9aa19c; }
+.catalogAdd label > span { display: block; }
+.catalogAdd label > small { display: block; margin-top: 4px; color: var(--ink); font-size: 11px; font-weight: 600; letter-spacing: normal; }
 .catalogAdd:has(input:focus-visible) { outline: 3px solid #dfe8e3; outline-offset: 2px; }
 @media (min-width: 560px) {
   .catalogList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 /* A sentence the author has to read, not a field caption. */
-.catalogField .confirmCheck { margin-top: 12px; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }
+.catalogField .confirmCheck { margin-top: 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }
+/* Outlined while it holds 新增 and 替換 back, so the reason is on the page
+   before anyone presses them. */
+.catalogField .gate { border-color: var(--coral); background: #fff; }

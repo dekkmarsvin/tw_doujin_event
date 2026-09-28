@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createMapContributionDraft, listMyMapDrafts, mapDraftConflict, mapDraftProblems, postMapDraftComment, readMapDraft, saveMapContributionDraft, submitMapContributionDraft, uploadMapContributionEvidence, type MapDraftSummary } from "../circle-editor-client";
 import { eventUsesScopedMaps, type EventDefinition } from "../event-catalog";
 import type { EventMapLayout } from "../event-map";
@@ -8,6 +8,7 @@ import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor
 import type { MapDraftProblem } from "../map-contribution-draft";
 import { loadStaticEventMap } from "../static-event-map-client";
 import { IDLE, STATUS_LABEL, CommentThread, DraftList, draftScopeLabel, EvidenceList, Preview, Problems, StatusNotice, message, previewUrl, type Detail, type Status } from "../map-contribution-panels";
+import { pointTo } from "./point-to";
 import styles from "./portal.module.css";
 
 export function MapContributorPanel({ event }: { event: EventDefinition }) {
@@ -46,7 +47,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   useEffect(() => { queueMicrotask(() => { void refreshList(); }); }, [refreshList]);
 
   const run = async (task: () => Promise<void>, ok: string) => {
-    setStatus({ kind: "busy", message: "處理中…" }); setProblems([]);
+    setStatus({ kind: "busy", message: "處理中…" }); setProblems([]); setCalled(null);
     try { await task(); setStatus({ kind: "ok", message: ok }); }
     catch (error) {
       setProblems(mapDraftProblems(error));
@@ -56,6 +57,18 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
 
   const editable = detail?.draft.status === "draft" || detail?.draft.status === "changes_requested";
   const hasUnsavedChanges = !!layout && (JSON.stringify(layout) !== savedLayoutJson || JSON.stringify(authoring) !== savedAuthoringJson);
+  // A press on something held back leads to what holds it back: 提交審閱 to
+  // 儲存新版本, the upload to the first of its fields still empty. Each ring
+  // stays only while the block does.
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const sourceField = useRef<HTMLInputElement>(null);
+  const dateField = useRef<HTMLInputElement>(null);
+  const fileField = useRef<HTMLInputElement>(null);
+  const [called, setCalled] = useState<"save" | "evidence" | null>(null);
+  const missingEvidence = ([[!sourceUrl, "source"], [!documentDate, "date"], [!file, "file"]] as const)
+    .filter(([missing]) => missing).map(([, field]) => field);
+  const evidenceFields = { source: sourceField, date: dateField, file: fileField };
+  const ringed = (field: (typeof missingEvidence)[number]) => called === "evidence" && missingEvidence.includes(field) ? styles.calledOut : undefined;
   const previewFile = detail?.files.find((item) => item.revision === detail.draft.current_revision
     && item.raw_deleted_at == null && item.mime.startsWith("image/"));
 
@@ -80,30 +93,36 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
       <h3>公開地圖預覽</h3><Preview event={event} layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>
-          <button type="button" onClick={() => void run(async () => {
+          <button ref={saveButton} type="button" className={called === "save" && hasUnsavedChanges ? styles.calledOut : undefined} onClick={() => void run(async () => {
             const saved = await saveMapContributionDraft(detail.draft.id, detail.draft.current_revision, layout, authoring);
             await openDraft(detail.draft.id); await refreshList();
             setStatus({ kind: "ok", message: `已儲存版本 ${saved.revision}；請為這個版本上傳來源檔。` });
           }, "草稿已儲存。")}>儲存新版本</button>
-          <button type="button" disabled={hasUnsavedChanges} onClick={() => void run(async () => {
-            await submitMapContributionDraft(detail.draft.id, detail.draft.current_revision);
-            await openDraft(detail.draft.id); await refreshList();
-          }, "草稿已送審。")}>提交審閱</button>
+          <button type="button" aria-disabled={hasUnsavedChanges || undefined} onClick={() => {
+            if (hasUnsavedChanges) { setCalled("save"); pointTo(saveButton.current); return; }
+            void run(async () => {
+              await submitMapContributionDraft(detail.draft.id, detail.draft.current_revision);
+              await openDraft(detail.draft.id); await refreshList();
+            }, "草稿已送審。");
+          }}>提交審閱</button>
         </div>
         {hasUnsavedChanges && <p className={styles.notice}>請先儲存新版本，再為該版本上傳來源並提交。</p>}
         <h3>目前版本的官方來源</h3>
-        <label>活動官方說明頁 URL<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
-        <label>文件日期<input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /></label>
+        <label>活動官方說明頁 URL<input ref={sourceField} className={ringed("source")} type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label>
+        <label>文件日期<input ref={dateField} className={ringed("date")} type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /></label>
         <label>頁碼（選填）<input type="number" min="1" value={pageNumber} onChange={(event) => setPageNumber(event.target.value)} /></label>
-        <label>來源檔<input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
-        <button type="button" disabled={!file || !sourceUrl || !documentDate} onClick={() => void run(async () => {
-          if (!file) return;
-          await uploadMapContributionEvidence({
-            draftId: detail.draft.id, revision: detail.draft.current_revision, file, sourceUrl, documentDate,
-            pageNumber: pageNumber ? Number(pageNumber) : null,
-          });
-          await openDraft(detail.draft.id); setFile(null);
-        }, "來源檔已綁定目前版本。")}>上傳私人來源檔</button>
+        <label>來源檔<input ref={fileField} className={ringed("file")} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
+        <button type="button" aria-disabled={missingEvidence.length > 0 || undefined} onClick={() => {
+          if (missingEvidence.length > 0) { setCalled("evidence"); pointTo(evidenceFields[missingEvidence[0]].current); return; }
+          void run(async () => {
+            if (!file) return;
+            await uploadMapContributionEvidence({
+              draftId: detail.draft.id, revision: detail.draft.current_revision, file, sourceUrl, documentDate,
+              pageNumber: pageNumber ? Number(pageNumber) : null,
+            });
+            await openDraft(detail.draft.id); setFile(null);
+          }, "來源檔已綁定目前版本。");
+        }}>上傳私人來源檔</button>
       </>}
       <h3>審閱留言</h3>
       <CommentThread comments={detail.comments} layout={layout} onFocus={editable ? (item) => {

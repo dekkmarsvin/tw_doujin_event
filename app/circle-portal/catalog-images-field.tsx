@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 import { catalogFileProblem, prepareCatalogImage } from "../catalog-image-prepare";
 import { uploadCatalogImage } from "../circle-editor-client";
 import { OVERRIDE_LIMITS, type CircleCatalogImage } from "../circle-overrides";
+import { pointTo } from "./point-to";
 import styles from "./portal.module.css";
 
 type Notice = { kind: "idle" | "busy" | "ok" | "error"; message: string };
@@ -17,7 +18,9 @@ const IDLE: Notice = { kind: "idle", message: "" };
  *
  * Uploading asks the author to confirm the pages suit readers of every age
  * (#413). The confirmation gates choosing a file, so it is given before the
- * picture exists rather than read past on the way to saving.
+ * picture exists rather than read past on the way to saving. While it is
+ * unticked it is outlined as the thing in the way, and pressing 新增 or 替換
+ * brings the author to it instead of doing nothing.
  */
 export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploading }: {
   circleId: string;
@@ -34,7 +37,15 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
   const [small, setSmall] = useState<ReadonlySet<string>>(new Set());
   const replaceInput = useRef<HTMLInputElement>(null);
   const replaceTarget = useRef<string | null>(null);
+  const confirmBox = useRef<HTMLInputElement>(null);
+  // Set by a press on something the confirmation holds back; the ring it
+  // adds goes with the tick.
+  const [called, setCalled] = useState(false);
   const full = images.length >= OVERRIDE_LIMITS.catalogImages;
+  const askToConfirm = () => {
+    setCalled(true);
+    pointTo(confirmBox.current);
+  };
 
   const upload = (file: File, replacing: string | null) => {
     const problem = catalogFileProblem(file);
@@ -66,8 +77,8 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
 
   return <div className={styles.catalogField}>
     <p className={styles.editorHint}>最多 {OVERRIDE_LIMITS.catalogImages} 張，依順序顯示。JPG、PNG、WebP；PDF 或 PSD 請先匯出成圖片。</p>
-    <label className={styles.confirmCheck}>
-      <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+    <label className={`${styles.confirmCheck} ${confirmed ? "" : styles.gate} ${!confirmed && called ? styles.calledOut : ""}`}>
+      <input ref={confirmBox} type="checkbox" checked={confirmed} onChange={(event) => { setConfirmed(event.target.checked); setCalled(false); }} />
       <span>我確認這些圖片適合所有年齡的讀者觀看。</span>
     </label>
     {/* One tile per page in reading order, and the next free place as the
@@ -85,7 +96,8 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
         </div>
         {small.has(image.url) && <p className={styles.notice}>縮小後文字可能太小，建議分成多張上傳。</p>}
         <div className={styles.catalogPageActions}>
-          <button type="button" disabled={busy || !confirmed} onClick={() => {
+          <button type="button" disabled={busy} aria-disabled={!confirmed || undefined} onClick={() => {
+            if (!confirmed) return askToConfirm();
             replaceTarget.current = image.url;
             replaceInput.current?.click();
           }} aria-label={`替換第 ${index + 1} 張品書`}>替換</button>
@@ -93,14 +105,23 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
         </div>
       </li>)}
       {!full && <li className={styles.catalogAdd}>
-        <label htmlFor={`${id}-add`}>新增品書圖片</label>
+        {/* The whole tile is the label, so a press anywhere on it reaches the
+            input; the name is its own span so the reason beside it describes
+            the control rather than renaming it. */}
+        <label htmlFor={`${id}-add`}>
+          <span id={`${id}-add-name`}>新增品書圖片</span>
+          {!confirmed && <small id={`${id}-add-gate`}>先勾選上方的確認</small>}
+        </label>
         <input
           id={`${id}-add`} type="file" accept="image/jpeg,image/png,image/webp" className={styles.visuallyHidden}
-          disabled={busy || !confirmed}
+          aria-labelledby={`${id}-add-name`} aria-describedby={confirmed ? undefined : `${id}-add-gate`}
+          disabled={busy} aria-disabled={!confirmed || undefined}
+          // Cancelling the click is what keeps the file dialog shut.
+          onClick={(event) => { if (!confirmed) { event.preventDefault(); askToConfirm(); } }}
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.currentTarget.value = "";
-            if (file) upload(file, null);
+            if (file && confirmed) upload(file, null);
           }}
         />
       </li>}
