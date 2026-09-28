@@ -153,8 +153,8 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
         {projection.topics.length > 2 && <button type="button" aria-expanded={moreTopics} onClick={() => setMoreTopics(!moreTopics)}>{moreTopics ? "收起題材" : "更多題材"}</button>}
       </div>}
       {hasFilters && <div className={styles.filters} aria-label="已套用條件">
-        {state.query.trim() && <button onClick={() => change({ ...state, query: "" })}>搜尋：{state.query}<UiIcon name="close" /></button>}
-        {projection.filters.map((filter) => <button key={filter.id} onClick={() => removeFilter(filter)} aria-label={`移除條件：${filter.label}`}>{filter.label}<UiIcon name="close" /></button>)}
+        {state.query.trim() && <button onClick={() => change({ ...state, query: "" })}><span>搜尋：{state.query}</span><UiIcon name="close" /></button>}
+        {projection.filters.map((filter) => <button key={filter.id} onClick={() => removeFilter(filter)} aria-label={`移除條件：${filter.label}`}><span>{filter.label}</span><UiIcon name="close" /></button>)}
         <button onClick={() => change({ ...state, query: "", genre: event.genres[0], advancedSearch: DEFAULT_ADVANCED_CIRCLE_SEARCH })}>全部清除</button>
       </div>}
       {planning.storageError && <p className={styles.error} role="alert">{planning.storageError}</p>}
