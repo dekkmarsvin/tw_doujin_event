@@ -1,0 +1,21 @@
+.panel { min-width: 0; }
+.tabs, .filters, .actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.tabs button[aria-pressed="true"], .list button[aria-pressed="true"] { background: #dfe8e3; color: #244d43; }
+.filters { margin: 20px 0; }
+.filters > label:first-child { flex: 1 1 200px; }
+.panel .check { display: flex; align-items: center; gap: 8px; letter-spacing: normal; }
+.panel .check input { width: auto; margin: 0; }
+.columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; }
+.list { list-style: none; margin: 12px 0; padding: 0; }
+.list > li { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.list p { margin: 6px 0; }
+.list button { white-space: normal; text-align: left; }
+.detail { min-width: 0; overflow-wrap: anywhere; }
+.form { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.form label { display: block; margin-top: 12px; }
+.form select { width: 100%; padding: 10px; }
+@media (max-width: 760px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+  .tabs button, .filters button, .list button, .detail button, .actions button { min-height: 44px; }
+}

@@ -1,3 +1,4 @@
+import { createAdminReferenceRepository } from "./admin-reference-repository";
 import { CIRCLE_OVERRIDES_SCHEMA, circleRetentionExpiresAt, type CircleRetentionChoice } from "../app/circle-overrides";
 import {
   INITIAL_ORGANIZER_VENUE_CATALOG,
@@ -3503,6 +3504,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     getActiveApprovedMapDraft, listStaleSubmittedMapDrafts, writeMapDraftRevision, submitMapDraft, transitionMapDraft,
     approveMapDraft, getMapDraftExport, exportMapDraft,
     addMapDraftFile, getMapDraftFile, markMapDraftRawDeleted,
+    ...createAdminReferenceRepository(database, ensureTables),
     listOrganizerVenueCatalog, createOrganizerVenue, createOrganizerVenueSpace,
     listOrganizerReferenceRecords, createOrganizerReferenceRecord, completeOrganizerVenueAddress,
     organizerRole, hasOrganizerAccess, createOrganizerCandidate, acceptOrganizerInvitations,

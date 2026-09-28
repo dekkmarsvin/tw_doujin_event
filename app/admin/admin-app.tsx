@@ -1,3 +1,4 @@
+import { AdminReferencePanel } from "./admin-reference-panel";
 import { useCallback, useEffect, useState } from "react";
 import { readSession, setPortalEventId, signOut, type PortalSession } from "../circle-editor-client";
 import { getPublishedEvent, PUBLISHED_EVENTS } from "../event-catalog";
@@ -26,6 +27,7 @@ function initialEventId() {
  * the map review on it, which is what a review digest's link asks for.
  */
 export default function AdminApp() {
+  const sharedReferences = new URLSearchParams(window.location.search).get("section") === "references";
   const [session, setSession] = useState<PortalSession | null>(null);
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
@@ -78,13 +80,15 @@ export default function AdminApp() {
         : !session.isAdmin ? <section className={styles.card}><h2>需要管理者權限</h2><p>目前帳號無法使用網站管理功能。</p><a href="/circle">返回社團入口</a></section>
           : <>
             <nav className={`${styles.card} ${styles.backLink}`} aria-label="管理項目">
-              <a href="#overview">待審總覽</a> · <a href="#admin">社團認領</a> · <a href="#map-review">地圖草稿審閱</a> · <a href="#takedown">撤下補充資料</a> · <a href="#accounts">管理者名單</a> · <a href="#review-notifications">待審通知</a>
+              <a href="/admin?section=references">共用資料</a> · <a href="/admin#overview">待審總覽</a> · <a href="/admin#admin">社團認領</a> · <a href="/admin#map-review">地圖草稿審閱</a> · <a href="/admin#takedown">撤下補充資料</a> · <a href="/admin#accounts">管理者名單</a> · <a href="/admin#review-notifications">待審通知</a>
             </nav>
+            {sharedReferences ? <AdminReferencePanel /> : <>
             <AdminReviewQueue initialEventId={claimFilter} onOpenMaps={openMaps} />
             <AdminMapReviewPanel event={event} picker={<AdminEventSelect id="map-review-event" value={event.id} onChange={chooseMapEvent} />} />
             <AdminTakedownPanel initialEventId={event.id} />
             <AdminRoster />
             <AdminNotificationPanel email={session.email} />
+            </>}
           </>}
   </div>;
 }
