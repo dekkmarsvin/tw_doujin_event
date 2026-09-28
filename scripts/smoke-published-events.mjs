@@ -1,3 +1,4 @@
+import { verifyOverlayReadiness } from "./overlay-readiness.mjs";
 import { readFile } from "node:fs/promises";
 import { MAP_MANIFEST_FILE, eventUsesScopedMaps } from "./event-data-pin-utils.mjs";
 
@@ -55,9 +56,10 @@ for (const eventId of eventIds) {
     const map = await read(`${prefix}/map.json`, `${eventId} map`).then((response) => response.json());
     if (map.eventId !== eventId) throw new Error(`${eventId} map identity mismatch.`);
   }
+  await verifyOverlayReadiness(baseUrl, eventId);
   const reader = await fetch(new URL(`/?event=${encodeURIComponent(eventId)}`, baseUrl), { redirect: "error" });
   if (!reader.ok || !(reader.headers.get("content-type") ?? "").includes("text/html")) {
     throw new Error(`${eventId} Reader route returned ${reader.status}.`);
   }
-  console.log(`Verified deployed event ${eventId}: definition, catalog, references, maps and Reader route.`);
+  console.log(`Verified deployed event ${eventId}: definition, catalog, references, maps, initialized overlay and Reader route.`);
 }

@@ -48,6 +48,10 @@ function index(name: string, tableName: string, expression: string, options: { u
 }
 
 export const IDENTITY_TABLES = [
+  table("identity_runtime_state", [
+    "id INTEGER PRIMARY KEY CHECK (id = 1)",
+    "version INTEGER NOT NULL CHECK (version >= 0)",
+  ]),
   table("admin_notification_preferences", [
     "recipient TEXT PRIMARY KEY NOT NULL",
     "enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))",

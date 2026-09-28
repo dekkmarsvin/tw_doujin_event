@@ -174,11 +174,9 @@ function bootstrapAdmins(env: PortalEnv) {
     .filter(Boolean);
 }
 
-/**
- * One repository per isolate, not per request. `ensureTables` memoizes its DDL
- * batch on the instance, so building a fresh one each time re-ran twenty
- * `CREATE TABLE IF NOT EXISTS` statements — and the admin seed check — on every
- * single request.
+/** One repository per isolate: coalesce readiness checks and control-plane
+ * bootstrap. The durable runtime version also avoids repeated DDL in a fresh
+ * isolate; public overlays never bootstrap admins or notification preferences.
  */
 const repositories = new WeakMap<D1Database, IdentityRepository>();
 

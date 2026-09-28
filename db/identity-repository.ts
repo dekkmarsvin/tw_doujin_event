@@ -1,13 +1,12 @@
 import { createAdminReferenceRepository } from "./admin-reference-repository";
 import { CIRCLE_OVERRIDES_SCHEMA, circleRetentionExpiresAt, type CircleRetentionChoice } from "../app/circle-overrides";
 import {
-  INITIAL_ORGANIZER_VENUE_CATALOG,
   organizerVenueNameKey,
   type OrganizerVenueCatalog,
   type OrganizerVenueSpaceAreaMode,
 } from "../app/organizer-venue-catalog";
-import { IDENTITY_COLUMN_MIGRATIONS, IDENTITY_INDEXES, IDENTITY_TABLES } from "./identity-runtime-schema";
-import { createVenueReference, createVenueSpaceReference, initialVenueReferences, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
+import { createIdentityInitializer, seedOrganizerVenueCatalog, referenceInsertStatement as prepareReferenceInsert } from "./identity-runtime-initializer";
+import { createVenueReference, createVenueSpaceReference, type OrganizerReferenceRecord } from "../app/organizer-reference-catalog";
 import { createOrganizerAmendmentRepository } from "./organizer-amendment-repository";
 import { createOrganizerRecoveryRepository } from "./organizer-recovery-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
@@ -91,61 +90,23 @@ function chunked<T>(values: readonly T[], size: number): T[][] {
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
   let tablesReady: Promise<void> | null = null;
 
-  /**
-   * Three ordered steps, and the order is load-bearing. `CREATE TABLE IF NOT
-   * EXISTS` is a no-op against a database that already has the table, so a
-   * column added later exists only by way of `IDENTITY_COLUMN_MIGRATIONS` — and
-   * an index over that column has to be created after the ALTER, never in the
-   * same batch as the tables. Getting this wrong does not degrade gracefully:
-   * the batch rejects with `no such column`, `tablesReady` resets, and every
-   * repository-backed request fails on a database that was previously fine.
+  const ensureRuntimeReady = createIdentityInitializer(database);
+
+  /** Control-plane initialization is separate from the public read path.
+   * Admin recovery and notification defaults depend on current configuration
+   * and recipients, so they must not be skipped by a durable schema version.
    */
   async function ensureTables() {
     if (!tablesReady) {
-      tablesReady = database.batch(IDENTITY_TABLES.map(({ sql }) => database.prepare(sql)))
-        .then(() => addMissingColumns())
-        .then(() => upgradeOrganizerEventIndex())
-        .then(() => database.batch(IDENTITY_INDEXES.map(({ sql }) => database.prepare(sql))))
+      tablesReady = ensureRuntimeReady()
         .then(() => seedAdmins())
-        .then(() => seedNotificationPreferences(database, Date.now()))
-        .then(() => seedOrganizerVenueCatalog())
+        .then(async () => { await seedNotificationPreferences(database, Date.now()); })
         .catch((error: unknown) => {
           tablesReady = null;
           throw error;
         });
     }
     return tablesReady;
-  }
-
-  async function addMissingColumns() {
-    for (const migration of IDENTITY_COLUMN_MIGRATIONS) {
-      try {
-        await database.prepare(migration.sql).run();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!/duplicate column name/i.test(message)) throw error;
-      }
-    }
-  }
-
-  async function upgradeOrganizerEventIndex() {
-    const previous = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'organizer_candidates_event_id_idx'").first<{ sql: string }>();
-    if (previous && !previous.sql.includes("publication_operation")) {
-      const replacement = IDENTITY_INDEXES.find(({ name }) => name === "organizer_candidates_event_id_idx")!;
-      // Keep the same name and replace atomically. Older deployment isolates
-      // using CREATE INDEX IF NOT EXISTS cannot recreate the obsolete rule.
-      await database.batch([
-        database.prepare("DROP INDEX IF EXISTS organizer_candidates_event_id_idx"),
-        database.prepare(replacement.sql),
-      ]);
-    }
-    const active = await database.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'organizer_candidates_active_amendment_idx'").first<{ sql: string }>();
-    if (active && !active.sql.includes("abandoned")) {
-      await database.batch([
-        database.prepare("DROP INDEX IF EXISTS organizer_candidates_active_amendment_idx"),
-        database.prepare(IDENTITY_INDEXES.find(({ name }) => name === "organizer_candidates_active_amendment_idx")!.sql),
-      ]);
-    }
   }
 
   /**
@@ -165,45 +126,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(email, now)));
   }
 
-  async function seedOrganizerVenueCatalog() {
-    const statements: D1PreparedStatement[] = [];
-    for (const venue of INITIAL_ORGANIZER_VENUE_CATALOG) {
-      statements.push(database.prepare(
-        `INSERT INTO organizer_venues (id, name, name_key, source_url, created_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, 'system', 0)
-         ON CONFLICT(id) DO NOTHING`,
-      ).bind(venue.id, venue.name, organizerVenueNameKey(venue.name), venue.sourceUrl));
-      for (const space of venue.spaces) {
-        statements.push(database.prepare(
-          `INSERT INTO organizer_venue_spaces (
-             id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
-           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'system', 0)
-           ON CONFLICT(id) DO NOTHING`,
-        ).bind(space.id, venue.id, space.name, organizerVenueNameKey(space.name), space.sourceUrl, space.defaultAreaMode));
-      }
-    }
-    if (statements.length > 0) await database.batch(statements);
-    // Explicit adoption only for seed identities whose existing metadata still matches.
-    // Never repair a changed canonical record by overwriting it during startup.
-    for (const reference of initialVenueReferences()) {
-      const venue = INITIAL_ORGANIZER_VENUE_CATALOG.find((item) => item.id === reference.id);
-      const space = INITIAL_ORGANIZER_VENUE_CATALOG.flatMap((item) => item.spaces.map((space) => ({ ...space, venueId: item.id })))
-        .find((item) => item.id === reference.id);
-      const compatible = venue
-        ? await database.prepare("SELECT id FROM organizer_venues WHERE id = ?1 AND name = ?2 AND source_url = ?3")
-          .bind(venue.id, venue.name, venue.sourceUrl).first()
-        : space && await database.prepare("SELECT id FROM organizer_venue_spaces WHERE id = ?1 AND name = ?2 AND source_url = ?3 AND venue_id = ?4")
-          .bind(space.id, space.name, space.sourceUrl, space.venueId).first();
-      if (compatible) await referenceInsertStatement(reference, "system", "ON CONFLICT(path) DO NOTHING").run();
-    }
-  }
-
   function referenceInsertStatement(record: OrganizerReferenceRecord, actor: string, conflict = "") {
-    return database.prepare(`INSERT INTO organizer_reference_records
-      (path, kind, reference_id, organizer_id, revision, display_name, public_reference_json, source_captured_at, created_by)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ${conflict}`)
-      .bind(record.path, record.kind, record.id, record.organizerId, record.revision, record.displayName,
-        record.publicReferenceJson, record.sourceCapturedAt, actor);
+    return prepareReferenceInsert(database, record, actor, conflict);
   }
 
   async function listOrganizerReferenceRecords(): Promise<OrganizerReferenceRecord[]> {
@@ -968,7 +892,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function listLiveOverrides(eventId: string, phase: OverridesPhase) {
-    await ensureTables();
+    await ensureRuntimeReady();
     // After the event, a circle that opted out is simply absent from the query,
     // so its content never reaches the published document at all.
     const hiddenClause = phase === "after" ? " AND o.post_event_hidden = 0" : "";
@@ -1039,7 +963,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function getOverridesDoc(eventId: string) {
-    await ensureTables();
+    await ensureRuntimeReady();
     return database.prepare(`SELECT revision, json, updated_at, phase FROM overrides_doc WHERE event_id = ?1`)
       .bind(eventId).first<{ revision: number; json: string; updated_at: number; phase: OverridesPhase }>();
   }
@@ -3479,7 +3403,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
     ].map((table) => database.prepare(`DELETE FROM ${table}`)));
-    await seedOrganizerVenueCatalog();
+    await seedOrganizerVenueCatalog(database);
   }
 
   return {

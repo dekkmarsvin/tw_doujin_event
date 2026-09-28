@@ -228,6 +228,12 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **退出的語意是「不再公開」，不是「不再持有」。** `post_event_hidden` 只在活動結束後重建公開文件時把該列濾掉，資料列本身留著。補充資料的保存期限是另一個座標軸，見下一節。
 
+## 公開補充資料的資料庫初始化
+
+公開 overlay 先確認 D1 的 `identity_runtime_state` 已完成目前 runtime 版本。資料庫已準備好時，新 repository 只做版本讀取與文件 SELECT（2 次往返），同 instance 後續只讀文件（1 次）；正常穩態 GET／HEAD 不執行 DDL、管理者或通知 seed。成功回應的 `x-identity-runtime-version` 表示服務端已確認的程式所需版本，供部署 smoke 使用，不改變 ETag 或快取政策。
+
+缺少版本表／紀錄或版本較舊時，沿用單一 schema authority 的首次建表與 additive 升級。所有固定 seed 成功後才記錄完成；失敗可重試，其他 D1 錯誤不能當作未初始化或空資料。管理者 bootstrap、空 roster 復原與通知偏好保留在控制面初始化；公開讀取先到達不會停用後續管理初始化。活動結束後的 phase 重建與資料撤下規則維持原契約。
+
 ## 保存期限與清除
 
 **憑證到期就清掉，紀錄類保留不設期限**（[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)）。

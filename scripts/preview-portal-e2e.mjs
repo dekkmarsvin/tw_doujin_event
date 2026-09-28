@@ -1,3 +1,4 @@
+import { verifyOverlayReadiness } from "./overlay-readiness.mjs";
 import { preparePreviewFixture, cleanupPreviewFixture } from "./preview-e2e-resources.mjs";
 import { previewRequestInit } from "./preview-transport.mjs";
 
@@ -91,6 +92,7 @@ async function unusedCircle(circles, overlay, runId) {
 const fixture = await preparePreviewFixture({ baseUrl, deploymentId: process.env.PREVIEW_DEPLOYMENT_ID, sha: process.env.GITHUB_SHA });
 const { adminEmail, circleEmail } = fixture;
 try {
+  await verifyOverlayReadiness(baseUrl, "ff47", { headers: accessHeaders });
   // This job holds the global preview E2E lock, so reserved fixtures still in
   // preview D1 belong to runs that have ended. Clearing them first keeps one
   // failed cleanup from blocking every later run; manual data never matches.

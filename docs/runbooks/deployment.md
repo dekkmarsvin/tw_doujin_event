@@ -41,6 +41,18 @@ Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_T
 
 不使用 advanced mode 是硬邊界：它會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker。`public/_routes.json` 明列 HTML、既有 API 與 overlay；HTML 經 middleware 加上 CSP nonce（[ADR-0074](../adr/0074-html-responses-carry-per-request-csp-nonces.md)），其餘靜態資源仍由邊緣直送。
 
+### Identity runtime 初始化
+
+Identity 保留首次使用時建表（#6／#24），沒有額外的手動 migration 步驟。`db/identity-runtime-initializer.ts` 以 D1 的 `identity_runtime_state` 保存完成版本；新 isolate 讀到相同或較新的版本即略過 schema／固定 seed，管理者與通知初始化仍由控制面獨立執行。
+
+修改 schema、column migration、index、固定場館／reference seed 或初始化演算法時，遞增 `db/identity-runtime-version.json` 的 `version` 並更新 `fingerprint`。`tests/identity-runtime-initialization.test.mjs` 會計算初始化程式、schema 宣告與實際 seed bytes 的 SHA-256；不符時顯示新值。已發布的版本不可重用。僅控制面管理者設定改變不需要 schema 升版，也不能把信箱名單放進此檔。
+
+升級必須維持前版程式可使用的 additive 結構；較新 marker 不能觸發舊 DDL 或被舊程式倒寫。失敗不記錄完成版本，下一次請求可重試。新部署的首次初始化仍可能較慢，同時開始的初始化仍靠既有冪等操作完成，並非 exactly-once。
+
+Production 的既有 `smoke-published-events.mjs` 與隔離 preview E2E 都會透過 `overlay-readiness.mjs` 連續讀取公開 overlay，確認版本 header、有效資料與再次讀取成功；不寫入 production fixture，也不把一次 smoke 當成效能 SLO。Pages 驗證與 publication Worker 的 source／binding／active-version 證據仍分開；retention Worker 不建立 schema。
+
+回復使用通過相容性測試的前版 Pages／受影響 Worker 程式，保留版本表及資料，不做 down migration。未來若需要破壞相容性的 schema 變更，必須另行定義切換與回復策略，不能沿用「較新版本直接略過」的假設。
+
 ### HTML nonce 驗收
 
 HTML CSP 由 `functions/_html-security.ts` 宣告，`public/_headers` 保留相同來源限制作靜態備援。每次網路 HTML 回應有新的 256-bit nonce，Cloudflare JavaScript Detections 從 origin header 採用該值。不要以 Response Header Transform Rule 補 nonce，因為標頭與腳本注入的階段不同，必須驗證最終 script 真的帶上相同值。
