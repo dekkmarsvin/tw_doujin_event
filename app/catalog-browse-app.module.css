@@ -18,12 +18,14 @@
 .search { display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); }
 .search>svg { width:22px; height:22px; color:var(--muted); flex:none; }
 .search input { width:100%; min-width:0; border:0; outline:0; background:transparent; font-size:16px; }
-.scope { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:start; margin-top:10px; }
+/* One row of equal controls. iOS Safari ignores min-height on a native select,
+   so the selects drop the native look and take an explicit height and arrow. */
+.scope { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:stretch; margin-top:10px; }
 .scope>label { min-width:0; }
-.scope select { width:100%; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); color:var(--ink); font-size:14px; }
+.scope select { -webkit-appearance:none; appearance:none; width:100%; height:44px; padding:0 30px 0 10px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707a82' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center / 14px; color:var(--ink); font-size:14px; text-overflow:ellipsis; }
 .scope>section { padding:0; }
-.scope>section>button { min-height:44px; border-radius:7px; background:var(--surface-soft); }
-.scope>section>button>span { font-size:14px; }
+.scope>section>button { height:44px; min-height:44px; border-radius:7px; background:var(--surface-soft); }
+.scope>section>button>span { font-size:14px; font-weight:700; }
 .scope>section>button>small { display:none; }
 .topics,.filters { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
 .topics button,.filters button { display:flex; align-items:center; gap:8px; max-width:100%; min-height:44px; padding:7px 12px; border:1px solid var(--line); border-radius:7px; background:var(--surface-soft); overflow-wrap:anywhere; text-align:left; }
@@ -90,9 +92,10 @@
   .grid,.textList { grid-template-columns:minmax(0,1fr); }
   .grid { gap:16px; }
   .scope { gap:6px; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; }
-  .scope select { padding-inline:5px; }
-  .scope>section>button { padding:8px; }
-  .scope>section>button>span { font-size:13px; gap:4px; }
+  .scope select { padding:0 26px 0 8px; background-position:right 8px center; }
+  .scope>section>button { padding:0 10px; }
+  /* Selects are 16px on phones so iOS does not zoom; the button label matches them. */
+  .scope>section>button>span { font-size:16px; gap:4px; }
   .scope>section>button svg { display:none; }
   .resultHeader { margin-top:16px; }
   .resultHeader h2 { font-size:17px; }
