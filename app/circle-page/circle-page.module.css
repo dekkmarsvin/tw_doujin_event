@@ -13,7 +13,7 @@
 
 /* Buttons, one family: soft white with a structural line, ink for the one
    action a card or the bar leads with. */
-.barButtons button,.plan,.planned,.feedback button,.unavailable button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:0 16px; border:1px solid #cfd5cf; border-radius:7px; background:#f9faf8; color:#202a35; font:inherit; font-weight:700; cursor:pointer; }
+.barButtons button,.plan,.planned,.feedback button,.unavailable button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:0 16px; border:1px solid #cfd5cf; border-radius:7px; background:#f9faf8; color:#202a35; font:inherit; font-size:15px; font-weight:700; cursor:pointer; }
 .barButtons button:hover:not(:disabled),.planned:hover:not(:disabled),.feedback button:hover,.unavailable button:hover { background:#f0f2ef; }
 .plan { border-color:#202a35; background:#202a35; color:#f9faf8; }
 .plan:hover:not(:disabled) { background:#34404d; }
@@ -23,24 +23,32 @@
 .barButtons .saved { border-color:#202a35; }
 .barButtons .saved svg { color:#e86f5d; }
 
-/* The circle's own content: one card per kind, the wide ones full width. */
-.content { margin-top:32px; }
+/* The circle's own content: one card per kind. The section heading comes
+   from discovery.css (22px); a card's title is the next step down (18px, in
+   ink), above body text and the 15px buttons. */
+.content { margin-top:40px; }
 .content h2 { margin:0 0 12px; }
-.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr)); gap:12px; }
-.card { min-width:0; margin:0; padding:16px 18px; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; }
-.card h3 { margin:0 0 10px; color:#626b73; font-size:14px; font-weight:700; }
-.wide { grid-column:1 / -1; }
+.stack { display:grid; gap:12px; }
+/* Two independent columns: each is as tall as its own cards, so a short card
+   beside a long one is never stretched into empty space. */
+.columns { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr)); gap:12px; align-items:start; }
+.column { display:grid; gap:12px; align-content:start; min-width:0; }
+.card { min-width:0; margin:0; padding:18px 20px; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; }
+.card h3 { margin:0 0 12px; font-size:18px; font-weight:700; line-height:1.4; }
 
 /* Sale-sheet pages at up to their own size, never cropped: small print is the
    point of them, and the browser's zoom works on the page as it stands. */
 .catalog { display:grid; gap:18px; margin:0; padding:0; list-style:none; }
-.page { margin:0; }
-.page img { display:block; max-width:100%; height:auto; border:1px solid #dfe3df; border-radius:9px; background:#ffffff; }
-.page figcaption { margin-top:6px; font-size:14px; }
-.page figcaption a { display:inline-flex; align-items:center; min-height:44px; }
+.catalog img { display:block; max-width:100%; height:auto; border:1px solid #dfe3df; border-radius:9px; background:#ffffff; }
+
+/* Tapping a picture opens the original. The cursor and a darker edge on hover
+   say so without any words on or under the image. */
+.zoom { display:block; width:fit-content; max-width:100%; border-radius:9px; cursor:zoom-in; }
+.zoom:hover img { border-color:#9aa5a0; }
+.zoom:focus-visible { outline:3px solid #d99b44; outline-offset:3px; }
 
 .picture { margin:0; }
-.picture img { display:block; max-width:100%; max-height:min(60vh,480px); height:auto; border-radius:9px; background:#f2f0e8; object-fit:contain; }
+.picture img { display:block; max-width:100%; max-height:min(60vh,480px); height:auto; border:1px solid transparent; border-radius:9px; background:#f2f0e8; object-fit:contain; }
 .picture figcaption { margin-top:6px; color:#626b73; font-size:14px; }
 
 .saleInfo { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -55,7 +63,7 @@
 .links li + li { border-top:1px solid #dfe3df; }
 .links a { display:flex; align-items:center; gap:10px; min-height:44px; padding:6px 0; text-decoration:none; }
 .links a span { font-weight:700; overflow-wrap:anywhere; }
-.links a small { color:#626b73; font-size:13px; }
+.links a small { color:#626b73; font-size:14px; }
 .links a svg { flex-shrink:0; margin-left:auto; }
 
 .source { margin:12px 0 0; color:#626b73; font-size:14px; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createCatalogPublication } from "../catalog-publication";
 import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE } from "../circle-page-data";
@@ -188,57 +188,66 @@ function CircleContent({ state, circle, onRetry }: { state: CatalogSnapshot; cir
   ].filter(({ values }) => values.length > 0);
   if (!picture && pages.length === 0 && !circle.saleInfo && details.length === 0 && circle.externalLinks.length === 0) return null;
 
-  // Each kind of content is its own card; the sale sheet and the links run
-  // the full width, the shorter cards pair up where there is room.
+  // A picture is its own way to the full-size file: tapping it opens the
+  // original, where the browser can zoom. No separate link to hunt for.
+  const zoomable = (media: { url: string; alt: string }, image: ReactNode) =>
+    <a className={styles.zoom} href={media.url} target="_blank" rel="noreferrer" aria-label={`開啟原圖：${media.alt}`}>{image}</a>;
+  const saleCard = circle.saleInfo ? <div className={styles.card}>
+    <h3>販售資訊</h3>
+    <p className={styles.saleInfo}>{circle.saleInfo}</p>
+  </div> : null;
+  const detailsCard = details.length > 0 ? <div className={styles.card} key="details">
+    <h3>作者與作品</h3>
+    <dl className={styles.details}>
+      {details.map(({ label, values, list }) => <div key={label}>
+        <dt>{label}</dt>
+        <dd>{list ? values.map((value) => <span key={value} className={styles.tag}>{value}</span>) : values[0]}</dd>
+      </div>)}
+    </dl>
+  </div> : null;
+  const pictureCard = picture ? <div className={styles.card} key="picture">
+    <h3>代表圖</h3>
+    {broken.has(picture.url)
+      ? <p className={styles.muted}>圖片暫時無法顯示。</p>
+      : <figure className={styles.picture}>
+        {zoomable(picture, <img src={picture.url} alt={picture.alt} referrerPolicy="no-referrer" onError={() => markBroken(picture.url)} />)}
+        {/* Provenance is optional on a circle's own upload (ADR-0053): a
+            link when there is one, the credit alone when not, nothing otherwise. */}
+        {picture.sourceUrl
+          ? <figcaption><a href={picture.sourceUrl} target="_blank" rel="noreferrer">{picture.provider ? `${picture.provider} · ` : ""}原始來源</a></figcaption>
+          : picture.provider ? <figcaption>{picture.provider}</figcaption> : null}
+      </figure>}
+  </div> : null;
+  const aside = [detailsCard, pictureCard].filter(Boolean);
+
+  // The sale sheet and the links run the full width. Between them the sale
+  // text is one column and the short cards stack in the other, each column as
+  // tall as its own content — a short card is never stretched to match a
+  // long one.
   return <section className={styles.content} aria-labelledby="circle-page-content">
     <h2 id="circle-page-content">社團介紹</h2>
-    <div className={styles.cards}>
+    <div className={styles.stack}>
       {/* The sale sheet first: it is what a shared link is opened for. Each
-          page is shown whole at up to its own size — the page itself can be
-          zoomed — and its size is reserved before it arrives. */}
-      {pages.length > 0 && <div className={`${styles.card} ${styles.wide}`}>
+          page is shown whole at up to its own size and its size is reserved
+          before it arrives. */}
+      {pages.length > 0 && <div className={styles.card}>
         <h3>本次品書</h3>
         <ol className={styles.catalog}>
           {pages.map((page, index) => <li key={page.id}>
             {broken.has(page.url)
               ? <p className={styles.muted}>第 {index + 1} 張品書暫時無法顯示。</p>
-              : <figure className={styles.page}>
-                <img
-                  src={page.url} alt={page.alt} width={page.width} height={page.height}
-                  loading={index === 0 ? undefined : "lazy"} referrerPolicy="no-referrer" onError={() => markBroken(page.url)}
-                />
-                <figcaption><a href={page.url} target="_blank" rel="noreferrer">開啟原圖</a></figcaption>
-              </figure>}
+              : zoomable(page, <img
+                src={page.url} alt={page.alt} width={page.width} height={page.height}
+                loading={index === 0 ? undefined : "lazy"} referrerPolicy="no-referrer" onError={() => markBroken(page.url)}
+              />)}
           </li>)}
         </ol>
       </div>}
-      {circle.saleInfo && <div className={styles.card}>
-        <h3>販售資訊</h3>
-        <p className={styles.saleInfo}>{circle.saleInfo}</p>
+      {(saleCard || aside.length > 0) && <div className={styles.columns}>
+        {saleCard && <div className={styles.column}>{saleCard}</div>}
+        {aside.length > 0 && <div className={styles.column}>{aside}</div>}
       </div>}
-      {details.length > 0 && <div className={styles.card}>
-        <h3>作者與作品</h3>
-        <dl className={styles.details}>
-          {details.map(({ label, values, list }) => <div key={label}>
-            <dt>{label}</dt>
-            <dd>{list ? values.map((value) => <span key={value} className={styles.tag}>{value}</span>) : values[0]}</dd>
-          </div>)}
-        </dl>
-      </div>}
-      {picture && <div className={styles.card}>
-        <h3>代表圖</h3>
-        {broken.has(picture.url)
-          ? <p className={styles.muted}>圖片暫時無法顯示。</p>
-          : <figure className={styles.picture}>
-            <img src={picture.url} alt={picture.alt} referrerPolicy="no-referrer" onError={() => markBroken(picture.url)} />
-            {/* Provenance is optional on a circle's own upload (ADR-0053): a
-                link when there is one, the credit alone when not, nothing otherwise. */}
-            {picture.sourceUrl
-              ? <figcaption><a href={picture.sourceUrl} target="_blank" rel="noreferrer">{picture.provider ? `${picture.provider} · ` : ""}原始來源</a></figcaption>
-              : picture.provider ? <figcaption>{picture.provider}</figcaption> : null}
-          </figure>}
-      </div>}
-      {circle.externalLinks.length > 0 && <div className={`${styles.card} ${styles.wide}`}>
+      {circle.externalLinks.length > 0 && <div className={styles.card}>
         <h3>更多資訊</h3>
         <ul className={styles.links}>
           {circle.externalLinks.map((link) => <li key={`${link.kind}-${link.provider}-${link.url}`}>

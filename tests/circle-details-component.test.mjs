@@ -76,7 +76,8 @@ test("sale-sheet pages load card previews where they are small and open whole wh
 
   const reading = render([page]);
   assert.match(reading, /<img src="https:\/\/image\.example\/page\.jpg"/, "the full view loads the page itself");
-  assert.match(reading, /href="https:\/\/image\.example\/page\.jpg"[^>]*><span>品書<\/span><span>開啟原圖<\/span>/, "and offers it at full size");
+  assert.match(reading, /<a [^>]*href="https:\/\/image\.example\/page\.jpg"[^>]*aria-label="開啟原圖：品書第 1 張"[^>]*><img src="https:\/\/image\.example\/page\.jpg"/, "and the page itself opens it at full size");
+  assert.doesNotMatch(reading, /<span>開啟原圖<\/span>/, "with no separate link to hunt for");
 
   const panel = render([page], { compact: true, floating: true });
   assert.match(panel, /<img src="https:\/\/image\.example\/page-card\.jpg"/, "the side panel loads the card preview");
