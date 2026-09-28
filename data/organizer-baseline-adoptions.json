@@ -1,4 +1,30 @@
 {
   "schema": "organizer-baseline-adoptions/1",
-  "records": []
+  "records": [
+    {
+      "schema": "organizer-baseline-adoption/1",
+      "id": "pf45-rf14-reviewed-cross-day-grouping",
+      "kind": "reviewed-cross-day-grouping",
+      "eventId": "pf45-rf14",
+      "source": {
+        "candidateId": "9686bbb6-7aee-4f67-9f72-47ef75ba59fc",
+        "candidateVersion": 2,
+        "jobId": "cb8ba38d-cf53-467a-a243-fc957337168a",
+        "snapshotId": "3cd13874-bb27-45b0-bcec-f55cdbf10e79",
+        "approvalHash": "284f7da45b883950044b1ca42c2a138ded12a562cfa2ebe468840e23bee247f5",
+        "dataCommit": "fcc02adaa468725d89910d754c7a2ae06666a92c",
+        "mainCommit": "b1329ad6ee89f83937340e1e3ce7e7c1ed311706"
+      },
+      "target": {
+        "mainCommit": "af52e0e9b0489f7037fb86b1be19987aecca9070",
+        "pinSha256": "b345bc54e22e0fe0c860304badf5f7469ff75a725b542d5b2b4ee0678cdeff83",
+        "groupingSha256": "7af6161042ca0fe05a0ad5c2b0677fd2f2c2e21960b395be088feb2fcf7a627b",
+        "evidenceSha256": "3d2ed68658e5f7f361a3ba6575d1c201c0668d298d800d9e0a2c1952e63e6f08"
+      },
+      "authorization": {
+        "pullRequest": "https://github.com/dekkmarsvin/tw_doujin_event/pull/416",
+        "decision": "ADR-0071"
+      }
+    }
+  ]
 }
