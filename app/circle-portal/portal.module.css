@@ -331,9 +331,15 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .fieldLabel { font-size: 11px; font-weight: 700; }
 .fieldHead + :is(input, select, textarea) { margin-top: 6px; }
 
-/* Held at the foot of the screen while the form scrolls, like the organizer
-   roster's footer; it settles where the form ends. */
-.editorActions {
+/* The map draft's save and submit row, under its canvas. */
+.editorActions { display: flex; gap: 8px; }
+.editorActions button { width: 100%; }
+
+/* The circle editor's own bar, held at the foot of the screen while the form
+   scrolls, like the organizer roster's footer; it settles where the form ends.
+   A class of its own: a sticky strip laid over the map draft's canvas would
+   take the drags meant for the map. */
+.saveBar {
   position: sticky;
   bottom: 0;
   z-index: 3;
@@ -342,15 +348,15 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
-.editorActions .problemList { max-height: 7.5em; margin: 0 0 8px; overflow: auto; }
-.editorActionRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
-.editorActionRow > p { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 11px; line-height: 1.6; }
-.card .editorActionRow button { min-width: 200px; margin-top: 0; }
+.saveBar .problemList { max-height: 7.5em; margin: 0 0 8px; overflow: auto; }
+.saveBarRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
+.saveBarRow > p { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 11px; line-height: 1.6; }
+.card .saveBarRow button { min-width: 200px; margin-top: 0; }
 .actionState { color: var(--muted); }
 .actionOk { color: var(--success); }
 .actionError { color: var(--danger); }
 @media (max-width: 559px) {
-  .card .editorActionRow button { flex: 1 1 100%; }
+  .card .saveBarRow button { flex: 1 1 100%; }
 }
 
 /* After the form: the share panel over the form column and the after-event
@@ -364,6 +370,10 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .dangerZone .danger > :not(summary) { max-width: 640px; }
 @media (min-width: 960px) {
   .editorAfterRow { grid-template-columns: minmax(0, 1fr) minmax(360px, var(--preview-column)); gap: var(--column-gap); }
+  /* Placed, not flowed: before the first save, or with no booth to share,
+     there is no share panel, and the choice would slide under the form and
+     jump across once one appears. */
+  .editorAfterRow > .retention { grid-column: 2; }
 }
 
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }

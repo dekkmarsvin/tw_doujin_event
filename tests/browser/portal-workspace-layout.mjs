@@ -52,6 +52,12 @@ try {
     for (const section of [claim, await box(editor), account]) assert.equal(section.right, masthead.right, `sections share the masthead's right edge: ${detail}`);
     assert.equal(mine.right, form.right, `my circles end where the editor's form ends: ${detail}`);
     assert.equal(claim.left, preview.left, `the claim starts where the editor's preview starts: ${detail}`);
+    // This fixture has no booth, so there is no share panel beside the
+    // after-event choice; it still keeps to the preview column rather than
+    // sliding under the form and jumping across once a share panel appears.
+    const retention = await box(editor.getByRole("group", { name: "活動結束後", exact: true }));
+    assert.equal(await editor.getByRole("region", { name: "分享公開頁" }).count(), 0);
+    assert.equal(retention.left, preview.left, `the after-event choice sits in the preview column: ${detail}`);
 
     // The event belongs under the title, not in a card of its own.
     assert.equal(await page.getByRole("banner").getByLabel("活動", { exact: true }).inputValue(), "sample");

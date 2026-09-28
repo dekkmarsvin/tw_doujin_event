@@ -1284,11 +1284,11 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       {/* Held at the foot of the screen while the form scrolls past, and
           ending where the form ends: the step that publishes is always in
           reach, and nothing else — least of all the deletion — sits beside it. */}
-      <div className={styles.editorActions}>
+      <div className={styles.saveBar}>
         {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
           {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}><a href={`#${problem.id}`}>{problem.message}</a></li>)}
         </ul>}
-        <div className={styles.editorActionRow}>
+        <div className={styles.saveBarRow}>
           <p className={formMessage?.kind === "error" ? styles.actionError : formMessage ? styles.actionOk : styles.actionState} role="status">
             {formMessage
               ? <>{formMessage.message}{formMessage.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}</>
