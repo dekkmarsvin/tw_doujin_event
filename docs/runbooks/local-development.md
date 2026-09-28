@@ -135,6 +135,8 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 ### 瀏覽器驗收
 
+新增或補強 UI 行為驗收時，同一 PR 核對並移除它已等效涵蓋的 JSX／CSS／原始碼字串斷言，在 PR 逐項記錄替代關係；未覆蓋者保留並說明缺口。優先擴充既有 journey，不為同一流程新增另一套。純邏輯、API／D1、授權、資料完整性與發布恢復仍留在適合的測試層，不以測試總數下降作為驗收。
+
 `tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：
 
 | 命令 | 跑什麼 | 約略耗時 |

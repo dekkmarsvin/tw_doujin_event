@@ -301,6 +301,11 @@ try {
   await organizer.getByLabel("來源檔案", { exact: true }).setInputFiles({ name: "corrections.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
   await organizer.getByRole("button", { name: "下一步：欄位對照", exact: true }).click();
   const form = organizer.getByRole("group", { name: "匯入檔案與欄位對應", exact: true });
+  const dayMapping = form.getByRole("group", { name: "活動日", exact: true });
+  await dayMapping.waitFor();
+  assert.equal(await dayMapping.getByLabel("來源欄位").count(), 1, "source and fixed value belong to the named mapping group");
+  assert.deepEqual(await dayMapping.getByLabel("固定值").locator('option').evaluateAll(options => options.filter(option => option.value).map(option => option.value)),
+    ["day-1", "day-2"], "activity day offers this event's defined days");
   await form.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("day-1");
   await form.getByRole("group", { name: "場地", exact: true }).getByLabel("固定值").selectOption("space-a");
   await form.getByRole("group", { name: "展區", exact: true }).getByLabel("固定值").fill("A");

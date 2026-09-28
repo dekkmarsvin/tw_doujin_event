@@ -4,11 +4,8 @@ import test from "node:test";
 
 /** The organizer workspace as one body of source.
  *
- * These assertions name behaviour, not file boundaries, and #224 split the
- * workspace across several files. Reading the directory keeps them pointed at
- * the behaviour: a `doesNotMatch` now covers every panel rather than whichever
- * file the code used to live in, and the next split does not silently drop an
- * assertion by moving the line it matched.
+ * These remaining guards are coupled to implementation and copy. Reading the
+ * directory covers panels split by #224, but does not prove user behaviour.
  *
  * Browser-covered entry, navigation and feedback assertions have been removed
  * individually. The remaining guards do not yet have equivalent behavioural
@@ -22,14 +19,8 @@ async function organizerSource() {
   return files.join("\n");
 }
 
-// portal-organizer-entry opens the built entry and checks noindex; the
-// public-artifact test also checks its separate entry chunk. Keep this guard:
-// fetching the reader HTML alone does not inspect its client-rendered links.
-test("the reader does not advertise the organizer workspace", async () => {
-  const reader = await readFile(new URL("../app/event-map-app.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(reader, /href=["']\/organizer|前往主辦單位後台/);
-});
-
+// Rendered reader entry, save/revision/navigation and completed onboarding
+// are checked by portal-organizer-entry and portal-organizer-references.
 test("the organizer login form requests its own audience", async () => {
   const app = await organizerSource();
   // The browser journey mints its login link through an API helper, so it
@@ -80,19 +71,6 @@ test("organizer ships the ADR-0047 guided station, binder readiness, and the sha
   assert.match(referencePanel, /\$\{styles\.row\} \$\{styles\.fieldRow\}/);
 });
 
-test("a successful draft save synchronizes its revision before follow-up navigation", async () => {
-  const app = await organizerSource();
-  const saveStart = app.indexOf("result = await saveOrganizerEvent");
-  const versionSynced = app.indexOf("setExpectedVersion(result.version)", saveStart);
-  const detailReloaded = app.indexOf("await onChanged()", versionSynced);
-  const followUp = app.indexOf("if (after) await after(result.version)", detailReloaded);
-
-  assert.ok(saveStart >= 0, "draft save call is missing");
-  assert.ok(versionSynced > saveStart, "saved revision is not synchronized locally");
-  assert.ok(detailReloaded > versionSynced, "detail reload must follow local revision synchronization");
-  assert.ok(followUp > detailReloaded, "onboarding or navigation callback must run after reload");
-});
-
 test("organizer save counters stay internal when no revision diff is available", async () => {
   const app = await organizerSource();
 
@@ -116,15 +94,7 @@ test("organizer reuses the event source for imports and labels every activity-da
   assert.doesNotMatch(app, /描摹/);
 });
 
-test("an explicit save-and-leave selection is not replaced by list refresh", async () => {
-  const app = await organizerSource();
-  assert.match(app, /const selectionInitialized = useRef\(false\)/);
-  assert.match(app, /selectionInitialized\.current\s*=\s*true/);
-  assert.match(app, /current === null \? null/);
-  assert.match(app, /onLeave=\{\(\) => \{ setNotice\(IDLE\); setDirty\(false\); setSelectedId\(null\); \}\}/);
-});
-
-test("booth import shows a worked example, groups each mapping field, and fixes bad rows in place", async () => {
+test("remaining import sample, layout and correction-reset guards", async () => {
   const [app, css] = await Promise.all([
     organizerSource(),
     readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
@@ -143,10 +113,8 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   assert.match(app, /URL\.createObjectURL/);
   assert.match(app, /buildOrganizerImportSample/);
 
-  // Each mapping field is one group, not two cells of a table.
-  assert.match(app, /<fieldset className=\{styles\.mappingField\}>\r?\n\s*<legend>\{label\}<\/legend>/);
-  assert.match(app, /<label className=\{styles\.subLabel\}>來源欄位/);
-  assert.match(app, /<label className=\{styles\.subLabel\}>固定值/);
+  // Mapping groups and selectable day/free-text area controls are operated
+  // in portal-organizer-import. These remaining guards need geometry checks.
   assert.match(css, /\.mappingField \{[^}]*display: block/);
   // Every card in a mapping row starts its title and its value on the same
   // line: the legend is floated instead of straddling the fieldset border, and
@@ -160,24 +128,11 @@ test("booth import shows a worked example, groups each mapping field, and fixes 
   assert.doesNotMatch(app, /<p>支援空白、逗號、頓號、分號與斜線。<\/p>/);
   assert.match(css, /@media \(max-width: 1230px\)[\s\S]*\.mappingGrid \{ grid-template-columns: repeat\(2/);
 
-  // The activity day is a fixed value set, so it is picked, not typed.
-  assert.match(app, /select\("活動日", day, setDay, "活動日代碼", dayOptions\)/);
-  assert.doesNotMatch(app, /select\("活動日", day, setDay, "活動日代碼"\)/);
-  assert.match(app, /const dayOptions = days\.map/);
-  // The area code is a fact of the source file, so it stays free text.
-  assert.match(app, /select\("展區", area, setArea, "展區代碼"\)/);
-  assert.match(app, /無分區/);
-
-  // A rejected row is visible, correctable and removable rather than absent.
-  assert.match(app, /待修正 \{result\.rejected\.length\}/);
-  assert.match(app, /result\.rejected\.slice\(start, start \+ 100\)/);
-  assert.match(app, /可匯入 \{result\.rows\.length\}/);
-  assert.match(app, /已排除 \{excluded\.length\}/);
-  assert.match(app, /排除全部待修正資料/);
+  // Pagination, corrections, bulk exclusion, restoration and the final saved
+  // rows are observed in portal-organizer-import. Individual exclusion and
+  // clearing all corrections still lack their own behavioural check.
   assert.match(app, />排除<\/button>/);
-  assert.match(app, />恢復<\/button>/);
   assert.match(app, /清除所有手動修改/);
-  assert.match(app, /excludedRows/);
 
   // Corrections are keyed by source row, so they cannot outlive the file,
   // sheet or header row that gives a row number its meaning.
@@ -238,9 +193,8 @@ test("the workspace carries one navigation, one progress count, and counts only 
   assert.ok(app.includes("void save(onSaved, true)"), "the primary save requires the task");
   assert.ok(app.includes("void save(onSecondarySaved)"), "leaving does not");
 
-  // Re-importing replaces the stored list, so the preview says so before it
-  // is confirmed rather than behind another dialog.
-  assert.match(app, /將以 \{result\.rows\.length\} 筆取代目前的/);
+  // The replacement-count warning is checked before confirmation by
+  // portal-organizer-import, alongside the resulting saved rows.
 });
 // #221 4.4／4.5 與 Phase 5: the rail reports what is wrong, and every empty
 // state names a job rather than a condition.
@@ -261,30 +215,6 @@ test("the rail reports problems, not unstarted work, and empty states name an ac
   assert.match(app, /這一版已通過檢查/);
   assert.match(app, /這一版還沒檢查/);
   assert.match(app, /尚未加入攤位名單/);
-});
-// Finishing the basic settings used to leave the reader on the first of the
-// three forms they had just completed, with a workspace-wide line naming a mode
-// switch. The browser journey in portal-organizer-references drives it.
-test("finishing the basic settings opens the next section and marks where the reader is", async () => {
-  const app = await organizerSource();
-
-  // The binder opens on the suggested section in the same pass as the detail,
-  // and that section is what the next visit resumes at.
-  assert.ok(app.includes('reloadDetail(candidateId, undefined, "suggested")'), "completion opens the suggested section");
-  assert.match(app, /persistLocation\(candidateId, next\.workspace\.resume\.guidedTask, next\.workspace\.readiness\.suggestedNextSection\)/, "the suggested section is remembered");
-
-  // Said on that section, not across the top of the workspace, and in terms of
-  // the next job rather than the mode that changed.
-  assert.doesNotMatch(app, /已開啟全部項目/);
-  // Completing is a new action: an earlier step's workspace notice goes.
-  assert.match(app, /const completeOnboarding = useCallback\(async \(candidateId: string, version: number\) => \{\s*setNotice\(IDLE\);/, "completion clears the earlier notice");
-  assert.ok(app.includes("{handoff && <OnboardingHandoff"), "the line sits with the panel it introduces");
-  assert.match(app, /const finishNavigation = [^]*?setHandoff\(null\);[^]*?request\.run\(\);/, "moving away clears it with every other notice");
-
-  // The rail says where the reader is, and does not offer a step they are on.
-  assert.ok(app.includes('aria-current={item.id === current ? "page" : undefined}'), "the open section is marked");
-  assert.ok(app.includes("{showNext && showNextAction && <button"), "no 下一步 to the panel already open");
-  assert.ok(app.includes("{suggestedNextSection !== current && <button"), "nor beside the roster heading");
 });
 // #298: 場館／場地／展區 are near-synonyms in everyday Chinese, and the
 // glossary that tells them apart is written for developers. The explanation
