@@ -42,7 +42,7 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0005](./0005-import-stays-p2-export-only.md) | 匯入維持 P2，一般介面只保留安全匯出 | 生效 |
 | [0006](./0006-split-search-planning-filter-and-display.md) | 把搜尋、規劃篩選與顯示設定拆成三組 | 生效；後果中的原創／二創由 0051 改寫，列為尚未實作的三項已實作 |
 | [0007](./0007-circle-name-is-not-circle-editable.md) | 社團名稱不可由社團自行編輯 | 生效 |
-| [0008](./0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker | 生效 |
+| [0008](./0008-static-public-reading-path.md) | 公開閱讀路徑純靜態，不經 Worker | 部分被取代（0074）；場刊／地圖與資產仍靜態 |
 | [0009](./0009-single-pages-project-direct-upload.md) | 單一 Pages project + Direct Upload | 生效 |
 | [0010](./0010-circle-identity-is-an-allocated-serial.md) | 社團身分改用配發的流水號 | **部分被取代** — 三項遷移後果由 0013 取代；規則一（跨活動 ID 沿用）由 0039 暫緩 |
 | [0011](./0011-ff47-is-not-a-public-launch.md) | FF47 期間全站不公開 | **已取代** — 由 0029 取代；資料位置見 0014，解除條件見 0015 |
@@ -108,3 +108,4 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0071](./0071-organizer-review-confirms-cross-day-circle-grouping.md) | 主辦在匯入預覽確認跨日同名社團 | 生效；部分取代 0044 |
 | [0072](./0072-sale-sheet-pages-are-prepared-in-the-browser-and-hosted-as-a-set.md) | 品書在瀏覽器縮圖，以一組代管圖片保存 | 生效；延續 0017、0053 |
 | [0073](./0073-reviewed-grouping-corrections-have-explicit-amendment-baselines.md) | 已核准的身分整合以固定紀錄承接修正基準 | 生效；延續 0071、0069 |
+| [0074](./0074-html-responses-carry-per-request-csp-nonces.md) | HTML 回應使用每次請求的 CSP nonce | 生效；部分取代 0008 的 HTML 直送要求 |

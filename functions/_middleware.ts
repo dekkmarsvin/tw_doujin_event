@@ -8,6 +8,8 @@
  * closes the hole without any per-request state.
  */
 
+import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
+
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
 function json(body: unknown, status: number) {
@@ -43,7 +45,8 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     if (contentType !== "application/json" && !privateFileUpload) return json({ error: "請求格式無效。" }, 415);
   }
 
-  const response = await context.next();
+  const html = SAFE_METHODS.has(request.method) && isHtmlRoute(url.pathname);
+  const response = html ? await context.next(unconditionalHtmlRequest(request)) : await context.next();
 
   // The public overlay sets its own cacheable headers; everything else under
   // /api/ carries identity and must never be stored by a cache or the worker.
@@ -53,5 +56,5 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   }
-  return response;
+  return html ? secureHtmlResponse(response, url.pathname) : response;
 };

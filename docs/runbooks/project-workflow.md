@@ -195,7 +195,7 @@ GitHub 發文、改票與關票在使用者已授權的範圍內執行；未授�
 |---|---|
 | 新增 Cloudflare 產品或常駐／排程角色 | 0；確有必要時先提出維護者決策，不自行引入 |
 | 每新增一場正常活動所需人工基礎設施設定 | 0；不新增專屬 Worker、DB、bucket、repo 或 token |
-| 公開基礎場刊與地圖 | 保持靜態，不為 SSR、追蹤或統一 middleware 改走 Function |
+| 公開基礎場刊與地圖 | 保持靜態；HTML nonce 為 [ADR-0074](../adr/0074-html-responses-carry-per-request-csp-nonces.md) 明列例外，不擴張到場刊／地圖 JSON 或資產 |
 | 新增每次閱讀的持久化寫入 | 0；不在閱讀路徑附帶 last_seen、稽核、修復或備份寫入 |
 | 發布執行機制 | 沿用既有 dispatcher、checkpoint、lease、retry 與 webhook／cron 恢復，不疊第二套 |
 | 觀測方式 | 先用平台既有能力，不新增 metrics DB、log forwarding Worker 或自製帳務服務 |

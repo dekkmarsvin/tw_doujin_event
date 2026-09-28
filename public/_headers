@@ -16,6 +16,9 @@
 # own `/cdn-cgi/rum`, which `connect-src 'self'` already covers; only the manual
 # snippet talks to `cloudflareinsights.com`. If the beacon is ever embedded by
 # hand, that host has to be added there too.
+# Static fallback policies also cover Pages fail-open. Online HTML receives
+# these same policies plus a per-response nonce from functions/_html-security.ts.
+# Keep both definitions aligned (tests/html-security.test.mjs).
 /*
   Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; worker-src 'self'; upgrade-insecure-requests
   Permissions-Policy: camera=(), geolocation=(), microphone=()
