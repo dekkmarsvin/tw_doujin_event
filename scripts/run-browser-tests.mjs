@@ -22,6 +22,7 @@
 // its tiers that way: a journey cannot be left out of the gate by forgetting to
 // register it somewhere.
 import { spawn, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -30,6 +31,13 @@ import { parseArgs } from "node:util";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const JOURNEYS = path.join(ROOT, "tests", "browser");
+// Resolved rather than pointed at, as run-local-portal.mjs does for wrangler: a
+// git worktree has no `node_modules` of its own and takes the checkout's, so a
+// path under ROOT finds nothing.
+const viteBin = () => {
+  const manifest = createRequire(path.join(ROOT, "package.json")).resolve("vite/package.json");
+  return path.join(path.dirname(manifest), JSON.parse(readFileSync(manifest, "utf8")).bin.vite);
+};
 const MATRIX_MODES = ["representative", "full", "none"];
 // A full run writes the size matrix QA quotes; a PR run must not overwrite it
 // with its two rows, so each mode owns its own directory.
@@ -153,7 +161,7 @@ async function preparePortal() {
 
   console.error("portal: building dist and clearing the isolated local D1");
   run("stage-event-data.mjs", ["--fixture", "sample"]);
-  const build = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "vite", "bin", "vite.js"), "build", "--config", "vite.pages.config.ts"], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });
+  const build = spawnSync(process.execPath, [viteBin(), "build", "--config", "vite.pages.config.ts"], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });
   if (build.status !== 0) process.exit(build.status ?? 1);
   // The circle introduction pages exist only once this step writes them, and
   // it is also what takes the page script's template back out of dist.
@@ -220,7 +228,7 @@ async function serve(mode) {
     ? { command: [path.join(ROOT, "scripts", "run-local-portal.mjs")], base: PORTAL_ORIGIN }
     : await (async () => {
       const port = Number(process.env.MAP_TEST_PORT) || await freePort();
-      return { command: [path.join(ROOT, "node_modules", "vite", "bin", "vite.js"), "--config", "vite.pages.config.ts", "--port", String(port), "--strictPort"], base: `http://localhost:${port}` };
+      return { command: [viteBin(), "--config", "vite.pages.config.ts", "--port", String(port), "--strictPort"], base: `http://localhost:${port}` };
     })();
   // Its own process group on POSIX, so the whole group can be signalled at once.
   const child = spawn(process.execPath, spawned.command, { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"], detached: process.platform !== "win32" });

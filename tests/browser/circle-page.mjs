@@ -28,7 +28,8 @@ const authored = [{
   updatedAt: "2026-08-20T00:00:00.000+08:00",
   fields: {
     pen: "北風",
-    saleInfo: "新刊 B5／32P 200 元\n會場限定明信片",
+    // Long enough to be the tallest card beside the short ones.
+    saleInfo: ["新刊 B5／32P 200 元", "會場限定明信片", ...Array.from({ length: 14 }, (unused, index) => `既刊第 ${index + 1} 冊 A5／20P 150 元`)].join("\n"),
     referencedWorks: ["原創"],
     ageRatings: ["全年齡", "R18"],
     links: [{ provider: "X", kind: "social", url: "https://example.com/northwind" }],
@@ -57,7 +58,24 @@ try {
   const sheet = content.getByRole("img", { name: "北風畫室 品書第 1 張" });
   await sheet.waitFor();
   await page.waitForFunction((address) => [...document.images].some((image) => image.src === address && image.complete && image.naturalWidth > 0), SHEET);
-  assert.equal(await content.getByRole("link", { name: "開啟原圖" }).first().getAttribute("href"), SHEET);
+  // The page itself opens the original; there is no separate link beside it.
+  const sheetLink = content.getByRole("link", { name: "開啟原圖：北風畫室 品書第 1 張", exact: true });
+  assert.equal(await sheetLink.getAttribute("href"), SHEET);
+  assert.equal(await sheetLink.getByRole("img").count(), 1, "the link is the picture");
+
+  // One scale: a section heading, then a card's title, never smaller than the
+  // buttons under them; a short card is not stretched to a long one's height.
+  const hierarchy = await page.evaluate(() => {
+    const size = (node) => parseFloat(getComputedStyle(node).fontSize);
+    const byText = (selector, value) => [...document.querySelectorAll(selector)].find((node) => node.textContent.trim() === value);
+    const card = (title) => byText("h3", title).parentElement.getBoundingClientRect().height;
+    return {
+      section: size(byText("h2", "社團介紹")), card: size(byText("h3", "本次品書")), button: size(byText("button", "收藏社團")),
+      sale: card("販售資訊"), details: card("作者與作品"),
+    };
+  });
+  assert.ok(hierarchy.section > hierarchy.card && hierarchy.card >= hierarchy.button, `heading ${hierarchy.section} > card title ${hierarchy.card} >= button ${hierarchy.button}`);
+  assert.ok(hierarchy.details < hierarchy.sale - 40, `the short card keeps its own height (${hierarchy.details}px beside ${hierarchy.sale}px)`);
   await content.getByText("第 2 張品書暫時無法顯示。", { exact: true }).waitFor();
   const firstHeading = await content.evaluate((section) => [...section.querySelectorAll("h3")].map((heading) => heading.textContent));
   assert.equal(firstHeading[0], "本次品書", "the sale sheet precedes the rest of the introduction");
