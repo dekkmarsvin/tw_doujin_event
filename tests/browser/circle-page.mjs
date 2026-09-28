@@ -63,22 +63,33 @@ try {
   assert.equal(firstHeading[0], "本次品書", "the sale sheet precedes the rest of the introduction");
   await journey.capture(page, "circle-page-desktop");
 
-  // 2. Two days, so the reader picks one; nothing is added for a day they did
-  //    not choose, and certainly not for "today".
-  const planning = page.getByRole("region", { name: "收藏與行程" });
-  const dayButtons = planning.getByRole("button", { name: /^加入 .*行程$/ });
+  // 2. Two days, so the reader picks one: each day's card carries its own plan
+  //    action, and nothing is added for a day they did not choose.
+  const cards = page.locator("li.booth-card");
+  assert.equal(await cards.count(), 2, "one card per day");
+  const dayButtons = page.getByRole("button", { name: /^加入這天行程（/ });
   assert.equal(await dayButtons.count(), 2, "one plan action per day the circle is there");
-  await planning.getByRole("button", { name: "收藏社團", exact: true }).click();
-  await planning.getByRole("button", { name: "加入 9月2日（三）行程", exact: true }).click();
-  await planning.getByText("已加入 9月2日（三）行程。", { exact: true }).waitFor();
+  assert.equal(await cards.nth(1).getByRole("button", { name: "加入這天行程（9月2日（三））", exact: true }).count(), 1, "the action sits on its own day's card");
+  const bar = page.getByRole("group", { name: "收藏與分享" });
+  await bar.getByRole("button", { name: "收藏社團", exact: true }).click();
+  await cards.nth(1).getByRole("button", { name: "加入這天行程（9月2日（三））", exact: true }).click();
+  await bar.getByText("已加入 9月2日（三）行程。", { exact: true }).waitFor();
+  await cards.nth(1).getByRole("button", { name: "從這天行程移除（9月2日（三））", exact: true }).waitFor();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("event-map-planning-v1")));
   assert.deepEqual(stored.visitPlans.map(({ eventId, day, circleId }) => [eventId, day, circleId]), [["sample", 2, TWO_DAYS]], "the plan is keyed exactly as the map keys it, numeric day included");
   assert.deepEqual(stored.favorites.map(({ eventId, circleId }) => [eventId, circleId]), [["sample", TWO_DAYS]]);
 
   // An unfavourite can be taken back with its record intact.
-  await planning.getByRole("button", { name: "取消收藏", exact: true }).click();
-  await planning.getByRole("button", { name: "復原收藏", exact: true }).click();
-  await planning.getByRole("button", { name: "取消收藏", exact: true }).waitFor();
+  await bar.getByRole("button", { name: "取消收藏", exact: true }).click();
+  await bar.getByRole("button", { name: "復原收藏", exact: true }).click();
+  await bar.getByRole("button", { name: "取消收藏", exact: true }).waitFor();
+
+  // Sharing without a share sheet copies the page's own address.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.evaluate(() => { Object.defineProperty(navigator, "share", { value: undefined, configurable: true }); });
+  await bar.getByRole("button", { name: "分享", exact: true }).click();
+  await bar.getByText("已複製連結。", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), pageOf(TWO_DAYS));
 
   // 3. The map agrees: same store, the chosen day, the right booth.
   await page.getByRole("link", { name: "在地圖查看" }).nth(1).click();
@@ -91,11 +102,39 @@ try {
   await journey.capture(page, "circle-page-map-agrees");
   await page.close();
 
-  // 4. One day only: the plan action names it and there is nothing to pick.
+  // 4. One day only: one card, one plan action, nothing to pick. On a phone
+  //    the favourite and share actions stay at the foot of the screen.
   const single = await journey.page({ url: pageOf(ONE_DAY), viewport: { width: 390, height: 844 }, routes: overridesRoute("sample", []) });
-  const singlePlanning = single.getByRole("region", { name: "收藏與行程" });
-  await singlePlanning.getByRole("button", { name: "加入 9月1日（二）行程", exact: true }).waitFor();
-  assert.equal(await singlePlanning.getByRole("button", { name: /^加入 .*行程$/ }).count(), 1);
+  await single.getByRole("button", { name: "加入這天行程（9月1日（二））", exact: true }).waitFor();
+  assert.equal(await single.getByRole("button", { name: /^加入這天行程（/ }).count(), 1);
+  const footBar = await single.getByRole("group", { name: "收藏與分享" }).evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { position: getComputedStyle(node).position, bottom: Math.round(innerHeight - box.bottom) };
+  });
+  assert.deepEqual(footBar, { position: "fixed", bottom: 0 }, "the bar is pinned to the foot of a phone screen");
+
+  // 4b. A bar grown taller — here by a storage warning above its buttons —
+  //     still leaves the page's last line reachable above it.
+  const cramped = await journey.page({
+    url: pageOf(ONE_DAY),
+    viewport: { width: 390, height: 844 },
+    routes: routes(overridesRoute("sample", []), (target) => target.addInitScript(() => {
+      localStorage.setItem("event-map-planning-v1", JSON.stringify({ schemaVersion: 1 }));
+    })),
+  });
+  const crampedBar = cramped.getByRole("group", { name: "收藏與分享" });
+  await crampedBar.getByRole("alert").waitFor();
+  await cramped.waitForFunction(() => document.documentElement.style.getPropertyValue("--circle-action-bar-height") !== "");
+  await cramped.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const overlap = await cramped.evaluate(() => {
+    const bar = document.querySelector('[aria-label="收藏與分享"]').getBoundingClientRect();
+    const last = [...document.querySelectorAll("footer a")].at(-1).getBoundingClientRect();
+    return { barHeight: Math.round(bar.height), gap: Math.round(bar.top - last.bottom) };
+  });
+  assert.ok(overlap.barHeight > 120, `the warning makes the bar taller than the old fixed allowance (${overlap.barHeight}px)`);
+  assert.ok(overlap.gap >= 0, `the footer's last link clears the bar (${overlap.gap}px)`);
+  await journey.capture(cramped, "circle-page-mobile-tall-bar");
+  await cramped.close();
   // Nothing written is nothing shown: no empty section, no placeholder picture.
   assert.equal(await single.getByRole("heading", { name: "社團介紹" }).count(), 0, "a circle that wrote nothing has no content section");
   await journey.capture(single, "circle-page-mobile-no-content");
