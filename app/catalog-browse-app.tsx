@@ -84,12 +84,17 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   useEffect(() => {
     // Reaching the end of the circles without a sheet loads their next batch.
     // They carry no pictures, so sheet cards keep their explicit button
-    // (ADR-0075); this one stays for keyboards. Waiting for the scroll to be
-    // restored keeps a new search at its first batch.
+    // (ADR-0075). Waiting for the scroll to be restored keeps a new search at
+    // its first batch.
     if (!moreText || restored !== restoration || typeof IntersectionObserver === "undefined") return;
     // A new observer reports at once, so a screen taller than one batch
     // keeps filling until the button is out of reach.
     const observer = new IntersectionObserver(([entry]) => {
+      // Keyboard focus in the list is a reader tabbing toward the button;
+      // loading ahead of it would push the button, and whatever follows the
+      // list, one batch further away on every Tab.
+      const focused = document.activeElement;
+      if (focused && moreText.parentElement?.contains(focused) && focused.matches(":focus-visible")) return;
       if (entry?.isIntersecting) setTextShown((n) => n + BROWSE_BATCH_SIZE);
     }, { rootMargin: "0px 0px 240px 0px" });
     observer.observe(moreText);

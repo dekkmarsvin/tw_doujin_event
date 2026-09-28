@@ -190,6 +190,17 @@ try {
   await listed.waitForFunction(() => scrollY === 0);
   await listed.waitForTimeout(300);
   assert.equal(await listedCards(), 25, "a new scope starts from the first batch");
+  // A keyboard reader tabbing to the end reaches the button instead of
+  // loading past it, and the button loads the next batch.
+  const moreText = listed.getByRole("button", { name: "載入更多社團", exact: true });
+  await listed.keyboard.press("Tab");
+  await listed.locator("#without-catalog article").last().locator("a").last().focus();
+  await listed.waitForTimeout(300);
+  await listed.keyboard.press("Tab");
+  assert.equal(await moreText.evaluate((button) => button === document.activeElement), true, "Tab reaches 載入更多社團");
+  assert.equal(await listedCards(), 25, "keyboard focus near the end loads nothing ahead of the button");
+  await listed.keyboard.press("Enter");
+  await listed.waitForFunction(() => document.querySelectorAll("article").length === 49);
   await listed.close();
 
   const ids = Array.from({ length: 300 }, (_, index) => `c-${900001 + index}`);
