@@ -80,7 +80,7 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
     {promotion
       ? <>
         <label htmlFor={`${id}-text`}>宣傳文字</label>
-        <textarea id={`${id}-text`} ref={box} readOnly rows={5} value={promotion.full} onFocus={(event) => event.currentTarget.select()} />
+        <textarea id={`${id}-text`} ref={box} readOnly rows={3} value={promotion.full} onFocus={(event) => event.currentTarget.select()} />
       </>
       : failed
         ? <p className={styles.shareResult} role="alert">無法取得攤位資料，宣傳文字暫時無法產生。<button type="button" className={styles.inlineButton} onClick={onRetry}>重新取得</button></p>

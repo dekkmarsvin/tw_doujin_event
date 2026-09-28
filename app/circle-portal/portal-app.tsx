@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createClaim, deleteMyAccount, deleteMyOverride, listMyClaims, PortalError, readMyOverride,
   previewOverride, readSession, readTurnstileSitekey, readClaimCircle, setPostEventVisibility, requestLoginLink, runChallenge, saveOverride, searchCircles, signOut, uploadThumbnail, verifyLoginToken, withdrawClaim,
@@ -27,7 +27,13 @@ import { CatalogImagesField } from "./catalog-images-field";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
 import styles from "./portal.module.css";
 
-type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string };
+/**
+ * `at` places an editor message beside the control that caused it: the
+ * after-event switch and the deletion each answer in their own section, and
+ * everything else in the editor's action bar. One value rather than three, so
+ * a new action always replaces the last message instead of standing next to it.
+ */
+type Status = { kind: "idle" | "busy" | "ok" | "error"; message: string; at?: "setting" | "delete" };
 
 const IDLE: Status = { kind: "idle", message: "" };
 const SAVED_MESSAGE = "已儲存，公開頁面會在一分鐘內更新。";
@@ -158,18 +164,27 @@ function isMultiChoiceField(key: CircleOverrideListFieldKey): key is MultiChoice
   return (MULTI_CHOICE_FIELD_KEYS as readonly string[]).includes(key);
 }
 
-function FieldModeControls({ mode, label, onInherit, onClear, inheritStatus = "目前顯示場刊資料", inheritAction = "使用場刊資料" }: {
+/**
+ * Offered only where the organizer's data has something of its own for the
+ * field: anywhere else 使用場刊資料 and 不顯示 both show a reader nothing, two
+ * buttons for one result, and emptying the field already says it.
+ *
+ * Each button is a toggle. Pressing the one that is on again gives back what
+ * the author had written before it replaced that (`onRestore`), instead of
+ * leaving a press that emptied the field with no way back but retyping.
+ */
+function FieldModeControls({ mode, label, onInherit, onClear, onRestore }: {
   mode: keyof typeof FIELD_MODE_LABEL;
   label: string;
   onInherit: () => void;
   onClear: () => void;
-  inheritStatus?: string;
-  inheritAction?: string;
+  /** Present while there is the author's own content to put back. */
+  onRestore?: () => void;
 }) {
   return <div className={styles.fieldMode} role="group" aria-label={`${label}顯示什麼`}>
-    <span><b>{mode === "inherit" ? inheritStatus : FIELD_MODE_LABEL[mode]}</b></span>
-    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit"} onClick={onInherit}>{inheritAction}</button>
-    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear"} onClick={onClear}>不顯示</button>
+    <span><b>{FIELD_MODE_LABEL[mode]}</b></span>
+    <button type="button" aria-pressed={mode === "inherit"} disabled={mode === "inherit" && !onRestore} onClick={mode === "inherit" ? onRestore : onInherit}>使用場刊資料</button>
+    <button type="button" aria-pressed={mode === "clear"} disabled={mode === "clear" && !onRestore} onClick={mode === "clear" ? onRestore : onClear}>不顯示</button>
   </div>;
 }
 
@@ -710,6 +725,14 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   // When the draft on this device differs from what the server holds. Shown as
   // a line the author can act on, never as a silent restore.
   const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null);
+  // The author's own content for a field, put aside when 使用場刊資料 or 不顯示
+  // replaced it, so the same button pressed again gives it back. This tab
+  // only: it is an undo, not part of the draft.
+  const [ownContent, setOwnContent] = useState<Partial<Record<CircleOverrideFieldKey, {
+    value: CircleOverrideFields[CircleOverrideFieldKey];
+    listInput: string | undefined;
+    stagedThumbnailKey: string | null;
+  }>>>({});
   const returnFocus = useRef<HTMLElement | null>(null);
   const reviewPanel = useRef<HTMLDivElement | null>(null);
   const reviewActions = useRef<HTMLDivElement | null>(null);
@@ -760,6 +783,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
         setListInputs(restored ? stored.listInputs ?? {} : {});
         setStagedThumbnailKey(restored ? stored.stagedThumbnailKey ?? null : null);
         setDraftRestoredAt(restored ? stored.savedAt : null);
+        setOwnContent({});
         if (!restored) forgetStoredDraft(claim.circleId);
         setSavedFields(initialFields);
         setHidden(!!result.postEventHidden);
@@ -811,6 +835,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     setListInputs({});
     setStagedThumbnailKey(null);
     setDraftRestoredAt(null);
+    setOwnContent({});
   };
 
   const retryHydration = () => {
@@ -841,20 +866,34 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     [key]: (current[key] ?? []).filter((candidate) => candidate !== value),
   }));
 
+  // A field's name and, where there is a choice to make, what it currently
+  // shows share one line, so the state and the way back sit where the field
+  // starts instead of on a line of their own under every control.
+  const fieldHead = (key: CircleOverrideFieldKey, name: string, title: ReactNode) =>
+    <div className={styles.fieldHead}>
+      {title}
+      {officialHas(key) && <FieldModeControls
+        mode={modeFor(key)} label={name} onInherit={() => inheritField(key)} onClear={() => clearField(key)}
+        onRestore={ownContent[key] ? () => restoreOwn(key) : undefined}
+      />}
+    </div>;
+
   const listField = (key: CircleOverrideListFieldKey, label: string) => {
     const id = `${key}-${claim.circleId}`;
-    if (isMultiChoiceField(key)) return <fieldset className={styles.choiceGroup}>
-      <legend>{label}</legend>
-      <div>{optionsFor(key).map((option) => <label key={option}>
-        <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
-        <span>{option}</span>
-      </label>)}</div>
-    </fieldset>;
+    if (isMultiChoiceField(key)) return <div className={styles.field}>
+      {fieldHead(key, label, <span id={`${id}-label`} className={styles.fieldLabel}>{label}</span>)}
+      <fieldset className={styles.choiceGroup} aria-labelledby={`${id}-label`}>
+        {optionsFor(key).map((option) => <label key={option}>
+          <input type="checkbox" checked={(fields[key] ?? []).includes(option)} onChange={(event) => toggleChoice(key, option, event.target.checked)} />
+          <span>{option}</span>
+        </label>)}
+      </fieldset>
+    </div>;
     if (key in CHOICE_FIELD_OPTIONS) {
       const choiceKey = key as ChoiceFieldKey;
       const values = fields[choiceKey] ?? [];
-      return <>
-        <label htmlFor={id}>{label}</label>
+      return <div className={styles.field}>
+        {fieldHead(key, label, <label htmlFor={id}>{label}</label>)}
         {/* 這個欄位以前可以填多個。多值時每一個都要看得到、刪得掉，不能只把
             第一個當成選取值，把其餘的留在送出的資料裡卻不顯示。 */}
         {values.length > 1 && <div className={styles.extraValues}>
@@ -867,12 +906,12 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           <option value="">尚未選擇</option>
           {optionsFor(choiceKey).map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
-      </>;
+      </div>;
     }
-    return <>
-      <label htmlFor={id}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>
+    return <div className={styles.field}>
+      {fieldHead(key, label, <label htmlFor={id}>{label}（以逗號分隔，最多 {OVERRIDE_LIMITS.listItems} 項）</label>)}
       <input id={id} value={listInputs[key] ?? (fields[key] ?? []).join("、")} onChange={(event) => setList(key, event.target.value)} />
-    </>;
+    </div>;
   };
 
   const resetListInput = (key: CircleOverrideFieldKey) => {
@@ -882,17 +921,52 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       return next;
     });
   };
+  // Taken only from the author's own content: moving between 使用場刊資料 and
+  // 不顯示 keeps what was put aside first, so either toggle still gives it back.
+  const putOwnAside = (key: CircleOverrideFieldKey) => {
+    if (modeFor(key) !== "replace") return;
+    setOwnContent((current) => ({
+      ...current,
+      [key]: { value: fields[key], listInput: listInputs[key], stagedThumbnailKey: key === "thumbnail" ? stagedThumbnailKey : null },
+    }));
+  };
+  const restoreOwn = (key: CircleOverrideFieldKey) => {
+    const kept = ownContent[key];
+    if (!kept) return;
+    setFields((current) => ({ ...current, [key]: kept.value }));
+    if (kept.listInput !== undefined) setListInputs((current) => ({ ...current, [key]: kept.listInput }));
+    if (key === "thumbnail") setStagedThumbnailKey(kept.stagedThumbnailKey);
+    setOwnContent((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
   const inheritField = (key: CircleOverrideFieldKey) => {
+    putOwnAside(key);
     resetListInput(key);
     if (key === "thumbnail") setStagedThumbnailKey(null);
     setFields((current) => inheritCircleOverrideField(current, key));
   };
   const clearField = (key: CircleOverrideFieldKey) => {
+    putOwnAside(key);
     resetListInput(key);
     if (key === "thumbnail") setStagedThumbnailKey(null);
     setFields((current) => clearCircleOverrideField(current, key));
   };
   const modeFor = (key: CircleOverrideFieldKey) => circleOverrideFieldMode(fields, key);
+
+  // What the organizer's own data holds for this circle, which is what
+  // 使用場刊資料 would show. Unknown until the preview baseline arrives.
+  const official = baseRecords?.[0]?.circle;
+  const officialHas = (key: CircleOverrideFieldKey) => {
+    if (!official) return false;
+    if (key === "thumbnail") return official.media.some((item) => item.kind === "thumbnail");
+    if (key === "catalogImages") return official.media.some((item) => item.kind === "catalog");
+    if (key === "links") return official.externalLinks.length > 0;
+    const value = official[key];
+    return Array.isArray(value) ? value.length > 0 : Boolean(value);
+  };
 
   const links = fields.links ?? [];
   const setLinks = (next: CircleExternalLink[]) => setFields((current) => ({ ...current, links: next }));
@@ -911,10 +985,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
     // Metadata edits still describe the same staged object. Only replacing the
     // URL turns it into a different (external) thumbnail and drops the key.
     if (Object.hasOwn(patch, "url")) setStagedThumbnailKey(null);
-    setFields((current) => ({
-      ...current,
-      thumbnail: { url: "", sourceUrl: "", provider: "", ...(current.thumbnail ?? {}), ...patch },
-    }));
+    setFields((current) => {
+      const next = { url: "", sourceUrl: "", provider: "", ...(current.thumbnail ?? {}), ...patch };
+      // All three emptied is the picture taken away, which is what a reader
+      // then sees — not an address still to be filled in.
+      const emptied = !next.url.trim() && !next.sourceUrl?.trim() && !next.provider?.trim();
+      return { ...current, thumbnail: emptied ? null : next };
+    });
   };
 
   // Block the round trip rather than let the shared validator answer with one
@@ -993,6 +1070,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       });
   };
 
+  // The action bar answers for the form itself; a busy state already shows on
+  // its button, and the after-event switch and the deletion answer in place.
+  const formMessage = !status.at && (status.kind === "ok" || status.kind === "error") ? status : null;
+
   return <section id={`circle-editor-${claim.circleId}`} className={`${styles.card} ${styles.editorCard}`} aria-busy={!hydrated && !hydrationError}>
     <h2>編輯：{claim.circleName}</h2>
     <p>儲存後約一分鐘內公開。社團名稱、攤位與日期無法在此修改；名稱有誤請聯絡管理者。</p>
@@ -1010,272 +1091,214 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
     <div className={styles.editorLayout}>
       <div id={`editor-fields-${claim.circleId}`} className={styles.editorForm} tabIndex={-1} inert={reviewOpen ? true : undefined}>
+      {/* The sections follow the reader's circle page — sale text, sale sheet,
+          who and what, picture, links — so what is filled in here is found in
+          the same place there. The sale sheet stays right after the sale text. */}
       <fieldset className={styles.editorFieldset} disabled={!hydrated || reviewOpen}>
 
-    <label htmlFor={`pen-${claim.circleId}`}>筆名（最多 {OVERRIDE_LIMITS.pen} 字）</label>
-    <input
-      id={`pen-${claim.circleId}`} maxLength={OVERRIDE_LIMITS.pen}
-      value={fields.pen ?? ""}
-      onChange={(event) => setFields((current) => ({ ...current, pen: event.target.value }))}
-    />
-    <FieldModeControls mode={modeFor("pen")} label="筆名" onInherit={() => inheritField("pen")} onClear={() => clearField("pen")} />
-
-    <label htmlFor={`sale-${claim.circleId}`}>販售資訊（最多 {OVERRIDE_LIMITS.saleInfo} 字）</label>
-    <textarea
-      id={`sale-${claim.circleId}`} rows={4} maxLength={OVERRIDE_LIMITS.saleInfo}
-      value={fields.saleInfo ?? ""}
-      onChange={(event) => setFields((current) => ({ ...current, saleInfo: event.target.value }))}
-    />
-    <FieldModeControls mode={modeFor("saleInfo")} label="販售資訊" onInherit={() => inheritField("saleInfo")} onClear={() => clearField("saleInfo")} />
-
-    <h3 className={styles.editorSection}>本次品書</h3>
-    {/* The organizer's data has no sale sheet, so "inherit" is "none yet",
-        the same way the category field reads. */}
-    <FieldModeControls
-      mode={modeFor("catalogImages")} label="品書" inheritStatus="目前未提供" inheritAction="恢復未提供"
-      onInherit={() => inheritField("catalogImages")} onClear={() => clearField("catalogImages")}
-    />
-    <CatalogImagesField
-      circleId={claim.circleId} images={fields.catalogImages ?? []} busy={status.kind === "busy"}
-      onUpdate={(update) => setFields((current) => ({ ...current, catalogImages: update(current.catalogImages ?? []) }))}
-      onUploading={(active) => setStatus(active ? { kind: "busy", message: "上傳品書中…" } : IDLE)}
-    />
-
-    <label htmlFor={`circle-category-${claim.circleId}`}>社團主題</label>
-    <select
-      id={`circle-category-${claim.circleId}`}
-      value={fields.circleCategory ?? ""}
-      onChange={(event) => setFields((current) => ({ ...current, circleCategory: event.target.value }))}
-    >
-      <option value="">尚未選擇</option>
-      {event.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
-    </select>
-    <FieldModeControls
-      mode={modeFor("circleCategory")} label="社團主題"
-      inheritStatus="目前未選擇" inheritAction="恢復未選擇"
-      onInherit={() => inheritField("circleCategory")} onClear={() => clearField("circleCategory")}
-    />
-
-    {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <div key={key}>
-      {listField(key, label)}
-      <FieldModeControls mode={modeFor(key)} label={label} onInherit={() => inheritField(key)} onClear={() => clearField(key)} />
-    </div>)}
-
-    <h3 className={styles.editorSection}>連結</h3>
-    {/* The HTTPS rule lives in `linkUrlProblem`, which names the row that
-        broke it; teaching it up here as well is a rule stated twice. */}
-    <p className={styles.editorHint}>地圖側欄顯示前 {SIDE_PANEL_LINK_LIMIT} 個連結，最多可填 {OVERRIDE_LIMITS.links} 個。</p>
-
-    <FieldModeControls mode={modeFor("links")} label="連結" onInherit={() => inheritField("links")} onClear={() => clearField("links")} />
-
-    {links.length === 0
-      ? modeFor("links") === "inherit" && <p className={styles.editorHint}>新增後會改用你填寫的連結。</p>
-      : <ol className={styles.linkList}>
-        {links.map((link, index) => {
-          const problem = linkUrlProblem(link.url);
-          return <li key={index}>
-            <div className={styles.linkRow}>
-              <span className={styles.linkPosition} aria-hidden="true">{index + 1}</span>
-              {/* Each label owns its control, so a row lays out as three fields
-                  rather than six items the grid has to guess the pairing of. */}
-              <label htmlFor={`link-provider-${claim.circleId}-${index}`}>
-                平台名稱
-                <input
-                  id={`link-provider-${claim.circleId}-${index}`}
-                  value={link.provider} maxLength={OVERRIDE_LIMITS.listItemLength}
-                  placeholder="例如：X、Pixiv、巴哈"
-                  onChange={(event) => editLink(index, { provider: event.target.value })}
-                />
-              </label>
-              <label htmlFor={`link-kind-${claim.circleId}-${index}`}>
-                類型
-                <select
-                  id={`link-kind-${claim.circleId}-${index}`}
-                  value={link.kind}
-                  onChange={(event) => editLink(index, { kind: event.target.value as CircleExternalLink["kind"] })}
-                >
-                  {LINK_KINDS.map((kind) => <option key={kind} value={kind}>{LINK_KIND_LABEL[kind]}</option>)}
-                </select>
-              </label>
-              <label htmlFor={`link-url-${claim.circleId}-${index}`} className={styles.linkUrlField}>
-                網址
-                <input
-                  id={`link-url-${claim.circleId}-${index}`}
-                  value={link.url} inputMode="url" placeholder="https://"
-                  aria-invalid={problem ? true : undefined}
-                  onChange={(event) => editLink(index, { url: event.target.value })}
-                />
-              </label>
-              <div className={styles.linkActions}>
-                <button type="button" disabled={index === 0} onClick={() => moveLink(index, -1)} aria-label={`把第 ${index + 1} 個連結往前移`}>↑</button>
-                <button type="button" disabled={index === links.length - 1} onClick={() => moveLink(index, 1)} aria-label={`把第 ${index + 1} 個連結往後移`}>↓</button>
-                <button type="button" onClick={() => setLinks(links.filter((unused, position) => position !== index))} aria-label={`移除第 ${index + 1} 個連結`}>移除</button>
-              </div>
-            </div>
-            {problem && <p className={styles.error}>{problem}</p>}
-            {index === SIDE_PANEL_LINK_LIMIT - 1 && links.length > SIDE_PANEL_LINK_LIMIT
-              && <p className={styles.linkCut}>以下的連結不會出現在地圖側欄</p>}
-          </li>;
-        })}
-      </ol>}
-
-    <div className={styles.linkAdd}>
-      <button type="button" disabled={links.length >= OVERRIDE_LIMITS.links} onClick={() => setLinks([...links, { ...EMPTY_LINK }])}>新增連結</button>
-      {links.length > 0 && <span>{links.length} / {OVERRIDE_LIMITS.links}</span>}
-    </div>
-
-    <h3 className={styles.editorSection}>代表圖</h3>
-    <FieldModeControls mode={modeFor("thumbnail")} label="代表圖" onInherit={() => inheritField("thumbnail")} onClear={() => clearField("thumbnail")} />
-
-    <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片</label>
-    <input
-      id={`thumb-file-${claim.circleId}`} type="file" accept="image/jpeg,image/png,image/webp"
-      disabled={status.kind === "busy"}
-      onChange={(event) => {
-        const input = event.currentTarget;
-        const file = event.target.files?.[0];
-        if (!file) return;
-        // Whatever credit is already filled in travels with the bytes; neither
-        // field gates the upload (ADR-0053).
-        const sourceUrl = thumbnail?.sourceUrl?.trim() ?? "";
-        const provider = thumbnail?.provider?.trim() ?? "";
-        setUploadNotice({ kind: "busy", message: "上傳中…" });
-        setStatus({ kind: "busy", message: "上傳代表圖中…" });
-        void uploadThumbnail(claim.circleId, file, sourceUrl, provider)
-          .then(({ thumbnail: uploaded, uploadKey }) => {
-            setFields((current) => ({ ...current, thumbnail: uploaded }));
-            setStagedThumbnailKey(uploadKey);
-            setUploadNotice({ kind: "ok", message: "圖片已上傳，儲存後公開。" });
-            setStatus(IDLE);
-          })
-          .catch((error: unknown) => {
-            setUploadNotice({ kind: "error", message: errorMessage(error) });
-            setStatus(IDLE);
-          })
-          .finally(() => { input.value = ""; });
-      }}
-    />
-    <p className={styles.editorHint}>JPEG、PNG、WebP，最大 5 MB</p>
-    {uploadNotice.kind !== "idle" && <p className={uploadNotice.kind === "error" ? styles.error : styles.notice}>{uploadNotice.message}</p>}
-
-    <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址</label>
-    <input
-      id={`thumb-url-${claim.circleId}`} value={thumbnail?.url ?? ""} inputMode="url" placeholder="https://"
-      aria-invalid={thumbnail?.url && thumbnailUrlProblem(thumbnail.url) ? true : undefined}
-      onChange={(event) => editThumbnail({ url: event.target.value })}
-    />
-    {thumbnail?.url && thumbnailUrlProblem(thumbnail.url) && <p className={styles.error}>{thumbnailUrlProblem(thumbnail.url)}</p>}
-
-    {/* The only check left on an external address is whether it is really an
-        image, and the browser is the one that can answer it (ADR-0052). The
-        preview is that answer, and doubles as the feedback an upload needs. */}
-    {thumbnail?.url && !thumbnailUrlProblem(thumbnail.url) && <div className={styles.thumbnailPreview}>
-      <img
-        src={thumbnail.url} alt="代表圖預覽"
-        onLoad={() => setThumbnailLoad({ url: thumbnail.url, ok: true })}
-        onError={() => setThumbnailLoad({ url: thumbnail.url, ok: false })}
+    <div className={styles.editorSection}>
+      {fieldHead("saleInfo", "販售資訊", <h3><label htmlFor={`sale-${claim.circleId}`}>販售資訊</label></h3>)}
+      <textarea
+        id={`sale-${claim.circleId}`} rows={4} maxLength={OVERRIDE_LIMITS.saleInfo}
+        aria-describedby={`sale-limit-${claim.circleId}`}
+        value={fields.saleInfo ?? ""}
+        onChange={(event) => setFields((current) => ({ ...current, saleInfo: event.target.value }))}
       />
-      {thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok && <p className={styles.error}>{THUMBNAIL_NOT_AN_IMAGE}</p>}
-    </div>}
-
-    <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面（選填）</label>
-    <input
-      id={`thumb-source-${claim.circleId}`} value={thumbnail?.sourceUrl ?? ""} inputMode="url" placeholder="https://"
-      aria-invalid={thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) ? true : undefined}
-      onChange={(event) => editThumbnail({ sourceUrl: event.target.value })}
-    />
-    {thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) && <p className={styles.error}>{linkUrlProblem(thumbnail.sourceUrl)}</p>}
-
-    <label htmlFor={`thumb-provider-${claim.circleId}`}>來源標示（選填，例如轉載或委託繪師）</label>
-    <input
-      id={`thumb-provider-${claim.circleId}`} value={thumbnail?.provider ?? ""} maxLength={OVERRIDE_LIMITS.listItemLength}
-      placeholder="例如：Pixiv" onChange={(event) => editThumbnail({ provider: event.target.value })}
-    />
-
-    <div className={styles.editorActions}>
-      <button type="button" disabled={status.kind === "busy" || problems.length > 0 || reviewOpen} onClick={openReview}>
-        {status.kind === "busy" ? "檢查中…" : "預覽並送出"}
-      </button>
+      <p id={`sale-limit-${claim.circleId}`} className={styles.editorHint}>最多 {OVERRIDE_LIMITS.saleInfo} 字</p>
     </div>
 
-    {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
-      {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}><a href={`#${problem.id}`}>{problem.message}</a></li>)}
-    </ul>}
+    <div className={styles.editorSection}>
+      {fieldHead("catalogImages", "品書", <h3>本次品書</h3>)}
+      <CatalogImagesField
+        circleId={claim.circleId} images={fields.catalogImages ?? []} busy={status.kind === "busy"}
+        onUpdate={(update) => setFields((current) => ({ ...current, catalogImages: update(current.catalogImages ?? []) }))}
+        onUploading={(active) => setStatus(active ? { kind: "busy", message: "上傳品書中…" } : IDLE)}
+      />
+    </div>
 
-    {/* Saved on the spot rather than with the draft: it is one switch with an
-        immediate answer, and it survives a tab closed before submitting. */}
-    <fieldset className={styles.retention}>
-      <legend>活動結束後</legend>
-      <div className={styles.retentionChoices}>
-        {([{ value: false, title: "繼續公開" }, { value: true, title: "不再公開" }] as const).map((option) => <label key={option.title}>
+    <div className={styles.editorSection}>
+      <h3>作者與作品</h3>
+      <div className={styles.field}>
+        {fieldHead("pen", "筆名", <label htmlFor={`pen-${claim.circleId}`}>筆名（最多 {OVERRIDE_LIMITS.pen} 字）</label>)}
+        <input
+          id={`pen-${claim.circleId}`} maxLength={OVERRIDE_LIMITS.pen}
+          value={fields.pen ?? ""}
+          onChange={(event) => setFields((current) => ({ ...current, pen: event.target.value }))}
+        />
+      </div>
+      <div className={styles.field}>
+        {fieldHead("circleCategory", "社團主題", <label htmlFor={`circle-category-${claim.circleId}`}>社團主題</label>)}
+        <select
+          id={`circle-category-${claim.circleId}`}
+          value={fields.circleCategory ?? ""}
+          onChange={(event) => setFields((current) => ({ ...current, circleCategory: event.target.value }))}
+        >
+          <option value="">尚未選擇</option>
+          {event.circleCategories.categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}
+        </select>
+      </div>
+      {CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => <Fragment key={key}>{listField(key, label)}</Fragment>)}
+    </div>
+
+    <div className={styles.editorSection}>
+      {fieldHead("thumbnail", "代表圖", <h3>代表圖</h3>)}
+      <div className={styles.thumbnailLayout}>
+        {/* The only check left on an external address is whether it is really
+            an image, and the browser is the one that can answer it (ADR-0052).
+            The preview is that answer, and doubles as the feedback an upload
+            needs; it leads so the current picture is seen before changing it. */}
+        {thumbnail?.url && !thumbnailUrlProblem(thumbnail.url) && <div className={styles.thumbnailPreview}>
+          <img
+            src={thumbnail.url} alt="代表圖預覽"
+            onLoad={() => setThumbnailLoad({ url: thumbnail.url, ok: true })}
+            onError={() => setThumbnailLoad({ url: thumbnail.url, ok: false })}
+          />
+          {thumbnailLoad?.url === thumbnail.url && !thumbnailLoad.ok && <p className={styles.error}>{THUMBNAIL_NOT_AN_IMAGE}</p>}
+          {/* The way to take the picture away where 不顯示 is not offered; an
+              emptied address alone would only be a field still to fill in. */}
+          {!officialHas("thumbnail") && <button type="button" onClick={() => clearField("thumbnail")}>移除圖片</button>}
+        </div>}
+        <div className={styles.thumbnailFields}>
+          <label htmlFor={`thumb-file-${claim.circleId}`}>上傳圖片</label>
           <input
-            type="radio" name={`after-event-${claim.circleId}`}
-            checked={hidden === option.value}
-            onChange={() => {
-              setHidden(option.value);
-              void setPostEventVisibility(claim.circleId, option.value)
-                .then(() => setStatus({ kind: "ok", message: option.value ? "活動結束後將不再公開你填寫的內容。" : "活動結束後仍會公開你填寫的內容。" }))
-                .catch((error: unknown) => { setHidden(!option.value); setStatus({ kind: "error", message: errorMessage(error) }); });
+            id={`thumb-file-${claim.circleId}`} type="file" accept="image/jpeg,image/png,image/webp"
+            aria-describedby={`thumb-file-hint-${claim.circleId}`}
+            disabled={status.kind === "busy"}
+            onChange={(event) => {
+              const input = event.currentTarget;
+              const file = event.target.files?.[0];
+              if (!file) return;
+              // Whatever credit is already filled in travels with the bytes; neither
+              // field gates the upload (ADR-0053).
+              const sourceUrl = thumbnail?.sourceUrl?.trim() ?? "";
+              const provider = thumbnail?.provider?.trim() ?? "";
+              setUploadNotice({ kind: "busy", message: "上傳中…" });
+              setStatus({ kind: "busy", message: "上傳代表圖中…" });
+              void uploadThumbnail(claim.circleId, file, sourceUrl, provider)
+                .then(({ thumbnail: uploaded, uploadKey }) => {
+                  setFields((current) => ({ ...current, thumbnail: uploaded }));
+                  setStagedThumbnailKey(uploadKey);
+                  setUploadNotice({ kind: "ok", message: "圖片已上傳，儲存後公開。" });
+                  setStatus(IDLE);
+                })
+                .catch((error: unknown) => {
+                  setUploadNotice({ kind: "error", message: errorMessage(error) });
+                  setStatus(IDLE);
+                })
+                .finally(() => { input.value = ""; });
             }}
           />
-          <span>{option.title}</span>
-        </label>)}
+          <p id={`thumb-file-hint-${claim.circleId}`} className={styles.editorHint}>JPEG、PNG、WebP，最大 5 MB</p>
+          {uploadNotice.kind !== "idle" && <p className={uploadNotice.kind === "error" ? styles.error : styles.notice}>{uploadNotice.message}</p>}
+
+          <label htmlFor={`thumb-url-${claim.circleId}`}>外部圖片網址</label>
+          <input
+            id={`thumb-url-${claim.circleId}`} value={thumbnail?.url ?? ""} inputMode="url" placeholder="https://"
+            aria-invalid={thumbnail?.url && thumbnailUrlProblem(thumbnail.url) ? true : undefined}
+            onChange={(event) => editThumbnail({ url: event.target.value })}
+          />
+          {thumbnail?.url && thumbnailUrlProblem(thumbnail.url) && <p className={styles.error}>{thumbnailUrlProblem(thumbnail.url)}</p>}
+
+          <label htmlFor={`thumb-source-${claim.circleId}`}>圖片出處頁面（選填）</label>
+          <input
+            id={`thumb-source-${claim.circleId}`} value={thumbnail?.sourceUrl ?? ""} inputMode="url" placeholder="https://"
+            aria-invalid={thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) ? true : undefined}
+            onChange={(event) => editThumbnail({ sourceUrl: event.target.value })}
+          />
+          {thumbnail?.sourceUrl && linkUrlProblem(thumbnail.sourceUrl) && <p className={styles.error}>{linkUrlProblem(thumbnail.sourceUrl)}</p>}
+
+          <label htmlFor={`thumb-provider-${claim.circleId}`}>來源標示（選填，例如轉載或委託繪師）</label>
+          <input
+            id={`thumb-provider-${claim.circleId}`} value={thumbnail?.provider ?? ""} maxLength={OVERRIDE_LIMITS.listItemLength}
+            placeholder="例如：Pixiv" onChange={(event) => editThumbnail({ provider: event.target.value })}
+          />
+        </div>
       </div>
-    </fieldset>
+    </div>
 
-    {/* Collapsed: it is the one irreversible action on the page, and it is
-        reached deliberately rather than met on the way past. `<details>` keeps
-        it one click away and findable by the browser's own in-page search. */}
-    {saved && <details className={styles.danger}>
-      <summary>刪除資料</summary>
-      {/* Clearing a field writes an empty value and leaves the row; this
-          removes the row. ADR-0020 requires the two to read as different
-          things, because only one of them is undoable. */}
-      <p>永久刪除你填寫的內容與上一版備份，<b>無法復原</b>。場刊中的社團名、攤位與日期不受影響。</p>
-      <p>將被刪除的內容：</p>
-      {deletionSummary(savedFields).length === 0
-        ? <ul className={styles.dangerSummary}><li>（目前沒有任何欄位有內容，但資料列仍然存在）</li></ul>
-        : <ul className={styles.dangerSummary}>{deletionSummary(savedFields).map((line) => <li key={line}>{line}</li>)}</ul>}
-      {/* Not a single button: a session lasts 30 days, and one click from a
-          stale tab must not be able to do this. Re-sending a mail would have
-          been the other option, and it would put an irreversible action behind
-          deliverability. */}
-      <label htmlFor={`confirm-${claim.circleId}`}>請輸入社團代號 <code>{claim.circleId}</code> 以確認</label>
-      <input
-        id={`confirm-${claim.circleId}`} value={confirmText} autoComplete="off" spellCheck={false}
-        onChange={(event) => setConfirmText(event.target.value)} placeholder={claim.circleId}
-      />
-      <button
-        type="button" className={styles.dangerButton}
-        disabled={confirmText.trim() !== claim.circleId || status.kind === "busy"}
-        onClick={() => {
-          setStatus({ kind: "busy", message: "刪除中…" });
-          void deleteMyOverride(claim.circleId)
-            .then(() => {
-              setFields({});
-              setListInputs({});
-              forgetStoredDraft(claim.circleId);
-              setDraftRestoredAt(null);
-              setSavedFields({});
-              setHidden(false);
-              setSaved(false);
-              setConfirmText("");
-              setStatus({ kind: "ok", message: "已刪除。公開頁面會在一分鐘內不再顯示這筆內容。" });
-            })
-            .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
-        }}
-      >刪除資料</button>
-    </details>}
+    <div className={styles.editorSection}>
+      {fieldHead("links", "連結", <h3>連結</h3>)}
+      {/* The HTTPS rule lives in `linkUrlProblem`, which names the row that
+          broke it; teaching it up here as well is a rule stated twice. */}
+      <p className={styles.editorHint}>地圖側欄顯示前 {SIDE_PANEL_LINK_LIMIT} 個連結，最多可填 {OVERRIDE_LIMITS.links} 個。</p>
 
-    {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>
-      {status.message}
-      {status.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}
-    </p>}
-    {saved && hydrated && <CirclePageShare
-      event={event} circle={{ id: claim.circleId, name: claim.circleName }}
-      records={baseRecords} failed={baselineFailed && !baseRecords} onRetry={retryBaseline}
-    />}
+      {links.length === 0
+        ? modeFor("links") === "inherit" && <p className={styles.editorHint}>新增後會改用你填寫的連結。</p>
+        : <ol className={styles.linkList}>
+          {links.map((link, index) => {
+            const problem = linkUrlProblem(link.url);
+            return <li key={index}>
+              <div className={styles.linkRow}>
+                <span className={styles.linkPosition} aria-hidden="true">{index + 1}</span>
+                {/* Each label owns its control, so a row lays out as three fields
+                    rather than six items the grid has to guess the pairing of. */}
+                <label htmlFor={`link-provider-${claim.circleId}-${index}`}>
+                  平台名稱
+                  <input
+                    id={`link-provider-${claim.circleId}-${index}`}
+                    value={link.provider} maxLength={OVERRIDE_LIMITS.listItemLength}
+                    placeholder="例如：X、Pixiv、巴哈"
+                    onChange={(event) => editLink(index, { provider: event.target.value })}
+                  />
+                </label>
+                <label htmlFor={`link-kind-${claim.circleId}-${index}`}>
+                  類型
+                  <select
+                    id={`link-kind-${claim.circleId}-${index}`}
+                    value={link.kind}
+                    onChange={(event) => editLink(index, { kind: event.target.value as CircleExternalLink["kind"] })}
+                  >
+                    {LINK_KINDS.map((kind) => <option key={kind} value={kind}>{LINK_KIND_LABEL[kind]}</option>)}
+                  </select>
+                </label>
+                <label htmlFor={`link-url-${claim.circleId}-${index}`} className={styles.linkUrlField}>
+                  網址
+                  <input
+                    id={`link-url-${claim.circleId}-${index}`}
+                    value={link.url} inputMode="url" placeholder="https://"
+                    aria-invalid={problem ? true : undefined}
+                    onChange={(event) => editLink(index, { url: event.target.value })}
+                  />
+                </label>
+                <div className={styles.linkActions}>
+                  <button type="button" disabled={index === 0} onClick={() => moveLink(index, -1)} aria-label={`把第 ${index + 1} 個連結往前移`}>↑</button>
+                  <button type="button" disabled={index === links.length - 1} onClick={() => moveLink(index, 1)} aria-label={`把第 ${index + 1} 個連結往後移`}>↓</button>
+                  <button type="button" onClick={() => setLinks(links.filter((unused, position) => position !== index))} aria-label={`移除第 ${index + 1} 個連結`}>移除</button>
+                </div>
+              </div>
+              {problem && <p className={styles.error}>{problem}</p>}
+              {index === SIDE_PANEL_LINK_LIMIT - 1 && links.length > SIDE_PANEL_LINK_LIMIT
+                && <p className={styles.linkCut}>以下的連結不會出現在地圖側欄</p>}
+            </li>;
+          })}
+        </ol>}
+
+      <div className={styles.linkAdd}>
+        <button type="button" disabled={links.length >= OVERRIDE_LIMITS.links} onClick={() => setLinks([...links, { ...EMPTY_LINK }])}>新增連結</button>
+        {links.length > 0 && <span>{links.length} / {OVERRIDE_LIMITS.links}</span>}
+      </div>
+    </div>
+
       </fieldset>
+
+      {/* Held at the foot of the screen while the form scrolls past, and
+          ending where the form ends: the step that publishes is always in
+          reach, and nothing else — least of all the deletion — sits beside it. */}
+      <div className={styles.saveBar}>
+        {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
+          {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}><a href={`#${problem.id}`}>{problem.message}</a></li>)}
+        </ul>}
+        <div className={styles.saveBarRow}>
+          <p className={formMessage?.kind === "error" ? styles.actionError : formMessage ? styles.actionOk : styles.actionState} role="status">
+            {formMessage
+              ? <>{formMessage.message}{formMessage.message === SAVED_MESSAGE && <a className={styles.inlineButton} href={mapHref(event.id, firstDayRecord)}>返回活動地圖</a>}</>
+              : hydrated && draftDiffersFromSaved ? "尚未儲存" : null}
+          </p>
+          <button type="button" disabled={!hydrated || status.kind === "busy" || problems.length > 0 || reviewOpen} onClick={openReview}>
+            {status.kind === "busy" ? "檢查中…" : "預覽並送出"}
+          </button>
+        </div>
+      </div>
       </div>
 
       <aside className={`${styles.previewColumn} ${reviewOpen ? styles.reviewOpen : ""}`} aria-label={reviewOpen ? "儲存前確認" : "即時公開預覽"}>
@@ -1313,7 +1336,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             {problems.length > 0 && <ul className={styles.problemList} aria-live="polite">
               {problems.map((problem) => <li key={`${problem.id}-${problem.message}`}>{problem.message}</li>)}
             </ul>}
-            {status.kind === "error" && <p className={styles.error} role="status">{status.message}</p>}
+            {status.kind === "error" && !status.at && <p className={styles.error} role="status">{status.message}</p>}
           </div>
           : <div className={styles.livePreview}>
             <small>尚未儲存</small>
@@ -1342,6 +1365,91 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
           <PublicationPreview records={livePreview} />
         </div>
       </div> : null}
+    </div>
+
+    {/* After the form, in falling order of use: taking the published page
+        somewhere, what happens to it after the event, and — last and set
+        apart — removing it. Outside the form so none of it reads as part of
+        what 預覽並送出 sends; both of the first two answer on the spot. */}
+    <div className={styles.editorAfter} inert={reviewOpen ? true : undefined}>
+      <fieldset className={styles.editorFieldset} disabled={!hydrated || reviewOpen}>
+        <div className={styles.editorAfterRow}>
+          {saved && hydrated && <CirclePageShare
+            event={event} circle={{ id: claim.circleId, name: claim.circleName }}
+            records={baseRecords} failed={baselineFailed && !baseRecords} onRetry={retryBaseline}
+          />}
+          {/* Saved on the spot rather than with the draft: it is one switch with an
+              immediate answer, and it survives a tab closed before submitting. */}
+          <fieldset className={styles.retention}>
+            <legend>活動結束後</legend>
+            <div className={styles.retentionChoices}>
+              {([{ value: false, title: "繼續公開" }, { value: true, title: "不再公開" }] as const).map((option) => <label key={option.title}>
+                <input
+                  type="radio" name={`after-event-${claim.circleId}`}
+                  checked={hidden === option.value}
+                  onChange={() => {
+                    setHidden(option.value);
+                    void setPostEventVisibility(claim.circleId, option.value)
+                      .then(() => setStatus({ kind: "ok", message: option.value ? "活動結束後將不再公開你填寫的內容。" : "活動結束後仍會公開你填寫的內容。", at: "setting" }))
+                      .catch((error: unknown) => { setHidden(!option.value); setStatus({ kind: "error", message: errorMessage(error), at: "setting" }); });
+                  }}
+                />
+                <span>{option.title}</span>
+              </label>)}
+            </div>
+            {status.at === "setting" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+          </fieldset>
+        </div>
+
+        {/* Collapsed: it is the one irreversible action on the page, and it is
+            reached deliberately rather than met on the way past. `<details>` keeps
+            it one click away and findable by the browser's own in-page search.
+            Its answer stays here even once the details are gone with the data. */}
+        {(saved || status.at === "delete") && <div className={styles.dangerZone}>
+        {saved && <details className={styles.danger}>
+          <summary>刪除資料</summary>
+          {/* Clearing a field writes an empty value and leaves the row; this
+              removes the row. ADR-0020 requires the two to read as different
+              things, because only one of them is undoable. */}
+          <p>永久刪除你填寫的內容與上一版備份，<b>無法復原</b>。場刊中的社團名、攤位與日期不受影響。</p>
+          <p>將被刪除的內容：</p>
+          {deletionSummary(savedFields).length === 0
+            ? <ul className={styles.dangerSummary}><li>（目前沒有任何欄位有內容，但資料列仍然存在）</li></ul>
+            : <ul className={styles.dangerSummary}>{deletionSummary(savedFields).map((line) => <li key={line}>{line}</li>)}</ul>}
+          {/* Not a single button: a session lasts 30 days, and one click from a
+              stale tab must not be able to do this. Re-sending a mail would have
+              been the other option, and it would put an irreversible action behind
+              deliverability. */}
+          <label htmlFor={`confirm-${claim.circleId}`}>請輸入社團代號 <code>{claim.circleId}</code> 以確認</label>
+          <input
+            id={`confirm-${claim.circleId}`} value={confirmText} autoComplete="off" spellCheck={false}
+            onChange={(event) => setConfirmText(event.target.value)} placeholder={claim.circleId}
+          />
+          <button
+            type="button" className={styles.dangerButton}
+            disabled={confirmText.trim() !== claim.circleId || status.kind === "busy"}
+            onClick={() => {
+              setStatus({ kind: "busy", message: "刪除中…", at: "delete" });
+              void deleteMyOverride(claim.circleId)
+                .then(() => {
+                  setFields({});
+                  setListInputs({});
+                  forgetStoredDraft(claim.circleId);
+                  setDraftRestoredAt(null);
+                  setSavedFields({});
+                  setHidden(false);
+                  setSaved(false);
+                  setConfirmText("");
+                  setOwnContent({});
+                  setStatus({ kind: "ok", message: "已刪除。公開頁面會在一分鐘內不再顯示這筆內容。", at: "delete" });
+                })
+                .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error), at: "delete" }));
+            }}
+          >刪除資料</button>
+        </details>}
+        {status.at === "delete" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
+        </div>}
+      </fieldset>
     </div>
   </section>;
 }
