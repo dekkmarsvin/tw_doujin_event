@@ -303,6 +303,7 @@ test("viewport failure keeps bounded request evidence and a screenshot before cl
         for (let i = 0; i < 25; i++) handlers.response({
           request: () => ({ method: () => "GET" }),
           url: () => "https://fixture.test/data/" + i + "?token=secret-sentinel", status: () => 503,
+          fromServiceWorker: () => i % 2 === 0,
         });
         handlers.requestfailed({ method: () => "GET", url: () => "https://fixture.test/map?token=secret-sentinel",
           failure: () => ({ errorText: "net::ERR_CONNECTION_RESET" }) });
@@ -340,7 +341,8 @@ test("viewport failure keeps bounded request evidence and a screenshot before cl
   const diagnostic = report.diagnostics[0];
   assert.equal(diagnostic.path, "/");
   assert.equal(diagnostic.requests.length, 20);
-  assert.deepEqual(diagnostic.requests[0], { method: "GET", path: "/data/6", status: 503 });
+  assert.deepEqual(diagnostic.requests[0], { method: "GET", path: "/data/6", status: 503, serviceWorker: true });
+  assert.deepEqual(diagnostic.requests[1], { method: "GET", path: "/data/7", status: 503, serviceWorker: false });
   assert.deepEqual(diagnostic.requests.at(-1), { method: "GET", path: "/map", failure: "net::ERR_CONNECTION_RESET" });
   assert.equal(raw.includes("secret-sentinel"), false);
   assert.equal(diagnostic.textError, "capture failed");
