@@ -168,6 +168,9 @@ try {
   assert.ok(counts.preview < 24, `first screen lazily loads images: ${counts.preview}`);
   assert.equal(counts.full, 0);
   journey.report.checks.push({ firstEntry: { ...counts } });
+  await large.setViewportSize({ width: 1440, height: 900 });
+  await journey.capture(large, "catalog-browse-300-desktop");
+  await large.setViewportSize({ width: 390, height: 844 });
   // Sharing copies only public criteria and opens identically in a fresh context.
   await large.evaluate(() => {
     Object.defineProperty(navigator, "share", { configurable: true, value: undefined });

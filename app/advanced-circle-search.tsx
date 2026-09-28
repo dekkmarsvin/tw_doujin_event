@@ -229,7 +229,7 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
         setDraftCategory(category);
         setTopicInput("");
         setOpen(nextOpen);
-        if (nextOpen && window.innerWidth <= 760) {
+        if (nextOpen && !categories && window.innerWidth <= 760) {
           window.requestAnimationFrame(() => trigger.scrollIntoView({ block: "start", behavior: "auto" }));
         }
       }}
