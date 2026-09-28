@@ -456,7 +456,7 @@ jobs:
       - name: Run representative browser journeys
         run: npm run test:browser
 
-      - name: Upload browser report and screenshots
+      - name: Upload browser reports, server diagnostics and screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:

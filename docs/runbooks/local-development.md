@@ -167,7 +167,7 @@ journey 放在 `tests/browser/*.mjs`，**不需要登記到任何清單**：runn
 | `fixture` | Vite + `sample` + `sample-two` | 真實資料不該有的情境：已移動／已取消攤位、有圖與無圖社團、多活動選擇器 |
 | `portal` | `dev:portal` 的隔離環境 | 需要登入的流程：magic-link、認領、審核、編輯與發布 |
 
-一次只能有一組資料，所以 runner 依宣告分組：先備妥並啟動一台伺服器跑完該組，再換下一組。即使某支 journey 失敗，其餘仍會跑完，最後一次回報全部失敗項目。
+一次只能有一組資料，所以 runner 依宣告分組：先備妥並啟動一台伺服器跑完該組，再換下一組。一般 journey 失敗仍會繼續同組其他測試；共用服務退出則中止目前 journey，剩餘同組項目標為未執行，並繼續其他獨立環境組。環境故障與 journey 失敗都使整體非零退出，不自動重啟服務或重跑。
 
 `portal` 組與 Vite 組是**不同的伺服器**：`/api/*` 只存在於 Pages Functions 底下，Vite dev server 會把登入請求當成前台 HTML fallback。runner 會自行 build `dist`、清空 `.wrangler/local-portal`，再用 `scripts/run-local-portal.mjs`（與 `npm run dev:portal` 同一支）啟動。
 
@@ -196,6 +196,8 @@ npm run test:browser:install
 若明確選取 fixture／portal journey 且同時設了 `MAP_TEST_URL`，runner 會拒絕執行；請移除該環境變數，由 runner 建立隔離環境。篩選後沒有任何可執行旅程也會失敗。
 
 操作失敗時，共用 journey 的 `browser-report-<journey>.json` 與地圖 viewport 的 `browser-report-<matrix>.json` 都保留原始錯誤，並附最多五個開啟頁面的畫面文字、失敗截圖路徑與最近二十筆請求結果。請求只記 method、path、status／網路錯誤，不記 query、headers 或 body；診斷取不到的項目如實標示，不覆蓋原始失敗。先用當時畫面與狀態判斷等待條件，再決定是否重跑。
+
+`browser-runner-report.json` 記錄每組服務的啟動／退出時間、退出碼或 signal、各 journey 的結果與未執行項目。`server-<環境>.log` 保存有上限並已遮蔽敏感資訊的 stdout、stderr 與 Wrangler 診斷尾端，一起上傳既有 browser artifact；原始 Wrangler log 僅留於本機 `.tmp/`。外部 `MAP_TEST_URL` 不由 runner 啟動、終止或蒐集服務日誌。
 
 **注意**：`npm run test:browser` 會改寫 staging（最後一組是 fixture `sample` + `sample-two`）。之後跑 `npm test` 會自動換回單一 fixture，但開發途中若直接執行 `npm run dev:pages`，看到的會是上一次驗收留下的 staging。
 
