@@ -39,7 +39,13 @@ Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_T
 | KV / Durable Objects | 不需要 |
 | advanced mode（`dist/_worker.js`） | **不得使用** |
 
-不使用 advanced mode 是硬邊界：它會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker。Pages 自動產生的路由表只涵蓋 `functions/` 下實際存在的路徑，其餘靜態資源仍由邊緣直送。
+不使用 advanced mode 是硬邊界：它會讓每一個請求（含 1.8 MB 的 `circles.json`）都經過 Worker。`public/_routes.json` 明列 HTML、既有 API 與 overlay；HTML 經 middleware 加上 CSP nonce（[ADR-0074](../adr/0074-html-responses-carry-per-request-csp-nonces.md)），其餘靜態資源仍由邊緣直送。
+
+### HTML nonce 驗收
+
+HTML CSP 由 `functions/_html-security.ts` 宣告，`public/_headers` 保留相同來源限制作靜態備援。每次網路 HTML 回應有新的 256-bit nonce，Cloudflare JavaScript Detections 從 origin header 採用該值。不要以 Response Header Transform Rule 補 nonce，因為標頭與腳本注入的階段不同，必須驗證最終 script 真的帶上相同值。
+
+部署後在正式網域檢查首頁、活動／社團介紹頁及 `/circle`、`/organizer`：回應只有一份 CSP，兩次網路請求 nonce 不同，JSD inline script 的 nonce 與回應一致。HTML 為 `private, no-store`，conditional request 不得回新 nonce 加舊 body；場刊 JSON 與雜湊資產仍保留原快取策略。瀏覽器確認 Reader、Turnstile 與離線 shell；離線 Response 的 body 與 CSP 必須一起保存。pages.dev 沒有正式 zone 的 Bot Fight Mode，不能代替此項驗收。回復方式為回復上一版 Pages deployment；嚴格靜態 CSP 仍在，JSD 可能恢復被擋。
 
 Pages project 的 production 與 preview 都必須使用 **Fail open**（Dashboard → Workers & Pages → `tw-catalog` → Settings → Runtime → Fail open / closed）。Cloudflare 沒有提供降低每日額度或模擬 Error 1027 的安全測試介面，因此不刻意耗盡正式帳號額度；CI 每次部署後會透過 Pages project API 校正並驗證兩個環境的 `fail_open: true`。這項決策見 [ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)。
 
@@ -230,7 +236,7 @@ Pages 完整 CI 另執行 `node scripts/worker-delivery.mjs --build-only`：使�
 
 與[本機共同 gate](./local-development.md#共同-gate) 相同，CI 會重跑一次。另需確認：
 
-- `dist/index.html`、`dist/_headers` 存在，且沒有 Functions 或自訂 rewrite 規則攔截靜態請求。
+- `dist/index.html`、`dist/_headers`、`dist/_routes.json` 存在，HTML nonce 例外之外的靜態資產／場刊請求不經 Functions。
 - `npm run build:production` 已依 `data/published-events.json` 重建**每一個已發布活動**的產物，且每一份地圖 artifact 都通過該活動 template 的 layout 驗證（FF47：988 格、28 根柱子、5 個出入口）。
 - `dist/_worker.js` 與 `dist/server/index.js` 不存在。
 - 閱讀端 bundle 不包含寫入端點（`/api/auth/`、`/api/claims`、`/api/admin/`、`/api/organizer/`）或登入與認領文案，由 `tests/public-artifact.test.mjs` 檢查。

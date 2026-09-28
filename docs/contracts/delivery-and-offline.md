@@ -4,19 +4,19 @@
 
 **實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)、[`app/circle-page-data.ts`](../../app/circle-page-data.ts)、[`app/circle-page/`](../../app/circle-page)
 **測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`、`tests/circle-page.test.mjs`、`tests/browser/circle-page.mjs`
-**設定**：[`public/_headers`](../../public/_headers)
+**設定**：[`public/_headers`](../../public/_headers)、[`public/_routes.json`](../../public/_routes.json)、[`functions/_html-security.ts`](../../functions/_html-security.ts)
 
 ## 公開搜尋介紹頁
 
 `scripts/build-discovery-pages.mjs` 在同一次已驗證 staging／Vite build 後產生活動及社團介紹 HTML、首頁未執行 JS 的活動摘要與 sitemap。HTML 僅投影 reviewed base 的社團名稱、配置及活動 reference；不讀取或靜態保存社團 overlay、圖片、聯絡資料、收藏或行程。新增／移除已發布活動由整份 build 產物反映，不增加每活動人工操作。
 
-介紹頁由 Pages 靜態直送，不經 Function，不新增資料寫入。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
+介紹頁仍在 build 產生；HTML 經既有 Function 加上每次回應的 CSP nonce，不新增資料讀寫（ADR-0074）。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
 
 首頁、介紹頁與 Reader 啟動後的 head 都以絕對網址指向品牌分享圖 `/share-card.png`（1200×630 PNG，維護者選定的 C 版），並使用 `summary_large_image`。例外是有活動圖片的活動：它的活動介紹頁與 Reader 的活動畫面改指向活動圖片及其尺寸，社團頁仍用品牌分享圖；多數分享平台不接受 SVG，所以不用站台圖示。分享圖供其他平台的伺服器抓取，不加入 Service Worker precache。
 
 首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
 
-介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。社團介紹頁腳本自己的資產同樣不進 precache（`scripts/build-service-worker.mjs` 與 `tests/public-artifact.test.mjs` 把關），與 Reader 共用的 chunk 除外。原 query 地圖仍使用既有離線行為。介紹頁及 sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證，避免舊活動／配置長期停留在瀏覽器；這不新增輪詢。
+介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。社團介紹頁腳本自己的資產同樣不進 precache（`scripts/build-service-worker.mjs` 與 `tests/public-artifact.test.mjs` 把關），與 Reader 共用的 chunk 除外。原 query 地圖仍使用既有離線行為。介紹頁 HTML 為 `private, no-store`；sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證；這不新增輪詢。
 
 ### 社團介紹頁的頁面腳本
 
@@ -68,7 +68,7 @@
 
 ## 快取標頭
 
-由 `public/_headers` 設定：
+靜態資產由 `public/_headers` 設定；HTML 由 Functions 加上 CSP nonce 與 `private, no-store`，不沿用靜態 HTML 快取時間：
 
 | 路徑 | Cache-Control |
 |---|---|
@@ -94,13 +94,15 @@ Cloudflare 沒有提供降低帳號用量上限或模擬 Error 1027 的測試介
 
 不以耗盡配額實驗作發布 gate、部署配置採 fail-open 的決策仍有效（[ADR-0031](../adr/0031-quota-exhaustion-is-not-a-release-gate.md)）；舊有 Free 成本前提的取代關係見 ADR-0065。
 
-由此推出一條給未來的約束：**任何新的公開讀取路徑都不得由 Pages Function 服務**，否則它會和 overlay 分食同一份帳號請求額度，並計入同一份月度計費量。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
+公開場刊／地圖與資產不得新增 Pages Function 讀取路徑。HTML nonce 是 [ADR-0074](../adr/0074-html-responses-carry-per-request-csp-nonces.md) 的例外，每次 HTML 網路請求計入同一份帳號 Function 用量，但不查 D1／R2。社團縮圖已使用獨立的 production／preview R2 bucket 與 custom domain，不走 Function（[ADR-0017](../adr/0017-thumbnails-are-self-hosted-with-external-urls-kept.md)）。
 
 同一份 `_headers` 也設定 CSP、`Permissions-Policy`（關閉相機、麥克風、定位）、`Referrer-Policy`、`X-Content-Type-Options` 與 `X-Frame-Options`。`img-src` 允許 `'self'`、`data:` 與 `https:`——寫入驗證接受任何 https 圖片位址（[ADR-0052](../adr/0052-thumbnail-addresses-are-checked-as-images-not-hosts.md)），CSP 若比它窄，存得進去的圖片會在讀者瀏覽器被擋掉。兩者一致由 `tests/circle-overrides.test.mjs` 把關，見[社團自助控制面契約](./circle-portal.md#媒體安全)。
 
 `/circle*` 與 `/organizer*` 各有一份放寬的 CSP：`script-src` 與 `frame-src` 加入 `https://challenges.cloudflare.com`，供登入表單的 Turnstile 使用（[ADR-0016](../adr/0016-human-verification-guards-the-mailer.md)）。兩份內容相同。**閱讀端的策略不變**——Turnstile 是本站程式碼唯一載入的第三方 script，且只在這兩個登入入口。三份策略都放行的 `https://static.cloudflareinsights.com` 是正式網域由 Cloudflare 自動注入的 Web Analytics beacon，見[資料 inventory](./data-inventory.md#第三方)。Cloudflare 對多條命中的 `_headers` 規則採合併而非覆寫，所以該區塊先以 `! Content-Security-Policy` 移除站台層的策略再重新宣告；兩份策略同時生效會被瀏覽器取交集，反而擋掉元件。兩個入口的策略關係（站台層 + 恰好兩個 Turnstile 來源）由 `tests/circle-overrides.test.mjs` 斷言。
 
-Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.com` 直接落到網路。
+HTML 的 Functions policy 與三份靜態 policy 除 nonce 外一致，由 `tests/html-security.test.mjs` 把關。HTML 不做通用 script nonce 重寫，只讓 Cloudflare 採用 CSP header 的 nonce；私人圖片 API 保留 sandbox policy。靜態政策仍作 fail-open 備援。
+
+Service Worker 只攔截同源請求，`challenges.cloudflare.com` 直接落到網路。Reader 離線 shell 保存完整 Response，使 body 與 nonce policy 配對；不獨立刷新 CSP nonce。每次線上 HTML 回應產生新 nonce，並移除資產 ETag／Last-Modified，禁止 CDN 與 HTTP 快取。
 
 `/admin*` 僅增加 `X-Robots-Tag: noindex, nofollow`，沿用全站 CSP；它沒有登入表單，不需放寬 Turnstile 來源。`/circle`、`/organizer`、`/admin` 的專用資產都不進 Reader precache。
 
@@ -111,6 +113,6 @@ Service Worker 不受影響：它只攔截同源請求，`challenges.cloudflare.
 - 主 bundle 不含場刊資料字面值。
 - 公開 bundle 不包含 `/api/events/`、地圖管理匯入器或管理發布文案。
 - `dist/sw.js` 的 precache 清單涵蓋所有離線必要檔案：**每一個**已發布活動的 `circles.json` 與其全部地圖 artifacts。選了第二場活動再離線的讀者不得拿到空殼。
-- `dist/_headers` 存在，且沒有 Functions 或自訂 rewrite 規則攔截靜態請求。
-- 全新瀏覽器工作階段不需圖片、Worker 或 D1 即可取得同一份場刊與地圖。
+- `dist/_headers` 與 `dist/_routes.json` 存在；Functions 僅涵蓋 HTML、既有 API 與 overlay，其他靜態資料／資產直送。
+- 全新瀏覽器工作階段不需圖片或 D1 即可取得同一份場刊與地圖；HTML 僅經輕量 nonce middleware。
 - 離線重新載入後，已下載的場刊、地圖、字型與介面仍可運作；縮圖不可用時維持文字卡。

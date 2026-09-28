@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "include": [
+    "/", "/index.html", "/404.html",
+    "/circle*", "/organizer*", "/admin*", "/privacy*", "/events/*",
+    "/api/*", "/data/events/*/overrides.json"
+  ],
+  "exclude": []
+}

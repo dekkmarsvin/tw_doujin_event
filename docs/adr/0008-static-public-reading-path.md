@@ -1,6 +1,6 @@
 # ADR-0008：公開閱讀路徑純靜態，不經 Worker
 
-- 狀態：已定案
+- 狀態：已定案；HTML 直送要求由 [ADR-0074](./0074-html-responses-carry-per-request-csp-nonces.md) 部分取代，場刊／地圖與資產保持靜態
 - 相關契約：[資料傳輸與離線契約](../contracts/delivery-and-offline.md)、[活動地圖契約](../contracts/event-map.md)
 - 相關流程：[部署](../runbooks/deployment.md)
 

@@ -3,9 +3,9 @@
   "name": "tw-catalog",
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-05-22",
-  // Identity and circle-authored overrides only. The reader's catalog and map
-  // stay static assets; no advanced-mode `main` entry, so `/`, `/assets/*` and
-  // `/fonts/*` are still served straight from the edge.
+  // HTML adds a per-response CSP nonce through the existing Functions middleware.
+  // public/_routes.json keeps catalog/map JSON, assets and fonts static; there
+  // is still no advanced-mode `main` entry (ADR-0074).
   //
   // One binding, named `DB`, because that is what the Functions read. Leaving
   // the binding `wrangler d1 create` generates from the database name would
