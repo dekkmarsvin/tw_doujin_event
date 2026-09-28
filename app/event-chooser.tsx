@@ -4,6 +4,7 @@ import type { EventDefinition } from "./event-catalog";
 import { groupCalendarEvents, taipeiDate } from "./event-calendar";
 import styles from "./event-chooser.module.css";
 import { eventPath } from "./seo";
+import { UiIcon } from "./ui-icons";
 
 /**
  * The public entry when a URL names no event, or names one this build does not
@@ -50,26 +51,29 @@ export default function EventChooser({ events, unresolved, onSelect }: {
       {groups.map((group) => <section key={group.id} className={styles.group} data-event-group={group.id} aria-labelledby={`event-group-${group.id}`}>
         <h2 id={`event-group-${group.id}`}>{group.label}</h2>
         <ul className={styles.list}>
-        {group.entries.map(({ event, label }) => <li key={event.id}>
-          <a href={`?event=${encodeURIComponent(event.id)}`} onClick={(pressed) => {
-            // A modified or middle click is the browser's, not ours: it opens
-            // the event in a new tab, which a button could never do.
-            if (pressed.button !== 0 || pressed.metaKey || pressed.ctrlKey || pressed.shiftKey || pressed.altKey) return;
-            pressed.preventDefault();
-            onSelect(event);
-          }}>
-            <span>
-              <b>{event.name}</b>
-              <small>{label} · {event.venue}</small>
-            </span>
-            <span className={styles.arrow} aria-hidden="true">→</span>
-          </a>
-          <a className={styles.introduction} href={`?event=${encodeURIComponent(event.id)}&view=browse`} onClick={(pressed) => {
-            if (!ordinaryLinkClick(pressed)) return;
-            pressed.preventDefault();
-            navigateReader(new URL(pressed.currentTarget.href));
-          }}>逛品書</a>
-          <a className={styles.introduction} href={eventPath(event.id)}>活動介紹與社團名單</a>
+        {/* One card per event: what it is, then the ways in. The map is the
+            primary entry and catalog browse its peer; each link names its event
+            so a list of links read out of context still says where it goes. */}
+        {group.entries.map(({ event, label }) => <li key={event.id} className={styles.card}>
+          <div>
+            <h3>{event.name}</h3>
+            <p>{label} · {event.venue}</p>
+          </div>
+          <div className={styles.entries}>
+            <a className={styles.map} href={`?event=${encodeURIComponent(event.id)}`} aria-label={`開啟攤位地圖：${event.name}`} onClick={(pressed) => {
+              // A modified or middle click is the browser's, not ours: it opens
+              // the event in a new tab, which a button could never do.
+              if (!ordinaryLinkClick(pressed)) return;
+              pressed.preventDefault();
+              onSelect(event);
+            }}>開啟攤位地圖<UiIcon name="chevron-right" /></a>
+            <a className={styles.browse} href={`?event=${encodeURIComponent(event.id)}&view=browse`} aria-label={`逛品書：${event.name}`} onClick={(pressed) => {
+              if (!ordinaryLinkClick(pressed)) return;
+              pressed.preventDefault();
+              navigateReader(new URL(pressed.currentTarget.href));
+            }}>逛品書</a>
+            <a className={styles.introduction} href={eventPath(event.id)} aria-label={`活動介紹與社團名單：${event.name}`}>活動介紹與社團名單</a>
+          </div>
         </li>)}
         </ul>
       </section>)}
