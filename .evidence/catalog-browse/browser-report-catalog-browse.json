@@ -1,0 +1,52 @@
+{
+  "journey": "catalog-browse",
+  "browser": "153.0.8010.12",
+  "recordedAt": "2026-09-28T11:23:12.108Z",
+  "source": "local fixtures, not production",
+  "checks": [
+    "catalog-browse-desktop",
+    "catalog-browse-390",
+    "catalog-browse-760",
+    "catalog-browse-761",
+    "catalog-browse-1050",
+    "catalog-browse-1440",
+    "catalog-browse-storage-recovery",
+    "catalog-browse-empty",
+    {
+      "firstEntry": {
+        "base": 1,
+        "overlay": 1,
+        "preview": 5,
+        "full": 0
+      }
+    },
+    "catalog-browse-300-desktop",
+    {
+      "afterMore": {
+        "base": 1,
+        "overlay": 1,
+        "preview": 15,
+        "full": 0
+      }
+    },
+    {
+      "circlePage": {
+        "base": 1,
+        "overlay": 2,
+        "preview": 15,
+        "full": 1
+      }
+    },
+    {
+      "returned": {
+        "base": 2,
+        "overlay": 3,
+        "preview": 22,
+        "full": 1
+      },
+      "restoredY": 1300
+    },
+    "catalog-browse-restored"
+  ],
+  "errors": []
+}
