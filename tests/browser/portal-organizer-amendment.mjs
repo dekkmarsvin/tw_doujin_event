@@ -91,6 +91,23 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
 }
 
 try {
+  for (const [code, message, status] of [
+    ["amendment_baseline_changed", "此活動的公開資料與發布紀錄不一致，暫時無法開始修正。", 409],
+    ["amendment_publication_pending", "公開版本尚未與活動資料一致，請稍後再試。", 409],
+    ["amendment_baseline_unavailable", "暫時無法核對公開版本，請稍後再試。", 503],
+  ]) {
+    const failed = fixtureRoutes("owner");
+    const page = await journey.page({ url: `${base}/organizer`, routes: async (page) => {
+      await failed.routes(page);
+      await page.route("**/api/organizer/events/source/amendments", (route) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ code, error: message }) }));
+    } });
+    await page.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: message }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "開始修正已發布活動", exact: true }).isEnabled(), true);
+    assert.equal(failed.state.created, false);
+    if (code === "amendment_baseline_changed") await journey.capture(page, "organizer-amendment-baseline-changed");
+    await page.close();
+  }
   const ownerRoutes = fixtureRoutes("owner");
   const page = await journey.page({ url: `${base}/organizer`, routes: ownerRoutes.routes });
   await page.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();

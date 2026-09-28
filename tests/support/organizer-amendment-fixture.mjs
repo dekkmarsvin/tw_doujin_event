@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { buildOfficialCatalogPayload } from "../../scripts/official-catalog-core.mjs";
+import { buildOrganizerCircleGrouping } from "../../app/organizer-circle-groups.mjs";
 
 export const hash = (text) => createHash("sha256").update(text).digest("hex");
 export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
@@ -45,9 +46,10 @@ export async function amendmentFixture(runner, adjustSnapshot = () => {}) {
 export function gitReaderFixture(fixture) {
   const reads = [];
   const main = fixture.mainFiles;
-  const original = new Map(main);
+  const original = new Map(fixture.originalMainFiles ?? main);
   const data = fixture.dataFiles;
-  const commits = new Map([[fixture.source.mainCommit, original], [fixture.baseline.mainCommit, main], [fixture.source.dataCommit, data]]);
+  const commits = new Map([[fixture.source.mainCommit, original], [fixture.baseline.mainCommit, main],
+    [fixture.source.dataCommit, fixture.originalDataFiles ?? data], ...(fixture.extraCommits ?? [])]);
   return { reads, original, async fetch(url, init) {
     assert.ok(!init?.method || init.method === "GET", "baseline loading must never write to GitHub");
     const path = new URL(url).pathname;
@@ -63,4 +65,44 @@ export function gitReaderFixture(fixture) {
     }
     throw new Error(`Unexpected GitHub read ${path}`);
   } };
+}
+
+/** A reviewed migration merges the same two circles across two days, while
+ * preserving their earliest IDs and all four placements. Old approvals stay
+ * byte-for-byte unchanged, just like the PF45 correction in PR #416. */
+export async function adoptedAmendmentFixture(runner) {
+  const data = await amendmentFixture(runner, (snapshot) => {
+    snapshot.draft.event.days.push({ id: "2", label: "第二天", date: "2026-11-08" });
+    snapshot.import.rows.push(...snapshot.import.rows.map((row) => ({ ...row, dayId: "2", sourceRow: row.sourceRow + 2 })));
+    snapshot.maps.push({ ...structuredClone(snapshot.maps[0]), id: "day-two", periodKey: "2" });
+  });
+  const { baselineCanonicalJson, baselineEventEvidence } = await runner.import("/app/organizer-baseline-adoption.ts");
+  data.originalMainFiles = new Map(data.mainFiles);
+  data.originalDataFiles = new Map(data.dataFiles);
+  const grouping = buildOrganizerCircleGrouping(data.baseline.event.id, data.snapshot.import.rows, data.snapshot.draft.officialSource.url);
+  const groupingPath = "events/event-alpha/circle-identity-groups.json";
+  const text = JSON.stringify(grouping, null, 2) + "\n";
+  data.dataFiles.set(groupingPath, text);
+  const pin = structuredClone(data.baseline.pin);
+  pin.commit = "4".repeat(40);
+  pin.files.find((file) => file.path === groupingPath).sha256 = hash(text);
+  data.mainFiles.set("data/event-data-pins/event-alpha.json", JSON.stringify(pin));
+  const evidence = structuredClone(data.baseline.evidence);
+  evidence.entries[0].sources.push(...evidence.entries[2].sources);
+  evidence.entries[1].sources.push(...evidence.entries[3].sources);
+  evidence.entries.splice(2);
+  data.mainFiles.set("data/circle-identities/evidence.json", JSON.stringify(evidence));
+  data.published = { dataCommit: pin.commit, catalog: buildOfficialCatalogPayload({ eventId: data.baseline.event.id,
+    event: data.baseline.event, official: data.baseline.official, evidence }) };
+  const { publishedAt: _publishedAt, snapshotJson: _snapshotJson, ...source } = data.source;
+  void _publishedAt; void _snapshotJson;
+  data.adoption = { schema: "organizer-baseline-adoption/1", id: "reviewed-cross-day-grouping", kind: "reviewed-cross-day-grouping",
+    eventId: data.baseline.event.id, source, target: { mainCommit: "5".repeat(40),
+      pinSha256: hash(baselineCanonicalJson(pin)), groupingSha256: hash(baselineCanonicalJson(grouping)),
+      evidenceSha256: hash(baselineCanonicalJson(baselineEventEvidence(evidence, data.baseline.event.id))) },
+    authorization: { pullRequest: "https://github.com/dekkmarsvin/tw_doujin_event/pull/416", decision: "ADR-0071" } };
+  data.extraCommits = [[pin.commit, data.dataFiles], [data.adoption.target.mainCommit, new Map(data.mainFiles)]];
+  data.expectedBaseline = { ...data.baseline, schema: "organizer-amendment-baseline/2", pin, grouping, evidence,
+    adoption: { record: data.adoption, sha256: hash(baselineCanonicalJson(data.adoption)) } };
+  return data;
 }

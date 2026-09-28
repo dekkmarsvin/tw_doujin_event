@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createServer, isRunnableDevEnvironment } from "vite";
-import { amendmentFixture, gitReaderFixture, hash } from "./support/organizer-amendment-fixture.mjs";
+import { adoptedAmendmentFixture, amendmentFixture, gitReaderFixture, hash } from "./support/organizer-amendment-fixture.mjs";
 import { buildOfficialCatalogPayload } from "../scripts/official-catalog-core.mjs";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR unavailable");
@@ -45,6 +45,50 @@ const mainInput = (fixture, files) => ({ dataCommit: "b".repeat(40), mainCommit:
 const jsonFile = (result, path) => JSON.parse(result.files.find((file) => file.path === path).text);
 const evidenceOf = (result) => jsonFile(result, "data/circle-identities/evidence.json");
 const reader = (artifacts, result) => buildOfficialCatalogPayload({ eventId: "event-alpha", event: artifacts.event, official: artifacts.official, evidence: evidenceOf(result) });
+
+test("adopted cross-day identities survive settings publication and the next amendment uses its own published job", async () => {
+  const fixture = await adoptedAmendmentFixture(runner);
+  fixture.baseline = await api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => "test" },
+    fetch: gitReaderFixture(fixture).fetch, published: async () => fixture.published, adoptions: [fixture.adoption] })(fixture.source);
+  const first = await snapshotFor(fixture, [], "adopted-settings", { name: "整合後的活動" });
+  const artifacts = await builder.buildApprovedPublicationArtifacts(first.source);
+  const data = await builder.buildPublicationDataStage(first.source, dataBase(fixture));
+  const main = await builder.buildPublicationMainStage(first.source, mainInput(fixture, data.allFiles));
+  const catalog = reader(artifacts, main);
+  assert.equal(catalog.circles.length, 2);
+  assert.equal(catalog.placements.length, 4);
+  assert.deepEqual(catalog.placements.map((row) => [row.day, row.boothCode, row.circleId]),
+    fixture.published.catalog.placements.map((row) => [row.day, row.boothCode, row.circleId]));
+  const next = { ...fixture, source: { ...fixture.source, ...first.source, candidateId: first.snapshot.candidateId,
+    candidateVersion: first.snapshot.candidateVersion, mainCommit: "d".repeat(40), dataCommit: "b".repeat(40), jobId: "next-job", snapshotId: "next-snapshot" },
+    baseline: { mainCommit: "e".repeat(40) }, mainFiles: new Map(main.files.map((file) => [file.path, file.text])),
+    dataFiles: new Map(data.allFiles.map((file) => [file.path, file.text])), originalMainFiles: null, originalDataFiles: null, extraCommits: [],
+    published: { dataCommit: "b".repeat(40), catalog } };
+  next.baseline = await api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => "test" },
+    fetch: gitReaderFixture(next).fetch, published: async () => next.published, adoptions: [] })(next.source);
+  assert.equal(next.baseline.schema, "organizer-amendment-baseline/1");
+  assert.equal(next.baseline.source.jobId, "next-job");
+  assert.equal(next.baseline.adoption, undefined);
+  assert.equal(JSON.stringify(next.baseline).includes("baselineJson"), false);
+  const second = await snapshotFor(next, [], "second-settings", { aliases: ["保留跨日整合"] });
+  const secondData = await builder.buildPublicationDataStage(second.source, dataBase(next));
+  const secondMain = await builder.buildPublicationMainStage(second.source, mainInput(next, secondData.allFiles));
+  assert.deepEqual(reader(await builder.buildApprovedPublicationArtifacts(second.source), secondMain).placements, catalog.placements);
+
+  for (const alter of [
+    (baseline) => { baseline.schema = "organizer-amendment-baseline/1"; delete baseline.adoption; },
+    (baseline) => { baseline.adoption.sha256 = "f".repeat(64); },
+    (baseline) => { baseline.source.jobId = "fabricated-job"; },
+    (baseline) => { baseline.grouping.groups[0].linkage.value = "unreviewed"; },
+    (baseline) => { baseline.evidence.entries[0].aliases.push("unreviewed"); },
+  ]) {
+    const tampered = structuredClone(first.snapshot);
+    const baseline = JSON.parse(tampered.amendment.baselineJson); alter(baseline);
+    tampered.amendment.baselineJson = JSON.stringify(baseline);
+    tampered.amendment.baselineSha256 = hash(tampered.amendment.baselineJson);
+    await assert.rejects(builder.buildApprovedPublicationArtifacts(approved(tampered)), (error) => error.code === "snapshot_mismatch");
+  }
+});
 
 test("four reviewed declarations deterministically stage through the real Reader pipeline using the current global ledger", async () => {
   const fixture = await amendmentFixture(runner, (snapshot) => {
