@@ -65,7 +65,10 @@ test("a tall picture stays inside the side panel's picture band", async () => {
   // portrait upload out-voted the gallery's own height and spilled over the
   // 16:8 band — cropped, in the density where the picture is smallest.
   const css = await source("event-workspace-panels.module.css");
-  assert.match(css, /[.]galleryOpen img,[.]galleryFrame>img [{] width:100%; height:100%; min-height:0;/);
+  assert.match(css, /[.]galleryOpen img,[.]galleryFrame>img,[.]galleryZoom>img [{] width:100%; height:100%; min-height:0;/);
+  // A sale-sheet page that opens its original sits inside a link; the link
+  // holds the same line.
+  assert.match(css, /[.]galleryZoom [{] width:100%; height:100%; min-height:0;/);
 });
 
 test("no reader-facing copy still promises the retired thumbnail index", async () => {

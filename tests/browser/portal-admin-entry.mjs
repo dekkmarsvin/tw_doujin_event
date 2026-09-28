@@ -80,6 +80,13 @@ try {
     await journey.capture(page, `admin-${role}`);
     await page.close();
   }
+  const linked = await open('admin');
+  const linkedReview = linked.page.locator('#map-review');
+  await linkedReview.getByLabel('活動', { exact: true }).selectOption('sample-two');
+  await linked.page.getByRole('navigation', { name: '管理項目' }).getByRole('link', { name: '地圖草稿審閱', exact: true }).click();
+  assert.equal(new URL(linked.page.url()).searchParams.get('event'), 'sample', 'section navigation preserves the notification event');
+  assert.equal(await linkedReview.getByLabel('活動', { exact: true }).inputValue(), 'sample-two', 'section navigation preserves the selected event');
+  await linked.page.close();
   const { page, requests, expire } = await open("admin", "circle");
   await page.getByRole("link", { name: "管理", exact: true }).waitFor();
   assert.equal(requests.filter(x => x.path.startsWith("/api/admin/")).length, 0, "/circle must never load management data");
@@ -150,6 +157,8 @@ try {
   await review.getByText("目前沒有草稿。", { exact: true }).waitFor();
   assert.equal(await review.getByRole("button", { name: "下載地圖檔案", exact: true }).count(), 0);
   assert.ok(requests.some(x => x.path === "/api/admin/map-contributions/drafts" && x.event === "sample-two"));
+  await page.getByRole('navigation', { name: '管理項目' }).getByRole('link', { name: '地圖草稿審閱', exact: true }).click();
+  assert.equal(await review.getByLabel('活動', { exact: true }).inputValue(), 'sample-two', 'section navigation preserves the selected map event');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => scrollTo(0, 0));
   await journey.capture(page, "admin-narrow-event-switch");

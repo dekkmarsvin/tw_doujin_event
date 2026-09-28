@@ -396,3 +396,10 @@ export function abandonOrganizerAmendment(candidateId: string, expectedVersion: 
     method: "POST", body: JSON.stringify({ expectedVersion, restorationPullNumber, reason }),
   });
 }
+
+export function readSharedReferences() {
+  return organizerCall<import('./shared-reference-catalog').SharedReferenceCatalog>('/api/admin/references');
+}
+export function saveSharedReference(input: Record<string, unknown>) {
+  return organizerCall<{ ok: true; id: string }>('/api/admin/references', { method: 'POST', body: JSON.stringify(input) });
+}

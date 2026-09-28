@@ -1719,3 +1719,85 @@ test("invitation mail uses the current server-side event name and the inviter's 
     }
   }
 });
+
+test('shared references are administered without any candidate and remain reusable by organizers', async () => {
+  const path = '/api/admin/references';
+  assert.equal((await handlers.adminListReferences(request(path))).status, 401);
+  const member = await signIn('shared-member@example.test');
+  assert.equal((await handlers.adminListReferences(request(path, 'GET', undefined, member))).status, 403);
+  assert.equal((await handlers.adminCreateReference(request(path, 'POST', { kind: 'organizer', name: 'forbidden', sourceUrl: 'https://example.test' }, member))).status, 403);
+  const admin = await signIn('admin@example.test');
+  const create = body => handlers.adminCreateReference(request(path, 'POST', body, admin));
+  const venueBody = { kind: 'venue-create', name: '獨立管理測試館', sourceUrl: 'https://venue.example/', address: '新北市三重區測試路1號', spaceName: '全館', spaceSourceUrl: '', defaultAreaMode: 'none' };
+  for (const address of ['', '   ']) assert.equal((await create({ ...venueBody, address })).status, 400);
+  const response = await create(venueBody);
+  assert.equal(response.status, 201);
+  const venueId = (await response.json()).id;
+  const listed = await (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+  const venue = listed.venues.find(item => item.id === venueId);
+  assert.equal(venue.address, venueBody.address);
+  assert.equal(venue.spaces[0].officialUrl, venueBody.sourceUrl, 'blank space source inherits the venue');
+  assert.match(venue.version, /^[a-f0-9]{64}$/);
+  assert.equal((await database.prepare('SELECT COUNT(*) AS n FROM organizer_event_candidates').first()).n, 0);
+  const before = (await repository.listOrganizerReferenceRecords()).length;
+  assert.equal((await create(venueBody)).status, 409);
+  assert.equal((await repository.listOrganizerReferenceRecords()).length, before, 'duplicate metadata rolls back its reference');
+  assert.equal((await create({ kind: 'venue-space-create', venueId, name: '二樓', sourceUrl: '', defaultAreaMode: 'imported' })).status, 201);
+  const organizer = await create({ kind: 'organizer', name: '獨立主辦', sourceUrl: 'https://organizer.example/' });
+  assert.equal(organizer.status, 201);
+  const organizerId = (await organizer.json()).id;
+  assert.equal((await create({ kind: 'category-catalog', organizerId: 'missing', name: '分類', sourceUrl: 'https://organizer.example/', categories: [{ label: '原創' }] })).status, 409);
+  assert.equal((await create({ kind: 'category-catalog', organizerId, name: '分類', sourceUrl: 'https://organizer.example/', categories: [{ label: '原創' }] })).status, 201);
+  assert.ok((await repository.listOrganizerVenueCatalog()).venues.some(item => item.id === venueId));
+});
+
+test('shared address completion compares bytes, audits one winner and preserves every other fact', async () => {
+  const admin = await signIn('admin@example.test');
+  const path = '/api/admin/references';
+  const original = (await repository.listOrganizerReferenceRecords()).find(row => row.kind === 'venue' && row.id === VENUE_ID);
+  const old = JSON.parse(original.publicReferenceJson);
+  delete old.address; delete old.provenance['/address']; old.sources = old.sources.filter(source => source.id !== 'address-source');
+  const bytes = JSON.stringify(old);
+  await database.prepare('UPDATE organizer_reference_records SET public_reference_json = ?1 WHERE path = ?2').bind(bytes, original.path).run();
+  try {
+    const listed = await (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+    const venue = listed.venues.find(item => item.id === VENUE_ID);
+    assert.equal(venue.address, null);
+    const body = { kind: 'venue-address', venueId: VENUE_ID, version: venue.version, address: '台北市中山區玉門街1號' };
+    assert.equal((await handlers.adminCreateReference(request(path, 'POST', { ...body, version: 'stale' }, admin))).status, 409);
+    const results = await Promise.all([1, 2].map(() => handlers.adminCreateReference(request(path, 'POST', body, admin))));
+    assert.deepEqual(results.map(result => result.status).sort(), [201, 409]);
+    const updated = JSON.parse((await repository.listOrganizerReferenceRecords()).find(row => row.path === original.path).publicReferenceJson);
+    assert.equal(updated.address, body.address);
+    delete updated.address; delete updated.provenance['/address']; updated.sources = updated.sources.filter(source => source.id !== 'address-source');
+    assert.deepEqual(updated, old);
+    assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'organizer_reference.address_completed' AND subject_id = ?1").bind(VENUE_ID).first()).n, 1);
+    assert.equal((await database.prepare('SELECT COUNT(*) AS n FROM organizer_event_candidates').first()).n, 0);
+  } finally {
+    await database.prepare('UPDATE organizer_reference_records SET public_reference_json = ?1 WHERE path = ?2').bind(original.publicReferenceJson, original.path).run();
+  }
+});
+
+test('shared source completion cannot overwrite existing records and rechecks admin authority at the write', async () => {
+  const admin = await signIn('admin@example.test');
+  const path = '/api/admin/references';
+  const original = (await repository.listOrganizerReferenceRecords()).find(row => row.kind === 'venue' && row.id === VENUE_ID);
+  await database.prepare('DELETE FROM organizer_reference_records WHERE path = ?1').bind(original.path).run();
+  try {
+    const body = { kind: 'venue', venueId: VENUE_ID, name: '花博公園爭艷館', sourceUrl: 'https://venue.example/', address: '台北市中山區玉門街1號' };
+    assert.equal((await handlers.adminCreateReference(request(path, 'POST', body, admin))).status, 201);
+    assert.equal((await handlers.adminCreateReference(request(path, 'POST', { ...body, name: '偷偷改名' }, admin))).status, 409);
+  } finally {
+    await database.prepare('UPDATE organizer_reference_records SET public_reference_json = ?1, source_captured_at = ?2, display_name = ?3 WHERE path = ?4')
+      .bind(original.publicReferenceJson, original.sourceCapturedAt, original.displayName, original.path).run();
+  }
+  const originalSave = repository.saveAdminReference;
+  const revoked = createCirclePortalHandlers({ ...handlerOptions, repository: { ...repository, saveAdminReference: async input => {
+    await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+    return originalSave(input);
+  } } });
+  const before = (await repository.listOrganizerReferenceRecords()).length;
+  const response = await revoked.adminCreateReference(request(path, 'POST', { kind: 'organizer', name: '撤權後不得建立', sourceUrl: 'https://organizer.example/' }, admin));
+  assert.equal(response.status, 409);
+  assert.equal((await repository.listOrganizerReferenceRecords()).length, before);
+});

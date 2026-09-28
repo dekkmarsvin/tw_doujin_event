@@ -153,7 +153,13 @@ export function CircleMediaGallery({ media, activeIndex: requestedIndex, compact
   return <div className={`${styles.mediaGallery} ${compact ? styles.compactGallery : styles.fullGallery}`} role="group" aria-label="社團圖片">
     {compact && onOpenFull
       ? <button className={styles.galleryOpen} disabled={readOnly} onClick={onOpenFull} aria-label={`開啟 ${activeMedia.alt} 的完整詳細資訊`}>{image}</button>
-      : <div className={styles.galleryFrame}>{image}</div>}
+      : <div className={styles.galleryFrame}>
+        {/* In the full view a sale-sheet page is its own way to the original,
+            where the browser can zoom: tap the page, not a link beside it. */}
+        {!compact && activeMedia.kind === "catalog"
+          ? <a className={styles.galleryZoom} href={activeMedia.url} target="_blank" rel="noreferrer" aria-label={`開啟原圖：${activeMedia.alt}`} aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}>{image}</a>
+          : image}
+      </div>}
     {!compact && <div className={styles.galleryFooter}>
       {media.length > 1 && <div className={styles.galleryControls} role="group" aria-label="圖片幻燈片控制">
         <button type="button" disabled={readOnly} onClick={() => move(-1)} aria-label="上一張圖片"><UiIcon name="chevron-left" /></button>
@@ -163,10 +169,9 @@ export function CircleMediaGallery({ media, activeIndex: requestedIndex, compact
       {/* Provenance is optional on a circle's own upload (ADR-0053). With no
           link there is nothing to point at, so the row shows the credit alone —
           and nothing at all when there is no credit either (ADR-0036). */}
-      {/* A sale-sheet page is the circle's own and has no other source; what a
-          reader needs is the page at full size, where the browser can zoom. */}
-      {activeMedia.kind === "catalog"
-        ? <a className={styles.mediaSource} href={activeMedia.url} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>品書</span><span>開啟原圖</span><UiIcon name="external" /></a>
+      {/* A sale-sheet page is the circle's own and has no other source to
+          credit; the page itself opens the original, so its row stays empty. */}
+      {activeMedia.kind === "catalog" ? null
         : activeMedia.sourceUrl
           ? <a className={styles.mediaSource} href={activeMedia.sourceUrl} target="_blank" rel="noreferrer" aria-disabled={readOnly || undefined} tabIndex={readOnly ? -1 : undefined} onClick={readOnly ? preventLinkActivation : undefined}><span>{activeMedia.provider}</span><span>原始來源</span><UiIcon name="external" /></a>
           : activeMedia.provider ? <div className={styles.mediaSource}><span>{activeMedia.provider}</span></div> : null}

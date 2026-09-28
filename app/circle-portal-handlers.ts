@@ -1,3 +1,4 @@
+import { createAdminReferenceHandlers } from "./admin-reference-handlers";
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
 import { groupOrganizerCircles } from "./organizer-circle-groups.mjs";
@@ -3520,6 +3521,7 @@ export function createCirclePortalHandlers({
   }
 
   return {
+    ...createAdminReferenceHandlers(repository, requireAdmin, config.now),
     adminGetNotificationPreferences, adminSaveNotificationPreferences,
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.
