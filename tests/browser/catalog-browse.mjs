@@ -22,6 +22,9 @@ try {
   const page = await journey.page({ params: "&view=browse", routes: content });
   await ready(page);
   assert.equal(await page.locator("article").count(), 2);
+  // Circles without a sheet are counted once, in their own section's heading.
+  await page.getByRole("heading", { name: "另有 1 個社團符合條件，但沒有提供品書", exact: true }).waitFor();
+  assert.equal(await page.getByText(/沒有提供品書/).count(), 1);
   assert.equal(await page.getByRole("combobox", { name: "活動日期" }).inputValue(), "");
   const card = page.locator(`article[data-circle-id="${CIRCLE}"]`);
   assert.equal(await card.getByRole("link", { name: /在地圖查看/ }).count(), 2);

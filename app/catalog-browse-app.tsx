@@ -168,9 +168,6 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
       {!ready && !failed && <div className={styles.grid} aria-label="正在讀取品書" aria-busy="true">{[0, 1, 2].map((n) => <div key={n} className={styles.skeleton} />)}</div>}
       {failed && <section className={styles.empty} role="status"><h2>{publication.status === "error" ? "活動資料暫時無法讀取" : "社團填寫的內容暫時無法讀取"}</h2><button onClick={() => void publication.retry()}>重新讀取</button><a href={readerLink(event)}>回到地圖搜尋</a></section>}
       {ready && <>
-        {projection.withoutCatalog.length > 0 && projection.withCatalog.length > 0 && <a className={styles.withoutLink} href="#without-catalog" onClick={(pressed) => {
-          if (ordinaryLinkClick(pressed)) { pressed.preventDefault(); document.getElementById("without-catalog")?.scrollIntoView({ block: "start" }); }
-        }}>另有 {projection.withoutCatalog.length} 個社團沒有提供品書</a>}
         {projection.circleCount === 0 ? <section className={styles.empty}><h2>沒有符合條件的社團</h2><p>可移除搜尋條件，或調整日期與場地。</p></section> : <>
           {projection.withCatalog.length === 0 && <section className={styles.empty}><h2>{hasFilters ? "符合條件的社團尚未提供品書" : allScope ? "這場目前還沒有社團提供品書" : "目前範圍沒有品書"}</h2><a href={readerLink(event)}>回到地圖搜尋</a></section>}
           <div className={styles.grid}>{cards(projection.withCatalog, shown)}</div>

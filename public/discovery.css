@@ -13,7 +13,13 @@
 .discovery a:focus-visible { outline:3px solid #d99b44; outline-offset:4px; }
 /* #626b73 on the page background is 5.06:1, clear of the 4.5:1 body-text minimum. */
 .discovery .eyebrow { font-variant-numeric:tabular-nums; color:#626b73; }
-.discovery .primary { display:inline-block; padding:12px 20px; border-radius:7px; background:#202a35; color:#fff; text-decoration:none; }
+/* An event's two entries are the circle page's button family: ink for the
+   map the page leads with, soft white with a structural line for its peer. */
+.discovery .entries { display:flex; flex-wrap:wrap; gap:8px; }
+.discovery :is(.primary,.secondary) { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 20px; border:1px solid #202a35; border-radius:7px; background:#202a35; color:#f9faf8; font-size:15px; font-weight:700; text-decoration:none; }
+.discovery .primary:hover { background:#34404d; }
+.discovery .secondary { border-color:#cfd5cf; background:#f9faf8; color:#202a35; }
+.discovery .secondary:hover { background:#f0f2ef; }
 .circle-directory { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:0 24px; padding:0; list-style:none; }
 .circle-directory a { display:block; padding:12px 0; border-bottom:1px solid #dfe3df; }
 /* A circle's booths, one card per day and place: the code is what a reader
@@ -36,5 +42,5 @@
 .booth-plan:empty { display:none; }
 .status { color:#a43e30; }
 .booth-plan { display:flex; }
-@media(max-width:540px) { .booth-actions > * { flex:1 1 100%; justify-content:center; } .booth-plan > * { flex:1; } }
+@media(max-width:540px) { .booth-actions > * { flex:1 1 100%; justify-content:center; } .booth-plan > * { flex:1; } .discovery .entries > * { flex:1 1 0; } }
 .discovery .claim { margin-top:32px; }
