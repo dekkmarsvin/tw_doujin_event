@@ -18,7 +18,7 @@
 // once and reuses the session rather than logging in again.
 import assert from "node:assert/strict";
 import { ADMIN, CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
-import { base, start } from "./support/journey.mjs";
+import { base, PICTURE, start } from "./support/journey.mjs";
 import { png } from "./support/png.mjs";
 
 const CIRCLE_NAME = "北風畫室";
@@ -154,7 +154,9 @@ try {
   await confirm.waitFor();
   assert.match(await review.innerText(), new RegExp(PEN_NAME), "the circle sees what it is about to publish");
   assert.match(await review.innerText(), /分級：全年齡、R15、R18/, "preview lists every selected rating");
-  assert.ok(await circle.locator("[inert]").count() > 0, "the form behind the review is inert");
+  assert.equal(await penField(circle).isDisabled(), true, "the actual editor input is locked during review");
+  assert.equal(await penField(circle).evaluate(node => Boolean(node.closest("[inert]"))), true, "the editor itself is inert");
+  assert.equal(await circle.getByRole("checkbox", { name: "R18", exact: true }).isDisabled(), true);
   await journey.capture(circle, "portal-review-open");
 
   // The panel offers the same way back in its heading and beside the confirm.
@@ -165,6 +167,7 @@ try {
   await circle.waitForFunction(() => document.activeElement?.textContent?.trim() === "預覽並送出", null, { timeout: 5000 })
     .catch(() => { throw new Error("leaving the review did not return focus to the control that opened it"); });
   assert.equal(await penField(circle).inputValue(), PEN_NAME, "backing out of the review keeps the draft");
+  assert.equal(await penField(circle).isDisabled(), false, "leaving review restores editing");
 
   // 6. Saving for real.
   await submit.click();
@@ -246,6 +249,26 @@ try {
   await circle.getByRole("button", { name: "移除第 1 張品書", exact: true }).click();
   assert.equal(await circle.getByRole("group", { name: "品書顯示什麼" }).count(), 0);
 
+  // The review is full-density content inside a narrow desktop column. Use
+  // an external picture fixture: local R2 URLs are deliberately not public.
+  await circle.route(PICTURE, route => route.fulfill({ contentType: "image/png", body: png(300, 1600) }));
+  await circle.getByLabel("外部圖片網址", { exact: true }).fill(PICTURE);
+  await circle.getByRole("img", { name: "代表圖預覽", exact: true }).evaluate(image => image.decode());
+  await submit.click(); await confirm.waitFor();
+  const previewGallery = review.getByRole("group", { name: "社團圖片", exact: true });
+  await previewGallery.locator("img").evaluate(image => image.decode());
+  const previewBox = await review.boundingBox();
+  const mediaBox = await previewGallery.boundingBox();
+  const bodyBox = await review.locator('[class*="detailBody"]').boundingBox();
+  const pictureBox = await previewGallery.locator("img").boundingBox();
+  assert.ok(previewBox.width < 700 && mediaBox.width > 0 && bodyBox.width > 0, "the desktop preview is a narrow container");
+  assert.ok(bodyBox.y >= mediaBox.y + mediaBox.height - 1, "narrow-container details stack media above text");
+  for (const box of [mediaBox, bodyBox, pictureBox]) assert.ok(box.x >= previewBox.x - 1 && box.x + box.width <= previewBox.x + previewBox.width + 1,
+    "the preview contains the text and portrait without clipping");
+  await journey.capture(circle, "portal-portrait-review");
+  await review.getByRole("button", { name: "返回修改", exact: true }).first().click();
+  await circle.getByRole("button", { name: "移除圖片", exact: true }).click();
+
   // 7b. The post waits for the official booths. A failed read offers to fetch
   //     them again instead of a post with no dates or booths in it.
   let previewFails = true;
@@ -258,6 +281,17 @@ try {
   assert.equal(await sharing.getByRole("button", { name: "複製宣傳文字與連結", exact: true }).isDisabled(), true, "nothing to copy without booths");
   assert.equal(await sharing.getByRole("textbox", { name: "宣傳文字" }).count(), 0, "and no partial post to copy by hand");
   await journey.capture(circle, "portal-share-baseline-failed");
+  // Autosave belongs to the hydrated editor, even when its separate preview
+  // request fails. A reload must recover the newer unsaved value.
+  const unsavedPen = "預覽失敗時仍保留的筆名";
+  await penField(circle).fill(unsavedPen);
+  await circle.waitForFunction(({ id, pen }) => JSON.parse(localStorage.getItem(`circle-portal-draft:${id}`) ?? "null")?.fields.pen === pen,
+    { id: CIRCLE_ID, pen: unsavedPen });
+  await circle.reload();
+  await sharing.getByText("無法取得攤位資料，宣傳文字暫時無法產生。").waitFor();
+  assert.equal(await penField(circle).inputValue(), unsavedPen, "failed preview does not discard the local draft on reload");
+  await circle.locator(`#editor-fields-${CIRCLE_ID}`).getByRole("button", { name: "還原為已儲存的版本", exact: true }).click();
+  assert.equal(await penField(circle).inputValue(), PEN_NAME, "restoration distinguishes the draft from the saved record");
   previewFails = false;
   await sharing.getByRole("button", { name: "重新取得", exact: true }).click();
   assert.match(await sharing.getByRole("textbox", { name: "宣傳文字" }).inputValue(), /S01/, "the retry brings the booths back");

@@ -38,6 +38,14 @@ try {
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
   await page.getByLabel(/^來源名稱/).fill("測試主辦提供");
   await page.getByLabel(/^官方公告網址/).fill("https://organizer.example/event");
+  // Saving an unfinished setup is a deliberate exit. A refreshed event list
+  // must not reopen the editor; choosing the event again restores the draft.
+  await page.getByRole("button", { name: "儲存並離開", exact: true }).click();
+  await page.getByRole("heading", { name: "先完成基本設定", exact: true }).waitFor({ state: "hidden" });
+  assert.equal(await page.getByLabel("活動代碼", { exact: false }).count(), 0);
+  await page.getByRole("navigation", { name: "活動列表", exact: true }).getByRole("button", { name: /分類目錄驗收/ }).click();
+  await page.getByLabel(/^官方公告網址/).waitFor();
+  assert.equal(await page.getByLabel(/^官方公告網址/).inputValue(), "https://organizer.example/event");
   // #396: the picture is optional, staged privately, and part of the draft
   // only once saved. The preview comes from the private upload.
   await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "narrow.png", mimeType: "image/png", buffer: png(800, 450) });
@@ -231,6 +239,9 @@ try {
   await page.getByRole("button", { name: "匯入檔案", exact: true }).click();
   await page.getByRole("button", { name: "返回名單", exact: true }).click();
   assert.equal(await handoff.count(), 0, "acting in the panel retires the handoff");
+  await page.reload();
+  await page.getByRole("heading", { name: "攤位名單", exact: true }).waitFor();
+  assert.equal(await page.getByText("已開啟全部項目", { exact: true }).count(), 0);
   await page.locator("summary").filter({ hasText: "準備進度" }).click();
   await sections.getByRole("button", { name: /^活動/ }).click();
   assert.equal(await sections.getByRole("button", { name: /^活動/ }).getAttribute("aria-current"), "page");

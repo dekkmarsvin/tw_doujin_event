@@ -100,8 +100,9 @@ try {
   // must not advertise a door that only organizers can walk through.
   const entry = await (await fetch(new URL("/organizer", base))).text();
   assert.match(entry, /<meta name="robots" content="noindex, nofollow"/, "the authoring entry refuses indexing");
-  const reader = await (await fetch(new URL("/", base))).text();
-  assert.doesNotMatch(reader, /href=["']\/organizer/, "the reader never links to the authoring entry");
+  const reader = await journey.mapPage();
+  assert.equal(await reader.locator('a[href^="/organizer"]').count(), 0, "the rendered reader never links to the authoring entry");
+  await reader.close();
 
   await journey.finish();
 } catch (error) {

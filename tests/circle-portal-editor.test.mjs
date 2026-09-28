@@ -4,9 +4,9 @@ import test from "node:test";
 
 /**
  * Remaining source-level guards for the circle editor. Browser acceptance
- * covers hydration delay/failure/retry, but not every CSS regression or local
- * autosave path below. Read the mapping kept with PR #344 before treating a
- * successful claim journey as a replacement for a whole case:
+ * covers hydration delay/failure/retry, the actual review lock and autosave
+ * across a failed preview and reload. The remaining CSS/copy conditions have
+ * not all been observed by that journey. Earlier mapping with PR #344:
  * https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/source-assertion-cleanup.md
  *
  * Each case below is a regression that shipped once in this file's own
@@ -50,24 +50,6 @@ test("the audit list keeps its own layout instead of the chip row's", async () =
   // its indent, its 10px type and its one-item-per-line reading order.
   assert.match(css, /\.auditList \{ display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px;/);
   assert.match(css, /^\.extraValues \{ display: flex;/m);
-});
-
-test("the draft is kept as soon as the record loads, not when the preview answers", async () => {
-  const app = await source("portal-app.tsx");
-
-  // `previewOverride` is a second request whose failure is swallowed on
-  // purpose — the editor works without a preview. Gating the draft write on
-  // its result made one failed preview silently disable the whole autosave.
-  assert.match(app, /if \(!hydrated\) return;\s*\r?\n\s*if \(!draftDiffersFromSaved\) forgetStoredDraft/);
-  const effect = app.slice(app.indexOf("if (!hydrated) return;"));
-  const deps = effect.slice(effect.indexOf("}, ["), effect.indexOf("]);") + 3);
-  assert.doesNotMatch(deps, /baseRecords/);
-
-  // The separate record-loading protection is exercised by
-  // browser/portal-circle-claim.mjs with delayed, failed and retried reads.
-  // Keep the review-open branch: that journey counts any [inert] element,
-  // which does not prove the editor itself is disabled during confirmation.
-  assert.match(app, /disabled=\{!hydrated \|\| reviewOpen\}/);
 });
 
 test("the post-event question is two outcomes, and staying public is the default", async () => {
