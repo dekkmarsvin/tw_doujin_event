@@ -59,6 +59,17 @@ try {
     assert.equal(await page.getByRole("link", { name: "編輯資料", exact: true }).getAttribute("href"), "#circle-editor-c-900001");
     assert.equal(await page.getByRole("list", { name: "開始使用", exact: true }).count(), 0, "a circle with claims is past the first step");
 
+    // The form ends with the step that publishes; the after-event choice comes
+    // after it and the deletion last, so nothing irreversible sits beside
+    // 預覽並送出. The official record here has nothing of its own, so no field
+    // offers 使用場刊資料 and 不顯示 as two buttons for the same empty result.
+    const follows = (first, second) => first.evaluate((node, other) => Boolean(node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING), second);
+    const submit = await editor.getByRole("button", { name: "預覽並送出", exact: true }).elementHandle();
+    const afterEvent = await editor.getByRole("group", { name: "活動結束後", exact: true }).elementHandle();
+    const removal = await editor.locator("summary", { hasText: "刪除資料" }).elementHandle();
+    assert.ok(await follows(submit, afterEvent) && await follows(afterEvent, removal), "form, then the after-event choice, then the deletion");
+    assert.equal(await editor.getByRole("group", { name: /顯示什麼$/ }).count(), 0);
+
     // Account-wide and irreversible: after the event's work, closed until asked for.
     const deletion = page.getByRole("region", { name: "帳號", exact: true }).locator("details");
     assert.equal(await deletion.evaluate((node) => node.open), false);

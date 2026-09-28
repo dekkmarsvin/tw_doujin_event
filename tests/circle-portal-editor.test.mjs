@@ -96,12 +96,33 @@ test("field state is described by what shows, not by inherit/replace/clear", asy
   // says what a reader would see instead (#197). The state text carries its own
   // 「目前」, so the row no longer prefixes one.
   assert.match(app, /const FIELD_MODE_LABEL = \{ inherit: "目前顯示場刊資料", replace: "目前顯示你填寫的內容", clear: "目前不顯示" \}/);
-  assert.match(app, /inheritAction = "使用場刊資料"/);
-  assert.match(app, /onClick=\{onClear\}>不顯示<\/button>/);
+  assert.match(app, /onClick=\{mode === "inherit" \? onRestore : onInherit\}>使用場刊資料<\/button>/);
+  assert.match(app, /onClick=\{mode === "clear" \? onRestore : onClear\}>不顯示<\/button>/);
   assert.doesNotMatch(app, /目前：<b>/);
   for (const modelWord of [/沿用場刊/, /社團自填/, /清除此欄/, /補充資料/]) {
     assert.doesNotMatch(app, modelWord);
   }
+});
+
+test("the two ways back are offered only where they differ, and each one can be undone", async () => {
+  const app = await source("portal-app.tsx");
+
+  // Where the organizer's data has nothing for a field, 使用場刊資料 and 不顯示
+  // both show a reader nothing: two buttons for one result, each of which
+  // emptied what the author had written. They appear only when the official
+  // record has something of its own, and the per-field wording that papered
+  // over the overlap ("恢復未提供", "恢復未選擇") is gone.
+  assert.match(app, /\{officialHas\(key\) && <FieldModeControls/);
+  assert.doesNotMatch(app, /恢復未提供|恢復未選擇|inheritStatus|inheritAction/);
+
+  // The button that is on stays pressable while there is the author's own
+  // content to give back, and pressing it restores that content.
+  assert.match(app, /disabled=\{mode === "inherit" && !onRestore\}/);
+  assert.match(app, /disabled=\{mode === "clear" && !onRestore\}/);
+  assert.match(app, /onRestore=\{ownContent\[key\] \? \(\) => restoreOwn\(key\) : undefined\}/);
+  // Only the author's own content is put aside, so moving between the two
+  // does not overwrite it with an empty value.
+  assert.match(app, /const putOwnAside = \(key: CircleOverrideFieldKey\) => \{\s*\r?\n\s*if \(modeFor\(key\) !== "replace"\) return;/);
 });
 
 test("deleting is collapsed, and its button says the same words as the summary", async () => {
@@ -122,7 +143,7 @@ test("the rating field is a checkbox group, because a circle can sell both", asy
   // one value replaces the array, so the next edit deletes the other value
   // silently (ADR-0051 decision 1, #193).
   assert.match(app, /const MULTI_CHOICE_FIELD_KEYS = \["creatorTypes", "ageRatings"\] as const/);
-  assert.match(app, /if \(isMultiChoiceField\(key\)\) return <fieldset className=\{styles\.choiceGroup\}>/);
+  assert.match(app, /if \(isMultiChoiceField\(key\)\) return <div className=\{styles\.field\}>\s*\r?\n[^\n]*\r?\n\s*<fieldset className=\{styles\.choiceGroup\}/);
 
   // The single-select branch replaces the whole array, so nothing that can hold
   // more than one true value may fall through to it.

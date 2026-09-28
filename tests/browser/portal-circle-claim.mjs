@@ -220,9 +220,11 @@ try {
   await circle.getByText("品書已上傳，儲存後公開。", { exact: true }).waitFor();
   await circle.getByText("第 1 張", { exact: true }).waitFor();
   await journey.capture(circle, "portal-catalog-staged");
-  // Back to what is saved, so the rest of the journey starts from it.
+  // Removing the page again leaves nothing to show, the same as what is saved.
+  // The organizer's data has no sale sheet, so the field offers no second way
+  // to say that.
   await circle.getByRole("button", { name: "移除第 1 張品書", exact: true }).click();
-  await circle.getByRole("button", { name: "恢復未提供", exact: true }).click();
+  assert.equal(await circle.getByRole("group", { name: "品書顯示什麼" }).count(), 0);
 
   // 7b. The post waits for the official booths. A failed read offers to fetch
   //     them again instead of a post with no dates or booths in it.

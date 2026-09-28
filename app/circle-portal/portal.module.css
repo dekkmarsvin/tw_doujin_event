@@ -122,6 +122,15 @@
   font: inherit;
   /* 16px avoids the iOS zoom-on-focus jump on a phone at the venue. */
   font-size: 16px;
+  /* Set, not inherited: a field wrapped in its own label took the label's
+     800 weight and letter-spacing, and its value read as a shouted caption. */
+  font-weight: 400;
+  letter-spacing: normal;
+}
+/* With a mouse there is no zoom to avoid, and 16px fields dwarf the 11px
+   buttons and labels beside them. */
+@media (hover: hover) and (pointer: fine) {
+  .card :is(input, select, textarea) { font-size: 14px; }
 }
 .editorFieldset :is(input, select, textarea):disabled {
   border-color: #c8d0cb;
@@ -132,6 +141,12 @@
 .editorFieldset :is(input, select, textarea):disabled::placeholder { color: #87918b; }
 .card :is(input, select, textarea):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
 .card textarea { resize: vertical; }
+/* The editor runs on one small scale: field names, states, hints and every
+   button at 11px, so a field's name, what it shows and the buttons that change
+   it read as one line. Placed before the chip, radio and check variants below,
+   which keep their own sizes by coming later. */
+.editorCard > h2 { font-size: 16px; }
+.editorCard label { font-size: 11px; font-weight: 700; letter-spacing: normal; color: var(--ink); }
 
 /* `:not(:where(.previewFrame *))` keeps these off the reader component embedded
    in the preview: it brings its own button styling, and the portal's block-button
@@ -253,9 +268,9 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 .admin { border-color: #c9d2cc; background: var(--paper); }
 
-.choiceGroup { margin: 12px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
-.choiceGroup legend { padding: 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
-.choiceGroup > div { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Named by the field head above it (`aria-labelledby`), so the chips sit
+   straight under the name rather than in a second box inside the section. */
+.choiceGroup { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; margin: 6px 0 0; padding: 0; border: 0; }
 .choiceGroup label {
   display: flex;
   align-items: center;
@@ -273,45 +288,83 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .choiceGroup label:has(input:checked) { border-color: var(--coral); }
 .choiceGroup input { width: auto; margin: 0; }
 
-/* Retention: the two options are laid out as equal columns, same border, same
-   type scale, so neither reads as the recommended one. ADR-0018 forbids putting
-   the deleting choice anywhere less prominent than the keeping one. */
-.retention { margin: 16px 0; padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 10px; }
-.retention legend { padding: 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
-.retentionChoices { display: grid; gap: 8px; }
-.retentionChoices label {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 3px 8px;
-  align-items: start;
+/* Retention: the two options are equal columns, same border, same type scale,
+   so neither reads as the recommended one (ADR-0018). A panel of its own
+   beside the share panel, headed the same way, since it answers on the spot
+   and is not part of what the form sends. The floated legend sits inside the
+   box as the panel's title instead of on its border. */
+.retention { min-width: 0; margin: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.retention legend { float: left; width: 100%; margin: 0 0 10px; padding: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
+.retentionChoices { clear: both; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card .retentionChoices label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: normal;
   color: var(--ink);
-  text-transform: none;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .retentionChoices label:has(input:checked) { border-color: var(--coral); }
-/* Placed explicitly: the radio spans both rows on the left, title above detail
-   on the right. Auto-placement puts the detail beside the title instead. */
-.retentionChoices input { grid-area: 1 / 1 / 3 / 2; width: auto; margin: 3px 0 0; }
-.retentionChoices span { grid-area: 1 / 2; font-weight: 700; }
-.retentionChoices small { grid-area: 2 / 2; color: var(--muted); font-size: 10px; line-height: 1.6; }
-.retention > p { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.6; }
-
-@media (min-width: 560px) {
-  .retentionChoices { grid-template-columns: 1fr 1fr; }
-}
+.retentionChoices input { width: auto; margin: 0; }
+.retention .notice, .retention .error { margin-top: 10px; }
 
 .editorLayout { margin-top: 14px; }
 .editorForm { min-width: 0; }
 .editorFieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-.editorActions { display: flex; gap: 8px; }
-.editorActions button { width: 100%; }
+
+/* Five sections, one per kind of content the reader's page shows. A field's
+   head carries its name on the left and what it currently shows, with the two
+   ways to change that, on the right. */
+.editorSection { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
+.editorSection:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.editorSection h3 { margin: 0; font-size: 14px; }
+.card .editorSection h3 label { display: inline; margin: 0; color: inherit; font: inherit; }
+.field { margin-top: 16px; }
+.fieldHead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.card .fieldHead label { margin: 0; }
+.fieldLabel { font-size: 11px; font-weight: 700; }
+.fieldHead + :is(input, select, textarea) { margin-top: 6px; }
+
+/* Held at the foot of the screen while the form scrolls, like the organizer
+   roster's footer; it settles where the form ends. */
+.editorActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin-top: 26px;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.editorActions .problemList { max-height: 7.5em; margin: 0 0 8px; overflow: auto; }
+.editorActionRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
+.editorActionRow > p { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 11px; line-height: 1.6; }
+.card .editorActionRow button { min-width: 200px; margin-top: 0; }
+.actionState { color: var(--muted); }
+.actionOk { color: var(--success); }
+.actionError { color: var(--danger); }
+@media (max-width: 559px) {
+  .card .editorActionRow button { flex: 1 1 100%; }
+}
+
+/* After the form: the share panel over the form column and the after-event
+   choice over the preview column, then the deletion, last and set apart. */
+.editorAfter { margin-top: 24px; }
+/* An explicit track: an implicit one sizes to the share post's longest line. */
+.editorAfterRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.editorAfterRow > .sharePanel { margin-top: 0; }
+.dangerZone { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+.dangerZone .danger { margin-top: 0; }
+.dangerZone .danger > :not(summary) { max-width: 640px; }
+@media (min-width: 960px) {
+  .editorAfterRow { grid-template-columns: minmax(0, 1fr) minmax(360px, var(--preview-column)); gap: var(--column-gap); }
+}
 
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }
 .mapReviewPreview { --slot-tone: #5fa695; max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
@@ -334,11 +387,30 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
-.thumbnailPreview { margin-top: 10px; }
+/* The current picture beside the fields that change it, rather than a lone
+   200px square in a column of its own. */
+.thumbnailLayout { display: grid; gap: 0 18px; align-items: start; }
+.thumbnailFields { min-width: 0; }
+.thumbnailPreview { margin-top: 12px; }
 .thumbnailPreview img {
-  display: block; max-width: 200px; max-height: 200px;
+  display: block; width: 100%; max-width: 200px; max-height: 200px;
   border: 1px solid var(--line); border-radius: 9px; background: #fff; object-fit: contain;
 }
+@media (min-width: 560px) {
+  .thumbnailLayout:has(> .thumbnailPreview) { grid-template-columns: minmax(0, 1fr) 168px; }
+  .thumbnailLayout > .thumbnailPreview { grid-column: 2; grid-row: 1; }
+}
+
+/* The native picker keeps its behaviour but wears the portal's own secondary
+   button, instead of a full-width grey box around the browser's control. */
+.editorCard input[type="file"] { padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 12px; }
+.editorCard input[type="file"]::file-selector-button {
+  min-height: 32px; margin-right: 10px; padding: 4px 12px;
+  border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink);
+  font: inherit; font-size: 11px; font-weight: 800; letter-spacing: .04em; cursor: pointer;
+}
+.editorCard input[type="file"]:disabled { border: 0; background: transparent; }
+.editorCard input[type="file"]:disabled::file-selector-button { background: var(--paper); color: var(--muted); cursor: not-allowed; }
 
 .problemList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
 .auditList { overflow-wrap: anywhere; color: var(--muted); }
@@ -368,6 +440,9 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .accountZone input {
   width: 100%; margin-top: 5px; padding: 9px 10px;
   border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 16px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .accountZone input { font-size: 14px; }
 }
 .accountZone label { display: block; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
 .accountZone .dangerButton { display: block; min-height: 38px; padding: 8px 14px; border: 1px solid; border-radius: 7px; font-size: 11px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
@@ -453,41 +528,60 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .claimList li { flex-wrap: wrap; }
 }
 
-/* Links and thumbnail editor. Ordering is meaningful here — the reader's side
-   panel shows the first six — so each row carries its position and the cut line
-   is drawn where the side panel stops. */
-.editorSection { margin: 22px 0 0; font-size: 12px; }
 .editorHint { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .editorHint b { color: var(--ink); }
 
+/* What the field shows now, and the two ways back, at the right of its head. */
 .fieldMode {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 7px;
+  margin-left: auto;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
-.fieldMode span { margin-right: auto; }
-.fieldMode b { color: var(--ink); }
+.fieldMode span { margin-right: 4px; }
+.fieldMode b { color: var(--muted); font-weight: 600; }
 .fieldMode button {
   min-height: 30px;
   margin-top: 0;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border-color: var(--line);
   background: #fff;
   color: var(--ink);
-  font-size: 9px;
+  font-size: 11px;
 }
-.fieldMode button[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); }
 
+/* Every secondary button in the editor — a field's way back, moving and
+   removing a row, adding one — is the same outlined 11px control. The dark
+   fill is kept for the one step that publishes (and the share panel's copy);
+   red is kept for the deletion, which is the only thing here that cannot be
+   undone. */
+.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button {
+  min-height: 30px;
+  margin-top: 0;
+  padding: 4px 10px;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:not(:disabled):hover { border-color: #b9c2bc; background: var(--paper); filter: none; }
+.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:disabled { border-color: var(--line); background: var(--paper); color: #9aa19c; }
+.editorCard .fieldMode button[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); color: var(--ink); }
+.editorCard .thumbnailPreview button { margin-top: 8px; }
+
+/* Links. Ordering is meaningful here — the reader's side panel shows the first
+   six — so each row carries its position and the cut line is drawn where the
+   side panel stops. */
 .linkList { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .linkList > li { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
-.linkRow { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; }
-.linkAdd { display: flex; align-items: center; gap: 10px; }
-.linkAdd span { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.linkRow label { grid-column: 2; margin-top: 0; }
+.linkRow { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px 10px; align-items: start; }
+.linkAdd { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.linkAdd span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.card .linkRow label { grid-column: 2; margin-top: 0; }
 .linkRow :is(input, select) { margin-top: 4px; }
 .linkPosition {
   grid-column: 1; grid-row: 1; width: 22px; height: 22px; display: grid; place-items: center;
@@ -495,20 +589,19 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   font: 700 10px "Geist Mono", ui-monospace, monospace;
 }
 .linkActions { grid-column: 2; display: flex; gap: 6px; }
-.linkActions button { margin-top: 8px; padding: 6px 10px; font-size: 10px; }
 .linkCut {
   margin: 10px -10px -10px; padding: 6px 10px;
-  border-top: 1px dashed var(--line); color: var(--muted); font-size: 9px; letter-spacing: .08em;
+  border-top: 1px dashed var(--line); color: var(--muted); font-size: 11px;
 }
 .problemList { margin: 10px 0 0; padding-left: 18px; color: var(--danger, #a43e30); font-size: 11px; line-height: 1.7; }
 
 @media (min-width: 560px) {
-  /* 平台名稱、類型、網址 side by side; the number keeps its own column and the
-     actions sit under the fields rather than squeezing into one. */
-  .linkRow { grid-template-columns: 22px minmax(0, 1.2fr) 130px minmax(0, 2fr); }
-  .linkRow label { grid-column: auto; }
-  .linkUrlField { grid-column: 4; }
-  .linkActions { grid-column: 2 / -1; }
+  /* Two lines: the short name and the kind, then the address — the one value
+     that needs the width — with the row's own buttons beside it. */
+  .linkRow { grid-template-columns: 22px minmax(0, 1fr) 150px; }
+  .card .linkRow label { grid-column: auto; }
+  .card .linkRow .linkUrlField { grid-column: 2; }
+  .linkActions { grid-column: 3; align-self: end; justify-content: flex-end; padding-bottom: 4px; }
 }
 
 .commentThread { display:grid; gap:9px; margin:0 0 13px; padding:0; list-style:none; }
@@ -646,7 +739,9 @@ a.inlineButton { display: inline-block; text-decoration: none; }
    a line of the save notice: it stays after the notice clears. */
 .sharePanel { margin-top: 18px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .sharePanel h3 { margin: 0; font-size: 13px; }
-.sharePanel textarea { font-size: 14px; line-height: 1.6; }
+/* As tall as the post it holds, where the browser can size a field to its
+   content; three rows otherwise. */
+.sharePanel textarea { line-height: 1.6; field-sizing: content; }
 .shareActions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
 .shareLink { display: inline-flex; align-items: center; min-height: 38px; margin-top: 14px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-decoration: none; }
 .shareLink:hover { background: var(--paper); }
@@ -657,14 +752,26 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .shareLink, .shareActions button { min-height: 44px; }
 }
 
-/* The sale sheet: one row per page, its card preview beside the controls that
-   move, replace or remove it. The preview is the card crop, not the page. */
-.catalogList { display: grid; gap: 10px; margin: 10px 0 0; padding: 0; list-style: none; }
-.catalogList li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
-.catalogList img { display: block; width: 96px; max-height: 144px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); object-fit: contain; }
-.catalogItem { min-width: 0; }
-.catalogItem b { font-size: 12px; }
-.catalogItem .notice { margin-top: 6px; }
-.catalogItem .linkActions { flex-wrap: wrap; }
+/* The sale sheet: one tile per page in reading order, its card preview over
+   the controls that move, replace or remove it, and the next free place as the
+   last tile. Never more tiles than pages allowed, so three columns always hold
+   them; the preview is the card crop, not the page. */
+.catalogList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.catalogPage { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.catalogPage img { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 5px; background: var(--paper); object-fit: contain; }
+.catalogPageHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.catalogPageHead b { font-size: 12px; }
+.catalogPageHead span { display: flex; gap: 4px; }
+.editorCard .catalogPageHead button { min-width: 30px; padding: 4px 0; }
+.catalogPageActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; }
+.catalogPage .notice { margin-top: 0; padding: 6px 8px; }
+.catalogAdd { position: relative; display: flex; min-height: 150px; border: 1px dashed #b9c2bc; border-radius: 9px; background: var(--paper); }
+.card .catalogAdd label { display: grid; flex: 1; place-items: center; margin: 0; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-align: center; cursor: pointer; }
+.catalogAdd:has(input:not(:disabled)):hover { border-color: var(--ink); background: #fff; }
+.card .catalogAdd:has(input:disabled) label { color: #9aa19c; cursor: not-allowed; }
+.catalogAdd:has(input:focus-visible) { outline: 3px solid #dfe8e3; outline-offset: 2px; }
+@media (min-width: 560px) {
+  .catalogList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 /* A sentence the author has to read, not a field caption. */
-.catalogField .confirmCheck { margin-top: 14px; color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }
+.catalogField .confirmCheck { margin-top: 12px; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }

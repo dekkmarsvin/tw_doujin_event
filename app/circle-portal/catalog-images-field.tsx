@@ -66,24 +66,45 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
 
   return <div className={styles.catalogField}>
     <p className={styles.editorHint}>最多 {OVERRIDE_LIMITS.catalogImages} 張，依順序顯示。JPG、PNG、WebP；PDF 或 PSD 請先匯出成圖片。</p>
-    {images.length > 0 && <ol className={styles.catalogList}>
-      {images.map((image, index) => <li key={image.url}>
+    <label className={styles.confirmCheck}>
+      <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+      <span>我確認這些圖片適合所有年齡的讀者觀看。</span>
+    </label>
+    {/* One tile per page in reading order, and the next free place as the
+        last tile: the list never has more tiles than the limit has pages, so
+        the row is filled rather than a strip of small pictures down the left. */}
+    <ol className={styles.catalogList}>
+      {images.map((image, index) => <li key={image.url} className={styles.catalogPage}>
         <img src={image.previewUrl} alt={`第 ${index + 1} 張品書預覽`} />
-        <div className={styles.catalogItem}>
+        <div className={styles.catalogPageHead}>
           <b>第 {index + 1} 張</b>
-          {small.has(image.url) && <p className={styles.notice}>縮小後文字可能太小，建議分成多張上傳。</p>}
-          <div className={styles.linkActions}>
-            <button type="button" disabled={busy || index === 0} onClick={() => move(index, -1)} aria-label={`把第 ${index + 1} 張品書往前移`}>↑</button>
-            <button type="button" disabled={busy || index === images.length - 1} onClick={() => move(index, 1)} aria-label={`把第 ${index + 1} 張品書往後移`}>↓</button>
-            <button type="button" disabled={busy || !confirmed} onClick={() => {
-              replaceTarget.current = image.url;
-              replaceInput.current?.click();
-            }} aria-label={`替換第 ${index + 1} 張品書`}>替換</button>
-            <button type="button" disabled={busy} onClick={() => onUpdate((current) => current.filter((page) => page.url !== image.url))} aria-label={`移除第 ${index + 1} 張品書`}>移除</button>
-          </div>
+          <span>
+            <button type="button" disabled={busy || index === 0} onClick={() => move(index, -1)} aria-label={`把第 ${index + 1} 張品書往前移`}>←</button>
+            <button type="button" disabled={busy || index === images.length - 1} onClick={() => move(index, 1)} aria-label={`把第 ${index + 1} 張品書往後移`}>→</button>
+          </span>
+        </div>
+        {small.has(image.url) && <p className={styles.notice}>縮小後文字可能太小，建議分成多張上傳。</p>}
+        <div className={styles.catalogPageActions}>
+          <button type="button" disabled={busy || !confirmed} onClick={() => {
+            replaceTarget.current = image.url;
+            replaceInput.current?.click();
+          }} aria-label={`替換第 ${index + 1} 張品書`}>替換</button>
+          <button type="button" disabled={busy} onClick={() => onUpdate((current) => current.filter((page) => page.url !== image.url))} aria-label={`移除第 ${index + 1} 張品書`}>移除</button>
         </div>
       </li>)}
-    </ol>}
+      {!full && <li className={styles.catalogAdd}>
+        <label htmlFor={`${id}-add`}>新增品書圖片</label>
+        <input
+          id={`${id}-add`} type="file" accept="image/jpeg,image/png,image/webp" className={styles.visuallyHidden}
+          disabled={busy || !confirmed}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.currentTarget.value = "";
+            if (file) upload(file, null);
+          }}
+        />
+      </li>}
+    </ol>
     <input
       ref={replaceInput} type="file" accept="image/jpeg,image/png,image/webp" hidden tabIndex={-1} aria-hidden="true"
       onChange={(event) => {
@@ -91,21 +112,6 @@ export function CatalogImagesField({ circleId, images, busy, onUpdate, onUploadi
         const replacing = replaceTarget.current;
         event.currentTarget.value = "";
         if (file && replacing) upload(file, replacing);
-      }}
-    />
-
-    <label className={styles.confirmCheck}>
-      <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-      <span>我確認這些圖片適合所有年齡的讀者觀看。</span>
-    </label>
-    <label htmlFor={`${id}-add`}>新增品書圖片</label>
-    <input
-      id={`${id}-add`} type="file" accept="image/jpeg,image/png,image/webp"
-      disabled={busy || !confirmed || full}
-      onChange={(event) => {
-        const file = event.target.files?.[0];
-        event.currentTarget.value = "";
-        if (file) upload(file, null);
       }}
     />
     {full && <p className={styles.editorHint}>已達 {OVERRIDE_LIMITS.catalogImages} 張上限，可替換或移除後再新增。</p>}
