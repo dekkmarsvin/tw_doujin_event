@@ -99,7 +99,7 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   const directory = (entries: readonly string[]) => `<ul class="circle-directory">${entries.map((entry) => `<li>${entry}</li>`).join("")}</ul>`;
   const entry = (circle: (typeof circles)[number], status = "") => link(circlePath(event.id, circle.id), `${listed(circle)}${status ? `（${status}）` : ""}`);
   pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${aliases}${eventFacts(event)}
-<p>${link(readerLink(event), "開啟攤位地圖", "primary")} ${link(readerLink(event) + "&view=browse", "逛品書")}</p>
+<p class="entries">${link(readerLink(event), "開啟攤位地圖", "primary")}${link(readerLink(event) + "&view=browse", "逛品書", "secondary")}</p>
 <section><h2>參展社團</h2><p>${circles.length} 個社團</p>${event.days.length > 1 ? dayDirectory() : directory(circles.map((circle) => entry(circle)))}</section>`, schema));
   /** A multi-day event lists its circles day by day, the way readers plan and
    * search a day (#364). A circle appears under every day it has a placement,
@@ -134,8 +134,7 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
 <div id="${CIRCLE_PAGE_ACTIONS_ID}"></div>
 <h2>參展攤位</h2><ol class="booth-cards">${cards.map((card) => boothCardHtml(event, card)).join("")}</ol>
 <div id="${CIRCLE_PAGE_ROOT_ID}"></div>${circlePageDataHtml(circlePageData(catalog, circle.id))}
-<p class="claim">這是你的社團嗎？${link(claim, "認領／管理資料")}</p>
-<p>${link(eventPath(event.id), "全部參展社團")}</p><p>${link(event.officialData.eventUrl, "活動網站")}</p>`, undefined, circlePageAssets));
+<p class="claim">這是你的社團嗎？${link(claim, "認領／管理資料")}</p>`, undefined, circlePageAssets));
   }
   return pages;
 }
