@@ -1,4 +1,5 @@
 "use client";
+import { sharePublicContent } from "../public-share";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -107,14 +108,11 @@ export default function CirclePageApp({ data }: { data: CircleCatalogPayload }) 
   // The page's own address, as the reader has it: this origin, no query.
   const share = () => {
     const url = `${window.location.origin}${window.location.pathname}`;
-    const copy = () => Promise.resolve().then(() => navigator.clipboard.writeText(url))
-      .then(() => setNotice("已複製連結。"), () => setNotice("無法自動複製，請從網址列複製。"));
     setUndo(null);
-    if (typeof navigator.share === "function") {
-      void navigator.share({ title: document.title, url })
-        // Closing the share sheet is a choice, not a failure.
-        .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) void copy(); });
-    } else void copy();
+    void sharePublicContent({ title: document.title, url }).then((result) => {
+      if (result === "copied") setNotice("已複製連結。");
+      if (result === "manual") setNotice("無法自動複製，請從網址列複製。");
+    });
   };
 
   return <>

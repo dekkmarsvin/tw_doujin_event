@@ -1,3 +1,8 @@
+import CatalogBrowseApp from "./catalog-browse-app";
+import { readerView } from "./catalog-browse-url";
+import { READER_NAVIGATION_EVENT } from "./reader-navigation";
+import { ReaderPlanningProvider } from "./reader-planning";
+import { useCircleCatalog } from "./use-circle-catalog";
 import { useCallback, useEffect, useState } from "react";
 import EventChooser from "./event-chooser";
 import EventMapApp from "./event-map-app";
@@ -19,6 +24,7 @@ const resolve = (): ResolvedUrlEvent => resolveUrlEvent(
  * because it seeds its state from the event it was given.
  */
 export default function EventEntry() {
+  const [view, setView] = useState(() => readerView(new URL(typeof window === "undefined" ? "https://event.invalid/" : window.location.href)));
   const [resolved, setResolved] = useState<ResolvedUrlEvent>(resolve);
 
   useEffect(() => {
@@ -28,6 +34,7 @@ export default function EventEntry() {
 
   useEffect(() => {
     const onPopState = () => {
+      setView(readerView(new URL(window.location.href)));
       setResolved((current) => {
         const next = resolve();
         // Within one event the app owns the URL, and re-resolving to the same
@@ -37,7 +44,8 @@ export default function EventEntry() {
       });
     };
     window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    window.addEventListener(READER_NAVIGATION_EVENT, onPopState);
+    return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener(READER_NAVIGATION_EVENT, onPopState); };
   }, []);
 
   const selectEvent = useCallback((event: EventDefinition) => {
@@ -45,6 +53,7 @@ export default function EventEntry() {
     url.searchParams.set("event", event.id);
     // A push, not a replace: the chooser is where back should return to.
     window.history.pushState({}, "", url);
+    setView(readerView(url));
     setResolved({ kind: "event", event });
   }, []);
 
@@ -54,10 +63,17 @@ export default function EventEntry() {
     setResolved({ kind: "choose" });
   }, []);
 
-  if (resolved.kind === "event") return <EventMapApp key={resolved.event.id} event={resolved.event} onChooseEvent={PUBLISHED_EVENTS.length > 1 ? chooseEvent : undefined} />;
+  if (resolved.kind === "event") return <EventReader key={resolved.event.id} view={view} event={resolved.event} onChooseEvent={PUBLISHED_EVENTS.length > 1 ? chooseEvent : undefined} />;
   return <EventChooser
     events={PUBLISHED_EVENTS}
     unresolved={resolved.kind === "unpublished" ? resolved.requested : null}
     onSelect={selectEvent}
   />;
+}
+
+function EventReader({ event, view, onChooseEvent }: { event: EventDefinition; view: "map" | "browse"; onChooseEvent?: () => void }) {
+  const catalog = useCircleCatalog(event.id);
+  return <ReaderPlanningProvider eventId={event.id} settled={catalog.status !== "loading"}>
+    {view === "browse" ? <CatalogBrowseApp event={event} /> : <EventMapApp event={event} onChooseEvent={onChooseEvent} />}
+  </ReaderPlanningProvider>;
 }

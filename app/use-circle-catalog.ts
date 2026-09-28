@@ -20,5 +20,7 @@ export function useCircleCatalog(eventId: string) {
   useEffect(() => { void browserCatalogPublication.load(eventId); }, [eventId]);
   const subscribe = useCallback((listener: () => void) => browserCatalogPublication.subscribe(eventId, listener), [eventId]);
   const snapshot = useCallback(() => browserCatalogPublication.getSnapshot(eventId), [eventId]);
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
+  const state = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const retry = useCallback(() => browserCatalogPublication.retry(eventId), [eventId]);
+  return { ...state, retry };
 }

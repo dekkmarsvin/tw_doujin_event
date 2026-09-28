@@ -1,3 +1,4 @@
+import { navigateReader, ordinaryLinkClick } from "./reader-navigation";
 import { useEffect, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { groupCalendarEvents, taipeiDate } from "./event-calendar";
@@ -63,6 +64,11 @@ export default function EventChooser({ events, unresolved, onSelect }: {
             </span>
             <span className={styles.arrow} aria-hidden="true">→</span>
           </a>
+          <a className={styles.introduction} href={`?event=${encodeURIComponent(event.id)}&view=browse`} onClick={(pressed) => {
+            if (!ordinaryLinkClick(pressed)) return;
+            pressed.preventDefault();
+            navigateReader(new URL(pressed.currentTarget.href));
+          }}>逛品書</a>
           <a className={styles.introduction} href={eventPath(event.id)}>活動介紹與社團名單</a>
         </li>)}
         </ul>

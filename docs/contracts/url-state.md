@@ -25,9 +25,10 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 | 參數 | 負責模組 | 說明 |
 |---|---|---|
 | `event` | 活動 | 目前活動 ID，永遠寫出。只接受已發布活動 |
-| `day` | 活動 | 活動日，永遠寫出 |
+| `view` | 閱讀方式 | `browse` 為逛品書；省略或未知值為地圖 |
+| `day` | 活動 | 地圖永遠寫出；browse 省略代表全部日期 |
 | `area`／`hall` | 舊連結相容 | 只在讀取時用已宣告的展區代碼推定場地；不做篩選，重新序列化時移除 |
-| `venueSpaceId` | 活動 | 場地 stable ID；只有活動分配多個場地時寫出 |
+| `venueSpaceId` | 活動 | 場地 stable ID；地圖只有活動分配多個場地時寫出；browse 省略代表全部場地 |
 | `query` | 探索搜尋 | 一般關鍵字 |
 | `genre` | 探索搜尋 | 社團主題；值為目前活動分類目錄中的顯示名稱 |
 | `creator` | 詳細搜尋 | 創作內容 |
@@ -45,7 +46,15 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 | `selectedCircle` | 地圖／詳情 | canonical `CircleRecord.id` |
 | `selectedBooth` | 地圖／詳情 | 實際 `PlacementRecord` 的攤位代碼 |
 
-除 `event`、`day` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件；多場地活動必須寫出 `venueSpaceId`，避免舊展區代碼或排序改變造成歸屬歧義。新網址不寫 `area`／`hall`。
+地圖除 `event`、`day` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件；多場地活動必須寫出 `venueSpaceId`，避免舊展區代碼或排序改變造成歸屬歧義。新網址不寫 `area`／`hall`。browse 的全範圍例外如下。
+
+## 品書瀏覽與檢視切換
+
+`/?event=<id>&view=browse` 預設全部日期及全部場地，不指定選取。明示有效 day／venueSpaceId 才限縮；明示無效值依地圖規則回到活動預設，舊 area／hall 僅推定場地。公開搜尋仍使用上述 query／genre／creator／work／workMode／workExclude／workType／r18。
+
+地圖切到 browse 時帶入目前日期、場地及公開條件；browse 切回地圖時，指定範圍照用，全範圍部分取活動定義的預設值。兩方向均由白名單重建 URL，不攜帶私人規劃篩選、selectedCircle／selectedBooth、顯示設定、hash 或未套用草稿；卡片的個別配置連結則使用既有精確地圖定位網址。
+
+一般點擊保持同文件 Reader，修改鍵及新分頁保持標準連結。原生前進／返回恢復 view、搜尋及範圍；browse entry 的已載入筆數與捲動位置存在 history.state，不進分享網址。詳細行為見[品書瀏覽契約](./catalog-browse.md)。browse title／description 描述逛品書，canonical 永遠為活動介紹頁；不另增 sitemap URL。
 
 ## 規則
 

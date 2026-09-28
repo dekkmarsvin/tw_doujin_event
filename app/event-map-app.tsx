@@ -29,9 +29,9 @@ import {
   toggleFavorite,
   updateFavorite,
   updateVisitPlanPurchase,
-  type FavoriteRecord,
 } from "./planning-store";
-import { usePlanning } from "./use-planning";
+import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
+import ReaderViewTabs from "./reader-navigation";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import { resolveCircleSelection } from "./map-view-state";
@@ -81,7 +81,11 @@ const MAP_DOUBLE_TAP_DISTANCE = 24;
  * this event's defaults, and a stale day or area from the previous event would
  * be indistinguishable from a deliberate choice.
  */
-export default function EventMapApp({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
+export default function EventMapApp(props: { event: EventDefinition; onChooseEvent?: () => void }) {
+  const catalog = useCircleCatalog(props.event.id);
+  return <ReaderPlanningBoundary eventId={props.event.id} settled={catalog.status !== "loading"}><EventMapWorkspace {...props} /></ReaderPlanningBoundary>;
+}
+function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; onChooseEvent?: () => void }) {
   const eventId = event.id;
   const genres: readonly string[] = event.genres;
   const urlDefaults = defaultEventUrlState(event);
@@ -130,10 +134,9 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   const [mapError, setMapError] = useState("");
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
-  const [favoriteUndo, setFavoriteUndo] = useState<{ favorite: FavoriteRecord; circleName: string } | null>(null);
   const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
-  const { document: planning, update: updatePlanning, storageError: planningStorageError } = usePlanning(eventId, catalogStatus !== "loading");
+  const { document: planning, update: updatePlanning, storageError: planningStorageError, favoriteUndo, setFavoriteUndo } = useReaderPlanning();
   const searchRef = useRef<HTMLInputElement | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const floorRef = useRef<HTMLDivElement | null>(null);
@@ -301,12 +304,6 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
   }, [day, event, eventId, venueAssignment, mapScopeKey, mapRetry]);
 
   useEffect(() => {
-    if (!favoriteUndo) return;
-    const timeout = window.setTimeout(() => setFavoriteUndo(null), 7000);
-    return () => window.clearTimeout(timeout);
-  }, [favoriteUndo]);
-
-  useEffect(() => {
     if (!planNotice) return;
     const timeout = window.setTimeout(() => setPlanNotice(null), 4000);
     return () => window.clearTimeout(timeout);
@@ -395,7 +392,7 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
     }, window.location.href);
     const method = historyMethod(historyIntent.current, false);
     if (method === "none") return;
-    window.history[method](null, "", url);
+    window.history[method]({ ...window.history.state }, "", url);
     historyIntent.current = "replace";
   }, [advancedSearch, catalogStatus, circleRecordsById, day, event, favoriteOnly, genre, planningDisplay, query, selectedRecordId, urlReady, venueAssignment]);
 
@@ -825,6 +822,10 @@ export default function EventMapApp({ event, onChooseEvent }: { event: EventDefi
       <div className="event">{eventIdentity}</div>
       <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
       {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
+      <ReaderViewTabs event={event} view="map" url={serializeEventUrlState(event, {
+        eventId, day, venueSpaceId, genre, query, favoriteOnly, advancedSearch, planningDisplay,
+        selection: { day, circleId: null, boothCode: null },
+      }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href)} />
     </header>
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
       <aside ref={leftRailRef} className={`filters ${styles.leftRail}`}>

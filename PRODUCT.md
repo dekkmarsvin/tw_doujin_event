@@ -36,10 +36,11 @@ web
 Search → Circle → Map
 Map → Space → Circle
 Favorite → Map Highlight
+Browse Catalog → Circle → Favorite → Map
 Circle Share → Circle Page → Favorite / Plan → Map
 ```
 
-最後一條是社團宣傳帶進來的讀者：從社團分享的出展頁直接看到內容，收藏或排入行程後在地圖定位。官方配置仍是權威，地圖仍是現場使用的核心。
+「逛品書」是展前從內容找社團的入口，讓讀者瀏覽同一活動的品書、收藏，再選日期定位攤位。最後一條是社團宣傳帶進來的讀者：從社團分享的出展頁直接看到內容，收藏或排入行程後在地圖定位。官方配置仍是權威，地圖仍是現場使用的核心。
 
 產品可以參考 Comike WebCatalog / NAVIO 的熟悉互動模式，但只採用能直接改善活動、社團與攤位位置關係的部分。
 

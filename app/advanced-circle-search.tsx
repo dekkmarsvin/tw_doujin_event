@@ -1,4 +1,5 @@
 "use client";
+import { createPortal } from "react-dom";
 
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
@@ -18,11 +19,14 @@ import styles from "./advanced-circle-search.module.css";
 
 type TopicList = "workTopics" | "excludedWorkTopics";
 
-export default function AdvancedCircleSearchControls({ value, workSuggestions, onApply }: {
+export default function AdvancedCircleSearchControls({ value, workSuggestions, onApply, categories, category }: {
   value: AdvancedCircleSearch;
   workSuggestions: WorkTopicSuggestion[];
-  onApply: (next: AdvancedCircleSearch) => void;
+  onApply: (next: AdvancedCircleSearch, category?: string) => void;
+  categories?: readonly string[];
+  category?: string;
 }) {
+  const [draftCategory, setDraftCategory] = useState(category);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   // The half-typed topic is draft state twice over: it is not applied, and it is
@@ -108,7 +112,7 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
       workTopics,
       excludedWorkTopics,
       workTopicMode: workTopics.length > 1 ? draft.workTopicMode : "any",
-    });
+    }, draftCategory);
     setTopicInput("");
     setOpen(false);
     window.requestAnimationFrame(() => triggerRef.current?.focus());
@@ -123,28 +127,8 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
       </li>)}
     </ul>;
 
-  return <section className={styles.wrap} aria-label="社團內容詳細搜尋">
-    <button
-      type="button"
-      ref={triggerRef}
-      className={styles.trigger}
-      aria-expanded={open}
-      aria-controls={panelId}
-      onClick={(event) => {
-        const nextOpen = !open;
-        const trigger = event.currentTarget;
-        setDraft(value);
-        setTopicInput("");
-        setOpen(nextOpen);
-        if (nextOpen && window.innerWidth <= 760) {
-          window.requestAnimationFrame(() => trigger.scrollIntoView({ block: "start", behavior: "auto" }));
-        }
-      }}
-    >
-      <span><UiIcon name="search" />詳細搜尋</span>
-      <small>{activeCount > 0 ? `已套用 ${activeCount} 項` : "創作者、作品與分級"}</small>
-    </button>
-    {open && <div ref={panelRef} id={panelId} className={styles.panel} role="dialog" aria-modal="true" aria-label="詳細搜尋條件" tabIndex={-1}>
+  const panel = <div ref={panelRef} id={panelId} className={`${styles.panel} ${categories ? styles.browsePanel : ""}`} role="dialog" aria-modal="true" aria-label="詳細搜尋條件" tabIndex={-1}>
+      {categories && <label>社團分類<select value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{categories.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
       <label>
         創作內容
         <select value={draft.creatorType} onChange={(event) => setDraft({ ...draft, creatorType: event.target.value })}>
@@ -230,6 +214,29 @@ export default function AdvancedCircleSearchControls({ value, workSuggestions, o
         <button type="button" onClick={closePanel}>取消</button>
         <button type="button" className={styles.apply} onClick={applyDraft}>套用搜尋</button>
       </footer>
-    </div>}
+    </div>;
+  return <section className={styles.wrap} aria-label="社團內容詳細搜尋">
+    <button
+      type="button"
+      ref={triggerRef}
+      className={styles.trigger}
+      aria-expanded={open}
+      aria-controls={panelId}
+      onClick={(event) => {
+        const nextOpen = !open;
+        const trigger = event.currentTarget;
+        setDraft(value);
+        setDraftCategory(category);
+        setTopicInput("");
+        setOpen(nextOpen);
+        if (nextOpen && window.innerWidth <= 760) {
+          window.requestAnimationFrame(() => trigger.scrollIntoView({ block: "start", behavior: "auto" }));
+        }
+      }}
+    >
+      <span><UiIcon name="search" />詳細搜尋</span>
+      <small>{activeCount > 0 ? `已套用 ${activeCount} 項` : "創作者、作品與分級"}</small>
+    </button>
+    {open && (categories ? createPortal(<div className={styles.browseBackdrop}>{panel}</div>, document.body) : panel)}
   </section>;
 }

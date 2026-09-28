@@ -1,0 +1,6 @@
+.tabs { grid-column:1/-1; display:flex; align-items:center; gap:20px; min-width:0; }
+.tabs a { display:flex; align-items:center; justify-content:center; min-height:44px; padding:8px 16px; color:var(--muted); border-bottom:2px solid transparent; text-decoration:none; font-size:15px; font-weight:700; white-space:nowrap; }
+.tabs a[aria-current] { color:var(--coral); border-color:var(--coral); }
+.tabs a:hover { background:var(--surface-soft); }
+.tabs a:focus-visible { outline:3px solid #8fac9c; outline-offset:-3px; }
+@media(max-width:760px) { .tabs { grid-row:3; gap:12px; } }

@@ -28,12 +28,13 @@ try {
     const page = await journey.page({ event: "", params: "" });
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
 
-    // Each published event offers its map and its static introduction.
-    assert.equal(await page.getByRole("link").count(), events.length * 2, "two destinations per published event");
+    // Each published event offers its map, catalog browse and static introduction.
+    assert.equal(await page.getByRole("link").count(), events.length * 3, "three destinations per published event");
     for (const [index, event] of events.entries()) {
       const entry = page.getByRole("link", { name: new RegExp(event.name) });
       await entry.waitFor();
       assert.equal(await page.locator(`a[href="/events/${event.id}/"]`).count(), 1, `${event.id} has one introduction link`);
+      assert.equal(await page.locator(`a[href="?event=${event.id}&view=browse"]`).count(), 1, `${event.id} has a browse link`);
       const summary = `${["26.09.01-02", "26.10.01-04"][index]} · ${event.venue}`;
       assert.equal(await entry.getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
       assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
@@ -59,9 +60,13 @@ try {
     assert.ok(!(await page.content()).includes(unknown), "the unknown id does not reach the markup either");
 
     // The way forward is still the list, and it is still only the real events.
-    assert.equal(await page.getByRole("link").count(), events.length * 2, "the list survives a dead link");
+    assert.equal(await page.getByRole("link").count(), events.length * 3, "the list survives a dead link");
     assert.equal(await page.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     await journey.capture(page, "chooser-refuses-unknown-event");
+    await page.locator('a[href="?event=sample&view=browse"]').click();
+    await page.getByRole("heading", { name: "範例創作市集 逛品書", exact: true }).waitFor();
+    assert.equal(await page.locator('meta[name="robots"]').count(), 0);
+    assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), "https://map.kotoban.top/events/sample/");
     await page.close();
   }
 
