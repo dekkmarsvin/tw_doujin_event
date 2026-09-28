@@ -171,6 +171,27 @@ try {
   assert.match(await empty.getByRole("textbox", { name: /請複製分享文字與連結/ }).inputValue(), /view=browse/);
   await empty.close();
 
+  // Circles without a sheet load their next batch as the reader reaches the
+  // end; a new scope starts again from the first batch at the top.
+  const textIds = Array.from({ length: 60 }, (_, index) => `c-${900001 + index}`);
+  const listed = await journey.page({ params: "&view=browse", routes: routes(catalogRoute("sample", (data) => {
+    data.circles = textIds.map((id, index) => ({ id, name: index === 0 ? "北風畫室" : `文字社團 ${index}` }));
+    data.placements = textIds.map((id, index) => ({ id: `p-${index}`, circleId: id, day: 1, area: "north", boothCode: `S${String(index + 1).padStart(3, "0")}`, status: "active", tone: "mint" }));
+  }), overridesRoute("sample", [authored()]), sheetRoutes) });
+  await ready(listed);
+  const listedCards = () => listed.locator("article").count();
+  const toEnd = () => listed.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  assert.equal(await listedCards(), 25);
+  await toEnd(); await listed.waitForFunction(() => document.querySelectorAll("article").length > 25);
+  assert.equal(await listedCards(), 49, "one batch per arrival at the end");
+  await toEnd(); await listed.waitForFunction(() => document.querySelectorAll("article").length === 60);
+  assert.equal(await listed.getByRole("button", { name: "載入更多社團", exact: true }).count(), 0);
+  await listed.getByRole("combobox", { name: "活動日期" }).selectOption("1"); await ready(listed);
+  await listed.waitForFunction(() => scrollY === 0);
+  await listed.waitForTimeout(300);
+  assert.equal(await listedCards(), 25, "a new scope starts from the first batch");
+  await listed.close();
+
   const ids = Array.from({ length: 300 }, (_, index) => `c-${900001 + index}`);
   const counts = { base: 0, overlay: 0, preview: 0, full: 0 };
   const large = await journey.page({ params: "&view=browse&work=原創&favorite=1&favoriteGroup=private", viewport: { width: 390, height: 844 }, routes: async (target) => {

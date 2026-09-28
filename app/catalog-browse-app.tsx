@@ -30,7 +30,8 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const [textShown, setTextShown] = useState(initial.textShown);
   const [restoration, setRestoration] = useState({ y: initial.y });
   const restoring = useRef(true);
-  const restored = useRef<object | null>(null);
+  const [restored, setRestored] = useState<object | null>(null);
+  const [moreText, setMoreText] = useState<HTMLButtonElement | null>(null);
   const [moreTopics, setMoreTopics] = useState(false);
   const [notice, setNotice] = useState("");
   const [manualShare, setManualShare] = useState("");
@@ -68,18 +69,32 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
     }
   }, [key]);
   useEffect(() => {
-    if (!ready || restored.current === restoration) return;
+    if (!ready || restored === restoration) return;
     let second = 0;
     const first = window.requestAnimationFrame(() => {
       second = window.requestAnimationFrame(() => {
         window.scrollTo(0, restoration.y);
-        restored.current = restoration;
+        setRestored(restoration);
         restoring.current = false;
         savePosition();
       });
     });
     return () => { window.cancelAnimationFrame(first); window.cancelAnimationFrame(second); };
-  }, [ready, restoration, savePosition]);
+  }, [ready, restored, restoration, savePosition]);
+  useEffect(() => {
+    // Reaching the end of the circles without a sheet loads their next batch.
+    // They carry no pictures, so sheet cards keep their explicit button
+    // (ADR-0075); this one stays for keyboards. Waiting for the scroll to be
+    // restored keeps a new search at its first batch.
+    if (!moreText || restored !== restoration || typeof IntersectionObserver === "undefined") return;
+    // A new observer reports at once, so a screen taller than one batch
+    // keeps filling until the button is out of reach.
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) setTextShown((n) => n + BROWSE_BATCH_SIZE);
+    }, { rootMargin: "0px 0px 240px 0px" });
+    observer.observe(moreText);
+    return () => observer.disconnect();
+  }, [moreText, restored, restoration, textShown]);
   useEffect(() => {
     window.addEventListener("scroll", savePosition, { passive: true });
     window.addEventListener("pagehide", savePosition);
@@ -174,7 +189,7 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
           {shown < projection.withCatalog.length && <button className={styles.more} onClick={() => setShown((n) => n + BROWSE_BATCH_SIZE)}>載入更多品書（已顯示 {Math.min(shown, projection.withCatalog.length)}／{projection.withCatalog.length}）</button>}
           {projection.withoutCatalog.length > 0 && <section id="without-catalog" className={styles.without}><h2>{projection.withCatalog.length ? "另有 " : ""}{projection.withoutCatalog.length} 個社團符合條件，但沒有提供品書</h2>
             <div className={styles.textList}>{cards(projection.withoutCatalog, textShown)}</div>
-            {textShown < projection.withoutCatalog.length && <button className={styles.more} onClick={() => setTextShown((n) => n + BROWSE_BATCH_SIZE)}>載入更多社團</button>}
+            {textShown < projection.withoutCatalog.length && <button ref={setMoreText} className={styles.more} onClick={() => setTextShown((n) => n + BROWSE_BATCH_SIZE)}>載入更多社團</button>}
           </section>}
         </>}
       </>}
