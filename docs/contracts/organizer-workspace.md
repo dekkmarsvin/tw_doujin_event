@@ -360,3 +360,14 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 - 公開 bundle 不含 organizer 介面與寫入 route，由 `tests/public-artifact.test.mjs` 把關。
 - 新候選活動預設進入引導；跨登入可恢復每位協作者自己的位置；完成 onboarding、切換區段或執行驗證都不會產生候選內容 revision。
 - workspace preference 與完成 onboarding 的最終 SQL 寫入會再次檢查 active grant；權限在請求途中被撤銷時不會留下流程狀態變更，對外仍回 404。
+
+## 獨立共用資料管理
+
+網站管理的「共用資料」入口為 `/admin?section=references`。管理者可在沒有候選活動時讀取完整場館／場地、主辦與分類目錄，新增場館連同第一個場地、在既有場館新增場地、新增主辦與分類目錄，以及補齊既有場館／場地缺少的 canonical 來源或場館地址。分類目錄須屬於既有主辦；場館與場地保留既有識別碼，地址只保存在 canonical reference JSON。
+
+`GET /api/admin/references` 僅回傳操作所需的公開欄位與 canonical bytes 的 SHA-256 版本；`POST` 依 `kind` 執行上述操作。兩者都要求管理者；每次寫入在同一 D1 transaction 內重新確認帳號仍為有效管理者、寫入資料並留下 audit。地址補齊須攜帶讀取時的版本，且資料仍缺地址，並行或過期寫入回傳 409。來源記錄只建立缺漏項目，不修改已有名稱、來源或地址，不提供刪除。
+
+表單提供明確儲存與取消，離開未儲存內容時確認放棄。寫入成功後清單重新讀取若失敗，顯示已儲存狀態、鎖住寫入，只允許重試 GET；不得重送已成功 POST。既有候選活動的角色與版本檢查不變，已送審 snapshot 和已發布 pin 不變，活動須走原有發布後修正流程才帶入共用資料。
+
+**實作**：[`app/admin-reference-handlers.ts`](../../app/admin-reference-handlers.ts)、[`app/shared-reference-catalog.ts`](../../app/shared-reference-catalog.ts)、[`app/admin/admin-reference-panel.tsx`](../../app/admin/admin-reference-panel.tsx)、[`db/admin-reference-repository.ts`](../../db/admin-reference-repository.ts)、[`functions/api/admin/references.ts`](../../functions/api/admin/references.ts)。
+**驗證**：[`tests/organizer-handlers.test.mjs`](../../tests/organizer-handlers.test.mjs)、[`tests/browser/admin-shared-references.mjs`](../../tests/browser/admin-shared-references.mjs)。
