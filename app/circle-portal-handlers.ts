@@ -43,7 +43,7 @@ import { createOrganizerReference, createCategoryReference, createVenueReference
   resolveOrganizerReferences, validateOrganizerReferences, type OrganizerReferenceRecord } from "./organizer-reference-catalog";
 import { PublicationFailure, publicationHasStarted } from "./organizer-publication";
 import { buildApprovedPublicationArtifacts } from "./publication-artifacts";
-import { planOrganizerAmendmentCandidate, readOrganizerAmendmentBaseline,
+import { AmendmentBaselineError, planOrganizerAmendmentCandidate, readOrganizerAmendmentBaseline,
   type AmendmentPublishedSource, type OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
 import { AmendmentSettingsError, amendmentSettingsImpact, applyAmendmentSettings, normalizeAmendmentSettings,
   approvedEventDraft, type OrganizerAmendmentSettings } from "./organizer-amendment-settings";
@@ -2243,7 +2243,10 @@ export function createCirclePortalHandlers({
       baseline = await loadPublishedAmendmentBaseline({ candidateId, candidateVersion: candidate.current_version,
         jobId: job.id, snapshotId: snapshot.id, approvalHash: snapshot.sha256, snapshotJson: snapshot.snapshot_json,
         dataCommit: job.data_merge_sha, mainCommit: job.main_merge_sha, publishedAt: candidate.published_at! });
-    } catch (error) { return json({ error: error instanceof Error ? error.message : "目前無法核對已發布基準，請稍後重試。" }, 409); }
+    } catch (error) {
+      if (error instanceof AmendmentBaselineError) return json({ error: error.message, code: error.code }, error.status);
+      return json({ error: "暫時無法核對公開版本，請稍後再試。", code: "amendment_baseline_unavailable" }, 503);
+    }
     const baselineJson = JSON.stringify(baseline);
     const baselineSha256 = await sha256Hex(baselineJson);
     const plan = planOrganizerAmendmentCandidate(baseline, [], () => new Date(now).toISOString().slice(0, 10));

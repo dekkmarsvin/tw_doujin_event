@@ -19,6 +19,7 @@ import { PublicationFailure } from "./organizer-publication";
 import { sha256Hex } from "./portal-crypto";
 import { planOrganizerAmendment } from "./organizer-amendment.mjs";
 import type { OrganizerAmendmentBaseline } from "./organizer-amendment-baseline";
+import { assertBaselineProvenance } from "./organizer-baseline-adoption";
 
 export type ApprovedArtifactSource = { snapshotJson: string; approvalHash: string };
 type Snapshot = {
@@ -129,12 +130,14 @@ export async function buildApprovedPublicationArtifacts(source: ApprovedArtifact
       const approved = snapshot.amendment!;
       if (typeof approved.baselineJson !== "string" || await sha256Hex(approved.baselineJson) !== approved.baselineSha256) fail("修正基準的核准 hash 不符。", "snapshot_mismatch");
       const baseline = JSON.parse(approved.baselineJson) as OrganizerAmendmentBaseline;
-      if (baseline.schema !== "organizer-amendment-baseline/1" || !Array.isArray(approved.changes)
+      if (!["organizer-amendment-baseline/1", "organizer-amendment-baseline/2"].includes(baseline.schema) || !Array.isArray(approved.changes)
         || baseline.source.candidateId === snapshot.candidateId || !Number.isSafeInteger(baseline.source.candidateVersion) || baseline.source.candidateVersion < 1
         || !COMMIT.test(baseline.source.dataCommit) || !COMMIT.test(baseline.source.mainCommit) || !COMMIT.test(baseline.mainCommit)
-        || baseline.event.id !== snapshot.eventId || baseline.pin.eventId !== snapshot.eventId || baseline.pin.commit !== baseline.source.dataCommit
+        || baseline.event.id !== snapshot.eventId || baseline.pin.eventId !== snapshot.eventId
         || !sameJson(parseEventDataPin(baseline.pin), baseline.pin)
         || !sameJson(snapshotDraft, baseline.draft) || !referencesMatchBaseline(baseline.references, snapshot.references)) fail("修正 snapshot 與固定基準的活動、reference 或版本不符。", "snapshot_mismatch");
+      try { await assertBaselineProvenance(baseline); }
+      catch { fail("修正 snapshot 的公開基準來源不符。", "snapshot_mismatch"); }
       // The declaration must already be in its one stored form; an approval
       // cannot carry values the save path would have rejected or dropped.
       let settings: OrganizerAmendmentSettings | null;

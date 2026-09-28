@@ -9,6 +9,7 @@ const runner = vite.environments.ssr.runner;
 const { createIdentityRepository } = await runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers, SESSION_COOKIE } = await runner.import("/app/circle-portal-handlers.ts");
 const { hmacSign, sha256Hex } = await runner.import("/app/portal-crypto.ts");
+const { AmendmentBaselineError } = await runner.import("/app/organizer-amendment-baseline.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: { DB: "amendment-handlers" } }));
 const db = await mf.getD1Database("DB");
 const repo = createIdentityRepository(db, { bootstrapAdmins: ["admin@example.test"] });
@@ -81,6 +82,20 @@ async function create() {
   assert.equal(response.status, 201, await response.clone().text());
   return (await response.json()).candidateId;
 }
+
+test("baseline errors distinguish version conflicts from unavailable upstreams without creating candidates", async () => {
+  for (const [code, status] of [["amendment_baseline_changed", 409], ["amendment_publication_pending", 409], ["amendment_baseline_unavailable", 503]]) {
+    loadHook = async () => { throw new AmendmentBaselineError(code, "可呈現的錯誤", status); };
+    const response = await handlers.createOrganizerAmendment(request("POST", { expectedVersion: 1 }, owner), "source");
+    assert.equal(response.status, status);
+    assert.deepEqual(await response.json(), { code, error: "可呈現的錯誤" });
+  }
+  loadHook = async () => { throw Error("private upstream diagnostic"); };
+  const response = await handlers.createOrganizerAmendment(request("POST", { expectedVersion: 1 }, owner), "source");
+  assert.equal(response.status, 503);
+  assert.ok(!(await response.text()).includes("private upstream"));
+  assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM organizer_amendments").first()).n, 0);
+});
 
 test("baseline reads follow authorization; callers cannot supply baseline content or use a stale source", async () => {
   for (const [cookie, status] of [[null, 401], [editor, 403], [stranger, 404]]) {
@@ -253,6 +268,37 @@ async function failedAfterDataMerge() {
 const abandon = (id, cookie = admin, extra = {}) => handlers.abandonOrganizerAmendment(request("POST", {
   expectedVersion: 2, restorationPullNumber: 9, reason: "舊版產檔錯誤，未公開資料已還原", ...extra,
 }, cookie), id);
+
+test("adopted baseline recovery checks the old source job and preserves the adopted pin for a fresh candidate", async () => {
+  const original = data.baseline;
+  const { baselineCanonicalJson, baselineEventEvidence } = await runner.import("/app/organizer-baseline-adoption.ts");
+  const baseline = structuredClone(original);
+  baseline.schema = "organizer-amendment-baseline/2"; baseline.pin.commit = "4".repeat(40);
+  const { publishedAt: _publishedAt, ...source } = baseline.source; void _publishedAt;
+  const record = { schema: "organizer-baseline-adoption/1", id: "reviewed-grouping", kind: "reviewed-cross-day-grouping", eventId: baseline.event.id,
+    source, target: { mainCommit: "5".repeat(40), pinSha256: await sha256Hex(baselineCanonicalJson(baseline.pin)),
+      groupingSha256: await sha256Hex(baselineCanonicalJson(baseline.grouping)),
+      evidenceSha256: await sha256Hex(baselineCanonicalJson(baselineEventEvidence(baseline.evidence, baseline.event.id))) },
+    authorization: { pullRequest: "https://github.com/dekkmarsvin/tw_doujin_event/pull/416", decision: "ADR-0071" } };
+  baseline.adoption = { record, sha256: await sha256Hex(baselineCanonicalJson(record)) };
+  data.baseline = baseline;
+  try {
+    const oldJob = await repo.getOrganizerPublicationJob("published-job");
+    const { id, job, snapshot } = await failedAfterDataMerge();
+    auditRecoveryHook = async (input) => {
+      assert.equal(input.baseline.pin.commit, "4".repeat(40));
+      assert.equal(input.baseline.source.dataCommit, oldJob.data_merge_sha);
+      return { restorationPullNumber: 9 };
+    };
+    const response = await abandon(id);
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.deepEqual(await repo.getOrganizerPublicationJob("published-job"), oldJob);
+    assert.deepEqual(await repo.getOrganizerSubmissionSnapshot(id, 2), snapshot);
+    assert.deepEqual(await repo.getOrganizerPublicationJob(job.id), { ...job, retryable: 0 });
+    const fresh = await create();
+    assert.deepEqual(JSON.parse((await repo.getOrganizerAmendment(fresh)).baseline_json), baseline);
+  } finally { data.baseline = original; }
+});
 
 test("restored amendment retires atomically, keeps failure/snapshot/intent and permits a fresh approval only", async () => {
   const { id, job, snapshot } = await failedAfterDataMerge();
