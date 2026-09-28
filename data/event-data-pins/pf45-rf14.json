@@ -2,7 +2,7 @@
   "schema": "event-data-pin/2",
   "eventId": "pf45-rf14",
   "repository": "dekkmarsvin/tw_doujin_event-data",
-  "commit": "6d60fe0d07229962dde5d8779b17beb1a085477a",
+  "commit": "3ac53aab20b1d36606820bd50aaae9693816ca66",
   "files": [
     {
       "path": "events/pf45-rf14/circle-identity-groups.json",
@@ -10,7 +10,7 @@
     },
     {
       "path": "events/pf45-rf14/event.json",
-      "sha256": "e72963626cc61d082440fbc00c4d808542c44f00f27475066ebe2bb0504eaae8"
+      "sha256": "fcf39647c682d68e808c9b85b034eed4620c1417f89b2f65523715940a4ed351"
     },
     {
       "path": "events/pf45-rf14/map-manifest.json",
@@ -18,11 +18,11 @@
     },
     {
       "path": "events/pf45-rf14/maps/1/zhengyan-exhibition-area.json",
-      "sha256": "1e9314a86f1fb787f4898dbb5a9ff47b82d49a0aad24f38d38538cd24d0f581b"
+      "sha256": "110984ebff5e78a79df9229b2f7df6a29769183918b4794b0197668a88ff9cec"
     },
     {
       "path": "events/pf45-rf14/maps/2/zhengyan-exhibition-area.json",
-      "sha256": "af805b511081bfe9c219e554cd1670720be727e3d7de547cf16dd4e906f591d3"
+      "sha256": "a2fa1fef12fe48cf485b3499de306f2c05d52ab2679b707c2814bf11bf84b5f2"
     },
     {
       "path": "events/pf45-rf14/official-booths.json",
@@ -46,7 +46,7 @@
     },
     {
       "path": "references/venues/taipei-expo-park-zhengyan-hall.json",
-      "sha256": "b7a5c3be4758db71a264bbf994b57329c377abcea68f5e7edefd288494c2e244"
+      "sha256": "8c86be66cb77557ac92b2cf0dff3dcd1b978cf165461d1f46d2dcb9603002048"
     }
   ]
 }
