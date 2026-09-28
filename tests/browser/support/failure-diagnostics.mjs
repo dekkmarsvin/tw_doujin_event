@@ -6,7 +6,7 @@ export function observeRequests(page) {
   // never query strings, headers or request bodies.
   const remember = record => { requests.push(record); if (requests.length > 20) requests.shift(); };
   page.on("response", response => {
-    remember({ method: response.request().method(), path: new URL(response.url()).pathname, status: response.status() });
+    remember({ method: response.request().method(), path: new URL(response.url()).pathname, status: response.status(), serviceWorker: response.fromServiceWorker() });
   });
   page.on("requestfailed", request => remember({ method: request.method(), path: new URL(request.url()).pathname, failure: request.failure()?.errorText }));
   return requests;

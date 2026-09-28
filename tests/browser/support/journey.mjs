@@ -34,7 +34,10 @@ export async function start(name) {
     report,
     /** `url` opens an exact address — a one-time login link; otherwise an event. */
     async page({ event = "sample", params = "", url, viewport = { width: 1440, height: 900 }, routes } = {}) {
-      const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
+      // A worker-controlled navigation can bypass page.route and read real
+      // server data instead of this page's fixtures. Keep routed journeys on
+      // their declared data; real portal pages still exercise the worker.
+      const page = await browser.newPage({ viewport, reducedMotion: "reduce", serviceWorkers: routes ? "block" : "allow" });
       observations.set(page, observeRequests(page));
       page.setDefaultTimeout(10000);
       page.on("pageerror", (error) => report.errors.push(error.message));
