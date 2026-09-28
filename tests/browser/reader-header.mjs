@@ -5,18 +5,26 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { start, output } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
 
 const events = (process.env.HEADER_TEST_EVENTS || "ff47").split(",");
 const sizes = [[1706, 898], [1440, 900], [1024, 768], [761, 844], [760, 844], [390, 844], [360, 640], [320, 568]];
 const scales = ["標準字級", "較大字級", "最大字級"];
+// Preserve both sides of the phone breakpoint, the smallest viewport and
+// the known 360x640 regression. Full keeps every previous size/scale pair.
+const matrix = selectMatrix(sizes.map(([width, height]) => [width, height, scales]), [
+  [1440, 900, [scales[0]]], [761, 844, [scales[2]]], [760, 844, [scales[2]]],
+  [390, 844, [scales[0]]], [360, 640, [scales[2]]], [320, 568, [scales[2]]],
+]);
 const journey = await start("reader-header");
 journey.report.source = `local staged events: ${events.join(", ")}, not production`;
 journey.report.matrix = [];
 try {
   for (const event of events) {
-    for (const [width, height] of sizes) {
+    for (const [width, height, selectedScales] of matrix) {
       const page = await journey.mapPage({ event, viewport: { width, height } });
-      for (const [index, scale] of scales.entries()) {
+      for (const scale of selectedScales) {
+        const index = scales.indexOf(scale);
         if (width <= 760) await page.locator("summary").getByText("工具", { exact: true }).click();
         await page.getByRole("button", { name: scale, exact: true }).click();
         if (width <= 760) await page.keyboard.press("Escape");

@@ -1,10 +1,16 @@
 // staged-data: fixture
 import assert from "node:assert/strict";
 import { start, overridesRoute } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
+const matrix = selectMatrix(
+  [[360, 640], [390, 844], [430, 932], [760, 844]].map(([width, height]) => [width, height, ["standard", "large", "extra"]]),
+  [[360, 640, ["standard", "extra"]], [390, 844, ["standard"]], [760, 844, ["extra"]]],
+);
 const run = await start("mobile-circle-sheet");
+run.report.matrix = [];
 try {
-  for (const [width, height] of [[360,640],[390,844],[430,932],[760,844]]) {
-    for (const scale of ["standard", "large", "extra"]) {
+  for (const [width, height, scales] of matrix) {
+    for (const scale of scales) {
       const page = await run.mapPage({ viewport: { width, height }, routes: async (page) => {
         await overridesRoute("sample", [{ circleId: "c-900001", updatedAt: "2026-01-01T00:00:00.000+08:00", fields: { saleInfo: "原創插畫集與旅行主題明信片，歡迎到攤位翻閱。".repeat(40) } }])(page);
         await page.addInitScript((scale) => localStorage.setItem("event-map-text-scale", scale), scale);
@@ -73,6 +79,7 @@ try {
       assert.equal(await level(), "peek");
       assert.equal(page.url(), url);
       assert.equal(await page.locator(".floor").evaluate((el) => el.style.transform), transform);
+      run.report.matrix.push({ width, height, scale, touchDrag: width === 390 && scale === "standard" });
       await page.close();
     }
   }

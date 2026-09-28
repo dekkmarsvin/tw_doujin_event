@@ -1,6 +1,12 @@
 // staged-data: pinned
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
+
+const matrix = selectMatrix([
+  ...[[761, 844], [1024, 768], [1050, 768], [1440, 900]].map(([width, height]) => [width, height, ["standard", "extra"]]),
+  [1051, 768, ["extra"]],
+], [[761, 844, ["extra"]], [1050, 768, ["extra"]], [1051, 768, ["extra"]], [1440, 900, ["standard"]]]);
 
 const journey = await start("reader-narrow-desktop");
 journey.report.source = "local pinned FF47, not production";
@@ -40,8 +46,8 @@ const contrast = (color, background) => {
 };
 
 try {
-  for (const [width, height] of [[761, 844], [1024, 768], [1050, 768], [1440, 900]]) {
-    for (const scale of ["standard", "extra"]) {
+  for (const [width, height, scales] of matrix) {
+    for (const scale of scales) {
       const narrow = width <= 1050;
       const page = await journey.mapPage({ event: "ff47", viewport: { width, height }, routes: async page => {
         await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), scale);

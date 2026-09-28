@@ -139,10 +139,14 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 `tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：
 
-| 命令 | 跑什麼 | 約略耗時 |
-|---|---|---|
-| `npm run test:browser` | 全部 journey；地圖以代表性尺寸（`1440x900` 與 `390x844`，標準字級） | 3 分鐘 |
-| `npm run test:browser:matrix` | 同上，但地圖改跑完整 10 尺寸 × 3 字級矩陣 | 4 分鐘 |
+| 命令 | 跑什麼 |
+|---|---|
+| `npm run test:browser` | 全部 journey；尺寸矩陣使用各流程的代表性案例 |
+| `npm run test:browser:matrix` | 全部 journey；尺寸矩陣使用完整組合，包含地圖 10 尺寸 × 3 字級 |
+
+`reader-header`、`reader-mobile-tools`、`mobile-circle-sheet`、`reader-narrow-desktop` 的代表性案例保留手機／桌機操作、360×640 回歸尺寸、相關 760／761 與 1050／1051 斷點、最大字級及觸控拖曳。完整模式保留全部原有尺寸／字級組合。名單的重複尺寸檢查保留 1040、1440、2560，詳情高度保留 761、1440；其餘少量版面分支與 resize／history／recovery 操作在兩種模式都執行，不因尺寸減量而略過整條 journey。
+
+共用 `selectMatrix` 只選尺寸組合，不選斷言。`--matrix none` 在上述流程仍執行代表性操作；它只略過 `map-viewport` 額外的尺寸矩陣。上述流程的 `browser-report-*.json` 記錄實際完成的組合、`pagesOpened`、主文件完成載入的 `documentLoads`（含 reload／跨頁，不含同頁路由）與 `durationMs`；runner 另記錄每條 journey 的開始／結束時間。耗時受資料下載、啟動與執行環境影響，以同環境的報告比較，不把縮小矩陣的比例當成整套 CI 加速比例。
 
 `npm run test:browser` 自己處理所有前置：staging、啟動 Vite、等待相依預先打包完成、跑完後關閉伺服器。不需要另開 terminal，也不需要自行組 `MAP_TEST_URL`。
 
