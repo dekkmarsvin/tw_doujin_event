@@ -1,6 +1,12 @@
 // staged-data: fixture
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
+
+const matrix = selectMatrix(
+  [[360, 640], [390, 844], [760, 390], [1440, 900]].map(([width, height]) => [width, height, ["standard", "large", "extra"]]),
+  [[360, 640, ["standard", "extra"]], [390, 844, ["standard"]], [760, 390, ["extra"]], [1440, 900, ["extra"]]],
+);
 
 const journey = await start("reader-mobile-tools");
 const events = (process.env.TOOLS_TEST_EVENTS || "sample").split(",");
@@ -23,8 +29,8 @@ async function assertReachable(locator) {
 
 try {
   for (const event of events) {
-    for (const [width, height] of [[360, 640], [390, 844], [760, 390], [1440, 900]]) {
-      for (const scale of ["standard", "large", "extra"]) {
+    for (const [width, height, scales] of matrix) {
+      for (const scale of scales) {
         const page = await journey.mapPage({ event, viewport: { width, height }, routes: (page) => page.addInitScript((value) => localStorage.setItem("event-map-text-scale", value), scale) });
         const mobile = width <= 760;
         const menu = page.locator("details");

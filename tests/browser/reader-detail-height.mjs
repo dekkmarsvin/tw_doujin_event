@@ -1,12 +1,14 @@
 // staged-data: fixture
 import assert from "node:assert/strict";
 import { overridesRoute, pictureRoute, routes, start, thumbnailOverride } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
 
 const journey = await start("reader-detail-height");
+journey.report.matrix = [];
 try {
   const long = thumbnailOverride("c-900002");
   long[0].fields.saleInfo = "作品介紹與販售資訊。".repeat(160);
-  for (const width of [1440, 1024, 761]) {
+  for (const width of selectMatrix([1440, 1024, 761], [1440, 761])) {
     const page = await journey.mapPage({ viewport: { width, height: 900 }, routes: routes(overridesRoute("sample", long), pictureRoute(true)) });
     const rail = page.getByRole("complementary", { name: "已選社團詳情" });
     const choose = async (name) => {
@@ -45,6 +47,7 @@ try {
     assert.equal((await rail.boundingBox()).height, shortBox.height, "returning to short content shrinks the panel again");
     await close.press("Escape");
     await rail.waitFor({ state: "hidden" });
+    journey.report.matrix.push({ width, height: 900, scale: "standard" });
     await page.close();
   }
   await journey.finish();

@@ -237,6 +237,7 @@ test("journey finish preserves pageerror diagnostics through the standard outer 
   const root = await mkdtemp(path.join(os.tmpdir(), "journey-diagnostics-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await copyFile(new URL("./browser/support/journey.mjs", import.meta.url), path.join(root, "journey.mjs"));
+  await copyFile(new URL("./browser/support/matrix.mjs", import.meta.url), path.join(root, "matrix.mjs"));
   await copyFile(new URL("./browser/support/failure-diagnostics.mjs", import.meta.url), path.join(root, "failure-diagnostics.mjs"));
   // Browser lifecycle only is stubbed; exercise the actual helper and report
   // writes, including the closed-browser state reached by the second abort.
@@ -246,7 +247,7 @@ test("journey finish preserves pageerror diagnostics through the standard outer 
     const page = {
       on: (name, callback) => { handlers[name] = callback; },
       setDefaultTimeout() {},
-      async goto() { handlers.pageerror(new Error("script failed")); },
+      async goto() { handlers.domcontentloaded(); handlers.pageerror(new Error("script failed")); },
       isClosed: () => closed,
       url: () => "https://fixture.test/?token=secret-sentinel",
       async screenshot() {},
@@ -275,6 +276,9 @@ test("journey finish preserves pageerror diagnostics through the standard outer 
     assert.equal(report.diagnostics[0].visibleText, "still visible at failure");
     assert.equal(report.diagnostics[0].screenshot, "failure-pageerror-1.png");
     assert.deepEqual(report.errors, ["script failed"]);
+    assert.equal(report.pagesOpened, 1);
+    assert.equal(report.documentLoads, 1);
+    assert.ok(report.durationMs >= 0);
     assert.match(report.failure, /script failed/);
     assert.equal(raw.includes("secret-sentinel"), false);
   `);

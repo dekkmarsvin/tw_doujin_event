@@ -2,8 +2,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { start, base, output } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
 
 const journey = await start("organizer-roster-recovery");
+journey.report.matrix = [];
 journey.report.synthetic = true;
 journey.report.productionWrites = 0;
 const now = Date.now();
@@ -70,11 +72,12 @@ try {
   await page.locator("summary").filter({ hasText: "準備進度 3/6" }).waitFor();
   await page.getByRole("button", { name: "下一步：地圖", exact: true }).waitFor();
   assert.equal(await list.getByText("· 已完成").count(), 0, "a list whose section is not complete is not marked finished");
-  for (const width of [1040, 1280, 1440, 1920, 2560]) {
+  for (const width of selectMatrix([1040, 1280, 1440, 1920, 2560], [1040, 1440, 2560])) {
     await page.setViewportSize({ width, height: 1000 });
     await journey.capture(page, `roster-recovery-${width}`);
     // Only the workspace is retained for PR evidence; the account header is outside it.
     await list.screenshot({ path: path.join(output, `roster-workspace-${width}.png`) });
+    journey.report.matrix.push({ width, height: 1000, scale: "standard" });
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await aliases.click();

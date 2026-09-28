@@ -10,6 +10,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { captureFailurePages, observeRequests } from "./failure-diagnostics.mjs";
+import { matrixMode } from "./matrix.mjs";
 
 const playwright = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const chromium = playwright.chromium ?? playwright.default?.chromium;
@@ -24,9 +25,10 @@ export const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAA
 export const PICTURE = "https://pictures.test/circle.png";
 
 export async function start(name) {
+  const startedAt = performance.now();
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
-  const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", checks: [], errors: [] };
+  const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", matrixMode, pagesOpened: 0, documentLoads: 0, checks: [], errors: [] };
   const observations = new WeakMap();
   let aborted = false;
 
@@ -38,6 +40,8 @@ export async function start(name) {
       // server data instead of this page's fixtures. Keep routed journeys on
       // their declared data; real portal pages still exercise the worker.
       const page = await browser.newPage({ viewport, reducedMotion: "reduce", serviceWorkers: routes ? "block" : "allow" });
+      report.pagesOpened++;
+      page.on("domcontentloaded", () => report.documentLoads++);
       observations.set(page, observeRequests(page));
       page.setDefaultTimeout(10000);
       page.on("pageerror", (error) => report.errors.push(error.message));
@@ -62,6 +66,7 @@ export async function start(name) {
     },
     async finish() {
       if (report.errors.length) return this.abort(new Error(`page errors: ${report.errors.join("; ")}`));
+      report.durationMs = Math.round(performance.now() - startedAt);
       await writeFile(path.join(output, `browser-report-${name}.json`), JSON.stringify(report, null, 2));
       await browser.close();
       console.log(`Passed ${report.checks.length} checks — ${name}.`);
@@ -72,6 +77,7 @@ export async function start(name) {
       if (aborted) throw error;
       aborted = true;
       const diagnostics = await captureFailurePages(browser, output, name, observations);
+      report.durationMs = Math.round(performance.now() - startedAt);
       await writeFile(path.join(output, `browser-report-${name}.json`), JSON.stringify({ ...report, failure: String(error), diagnostics }, null, 2)).catch(() => {});
       await browser.close();
       throw error;

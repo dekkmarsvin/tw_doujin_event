@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { ADMIN, clearMail, loginLink } from "./support/portal.mjs";
 import { start } from "./support/journey.mjs";
+import { selectMatrix } from "./support/matrix.mjs";
 
 const CANDIDATE_ID = "issue-213-synthetic";
 const GROUP_COUNT = 20_000;
@@ -195,13 +196,15 @@ try {
   assert.equal(await rowsOnPage.first().locator("td").nth(5).innerText(), "ALL");
   assert.equal(await list.getByText("匯入出處").count(), 0);
   assert.equal(await list.getByRole("button", { name: "新增攤位", exact: true }).isDisabled(), true);
-  for (const width of [1040, 1280, 1440, 1920, 2560]) {
+  journey.report.matrix = [];
+  for (const width of selectMatrix([1040, 1280, 1440, 1920, 2560], [1040, 1440, 2560])) {
     await organizer.setViewportSize({ width, height: 1000 });
     await journey.capture(organizer, `roster-desktop-${width}`);
     const box = await rowsOnPage.first().locator("td").nth(2).boundingBox();
     assert.ok(box.width >= 210, "circle name keeps useful width");
     const table = rowsOnPage.locator("..").locator("..").locator("..");
     assert.ok((await table.boundingBox()).height > 420, "the list uses the available height");
+    journey.report.matrix.push({ width, height: 1000, scale: "standard" });
   }
   await organizer.setViewportSize({ width: 1600, height: 1000 });
   const next = list.getByRole("button", { name: "下一頁", exact: true });
