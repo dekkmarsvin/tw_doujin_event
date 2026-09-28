@@ -187,6 +187,8 @@ test("active amendment index upgrades in place and releases only published or ab
   const legacy = await mf.getD1Database("LEGACY");
   await legacy.prepare("DELETE FROM organizer_event_candidates").run();
   await legacy.prepare("DROP INDEX organizer_candidates_active_amendment_idx").run();
+  // This fixture deliberately restores a pre-upgrade database, including its readiness.
+  await legacy.prepare("DELETE FROM identity_runtime_state").run();
   const oldIndex = "CREATE UNIQUE INDEX IF NOT EXISTS organizer_candidates_active_amendment_idx ON organizer_event_candidates (event_id) WHERE publication_operation = 'AMEND' AND status != 'published'";
   await legacy.prepare(oldIndex).run();
   const insert = (id, status) => legacy.prepare(`INSERT INTO organizer_event_candidates
