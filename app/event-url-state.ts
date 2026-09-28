@@ -1,20 +1,10 @@
-import { normalizeWorkTopics, type AdvancedCircleSearch } from "./circle-search";
-import type { WORK_TYPE_OPTIONS } from "./circle-overrides";
+import { parsePublicSearch, writePublicSearch } from "./public-search-url";
+import { type AdvancedCircleSearch } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import {
   eventUsesVenueSpaceSwitcher, venueAssignmentForArea,
   venueAssignmentForVenueSpace, type EventDefinition,
 } from "./event-catalog";
-
-/**
- * 作品類型在 URL 裡走 ASCII 代號。舊的 `original`／`derivative` 沒有對應的取向，
- * 讀到就當成未設定，舊連結仍然開得起來，只是少一個條件。
- */
-const WORK_TYPE_PARAMETERS: Record<string, (typeof WORK_TYPE_OPTIONS)[number]> = {
-  male: "男性向",
-  female: "女性向",
-  general: "一般向",
-};
 
 export type PendingCircleSelection<TDay extends string | number> = {
   day: TDay;
@@ -97,10 +87,6 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
   const inferredAssignment = declaredArea === undefined ? undefined : venueAssignmentForArea(event, declaredArea);
   const defaultAssignment = venueAssignmentForVenueSpace(event, defaults.venueSpaceId);
   const venueAssignment = requestedAssignment ?? inferredAssignment ?? defaultAssignment;
-  const genreValue = url.searchParams.get("genre");
-  const genre = genreValue && event.genres.includes(genreValue) ? genreValue : defaults.genre;
-  const workType = url.searchParams.get("workType") ?? "";
-  const adultContent = url.searchParams.get("r18");
   const visit = url.searchParams.get("visit");
   const sort = url.searchParams.get("sort");
   const density = url.searchParams.get("density");
@@ -109,22 +95,8 @@ export function parseEventUrlState<TDay extends string | number, TArea extends s
       eventId: event.id,
       day,
       venueSpaceId: venueAssignment.venueSpaceId,
-      query: url.searchParams.get("query") ?? "",
-      genre,
+      ...parsePublicSearch(event, url),
       favoriteOnly: url.searchParams.get("favorite") === "1",
-      advancedSearch: {
-        creatorType: url.searchParams.get("creator") ?? "ALL",
-        // Repeated rather than delimited, so a work whose title contains the
-        // delimiter cannot split itself into two conditions.
-        workTopics: normalizeWorkTopics(url.searchParams.getAll("work")),
-        workTopicMode: url.searchParams.get("workMode") === "all" ? "all" : "any",
-        excludedWorkTopics: normalizeWorkTopics(url.searchParams.getAll("workExclude")),
-        // Own-property check, not a bare lookup: `?workType=__proto__` would
-        // otherwise hand an inherited object to the search state and the applied
-        // filter chip would try to render it.
-        workType: Object.hasOwn(WORK_TYPE_PARAMETERS, workType) ? WORK_TYPE_PARAMETERS[workType] : "ALL",
-        adultContent: adultContent === "include" ? "R18" : adultContent === "r15" ? "R15" : adultContent === "general" || adultContent === "exclude" ? "GENERAL" : "ALL",
-      },
       planningDisplay: {
         favoriteGroupId: url.searchParams.get("favoriteGroup") ?? "ALL",
         visitStatus: visit === "planned" || visit === "next" || visit === "visited" || visit === "not-planned" ? visit : "ALL",
@@ -150,7 +122,6 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
 ) {
   if (state.eventId !== event.id) throw new Error(`Cannot serialize ${state.eventId} with event definition ${event.id}.`);
   const url = typeof input === "string" ? new URL(input, "https://event.invalid/") : new URL(input.toString());
-  const defaults = defaultEventUrlState(event);
   OPTIONAL_PARAMETERS.forEach((key) => url.searchParams.delete(key));
   url.searchParams.delete("hall");
   url.searchParams.delete("area");
@@ -158,17 +129,8 @@ export function serializeEventUrlState<TDay extends string | number, TArea exten
   url.searchParams.set("day", String(state.day));
   const venueAssignment = venueAssignmentForVenueSpace(event, state.venueSpaceId);
   if (eventUsesVenueSpaceSwitcher(event)) url.searchParams.set("venueSpaceId", venueAssignment.venueSpaceId);
-  if (state.query.trim()) url.searchParams.set("query", state.query.trim());
-  if (state.genre !== defaults.genre) url.searchParams.set("genre", state.genre);
+  writePublicSearch(event, state, url);
   if (state.favoriteOnly) url.searchParams.set("favorite", "1");
-  if (state.advancedSearch.creatorType !== "ALL") url.searchParams.set("creator", state.advancedSearch.creatorType);
-  normalizeWorkTopics(state.advancedSearch.workTopics).forEach((topic) => url.searchParams.append("work", topic));
-  if (state.advancedSearch.workTopicMode === "all") url.searchParams.set("workMode", "all");
-  normalizeWorkTopics(state.advancedSearch.excludedWorkTopics).forEach((topic) => url.searchParams.append("workExclude", topic));
-  const workTypeParameter = Object.keys(WORK_TYPE_PARAMETERS).find((key) => WORK_TYPE_PARAMETERS[key] === state.advancedSearch.workType);
-
-  if (workTypeParameter) url.searchParams.set("workType", workTypeParameter);
-  if (state.advancedSearch.adultContent !== "ALL") url.searchParams.set("r18", state.advancedSearch.adultContent === "R18" ? "include" : state.advancedSearch.adultContent === "R15" ? "r15" : "general");
   if (state.planningDisplay.favoriteGroupId !== "ALL") url.searchParams.set("favoriteGroup", state.planningDisplay.favoriteGroupId);
   if (state.planningDisplay.visitStatus !== "ALL") url.searchParams.set("visit", state.planningDisplay.visitStatus);
   if (state.planningDisplay.sort !== "booth") url.searchParams.set("sort", state.planningDisplay.sort);

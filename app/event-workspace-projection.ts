@@ -1,6 +1,7 @@
+import { describePublicSearchFilters, matchesPublicScope, matchesPublicSearch } from "./public-circle-search";
 import type { MapSlotView } from "./accessible-event-map-renderer";
-import { circleSearchText, placementStatusLabel, representativeMedia, type CircleViewRecord } from "./circle-records";
-import { ageRatingFilterLabel, buildWorkTopicSuggestions, describeCircleMatch, matchesAdvancedCircleSearch, normalizeWorkTopics, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
+import { placementStatusLabel, representativeMedia, type CircleViewRecord } from "./circle-records";
+import { buildWorkTopicSuggestions, describeCircleMatch, type AdvancedCircleSearch, type CircleMatchReason } from "./circle-search";
 import type { PlanningDisplayFilters } from "./display-filter-controls";
 import { venueAssignmentForVenueSpace, type EventDefinition } from "./event-catalog";
 import type { PlanningDocument } from "./planning-store";
@@ -49,7 +50,6 @@ export function projectEventWorkspace(input: ProjectionInput) {
   // "all areas" names no space of its own -- and because the map on screen is
   // one day in one venue space, so a booth outside it has no coordinates here.
   const venueAssignment = venueAssignmentForVenueSpace(event, venueSpaceId);
-  const areaFilter = new Set<string>(venueAssignment.areaIds);
   const eventRecords = records.filter((record) => record.placement.eventId === event.id);
   const favorites = planning.favorites.filter((item) => item.eventId === event.id);
   const favoriteIds = new Set(favorites.map((item) => item.circleId));
@@ -86,7 +86,6 @@ export function projectEventWorkspace(input: ProjectionInput) {
   const navigationTargetRecord = navigationTargetEntry ? dayRecordsByCircleId.get(navigationTargetEntry.circleId) ?? null : null;
   const visitedCount = dayPlan.filter((entry) => entry.status === "visited").length;
   const sharedRecords = selected ? eventRecords.filter((record) => record.day === selected.day && record.code === selected.code) : [];
-  const needle = query.trim().toLocaleLowerCase();
   const filtered = eventRecords.filter((record) => {
     const favorite = favorites.find((item) => item.circleId === record.circle.id);
     const plan = plansById.get(record.circle.id);
@@ -94,13 +93,10 @@ export function projectEventWorkspace(input: ProjectionInput) {
       || (planningDisplay.favoriteGroupId === "UNGROUPED" ? !!favorite && !favorite.groupId : favorite?.groupId === planningDisplay.favoriteGroupId);
     const visitMatches = planningDisplay.visitStatus === "ALL"
       || (planningDisplay.visitStatus === "not-planned" ? !plan : plan?.status === planningDisplay.visitStatus);
-    return record.day === day
-      && areaFilter.has(record.hall)
-      && (genre === event.genres[0] || record.genre === genre)
+    return matchesPublicScope(record, event, { day, venueSpaceId })
+      && matchesPublicSearch(record, event, { genre, query, advancedSearch })
       && (!favoriteOnly || favoriteIds.has(record.circle.id))
-      && groupMatches && visitMatches
-      && matchesAdvancedCircleSearch(record, advancedSearch)
-      && (!needle || circleSearchText(record).includes(needle));
+      && groupMatches && visitMatches;
   }).sort((left, right) => {
     if (planningDisplay.sort === "name") return left.name.localeCompare(right.name, "zh-Hant");
     if (planningDisplay.sort === "updated") {
@@ -123,7 +119,7 @@ export function projectEventWorkspace(input: ProjectionInput) {
   const resultCircleCount = new Set(filtered.map((record) => record.circle.id)).size;
   const genreCircleIds = new Map(event.genres.map((value) => [value, new Set<string>()]));
   eventRecords.forEach((record) => {
-    if (record.day !== day || !areaFilter.has(record.hall)) return;
+    if (!matchesPublicScope(record, event, { day, venueSpaceId })) return;
     // Category availability counts circles in this map's scope, not placements.
     // The fallback category can be the total itself; adding to a Set is idempotent.
     genreCircleIds.get(event.genres[0])?.add(record.circle.id);
@@ -167,18 +163,11 @@ export function projectEventWorkspace(input: ProjectionInput) {
       thumbnailUrl: representativeMedia(representative.circle.media)?.url,
     }];
   }));
-  const includedTopics = normalizeWorkTopics(advancedSearch.workTopics);
-  // Under `all` every listed topic has to hold, so each chip reads as one more
-  // requirement rather than one more alternative.
-  const topicPrefix = includedTopics.length > 1 && advancedSearch.workTopicMode === "all" ? "同時包含：" : "作品：";
+  const publicFilters = describePublicSearchFilters(event, { genre, query, advancedSearch });
   const filters: WorkspaceFilterDescriptor[] = [
-    ...(genre !== event.genres[0] ? [{ id: "genre", kind: "genre" as const, label: genre }] : []),
+    ...publicFilters.filter((filter) => filter.kind === "genre"),
     ...(favoriteOnly ? [{ id: "favorite", kind: "favorite" as const, label: "只看收藏" }] : []),
-    ...(advancedSearch.creatorType !== "ALL" ? [{ id: "creator", kind: "creator" as const, label: `創作者：${advancedSearch.creatorType}` }] : []),
-    ...includedTopics.map((topic) => ({ id: `work:${topic}`, kind: "work" as const, label: `${topicPrefix}${topic}`, value: topic })),
-    ...normalizeWorkTopics(advancedSearch.excludedWorkTopics).map((topic) => ({ id: `work-exclude:${topic}`, kind: "work-exclude" as const, label: `排除：${topic}`, value: topic })),
-    ...(advancedSearch.workType !== "ALL" ? [{ id: "work-type", kind: "work-type" as const, label: advancedSearch.workType }] : []),
-    ...(advancedSearch.adultContent !== "ALL" ? [{ id: "adult", kind: "adult" as const, label: ageRatingFilterLabel(advancedSearch.adultContent) }] : []),
+    ...publicFilters.filter((filter) => filter.kind !== "genre"),
     ...(planningDisplay.favoriteGroupId !== "ALL" ? [{ id: "favorite-group", kind: "favorite-group" as const, label: planningDisplay.favoriteGroupId === "UNGROUPED" ? "未分組收藏" : groups.get(planningDisplay.favoriteGroupId) ?? "收藏群組" }] : []),
     ...(planningDisplay.visitStatus !== "ALL" ? [{ id: "visit", kind: "visit" as const, label: ({ planned: "待前往", next: "下一站", visited: "已走訪", "not-planned": "未加入行程" } as const)[planningDisplay.visitStatus] }] : []),
   ];
