@@ -23,7 +23,7 @@
 社團介紹頁（`circlePath`）是可分享的出展頁。靜態 HTML 已列出社團名稱、每一筆配置與「在地圖查看」；未執行 JS 時仍是完整的官方頁面。頁面另外載入自己的入口 `circlePage`（Vite 以 `circle-page.html` 為模板建置，discovery build 把資產標籤複製到每個社團頁後移除模板），只做靜態 HTML 做不到的兩件事：
 
 - **即時讀取社團填寫的內容。** 經既有的 `/data/events/:eventId/overrides.json` 讀取，與地圖使用同一條路徑、同一個 publication module 與同一個 `buildCircleCatalog` 投影；不是新的公開讀取路徑。可撤下的社團內容因此不會寫進 build 產物。每次開啟頁面讀一次 overlay，不輪詢；已開啟頁面的更新時機同下方「更新可見性」。
-- **收藏與行程。** 經既有 planning store 寫入，與地圖是同一份資料，見[收藏與走訪規劃契約](./planning.md#責任邊界)。
+- **收藏、行程與分享。** 收藏與行程經既有 planning store 寫入，與地圖是同一份資料，見[收藏與走訪規劃契約](./planning.md#責任邊界)；逐日的「加入這天行程」填進靜態攤位卡預留的位置。分享只使用瀏覽器的系統分享或剪貼簿，不送出任何請求。
 
 頁面腳本需要的官方資料不另外請求：該社團在 reviewed base 中的名稱與全部 placement，以 `circle-catalog/3` 格式（只有這一個社團）寫在 HTML 的 `application/json` 區塊（`#circle-page-data`）。欄位逐一複製，不帶其他屬性；`day` 保持原型別，行程才會與地圖寫入的鍵一致。整份 `circles.json` 不因開啟一個社團頁而下載。
 
