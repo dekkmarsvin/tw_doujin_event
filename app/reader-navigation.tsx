@@ -4,9 +4,27 @@ import { switchReaderViewUrl } from "./catalog-browse-url";
 import styles from "./reader-navigation.module.css";
 
 export const READER_NAVIGATION_EVENT = "reader:navigate";
-export function navigateReader(url: URL) {
-  window.history.pushState({}, "", url);
+export function navigateReader(url: URL, state: Record<string, unknown> = {}) {
+  window.history.pushState(state, "", url);
   window.dispatchEvent(new Event(READER_NAVIGATION_EVENT));
+}
+
+/**
+ * The browse view's 行程 tab opens the map with today's plan already showing.
+ * It rides on the history entry, not the URL: it is a one-time landing, not
+ * shareable state, and the map forgets it once it has opened the panel.
+ */
+const MOBILE_PANEL_STATE = "readerMobilePanel";
+export function openMapOnPlan(url: URL) {
+  navigateReader(url, { [MOBILE_PANEL_STATE]: "plan" });
+}
+export function arrivedOnPlan() {
+  return typeof window !== "undefined" && window.history.state?.[MOBILE_PANEL_STATE] === "plan";
+}
+export function forgetArrivalPanel() {
+  const state = { ...window.history.state };
+  delete state[MOBILE_PANEL_STATE];
+  window.history.replaceState(state, "", window.location.href);
 }
 export function ordinaryLinkClick(event: MouseEvent<HTMLAnchorElement>) {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;

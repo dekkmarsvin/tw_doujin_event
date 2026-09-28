@@ -17,7 +17,6 @@
 .clearFilters:active,.filterStack .clearFilters:active { filter:brightness(.88); }
 .clearFiltersActive,.filterStack .clearFiltersActive { border-color:var(--ink); background:var(--ink); color:var(--surface-soft); }
 .clearFiltersActive:hover,.filterStack .clearFiltersActive:hover { border-color:var(--ink); background:var(--ink); color:var(--surface-soft); filter:brightness(.94); }
-.mobileTabs span { display:inline-grid; place-items:center; min-width:18px; height:18px; margin-left:3px; padding:0 5px; border-radius:9px; background:#eff1ed; color:var(--ink); font:700 calc(9px * var(--ui-font-scale,1)) ui-monospace,monospace; }
 .filterStack { flex:0 0 auto; max-height:45%; padding:16px 16px 10px; overflow:auto; border-bottom:1px solid var(--line); }
 .filterStack fieldset { margin-bottom:14px; }
 .filterStack :global(.genres) { grid-template-columns:1fr 1fr; }
@@ -233,10 +232,9 @@
  .eventLink { flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; width:100%; min-height:44px; padding-block:2px; }
  .eventInfo h1 { font-size:calc(11px * var(--ui-font-scale)); line-height:1.3; font-weight:500; }
  .eventSwitch { font-size:calc(10px * var(--ui-font-scale)); line-height:1.3; }
- /* The top row's right end is the tools menu, so the switch takes the next row,
-    where the browse view also puts it; search follows. */
- .shell .viewSwitch { grid-column:1 / -1; grid-row:2; justify-self:start; margin-top:4px; }
- .shell :global(.search) { grid-column:1 / -1; grid-row:3; margin-top:6px; }
+ .shell :global(.search) { grid-column:1 / -1; grid-row:2; margin-top:5px; }
+ /* On phones the switch lives in the bottom navigation as 逛品書. */
+ .shell .viewSwitch { display:none; }
  .shell .searchClear { display:grid; place-items:center; width:32px; height:40px; padding:0; border:0; background:transparent; cursor:pointer; }
  .shell :global(.map-region) { padding:0; }
  .shell .mapCanvas { border:0; border-radius:0; }
@@ -275,13 +273,8 @@
  .mobilePanelHeader { display:flex; align-items:center; justify-content:space-between; flex:none; height:44px; margin:0 16px; border-bottom:1px solid var(--line); font-size:calc(14px * var(--ui-font-scale)); }
  .shell .mobilePanelHeader button { position:relative; z-index:1; display:flex; align-items:center; gap:5px; min-height:44px; padding:0; border:0; background:none; font-weight:700; cursor:pointer; }
  .mobilePanelHeader svg { width:20px; height:20px; }
- .mobileTabs { flex:none; display:grid; grid-template-columns:1fr 1fr; height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); gap:0; border:0; border-top:1px solid var(--line); background:#fff; }
- .shell .mobileTabs button { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:0; padding:3px 0 8px; border:0; border-radius:0; background:transparent; color:#787e87; font-size:calc(14px * var(--ui-font-scale)); font-weight:700; cursor:pointer; }
- .mobileTabs button svg { width:24px; height:24px; }
- .mobileTabs button>span { display:flex; align-items:center; gap:4px; height:auto; margin:0; padding:0; border-radius:0; background:transparent; color:inherit; font:inherit; line-height:1.2; }
- .mobileTabs small { font-size:10px; }
- .mobileTabs button[aria-pressed="true"] { color:var(--ink); }
- .mobileTabs button[aria-pressed="true"]::after { content:""; position:absolute; bottom:4px; width:56px; height:3px; border-radius:3px; background:var(--mint); }
+ /* 探索、行程 and 逛品書: item look in reader-mobile-tabs.module.css, shared with browse. */
+ .mobileTabs { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); gap:0; border:0; border-top:1px solid var(--line); background:#fff; }
  .mobilePanel { min-height:0; height:auto; flex:1; display:block; overflow:auto; overscroll-behavior:contain; scroll-padding-block:12px; }
  .mobilePanel>* { width:100%; min-width:0; max-width:none; }
  .mobilePanel[aria-label="探索結果"]:not([hidden]) { display:flex; flex-direction:column; overflow:hidden; }
@@ -325,13 +318,6 @@
  .mobileToolsMenu>summary { min-width:60px; }
 }
 @media (max-width:760px) and (max-height:740px) {
- /* The map/browse switch takes another row. Place +/- beside each other on
-    short phones, keeping one width across sheet levels so map fit is stable. */
- .shell[data-mobile-sheet-level] :global(.controls) { display:grid; grid-template-columns:44px 44px; width:88px; }
- .shell[data-mobile-sheet-level="full"] :global(.controls) { display:none; }
- .shell :global(.controls) button:first-child { border-bottom:1px solid var(--line); border-right:0; border-radius:12px 0 0 12px; }
- .shell :global(.controls) button:nth-of-type(2) { border-radius:0 12px 12px 0; }
- .shell :global(.controls) .fitButton { grid-column:1/-1; justify-self:end; }
  .shell[data-mobile-summary="true"] { --mobile-half-height:calc(216px + env(safe-area-inset-bottom)); }
 
  .mobileSummary { padding:0 16px 4px; }

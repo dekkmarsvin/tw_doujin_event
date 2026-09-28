@@ -77,6 +77,26 @@ try {
   assert.equal(await page.locator('meta[name="robots"][content*="noindex"]').count(), 0);
   await page.close();
 
+  // Phones switch views from the bottom bar: 探索 lands on the map at rest,
+  // 行程 opens today's plan once, and the map's own 逛品書 comes back here.
+  const phone = await journey.page({ params: "&view=browse", routes: content, viewport: { width: 390, height: 844 } });
+  await ready(phone);
+  const sheet = () => phone.locator("main.app-shell").getAttribute("data-mobile-sheet-level");
+  assert.equal(await browseNav(phone).getByRole("link", { name: "逛品書", exact: true }).getAttribute("aria-current"), "page");
+  await browseNav(phone).getByRole("link", { name: "行程", exact: true }).click();
+  await phone.locator("[data-slot-code]").first().waitFor(); await phone.waitForTimeout(300);
+  const dock = phone.getByRole("group", { name: "行動版工作區" });
+  assert.equal(await dock.getByRole("button", { name: /^行程/ }).getAttribute("aria-pressed"), "true");
+  assert.equal(await sheet(), "half", "行程 opens today's plan");
+  assert.equal(await phone.evaluate(() => history.state?.readerMobilePanel), undefined, "the landing is used once");
+  await journey.capture(phone, "catalog-browse-phone-plan");
+  await dock.getByRole("link", { name: "逛品書", exact: true }).click(); await ready(phone);
+  await browseNav(phone).getByRole("link", { name: "探索", exact: true }).click();
+  await phone.locator("[data-slot-code]").first().waitFor(); await phone.waitForTimeout(300);
+  assert.equal(await sheet(), "peek", "探索 returns to the map at rest");
+  assert.equal(await dock.getByRole("button", { name: "探索", exact: true }).getAttribute("aria-pressed"), "true");
+  await journey.capture(phone, "catalog-browse-phone-map");
+  await phone.close();
   // Failed storage stays in the event owner, including undo and the export surface.
   const failedStorage = await journey.page({ params: "&view=browse", routes: async (target) => {
     await target.addInitScript(() => { const set = Storage.prototype.setItem; Storage.prototype.setItem = function(key, value) {

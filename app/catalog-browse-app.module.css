@@ -76,19 +76,22 @@
 .manualShare small { color:var(--muted); }
 .undo { position:fixed; z-index:45; inset:auto 12px 16px; width:fit-content; max-width:calc(100% - 24px); margin:auto; display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 14px; border-radius:9px; background:var(--ink); color:var(--surface-soft); box-shadow:0 4px 14px #2733291f; }
 .undo button { min-height:44px; padding:8px; border:0; background:transparent; color:inherit; text-decoration:underline; }
+.mobileNav { display:none; }
 .srOnly { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 @media(max-width:1050px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) {
   .header>div { padding-inline:14px; }
-  /* As on the map: the tools keep the top row's right end, the switch gets its own row. */
-  .identity { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:6px 12px; min-height:56px; padding-block:6px 10px; }
+  /* As on the map: brand, event and tools share the top row; the switch moves to the bottom navigation. */
+  .identity { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:6px 12px; min-height:56px; padding-block:6px; }
   .brand { font-size:19px; gap:8px; margin-right:0; }
   .brand>span { width:32px; height:32px; font-size:16px; }
   .identity>.event { margin-right:0; font-size:12px; }
   .identity>.event small { font-size:11px; }
-  .identity>.viewSwitch { grid-column:1 / -1; grid-row:2; justify-self:start; }
+  .identity>.viewSwitch { display:none; }
+  .mobileNav { position:fixed; z-index:40; inset:auto 0 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); border-top:1px solid var(--line); background:#fff; }
+  .undo { bottom:calc(76px + env(safe-area-inset-bottom)); }
   .identity>button { grid-column:3; grid-row:1; }
-  .main { padding:12px 12px 80px; }
+  .main { padding:12px 12px calc(96px + env(safe-area-inset-bottom)); }
   .grid,.textList { grid-template-columns:minmax(0,1fr); }
   .grid { gap:16px; }
   .scope { gap:6px; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; }

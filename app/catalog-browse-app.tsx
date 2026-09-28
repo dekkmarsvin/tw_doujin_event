@@ -5,14 +5,15 @@ import { eventDayCalendarDate, shortDate } from "./event-calendar";
 import { placementStatusLabel } from "./circle-records";
 import { DEFAULT_ADVANCED_CIRCLE_SEARCH, normalizeWorkTopics } from "./circle-search";
 import { catalogPreviewSize } from "./catalog-image-prepare";
-import { catalogBrowseUrl, parseCatalogBrowseUrl, type CatalogBrowseState } from "./catalog-browse-url";
+import { catalogBrowseUrl, parseCatalogBrowseUrl, switchReaderViewUrl, type CatalogBrowseState } from "./catalog-browse-url";
 import { projectCatalogBrowse, type CatalogBrowseCard } from "./catalog-browse-projection";
 import { BROWSE_BATCH_SIZE, readBrowseHistory, saveBrowseHistory } from "./catalog-browse-history";
 import { useCircleCatalog } from "./use-circle-catalog";
 import { useReaderPlanning } from "./reader-planning";
 import { restoreFavorite, toggleFavorite } from "./planning-store";
 import { applyReaderMetadata, circlePath, pageMetadata, readerLink } from "./seo";
-import ReaderViewTabs, { navigateReader, ordinaryLinkClick } from "./reader-navigation";
+import ReaderViewTabs, { navigateReader, openMapOnPlan, ordinaryLinkClick } from "./reader-navigation";
+import tabStyles from "./reader-mobile-tabs.module.css";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
 import PlanningTools from "./planning-tools";
 import { UiIcon } from "./ui-icons";
@@ -35,6 +36,7 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
   const [manualShare, setManualShare] = useState("");
   const url = catalogBrowseUrl(event, state, window.location.origin);
   const key = url.toString();
+  const mapUrl = useMemo(() => switchReaderViewUrl(event, new URL(key)), [event, key]);
   const ready = publication.status === "ready" && publication.overlayStatus === "applied";
   const projection = useMemo(() => projectCatalogBrowse(event, publication.catalog.records, state), [event, publication.catalog, state]);
   const savePosition = useCallback(() => {
@@ -180,6 +182,22 @@ export default function CatalogBrowseApp({ event }: { event: EventDefinition }) 
         </>}
       </>}
     </main>
+    {/* Phones: the same bottom navigation as the map. 探索 returns to the map at rest,
+        行程 opens it on today's plan, and 逛品書 again goes back to the top. */}
+    <nav className={styles.mobileNav} aria-label="閱讀方式">
+      <a className={tabStyles.tab} href={mapUrl.toString()} onClick={(pressed) => {
+        if (!ordinaryLinkClick(pressed)) return;
+        pressed.preventDefault(); savePosition(); navigateReader(mapUrl);
+      }}><UiIcon name="search" /><span>探索</span></a>
+      <a className={tabStyles.tab} href={mapUrl.toString()} onClick={(pressed) => {
+        if (!ordinaryLinkClick(pressed)) return;
+        pressed.preventDefault(); savePosition(); openMapOnPlan(mapUrl);
+      }}><UiIcon name="check-square" /><span>行程</span></a>
+      <a className={tabStyles.tab} href={key} aria-current="page" onClick={(pressed) => {
+        if (!ordinaryLinkClick(pressed)) return;
+        pressed.preventDefault(); window.scrollTo({ top: 0 });
+      }}><UiIcon name="book" /><span>逛品書</span></a>
+    </nav>
     {planning.favoriteUndo && <div className={styles.undo} role="status"><span>已取消收藏「{planning.favoriteUndo.circleName}」</span><button onClick={() => {
       const undo = planning.favoriteUndo;
       if (undo) planning.update((current) => restoreFavorite(current, undo.favorite));
