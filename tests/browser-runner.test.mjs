@@ -20,6 +20,8 @@ async function selectionFixture(t) {
     appendFileSync("staged", JSON.stringify(process.argv.slice(2)) + "\\n");
   `);
   await writeFile(path.join(root, "scripts/fetch-event-data.mjs"), `throw new Error("unselected pinned data must not be fetched");`);
+  // The runner finds Vite through its manifest, as a real install provides it.
+  await writeFile(path.join(root, "node_modules/vite/package.json"), '{"name":"vite","type":"module","bin":{"vite":"bin/vite.js"}}');
   await writeFile(path.join(root, "node_modules/vite/bin/vite.js"), `
     import http from "node:http";
     http.createServer((_request, response) => response.end("ready"))
