@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -35,13 +36,15 @@ if (!await fetch(process.env.MAP_TEST_URL).then(response => response.ok)) proces
 process.exit(${status});
   `);
   const run = (args = [], overrides = {}) => {
-    const env = { ...process.env, PLAYWRIGHT_MODULE: "unused-test-module" };
+    const env = { ...process.env, PLAYWRIGHT_MODULE: "unused-test-module", MAP_TEST_OUTPUT: path.join(root, "output") };
     delete env.MAP_TEST_URL; delete env.MAP_TEST_PORT;
     return spawnSync(process.execPath, [path.join(root, "scripts/run-browser-tests.mjs"), ...args], {
       cwd: root, env: { ...env, ...overrides }, encoding: "utf8", timeout: 20000,
     });
   };
-  return { root, journey, run };
+  const server = source => writeFile(path.join(root, "node_modules/vite/bin/vite.js"), source);
+  const report = async () => JSON.parse(await readFile(path.join(root, "output/browser-runner-report.json"), "utf8"));
+  return { root, journey, run, server, report };
 }
 
 test("named journeys run once, prepare only their data and preserve failures", async t => {
@@ -66,6 +69,87 @@ test("no selection still runs every journey and reports success", async t => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(await readFile(path.join(f.root, "ran"), "utf8"), "first\nsecond\n");
   assert.match(result.stderr, /All eligible browser journeys passed \(2 files\)/);
+});
+
+test("a server that exits before readiness fails promptly and retains sanitized diagnostics", async t => {
+  const f = await selectionFixture(t);
+  await f.journey("first");
+  await f.server(`
+    import { writeFileSync } from "node:fs";
+    console.log("startup failed for person@example.test https://fixture.test/start?credential=private-query");
+    console.error("diagnostic-secret-sentinel");
+    writeFileSync(process.env.WRANGLER_LOG_PATH, "runtime disconnected\\nAuthorization: private-header\\n");
+    process.exit(23);
+  `);
+  const result = f.run([], { AUDIT_SECRET: "diagnostic-secret-sentinel" });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1);
+  const [group] = (await f.report()).groups;
+  assert.equal(group.server.exit.code, 23);
+  assert.equal(group.journeys[0].status, "not_run");
+  assert.match(group.infrastructureFailure, /server exited/);
+  const log = await readFile(path.join(f.root, "output/server-fixture.log"), "utf8");
+  assert.match(log, /startup failed/);
+  assert.match(log, /runtime disconnected/);
+  for (const secret of ["person@example.test", "private-query", "private-header", "diagnostic-secret-sentinel"]) assert.equal(log.includes(secret), false, secret);
+  await assert.rejects(readFile(path.join(f.root, "ran")), { code: "ENOENT" });
+});
+
+test("a shared server exit interrupts its journey, skips dependants and still runs the next environment", async t => {
+  const f = await selectionFixture(t);
+  await f.server(`
+    import http from "node:http";
+    http.createServer((request, response) => {
+      if (request.url === "/crash") { process.exit(24); }
+      else response.end("ready");
+    }).listen(Number(process.argv[process.argv.indexOf("--port") + 1]));
+  `);
+  await writeFile(path.join(f.root, "scripts/fetch-event-data.mjs"), "");
+  await f.journey("a-crash");
+  await writeFile(path.join(f.root, "tests/browser/a-crash.mjs"), `
+// staged-data: fixture
+    import { writeFileSync } from "node:fs";
+    writeFileSync("journey-pid", String(process.pid));
+    await fetch(process.env.MAP_TEST_URL + "/crash").catch(() => {});
+    setInterval(() => {}, 1000);
+  `);
+  await f.journey("b-skipped");
+  await f.journey("c-independent", "pinned");
+  const result = f.run();
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1);
+  const [failed, independent] = (await f.report()).groups;
+  assert.equal(failed.mode, "fixture");
+  assert.equal(independent.mode, "pinned");
+  assert.equal(failed.server.exit.code, 24);
+  assert.deepEqual(failed.journeys.map(entry => entry.status), ["interrupted_by_server_exit", "not_run"]);
+  assert.equal(independent.journeys[0].status, "passed");
+  assert.equal(await readFile(path.join(f.root, "ran"), "utf8"), "c-independent\n");
+  const pid = Number(await readFile(path.join(f.root, "journey-pid"), "utf8"));
+  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  const origin = independent.server.base;
+  await assert.rejects(fetch(origin, { signal: AbortSignal.timeout(2000) }));
+});
+
+test("an external server remains owned by the caller after a failed journey", async t => {
+  const f = await selectionFixture(t);
+  await f.journey("external-reader", "pinned", 1);
+  const server = spawn(process.execPath, ["--input-type=module", "-e", `
+    import http from "node:http";
+    const server = http.createServer((_req, res) => res.end("ready"));
+    server.listen(0, "127.0.0.1", () => console.log(server.address().port));
+  `], { stdio: ["ignore", "pipe", "inherit"] });
+  t.after(async () => { const closed = once(server, "exit"); server.kill(); await closed; });
+  const [port] = await once(server.stdout, "data");
+  const url = `http://127.0.0.1:${Number(String(port).trim())}`;
+  const result = f.run([], { MAP_TEST_URL: url });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1);
+  assert.equal((await fetch(url)).status, 200);
+  const [group] = (await f.report()).groups;
+  assert.equal(group.journeys[0].status, "failed");
+  assert.equal(group.server, undefined);
+  await assert.rejects(readFile(path.join(f.root, "staged")), { code: "ENOENT" });
 });
 
 test("unknown names, options and incompatible external selections fail before staging", async t => {
