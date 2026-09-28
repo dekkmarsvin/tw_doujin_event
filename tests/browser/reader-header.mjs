@@ -24,7 +24,7 @@ try {
         const header = await page.locator(".topbar").evaluate((node) => {
           const rect = (el) => el?.getBoundingClientRect().toJSON();
           const h1 = node.querySelector("h1");
-          const link = node.querySelector("a");
+          const link = node.querySelector(".event a");
           const search = node.querySelector(".search");
           const scale = node.querySelector('[aria-label="網頁字體大小"]');
           const tools = Array.from(node.querySelectorAll("button")).filter((el) => ["資料管理", "使用說明"].includes(el.textContent));
