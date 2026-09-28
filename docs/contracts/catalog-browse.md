@@ -28,5 +28,6 @@
 - 系統分享失敗後嘗試複製文字與連結，再失敗提供手動複製；使用者取消系統分享時不自行複製。分享為動態結果，內容會隨社團公開資料改變。
 - 同文件地圖／逛品書切換共用 event-level planning owner，保存未能寫入儲存空間的記憶體資料、錯誤與 7 秒收藏復原；資料管理匯出同一份狀態。跨文件社團頁仍使用既有 localStorage／storage 協定。
 - 卡片收藏不建立行程；具體活動日的行程由既有出展頁或地圖加入。
+- 760px 以下兩個畫面共用底部「探索／行程／逛品書」，桌機切換在頁首（[ADR-0076](../adr/0076-phones-switch-reader-views-from-the-bottom-bar.md)）。從逛品書點探索回到面板收合的地圖；點行程以該筆 history state 一次性要求展開今日行程，地圖開啟後即清除；在逛品書點逛品書回到頁首。
 - browse history entry 保存目前公開 URL、兩區已顯示筆數與 scrollY。返回／前進於資料完成後還原；搜尋或範圍變更重設為首批及頁首。位置資訊不寫入分享 URL，也不新增持久儲存。
 - metadata 使用 browse 專屬 title／description 及活動 canonical；切換時不得殘留社團 canonical 或無效活動 noindex。活動選擇頁、Reader 頁首及活動介紹皆提供入口，不因目前無品書而隱藏。

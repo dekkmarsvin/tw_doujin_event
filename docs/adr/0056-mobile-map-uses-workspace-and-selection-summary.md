@@ -2,6 +2,7 @@
 
 - **狀態**：部分被取代；決策 3 的摘要關閉保留選取由 [ADR-0063](./0063-reader-dismissal-clears-selection.md) 取代，把手收合及完整資訊返回摘要仍適用。
 - 手機完整資訊的 dialog／禁止 full 限制由 [ADR-0064](./0064-mobile-circle-details-use-three-sheet-levels.md) 取代。
+- 決策 1 的底部兩入口由 [ADR-0076](./0076-phones-switch-reader-views-from-the-bottom-bar.md) 擴充為探索／行程／逛品書。
 - **日期**：2026-09-12
 - **取代範圍**：[ADR-0055](./0055-desktop-map-uses-two-zones-and-overlay-details.md) 中「手機工作面板維持原行為」；桌機決策保留。
 - **規格**：[手機地圖面板方案 B](../design/history/mobile-map-panel-plan.md)
