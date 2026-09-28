@@ -94,6 +94,15 @@ test("organizer reuses the event source for imports and labels every activity-da
   assert.doesNotMatch(app, /描摹/);
 });
 
+test("an explicitly cleared selection survives a later list refresh", async () => {
+  const app = await organizerSource();
+  // The browser save-and-leave journey refreshes before clearing selection.
+  // Keep these guards until a journey refreshes the list after leaving.
+  assert.match(app, /const selectionInitialized = useRef\(false\)/);
+  assert.match(app, /selectionInitialized\.current\s*=\s*true/);
+  assert.match(app, /current === null \? null/);
+});
+
 test("remaining import sample, layout and correction-reset guards", async () => {
   const [app, css] = await Promise.all([
     organizerSource(),
