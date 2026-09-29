@@ -893,6 +893,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function listLiveOverrides(eventId: string, phase: OverridesPhase) {
     await ensureRuntimeReady();
+    return readLiveOverrides(eventId, phase);
+  }
+
+  /** Optional HTML metadata never initializes or repairs storage on a read.
+   * If the runtime is not prepared, the page keeps its static brand card. */
+  async function getPublicOverride(eventId: string, circleId: string, phase: OverridesPhase) {
+    return (await readLiveOverrides(eventId, phase, circleId))[0] ?? null;
+  }
+
+  async function readLiveOverrides(eventId: string, phase: OverridesPhase, circleId?: string) {
     // After the event, a circle that opted out is simply absent from the query,
     // so its content never reaches the published document at all.
     const hiddenClause = phase === "after" ? " AND o.post_event_hidden = 0" : "";
@@ -904,13 +914,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     // trail all stay put — this withdraws the projection, not the record.
     const result = await database.prepare(
       `SELECT o.circle_id, o.fields_json, o.status, o.updated_at FROM circle_overrides o
-       WHERE o.event_id = ?1 AND o.status = 'live'${hiddenClause}
+       WHERE o.event_id = ?1 AND o.status = 'live'${hiddenClause}${circleId ? " AND o.circle_id = ?2" : ""}
          AND EXISTS (
            SELECT 1 FROM circle_claims c
            WHERE c.event_id = o.event_id AND c.circle_id = o.circle_id AND c.status = 'verified'
          )
        ORDER BY o.circle_id ASC`,
-    ).bind(eventId).all<OverrideRow>();
+    ).bind(...(circleId ? [eventId, circleId] : [eventId])).all<OverrideRow>();
     return result.results;
   }
 
@@ -3419,7 +3429,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
     createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listAdminReviewQueue,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
-    getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, setPostEventHidden,
+    getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,
     manageMapContributor, hasActiveMapContributor,
     createMapDraft, getMapDraft, normalizeMapDraftPeriodAliases,

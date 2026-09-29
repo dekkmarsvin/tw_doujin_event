@@ -24,6 +24,7 @@ import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
+import { selectedCircleShareImage } from "../circle-share-image";
 import { CatalogImagesField } from "./catalog-images-field";
 import { pointTo } from "./point-to";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
@@ -694,6 +695,7 @@ function ReviewSummary({ fields }: { fields: CircleOverrideFields }) {
     ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(fields[key])]),
     ["連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
     ["代表圖", fields.thumbnail ? fields.thumbnail.provider || "已提供" : "未提供"],
+    ["分享縮圖", selectedCircleShareImage(fields).label],
   ];
   return <dl className={styles.reviewSummary}>
     {rows.map(([label, content]) => <div key={label}><dt>{label}</dt><dd>{content}</dd></div>)}
@@ -987,6 +989,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
   const official = baseRecords?.[0]?.circle;
   const officialHas = (key: CircleOverrideFieldKey) => {
     if (!official) return false;
+    if (key === "shareImage") return false;
     if (key === "thumbnail") return official.media.some((item) => item.kind === "thumbnail");
     if (key === "catalogImages") return official.media.some((item) => item.kind === "catalog");
     if (key === "links") return official.externalLinks.length > 0;
@@ -1310,6 +1313,13 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
 
       </fieldset>
 
+      {saved && hydrated && <CirclePageShare
+        event={event} circle={{ id: claim.circleId, name: claim.circleName }}
+        records={baseRecords} failed={baselineFailed && !baseRecords} onRetry={retryBaseline}
+        fields={fields} savedFields={savedFields}
+        onImageChange={shareImage => setFields(current => ({ ...current, shareImage }))}
+      />}
+
       {/* Held at the foot of the screen while the form scrolls past, and
           ending where the form ends: the step that publishes is always in
           reach, and nothing else — least of all the deletion — sits beside it. */}
@@ -1347,6 +1357,7 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             <PublicationPreview records={serverPreview} />
             <h4>這次填寫的欄位</h4>
             <ReviewSummary fields={reviewedFields} />
+            <img className={styles.shareImagePreview} src={selectedCircleShareImage(reviewedFields).image.url} alt="儲存後的分享縮圖" />
             <div ref={reviewActions} className={styles.reviewActions}>
               <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
               {/* Re-checked here, not only when the review opened: an image
@@ -1410,17 +1421,10 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
       </div> : null}
     </div>
 
-    {/* After the form, in falling order of use: taking the published page
-        somewhere, what happens to it after the event, and — last and set
-        apart — removing it. Outside the form so none of it reads as part of
-        what 預覽並送出 sends; both of the first two answer on the spot. */}
+    {/* These settings act independently of the form's preview and save. */}
     <div className={styles.editorAfter} inert={reviewOpen ? true : undefined}>
       <fieldset className={styles.editorFieldset} disabled={!hydrated || reviewOpen}>
         <div className={styles.editorAfterRow}>
-          {saved && hydrated && <CirclePageShare
-            event={event} circle={{ id: claim.circleId, name: claim.circleName }}
-            records={baseRecords} failed={baselineFailed && !baseRecords} onRetry={retryBaseline}
-          />}
           {/* Saved on the spot rather than with the draft: it is one switch with an
               immediate answer, and it survives a tab closed before submitting. */}
           <fieldset className={styles.retention}>

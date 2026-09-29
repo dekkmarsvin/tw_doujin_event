@@ -9,6 +9,7 @@
  */
 
 import { isHtmlRoute, secureHtmlResponse, unconditionalHtmlRequest } from "./_html-security";
+import { applyCircleShareImage } from "./_circle-share-image";
 
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
@@ -56,5 +57,5 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   }
-  return html ? secureHtmlResponse(response, url.pathname) : response;
+  return html ? secureHtmlResponse(await applyCircleShareImage(context, response), url.pathname) : response;
 };

@@ -66,3 +66,14 @@ test("a missing clipboard rejects instead of throwing", async () => {
   assert.doesNotThrow(() => { pending = writeClipboard("text"); });
   await assert.rejects(pending, TypeError);
 });
+
+test("share settings preview the selected page and clearly leave saving to the editor", () => {
+  const page = { url: "https://pictures.test/sheet.jpg", previewUrl: "https://pictures.test/small.jpg", width: 1800, height: 2500 };
+  const markup = render({ records: [record(1, "S01")], failed: false, onImageChange() {},
+    fields: { catalogImages: [page], shareImage: page.url }, savedFields: {} });
+  assert.match(markup, /分享縮圖/);
+  assert.match(markup, /品書第 1 張/);
+  assert.match(markup, /src="https:\/\/pictures.test\/sheet.jpg"/);
+  assert.match(markup, /縮圖尚未儲存，請預覽並送出。/);
+  assert.doesNotMatch(markup, /社團代表圖/);
+});

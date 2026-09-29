@@ -50,6 +50,9 @@ export type CircleOverrideFields = {
   thumbnail?: CircleOverrideThumbnail | null;
   /** In reading order. An empty list is the tombstone, as for every list. */
   catalogImages?: CircleCatalogImage[];
+  /** Brand card, current representative image, or a URL from catalogImages.
+   * A removed image resolves to the brand card, never to an arbitrary URL. */
+  shareImage?: string;
 };
 
 export type CircleOverride = {
@@ -162,7 +165,7 @@ const LIST_FIELDS = CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key }) => key);
 const TEXT_FIELDS = ["pen", "saleInfo"] as const;
 
 /** One editable-scope authority shared by validation, editor controls and tests. */
-export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, "circleCategory", ...LIST_FIELDS, "links", "thumbnail", "catalogImages"] as const satisfies readonly (keyof CircleOverrideFields)[];
+export const CIRCLE_OVERRIDE_FIELD_KEYS = [...TEXT_FIELDS, "circleCategory", ...LIST_FIELDS, "links", "thumbnail", "catalogImages", "shareImage"] as const satisfies readonly (keyof CircleOverrideFields)[];
 
 export type CircleOverrideFieldKey = (typeof CIRCLE_OVERRIDE_FIELD_KEYS)[number];
 type CircleOverrideFieldMode = "inherit" | "replace" | "clear";
@@ -182,6 +185,7 @@ export function inheritCircleOverrideField(fields: CircleOverrideFields, key: Ci
 
 /** Encode an explicit tombstone without making the editor duplicate field kinds. */
 export function clearCircleOverrideField(fields: CircleOverrideFields, key: CircleOverrideFieldKey): CircleOverrideFields {
+  if (key === "shareImage") return { ...fields, shareImage: "brand" };
   if (key === "thumbnail") return { ...fields, thumbnail: null };
   if (key === "links") return { ...fields, links: [] };
   if (key === "catalogImages") return { ...fields, catalogImages: [] };
@@ -286,6 +290,8 @@ export function circleOverrideFieldsProblem(
     && fields.catalogImages.length <= OVERRIDE_LIMITS.catalogImages && fields.catalogImages.every(isCatalogImage))) {
     return `品書最多 ${OVERRIDE_LIMITS.catalogImages} 張，請重新上傳品書圖片。`;
   }
+  if ("shareImage" in fields && fields.shareImage !== "brand" && fields.shareImage !== "thumbnail"
+    && !isHttpsUrl(fields.shareImage)) return "請重新選擇分享縮圖。";
 
   return JSON.stringify(fields).length <= OVERRIDE_LIMITS.serializedFields
     ? null

@@ -373,20 +373,16 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .card .saveBarRow button { flex: 1 1 100%; }
 }
 
-/* After the form: the share panel over the form column and the after-event
-   choice over the preview column, then the deletion, last and set apart. */
+/* Immediate settings stay after the form, with deletion last and set apart. */
 .editorAfter { margin-top: 24px; }
 /* An explicit track: an implicit one sizes to the share post's longest line. */
 .editorAfterRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
-.editorAfterRow > .sharePanel { margin-top: 0; }
 .dangerZone { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
 .dangerZone .danger { margin-top: 0; }
 .dangerZone .danger > :not(summary) { max-width: 640px; }
 @media (min-width: 960px) {
   .editorAfterRow { grid-template-columns: minmax(0, 1fr) minmax(360px, var(--preview-column)); gap: var(--column-gap); }
-  /* Placed, not flowed: before the first save, or with no booth to share,
-     there is no share panel, and the choice would slide under the form and
-     jump across once one appears. */
+  /* Keep the existing position under the preview column. */
   .editorAfterRow > .retention { grid-column: 2; }
 }
 
@@ -763,6 +759,8 @@ a.inlineButton { display: inline-block; text-decoration: none; }
    a line of the save notice: it stays after the notice clears. */
 .sharePanel { margin-top: 18px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .sharePanel h3 { margin: 0; font-size: 13px; }
+.shareImageField { margin: 12px 0; }
+.shareImagePreview { display: block; width: 100%; max-width: 320px; height: 168px; margin-top: 10px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft, #f9faf8); }
 /* As tall as the post it holds, where the browser can size a field to its
    content; three rows otherwise. */
 .sharePanel textarea { line-height: 1.6; field-sizing: content; }

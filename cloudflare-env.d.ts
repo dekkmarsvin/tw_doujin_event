@@ -5,6 +5,12 @@ interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }
 
+/** HTMLRewriter subset used for the circle page's Open Graph image. */
+declare class HTMLRewriter {
+  on(selector: string, handler: { element(element: { setAttribute(name: string, value: string): void; remove(): void }): void }): HTMLRewriter;
+  transform(response: Response): Response;
+}
+
 interface D1Meta {
   changes: number;
   last_row_id: number;
