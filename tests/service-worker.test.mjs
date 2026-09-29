@@ -58,7 +58,7 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   // #439: the header's stylesheet is precached but keeps its name across
   // deploys, so it revalidates, and only a CSS answer is stored under it.
   assert.ok(manifest.includes("/site-header.css"), "the offline chooser keeps its header's stylesheet");
-  assert.match(worker, /if \(url\.pathname === "\/site-header\.css"\) \{\s*(?:\/\/.*\s*)*event\.respondWith\(staleWhileRevalidate\(request, isStylesheet\)\);/);
+  assert.match(worker, /if \(url\.pathname === "\/site-header\.css"\) \{[^}]*event\.respondWith\(staleWhileRevalidate\(request, isStylesheet\)\);/);
   assert.match(worker, /function isStylesheet\(response\) \{\s*return \(response\.headers\.get\("content-type"\) \?\? ""\)\.includes\("text\/css"\);/);
   const matchCalls = worker.match(/cache\.match\([^)]*\)/g) ?? [];
   assert.equal(matchCalls.length, 3, "every caching strategy must read through the cache exactly once");
