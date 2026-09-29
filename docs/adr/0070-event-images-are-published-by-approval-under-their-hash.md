@@ -1,6 +1,7 @@
 # ADR-0070：活動圖片由核准公開，以內容雜湊命名
 
 - 狀態：已定案（2026-09-24）。由 [#396](https://github.com/dekkmarsvin/tw_doujin_event/issues/396) 實作。
+- 社團頁固定品牌圖的部分由 [ADR-0077](./0077-circle-share-images-follow-published-media.md) 取代；活動圖片規則不變。
 - 相關 issue：[#396](https://github.com/dekkmarsvin/tw_doujin_event/issues/396)
 - 延續：[ADR-0017](./0017-thumbnails-are-self-hosted-with-external-urls-kept.md)（公開圖片自行託管於 R2）、[ADR-0057](./0057-approval-starts-create-publication.md)（核准啟動發布）、[ADR-0068](./0068-published-event-settings-are-declared-amendments.md)（已發布活動的設定以宣告更正；本 ADR 擴充其允許清單）
 

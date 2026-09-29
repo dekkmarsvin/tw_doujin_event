@@ -2,7 +2,8 @@ import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
-import { CIRCLE_OVERRIDES_SCHEMA } from "../app/circle-overrides";
+import { CIRCLE_OVERRIDES_SCHEMA, isCircleOverrideFields } from "../app/circle-overrides";
+import { selectedCircleShareImage } from "../app/circle-share-image";
 import { createIdentityRepository, type IdentityRepository } from "../db/identity-repository";
 import { parseEventDefinition, type EventDefinition } from "../app/event-catalog";
 import type { HostedThumbnailStore } from "../app/hosted-thumbnails";
@@ -72,6 +73,19 @@ async function catalog(env: PortalEnv, request: Request, eventId: string) {
 
 async function catalogIndex(env: PortalEnv, request: Request, eventId: string) {
   return (await catalog(env, request, eventId)).index;
+}
+
+/** The same visibility predicate as the public overlay, with no document
+ * rebuild or write on a page read. The static page remains the authority for
+ * which circles have a page in this deployment. */
+export async function publicCircleShareImage(context: { env: PortalEnv; request: Request }, eventId: string, circleId: string) {
+  const { event, payload } = await catalog(context.env, context.request, eventId);
+  if (!payload.placements.some(placement => placement.circleId === circleId)) return null;
+  const phase = Date.now() > Date.parse(event.eventEndsAt) ? "after" : "during";
+  const row = await repositoryFor(context.env).getPublicOverride(eventId, circleId, phase);
+  if (!row) return null;
+  const fields: unknown = JSON.parse(row.fields_json);
+  return isCircleOverrideFields(fields, event.circleCategories) ? selectedCircleShareImage(fields).image : null;
 }
 
 function requireSecret(env: PortalEnv, name: "SESSION_SECRET" | "HASH_PEPPER" | "TURNSTILE_SECRET" | "TURNSTILE_SITEKEY") {

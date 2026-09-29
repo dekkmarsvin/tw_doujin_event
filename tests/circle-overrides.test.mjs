@@ -221,7 +221,7 @@ test("R15 and unknown legacy ratings preserve the whole overlay and its other fi
 
 test("one field authority defines inherit, replace and clear encodings", () => {
   assert.deepEqual(overrides.CIRCLE_OVERRIDE_FIELD_KEYS, [
-    "pen", "saleInfo", "circleCategory", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail", "catalogImages",
+    "pen", "saleInfo", "circleCategory", "referencedWorks", "creatorTypes", "workTypes", "ageRatings", "specialTags", "links", "thumbnail", "catalogImages", "shareImage",
   ]);
 
   let fields = {};
@@ -270,7 +270,8 @@ test("every editable field projects empty base, replace and clear from the same 
   };
   const emptyBase = { pen: "", saleInfo: "", circleCategory: "", referencedWorks: [], creatorTypes: [], workTypes: [], ageRatings: [], specialTags: [], links: [], thumbnail: [], catalogImages: [] };
 
-  for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS) {
+  // Share metadata is projected into HTML, covered in circle-share-image.
+  for (const key of overrides.CIRCLE_OVERRIDE_FIELD_KEYS.filter(key => key !== "shareImage")) {
     const inherited = records.buildCircleCatalog(payload, withFields(placed.id, {})).circlesById.get(placed.id);
     assert.deepEqual(valueOf[key](inherited), emptyBase[key], `${key} must inherit the empty official base`);
 

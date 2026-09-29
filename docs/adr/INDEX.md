@@ -104,10 +104,11 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0067](./0067-audit-retention-follows-purpose.md) | 稽核依用途保存，先移除兩項重複寫入 | **草案，未生效**；#189 方案，期限與實作範圍待決策 |
 | [0068](./0068-published-event-settings-are-declared-amendments.md) | 活動別稱是活動資料，已發布活動的設定以宣告更正 | 生效；延續 0045、0028 |
 | [0069](./0069-restored-unpublished-amendments-retain-failed-history.md) | 還原未公開修正後，保留失敗紀錄並重新送審 | 生效；延續 0059、0068 |
-| [0070](./0070-event-images-are-published-by-approval-under-their-hash.md) | 活動圖片由核准公開，以內容雜湊命名 | 生效；延續 0017、0057，擴充 0068 的更正允許清單 |
+| [0070](./0070-event-images-are-published-by-approval-under-their-hash.md) | 活動圖片由核准公開，以內容雜湊命名 | 生效；延續 0017、0057，擴充 0068；社團分享部分由 0077 取代 |
 | [0071](./0071-organizer-review-confirms-cross-day-circle-grouping.md) | 主辦在匯入預覽確認跨日同名社團 | 生效；部分取代 0044 |
 | [0072](./0072-sale-sheet-pages-are-prepared-in-the-browser-and-hosted-as-a-set.md) | 品書在瀏覽器縮圖，以一組代管圖片保存 | 生效；延續 0017、0053 |
 | [0073](./0073-reviewed-grouping-corrections-have-explicit-amendment-baselines.md) | 已核准的身分整合以固定紀錄承接修正基準 | 生效；延續 0071、0069 |
-| [0074](./0074-html-responses-carry-per-request-csp-nonces.md) | HTML 回應使用每次請求的 CSP nonce | 生效；部分取代 0008 的 HTML 直送要求 |
+| [0074](./0074-html-responses-carry-per-request-csp-nonces.md) | HTML 回應使用每次請求的 CSP nonce | 生效；部分取代 0008；社團分享部分由 0077 取代 |
 | [0075](./0075-catalog-browse-shares-the-reader-catalog-and-public-search.md) | 品書瀏覽共用 Reader 場刊與公開搜尋 | 生效 |
 | [0076](./0076-phones-switch-reader-views-from-the-bottom-bar.md) | 手機以底部探索／行程／逛品書切換，桌機切換留在頁首 | 生效；部分取代 0056 |
+| [0077](./0077-circle-share-images-follow-published-media.md) | 社團分享縮圖使用已公開的圖片選擇 | 生效；部分取代 0070、0074 |

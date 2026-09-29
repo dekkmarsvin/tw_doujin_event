@@ -929,6 +929,10 @@ test("a circle can withdraw its own content from after the event", async () => {
 
   const opted = await handlers.setPostEventVisibility(post("/api/circle/ff47-site/visibility", { hidden: true }, owner), "ff47-site");
   assert.equal(opted.status, 200);
+  assert.ok(await repository.getPublicOverride("ff47", "ff47-site", "during"));
+  assert.equal(await repository.getPublicOverride("ff47", "ff47-site", "after"), null);
+  assert.equal(await repository.getPublicOverride("another-event", "ff47-site", "during"), null);
+  assert.equal(await repository.getPublicOverride("ff47", "ff47-domain", "during"), null);
 
   // During the event nothing changes: the opt-out is about afterwards.
   const during = await handlers.publicOverrides(get("/data/events/ff47/overrides.json"), "ff47");

@@ -5,6 +5,8 @@ import { circlePromotion } from "../circle-share";
 import { circlePath } from "../seo";
 import type { EventDefinition } from "../event-catalog";
 import type { CircleViewRecord } from "../circle-records";
+import type { CircleOverrideFields } from "../circle-overrides";
+import { circleShareImageOptions, selectedCircleShareImage } from "../circle-share-image";
 import styles from "./portal.module.css";
 
 /**
@@ -32,12 +34,15 @@ export function writeClipboard(text: string) {
  * that could be this one. With no booth at all there is nothing to share, so
  * the panel is not shown.
  */
-export function CirclePageShare({ event, circle, records, failed, onRetry }: {
+export function CirclePageShare({ event, circle, records, failed, onRetry, fields = {}, savedFields = {}, onImageChange }: {
   event: EventDefinition;
   circle: { id: string; name: string };
   records: CircleViewRecord[] | null;
   failed: boolean;
   onRetry: () => void;
+  fields?: CircleOverrideFields;
+  savedFields?: CircleOverrideFields;
+  onImageChange?: (value: string) => void;
 }) {
   const id = useId();
   const box = useRef<HTMLTextAreaElement>(null);
@@ -51,6 +56,9 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
     [circle.id, event, name, records],
   );
   const canShare = typeof navigator.share === "function";
+  const selectedImage = selectedCircleShareImage(fields);
+  const savedImage = selectedCircleShareImage(savedFields);
+  const imageChanged = selectedImage.value !== savedImage.value || selectedImage.image.url !== savedImage.image.url;
 
   const selectText = () => {
     box.current?.focus();
@@ -77,6 +85,15 @@ export function CirclePageShare({ event, circle, records, failed, onRetry }: {
   if (records?.length === 0) return null;
   return <section className={styles.sharePanel} aria-labelledby={`${id}-title`}>
     <h3 id={`${id}-title`}>分享公開頁</h3>
+    {onImageChange && <div className={styles.shareImageField}>
+      <label htmlFor={`${id}-image`}>分享縮圖</label>
+      <select id={`${id}-image`} value={selectedImage.value} onChange={event => onImageChange(event.target.value)}>
+        {circleShareImageOptions(fields).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <img className={styles.shareImagePreview} src={selectedImage.image.url} alt="分享縮圖預覽" />
+      <p className={styles.editorHint}>建議使用橫式 1.91:1（例如 1200×630）的圖片，其他比例會置中裁切。</p>
+      <p className={styles.editorHint}>{imageChanged ? "縮圖尚未儲存，請預覽並送出。" : "已套用到公開頁；分享平台可能稍後才更新。"}</p>
+    </div>}
     {promotion
       ? <>
         <label htmlFor={`${id}-text`}>宣傳文字</label>

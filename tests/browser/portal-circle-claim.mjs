@@ -254,6 +254,11 @@ try {
   await circle.route(PICTURE, route => route.fulfill({ contentType: "image/png", body: png(300, 1600) }));
   await circle.getByLabel("外部圖片網址", { exact: true }).fill(PICTURE);
   await circle.getByRole("img", { name: "代表圖預覽", exact: true }).evaluate(image => image.decode());
+  const shareImage = circle.getByLabel("分享縮圖", { exact: true });
+  await shareImage.selectOption("thumbnail");
+  assert.equal(await share.getByRole("img", { name: "分享縮圖預覽" }).getAttribute("src"), PICTURE);
+  const beforeSave = await (await fetch(pageUrl)).text();
+  assert.match(beforeSave, /property="og:image" content="https:\/\/map.kotoban.top\/share-card.png"/, "draft does not change public metadata");
   await submit.click(); await confirm.waitFor();
   const previewGallery = review.getByRole("group", { name: "社團圖片", exact: true });
   await previewGallery.locator("img").evaluate(image => image.decode());
@@ -266,8 +271,35 @@ try {
   for (const box of [mediaBox, bodyBox, pictureBox]) assert.ok(box.x >= previewBox.x - 1 && box.x + box.width <= previewBox.x + previewBox.width + 1,
     "the preview contains the text and portrait without clipping");
   await journey.capture(circle, "portal-portrait-review");
-  await review.getByRole("button", { name: "返回修改", exact: true }).first().click();
+  const reviewedShare = review.locator("dl > div", { hasText: "分享縮圖" });
+  await reviewedShare.getByRole("img", { name: "儲存後的分享縮圖", exact: true }).waitFor();
+  assert.equal(await reviewedShare.count(), 1, "the reviewed share image sits in the row that names it");
+  await confirm.click();
+  await circle.locator('aside[aria-label="即時公開預覽"]').waitFor();
+  const sharedHtml = await (await fetch(pageUrl)).text();
+  assert.match(sharedHtml, /property="og:image" content="https:\/\/pictures.test\/circle.png"/, "the anonymous raw HTML uses the saved image");
+  assert.doesNotMatch(sharedHtml, /property="og:image:width"/, "unknown image dimensions are not the brand dimensions");
+  await circle.reload();
+  await circle.waitForFunction(() => document.querySelector('select[id$="-image"]')?.value === "thumbnail");
+  await share.scrollIntoViewIfNeeded();
+  await journey.capture(circle, "portal-share-image-saved");
+  assert.equal(await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).evaluate(node => getComputedStyle(node).objectFit), "cover",
+    "the preview crops like the share card, not the whole image");
+  const desktopFrame = await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).boundingBox();
+  assert.ok(Math.abs(desktopFrame.width / desktopFrame.height - 1200 / 630) < 0.05, "the desktop preview keeps the share-card shape");
+  await circle.setViewportSize({ width: 390, height: 844 });
+  await share.scrollIntoViewIfNeeded();
+  assert.ok(await circle.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "share controls fit a phone");
+  const sharePreview = share.getByRole("img", { name: "分享縮圖預覽", exact: true });
+  const phoneFrame = await sharePreview.boundingBox();
+  assert.ok(Math.abs(phoneFrame.width / phoneFrame.height - 1200 / 630) < 0.05, "the phone preview keeps the share-card shape");
+  await journey.capture(circle, "portal-share-image-mobile");
+  await circle.setViewportSize({ width: 1280, height: 900 });
   await circle.getByRole("button", { name: "移除圖片", exact: true }).click();
+  assert.equal(await shareImage.inputValue(), "brand", "removed image falls back in the preview");
+  await submit.click(); await confirm.waitFor(); await confirm.click();
+  await circle.locator('aside[aria-label="即時公開預覽"]').waitFor();
+  assert.match(await (await fetch(pageUrl)).text(), /property="og:image" content="https:\/\/map.kotoban.top\/share-card.png"/, "removed media cannot survive in the public share image");
 
   // 7b. The post waits for the official booths. A failed read offers to fetch
   //     them again instead of a post with no dates or booths in it.
