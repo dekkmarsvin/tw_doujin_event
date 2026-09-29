@@ -26,6 +26,9 @@ const PRECACHE_PATTERNS = [
   /^\/404\.html$/,
   /^\/manifest\.webmanifest$/,
   /^\/fonts\/.+\.(?:css|woff2)$/,
+  // The chooser's header is styled by a plain stylesheet index.html links,
+  // not by a bundled asset, so it is named here or the offline chooser loses it.
+  /^\/site-header\.css$/,
   /^\/data\/events\/.+\.json$/,
   /^\/(?:favicon|app-icon)\.svg$/,
 ];

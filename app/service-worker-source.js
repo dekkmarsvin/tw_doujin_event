@@ -10,6 +10,7 @@
  *   other navigations  network-only — the circle portal and the policy
  *                      notice are separate documents, not the reader shell
  *   static event data stale-while-revalidate — instant catalog, refreshed in place
+ *   public header CSS  stale-while-revalidate — one name across deploys (#439)
  *   overrides.json network-only — failed freshness confirmation falls back to base
  *   hashed assets  cache-first — the filename already carries the version
  */
@@ -103,11 +104,16 @@ function isJson(response) {
   return (response.headers.get("content-type") ?? "").includes("json");
 }
 
-async function staleWhileRevalidate(request) {
+/** The same guard for the header's stylesheet: only CSS is stored under it. */
+function isStylesheet(response) {
+  return (response.headers.get("content-type") ?? "").includes("text/css");
+}
+
+async function staleWhileRevalidate(request, accepts = isJson) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request, MATCH_OPTIONS);
   const network = fetch(request).then(async (response) => {
-    if (isStorable(response) && isJson(response)) await cache.put(request, response.clone());
+    if (isStorable(response) && accepts(response)) await cache.put(request, response.clone());
     return response;
   }).catch(() => undefined);
   if (cached) {
@@ -150,6 +156,13 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.pathname.startsWith("/data/events/")) {
     event.respondWith(staleWhileRevalidate(request));
+    return;
+  }
+  if (url.pathname === "/site-header.css") {
+    // Precached so the offline chooser keeps its header, but not hashed: its
+    // name survives a deploy, so cache-first would keep an old header until the
+    // worker itself changed. Render from cache, refresh for the next visit.
+    event.respondWith(staleWhileRevalidate(request, isStylesheet));
     return;
   }
   if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/") || url.pathname.endsWith(".svg") || url.pathname.endsWith(".webmanifest")) {

@@ -20,6 +20,7 @@ import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { nearestEvent, taipeiDate } from "../event-calendar";
+import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
@@ -307,6 +308,9 @@ export default function CirclePortalApp() {
         <p className={styles.backLink}><a href={mapHref(event.id)}>返回活動地圖</a></p>
       </div>
       {session && <div className={styles.identity}>
+        {/* Signing in here does not hide the way to the organizer workspace:
+            the same session opens it, and that page decides what it allows. */}
+        <WorkspaceSwitch current="circle" />
         {/* Shows which identity the server resolved, so a mismatch against
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
@@ -320,7 +324,12 @@ export default function CirclePortalApp() {
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
 
     {!ready ? <p className={styles.notice}>載入中…</p>
-      : !session ? <SignIn circleId={targetCircleId} />
+      : !session ? <>
+        {/* The public header's "登入" lands here, organizers included, so the
+            sign-in says which workspace this is and where the other one is. */}
+        <WorkspaceEntries current="circle" className={styles.entryNav} />
+        <SignIn circleId={targetCircleId} />
+      </>
         : <div className={styles.workspace}>
           {/* Keyed on the event: claims, drafts and editor drafts all belong to
               one event, and carrying them across a switch would show one

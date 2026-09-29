@@ -63,6 +63,17 @@
 .centerCard h2 { font-size: 20px; }
 .centerCard p { max-width: 68ch; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .stack { display: grid; gap: 10px; margin-top: 24px; }
+/* Signed out, the workspace entries sit in the sign-in card's column. */
+.signInEntries { width: min(520px, calc(100% - 32px)); margin: 8vh auto 0; }
+.signInEntries + .centerCard { margin-top: 16px; }
+/* The ways back from an account with no organizer access, as buttons. */
+.linkActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.linkActions a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 700; text-decoration: none; }
+.linkActions a:hover { border-color: #aeb6b3; background: var(--map-paper); }
+.invitation { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.invitation h3 { margin: 0; font-size: 14px; }
+.invitation > p, .invitation form p { margin: 0; }
+.invitation > p button { margin-left: 8px; }
 .page :global(label) { display: grid; align-content: start; gap: 7px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
 .page :global(input), .page :global(textarea), .page :global(select) { width: 100%; min-width: 0; min-height: 38px; border: 1px solid #c9cfcb; border-radius: 7px; padding: 9px 10px; background: var(--surface); color: var(--ink); }
 .page :global(input::placeholder), .page :global(textarea::placeholder) { color: #7a858c; }

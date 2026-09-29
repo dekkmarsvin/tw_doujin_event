@@ -9,6 +9,7 @@ const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const { default: EventChooser } = await environment.runner.import("/app/event-chooser.tsx");
 const { eventCalendar, eventsByProximity, groupCalendarEvents, nearestEvent, taipeiDate } = await environment.runner.import("/app/event-calendar.ts");
+const { publicHeaderHtml, publicLoginHref } = await environment.runner.import("/app/public-header.ts");
 after(() => vite.close());
 
 const events = [
@@ -92,4 +93,14 @@ test("an empty published collection has a readable empty state and no empty grou
   const html = render({ events: [] });
   assert.match(html, /目前沒有公開活動/);
   assert.doesNotMatch(html, /<a href|data-event-group/);
+});
+
+// #439: the chooser and the static introduction pages are one header, drawn by
+// two renderers. Equal markup is what lets one stylesheet serve both.
+test("the chooser draws the static pages' header, its sign-in naming no event", () => {
+  const header = render({}).match(/<header class="site-header">[\s\S]*?<\/header>/)?.[0];
+  assert.equal(header, publicHeaderHtml(publicLoginHref()));
+  assert.match(header, /<a class="site-header-brand" href="\/">/);
+  assert.match(header, /<a class="site-header-login" href="\/circle">登入<\/a>/);
+  assert.equal(publicLoginHref({ circleId: "c-900001" }), "/circle", "a circle is never named without its event");
 });

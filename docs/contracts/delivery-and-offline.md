@@ -59,6 +59,7 @@
 | 其他導覽（`/circle`、`/organizer`、`/privacy`） | network-only；不讀也不寫 shell 快取 |
 | static `/data/events/*`（`circles.json`、地圖 artifacts） | stale-while-revalidate |
 | Function `/data/events/:eventId/overrides.json` | network-only；失敗時 publication module 使用 reviewed base |
+| 公開頁首樣式 `/site-header.css` | stale-while-revalidate；只儲存 CSS 回應 |
 | 雜湊資產 | cache-first |
 
 - precache 清單由 build 時產生，**只涵蓋 `index.html` 實際載入的資源**，不含社團入口。

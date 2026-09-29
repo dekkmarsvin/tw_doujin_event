@@ -88,6 +88,21 @@ test("booths read as one card per day and place, with one plan slot per day", ()
   assert.ok(elements.some((node) => attr(node, "id") === CIRCLE_PAGE_ACTIONS_ID), "the bar under the name has its place");
 });
 
+test("every introduction page opens with the public header, its sign-in keeping the page's context", () => {
+  const pages = discoveryPages(event, catalog);
+  for (const [path, login] of [["/events/sample/", "/circle?event=sample"], ["/events/sample/circles/c-900001/", "/circle?event=sample&circle=c-900001"]]) {
+    const elements = nodes(parse(pages.get(path)));
+    const body = elements.find((node) => node.tagName === "body");
+    const first = body.childNodes.find((node) => node.tagName);
+    assert.equal(first.tagName, "header", `${path}: the header is the first thing on the page`);
+    assert.equal(elements.filter((node) => node.tagName === "header").length, 1, path);
+    const links = nodes(first).filter((node) => node.tagName === "a");
+    assert.deepEqual(links.map((node) => attr(node, "href")), ["/", login], `${path}: the brand leads home, 登入 keeps the context`);
+    assert.equal(text(links[1]), "登入");
+    assert.ok(elements.some((node) => node.tagName === "link" && attr(node, "href") === "/site-header.css"), `${path} loads the header's stylesheet`);
+  }
+});
+
 test("only circle pages load the page script", () => {
   const pages = discoveryPages(event, catalog, { circlePageAssets: '<script type="module" src="/assets/circlePage-test.js"></script>' });
   assert.doesNotMatch(pages.get("/events/sample/"), /circlePage-test|circle-page-data/);

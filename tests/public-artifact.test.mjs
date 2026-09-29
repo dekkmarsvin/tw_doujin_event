@@ -24,7 +24,7 @@ const assetsIn = (html) => [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g
 test("builds the staged application as a Cloudflare Pages SPA", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>場刊 Map｜同人展逛攤地圖<\/title>/i);
-  assert.match(html, /<div id="root"><main class="discovery-summary">/);
+  assert.match(html, /<div id="root"><header class="site-header">[\s\S]*?<\/header><main class="discovery-summary">/);
   assert.match(html, /\/assets\/index-[^"']+\.js/);
 
   const publicAssets = (await readTextAssets(new URL("../dist/", import.meta.url))).join("\n");
@@ -120,6 +120,32 @@ test("the circle page script is its own public entry, outside the offline shell"
   const manifest = JSON.parse((await readFile(dist("sw.js"), "utf8")).match(/const PRECACHE_MANIFEST = (\[[^\]]*\]);/)[1]);
   for (const asset of own) assert.equal(manifest.includes(asset), false, `circle page asset ${asset} must not be precached`);
   assert.equal(manifest.includes(circlePage), false);
+});
+
+/**
+ * #439: the chooser and both kinds of introduction page open with one header,
+ * whose "登入" carries the page's own event and circle to the portal. It is
+ * plain markup in the built HTML, so it is there before any script runs; and
+ * the reader and circle-page bundles above still carry no `/api/auth/` path,
+ * so showing it asks the server nothing.
+ */
+test("every public entry page opens with one header whose 登入 keeps the page's context", async () => {
+  const dist = (path) => new URL(`../dist/${path}`, import.meta.url);
+  const sitemap = await readFile(dist("sitemap.xml"), "utf8");
+  const paths = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(([, loc]) => new URL(loc).pathname);
+  const eventPage = paths.find((path) => /^\/events\/[^/]+\/$/.test(path));
+  const circlePage = paths.find((path) => path.startsWith(`${eventPage}circles/`));
+  const eventId = eventPage.split("/")[2];
+  const circleId = circlePage.split("/")[4];
+  const attribute = (value) => value.replace(/&/g, "&amp;").replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  for (const [path, login] of [["/", "/circle"], [eventPage, `/circle?event=${eventId}`], [circlePage, `/circle?event=${eventId}&circle=${circleId}`]]) {
+    const html = await readFile(dist(path === "/" ? "index.html" : `${path.slice(1)}index.html`), "utf8");
+    const headers = [...html.matchAll(/<header class="site-header">([\s\S]*?)<\/header>/g)].map(([, inner]) => inner);
+    assert.equal(headers.length, 1, `${path} has one public header`);
+    assert.match(headers[0], /<a class="site-header-brand" href="\/">/, `${path}: the brand leads home`);
+    assert.match(headers[0], new RegExp(`<a class="site-header-login" href="${attribute(login)}">登入</a>`), `${path}: 登入 keeps the page's context`);
+    assert.match(html, /<link rel="stylesheet" href="\/site-header\.css"/, `${path} loads the header's stylesheet`);
+  }
 });
 
 test("admin is a noindex entry with no private assets in the reader precache", async () => {

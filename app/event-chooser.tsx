@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { groupCalendarEvents, taipeiDate } from "./event-calendar";
 import styles from "./event-chooser.module.css";
+import { PUBLIC_HEADER, publicLoginHref } from "./public-header";
 import { eventPath } from "./seo";
 import { UiIcon } from "./ui-icons";
 
@@ -31,10 +32,7 @@ export default function EventChooser({ events, unresolved, onSelect }: {
   }, []);
   const groups = groupCalendarEvents(events, today);
   return <div className={styles.shell}>
-    <header className={styles.header}>
-      <span aria-hidden="true">場</span>
-      <div><b>場刊 Map</b><small>同人展逛攤地圖</small></div>
-    </header>
+    <PublicHeader loginHref={publicLoginHref()} />
     <main className={styles.main}>
       <h1>選擇活動</h1>
       <p>選一場活動後即可搜尋社團、查看攤位並收藏。</p>
@@ -80,4 +78,13 @@ export default function EventChooser({ events, unresolved, onSelect }: {
       {events.length === 0 && <p className={styles.empty} role="status">目前沒有公開活動，請稍後再來查看。</p>}
     </main>
   </div>;
+}
+
+/** `publicHeaderHtml()` in React: the same elements, in the same order. */
+function PublicHeader({ loginHref }: { loginHref: string }) {
+  const { home, mark, name, tagline, login } = PUBLIC_HEADER;
+  return <header className="site-header">
+    <a className="site-header-brand" href={home}><span className="site-header-mark" aria-hidden="true">{mark}</span><span className="site-header-name"><b>{name}</b><small>{tagline}</small></span></a>
+    <a className="site-header-login" href={loginHref}>{login}</a>
+  </header>;
 }
