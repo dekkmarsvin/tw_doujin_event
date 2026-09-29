@@ -11,5 +11,13 @@ export function readBrowseHistory(state: unknown, key: string): BrowseHistory {
 }
 export function saveBrowseHistory(value: BrowseHistory) {
   if (window.location.href !== value.key) return;
-  window.history.replaceState({ ...window.history.state, catalogBrowse: value }, "", value.key);
+  const saved = window.history.state?.catalogBrowse as BrowseHistory | undefined;
+  if (saved?.key === value.key && saved.shown === value.shown && saved.textShown === value.textShown && saved.y === value.y) return;
+  try {
+    window.history.replaceState({ ...window.history.state, catalogBrowse: value }, "", value.key);
+  } catch (error) {
+    // WebKit can reject frequent history writes. A missed scroll checkpoint
+    // must not escape a React effect and unmount the reader.
+    if (!(error instanceof DOMException) || !["SecurityError", "QuotaExceededError"].includes(error.name)) throw error;
+  }
 }

@@ -30,4 +30,5 @@
 - 卡片收藏不建立行程；具體活動日的行程由既有出展頁或地圖加入。
 - 760px 以下兩個畫面共用底部「探索／行程／逛品書」，桌機切換在頁首（[ADR-0076](../adr/0076-phones-switch-reader-views-from-the-bottom-bar.md)）。從逛品書點探索回到面板收合的地圖；點行程以該筆 history state 一次性要求展開今日行程，地圖開啟後即清除；在逛品書點逛品書回到頁首。
 - browse history entry 保存目前公開 URL、兩區已顯示筆數與 scrollY。返回／前進於資料完成後還原；搜尋或範圍變更重設為首批及頁首。位置資訊不寫入分享 URL，也不新增持久儲存。
+- 連續捲動與自動分批載入合併為停止後保存位置；明確導航與 pagehide 立即保存。瀏覽器因頻率或配額拒絕位置保存時，可失去該次位置更新，但不能中斷渲染或清空頁面。
 - metadata 使用 browse 專屬 title／description 及活動 canonical；切換時不得殘留社團 canonical 或無效活動 noindex。活動選擇頁、Reader 頁首及活動介紹皆提供入口，不因目前無品書而隱藏。

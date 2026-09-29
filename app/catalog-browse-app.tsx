@@ -101,9 +101,22 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
     return () => observer.disconnect();
   }, [moreText, restored, restoration, textShown]);
   useEffect(() => {
-    window.addEventListener("scroll", savePosition, { passive: true });
-    window.addEventListener("pagehide", savePosition);
-    return () => { savePosition(); window.removeEventListener("scroll", savePosition); window.removeEventListener("pagehide", savePosition); };
+    // Scroll events and automatic batches can exhaust WebKit's history quota.
+    // Save after scrolling settles; explicit navigation still saves immediately.
+    let timer = 0;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(savePosition, 500);
+    };
+    const flush = () => { window.clearTimeout(timer); savePosition(); };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("pagehide", flush);
+    };
   }, [savePosition]);
   const change = (next: CatalogBrowseState, replace = false) => {
     savePosition();
