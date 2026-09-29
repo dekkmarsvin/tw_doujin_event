@@ -75,6 +75,7 @@ test("share settings preview the selected page and clearly leave saving to the e
   assert.match(markup, /品書第 1 張/);
   assert.match(markup, /src="https:\/\/pictures.test\/sheet.jpg"/);
   assert.match(markup, /縮圖尚未儲存，請預覽並送出。/);
+  assert.match(markup, /建議使用橫式 1\.91:1（例如 1200×630）的圖片，其他比例會置中裁切。/);
   assert.doesNotMatch(markup, /社團代表圖/);
 });
 

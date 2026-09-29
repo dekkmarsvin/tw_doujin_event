@@ -91,6 +91,7 @@ export function CirclePageShare({ event, circle, records, failed, onRetry, field
         {circleShareImageOptions(fields).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
       <img className={styles.shareImagePreview} src={selectedImage.image.url} alt="分享縮圖預覽" />
+      <p className={styles.editorHint}>建議使用橫式 1.91:1（例如 1200×630）的圖片，其他比例會置中裁切。</p>
       <p className={styles.editorHint}>{imageChanged ? "縮圖尚未儲存，請預覽並送出。" : "已套用到公開頁；分享平台可能稍後才更新。"}</p>
     </div>}
     {promotion

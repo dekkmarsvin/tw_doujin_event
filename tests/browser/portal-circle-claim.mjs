@@ -283,6 +283,8 @@ try {
   await circle.waitForFunction(() => document.querySelector('select[id$="-image"]')?.value === "thumbnail");
   await share.scrollIntoViewIfNeeded();
   await journey.capture(circle, "portal-share-image-saved");
+  assert.equal(await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).evaluate(node => getComputedStyle(node).objectFit), "cover",
+    "the preview crops like the share card, not the whole image");
   const desktopFrame = await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).boundingBox();
   assert.ok(Math.abs(desktopFrame.width / desktopFrame.height - 1200 / 630) < 0.05, "the desktop preview keeps the share-card shape");
   await circle.setViewportSize({ width: 390, height: 844 });

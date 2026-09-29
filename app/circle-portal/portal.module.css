@@ -760,9 +760,10 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .sharePanel { margin-top: 18px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .sharePanel h3 { margin: 0; font-size: 13px; }
 .shareImageField { margin: 12px 0; }
-/* The frame is the 1200×630 share card at every width, so the preview keeps one
-   shape; the picture inside is shown whole, as the 代表圖 preview shows its own. */
-.shareImagePreview { display: block; width: 100%; max-width: 320px; aspect-ratio: 1200 / 630; height: auto; margin-top: 10px; object-fit: contain; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+/* The frame is the 1200×630 share card at every width and the picture fills it
+   the way a share card does, centred and cropped: the preview shows what will be
+   shared, not the whole image. */
+.shareImagePreview { display: block; width: 100%; max-width: 320px; aspect-ratio: 1200 / 630; height: auto; margin-top: 10px; object-fit: cover; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .reviewSummary .shareImagePreview { max-width: 200px; margin-top: 6px; }
 /* As tall as the post it holds, where the browser can size a field to its
    content; three rows otherwise. */
