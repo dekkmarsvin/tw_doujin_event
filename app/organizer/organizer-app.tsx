@@ -18,6 +18,7 @@ import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGui
 
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
+import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 
 
 import { UiIcon } from "../ui-icons";
@@ -45,11 +46,10 @@ export default function OrganizerApp() {
       queueMicrotask(() => setReady(true));
       return;
     }
+    // An account with nothing to do here is still signed in: dropping the
+    // session would put it back in front of a sign-in form it already passed.
     void (token ? verifyLoginToken(token) : readSession())
-      .then((current) => {
-        if (!current.isAdmin && !current.hasOrganizerAccess && !current.canApplyForEvent && !current.hasEventApplications) throw new PortalError("此帳號沒有活動工作區權限。", 403);
-        setSession(current);
-      })
+      .then(setSession)
       .catch((error: unknown) => {
         setSession(null);
         if (token) setNotice({ kind: "error", message: message(error) });
@@ -61,6 +61,7 @@ export default function OrganizerApp() {
     <header className={styles.header}>
       <div><h1>主辦單位工作區</h1><p>場刊 Map 活動資料建置</p></div>
       {session && <div className={styles.identity}>
+        <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
         <SessionDeadline session={session} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
@@ -68,7 +69,16 @@ export default function OrganizerApp() {
     </header>
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
     {!ready ? <main className={styles.centerCard}><p>載入工作區…</p></main>
-      : !session ? <OrganizerSignIn />
+      : !session ? <main>
+        <WorkspaceEntries current="organizer" className={styles.signInEntries} />
+        <section className={styles.centerCard}>
+          <h2>主辦單位登入</h2>
+          <p>使用 email 取得 15 分鐘內有效的一次性登入連結。</p>
+          <OrganizerLoginLink />
+        </section>
+      </main>
+        : !session.isAdmin && !session.hasOrganizerAccess && !session.canApplyForEvent && !session.hasEventApplications
+          ? <main><OrganizerNoAccess session={session} /></main>
         : !session.isAdmin && !session.hasOrganizerAccess ? <main className={styles.applicationMain}><OrganizerApplicationsPanel session={session} /></main>
         : isDesktop ? <OrganizerWorkspace session={session} />
           : session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
@@ -86,8 +96,13 @@ function NarrowScreenBlocker({ onSignedOut }: { onSignedOut: () => void }) {
   </section>;
 }
 
-function OrganizerSignIn() {
-  const [email, setEmail] = useState("");
+/**
+ * The organizer's one-time link. `email` fixes the address to the account
+ * already signed in, which only needs a link of this audience: signing in
+ * through one is what accepts a pending organizer invitation.
+ */
+function OrganizerLoginLink({ email: signedInEmail }: { email?: string }) {
+  const [email, setEmail] = useState(signedInEmail ?? "");
   const [sitekey, setSitekey] = useState<string | null>(null);
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -95,9 +110,7 @@ function OrganizerSignIn() {
   useEffect(() => { void readTurnstileSitekey().then(setSitekey).catch((error) => setNotice({ kind: "error", message: message(error) })); }, []);
   const unavailable = useCallback(() => setNotice({ kind: "error", message: "真人驗證載入失敗，請檢查網路後重新整理。" }), []);
 
-  return <main className={styles.centerCard}>
-    <h2>主辦單位登入</h2>
-    <p>使用 email 取得 15 分鐘內有效的一次性登入連結。</p>
+  return <>
     <form className={styles.stack} onSubmit={(event) => {
       event.preventDefault();
       if (!humanToken) return;
@@ -107,14 +120,41 @@ function OrganizerSignIn() {
         .catch((error: unknown) => setNotice({ kind: "error", message: message(error) }))
         .finally(() => { setHumanToken(null); setGeneration((value) => value + 1); });
     }}>
-      <label htmlFor="organizer-email">Email</label>
-      <input id="organizer-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+      {signedInEmail ? <p>寄到 {signedInEmail}</p> : <>
+        <label htmlFor="organizer-email">Email</label>
+        <input id="organizer-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+      </>}
       {sitekey && <TurnstileWidget key={generation} sitekey={sitekey} onToken={setHumanToken} onUnavailable={unavailable} />}
       <button type="submit" disabled={!humanToken || notice.kind === "busy"}>寄出登入連結</button>
     </form>
     <p className={styles.finePrint}>登入前請閱讀<a href="/privacy">隱私權與資料使用告知</a>。</p>
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
-  </main>;
+  </>;
+}
+
+/**
+ * Signed in, with no event, no application and no way to apply (#439). Said
+ * once, with the ways back; never the sign-in form again, which would only
+ * send the same account round the same loop.
+ *
+ * The one thing a link can still change is an organizer invitation, accepted
+ * only by signing in through an organizer link. Its own link lasts 15 minutes,
+ * so an invitee who came in through `/circle` can ask for another here — and
+ * only when they say so, so the verification is not loaded for everyone else.
+ */
+function OrganizerNoAccess({ session }: { session: PortalSession }) {
+  const [asking, setAsking] = useState(false);
+  return <section className={styles.centerCard} aria-labelledby="organizer-no-access">
+    <h2 id="organizer-no-access">此帳號沒有主辦工作區權限</h2>
+    <p>目前未開放新活動申請。</p>
+    <p className={styles.linkActions}><a href="/circle">返回社團資料</a><a href="/">返回活動列表</a></p>
+    <div className={styles.invitation}>
+      {asking ? <>
+        <h3>寄送主辦登入連結</h3>
+        <OrganizerLoginLink email={session.email} />
+      </> : <p>收到主辦邀請？<button type="button" className={styles.ghost} onClick={() => setAsking(true)}>寄送主辦登入連結</button></p>}
+    </div>
+  </section>;
 }
 
 function OrganizerWorkspace({ session }: { session: PortalSession }) {

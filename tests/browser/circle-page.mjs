@@ -177,6 +177,40 @@ try {
   await flaky.getByText("新刊 B5／32P 200 元", { exact: false }).waitFor();
   await flaky.close();
 
+  // 6. #439: both introduction pages open with the public header. Its "登入"
+  //    carries the event, and on a circle's page the circle too, and is whole
+  //    on the narrowest phone; showing it asks the server nothing.
+  const introduction = new URL("/events/sample/", base).toString();
+  for (const [url, login, name] of [
+    [introduction, "/circle?event=sample", "event"],
+    [pageOf(ONE_DAY), `/circle?event=sample&circle=${ONE_DAY}`, "circle"],
+  ]) for (const width of [320, 1440]) {
+    const asked = [];
+    const visit = await journey.page({ url, viewport: { width, height: 800 }, routes: routes(overridesRoute("sample", []), async (target) => {
+      target.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/")) asked.push(new URL(request.url()).pathname); });
+    }) });
+    const header = visit.getByRole("banner");
+    const entry = header.getByRole("link", { name: "登入", exact: true });
+    await entry.waitFor();
+    assert.equal(await entry.getAttribute("href"), login, `${name} page: 登入 keeps the page's context`);
+    assert.equal(await header.getByRole("link", { name: /場刊 Map/ }).getAttribute("href"), "/");
+    const box = await entry.boundingBox();
+    assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width, `登入 is whole and pressable at ${width}px: ${JSON.stringify(box)}`);
+    assert.equal(await header.evaluate((node) => node.scrollWidth <= node.clientWidth), true, `the header never scrolls sideways at ${width}px`);
+    await visit.waitForLoadState("networkidle");
+    assert.deepEqual(asked, [], "the header asks the server nothing");
+    await journey.capture(visit, `introduction-header-${name}-${width}`);
+    if (name === "circle" && width === 320) {
+      // Followed on a phone, the circle arrives at its own sign-in.
+      await entry.click();
+      await visit.getByRole("heading", { name: "登入", exact: true }).waitFor();
+      const arrived = new URL(visit.url());
+      assert.deepEqual([arrived.pathname, arrived.searchParams.get("event"), arrived.searchParams.get("circle")], ["/circle", "sample", ONE_DAY]);
+      await journey.capture(visit, "introduction-header-leads-to-sign-in-320");
+    }
+    await visit.close();
+  }
+
   await journey.finish();
 } catch (error) {
   await journey.abort(error);

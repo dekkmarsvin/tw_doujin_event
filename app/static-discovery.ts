@@ -4,6 +4,7 @@ import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
 import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
 import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
+import { PUBLIC_HEADER, publicHeaderHtml, publicLoginHref } from "./public-header";
 
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 const link = (href: string, text: string, className = "") => `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(href)}">${escapeHtml(text)}</a>`;
@@ -19,10 +20,11 @@ ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><m
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(metadata.title)}"><meta name="twitter:description" content="${escapeHtml(metadata.description)}">`;
 }
 
-function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, schema?: unknown, assets = "") {
+/** `loginHref` is where the header's "登入" leads from this page (#439). */
+function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, { loginHref, schema, assets = "" }: { loginHref: string; schema?: unknown; assets?: string }) {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/fonts/geist.css"><link rel="stylesheet" href="/discovery.css">
-${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}${assets}</head><body class="discovery"><header>${link("/", "場刊 Map")}</header><main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
+${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/fonts/geist.css"><link rel="stylesheet" href="/discovery.css"><link rel="stylesheet" href="${PUBLIC_HEADER.stylesheet}">
+${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}${assets}</head><body class="discovery">${publicHeaderHtml(loginHref)}<main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
 }
 
 // Postal code, country, city or county, postal code, district, the rest.
@@ -58,8 +60,10 @@ export function websiteSchemaHtml() {
   return `<script type="application/ld+json">${json({ "@context": "https://schema.org", "@type": "WebSite", name: "場刊 Map", url: `${PUBLIC_ORIGIN}/` })}</script>`;
 }
 
+/** What the homepage shows before its script runs, under the same header the
+ * chooser then draws, so the header does not move when the chooser takes over. */
 export function homepageSummary(events: readonly EventDefinition[]) {
-  return `<main class="discovery-summary"><h1>${escapeHtml(SITE_TITLE)}</h1><p>選擇活動，查看日期、場館、社團與攤位。</p><ul>${events.map((event) => `<li>${link(eventPath(event.id), event.name)} · ${escapeHtml(eventCalendar(event).label)} · ${escapeHtml(event.venue)}</li>`).join("")}</ul></main>`;
+  return `${publicHeaderHtml(publicLoginHref())}<main class="discovery-summary"><h1>${escapeHtml(SITE_TITLE)}</h1><p>選擇活動，查看日期、場館、社團與攤位。</p><ul>${events.map((event) => `<li>${link(eventPath(event.id), event.name)} · ${escapeHtml(eventCalendar(event).label)} · ${escapeHtml(event.venue)}</li>`).join("")}</ul></main>`;
 }
 
 /**
@@ -100,7 +104,7 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
   const entry = (circle: (typeof circles)[number], status = "") => link(circlePath(event.id, circle.id), `${listed(circle)}${status ? `（${status}）` : ""}`);
   pages.set(eventPath(event.id), documentHtml(pageMetadata(event), `<h1>${escapeHtml(event.name)}</h1>${aliases}${eventFacts(event)}
 <p class="entries">${link(readerLink(event), "開啟攤位地圖", "primary")}${link(readerLink(event) + "&view=browse", "逛品書", "secondary")}</p>
-<section><h2>參展社團</h2><p>${circles.length} 個社團</p>${event.days.length > 1 ? dayDirectory() : directory(circles.map((circle) => entry(circle)))}</section>`, schema));
+<section><h2>參展社團</h2><p>${circles.length} 個社團</p>${event.days.length > 1 ? dayDirectory() : directory(circles.map((circle) => entry(circle)))}</section>`, { loginHref: publicLoginHref({ eventId: event.id }), schema }));
   /** A multi-day event lists its circles day by day, the way readers plan and
    * search a day (#364). A circle appears under every day it has a placement,
    * each entry linking to its one page; a day it only moved away from or
@@ -128,13 +132,13 @@ export function discoveryPages(event: EventDefinition, catalog: CircleCatalogPay
     const placements = placementsOf(circle.id);
     const cards = boothCards(event, placements);
     const venues = [...new Set(cards.filter((card) => card.status === "active").map((card) => card.venueName).filter(Boolean))];
-    const claim = `/circle?${new URLSearchParams({ event: event.id, circle: circle.id })}`;
+    const claim = publicLoginHref({ eventId: event.id, circleId: circle.id });
     pages.set(circlePath(event.id, circle.id), documentHtml(pageMetadata(event, circle, placements), `<nav aria-label="活動">${link(eventPath(event.id), event.name)}</nav>
 <h1>${escapeHtml(circle.name)}</h1><p class="eyebrow">${escapeHtml([calendar.label, ...venues].join(" · "))}</p>
 <div id="${CIRCLE_PAGE_ACTIONS_ID}"></div>
 <h2>參展攤位</h2><ol class="booth-cards">${cards.map((card) => boothCardHtml(event, card)).join("")}</ol>
 <div id="${CIRCLE_PAGE_ROOT_ID}"></div>${circlePageDataHtml(circlePageData(catalog, circle.id))}
-<p class="claim">這是你的社團嗎？${link(claim, "認領／管理資料")}</p>`, undefined, circlePageAssets));
+<p class="claim">這是你的社團嗎？${link(claim, "認領／管理資料")}</p>`, { loginHref: claim, assets: circlePageAssets }));
   }
   return pages;
 }

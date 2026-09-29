@@ -1,6 +1,9 @@
 .discovery { margin:0; background:#f8f7f2; color:#202a35; font-family:Geist,system-ui,"Noto Sans TC",sans-serif; line-height:1.65; }
-.discovery header,.discovery main,.discovery footer { max-width:960px; margin:auto; padding:24px; }
-.discovery header { border-bottom:1px solid #dfe3df; font-weight:800; }
+/* The header is the shared public one (site-header.css), full width; only
+   the content keeps to the 960px column. */
+.discovery main,.discovery footer { max-width:960px; margin:auto; padding:24px; }
+/* On a phone the content starts where the header's brand does. */
+@media(max-width:760px) { .discovery main,.discovery footer { padding:24px 16px; } }
 .discovery footer { border-top:1px solid #dfe3df; font-size:14px; }
 /* One scale for every introduction page, largest to smallest: the name, a
    section, a card's own title, body text, buttons, then secondary facts,

@@ -30,7 +30,7 @@ try {
     await page.getByRole("heading", { name: "選擇活動" }).waitFor();
 
     // Each published event offers its map, catalog browse and static introduction.
-    assert.equal(await page.getByRole("link").count(), events.length * 3, "three destinations per published event");
+    assert.equal(await page.getByRole("main").getByRole("link").count(), events.length * 3, "three destinations per published event");
     for (const [index, event] of events.entries()) {
       // Every entry names its event, so each card's links stay distinct out of context.
       const entry = page.getByRole("link", { name: mapEntry(event), exact: true });
@@ -62,7 +62,7 @@ try {
     assert.ok(!(await page.content()).includes(unknown), "the unknown id does not reach the markup either");
 
     // The way forward is still the list, and it is still only the real events.
-    assert.equal(await page.getByRole("link").count(), events.length * 3, "the list survives a dead link");
+    assert.equal(await page.getByRole("main").getByRole("link").count(), events.length * 3, "the list survives a dead link");
     assert.equal(await page.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     await journey.capture(page, "chooser-refuses-unknown-event");
     await page.locator('a[href="?event=sample&view=browse"]').click();
@@ -88,6 +88,41 @@ try {
     assert.equal(await page.locator('meta[property="og:image"]').getAttribute("content"), "https://map.kotoban.top/share-card.png");
     assert.equal(await page.locator('meta[name="twitter:card"]').getAttribute("content"), "summary_large_image");
     await journey.capture(page, "chooser-opens-the-chosen-event");
+    await page.close();
+  }
+
+  // #439: what a first visit sees at the top, on the narrowest phone and a
+  // desktop: "登入" as its own button, never a menu item, whole at every width,
+  // and shown without the page asking the server who is reading.
+  for (const width of [320, 390, 1440]) {
+    const asked = [];
+    const page = await journey.page({ event: "", params: "", viewport: { width, height: 800 }, routes: async (target) => {
+      target.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/")) asked.push(new URL(request.url()).pathname); });
+      // Signed out, so the portal this leads to has only its sign-in to show.
+      await target.route("**/api/**", (route) => route.fulfill({ status: 401, json: { error: "尚未登入。" } }));
+    } });
+    await page.getByRole("heading", { name: "選擇活動" }).waitFor();
+    const header = page.getByRole("banner");
+    const login = header.getByRole("link", { name: "登入", exact: true });
+    assert.equal(await login.getAttribute("href"), "/circle", "the chooser names no event to sign in to");
+    assert.equal(await header.getByRole("link", { name: /場刊 Map/ }).getAttribute("href"), "/", "the brand leads home");
+    const box = await login.boundingBox();
+    assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width, `登入 is whole and pressable at ${width}px: ${JSON.stringify(box)}`);
+    assert.equal(await header.evaluate((node) => node.scrollWidth <= node.clientWidth), true, `the header never scrolls sideways at ${width}px`);
+    assert.equal(await header.getByText("同人展逛攤地圖", { exact: true }).isVisible(), width > 420, "only the narrowest phones drop the tagline");
+    assert.deepEqual(asked, [], "the header asks the server nothing");
+    await journey.capture(page, `chooser-header-${width}`);
+    if (width === 390) {
+      // Keyboard: the brand, then 登入, then the page — and Enter follows it.
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+      assert.equal(await login.evaluate((node) => node === document.activeElement), true, "登入 is the second stop");
+      await page.keyboard.press("Enter");
+      await page.waitForURL((url) => url.pathname === "/circle");
+      await page.getByRole("heading", { name: "登入", exact: true }).waitFor();
+      assert.equal(await page.getByRole("navigation", { name: "工作區" }).getByRole("link", { name: /^主辦工作區/ }).getAttribute("href"), "/organizer",
+        "the sign-in names the organizer workspace before asking for an email");
+    }
     await page.close();
   }
 

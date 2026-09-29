@@ -2,8 +2,8 @@
 
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
-**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/catalog-image-prepare.ts`](../../app/catalog-image-prepare.ts)、[`app/hosted-thumbnails.ts`](../../app/hosted-thumbnails.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/circle-portal-route.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/public-header.ts`](../../app/public-header.ts)、[`app/workspace-nav.tsx`](../../app/workspace-nav.tsx)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/catalog-image-prepare.ts`](../../app/catalog-image-prepare.ts)、[`app/hosted-thumbnails.ts`](../../app/hosted-thumbnails.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
+**測試**：`tests/circle-portal-route.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`
@@ -23,9 +23,9 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 ## 入口分離
 
 - **社團登入與編輯只存在於 `/circle`，不與閱讀端共用 bundle。** 閱讀端不得出現登入介面、寫入 route 或 session cookie 名稱，由 `tests/public-artifact.test.mjs` 以建置產物比對把關。
-- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 閱讀端必須有一處靜態指引說明參展社團可以來補充自己的資料並連向 `/circle`；目前在「使用說明」面板的「你是參展社團嗎？」段落，同樣由 `tests/public-artifact.test.mjs` 把關。連結帶目前閱讀的活動（`/circle?event=<eventId>`），控制面因此開在同一場，不落到瀏覽器上次維護或依日期選出的那場。第一次到站的社團成員只會看到閱讀端，沒有這個指引就等於沒有入口。連結是純靜態 `href`，不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
+- **入口分離指的是程式邊界，不是把 `/circle` 藏起來。** 公開閱讀端不嵌入登入表單、session 邏輯或資料寫入控制，但頁首固定提供前往控制面的「登入」入口；公開瀏覽、搜尋、收藏與行程仍不要求登入。活動選擇頁、活動介紹與社團公開頁的頁首「登入」分別連到 `/circle`、`/circle?event=<eventId>`、`/circle?event=<eventId>&circle=<circleId>`，值取自該頁的資料，由 `tests/public-artifact.test.mjs` 核對建置產物。控制面因此開在同一場、同一個社團，不落到瀏覽器上次維護或依日期選出的那場；沒有指名社團時不猜測。「使用說明」面板的「你是參展社團嗎？」段落與社團頁的「認領／管理資料」保留，仍是針對眼前活動或社團的入口。這些連結是純靜態 `href`：不查詢 session、不載入 Turnstile、不呼叫任何寫入 route，因此不牴觸上一條。
 - 一般參觀者公開瀏覽、不需登入。社團登入**不介入**參觀者的收藏與行程。
-- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle，也不出現在公開導覽。
+- [主辦單位工作區](./organizer-workspace.md)的 `/organizer` 是第三個入口：與 `/circle` 共用帳號、session cookie 與本節的登入機制，但不共用 bundle。公開頁不直接連到 `/organizer`；`/circle` 與 `/organizer` 在未登入與已登入時都列出「社團資料」「主辦工作區」兩個工作區，兩邊只共用一個不 import 任何工作區的小型導覽元件。選擇工作區只是導覽，不是註冊另一種帳號，也不授予權限；同一個有效 session 進入另一邊時不再索取登入信。
 - `/admin` 是獨立且 noindex 的管理入口，沿用同一 session；沒有登入表單，未登入時連向 `/circle`。非管理者不載入管理內容。`/circle` 只保留管理者身分與管理連結，不掛載管理面板或發出其管理 API 呼叫。管理資產不進 Reader precache，Reader 不新增管理導覽。
 - 社團入口不下載場刊：認領時的社團搜尋走 `/api/circle/search`，需要 session 且只回傳比對到的社團。
 

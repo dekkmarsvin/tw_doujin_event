@@ -75,6 +75,9 @@
   background: var(--surface);
 }
 .editorCard { max-width: none; }
+/* The workspace entries sit in the sign-in card's column, just above it. */
+.entryNav { max-width: 720px; margin: 18px auto 0; }
+.entryNav + .card { margin-top: 12px; }
 /* Signed in, every section spans the same column as the masthead; only the
    lone sign-in card stays narrow and centred. */
 .workspace .card { max-width: none; margin-right: 0; margin-left: 0; }

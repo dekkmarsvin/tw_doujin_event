@@ -53,7 +53,13 @@ test("ships an offline shell covering the venue-critical artifact", async () => 
   // The data namespace is JSON only; a 200 HTML fallback must never be stored
   // there and then served offline as if it were the catalog.
   assert.match(worker, /function isJson\(response\)/);
-  assert.match(worker, /if \(isStorable\(response\) && isJson\(response\)\) await cache\.put\(request, response\.clone\(\)\);/);
+  assert.match(worker, /async function staleWhileRevalidate\(request, accepts = isJson\)/);
+  assert.match(worker, /if \(isStorable\(response\) && accepts\(response\)\) await cache\.put\(request, response\.clone\(\)\);/);
+  // #439: the header's stylesheet is precached but keeps its name across
+  // deploys, so it revalidates, and only a CSS answer is stored under it.
+  assert.ok(manifest.includes("/site-header.css"), "the offline chooser keeps its header's stylesheet");
+  assert.match(worker, /if \(url\.pathname === "\/site-header\.css"\) \{\s*(?:\/\/.*\s*)*event\.respondWith\(staleWhileRevalidate\(request, isStylesheet\)\);/);
+  assert.match(worker, /function isStylesheet\(response\) \{\s*return \(response\.headers\.get\("content-type"\) \?\? ""\)\.includes\("text\/css"\);/);
   const matchCalls = worker.match(/cache\.match\([^)]*\)/g) ?? [];
   assert.equal(matchCalls.length, 3, "every caching strategy must read through the cache exactly once");
 
