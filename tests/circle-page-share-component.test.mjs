@@ -77,3 +77,9 @@ test("share settings preview the selected page and clearly leave saving to the e
   assert.match(markup, /縮圖尚未儲存，請預覽並送出。/);
   assert.doesNotMatch(markup, /社團代表圖/);
 });
+
+test("an unchanged share image reads as already applied, not as waiting for a save", () => {
+  const markup = render({ records: [record(1, "S01")], failed: false, onImageChange() {}, fields: {}, savedFields: {} });
+  assert.match(markup, /已套用到公開頁/);
+  assert.doesNotMatch(markup, /儲存後套用|尚未儲存/);
+});

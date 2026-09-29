@@ -271,6 +271,9 @@ try {
   for (const box of [mediaBox, bodyBox, pictureBox]) assert.ok(box.x >= previewBox.x - 1 && box.x + box.width <= previewBox.x + previewBox.width + 1,
     "the preview contains the text and portrait without clipping");
   await journey.capture(circle, "portal-portrait-review");
+  const reviewedShare = review.locator("dl > div", { hasText: "分享縮圖" });
+  await reviewedShare.getByRole("img", { name: "儲存後的分享縮圖", exact: true }).waitFor();
+  assert.equal(await reviewedShare.count(), 1, "the reviewed share image sits in the row that names it");
   await confirm.click();
   await circle.locator('aside[aria-label="即時公開預覽"]').waitFor();
   const sharedHtml = await (await fetch(pageUrl)).text();
@@ -280,9 +283,14 @@ try {
   await circle.waitForFunction(() => document.querySelector('select[id$="-image"]')?.value === "thumbnail");
   await share.scrollIntoViewIfNeeded();
   await journey.capture(circle, "portal-share-image-saved");
+  const desktopFrame = await share.getByRole("img", { name: "分享縮圖預覽", exact: true }).boundingBox();
+  assert.ok(Math.abs(desktopFrame.width / desktopFrame.height - 1200 / 630) < 0.05, "the desktop preview keeps the share-card shape");
   await circle.setViewportSize({ width: 390, height: 844 });
   await share.scrollIntoViewIfNeeded();
   assert.ok(await circle.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "share controls fit a phone");
+  const sharePreview = share.getByRole("img", { name: "分享縮圖預覽", exact: true });
+  const phoneFrame = await sharePreview.boundingBox();
+  assert.ok(Math.abs(phoneFrame.width / phoneFrame.height - 1200 / 630) < 0.05, "the phone preview keeps the share-card shape");
   await journey.capture(circle, "portal-share-image-mobile");
   await circle.setViewportSize({ width: 1280, height: 900 });
   await circle.getByRole("button", { name: "移除圖片", exact: true }).click();

@@ -695,10 +695,15 @@ function ReviewSummary({ fields }: { fields: CircleOverrideFields }) {
     ...CIRCLE_OVERRIDE_LIST_FIELDS.map(({ key, label }) => [label, value(fields[key])]),
     ["連結", fields.links?.length ? `${fields.links.length} 條` : "未提供"],
     ["代表圖", fields.thumbnail ? fields.thumbnail.provider || "已提供" : "未提供"],
-    ["分享縮圖", selectedCircleShareImage(fields).label],
   ];
+  const shareImage = selectedCircleShareImage(fields);
   return <dl className={styles.reviewSummary}>
     {rows.map(([label, content]) => <div key={label}><dt>{label}</dt><dd>{content}</dd></div>)}
+    {/* The picture stays with the row that names it. */}
+    <div>
+      <dt>分享縮圖</dt>
+      <dd>{shareImage.label}<img className={styles.shareImagePreview} src={shareImage.image.url} alt="儲存後的分享縮圖" /></dd>
+    </div>
   </dl>;
 }
 
@@ -1357,7 +1362,6 @@ function CircleEditor({ event, claim }: { event: EventDefinition; claim: ClaimSu
             <PublicationPreview records={serverPreview} />
             <h4>這次填寫的欄位</h4>
             <ReviewSummary fields={reviewedFields} />
-            <img className={styles.shareImagePreview} src={selectedCircleShareImage(reviewedFields).image.url} alt="儲存後的分享縮圖" />
             <div ref={reviewActions} className={styles.reviewActions}>
               <button type="button" className={styles.backButton} disabled={status.kind === "busy"} onClick={closeReview}>返回修改</button>
               {/* Re-checked here, not only when the review opened: an image

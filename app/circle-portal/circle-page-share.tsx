@@ -91,7 +91,7 @@ export function CirclePageShare({ event, circle, records, failed, onRetry, field
         {circleShareImageOptions(fields).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
       <img className={styles.shareImagePreview} src={selectedImage.image.url} alt="分享縮圖預覽" />
-      <p className={styles.editorHint}>{imageChanged ? "縮圖尚未儲存，請預覽並送出。" : "縮圖儲存後套用到公開頁；分享平台可能稍後才更新。"}</p>
+      <p className={styles.editorHint}>{imageChanged ? "縮圖尚未儲存，請預覽並送出。" : "已套用到公開頁；分享平台可能稍後才更新。"}</p>
     </div>}
     {promotion
       ? <>
