@@ -1,3 +1,4 @@
+import { RequiredMark } from "./organizer-field-guidance";
 /** 攤位匯入：欄位對應、預覽逐列修正、已存清單與場館目錄新增。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
@@ -493,12 +494,12 @@ export function VenueCatalogCreator({ candidateId, venue, onCreated, onCancel }:
     <div className={styles.panelHead}><div><h4>{venue ? `新增 ${venue.name} 的場地` : "建立新場館"}</h4><p>建立後會立即出現在下方選單中。</p></div></div>
     <div className={styles.formGrid}>
       {!venue && <>
-        <label>場館名稱<input maxLength={120} aria-invalid={fieldErrors.venueName ? true : undefined} value={venueName} onChange={(event) => setVenueName(event.target.value)} />{fieldErrors.venueName && <small className={styles.fieldError}>{fieldErrors.venueName}</small>}</label>
-        <label>場館官方網址<input type="url" placeholder="https://" aria-invalid={fieldErrors.venueUrl ? true : undefined} value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} />{fieldErrors.venueUrl && <small className={styles.fieldError}>{fieldErrors.venueUrl}</small>}</label>
-        <label>場館地址<input maxLength={200} aria-invalid={fieldErrors.venueAddress ? true : undefined} value={venueAddress} onChange={(event) => setVenueAddress(event.target.value)} />
+        <label><span>場館名稱<RequiredMark /></span><input aria-label="場館名稱" required maxLength={120} aria-invalid={fieldErrors.venueName ? true : undefined} value={venueName} onChange={(event) => setVenueName(event.target.value)} />{fieldErrors.venueName && <small className={styles.fieldError}>{fieldErrors.venueName}</small>}</label>
+        <label><span>場館官方網址<RequiredMark /></span><input aria-label="場館官方網址" required type="url" placeholder="https://" aria-invalid={fieldErrors.venueUrl ? true : undefined} value={venueUrl} onChange={(event) => setVenueUrl(event.target.value)} />{fieldErrors.venueUrl && <small className={styles.fieldError}>{fieldErrors.venueUrl}</small>}</label>
+        <label><span>場館地址<RequiredMark /></span><input aria-label="場館地址" required maxLength={200} aria-invalid={fieldErrors.venueAddress ? true : undefined} value={venueAddress} onChange={(event) => setVenueAddress(event.target.value)} />
           {fieldErrors.venueAddress ? <small className={styles.fieldError}>{fieldErrors.venueAddress}</small> : <small>貼上場館官方網站上的完整地址。</small>}</label>
       </>}
-      <label>場地名稱<input maxLength={120} placeholder="例如：全館、1F 展場" aria-invalid={fieldErrors.spaceName ? true : undefined} value={spaceName} onChange={(event) => setSpaceName(event.target.value)} />{fieldErrors.spaceName && <small className={styles.fieldError}>{fieldErrors.spaceName}</small>}</label>
+      <label><span>場地名稱<RequiredMark /></span><input aria-label="場地名稱" required maxLength={120} placeholder="例如：全館、1F 展場" aria-invalid={fieldErrors.spaceName ? true : undefined} value={spaceName} onChange={(event) => setSpaceName(event.target.value)} />{fieldErrors.spaceName && <small className={styles.fieldError}>{fieldErrors.spaceName}</small>}</label>
       <label>場地官方網址（選填）<input type="url" placeholder="https://" aria-invalid={fieldErrors.spaceUrl ? true : undefined} value={spaceUrl} onChange={(event) => setSpaceUrl(event.target.value)} />
         {fieldErrors.spaceUrl
           ? <small className={styles.fieldError}>{fieldErrors.spaceUrl}</small>

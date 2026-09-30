@@ -6,7 +6,7 @@
 import { EVENT_ALIAS_MAX_COUNT } from "../event-aliases";
 import { getMapTemplateShape, listMapTemplateOptions, type MapTemplateShape } from "../map-template-registry";
 import { saveOrganizerEvent, type OrganizerEventDetail } from "../organizer-client";
-import { nextOrganizerEventDay, ORGANIZER_DEFAULT_SOURCE_LABEL, organizerPendingVenueSelections, type OrganizerEventDraft } from "../organizer-event";
+import { nextOrganizerEventDay, ORGANIZER_DEFAULT_SOURCE_LABEL, organizerPendingVenueSelections, validateOrganizerEventDraft, type OrganizerEventDraft } from "../organizer-event";
 import { validateOrganizerVenueCatalogAssignments, type OrganizerVenueCatalog, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { type OrganizerGuidedTask } from "../organizer-workspace";
 import { VenueCatalogCreator } from "./organizer-import-panel";
@@ -16,7 +16,10 @@ import { GUIDED_LABEL, TASK_QUESTION, mapTemplatePreview, message, organizerGuid
 import { OrganizerVenueAddressPanel, OrganizerVenueReferencePanel } from "./organizer-venue-reference-panel";
 import { VenueLayerGuide } from "./organizer-venue-layers";
 import styles from "./organizer.module.css";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { validateOrganizerReferences, type OrganizerReferenceCatalog } from "../organizer-reference-catalog";
+import { FieldGuidance, GuidedField, RequiredMark, focusOrganizerField, organizerIssueTarget, type FieldRequest } from "./organizer-field-guidance";
 
 const emptyVenueAssignment = (): OrganizerEventDraft["venue"]["assignments"][number] => ({
   venueId: "", venueSpaceId: "", areaIds: [], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "imported",
@@ -24,11 +27,12 @@ const emptyVenueAssignment = (): OrganizerEventDraft["venue"]["assignments"][num
 
 export function DraftForm({
   detail, section, guidedTask, saveLabel = "儲存", secondarySaveLabel,
-  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, onDraftStateChange,
+  onSaved, onSecondarySaved, onChanged, onDirtyChange, onSaveReady, onDraftStateChange, fieldRequest,
 }: {
   detail: OrganizerEventDetail;
   section: "event" | "venue";
   guidedTask?: OrganizerGuidedTask;
+  fieldRequest?: FieldRequest | null;
   saveLabel?: string;
   secondarySaveLabel?: string;
   onSaved?: (version: number) => Promise<void>;
@@ -36,8 +40,13 @@ export function DraftForm({
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onSaveReady?: (save: (() => Promise<boolean>) | null) => void;
-  onDraftStateChange?: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
+  onDraftStateChange?: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog, references: OrganizerReferenceCatalog) => void;
 }) {
+  const form = useRef<HTMLElement>(null);
+  const [referenceCatalog, setReferenceCatalog] = useState(detail.referenceCatalog ?? { organizers: [], categories: [] });
+  useEffect(() => {
+    if (fieldRequest && form.current) focusOrganizerField(form.current, fieldRequest.target);
+  }, [fieldRequest]);
   const [draft, setDraft] = useState(detail.draft);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,6 +68,7 @@ export function DraftForm({
     setExpectedVersion(detail.event.version);
     setDraft(detail.draft);
     setVenueCatalog(detail.venueCatalog);
+    setReferenceCatalog(detail.referenceCatalog ?? { organizers: [], categories: [] });
   }
   useEffect(() => {
     onDirtyChange(dirty);
@@ -66,7 +76,7 @@ export function DraftForm({
     window.addEventListener("beforeunload", warn);
     return () => { window.removeEventListener("beforeunload", warn); onDirtyChange(false); };
   }, [dirty, onDirtyChange]);
-  useEffect(() => { onDraftStateChange?.(draft, dirty, venueCatalog); }, [draft, dirty, onDraftStateChange, venueCatalog]);
+  useEffect(() => { onDraftStateChange?.(draft, dirty, venueCatalog, referenceCatalog); }, [draft, dirty, onDraftStateChange, venueCatalog, referenceCatalog]);
   const update = (mutate: (current: OrganizerEventDraft) => OrganizerEventDraft) => {
     setDirty(true);
     // Editing again makes the last save a description of a different
@@ -94,7 +104,7 @@ export function DraftForm({
      * the leave dialog pass through: a half-finished draft is a legitimate
      * thing to store and come back to (#221 4.2, 4.3). */
     if (requireTask && guidedTask && organizerGuidedDraftIssues(draft, guidedTask, venueCatalog).length > 0) {
-      setResult({ ok: false, text: "上方還有沒填完的項目，補齊後才能繼續。" });
+      setResult({ ok: false, text: "請補齊待修正項目，點選可前往欄位。" });
       return false;
     }
     setSaving(true);
@@ -131,47 +141,50 @@ export function DraftForm({
   const venueIssues = section === "venue"
     ? [...organizerPendingVenueSelections(draft), ...validateOrganizerVenueCatalogAssignments(draft.venue.assignments, venueCatalog)]
     : [];
+  const allIssues = [...validateOrganizerEventDraft(draft), ...validateOrganizerReferences(draft, referenceCatalog), ...venueIssues]
+    .map(issue => ({ ...issue, target: organizerIssueTarget(issue, draft) }));
+  const locate = (target: string) => { setAttempted(true); if (form.current) focusOrganizerField(form.current, target); };
   const taskIssues = guidedTask ? organizerGuidedDraftIssues(draft, guidedTask, venueCatalog) : venueIssues;
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
-  return <section className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
+  return <FieldGuidance value={{ issues: allIssues, attempted, target: fieldRequest?.target }}><section ref={form} onChangeCapture={() => form.current?.querySelectorAll("[data-field-highlight]").forEach(item => item.removeAttribute("data-field-highlight"))} className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
     <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與場地"}</h3>
       {guidedTask && <p>{TASK_QUESTION[guidedTask]}</p>}</div></div>
     <fieldset className={styles.formFields} disabled={saving} aria-label={guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料欄位" : "場館與場地欄位"}>
     {section === "event" ? <div className={styles.formGrid}>
       {showIdentity && <>
-        <label>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /><small>例如：秋日同人交流會 2026</small></label>
-        <div className={styles.full}><div className={styles.panelHead}><h4>活動別稱</h4><button type="button" className={styles.secondary}
+        <GuidedField target="event.name" required={true}>活動名稱<input disabled={!editable} value={draft.event.name} onChange={(event) => update((next) => { next.event.name = event.target.value; return next; })} /><small>例如：秋日同人交流會 2026</small></GuidedField>
+        <div className={styles.full} data-organizer-field="event.aliases"><div className={styles.panelHead}><h4>活動別稱（選填）</h4><button type="button" className={styles.secondary}
           disabled={!editable || (draft.event.aliases?.length ?? 0) >= EVENT_ALIAS_MAX_COUNT}
           onClick={() => update((next) => { next.event.aliases = [...(next.event.aliases ?? []), ""]; return next; })}>新增別稱</button></div>
           <small>讀者常用的其他稱呼，例如：FF47、開拓動漫祭 47。第一個會當作簡稱。</small>
           {(draft.event.aliases ?? []).map((alias, index) => <div className={styles.inlineFields} key={index}>
-            <label>別稱 {index + 1}<input disabled={!editable} value={alias} onChange={(event) => update((next) => { next.event.aliases![index] = event.target.value; return next; })} /></label>
+            <GuidedField target={`event.aliases.${index}`} required={false}>別稱 {index + 1}<input disabled={!editable} value={alias} onChange={(event) => update((next) => { next.event.aliases![index] = event.target.value; return next; })} /></GuidedField>
             <button type="button" className={styles.dangerText} disabled={!editable} aria-label={`移除別稱 ${index + 1}`} onClick={() => update((next) => { next.event.aliases!.splice(index, 1); return next; })}>移除</button>
           </div>)}
         </div>
-        <label>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "例如：autumn-doujin-2026。使用小寫英數字與連字號；首次送審後不能修改。"}</small></label>
-        <label>官方公告網址<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /><small>貼上主辦單位的活動頁或公告貼文網址。</small></label>
+        <GuidedField target="event.id" required={true}>活動代碼<input disabled={!editable || detail.event.eventIdLocked} placeholder="pf45-rf14" value={draft.event.id ?? ""} onChange={(event) => update((next) => { next.event.id = event.target.value || null; return next; })} /><small>{detail.event.eventIdLocked ? "首次送審後已鎖定" : "例如：autumn-doujin-2026。使用小寫英數字與連字號；首次送審後不能修改。"}</small></GuidedField>
+        <GuidedField target="officialSource.url" required={true}>官方公告網址<input disabled={!editable} required type="url" placeholder="https://" value={draft.officialSource.url ?? ""} onChange={(event) => update((next) => { next.officialSource.url = event.target.value || null; return next; })} /><small>貼上主辦單位的活動頁或公告貼文網址。</small></GuidedField>
         <label>來源名稱（選填）<input disabled={!editable} placeholder={ORGANIZER_DEFAULT_SOURCE_LABEL} value={draft.officialSource.label} onChange={(event) => update((next) => { next.officialSource.label = event.target.value; return next; })} /><small>留空時顯示「{ORGANIZER_DEFAULT_SOURCE_LABEL}」。</small></label>
         <EventImageField candidateId={detail.event.id} image={draft.event.image} editable={editable}
           onChange={(image) => update((next) => { if (image) next.event.image = image; else delete next.event.image; return next; })} />
         <OrganizerReferencePanel candidateId={detail.event.id} expectedVersion={expectedVersion}
-          catalog={detail.referenceCatalog} selection={draft.references} editable={editable}
+          catalog={referenceCatalog} onCatalogChange={setReferenceCatalog} selection={draft.references} editable={editable}
           eventSourceUrl={draft.officialSource.url ?? ""}
           onChange={(references) => update((next) => ({ ...next, references }))} />
       </>}
-      {showDays && <div className={styles.full}><div className={styles.panelHead}><h4>活動日</h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>新增一天</button></div>
+      {showDays && <div className={styles.full} data-organizer-field="event.days"><div className={styles.panelHead}><h4>活動日<RequiredMark /></h4><button type="button" className={styles.secondary} disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>新增一天</button></div>
         {draft.event.days.map((day, index) => <div className={styles.inlineFields} key={`${index}-${day.id}`}>
-          <label>{day.label || `第 ${index + 1} 天`}<input disabled={!editable} aria-label={`${day.label || `第 ${index + 1} 天`}日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} /></label>
+          <GuidedField target={`event.days.${index}.date`} required={true}>{day.label || `第 ${index + 1} 天`}<input disabled={!editable} aria-label={`${day.label || `第 ${index + 1} 天`}日期`} type="date" value={day.date} onChange={(event) => update((next) => { next.event.days[index].date = event.target.value; return next; })} /></GuidedField>
           <details className={styles.dayAdvanced}><summary>改這一天的名稱或代碼</summary>
-            <label>名稱<input disabled={!editable} aria-label={`第 ${index + 1} 天名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} /></label>
-            <label>代碼<input disabled={!editable} aria-label={`第 ${index + 1} 天代碼`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} /><small>攤位名單用這個代碼指到這一天，通常不需要改。</small></label>
+            <GuidedField target={`event.days.${index}.label`} required={true}>名稱<input disabled={!editable} aria-label={`第 ${index + 1} 天名稱`} value={day.label} onChange={(event) => update((next) => { next.event.days[index].label = event.target.value; return next; })} /></GuidedField>
+            <GuidedField target={`event.days.${index}.id`} required={true}>代碼<input disabled={!editable} aria-label={`第 ${index + 1} 天代碼`} value={day.id} onChange={(event) => update((next) => { next.event.days[index].id = event.target.value; return next; })} /><small>攤位名單用這個代碼指到這一天，通常不需要改。</small></GuidedField>
           </details>
           <button type="button" className={styles.dangerText} disabled={!editable} onClick={() => update((next) => { next.event.days.splice(index, 1); return next; })}>移除</button>
         </div>)}
         {draft.event.days.length === 0 && <div className={styles.inlineEmpty}><p>尚未設定活動日期。</p><button type="button" disabled={!editable} onClick={() => update((next) => { next.event.days.push(nextOrganizerEventDay(next.event.days, new Date())); return next; })}>建立第一個活動日</button></div>}
       </div>}
-    </div> : <div>
+    </div> : <div data-organizer-field="venue.assignments">
       <div role="group" aria-label="活動日期" className={styles.venueDates}>
         {draft.event.days.map((day, index) => <label key={`${index}-${day.id}`}>{day.label || `第 ${index + 1} 天`}
           <input type="date" aria-label={`${day.label || `第 ${index + 1} 天`}日期`} value={day.date} readOnly />
@@ -222,8 +235,8 @@ export function DraftForm({
         const selectedVenue = venueCatalog.venues.find((venue) => venue.id === assignment.venueId);
         const spaces = selectedVenue?.spaces ?? [];
         const selectedSpace = spaces.find((space) => space.id === assignment.venueSpaceId);
-        return <div className={`${styles.venueCard} ${guidedTask ? styles.guidedVenueCard : ""}`} key={index}>
-          <label>場館<select disabled={!editable} value={assignment.venueId} onChange={(event) => updateVenue((next) => {
+        return <div className={`${styles.venueCard} ${guidedTask ? styles.guidedVenueCard : ""}`} key={index} data-organizer-field={`venue.assignments.${index}`}>
+          <GuidedField target={`venue.assignments.${index}.venueId`} required={true}>場館<select disabled={!editable} value={assignment.venueId} onChange={(event) => updateVenue((next) => {
             // Changing the venue invalidates whatever space sat under it, and
             // choosing the replacement belongs to the owner for the same
             // reason the first choice did.
@@ -233,15 +246,15 @@ export function DraftForm({
               areaIds: [], areaMode: "imported",
             };
             return next;
-          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select></label>
-          <label>場地<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => updateVenue((next) => {
+          })}><option value="">請選擇場館</option>{venueCatalog.venues.map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}{assignment.venueId && !selectedVenue && <option value={assignment.venueId}>原場館已不存在</option>}</select></GuidedField>
+          <GuidedField target={`venue.assignments.${index}.venueSpaceId`} required={true}>場地<select disabled={!editable || !selectedVenue} value={assignment.venueSpaceId} onChange={(event) => updateVenue((next) => {
             const space = spaces.find((item) => item.id === event.target.value);
             next.venue.assignments[index].venueSpaceId = space?.id ?? "";
             next.venue.assignments[index].areaMode = space?.defaultAreaMode ?? "imported";
             next.venue.assignments[index].areaIds = space?.defaultAreaMode === "none" ? ["ALL"] : [];
             delete next.venue.assignments[index].areaLabels;
             return next;
-          })}><option value="">請選擇場地</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原場地已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個場地一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到場地？立即新增</button></label>
+          })}><option value="">請選擇場地</option>{spaces.map((space) => <option value={space.id} key={space.id}>{space.name}</option>)}{assignment.venueSpaceId && !selectedSpace && <option value={assignment.venueSpaceId}>原場地已不存在</option>}</select><small>例如：全館、1F 展場、2F 展場。一個場地一張地圖。</small><button type="button" className={styles.textButton} disabled={!editable || !selectedVenue} onClick={() => selectedVenue && setCatalogAction({ kind: "space", venueId: selectedVenue.id, assignmentIndex: index })}>找不到場地？立即新增</button></GuidedField>
           <label>攤位名單有另外區分展區嗎？<select disabled={!editable || !selectedSpace} value={assignment.areaMode ?? "imported"} onChange={(event) => updateVenue((next) => {
             const areaMode = event.target.value as OrganizerVenueSpaceAreaMode;
             next.venue.assignments[index].areaMode = areaMode;
@@ -266,7 +279,7 @@ export function DraftForm({
     {/* The same pending item is also listed in 準備進度, so this block carries a
         name: a reader arriving at the announcement needs to know which of the
         two they are hearing, and it is the one beside the controls that fix it. */}
-    {(attempted || venueIssues.length > 0) && taskIssues.length > 0 && <div className={styles.taskIssues} role="group" aria-label="這個表單尚待完成的項目" aria-live="polite">{taskIssues.map((issue, index) => <p key={`${issue.code}-${index}`}>{issue.message}</p>)}</div>}
+    {(attempted || venueIssues.length > 0) && taskIssues.length > 0 && <div className={styles.taskIssues} role="group" aria-label="這個表單尚待完成的項目" aria-live="polite">{taskIssues.map((issue, index) => <button type="button" className={styles.issueLink} key={`${issue.code}-${index}`} onClick={() => { const target = organizerIssueTarget(issue, draft); if (target) locate(target); }}>{issue.message}</button>)}</div>}
     <div className={styles.formActions}>
       <button type="button" disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSaved, true); }}>{saving ? "儲存中…" : saveLabel}</button>
       {secondarySaveLabel && <button type="button" className={styles.secondary} disabled={!editable || saving || venueIssues.length > 0} onClick={() => { void save(onSecondarySaved); }}>{secondarySaveLabel}</button>}
@@ -278,7 +291,7 @@ export function DraftForm({
           : dirty ? "尚有未儲存變更" : "目前沒有未儲存的變更"}
       </span>
     </div>
-  </section>;
+  </section></FieldGuidance>;
 }
 
 /** The schematic is drawn from the same shape validation enforces, so it can

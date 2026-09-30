@@ -77,19 +77,14 @@ test("organizer save counters stay internal when no revision diff is available",
   assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
 });
 
-test("organizer reuses the event source for imports and labels every activity-day field", async () => {
+test("organizer reuses the event source for imports and describes free map editing", async () => {
   const app = await organizerSource();
 
   assert.doesNotMatch(app, /<label>來源說明<input/);
   assert.match(app, /const sourceLabel = organizerSourceLabel\(detail\.draft\.officialSource\);/);
   assert.match(app, /sourceDescription: sourceLabel/);
-  assert.match(app, /<label>代碼<input/);
-  assert.match(app, /<label>名稱<input/);
-  // #221: the date is labelled by the day it belongs to （第一天）, because that
-  // is the question being asked; the id and name it does not ask about moved
-  // behind a disclosure and are still labelled there.
-  assert.ok(app.includes("天`}日期"), "the date field is labelled by its own day");
-  assert.doesNotMatch(app, /<label>日期<input/);
+  // Day labels, folded details and keyboard repair are exercised through
+  // their actual controls in portal-organizer-references.
   assert.match(app, />自由編輯<\/text>/);
   assert.doesNotMatch(app, /描摹/);
 });
@@ -196,11 +191,8 @@ test("the workspace carries one navigation, one progress count, and counts only 
   // outstanding right now, unsaved edits included. That is not progress.
   assert.ok(app.includes("liveDraft && liveDirty ? organizerGuidedDraftIssues"), "outstanding items still follow the screen");
 
-  // 儲存並繼續 checks the task it stands on and refuses to advance; 儲存並離開
-  // and the leave dialog pass through, because a half-finished draft is a
-  // legitimate thing to store and come back to.
-  assert.ok(app.includes("void save(onSaved, true)"), "the primary save requires the task");
-  assert.ok(app.includes("void save(onSecondarySaved)"), "leaving does not");
+  // portal-organizer-references now checks the refused primary save and the
+  // incomplete draft saved by 儲存並離開, without inspecting JSX wiring.
 
   // The replacement-count warning is checked before confirmation by
   // portal-organizer-import, alongside the resulting saved rows.
