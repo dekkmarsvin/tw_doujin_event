@@ -101,3 +101,93 @@ test("deployment lag and network failure have distinct actionable responses", as
   await assert.rejects(adoptionLoader(data, { fetch: async () => { throw new Error("private upstream response"); } })(data.source),
     { code: "amendment_baseline_unavailable", status: 503, message: "暫時無法核對公開版本，請稍後再試。" });
 });
+
+test("baseline diagnostics distinguish GitHub responses, transport, authentication and published catalog failures without private data", async () => {
+  const data = await fixture();
+  const { PublicationFailure } = await vite.environments.ssr.runner.import("/app/organizer-publication.ts");
+  const privateText = "private token, URL, account and upstream body";
+  for (const [extra, expected] of [
+    [{ fetch: async () => new Response(privateText, { status: 404 }) }, { stage: "github_ref", repository: "main", failure: "github_api_response", httpStatus: 404 }],
+    [{ fetch: async () => new Response(privateText, { status: 429 }) }, { stage: "github_ref", repository: "main", failure: "github_api_response", httpStatus: 429 }],
+    [{ fetch: async () => { throw new TypeError(privateText); } }, { stage: "github_ref", repository: "main", failure: "network", httpStatus: null }],
+    [{ fetch: async () => { throw new DOMException(privateText, "TimeoutError"); } }, { stage: "github_ref", repository: "main", failure: "timeout", httpStatus: null }],
+    [{ tokenProvider: { getToken: async () => { throw new PublicationFailure("github_app_key", privateText, false); } } },
+      { stage: "github_ref", repository: "main", failure: "github_app_key", httpStatus: null }],
+    [{ published: async () => { throw new SyntaxError(privateText); } }, { stage: "published_catalog", repository: null, failure: "invalid_json", httpStatus: null }],
+  ]) {
+    const diagnostics = [];
+    const read = api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => privateText },
+      fetch: gitReaderFixture(data).fetch, published: async () => data.published,
+      onUnavailable: (diagnostic) => diagnostics.push(diagnostic), ...extra });
+    await assert.rejects(read(data.source), { code: "amendment_baseline_unavailable", status: 503,
+      message: "暫時無法核對公開版本，請稍後再試。" });
+    assert.equal(diagnostics.length, 1);
+    const { elapsedMs, ...actual } = diagnostics[0];
+    assert.deepEqual(actual, expected);
+    assert.ok(Number.isFinite(elapsedMs) && elapsedMs >= 0);
+    assert.ok(!JSON.stringify(diagnostics).includes(privateText));
+  }
+});
+
+test("token refresh failures are not attributed to a completed unauthorized request", async (t) => {
+  const data = await fixture();
+  const { PublicationFailure } = await vite.environments.ssr.runner.import("/app/organizer-publication.ts");
+  const completedRequest = new AbortController();
+  t.mock.method(AbortSignal, "timeout", () => completedRequest.signal);
+  let tokenReads = 0;
+  const rejectedTokens = [];
+  const diagnostics = [];
+  const read = api.createPublishedAmendmentBaselineLoader({ tokenProvider: {
+    getToken: async () => {
+      if (++tokenReads === 1) return "rejected-token";
+      completedRequest.abort(new DOMException("Expired earlier request", "TimeoutError"));
+      throw new PublicationFailure("github_app_request", "private authentication response", true);
+    }, invalidate: (token) => rejectedTokens.push(token),
+  }, fetch: async () => new Response(null, { status: 401 }), published: async () => data.published,
+  onUnavailable: (diagnostic) => diagnostics.push(diagnostic) });
+  await assert.rejects(read(data.source), { code: "amendment_baseline_unavailable", status: 503 });
+  assert.equal(tokenReads, 2);
+  assert.deepEqual(rejectedTokens, ["rejected-token"]);
+  assert.equal(diagnostics.length, 1);
+  const { elapsedMs, ...actual } = diagnostics[0];
+  assert.ok(Number.isFinite(elapsedMs) && elapsedMs >= 0);
+  assert.deepEqual(actual, { stage: "github_ref", repository: "main", failure: "github_app_request", httpStatus: null });
+});
+
+test("a failed fetch after token refresh does not retain the earlier unauthorized status", async () => {
+  const data = await fixture();
+  let fetches = 0;
+  const diagnostics = [];
+  const read = api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => "test-token", invalidate: () => {} },
+    fetch: async () => {
+      if (++fetches === 1) return new Response(null, { status: 401 });
+      throw new TypeError("private network error");
+    }, published: async () => data.published, onUnavailable: (diagnostic) => diagnostics.push(diagnostic) });
+  await assert.rejects(read(data.source), { code: "amendment_baseline_unavailable", status: 503 });
+  assert.equal(fetches, 2);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].failure, "network");
+  assert.equal(diagnostics[0].httpStatus, null);
+});
+
+test("parallel GitHub reads retain their own response status and diagnostics do not change baseline decisions", async () => {
+  const data = await fixture();
+  const diagnostics = [];
+  const remote = gitReaderFixture(data);
+  const read = api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => "test-token" },
+    fetch: async (url, init) => {
+      if (String(url).endsWith(`/git/commits/${data.source.mainCommit}`)) return new Response("private response", { status: 403 });
+      return remote.fetch(url, init);
+    }, published: async () => data.published, onUnavailable: (event) => diagnostics.push(event) });
+  await assert.rejects(read(data.source), { code: "amendment_baseline_unavailable" });
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].stage, "github_commit");
+  assert.equal(diagnostics[0].httpStatus, 403);
+  const options = { tokenProvider: { getToken: async () => "test-token" }, fetch: remote.fetch, published: async () => data.published,
+    onUnavailable: () => { throw new Error("diagnostic sink failed"); } };
+  assert.deepEqual(await api.createPublishedAmendmentBaselineLoader(options)(data.source), data.baseline);
+  await assert.rejects(api.createPublishedAmendmentBaselineLoader({ ...options, fetch: async () => new Response(null, { status: 503 }) })(data.source),
+    { code: "amendment_baseline_unavailable", status: 503 });
+  data.published.catalog.circles[0].name = "changed";
+  await assert.rejects(api.createPublishedAmendmentBaselineLoader(options)(data.source), { code: "amendment_baseline_changed", status: 409 });
+});

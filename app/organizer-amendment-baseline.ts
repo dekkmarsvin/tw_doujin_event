@@ -8,6 +8,7 @@ import { buildOfficialCatalogPayload } from "../scripts/official-catalog-core.mj
 import { parseOrganizerEventDraft, type OrganizerEventDraft } from "./organizer-event";
 import type { OrganizerNormalizedImportRow } from "./organizer-import";
 import { sha256Hex } from "./portal-crypto";
+import { PublicationFailure } from "./organizer-publication";
 import registeredAdoptions from "../data/organizer-baseline-adoptions.json";
 import { adoptionMatchesSource, assertBaselineProvenance, baselineCanonicalJson, baselineEventEvidence, parseBaselineAdoption,
   type OrganizerBaselineAdoption } from "./organizer-baseline-adoption";
@@ -35,9 +36,15 @@ export class AmendmentBaselineError extends Error {
 }
 const changed = () => new AmendmentBaselineError("amendment_baseline_changed", "此活動的公開資料與發布紀錄不一致，暫時無法開始修正。");
 const unavailable = () => new AmendmentBaselineError("amendment_baseline_unavailable", "暫時無法核對公開版本，請稍後再試。", 503);
-async function readUpstream<T>(read: () => Promise<T>): Promise<T> {
-  try { return await read(); } catch { throw unavailable(); }
-}
+export type AmendmentBaselineDiagnostic = {
+  stage: "github_ref" | "github_commit" | "github_tree" | "github_blob" | "published_catalog";
+  repository: "main" | "data" | null;
+  failure: "timeout" | "network" | "invalid_json" | "unexpected" | "github_app_config" | "github_app_key"
+    | "github_app_token" | "github_app_request" | "github_api_request" | "github_api_response";
+  httpStatus: number | null;
+  elapsedMs: number;
+};
+const diagnosticCodes = new Set(["github_app_config", "github_app_key", "github_app_token", "github_app_request", "github_api_request", "github_api_response"]);
 
 /** Only called after candidate authorization; reads fixed Git trees and the
  * currently served catalog. The browser cannot supply any baseline bytes. */
@@ -45,16 +52,58 @@ export function createPublishedAmendmentBaselineLoader(options: Pick<GitHubAdapt
   published: (eventId: string) => Promise<{ dataCommit: string; catalog: unknown } | null>;
   /** Server-owned configuration only. Never read from the HTTP request. */
   adoptions?: readonly unknown[];
+  /** Fixed fields only: never pass tokens, URLs, response bodies or raw errors. */
+  onUnavailable?: (diagnostic: AmendmentBaselineDiagnostic) => void;
 }) {
-  const adapter = createGitHubPublicationAdapter({ owner: GITHUB_PUBLICATION_OWNER, tokenProvider: options.tokenProvider,
-    fetch: (url, init) => (options.fetch ?? globalThis.fetch)(url, { ...init, signal: AbortSignal.timeout(8_000) }) });
+  async function readUpstream<T>(diagnostic: Pick<AmendmentBaselineDiagnostic, "stage" | "repository">,
+    read: (transport: { httpStatus: number | null; failure: "timeout" | "network" | null; signal?: AbortSignal }) => Promise<T>): Promise<T> {
+    const started = Date.now();
+    const transport: { httpStatus: number | null; failure: "timeout" | "network" | null; signal?: AbortSignal } = { httpStatus: null, failure: null };
+    try { return await read(transport); } catch (error) {
+      const code = error instanceof PublicationFailure && diagnosticCodes.has(error.code)
+        ? error.code as AmendmentBaselineDiagnostic["failure"] : null;
+      // A rejected API token can trigger authentication after that fetch has
+      // finished. Its old timeout/status must not describe a token failure.
+      const authenticationFailure = code?.startsWith("github_app_") ? code : null;
+      const failure = authenticationFailure ?? (transport.signal?.aborted ? "timeout" : transport.failure
+        ?? code ?? (error instanceof SyntaxError ? "invalid_json" : "unexpected"));
+      try { options.onUnavailable?.({ ...diagnostic, failure, httpStatus: authenticationFailure ? null : transport.httpStatus,
+        elapsedMs: Math.max(0, Date.now() - started) }); }
+      catch { /* A diagnostic sink must not change the established API error. */ }
+      throw unavailable();
+    }
+  }
+  function readGit<T>(repository: string, stage: Exclude<AmendmentBaselineDiagnostic["stage"], "published_catalog">,
+    read: (adapter: ReturnType<typeof createGitHubPublicationAdapter>) => Promise<T>) {
+    return readUpstream({ stage, repository: repository === GITHUB_PUBLICATION_REPOSITORIES[1] ? "main" : "data" }, async (transport) => {
+      // Each read owns its transport diagnostics; parallel blob reads must not
+      // attribute one response's status to another operation. The shared token
+      // provider still coalesces authentication and reuses its existing token.
+      const adapter = createGitHubPublicationAdapter({ owner: GITHUB_PUBLICATION_OWNER, tokenProvider: options.tokenProvider,
+        fetch: async (url, init) => {
+          const signal = AbortSignal.timeout(8_000);
+          transport.signal = signal;
+          transport.httpStatus = null;
+          transport.failure = null;
+          try {
+            const response = await (options.fetch ?? globalThis.fetch)(url, { ...init, signal });
+            transport.httpStatus = response.status;
+            return response;
+          } catch (error) {
+            transport.failure = signal.aborted || (error instanceof Error && error.name === "TimeoutError") ? "timeout" : "network";
+            throw error;
+          }
+        } });
+      return read(adapter);
+    });
+  }
   async function files(repository: string, commit: string, paths: string[]) {
-    const record = await readUpstream(() => adapter.readCommit(repository, commit));
-    const tree = await readUpstream(() => adapter.readTree(repository, record.tree.sha));
+    const record = await readGit(repository, "github_commit", (adapter) => adapter.readCommit(repository, commit));
+    const tree = await readGit(repository, "github_tree", (adapter) => adapter.readTree(repository, record.tree.sha));
     return new Map(await Promise.all(paths.map(async (path) => {
       const entry = tree.find((item) => item.path === path);
       if (!entry || entry.type !== "blob" || entry.mode !== "100644") throw changed();
-      return [path, await readUpstream(() => adapter.readBlob(repository, entry.sha))] as const;
+      return [path, await readGit(repository, "github_blob", (adapter) => adapter.readBlob(repository, entry.sha))] as const;
     })));
   }
   return async (source: AmendmentPublishedSource): Promise<OrganizerAmendmentBaseline> => {
@@ -66,11 +115,15 @@ export function createPublishedAmendmentBaselineLoader(options: Pick<GitHubAdapt
       const pinPath = `data/event-data-pins/${eventId}.json`;
       const mainRepo = GITHUB_PUBLICATION_REPOSITORIES[1];
       const dataRepo = GITHUB_PUBLICATION_REPOSITORIES[0];
-      const mainCommit = await readUpstream(() => adapter.readRef(mainRepo, "main"));
-      if (!mainCommit) throw unavailable();
+      const mainCommit = await readGit(mainRepo, "github_ref", async (adapter) => {
+        const commit = await adapter.readRef(mainRepo, "main");
+        if (!commit) throw new PublicationFailure("github_api_response", "GitHub main ref is unavailable.", true);
+        return commit;
+      });
       const [mainFiles, originalFiles, published] = await Promise.all([
         files(mainRepo, mainCommit, [pinPath, "data/published-events.json", "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"]),
-        files(mainRepo, source.mainCommit, [pinPath]), readUpstream(() => options.published(eventId)),
+        files(mainRepo, source.mainCommit, [pinPath]),
+        readUpstream({ stage: "published_catalog", repository: null }, () => options.published(eventId)),
       ]);
       const pin = parseEventDataPin(JSON.parse(mainFiles.get(pinPath)!));
       const originalPin = parseEventDataPin(JSON.parse(originalFiles.get(pinPath)!));
