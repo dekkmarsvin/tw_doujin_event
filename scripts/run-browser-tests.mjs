@@ -278,7 +278,7 @@ async function serve(mode) {
     ? { command: [path.join(ROOT, "scripts", "run-local-portal.mjs")], base: PORTAL_ORIGIN }
     : await (async () => {
       const port = Number(process.env.MAP_TEST_PORT) || await freePort();
-      return { command: [viteBin(), "--config", "vite.pages.config.ts", "--port", String(port), "--strictPort"], base: `http://localhost:${port}` };
+      return { command: [viteBin(), "--config", "vite.pages.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], base: `http://127.0.0.1:${port}` };
     })();
   const log = { startedAt: new Date().toISOString(), base: spawned.base, exit: null };
   let stdout = "", stderr = "";
