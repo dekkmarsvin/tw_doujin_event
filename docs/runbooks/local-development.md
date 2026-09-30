@@ -137,6 +137,8 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只在 PR 與手動 dispatch 執行；main 不重跑全套，也不讓 browser 的完成時間占住正式部署佇列。活動發布 PR 仍須取得同 head SHA 的成功結果才能自動合併。
 
+純發布資料由 `publication-data` profile 驗證：先核對成功 main 部署基準與完整累積差異，再保留 production build、成品完整性、preview E2E 與 deployment smoke。Browser 以 `npm run build:production` 後執行 `node scripts/test-published-reader.mjs`，對所有實際發布 pins 開啟桌面／手機日期與場地組合及 warm reload。此 profile 不重跑未變動程式的完整 suite／lint／type-check／Worker rebuild；未知、混合或無可靠基準仍完整執行。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
+
 新增或補強 UI 行為驗收時，同一 PR 核對並移除它已等效涵蓋的 JSX／CSS／原始碼字串斷言，在 PR 逐項記錄替代關係；未覆蓋者保留並說明缺口。優先擴充既有 journey，不為同一流程新增另一套。純邏輯、API／D1、授權、資料完整性與發布恢復仍留在適合的測試層，不以測試總數下降作為驗收。
 
 `tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：
@@ -159,7 +161,7 @@ npm run test:browser -- --journey reader-thumbnails
 npm run test:browser -- --journey portal-admin-entry --journey portal-organizer-entry
 ```
 
-未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；CI 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收。
+未知名稱、未知選項及缺少值會失敗，不會默默改跑全套。部分旅程的成功只證明所選範圍；完整 profile 的 `Browser acceptance` 不提供 `--journey`，維持完整代表性驗收；純發布資料使用上述 published Reader 驗證。
 
 ### journey 與它需要的資料
 

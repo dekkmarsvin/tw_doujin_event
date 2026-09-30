@@ -16,6 +16,14 @@ test("only known non-product inputs take a short path", () => {
   assert.equal(classifyPaths([]).profile, "full");
 });
 
+test("publication data requires a pure conservative allowlist", () => {
+  const publication = ["data/published-events.json", "data/event-data-pins/fgo-only-2026.json", "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"];
+  assert.equal(classifyPaths(publication).profile, "publication-data");
+  for (const file of ["README.md", "data/new.json", "data/event-data-pins/nested/event.json", "app/event-catalog.ts", "package-lock.json", "data/circle-identities/new.json"]) {
+    assert.equal(classifyPaths([...publication, file]).profile, "full", file);
+  }
+});
+
 async function repository(t) {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "ci-scope-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -92,6 +100,30 @@ test("PR, dispatch and product changes do not need a deployment lookup", async t
   assert.equal((await determineWorkflowScope({ eventName: "push", event: { before: docs }, sha: r.commit(), cwd: r.cwd }, noLookup)).profile, "full");
 });
 
+test("publication PR and push include undelivered code and require a verified ancestor baseline", async t => {
+  const r = await repository(t);
+  await r.put("app/product.ts");
+  const product = r.commit();
+  await r.put("data/event-data-pins/new-event.json", "{}");
+  const sha = r.commit();
+  for (const [eventName, event] of [["pull_request", { pull_request: { base: { sha: product } } }], ["push", { before: product, ref: "refs/heads/main" }]]) {
+    const args = { eventName, event, sha, cwd: r.cwd };
+    assert.equal(determineScope(args).profile, "publication-data");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => ({ sha: r.base, runId: 1 }) })).profile, "full");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => ({ sha: product, runId: 2 }) })).profile, "publication-data");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => null })).profile, "full");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => { throw new Error("API unavailable"); } })).profile, "full");
+  }
+  // The PR cannot borrow a baseline from a newer/different main history.
+  const args = { eventName: "pull_request", event: { pull_request: { base: { sha: product } } }, sha, cwd: r.cwd };
+  assert.equal((await determineWorkflowScope(args, { findBaseline: async () => ({ sha, runId: 3 }) })).profile, "full");
+  // A pin-shaped path must not become a symlink or executable build input.
+  r.git(["update-index", "--chmod=+x", "data/event-data-pins/new-event.json"]);
+  r.git(["-c", "commit.gpgsign=false", "commit", "-m", "mode"]);
+  const modeSha = r.git(["rev-parse", "HEAD"]);
+  assert.equal(determineScope({ ...args, sha: modeSha }).profile, "full");
+});
+
 test("baseline lookup skips lightweight runs and requires an identifiable successful deploy", async () => {
   const run = { head_branch: "main", event: "push", path: ".github/workflows/deploy-pages.yml", status: "completed", conclusion: "success", id: 20, head_sha: "a".repeat(40) };
   const deploy = { name: "Verify and deploy", status: "completed", conclusion: "success" };
@@ -118,6 +150,21 @@ test("baseline lookup skips lightweight runs and requires an identifiable succes
   assert.equal(await lookup([{ workflow_runs: [] }]), null);
   assert.equal(await findValidatedMainRun({ repository: "owner/repo" }), null);
   await assert.rejects(findValidatedMainRun({ repository: "owner/repo", token: "fixture", fetchImpl: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
+});
+
+test("a pure data revert cannot downgrade the required gates to docs", async t => {
+  const r = await repository(t);
+  await r.put("data/published-events.json", "original");
+  const deployed = r.commit();
+  await r.put("data/published-events.json", "changed");
+  await r.put("README.md", "undelivered docs");
+  const base = r.commit();
+  await r.put("data/published-events.json", "original");
+  const sha = r.commit();
+  for (const [eventName, event] of [["pull_request", { pull_request: { base: { sha: base } } }], ["push", { before: base, ref: "refs/heads/main" }]]) {
+    const result = await determineWorkflowScope({ eventName, event, sha, cwd: r.cwd }, { findBaseline: async () => ({ sha: deployed, runId: 1 }) });
+    assert.equal(result.profile, "full");
+  }
 });
 
 test("the real CLI reports docs applicability and fails on malformed event input", async t => {

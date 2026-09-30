@@ -8,9 +8,12 @@ import { pathToFileURL } from "node:url";
 const ROOT_DOCS = new Set(["AGENTS.md", "CONTEXT.md", "DESIGN.md", "PRODUCT.md", "README.md"]);
 const TOOLING = new Set([".gitignore", ".claude/settings.json", ".claude/hooks/session-start.sh"]);
 const ISSUE_FORMS = new Set(["bug.yml", "feature.yml", "documentation.yml", "config.yml"]);
+const PUBLICATION_DATA = new Set(["data/published-events.json", "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"]);
+const isPublicationData = file => PUBLICATION_DATA.has(file) || /^data\/event-data-pins\/[a-z0-9][a-z0-9-]*\.json$/.test(file);
 
 export function classifyPaths(paths) {
   if (!paths.length) return { profile: "full", reason: "No changed paths; use the full gate." };
+  if (paths.every(isPublicationData)) return { profile: "publication-data", reason: "Only publication pins, registry and circle identity data changed." };
   let tooling = false;
   for (const file of paths) {
     if (TOOLING.has(file)) { tooling = true; continue; }
@@ -50,7 +53,12 @@ export function determineScope({ eventName, event, sha, cwd = process.cwd() }) {
     paths.push(fields[index + 1]);
     if (!["A", "M", "D"].includes(fields[index])) typeChange = true;
   }
-  return { ...(typeChange ? { profile: "full", reason: "A file type changed; use the full gate." } : classifyPaths(paths)), paths };
+  const classification = typeChange ? { profile: "full", reason: "A file type changed; use the full gate." } : classifyPaths(paths);
+  if (classification.profile === "publication-data") {
+    const entries = git(["ls-tree", "-r", sha, "--", ...paths]).trim().split("\n").filter(Boolean);
+    if (entries.some(entry => !entry.startsWith("100644 blob "))) return { profile: "full", reason: "Publication inputs must be regular JSON files.", paths };
+  }
+  return { ...classification, paths };
 }
 
 // A docs push can cancel a still-running product push under the existing
@@ -89,14 +97,20 @@ export async function findValidatedMainRun({ repository, token, fetchImpl = fetc
 
 export async function determineWorkflowScope(args, { findBaseline = findValidatedMainRun, ...apiOptions } = {}) {
   const scope = determineScope(args);
-  if (scope.profile === "full" || args.eventName !== "push") return scope;
+  if (scope.profile === "full" || (args.eventName !== "push" && scope.profile !== "publication-data")) return scope;
   const full = reason => ({ ...scope, profile: "full", reason });
-  if (args.event.ref !== "refs/heads/main") return full("No verified main ref; use the full gate.");
+  if (args.eventName === "push" && args.event.ref !== "refs/heads/main") return full("No verified main ref; use the full gate.");
   let baseline;
   try { baseline = await findBaseline(apiOptions); }
   catch { return full("Deployment baseline lookup failed; use the full gate."); }
   if (!baseline) return full("No verified successful main deployment; use the full gate.");
-  const cumulative = determineScope({ ...args, event: { ...args.event, before: baseline.sha } });
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", baseline.sha, args.eventName === "pull_request" ? args.event.pull_request.base.sha : args.sha], { cwd: args.cwd, stdio: "ignore" });
+  } catch { return full("Successful deployment is not an ancestor of this comparison; use the full gate."); }
+  const cumulative = determineScope({ ...args, eventName: "push", event: { before: baseline.sha } });
+  if (scope.profile === "publication-data" && !["publication-data", "full"].includes(cumulative.profile)) {
+    return full("Publication data was reverted relative to the deployed baseline; retain the full required gates.");
+  }
   return { ...cumulative, baseline, reason: `Compared with successful main run ${baseline.runId}. ${cumulative.reason}` };
 }
 
@@ -112,6 +126,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       "## Verification scope", `Profile: **${scope.profile}**. ${scope.reason}`,
       scope.profile === "full"
         ? "Product checks and deployment remain applicable (subject to the existing event/fork restrictions)."
+        : scope.profile === "publication-data"
+          ? "Rebuild and validate every pinned published event, verify built artifacts, run published Reader browser checks, deploy and smoke. Full code tests/lint/type-check/Worker rebuild are not applicable because code matches a successful main deployment; preview portal E2E remains required."
         : "Document checks apply; tooling checks also apply for the tooling profile. Product tests, browser journeys, deployment and remote preview E2E are **not applicable and will not run**; this is not a claim that those tests passed.",
       "Changed paths (JSON escaped):", "```json", JSON.stringify(scope.paths, null, 2), "```", "",
     ].join("\n\n"));

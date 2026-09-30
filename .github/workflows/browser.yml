@@ -20,6 +20,9 @@ jobs:
     name: Classify browser scope
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
     outputs:
       profile: ${{ steps.scope.outputs.profile }}
     steps:
@@ -31,6 +34,8 @@ jobs:
           node-version-file: .nvmrc
       - name: Classify all changed paths
         id: scope
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci-scope.mjs
 
   # Keep this check name: the publication adapter requires its actual success
@@ -38,13 +43,20 @@ jobs:
   browser-acceptance:
     name: Browser acceptance
     needs: scope
-    if: needs.scope.outputs.profile == 'full'
+    if: needs.scope.outputs.profile == 'full' || needs.scope.outputs.profile == 'publication-data'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Match package-lock.json's Playwright version. Includes browsers and OS
+    # libraries; no per-run apt mirror dependency. Measure pull in Set up job.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Trust this container checkout for journey Git reads
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -55,20 +67,20 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      # npm ci locks the Playwright package; only this job installs its browser
-      # binary and the shared libraries a bare runner image does not carry.
-      - name: Install Chromium
-        run: |
-          npm run test:browser:install
-          npx playwright install-deps chromium
-
       # Each journey declares what it needs and `test:browser` stands it up: the
       # pinned FF47 data it fetches itself, the fixtures it stages, and the
       # isolated local portal — Wrangler with local D1 and R2, always-pass
       # Turnstile and mail captured in D1 — that the signed-in journeys need.
       # Nothing here reaches a remote binding or sends mail.
       - name: Run representative browser journeys
+        if: needs.scope.outputs.profile == 'full'
         run: npm run test:browser
+
+      - name: Build and exercise all published Readers
+        if: needs.scope.outputs.profile == 'publication-data'
+        run: |
+          npm run build:production
+          node scripts/test-published-reader.mjs
 
       - name: Upload browser reports, server diagnostics and screenshots
         if: always()

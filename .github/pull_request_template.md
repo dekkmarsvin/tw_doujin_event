@@ -23,7 +23,7 @@
 <!-- 本機預設聚焦驗證；完整產品套件由對應版本的 CI 提供。不適用寫明理由，未執行或 skipped 不寫成通過。 -->
 
 - 待交付 commit／環境：
-- CI scope 與 run 連結（產品變更須有完整 Node、lint、type-check 與適用 browser／preview checks）：
+- CI scope 與 run 連結（產品程式須有完整 Node、lint、type-check 與適用 browser／preview checks；純發布資料依 publication-data profile）：
 - 本機聚焦命令、結果與對應驗收條件：
 - 人工／真實環境驗收及剩餘未完成項：
 - 沿用既有證據或不適用項的依據：
