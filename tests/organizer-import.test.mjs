@@ -304,18 +304,30 @@ test("the downloadable example parses back into the table it was built from", ()
   assert.deepEqual(parsed.map((row) => row.cells), [sample.header, ...sample.rows]);
 
   // The example is not just readable, it is importable: mapping it by column
-  // yields exactly the rows it shows.
+  // yields exactly the rows it shows, including one circle's two booths on
+  // one day written in a single cell.
+  const booths = parsed.slice(1).map((row) => row.cells[3]);
+  assert.deepEqual(imports.findOrganizerListedBoothCodes(booths), { count: 1, example: "B02、B03" });
   const result = imports.prepareOrganizerImport({
     rows: parsed, headerRow: 1,
     mapping: {
       day: { column: 0, values: { 1: "1", 2: "2" } },
       venueSpace: { column: 1, values: { "新光三越高雄左營店・10F國際活動展演中心": "zhengyan" } },
       area: { column: 2 }, boothCode: { column: 3 }, circleName: { column: 4 }, stableKey: { column: 5 },
+      boothCodeMode: "delimited",
     },
   });
   assert.deepEqual(result.issues, []);
   assert.equal(result.rows.length, sample.rows.length);
-  assert.deepEqual(result.rows.map((row) => row.identityGroup), ["stable:circle-001", "stable:circle-002", "stable:circle-003"]);
+  assert.deepEqual(result.rows.map((row) => row.codes), [["A01"], ["A02"], ["B01"], ["B02", "B03"]]);
+  assert.deepEqual(result.rows.map((row) => row.identityGroup), ["stable:circle-001", "stable:circle-002", "stable:circle-003", "stable:circle-004"]);
+});
+
+test("cells listing several booth codes are found, spaced single codes are not", () => {
+  assert.deepEqual(imports.findOrganizerListedBoothCodes(["A01", "A02、A03", "B01,B02", "C01 C02", "D01／D02"]), { count: 4, example: "A02、A03" });
+  // A space inside one code, a lone trailing separator and an empty cell are
+  // all one code or none; none of them is a list.
+  assert.equal(imports.findOrganizerListedBoothCodes(["A 01", "A01、", "", "特 1"]), null);
 });
 
 test("an undivided event gets an example without an area column", () => {
@@ -339,7 +351,7 @@ test("the example leaves the area blank for a space that has no divisions", () =
   const area = sample.header.indexOf("展區");
   const space = sample.header.indexOf("場地");
   const cells = sample.rows.map((row) => [row[space], row[area]]);
-  assert.deepEqual(cells.filter(([name]) => name === "全館").map(([, value]) => value), ["", ""]);
+  assert.deepEqual(cells.filter(([name]) => name === "全館").map(([, value]) => value), ["", "", ""]);
   assert.equal(cells.find(([name]) => name === "分區館")[1], "A");
 });
 

@@ -49,7 +49,13 @@ try {
   await form.getByLabel("攤位代碼", { exact: true }).selectOption("1");
   await form.getByLabel("社團名稱", { exact: true }).selectOption("2");
   await form.getByLabel("主辦內部編號（選填）", { exact: true }).selectOption("3");
-  await form.getByLabel("攤位代碼格式").selectOption("delimited");
+  // The default format reads 「A01 A02」 as one code; the file itself says it
+  // lists codes, and the way out is offered beside the menu that hides it.
+  await form.getByText("有 1 列在同一格寫了多個代碼，例如「A01 A02」。", { exact: true }).waitFor();
+  await journey.capture(page, "cross-day-listed-codes-hint");
+  await form.getByRole("button", { name: "改用分隔符號分開", exact: true }).click();
+  assert.equal(await form.getByLabel("攤位代碼格式").inputValue(), "delimited");
+  assert.equal(await form.getByRole("button", { name: "改用分隔符號分開", exact: true }).count(), 0);
   await form.getByRole("button", { name: "預覽對應結果", exact: true }).click();
   const summary = page.locator("summary").filter({ hasText: "跨日整合：1 個社團" });
   await summary.click();

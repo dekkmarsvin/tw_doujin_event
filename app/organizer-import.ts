@@ -50,6 +50,9 @@ function compact(value: unknown) {
   return String(value ?? "").normalize("NFKC").trim().replace(/\s+/gu, " ");
 }
 
+/** What the delimited format splits a booth cell on. */
+const BOOTH_CODE_SEPARATORS = /[\s,，、;；/]+/u;
+
 /** Suggest only: choosing a width is an explicit organizer decision. */
 export function suggestOrganizerBoothCodeWidth(values: readonly string[]): number | null {
   const lengths = values.map((value) => [...compact(value)].length).filter((length) => length > 0);
@@ -63,6 +66,17 @@ export function suggestOrganizerBoothCodeWidth(values: readonly string[]): numbe
     if (units.every((unit) => [...unit].length === width) && lengths.some((length) => length > width)) return width;
   }
   return null;
+}
+
+/** Cells that already list several codes for one circle. Every part must carry
+ * a digit, so a spaced code such as 「A 01」 is not read as two booths.
+ * Suggest only, like the width: the format stays the organizer's choice. */
+export function findOrganizerListedBoothCodes(values: readonly string[]): { count: number; example: string } | null {
+  const listed = values.map(compact).filter((value) => {
+    const parts = value.split(BOOTH_CODE_SEPARATORS).filter(Boolean);
+    return parts.length > 1 && parts.every((part) => /\d/u.test(part));
+  });
+  return listed.length ? { count: listed.length, example: listed[0] } : null;
 }
 
 /**
@@ -195,7 +209,7 @@ export function prepareOrganizerImport(input: {
 
     const characters = [...boothCode];
     const boothCodes = mode === "delimited"
-      ? boothCode.split(/[\s,，、;；/]+/u).filter(Boolean)
+      ? boothCode.split(BOOTH_CODE_SEPARATORS).filter(Boolean)
       : mode === "fixed-width"
         ? Array.from({ length: Math.ceil(characters.length / width!) }, (_, index) => characters.slice(index * width!, (index + 1) * width!).join(""))
         : [boothCode];
@@ -283,6 +297,9 @@ export function buildOrganizerImportSample(input: {
     { booth: "A01", circle: "範例社團一", stable: "circle-001" },
     { booth: "A02", circle: "範例社團二", stable: "circle-002" },
     { booth: "B01", circle: "範例社團三", stable: "circle-003" },
+    // Two booths of one circle on one day stay in one row: two rows of one
+    // name on one day publish as two circles unless they share an ID.
+    { booth: "B02、B03", circle: "範例社團四", stable: "circle-004" },
   ];
   const rows = samples.map((sample, index) => {
     const day = days[Math.min(index, days.length - 1)];

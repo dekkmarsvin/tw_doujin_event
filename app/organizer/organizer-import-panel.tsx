@@ -6,7 +6,7 @@
 import { RequiredMark } from "./organizer-field-guidance";
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
 import { isOrganizerAreaId, organizerSourceLabel, withOrganizerImportedAreaIds } from "../organizer-event";
-import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
+import { buildOrganizerImportMetadata, buildOrganizerImportSample, findOrganizerListedBoothCodes, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
@@ -157,6 +157,9 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
 
   const suggestedWidth = useMemo(() => sheet && boothColumn !== null
     ? suggestOrganizerBoothCodeWidth(sheet.rows.slice(headerRow).map((row) => String(row.cells[boothColumn] ?? ""))) : null,
+  [sheet, boothColumn, headerRow]);
+  const listedCodes = useMemo(() => sheet && boothColumn !== null
+    ? findOrganizerListedBoothCodes(sheet.rows.slice(headerRow).map((row) => String(row.cells[boothColumn] ?? ""))) : null,
   [sheet, boothColumn, headerRow]);
   const excludedRows = useMemo(() => excluded.map((row) => row.sourceRow), [excluded]);
   const prepared = useMemo(() => {
@@ -323,7 +326,11 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
         {/* A hint belongs under the control it is about; as its own grid cell
             it sat in the next column, level with nothing. */}
         {boothCodeMode === "delimited" && <small>支援空白、逗號、頓號、分號與斜線。</small>}
-        {boothCodeMode === "single" && suggestedWidth !== null && <small role="status">名單可能含合併攤位；例如每 {suggestedWidth} 個字元為一碼。請核對格式再儲存。</small>}
+        {/* The default reads 「A01、A02」 as one code, and the other formats sit
+            unseen inside the menu, so a file that lists codes says so here. */}
+        {boothCodeMode === "single" && listedCodes && <><small role="status">有 {listedCodes.count} 列在同一格寫了多個代碼，例如「{listedCodes.example}」。</small>
+          <button type="button" className={styles.ghost} onClick={() => { setBoothCodeMode("delimited"); setBoothCodeWidth(""); }}>改用分隔符號分開</button></>}
+        {boothCodeMode === "single" && !listedCodes && suggestedWidth !== null && <small role="status">名單可能含合併攤位；例如每 {suggestedWidth} 個字元為一碼。請核對格式再儲存。</small>}
         </label>
         {boothCodeMode === "fixed-width" && <label>每個代碼的字元數<input type="number" min={1} max={80} value={boothCodeWidth} onChange={(event) => setBoothCodeWidth(event.target.value)} />
           <small>請核對原始名單後填入；不會自動套用。</small>
@@ -428,7 +435,7 @@ function ColumnSelect({ label, value, header, required = false, onChange }: {
  * read are different needs (#221 3.2, 3.3). */
 function ImportSampleCard({ sample, fileBase }: { sample: { header: string[]; rows: string[][] }; fileBase: string }) {
   return <>
-    <p>每列填一個攤位。主辦內部編號可留空。活動日與場地請使用本活動的值；欄位順序可以不同，選好檔案後再對應。</p>
+    <p>每列填一個社團在一天的攤位；同一天有多個攤位時，代碼寫在同一格並用頓號分開。主辦內部編號可留空。活動日與場地請使用本活動的值；欄位順序可以不同，選好檔案後再對應。</p>
     <div className={styles.sampleTable}>
       <table><thead><tr>{sample.header.map((name) => <th key={name}>{name}</th>)}</tr></thead>
         <tbody>{sample.rows.map((row) => <tr key={row.join("/")}>{row.map((cell, index) => <td key={index}>{cell}</td>)}</tr>)}</tbody></table>
