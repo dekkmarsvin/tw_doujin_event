@@ -19,34 +19,50 @@ journey.report.source = "local production build from all published pins; Functio
 journey.report.matrixMode = "published-desktop-mobile";
 journey.report.events = events;
 try {
-  const chooser = await journey.page({ url: base });
   for (const eventId of events) {
     const event = await read(`dist/data/events/${eventId}/event.json`);
     const catalog = await read(`dist/data/events/${eventId}/circles.json`);
-    await chooser.getByRole("link", { name: `開啟攤位地圖：${event.name}`, exact: true }).waitFor();
     for (const [size, viewport] of [["desktop", { width: 1440, height: 900 }], ["mobile", { width: 375, height: 812 }]]) {
+      const page = await journey.page({ url: base, viewport });
+      if (events.length > 1) await page.getByRole("link", { name: `開啟攤位地圖：${event.name}`, exact: true }).click();
+      await page.locator("[data-slot-code]").first().waitFor();
       for (const day of event.days) for (const space of event.venueAssignments) {
-        const params = new URLSearchParams({ event: eventId, day: String(day.id), venueSpaceId: space.venueSpaceId });
+        // Use the real controls, including when changing from another day or
+        // hall. A correct direct URL alone cannot prove these controls work.
+        if (size === "mobile") await page.getByRole("combobox", { name: "活動日期", exact: true }).selectOption(String(day.id));
+        else await page.getByRole("tab").filter({ has: page.getByText(day.label, { exact: true }) }).click();
+        if (event.venueAssignments.length > 1) await page.getByRole("combobox", { name: "場地", exact: true }).selectOption(space.venueSpaceId);
+        await page.waitForURL(url => url.searchParams.get("event") === eventId && url.searchParams.get("day") === String(day.id)
+          && (event.venueAssignments.length === 1 || url.searchParams.get("venueSpaceId") === space.venueSpaceId));
+        if (size === "mobile") assert.equal(await page.getByRole("combobox", { name: "活動日期", exact: true }).inputValue(), String(day.id));
+        else assert.equal(await page.getByRole("tab").filter({ has: page.getByText(day.label, { exact: true }) }).getAttribute("aria-selected"), "true");
+        if (event.venueAssignments.length > 1) assert.equal(await page.getByRole("combobox", { name: "場地", exact: true }).inputValue(), space.venueSpaceId);
         const placement = catalog.placements.find(item => String(item.day) === String(day.id) && space.areaIds.includes(item.area) && item.status === "active");
-        if (placement) params.set("selectedBooth", placement.boothCode);
-        const page = await journey.page({ url: `${base}/?${params}`, viewport });
         await page.locator("[data-slot-code]").first().waitFor();
-        assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), `https://map.kotoban.top/events/${eventId}/${placement ? `circles/${placement.circleId}/` : ""}`);
+        let selected;
+        let circle;
         if (placement) {
-          const circle = catalog.circles.find(item => item.id === placement.circleId);
-          const selected = page.getByRole(size === "mobile" ? "region" : "complementary", { name: size === "mobile" ? "已選社團摘要" : "已選社團詳情", exact: true });
+          circle = catalog.circles.find(item => item.id === placement.circleId);
+          // This label is derived from the rendered scope's real catalog,
+          // so an old map or wrong day's circle cannot satisfy the selection.
+          const slot = page.locator(`[data-slot-code=${JSON.stringify(placement.boothCode)}][role="button"]`);
+          await slot.filter({ hasText: circle.name }).click();
+          selected = page.getByRole(size === "mobile" ? "region" : "complementary", { name: size === "mobile" ? "已選社團摘要" : "已選社團詳情", exact: true });
           await selected.getByText(circle.name, { exact: true }).first().waitFor();
+          assert.equal(new URL(page.url()).searchParams.get("selectedBooth"), placement.boothCode);
+          assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), `https://map.kotoban.top/events/${eventId}/circles/${placement.circleId}/`);
         }
         await journey.capture(page, `published-${eventId}-${day.id}-${space.venueSpaceId}-${size}`);
         // The same context retains its Service Worker/cache on a normal reload.
         await page.reload();
         await page.locator("[data-slot-code]").first().waitFor();
         assert.equal(new URL(page.url()).searchParams.get("event"), eventId);
-        await page.close();
+        assert.equal(new URL(page.url()).searchParams.get("day"), String(day.id));
+        if (selected) await selected.getByText(circle.name, { exact: true }).first().waitFor();
       }
+      await page.close();
     }
   }
-  await chooser.close();
   await journey.finish();
 } catch (error) {
   await journey.abort(error);

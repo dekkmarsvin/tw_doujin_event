@@ -108,6 +108,9 @@ export async function determineWorkflowScope(args, { findBaseline = findValidate
     execFileSync("git", ["merge-base", "--is-ancestor", baseline.sha, args.eventName === "pull_request" ? args.event.pull_request.base.sha : args.sha], { cwd: args.cwd, stdio: "ignore" });
   } catch { return full("Successful deployment is not an ancestor of this comparison; use the full gate."); }
   const cumulative = determineScope({ ...args, eventName: "push", event: { before: baseline.sha } });
+  if (scope.profile === "publication-data" && !["publication-data", "full"].includes(cumulative.profile)) {
+    return full("Publication data was reverted relative to the deployed baseline; retain the full required gates.");
+  }
   return { ...cumulative, baseline, reason: `Compared with successful main run ${baseline.runId}. ${cumulative.reason}` };
 }
 

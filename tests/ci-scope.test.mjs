@@ -152,6 +152,21 @@ test("baseline lookup skips lightweight runs and requires an identifiable succes
   await assert.rejects(findValidatedMainRun({ repository: "owner/repo", token: "fixture", fetchImpl: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
 });
 
+test("a pure data revert cannot downgrade the required gates to docs", async t => {
+  const r = await repository(t);
+  await r.put("data/published-events.json", "original");
+  const deployed = r.commit();
+  await r.put("data/published-events.json", "changed");
+  await r.put("README.md", "undelivered docs");
+  const base = r.commit();
+  await r.put("data/published-events.json", "original");
+  const sha = r.commit();
+  for (const [eventName, event] of [["pull_request", { pull_request: { base: { sha: base } } }], ["push", { before: base, ref: "refs/heads/main" }]]) {
+    const result = await determineWorkflowScope({ eventName, event, sha, cwd: r.cwd }, { findBaseline: async () => ({ sha: deployed, runId: 1 }) });
+    assert.equal(result.profile, "full");
+  }
+});
+
 test("the real CLI reports docs applicability and fails on malformed event input", async t => {
   const r = await repository(t);
   await r.put("docs/runbooks/example with spaces.md");
