@@ -18,7 +18,7 @@ async function openWorkspace({ guided = false, fresh = false } = {}) {
     import: { source: { fileName: "roster.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "合成來源", mapping: {} }, rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: "test-space", areaId: "A", codes: ["S01"], circleName: "測試社", stableKey: null, identityGroup: null }] },
     workspace: { mode: event.workspaceMode, onboardingCompletedAt: guided ? null : now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 6, suggestedNextSection: "validate", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } },
   };
-  const state = { map: fresh ? null : { id: "test-map", periodKey: "1", venueSpaceId: "test-space", mapRevision: 1, layout: structuredClone(source), authoring: { guides: [] } }, attempts: 0, creates: 0, saves: 0, failSave: false, failBackground: false };
+  const state = { map: fresh ? null : { id: "test-map", periodKey: "1", venueSpaceId: "test-space", mapRevision: 1, layout: structuredClone(source), authoring: { guides: [] } }, attempts: 0, creates: 0, saves: 0, failSave: false, failBackground: false, uploads: [] };
   const page = await journey.page({ url: `${base}/organizer`, viewport: { width: 1600, height: 1100 }, routes: async page => {
     await page.route("**/api/**", async route => {
       const request = route.request(), api = new URL(request.url()).pathname, method = request.method();
@@ -32,6 +32,7 @@ async function openWorkspace({ guided = false, fresh = false } = {}) {
       if (api.endsWith("/maps") && method === "GET") return reply({ maps: state.map ? [state.map] : [] });
       if (api.endsWith("/background")) {
         if (method === "PUT") {
+          state.uploads.push(request.postDataBuffer().toString().match(/filename="([^"]+)"/)[1]);
           if (state.failBackground) { state.failBackground = false; return reply({ error: "配置圖儲存失敗" }, 503); }
           return reply({ ok: true });
         }
@@ -138,9 +139,13 @@ try {
   await fresh.dialog.getByRole("alert").waitFor(); assert.equal(fresh.state.creates, 1);
   await fresh.dialog.getByRole("button", { name: "取消", exact: true }).click();
   await fresh.page.getByText("地圖已儲存，但配置圖沒有存上：配置圖儲存失敗", { exact: true }).waitFor();
+  await fresh.page.locator('input[type="file"]').setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: PIXEL });
+  await fresh.page.getByRole("dialog", { name: "已經有配置圖", exact: true }).getByRole("button", { name: "換成新的", exact: true }).click();
+  await fresh.page.getByText("配置圖已儲存。", { exact: true }).waitFor();
   await fresh.section("攤位名單").click(); await fresh.dialog.getByRole("button", { name: "儲存並切換", exact: true }).click();
   await fresh.editor.waitFor({ state: "hidden" }); assert.equal(fresh.state.creates, 1);
   assert.equal(fresh.state.map.layout.accessPoints.length, 1);
+  assert.deepEqual(fresh.state.uploads, ["plan.png", "replacement.png"], "retry must not overwrite the replacement with the failed pending plan");
   journey.report.checks.push("empty new map cannot save; facility map and pending plan retry keep the saved map identity and revision");
   const closingWorkspace = await openWorkspace();
   await closingWorkspace.edit();

@@ -228,7 +228,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
     // that does not. A failed upload therefore changes nothing on screen.
     if (target) {
       await uploadOrganizerMapBackground(detail.event.id, target.id, file);
-      if (current()) setBackground(source);
+      if (current()) { setBackground(source); setPendingBackground(null); }
       return `${traced}配置圖已儲存。`;
     }
     setBackground(source);
