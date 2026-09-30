@@ -13,6 +13,8 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 if (!isRunnableDevEnvironment(vite.environments.ssr)) throw new Error("Vite SSR unavailable");
 const runner = vite.environments.ssr.runner;
 const builder = await runner.import("/app/publication-artifacts.ts");
+const { prepareOrganizerImport, parseOrganizerCsv } = await runner.import("/app/organizer-import.ts");
+const { withOrganizerImportedAreaIds } = await runner.import("/app/organizer-event.ts");
 const catalog = await runner.import("/app/organizer-reference-catalog.ts");
 const { pinnedVenue } = await runner.import("/app/organizer-reference-seeds.ts");
 const { validateStagedEventArtifacts } = await runner.import("/app/staged-event-data.ts");
@@ -122,6 +124,27 @@ test("imported area labels and drawn regions survive approval and publication", 
   assert.equal(artifacts.event.areas.find((area) => area.id === "A").label, "版攤活動");
   assert.equal(artifacts.event.areas.find((area) => area.id === "B").label, "巴哈市集");
   const publishedMap = JSON.parse(artifacts.files.find((file) => file.path.endsWith("/map.json")).text);
+  assert.deepEqual(publishedMap.layout.areaRegions, snapshot.maps[0].content.layout.areaRegions);
+});
+
+test("CSV area names publish with generated identities in placements and map regions", async () => {
+  const snapshot = await sample();
+  const prepared = prepareOrganizerImport({
+    rows: parseOrganizerCsv("攤位,社團,展區\nS01,甲社,原創插畫／手作\nS02,乙社,社群交流-互動\n"), headerRow: 1,
+    mapping: { day: { fixed: "1" }, venueSpace: { fixed: "zhengyan-exhibition-area" }, area: { column: 2 }, boothCode: { column: 0 }, circleName: { column: 1 } },
+    areaAssignments: snapshot.draft.venue.assignments, areaGeneration: snapshot.candidateVersion,
+  });
+  snapshot.draft = withOrganizerImportedAreaIds(snapshot.draft, prepared.rows, prepared.areaLabels);
+  snapshot.import.rows = prepared.rows;
+  snapshot.maps[0].content.layout.areaRegions = [
+    { id: "region-auto", areaId: prepared.rows[0].areaId, color: "mint", points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }] },
+  ];
+  const artifacts = await builder.buildApprovedPublicationArtifacts(source(snapshot));
+  assert.deepEqual(artifacts.event.areas.map(area => [area.id, area.label]), [
+    [prepared.rows[0].areaId, "原創插畫/手作"], [prepared.rows[1].areaId, "社群交流-互動"],
+  ]);
+  assert.deepEqual(artifacts.official.days[0].booths.map(row => row.areaId), prepared.rows.map(row => row.areaId));
+  const publishedMap = JSON.parse(artifacts.files.find(file => file.path.endsWith("/map.json")).text);
   assert.deepEqual(publishedMap.layout.areaRegions, snapshot.maps[0].content.layout.areaRegions);
 });
 

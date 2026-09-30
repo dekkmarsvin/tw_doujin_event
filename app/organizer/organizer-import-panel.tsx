@@ -5,14 +5,13 @@
  */
 import { RequiredMark } from "./organizer-field-guidance";
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
-import { isOrganizerAreaId, organizerSourceLabel, withOrganizerImportedAreaIds } from "../organizer-event";
+import { organizerSourceLabel, withOrganizerImportedAreaIds } from "../organizer-event";
 import { buildOrganizerImportMetadata, buildOrganizerImportSample, findOrganizerListedBoothCodes, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
 import { normalizeOrganizerVenueSourceUrl, type OrganizerVenueCatalogSpace, type OrganizerVenueCatalogVenue, type OrganizerVenueSpaceAreaMode } from "../organizer-venue-catalog";
 import { readOrganizerWorkbook, type OrganizerWorkbookSheet } from "../organizer-workbook";
 import { IDLE, message, organizerVenueSpaceLabel, type Notice } from "./organizer-shared";
 import { SavedImportList } from "./organizer-roster-editor";
 import { CrossDayCircles } from "./organizer-cross-day-circles";
-import { AreaNameFields } from "./organizer-area-names";
 import { RosterDialog } from "./organizer-roster-dialog";
 import { PortalError } from "../circle-editor-client";
 import { VenueLayerGuide } from "./organizer-venue-layers";
@@ -89,7 +88,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
   const [boothCodeWidth, setBoothCodeWidth] = useState("");
   const [stableColumn, setStableColumn] = useState<number | null>(null);
   const [previewRequested, setPreviewRequested] = useState(false);
-  const [areaLabels, setAreaLabels] = useState<Record<string, Record<string, string>>>({});
+  const [areaGeneration] = useState(detail.event.version);
   const [overrides, setOverrides] = useState<OrganizerImportOverrides>({});
   const [excluded, setExcluded] = useState<readonly ExcludedImportRow[]>([]);
   const [metadata, setMetadata] = useState<Awaited<ReturnType<typeof buildOrganizerImportMetadata>> | null>(null);
@@ -168,11 +167,11 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     // preview now recomputes as the organizer types, so that refusal is shown
     // in place instead of raised as one notice per keystroke.
     try {
-      return { ok: true as const, ...prepareOrganizerImport({ rows: sheet.rows, headerRow, mapping, areaModeByVenueSpace, overrides, excludedRows }) };
+      return { ok: true as const, ...prepareOrganizerImport({ rows: sheet.rows, headerRow, mapping, areaModeByVenueSpace, areaAssignments: assignments, areaGeneration, overrides, excludedRows }) };
     } catch (error) {
       return { ok: false as const, message: message(error) };
     }
-  }, [sheet, headerRow, mapping, areaModeByVenueSpace, overrides, excludedRows]);
+  }, [sheet, headerRow, mapping, areaModeByVenueSpace, assignments, areaGeneration, overrides, excludedRows]);
   const result = previewRequested && prepared?.ok ? prepared : null;
 
   const derived = useMemo(() => {
@@ -186,11 +185,11 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
       venueSpaceId,
       declared: assignments.some((assignment) => assignment.venueSpaceId === venueSpaceId),
       areas: [...areas]
-        .map(([id, rows]) => ({ id, rows, valid: isOrganizerAreaId(id) }))
+        .map(([id, rows]) => ({ id, rows }))
         .sort((a, b) => a.id.localeCompare(b.id, "en")),
     })).sort((a, b) => a.venueSpaceId.localeCompare(b.venueSpaceId, "en"));
   }, [assignments, result]);
-  const derivedBlocked = derived.some((space) => !space.declared || space.areas.some((area) => !area.valid));
+  const derivedBlocked = derived.some((space) => !space.declared);
   // Import replaces the whole booth list, so a configured space this file never
   // mentions ends up with no booths and no areas. That is legitimate mid-work,
   // but the organizer should see it here rather than meet it as an error after
@@ -257,7 +256,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
     if (!result || !metadata || !mapping || conflict || committed) return;
     const work = async () => {
       try {
-        const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows, areaLabels);
+        const withAreas = withOrganizerImportedAreaIds(detail.draft, result.rows, result.areaLabels);
         let version = expectedVersion;
         if (JSON.stringify(withAreas) !== JSON.stringify(declaredDraft)) {
           version = (await saveOrganizerEvent(detail.event.id, version, withAreas)).version;
@@ -302,7 +301,7 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
         {select("場地", venueSpace, setVenueSpace, "場地", spaceOptions)}
         {/* The read-only card carries the same title, sub-label and value line
             as the pickers beside it, so the row reads as one row. */}
-        {requiresAreaMapping ? <>{select("展區", area, setArea, "展區代碼")}
+        {requiresAreaMapping ? <>{select("展區", area, setArea, "展區名稱")}
           {/* 展區 is a required column here, so an organizer whose list has no
               real one maps the nearest thing and ends up with rows as areas.
               The way out is a setting in another section, so it is offered
@@ -345,18 +344,13 @@ function ImportWizard({ detail, onChanged, onSection, onDirtyChange, onSaveReady
       {result && <>
         <div className={styles.validationSummary}><b>{result.rows.length} 筆可匯入 · {result.boothCount} 個攤位代碼</b><span>{result.rejected.length} 筆待修正</span><span>{excluded.length} 筆已排除</span></div>
         <CrossDayCircles rows={result.rows} detail={detail} />
-        {requiresAreaMapping && <details className={styles.areaNamePreview}><summary>展區顯示名稱（選填）</summary>
-          <AreaNameFields detail={detail} spaces={derived.filter(space => space.declared).map(space => ({ venueSpaceId: space.venueSpaceId, areaIds: space.areas.map(area => area.id) }))} labels={areaLabels}
-            onChange={(spaceId, areaId, label) => setAreaLabels(current => ({ ...current, [spaceId]: { ...current[spaceId], [areaId]: label } }))} />
-        </details>}
         {derived.filter(space => !space.declared).map(space => <p role="alert" key={space.venueSpaceId}>請先在「場館與場地」加入 {space.venueSpaceId}，或修正來源欄位。</p>)}
-        {derived.some(space => space.areas.some(area => !area.valid)) && <p role="alert">展區代碼只能使用英數字、底線與連字號。</p>}
         {result.issues.filter(issue => issue.severity === "warning").slice(0, 10).map(issue => <p key={`${issue.code}-${issue.row}`} role="status">{issue.message}</p>)}
         <div className={styles.previewTabs} role="group" aria-label="預覽資料"><button type="button" aria-pressed={previewGroup === "ready"} onClick={() => { setPreviewGroup("ready"); setPreviewPage(0); }}>可匯入 {result.rows.length}</button><button type="button" aria-pressed={previewGroup === "rejected"} onClick={() => { setPreviewGroup("rejected"); setPreviewPage(0); }}>待修正 {result.rejected.length}</button><button type="button" aria-pressed={previewGroup === "excluded"} onClick={() => { setPreviewGroup("excluded"); setPreviewPage(0); }}>已排除 {excluded.length}</button></div>
         <div className={`${styles.importPreview} ${styles.previewTable}`}><table><thead><tr><th>來源列</th><th>活動日</th><th>場地</th>{requiresAreaMapping && <th>展區</th>}<th>攤位</th><th>社團</th><th>主辦內部編號</th><th /></tr></thead>
           <tbody>{previewGroup === "rejected" && result.rejected.slice(start, start + 100).map(row => <RejectedImportRow key={row.sourceRow} row={row} columns={columns} dayOptions={dayOptions} spaceOptions={spaceOptions} requiresArea={requiresAreaMapping} areaModeByVenueSpace={areaModeByVenueSpace} overrides={overrides[row.sourceRow]}
             duplicate={result.issues.find(issue => issue.severity === "error" && issue.row === row.sourceRow)?.message ?? null} onCorrect={(field, value) => correct(row.sourceRow, field, value)} onRemove={() => remove(row)} />)}
-          {previewGroup === "ready" && result.rows.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td>{days.find(day => day.id === row.dayId)?.label ?? row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>{requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : row.areaId}</td>}<td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td><td>{flagged.has(row.sourceRow) && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>排除</button>}</td></tr>)}
+          {previewGroup === "ready" && result.rows.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td>{days.find(day => day.id === row.dayId)?.label ?? row.dayId}</td><td>{organizerVenueSpaceLabel(catalog, row.venueSpaceId)}</td>{requiresAreaMapping && <td>{areaModeByVenueSpace[row.venueSpaceId] === "none" ? "無分區" : result.areaLabels[row.venueSpaceId]?.[row.areaId] ?? row.areaId}</td>}<td>{row.codes.join("、")}</td><td>{row.circleName}</td><td>{row.stableKey ?? "—"}</td><td>{flagged.has(row.sourceRow) && <button type="button" className={styles.ghost} onClick={() => remove({ ...row, boothCode: row.codes.join("、") })}>排除</button>}</td></tr>)}
           {previewGroup === "excluded" && excluded.slice(start, start + 100).map(row => <tr key={row.sourceRow}><td>{row.sourceRow}</td><td colSpan={requiresAreaMapping ? 3 : 2} /><td>{row.boothCode}</td><td>{row.circleName}</td><td /><td><button type="button" className={styles.ghost} onClick={() => restore(row.sourceRow)}>恢復</button></td></tr>)}
           </tbody></table>{count === 0 && <p>沒有{previewGroup === "rejected" ? "待修正" : previewGroup === "excluded" ? "已排除" : "可匯入"}的資料。</p>}</div>
         <div className={styles.rosterTools}><span>第 {currentPage + 1} / {previewPages} 頁</span><button type="button" className={styles.ghost} disabled={currentPage === 0} onClick={() => setPreviewPage(currentPage - 1)}>上一頁</button><button type="button" className={styles.ghost} disabled={currentPage + 1 >= previewPages} onClick={() => setPreviewPage(currentPage + 1)}>下一頁</button>
@@ -392,7 +386,7 @@ function RejectedImportRow({ row, columns, dayOptions, spaceOptions, requiresAre
   // Corrections commit on blur rather than on every keystroke: the import model
   // collapses whitespace, which would eat the space still being typed.
   const cell = (field: OrganizerImportOverrideField, fallback: string, label: string) =>
-    <td className={row.codes.includes(MISSING_CODE[field]) ? styles.issueCell : undefined}>
+    <td className={row.codes.includes(MISSING_CODE[field]) || (field === "areaId" && row.codes.includes("invalid_area_name")) ? styles.issueCell : undefined}>
       <input aria-label={`來源列 ${row.sourceRow} 的${label}`} defaultValue={shown(field, fallback)}
         onBlur={(event) => onCorrect(field, event.target.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && event.keyCode !== 229) event.currentTarget.blur(); }} />

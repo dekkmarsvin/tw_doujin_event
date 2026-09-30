@@ -48,7 +48,7 @@ try {
         }
         event.version++;
         if (failReadAfterWrite) { failReadAfterWrite = false; failNextRead = true; }
-        return reply({ ok: true, version: event.version, importedRows: detail.import.rows.length });
+        return reply({ ok: true, version: event.version, importedRows: detail.import?.rows.length ?? 0 });
       }
       throw new Error(`Unexpected API: ${method} ${api}`);
     });
@@ -57,7 +57,10 @@ try {
   const row = list.locator('tr[data-roster-key="0"]');
   const aliases = list.getByRole("button", { name: "展區名稱", exact: true });
   const dialog = page.getByRole("dialog", { name: "展區名稱", exact: true });
-  const aliasField = (space, code) => dialog.getByRole("textbox", { name: `活動中心・${space} ${code} 顯示名稱（選填）`, exact: true });
+  const aliasField = (space, code) => {
+    const assignment = detail.draft.venue.assignments.find(item => item.venueSpaceId === (space === "東一館" ? "east" : "west"));
+    return dialog.getByRole("textbox", { name: `活動中心・${space} ${assignment.areaLabels?.[code] || code} 展區名稱`, exact: true });
+  };
   const saveAliases = async () => { await dialog.getByRole("button", { name: "儲存展區名稱", exact: true }).click(); await dialog.waitFor({ state: "hidden" }); };
   const edit = async (field, value) => {
     await row.getByRole("button", { name: new RegExp(`^編輯 .* ${field}$`) }).click();
@@ -101,17 +104,30 @@ try {
   assert.equal(detail.draft.venue.assignments[1].areaLabels.A, "巴哈市集");
   await aliases.click();
   await aliasField("東一館", "A").fill("");
+  assert.equal(await dialog.getByRole("button", { name: "儲存展區名稱", exact: true }).isDisabled(), true);
+  await aliasField("東一館", "A").fill("原創插畫");
   failReadAfterWrite = true;
   await saveAliases();
   await list.getByText(/展區名稱已儲存，但重新讀取失敗/).waitFor();
   await retry();
   await aliases.click();
-  assert.equal(await aliasField("東一館", "A").inputValue(), "");
+  assert.equal(await aliasField("東一館", "A").inputValue(), "原創插畫");
   await aliasField("東一館", "B").fill("影音與試玩");
   await saveAliases();
   await list.getByText("展區名稱已儲存。", { exact: true }).waitFor();
-  assert.equal(detail.draft.venue.assignments[0].areaLabels.A, undefined, "a cleared alias is not resurrected by the next edit");
-  journey.report.checks.push("alias write/read failure, clear/retry, same code across spaces");
+  assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "原創插畫", "a saved name survives subsequent edits");
+  journey.report.checks.push("name write/read failure, required name, retry, same code across spaces");
+
+  const secondRow = list.locator('tr[data-roster-key="1"]');
+  await secondRow.getByRole("button", { name: /展區$/ }).click();
+  await secondRow.getByRole("textbox").fill("原創插畫");
+  await secondRow.getByRole("textbox").press("Enter");
+  await list.getByRole("button", { name: "儲存變更", exact: true }).click();
+  await list.getByText("名單已儲存。", { exact: true }).waitFor();
+  assert.equal(detail.import.rows[0].areaId, "A");
+  assert.equal(detail.import.rows[1].areaId, "A", "editing reuses the existing group in the same space");
+  assert.equal(detail.import.rows[2].areaId, "A", "editing does not migrate another space's legacy code");
+  journey.report.checks.push("roster name edits reuse a legacy group shared across spaces");
 
   // Composition Enter must not confirm an unfinished Chinese name.
   await row.getByRole("button", { name: /社團名稱$/ }).click();
@@ -166,5 +182,62 @@ try {
   assert.equal(detail.import.rows.length, 1);
   assert.match(await list.innerText(), /新名單社團/);
   journey.report.checks.push("valid preview defaults to ready; committed import read retry never rewrites");
+
+  // Names are grouped automatically; only genuinely invalid rows need repair.
+  detail.import = null;
+  await page.reload();
+  await page.getByRole("button", { name: "匯入檔案", exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles({ name: "mixed-areas.csv", mimeType: "text/csv", buffer: Buffer.from(`攤位代碼,社團名稱,展區\nA01,保留社團,原創 插畫／手作\nA02,第二社團, 原創\u3000插畫/手作 \nB01,不同展區社團,社群交流-互動\nC01,展區待修正社團,${"展".repeat(61)}\nD01,,原創 插畫/手作\n`) });
+  await page.getByRole("button", { name: "下一步：欄位對照", exact: true }).click();
+  await page.getByLabel("攤位代碼", { exact: true }).selectOption("0");
+  await page.getByLabel("社團名稱", { exact: true }).selectOption("1");
+  await page.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("1");
+  await page.getByRole("group", { name: "場地", exact: true }).getByLabel("固定值").selectOption("east");
+  await page.getByRole("group", { name: "展區", exact: true }).getByLabel("來源欄位").selectOption("2");
+  await page.getByRole("button", { name: "預覽對應結果", exact: true }).click();
+  const importButton = page.getByRole("button", { name: "匯入名單", exact: true });
+  assert.equal(await importButton.isDisabled(), true);
+  await page.getByRole("button", { name: "可匯入 3", exact: true }).click();
+  assert.equal(await page.getByRole("cell", { name: "原創 插畫/手作", exact: true }).count(), 2);
+  await page.getByRole("button", { name: "待修正 2", exact: true }).click();
+  await page.getByRole("button", { name: "排除全部待修正資料", exact: true }).click();
+  assert.equal(await importButton.isEnabled(), true, "excluding every rejected row leaves the valid roster importable");
+  await page.getByRole("button", { name: "待修正 0", exact: true }).waitFor();
+  await page.getByRole("button", { name: "已排除 2", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "展區待修正社團" }).getByRole("button", { name: "恢復", exact: true }).click();
+  assert.equal(await importButton.isDisabled(), true, "restoring an invalid row blocks import again");
+  await page.getByRole("button", { name: "待修正 1", exact: true }).click();
+  await page.getByText("展區名稱不能超過 60 字。", { exact: true }).waitFor();
+  await page.getByRole("textbox", { name: "來源列 5 的展區", exact: true }).fill("原創 插畫/手作");
+  await page.getByRole("textbox", { name: "來源列 5 的展區", exact: true }).press("Tab");
+  assert.equal(await importButton.isEnabled(), true, "correcting the area name makes the restored row importable");
+  await page.getByRole("button", { name: "可匯入 4", exact: true }).waitFor();
+  await page.getByRole("button", { name: "清除所有手動修改", exact: true }).click();
+  await page.getByRole("button", { name: "排除全部待修正資料", exact: true }).click();
+  await page.getByRole("button", { name: "可匯入 3", exact: true }).click();
+  await page.getByRole("cell", { name: "保留社團", exact: true }).waitFor();
+  const wizard = page.locator("section").filter({ has: page.getByRole("heading", { name: "匯入攤位名單", exact: true }) }).last();
+  assert.doesNotMatch(await wizard.innerText(), /area-\d+-\d+/);
+  await wizard.screenshot({ path: path.join(output, "roster-import-area-names.png") });
+  const beforeExclusionImport = putCount;
+  await importButton.click();
+  await list.waitFor();
+  assert.equal(putCount, beforeExclusionImport + 1);
+  assert.deepEqual(detail.import.rows.map(row => row.sourceRow), [2, 3, 4]);
+  const [first, second, third] = detail.import.rows;
+  assert.equal(first.areaId, second.areaId);
+  assert.notEqual(first.areaId, third.areaId);
+  assert.equal(detail.draft.venue.assignments[0].areaLabels[first.areaId], "原創 插畫/手作");
+  assert.equal(detail.draft.venue.assignments[0].areaLabels[third.areaId], "社群交流-互動");
+  await page.reload(); await list.waitFor();
+  await list.locator('tr[data-roster-key="2"]').getByRole("button", { name: /展區$/ }).click();
+  await list.locator('tr[data-roster-key="2"]').getByRole("textbox").fill("原創 插畫/手作");
+  await list.locator('tr[data-roster-key="2"]').getByRole("textbox").press("Enter");
+  await list.getByRole("button", { name: "儲存變更", exact: true }).click();
+  await list.getByText("名單已儲存。", { exact: true }).waitFor();
+  assert.equal(new Set(detail.import.rows.map(row => row.areaId)).size, 1, "editing a name reuses its existing group");
+  assert.doesNotMatch(await list.innerText(), /area-\d+-\d+/);
+  await list.screenshot({ path: path.join(output, "roster-saved-area-names.png") });
+  journey.report.checks.push("CSV names group, persist and reload; exclusion and correction unblock import; roster edits reuse named groups");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

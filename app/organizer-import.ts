@@ -1,4 +1,4 @@
-import type { OrganizerValidationIssue } from "./organizer-event";
+import { createOrganizerAreaNames, type OrganizerEventDraft, type OrganizerValidationIssue } from "./organizer-event";
 
 export type OrganizerImportTableRow = { sourceRow: number; cells: unknown[] };
 
@@ -145,6 +145,9 @@ export function prepareOrganizerImport(input: {
   headerRow: number;
   mapping: OrganizerImportMapping;
   areaModeByVenueSpace?: Readonly<Record<string, "imported" | "none">>;
+  areaAssignments?: OrganizerEventDraft["venue"]["assignments"];
+  /** Initial candidate version, retained through a partial-save retry. */
+  areaGeneration?: number;
   /** Values the organizer corrected in the preview, replacing the mapped cell. */
   overrides?: OrganizerImportOverrides;
   /** Source rows the organizer removed; they import nothing and report nothing. */
@@ -167,12 +170,12 @@ export function prepareOrganizerImport(input: {
     .map((row) => input.overrides?.[row.sourceRow]?.boothCode ?? mapped(row, input.mapping.boothCode)));
   const placements = new Map<string, { sourceRow: number; boothCode: string }>();
   const excluded = new Set(input.excludedRows ?? []);
+  const areaNames = createOrganizerAreaNames(input.areaAssignments ?? [], input.areaGeneration ?? 0, "import");
 
   for (const source of input.rows.slice(input.headerRow)) {
     // A removed row leaves before it can claim a placement, so removing one of
     // two rows on the same booth resolves the duplicate rather than leaving the
     // survivor blocked by a row nobody is importing any more.
-    if (excluded.has(source.sourceRow)) continue;
     // A correction cannot resurrect a header line as data.
     const override = (source.sourceRow > input.headerRow && input.overrides?.[source.sourceRow]) || {};
     const corrected = (field: OrganizerImportOverrideField, cell: string) =>
@@ -186,6 +189,11 @@ export function prepareOrganizerImport(input: {
     const areaId = input.areaModeByVenueSpace?.[venueSpaceId] === "none"
       ? "ALL"
       : corrected("areaId", mapped(source, input.mapping.area));
+    // Reserve names even for excluded/rejected rows so toggling a row does not
+    // renumber the remaining preview. Only accepted rows are persisted below.
+    const normalizedAreaId = input.areaModeByVenueSpace?.[venueSpaceId] === "none" ? "ALL"
+      : areaId.length <= 60 ? areaNames.resolve(venueSpaceId, areaId) : "";
+    if (excluded.has(source.sourceRow)) continue;
     const boothCode = corrected("boothCode", mapped(source, input.mapping.boothCode));
     const circleName = corrected("circleName", mapped(source, input.mapping.circleName));
     const stableKey = corrected("stableKey", mapped(source, input.mapping.stableKey)) || null;
@@ -201,6 +209,11 @@ export function prepareOrganizerImport(input: {
       if (value) continue;
       codes.push(code);
       issues.push({ severity: "error", step: "import", code, row: source.sourceRow, message: `找不到${label}，請確認欄位對應。` });
+    }
+    if (areaId.length > 60) {
+      codes.push("invalid_area_name");
+      issues.push({ severity: "error", step: "import", code: "invalid_area_name", row: source.sourceRow,
+        message: "展區名稱不能超過 60 字。" });
     }
     if (codes.length > 0) {
       rejected.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, boothCode, circleName, stableKey, codes });
@@ -238,7 +251,7 @@ export function prepareOrganizerImport(input: {
       issues.push({ severity: "warning", step: "import", code: "possibly_combined_booth", row: source.sourceRow,
         message: `來源列 ${source.sourceRow} 的 ${boothCode} 可能包含多個攤位，請確認攤位代碼格式。` });
     }
-    rows.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId, codes: boothCodes, circleName, stableKey,
+    rows.push({ sourceRow: source.sourceRow, dayId, venueSpaceId, areaId: normalizedAreaId, codes: boothCodes, circleName, stableKey,
       identityGroup: stableKey ? `stable:${stableKey}` : null });
   }
   /* 展區 is a required column, and an organizer whose list has no real one maps
@@ -248,9 +261,11 @@ export function prepareOrganizerImport(input: {
    * booth code's first character is the shape that says so; it is a warning and
    * not a refusal, because an organizer really may use whole rows as areas
    * (#294). */
+  const areaLabels = areaNames.labels();
   const areaRows = rows.filter((row) => row.areaId && row.areaId !== "ALL" && row.codes.length > 0);
-  if (areaRows.length >= 10 && areaRows.every((row) => row.codes.every((code) => code.startsWith(row.areaId)))
-    && new Set(areaRows.map((row) => row.areaId)).size > 1) {
+  const areaName = (row: OrganizerNormalizedImportRow) => areaLabels[row.venueSpaceId]?.[row.areaId] ?? row.areaId;
+  if (areaRows.length >= 10 && areaRows.every((row) => row.codes.every((code) => code.startsWith(areaName(row))))
+    && new Set(areaRows.map(areaName)).size > 1) {
     issues.push({
       severity: "warning", step: "import", code: "area_looks_like_booth_row",
       message: "每一列的展區值都是該列攤位代碼的開頭，看起來對應到的是攤位排號而不是分區。"
@@ -258,7 +273,7 @@ export function prepareOrganizerImport(input: {
         + "如果有，請把展區對應到名單裡真正的分區欄位。",
     });
   }
-  return { rows, issues, rejected, suggestedWidth, boothCount: rows.reduce((total, row) => total + row.codes.length, 0) };
+  return { rows, issues, rejected, areaLabels, suggestedWidth, boothCount: rows.reduce((total, row) => total + row.codes.length, 0) };
 }
 
 export async function buildOrganizerImportMetadata(input: {

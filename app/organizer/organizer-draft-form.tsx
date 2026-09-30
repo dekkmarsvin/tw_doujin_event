@@ -264,7 +264,7 @@ export function DraftForm({
             next.venue.assignments[index].areaIds = areaMode === "none" ? ["ALL"] : [];
             delete next.venue.assignments[index].areaLabels;
             return next;
-          })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個場地沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.join("、")}` : "尚未匯入攤位。"}</small></label>
+          })}><option value="imported">依名單中的展區欄位區分</option><option value="none">沒有分區</option></select><small>{assignment.areaMode === "none" ? "這個場地沒有分區，匯入不用對應展區欄。" : assignment.areaIds.length > 0 ? `已匯入：${assignment.areaIds.map(id => assignment.areaLabels?.[id] || id).join("、")}` : "尚未匯入攤位。"}</small></label>
           {!guidedTask && <label>地圖模板<select disabled={!editable || !selectedSpace} value={assignment.mapTemplate} onChange={(event) => updateVenue((next) => { next.venue.assignments[index].mapTemplate = event.target.value; return next; })}>
             {listMapTemplateOptions().map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
             {!listMapTemplateOptions().some((option) => option.id === assignment.mapTemplate) && <option value={assignment.mapTemplate}>{assignment.mapTemplate}</option>}

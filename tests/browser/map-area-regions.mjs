@@ -11,11 +11,12 @@ journey.report.synthetic = true;
 journey.report.productionWrites = 0;
 
 try {
-  const { page, editor, state } = await openSurface(journey, "organizer");
+  const { page, editor, state } = await openSurface(journey, "organizer", source, { areaLabels: { A: "原創 插畫/手作" } });
   const svg = editor.locator("svg[tabindex='0']");
   const draw = async (points) => {
     await openToolGroup(editor, "區域");
     await editor.getByRole("button", { name: "新增展區範圍" }).click();
+    assert.equal(await editor.getByRole("status").filter({ hasText: "在地圖上依序點選範圍的頂點" }).getByRole("combobox", { name: /^展區/ }).locator('option[value="A"]').innerText(), "原創 插畫/手作");
     await svg.scrollIntoViewIfNeeded();
     for (const [x, y] of points) {
       const box = await svg.boundingBox();

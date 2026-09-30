@@ -6,6 +6,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const imports = await environment.runner.import("/app/organizer-import.ts");
+const { withOrganizerImportedAreaIds, createOrganizerAreaNames } = await environment.runner.import("/app/organizer-event.ts");
 const roster = await environment.runner.import("/app/organizer-roster.ts");
 after(() => vite.close());
 
@@ -153,7 +154,7 @@ test("mixed imports require areas only for the rows whose event space is divided
     areaModeByVenueSpace: { "whole-hall": "none", "divided-hall": "imported" },
   });
   assert.deepEqual(result.rows.map(({ venueSpaceId, areaId }) => [venueSpaceId, areaId]), [
-    ["whole-hall", "ALL"], ["divided-hall", "B"],
+    ["whole-hall", "ALL"], ["divided-hall", "area-0-1"],
   ]);
   assert.deepEqual(result.issues.map(({ row, code }) => [row, code]), [[4, "missing_area"]]);
 });
@@ -216,7 +217,7 @@ test("a correction supplies a missing value and the row stops being rejected", (
   });
   assert.deepEqual(result.issues, []);
   assert.deepEqual(result.rejected, []);
-  assert.deepEqual(result.rows.map(({ sourceRow, areaId }) => [sourceRow, areaId]), [[2, "ALL"], [3, "B"], [4, "B"]]);
+  assert.deepEqual(result.rows.map(({ sourceRow, areaId }) => [sourceRow, areaId]), [[2, "ALL"], [3, "area-0-1"], [4, "area-0-1"]]);
 });
 
 test("a no-division space ignores an area correction", () => {
@@ -225,6 +226,81 @@ test("a no-division space ignores an area correction", () => {
     overrides: { 2: { areaId: "手動填的分區" } },
   });
   assert.equal(result.rows.find((row) => row.sourceRow === 2).areaId, "ALL");
+});
+
+test("overlong area names join rejected rows and can be excluded or corrected", () => {
+  const tooLong = "展".repeat(61);
+  const input = {
+    rows: imports.parseOrganizerCsv(`攤位,社團,展區\nA01,待修正社團,${tooLong}\nA01,有效社團,A\nB01,,A\n`),
+    headerRow: 1, mapping: { ...DUPLICATE_MAPPING, area: { column: 2 } },
+  };
+  const preview = imports.prepareOrganizerImport(input);
+  assert.deepEqual(preview.rows.map(row => row.sourceRow), [3]);
+  assert.deepEqual(preview.rejected.map(({ sourceRow, codes }) => [sourceRow, codes]), [
+    [2, ["invalid_area_name"]], [4, ["missing_circle"]],
+  ]);
+  assert.equal(preview.rejected[0].areaId, tooLong, "the source value remains available for correction");
+  const excluded = imports.prepareOrganizerImport({ ...input, excludedRows: preview.rejected.map(row => row.sourceRow) });
+  assert.deepEqual(excluded.issues, []);
+  assert.deepEqual(excluded.rejected, []);
+  assert.deepEqual(excluded.rows, preview.rows);
+  const corrected = imports.prepareOrganizerImport({ ...input, excludedRows: [4], overrides: { 2: { areaId: " Ｂ_2 ", boothCode: "B02" } } });
+  assert.deepEqual(corrected.issues, []);
+  assert.deepEqual(corrected.rows.map(({ sourceRow, areaId }) => [sourceRow, areaId]), [[2, "area-0-1"], [3, "area-0-2"]]);
+  assert.deepEqual(corrected.areaLabels, { "hall-a": { "area-0-1": "B_2", "area-0-2": "A" } });
+  const duplicate = imports.prepareOrganizerImport({ ...input, excludedRows: [4], overrides: { 2: { areaId: "A" } } });
+  assert.deepEqual(duplicate.rejected.map(({ sourceRow, codes }) => [sourceRow, codes]), [[3, ["duplicate_booth"]]]);
+});
+
+test("area names group across days within a space and reimports retain identities", () => {
+  const draft = { venue: { assignments: [
+    { venueSpaceId: "east", areaIds: ["A", "area-7-1"], areaLabels: { A: "既有展區", "area-7-1": "已移除展區" } },
+    { venueSpaceId: "west", areaIds: [] },
+  ] } };
+  const input = {
+    rows: imports.parseOrganizerCsv("日,場地,展區,攤位,社團\n1,east, 原創　插畫／手作 ,A01,甲\n2,east,原創 插畫/手作,A01,乙\n1,east,既有展區,A02,丙\n1,west,原創 插畫/手作,B01,丁\n1,east,__proto__,A03,戊\n1,east,123,A04,己\n"),
+    headerRow: 1, mapping: { day: { column: 0 }, venueSpace: { column: 1 }, area: { column: 2 }, boothCode: { column: 3 }, circleName: { column: 4 } },
+    areaAssignments: draft.venue.assignments, areaGeneration: 7,
+  };
+  const first = imports.prepareOrganizerImport(input);
+  assert.deepEqual(first.issues, []);
+  assert.equal(first.rows[0].areaId, first.rows[1].areaId);
+  assert.notEqual(first.rows[0].areaId, first.rows[3].areaId, "different spaces get distinct public area IDs");
+  assert.equal(first.rows[2].areaId, "A", "an existing name retains its map identity");
+  assert.notEqual(first.rows[0].areaId, "area-7-1", "do not reuse another area's ID");
+  assert.equal(first.areaLabels.east[first.rows[0].areaId], "原創 插畫/手作");
+  assert.equal(first.areaLabels.east[first.rows[4].areaId], "__proto__");
+  assert.equal(first.areaLabels.east[first.rows[5].areaId], "123");
+  const excluded = imports.prepareOrganizerImport({ ...input, excludedRows: [2] });
+  assert.deepEqual(excluded.rows, first.rows.slice(1), "exclusion does not renumber remaining groups");
+  const saved = withOrganizerImportedAreaIds(draft, first.rows, first.areaLabels);
+  const reordered = imports.prepareOrganizerImport({ ...input, rows: [input.rows[0], ...input.rows.slice(1).reverse()], areaAssignments: saved.venue.assignments, areaGeneration: 9 });
+  assert.deepEqual(reordered.rows.toReversed(), first.rows);
+  assert.deepEqual(reordered.areaLabels, first.areaLabels);
+  const replacement = imports.prepareOrganizerImport({ ...input, rows: imports.parseOrganizerCsv("日,場地,展區,攤位,社團\n1,east,全新展區,Z01,庚\n"), areaAssignments: saved.venue.assignments, areaGeneration: 9 });
+  assert.ok(!first.rows.some(row => row.areaId === replacement.rows[0].areaId));
+  const collided = imports.prepareOrganizerImport({ ...input, areaAssignments: [
+    { venueSpaceId: "east", areaIds: ["A"], areaLabels: { A: "原創 插畫/手作" } },
+    { venueSpaceId: "west", areaIds: ["A"], areaLabels: { A: "原創 插畫/手作" } },
+  ] });
+  assert.notEqual(collided.rows[0].areaId, collided.rows[3].areaId, "legacy codes shared by spaces cannot become duplicate public areas");
+  assert.notEqual(collided.rows[0].areaId, "A");
+});
+
+test("editing a roster name reuses the local group even when legacy spaces share its code", () => {
+  const draft = { venue: { assignments: [
+    { venueSpaceId: "east", areaIds: ["A", "B"], areaLabels: { A: "原創插畫", B: "遊戲" } },
+    { venueSpaceId: "west", areaIds: ["A"], areaLabels: { A: "交流" } },
+  ] } };
+  const names = createOrganizerAreaNames(draft.venue.assignments, 7, "edit");
+  const target = names.resolve("east", "原創插畫");
+  assert.equal(target, "A");
+  const saved = withOrganizerImportedAreaIds(draft, [
+    { venueSpaceId: "east", areaId: "A" }, { venueSpaceId: "east", areaId: target }, { venueSpaceId: "west", areaId: "A" },
+  ], names.labels());
+  assert.deepEqual(saved.venue.assignments.map(({ areaIds, areaLabels }) => ({ areaIds, areaLabels })), [
+    { areaIds: ["A"], areaLabels: { A: "原創插畫" } }, { areaIds: ["A"], areaLabels: { A: "交流" } },
+  ]);
 });
 
 test("correcting the venue space re-decides whether the row needs an area at all", () => {
