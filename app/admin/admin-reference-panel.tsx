@@ -62,7 +62,7 @@ export function AdminReferencePanel() {
     setError(''); setNotice('');
   }
   function edit(kind: string, title: string, item: Managed, values: Record<string, string>) {
-    open(kind, title, { ...values, action: 'edit', path: item.path!, version: item.version! });
+    open(kind, title, { ...values, ...(item.revision ? { revision: item.revision } : {}), action: 'edit', path: item.path!, version: item.version! });
   }
   function remove(kind: string, name: string, item: Managed) {
     setRemoval({ kind, name, item }); setError(''); setNotice('');
@@ -184,7 +184,9 @@ export function AdminReferencePanel() {
         {!catalog.categories.length && <p>尚無分類目錄。</p>}</>}
     </>}
     {modalOpen && <dialog ref={dialog} className={ui.dialog} aria-labelledby="reference-dialog-title" onCancel={event => { event.preventDefault(); if (mayLeave()) { setForm(null); setRemoval(null); } }}>
-    {form && <form ref={formElement} className={ui.form} onSubmit={event => void save(event)}><h3 id="reference-dialog-title">{form.title}</h3>{errorNotice}<fieldset disabled={locked}>
+    {form && <form ref={formElement} className={ui.form} onSubmit={event => void save(event)}><div className={ui.dialogHeader}>
+      <div><h3 id="reference-dialog-title">{form.title}</h3>{form.values.revision && <p>{JSON.parse(form.initial).name} · 第 {form.values.revision} 版</p>}</div>
+      <button type="button" aria-label="關閉" disabled={busy} onClick={() => { if (mayLeave()) setForm(null); }}><UiIcon name="close" /></button></div>{errorNotice}<fieldset disabled={locked}>
       {form.kind !== 'venue-address' && field('name', form.kind === 'venue-create' ? '場館名稱' : form.kind.includes('space') ? '場地名稱' : form.kind === 'organizer' ? '主辦名稱' : form.kind === 'category-catalog' ? '目錄名稱' : '公開名稱')}
       {form.kind !== 'venue-address' && field('sourceUrl', '官方來源網址', form.kind !== 'venue-space-create', 'url')}
       {form.kind === 'venue-space-create' && <p>網址留空時沿用場館來源。</p>}
@@ -196,8 +198,8 @@ export function AdminReferencePanel() {
         <option value="">請選擇主辦單位</option>{catalog?.organizers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>分類名稱（每行一個）<textarea required rows={7} value={form.values.categories} onChange={event => setForm({ ...form, values: { ...form.values, categories: event.target.value } })} /></label>
         <p>依每行順序顯示。{form.values.action === 'edit' && '儲存後建立新版本，保留舊版；既有活動不會自動切換版本。'}</p></>}
-      <div className={ui.actions}><button type="submit">{busy ? '儲存中…' : form.kind === 'venue-address' ? '儲存地址' : '儲存'}</button>
-        <button type="button" onClick={() => { if (mayLeave()) setForm(null); }}>取消</button></div>
+      <div className={ui.actions}><button type="button" onClick={() => { if (mayLeave()) setForm(null); }}>取消</button>
+        <button type="submit">{busy ? '儲存中…' : form.kind === 'venue-address' ? '儲存地址' : form.kind === 'category-catalog' && form.values.action === 'edit' ? '儲存新版本' : '儲存'}</button></div>
     </fieldset></form>}
     {removal && <><h3 id="reference-dialog-title">{removal.item.deleteBlocked ? '無法刪除' : '確認刪除'}{removal.name}</h3>{errorNotice}
       <p>{removal.item.deleteBlocked ? removal.item.deleteReason : `刪除後無法復原。${removal.kind === 'category-catalog' ? '其他版本會保留。' : ''}`}</p>

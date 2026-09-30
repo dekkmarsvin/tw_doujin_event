@@ -64,7 +64,7 @@ try {
   await page.getByRole('dialog', { name: '編輯分類目錄' }).waitFor();
   await page.getByLabel('分類名稱（每行一個）', { exact: true }).fill('二創\n原創\n遊戲\n其他');
   await journey.capture(page, 'shared-category-edit');
-  await page.getByRole('button', { name: '儲存', exact: true }).click();
+  await page.getByRole('button', { name: '儲存新版本', exact: true }).click();
   const current = page.getByRole('region', { name: '第一版分類第 2 版', exact: true });
   await current.waitFor();
   assert.deepEqual(await current.locator('li').allTextContents(), ['二創', '原創', '遊戲', '其他']);

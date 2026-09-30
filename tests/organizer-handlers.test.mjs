@@ -1902,3 +1902,33 @@ test('shared venue and space edits update metadata atomically, and revoked admin
   assert.equal((await database.prepare("SELECT COUNT(*) n FROM audit_log WHERE action = 'organizer_reference.deleted'").first()).n, before);
   assert.ok((await repository.listOrganizerVenueCatalog()).venues.some(item => item.id === venueId));
 });
+
+test('shared venue deletion racing with organizer space creation leaves no orphan or audit', async () => {
+  const admin = await signIn('admin@example.test'), path = '/api/admin/references';
+  const write = body => handlers.adminCreateReference(request(path, 'POST', body, admin));
+  const venueId = (await (await write({ kind: 'venue-create', name: '競態場館', address: '測試路1號', sourceUrl: 'https://venue.example/', spaceName: '全館' })).json()).id;
+  const catalog = await (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+  const venue = catalog.venues.find(item => item.id === venueId), space = venue.spaces[0];
+  await write({ action: 'delete', kind: 'venue-space', path: space.path, version: space.version });
+  const previous = (await repository.listOrganizerReferenceRecords()).find(row => row.id === venueId);
+  const actorAccountId = (await database.prepare("SELECT id FROM accounts WHERE email = 'admin@example.test'").first()).id;
+  let armed = false;
+  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    if (key === 'batch') return async statements => {
+      if (armed) {
+        armed = false;
+        assert.equal(await repository.mutateAdminReference({ previous, action: 'delete', actorAccountId, now }), true);
+      }
+      return target.batch(statements);
+    };
+    const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+  } }));
+  await racing.ensureTables(); armed = true;
+  const result = await racing.createOrganizerVenueSpace({ id: 'racing-space', venueId, name: '新增場地', sourceUrl: 'https://venue.example/',
+    defaultAreaMode: 'none', createdByAccountId: actorAccountId, now,
+    audit: { at: now, actorAccountId, actorRole: 'admin', action: 'organizer_venue_space.created', subjectType: 'venue-space', subjectId: 'racing-space' } });
+  assert.equal(result.ok, false);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM organizer_venue_spaces WHERE id = 'racing-space'").first()).n, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM organizer_reference_records WHERE reference_id = 'racing-space'").first()).n, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM audit_log WHERE subject_id = 'racing-space'").first()).n, 0);
+});

@@ -126,8 +126,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(email, now)));
   }
 
-  function referenceInsertStatement(record: OrganizerReferenceRecord, actor: string, conflict = "") {
-    return prepareReferenceInsert(database, record, actor, conflict);
+  function referenceInsertStatement(record: OrganizerReferenceRecord, actor: string, conflict = "", requireChange = false) {
+    return prepareReferenceInsert(database, record, actor, conflict, requireChange);
   }
 
   async function listOrganizerReferenceRecords(): Promise<OrganizerReferenceRecord[]> {
@@ -243,7 +243,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return results[0].meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
-  function auditStatement(entry: IdentityAuditEntry, applicationToken: string | null = null) {
+  function auditStatement(entry: IdentityAuditEntry, applicationToken: string | null = null, requireChange = false) {
     return database.prepare(
       `INSERT INTO audit_log (
          id, at, actor_account_id, actor_role, action, subject_type, subject_id,
@@ -258,7 +258,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          SELECT CASE WHEN ?3 IS NULL OR EXISTS (
            SELECT 1 FROM accounts WHERE id = ?3 AND deletion_started_at IS NULL
          ) THEN 1 ELSE 0 END AS actor_allowed
-       ) WHERE (?10 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?10))`,
+       ) WHERE (?10 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?10))
+         ${requireChange ? 'AND changes() = 1' : ''}`,
     ).bind(
       crypto.randomUUID(), entry.at, entry.actorAccountId ?? null, entry.actorRole,
       entry.action, entry.subjectType, entry.subjectId,
@@ -1692,11 +1693,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       const results = await database.batch([database.prepare(
         `INSERT INTO organizer_venue_spaces (
            id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
-         ) VALUES (?1, ?8, ?2, ?3, ?4, ?5, ?6, ?7)`,
+         ) SELECT ?1, ?8, ?2, ?3, ?4, ?5, ?6, ?7 WHERE EXISTS (SELECT 1 FROM organizer_venues WHERE id = ?8)`,
       ).bind(
         input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl,
         input.defaultAreaMode, input.createdByAccountId, input.now, input.venueId,
-      ), ...(input.sourceUrl ? [referenceInsertStatement(createVenueSpaceReference(input, input.now), input.createdByAccountId)] : []), auditStatement(input.audit)]);
+      ), ...(input.sourceUrl ? [referenceInsertStatement(createVenueSpaceReference(input, input.now), input.createdByAccountId, '', true)] : []), auditStatement(input.audit, null, true)]);
       return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const }
         : { ok: false as const, reason: "conflict" as const };
