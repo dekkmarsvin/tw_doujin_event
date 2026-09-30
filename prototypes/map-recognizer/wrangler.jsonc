@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // Prototype only: run with `wrangler dev`. It is deliberately absent from
+  // scripts/worker-delivery.mjs and has no deploy script, because a new
+  // deployed Worker is a new Cloudflare role (docs/runbooks/project-workflow.md
+  // §7.4) and needs a maintainer decision first.
+  "name": "tw-catalog-map-recognizer-prototype",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-05-22",
+  // No bindings: nothing is stored, so there is nothing to bill but the
+  // request and its CPU. The CPU cap bounds a pathological image (Workers
+  // Paid allows up to 5 minutes; a typical plan needs well under a second).
+  "limits": { "cpu_ms": 5000 },
+  "observability": {
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true }
+  }
+}

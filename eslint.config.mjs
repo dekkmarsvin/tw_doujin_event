@@ -8,7 +8,7 @@ import tseslint from "typescript-eslint";
 
 const eslintConfig = defineConfig([
   globalIgnores([
-    ".wrangler/**",
+    "**/.wrangler/**",
     "dist/**",
     // Isolated clones live here during onboarding and data migrations. They
     // carry their own dist bundles, which the top-level "dist/**" pattern does
