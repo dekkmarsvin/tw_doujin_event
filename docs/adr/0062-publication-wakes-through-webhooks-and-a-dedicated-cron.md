@@ -10,7 +10,9 @@
 
 Webhook 僅接受固定路徑的 JSON POST，豁免該請求的 Origin 檢查，仍驗證 exact bytes HMAC。合法 delivery 以固定 repository 和已釘住的 head／merge SHA 找 job，在同一交易重設 due time 並完成 delivery 紀錄；重送不再重設排程。Webhook 不在 HTTP request 內執行 GitHub 發布。
 
-Cron 每輪挑最多十筆到期且仍屬目前核准版本的 job，各執行一步。外部 pending 以 1、2、4、5 分鐘退避，之後上限五分鐘；成功前進的下一步於下次 cron 可執行。due time 與 checkpoint 在既有 lease 下同次寫入，重啟不丟排程。Webhook 漏送、早於 checkpoint 到達或與正在執行的 delivery 相撞，最遲仍由到期輪詢接手；五分鐘是排程退避上限，不是外部服務可用性保證。
+Cron 每輪挑最多十筆到期且仍屬目前核准版本的 job。已成功寫入 checkpoint 的下一步可在同輪接續，單 job 最多八個 transition、整輪最多十六個；自 tick 開始二十秒後不再啟動新 transition。這是新工作啟動預算，已啟動的單步仍依原有 lease／遠端 timeout 完成或失敗，不中斷遠端寫入或省略 checkpoint。每一步重新讀取 job、核准 snapshot 並取得 lease；pending、failed、skipped 或已 published 即停止該 job，同輪不睡眠或輪詢外部等待。預算耗盡的 due job 留待下一輪，重啟從持久化 checkpoint 接續。
+
+外部 CI／部署 pending 仍以 1、2、4、5 分鐘退避，上限五分鐘。已辨識的 workflow run／attempt 首次寫入，以及 completed job 尚未收斂的 step metadata，使用一分鐘重新確認，不能因此略過同 SHA／attempt、部署 step 或 production smoke。due time 與 checkpoint 在既有 lease 下同次寫入。Webhook 漏送、早於 checkpoint 到達或與正在執行的 delivery 相撞，仍由到期輪詢接手；五分鐘是排程退避上限，不是外部服務可用性保證。這取代原先一個 ready step 仍須空等下一輪的執行方式，不新增排程服務或修改現有 cron。
 
 保留 15 分鐘 queued timeout，由 cron 掃描並在交易時重新檢查 live lease；工作區 GET 不再掃描或更改 publication。CI 等待為 publishing，沒有 queued timeout。失敗仍要求既有 Owner／Admin retry，同一 job、snapshot 與 checkpoint；cron 不自行恢復 failed 或舊版本。
 

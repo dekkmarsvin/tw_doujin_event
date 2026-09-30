@@ -12,6 +12,7 @@ export type PublicationJob = NonNullable<Awaited<ReturnType<IdentityRepository["
 export type PublicationMetadata = Partial<Pick<PublicationJob,
   "data_pr_number" | "data_head_sha" | "data_merge_sha" | "main_pr_number" | "main_head_sha" | "main_merge_sha" | "workflow_run_id" | "workflow_run_attempt" | "production_manifest_sha256"
 >>;
+export type PublicationPendingReason = "deployment_metadata";
 
 /**
  * Whether this publication has left any record of remote work. `preparing_data`
@@ -62,12 +63,12 @@ export interface PublicationDriver {
     snapshot: unknown; snapshotJson: string; idempotencyKey: string; assertLease: () => Promise<void>;
     /** Persist remote-write intent before the first mutating API call. */
     beginRemoteWrite: () => Promise<void>;
-  }): Promise<{ pending?: boolean; metadata?: PublicationMetadata; productionVerified?: boolean }>;
+  }): Promise<{ pending?: boolean; pendingReason?: PublicationPendingReason; metadata?: PublicationMetadata; productionVerified?: boolean }>;
 }
 
 /** One bounded transition per delivery; never wait for CI in a Pages request. */
 export function createOrganizerPublicationExecutor(repository: IdentityRepository, driver: PublicationDriver, now = Date.now,
-  pendingBackoff?: (attempt: number) => number) {
+  pendingBackoff?: (attempt: number, reason?: PublicationPendingReason) => number) {
   return async (jobId: string) => {
     let job = await repository.getOrganizerPublicationJob(jobId);
     if (!job || job.status === "published" || job.status === "failed") return "skipped" as const;
@@ -150,7 +151,7 @@ export function createOrganizerPublicationExecutor(repository: IdentityRepositor
       if (!await repository.updateOrganizerPublicationJob({ jobId, leaseToken: lease.token,
         expectedStep: job.step, nextStep: next, status: next === "completed" ? "published" : "publishing",
         metadata, productionVerified: result.productionVerified, now: completedAt, eventEndsAt,
-        ...(pendingBackoff ? { pendingAttempts, nextAttemptAt: completedAt + (result.pending ? pendingBackoff(pendingAttempts) : 0) } : {}),
+        ...(pendingBackoff ? { pendingAttempts, nextAttemptAt: completedAt + (result.pending ? pendingBackoff(pendingAttempts, result.pendingReason) : 0) } : {}),
       })) throw new Error("Publication checkpoint conflict.");
       return result.pending ? "pending" as const : "advanced" as const;
     } catch (error) {
