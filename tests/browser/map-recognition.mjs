@@ -69,10 +69,28 @@ try {
   assert.equal(await svg.locator("[data-slot-code]").count(), 33);
   await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
   await panel.getByRole("button", { name: "查看 C 排 · 6 攤", exact: true }).waitFor();
+  // An empty list holds the run back and takes the reader to the list, even when it is folded away.
+  const list = panel.locator("summary").filter({ hasText: "辨識用攤位清單" });
+  await panel.getByRole("textbox").fill("");
+  await list.click();
+  // Playwright will not press an aria-disabled button, and that press is what is under test.
+  await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click({ force: true });
+  await panel.getByText("請輸入要辨識的攤位代碼或範圍。", { exact: true }).waitFor();
+  assert.ok(await panel.getByRole("textbox").evaluate(node => node === document.activeElement), "the held-back run points to the list");
+  // Blocks the list does not name are offered as unmatched blocks, and folding the panel keeps them.
+  await panel.getByRole("textbox").fill(codes.filter(code => !code.startsWith("C")).join("\n"));
+  await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
+  await panel.getByRole("button", { name: "查看 未配對區塊 1 · 6 格", exact: true }).waitFor();
+  const toggle = panel.getByRole("button", { name: "自動建立草稿（實驗）" });
+  await toggle.click();
+  await toggle.click();
+  await panel.getByRole("button", { name: "查看 未配對區塊 1 · 6 格", exact: true }).waitFor();
   // Changing inputs discards old proposals, even though the map is unchanged.
+  await list.click();
   await panel.getByRole("textbox").fill("C01~C06");
   assert.equal(await panel.getByRole("button", { name: /採用已核對/ }).count(), 0);
   await panel.getByRole("button", { name: "框選辨識範圍" }).click();
+  await panel.getByText(/只保留範圍內的攤位/).waitFor();
   for (const [name, value] of [["左側", "190"], ["上緣", "10"], ["寬度", "140"], ["高度", "55"]]) await panel.getByRole("spinbutton", { name, exact: true }).fill(value);
   await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
   await panel.getByRole("button", { name: "查看 C 排 · 6 攤", exact: true }).waitFor();
