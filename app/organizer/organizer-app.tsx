@@ -13,6 +13,8 @@ import { PortalError, readSession, readTurnstileSitekey, requestLoginLink, signO
 import { createOrganizerEvent, completeOrganizerOnboarding, listOrganizerEvents, readOrganizerEvent, saveOrganizerWorkspacePreference, startOrganizerAmendment, type OrganizerEventDetail, type OrganizerEventSummary, type OrganizerMapLocation } from "../organizer-client";
 import { type OrganizerVenueCatalog } from "../organizer-venue-catalog";
 
+import { type OrganizerReferenceCatalog, validateOrganizerReferences } from "../organizer-reference-catalog";
+import { organizerIssueTarget, RequiredMark, type FieldRequest } from "./organizer-field-guidance";
 import { type OrganizerEventDraft } from "../organizer-event";
 import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGuidedTask, type OrganizerWorkspaceSection } from "../organizer-workspace";
 
@@ -168,6 +170,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
   const [pollGeneration, setPollGeneration] = useState(0);
   const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
+  const [fieldRequest, setFieldRequest] = useState<FieldRequest | null>(null);
   const [section, setSection] = useState<OrganizerWorkspaceSection>("event");
   const [guidedTask, setGuidedTask] = useState<OrganizerGuidedTask>("identity_source");
   const [showAllTasks, setShowAllTasks] = useState(false);
@@ -352,9 +355,14 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     requestNavigation("切換活動", () => { setApplicationsOpen(false); setSelectedId(candidateId); });
   };
 
-  const chooseSection = (nextSection: OrganizerWorkspaceSection) => {
+  const chooseSection = (nextSection: OrganizerWorkspaceSection, target?: string) => {
     if (!detail) return;
+    if (nextSection === section && target && (detail.workspace.mode !== "guided" || showAllTasks)) {
+      setFieldRequest({ candidateId: detail.event.id, section: nextSection, target });
+      return;
+    }
     requestNavigation("切換項目", () => {
+      setFieldRequest(target ? { candidateId: detail.event.id, section: nextSection, target } : null);
       setSection(nextSection);
       if (detail.workspace.mode === "guided") setShowAllTasks(true);
       void persistLocation(detail.event.id, guidedTask, nextSection)
@@ -453,6 +461,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           guidedTask={guidedTask}
           showAllTasks={showAllTasks}
           onSection={chooseSection}
+          fieldRequest={fieldRequest?.candidateId === detail.event.id ? fieldRequest : null}
           onGuidedTask={chooseGuidedTask}
           onGuidedTaskSaved={advanceGuidedTask}
           onShowAll={() => requestNavigation("查看全部項目", () => setShowAllTasks(true))}
@@ -483,7 +492,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
 }
 
 function WorkspaceSurface({
-  session, detail, section, guidedTask, showAllTasks, onSection, onGuidedTask, onGuidedTaskSaved,
+  session, detail, section, guidedTask, showAllTasks, onSection, onGuidedTask, onGuidedTaskSaved, fieldRequest,
   onShowAll, onReturnToGuide, onLeave, onCompleteOnboarding, handoff, onHandoffDone, onChanged, onDirtyChange, onDraftSaveReady, persistLocation,
 }: {
   session: PortalSession;
@@ -491,7 +500,8 @@ function WorkspaceSurface({
   section: OrganizerWorkspaceSection;
   guidedTask: OrganizerGuidedTask;
   showAllTasks: boolean;
-  onSection: (section: OrganizerWorkspaceSection) => void;
+  fieldRequest: FieldRequest | null;
+  onSection: (section: OrganizerWorkspaceSection, target?: string) => void;
   onGuidedTask: (task: OrganizerGuidedTask) => void;
   onGuidedTaskSaved: (task: OrganizerGuidedTask) => void;
   onShowAll: () => void;
@@ -509,6 +519,7 @@ function WorkspaceSurface({
   const guided = detail.workspace.mode === "guided" && !showAllTasks;
   const wideRoster = section === "import" && detail.event.operation !== "AMEND";
   const [liveDraft, setLiveDraft] = useState(detail.draft);
+  const [liveReferences, setLiveReferences] = useState(detail.referenceCatalog);
   const [liveVenueCatalog, setLiveVenueCatalog] = useState(detail.venueCatalog);
   const [mapLocation, setMapLocation] = useState<OrganizerMapLocation | null>(null);
   const [liveDirty, setLiveDirty] = useState(false);
@@ -530,7 +541,7 @@ function WorkspaceSurface({
         onChanged={onChanged}
         onDirtyChange={onDirtyChange}
         onDraftSaveReady={onDraftSaveReady}
-        onLiveDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
+        onLiveDraftStateChange={(nextDraft, dirty, catalog, references) => { setLiveReferences(references); setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
         persistLocation={persistLocation}
       />
     </div> : <>
@@ -555,16 +566,17 @@ function WorkspaceSurface({
             session={session}
             detail={detail}
             section={section}
+            fieldRequest={fieldRequest?.section === section ? fieldRequest : null}
             onSection={onSection}
             mapLocation={mapLocation?.candidateId === detail.event.id ? mapLocation : null}
             onLocate={location => { setMapLocation(location); onSection("map"); }}
             onChanged={onChanged}
             onDirtyChange={onDirtyChange}
             onDraftSaveReady={onDraftSaveReady}
-            onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
+            onDraftStateChange={(nextDraft, dirty, catalog, references) => { setLiveReferences(references); setLiveDraft(nextDraft); setLiveVenueCatalog(catalog); setLiveDirty(dirty); }}
           />
         </div>
-        {!wideRoster && <ReadinessRail detail={detail} current={section} onSection={onSection} liveDraft={liveDraft} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />}
+        {!wideRoster && <ReadinessRail detail={detail} current={section} onSection={onSection} liveDraft={liveDraft} liveReferences={liveReferences} liveVenueCatalog={liveVenueCatalog} liveDirty={liveDirty} liveSection={activeLiveSection} />}
       </div>
     </>}
   </>;
@@ -600,7 +612,7 @@ function GuidedTaskStation({
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
-  onLiveDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
+  onLiveDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog, references: OrganizerReferenceCatalog) => void;
   persistLocation: (candidateId: string, task: OrganizerGuidedTask, section: OrganizerWorkspaceSection) => Promise<void>;
 }) {
   /* The station keeps only the dirty flag now that progress is counted from
@@ -649,13 +661,13 @@ function GuidedTaskStation({
       onChanged={onChanged}
       onDirtyChange={onDirtyChange}
       onSaveReady={onDraftSaveReady}
-      onDraftStateChange={(nextDraft, dirty, catalog) => { setLiveDirty(dirty); onLiveDraftStateChange(nextDraft, dirty, catalog); }}
+      onDraftStateChange={(nextDraft, dirty, catalog, references) => { setLiveDirty(dirty); onLiveDraftStateChange(nextDraft, dirty, catalog, references); }}
     />
     <div className={styles.exploreRow}><button type="button" className={styles.textButton} onClick={onShowAll}>查看全部項目</button><span>可以先看後面的項目，不會影響目前進度。</span></div>
   </section>;
 }
 
-function RosterNavigation({ detail, current, onSection }: { detail: OrganizerEventDetail; current: OrganizerWorkspaceSection; onSection: (section: OrganizerWorkspaceSection) => void }) {
+function RosterNavigation({ detail, current, onSection }: { detail: OrganizerEventDetail; current: OrganizerWorkspaceSection; onSection: (section: OrganizerWorkspaceSection, target?: string) => void }) {
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const close = (event: PointerEvent) => { if (menu.current && !menu.current.contains(event.target as Node)) menu.current.open = false; };
@@ -675,21 +687,22 @@ function RosterNavigation({ detail, current, onSection }: { detail: OrganizerEve
    * save-or-discard prompt as any other move. */
   return <div className={styles.rosterProgress}>
     <details ref={menu} className={styles.rosterNavigation}><summary>準備進度 {completed}/{total}</summary>
-      <ReadinessRail detail={detail} current={current} showNextAction={false} onSection={section => { if (menu.current) menu.current.open = false; onSection(section); }} />
+      <ReadinessRail detail={detail} current={current} showNextAction={false} onSection={(section, target) => { if (menu.current) menu.current.open = false; onSection(section, target); }} />
     </details>
     {suggestedNextSection !== current && <button type="button" onClick={() => onSection(suggestedNextSection)}>下一步：{organizerSectionLabel(detail, suggestedNextSection)}</button>}
   </div>;
 }
 
-function ReadinessRail({ detail, current, onSection, compact = false, showNextAction = true, liveDraft, liveVenueCatalog, liveDirty = false, liveSection }: {
+function ReadinessRail({ detail, current, onSection, compact = false, showNextAction = true, liveDraft, liveReferences, liveVenueCatalog, liveDirty = false, liveSection }: {
   detail: OrganizerEventDetail;
   /** The section open beside the rail. */
   current: OrganizerWorkspaceSection;
-  onSection: (section: OrganizerWorkspaceSection) => void;
+  onSection: (section: OrganizerWorkspaceSection, target?: string) => void;
   compact?: boolean;
   /** Off where the next step already stands outside the rail. */
   showNextAction?: boolean;
   liveDraft?: OrganizerEventDraft;
+  liveReferences?: OrganizerReferenceCatalog;
   liveVenueCatalog?: OrganizerVenueCatalog;
   liveDirty?: boolean;
   liveSection?: "event" | "venue";
@@ -697,7 +710,7 @@ function ReadinessRail({ detail, current, onSection, compact = false, showNextAc
   const readiness = detail.workspace.readiness;
   const catalog = liveVenueCatalog ?? detail.venueCatalog;
   const liveEventIssues = liveDraft && liveDirty
-    ? [...organizerGuidedDraftIssues(liveDraft, "identity_source", catalog), ...organizerGuidedDraftIssues(liveDraft, "days", catalog)]
+    ? [...organizerGuidedDraftIssues(liveDraft, "identity_source", catalog), ...organizerGuidedDraftIssues(liveDraft, "days", catalog), ...validateOrganizerReferences(liveDraft, liveReferences ?? detail.referenceCatalog ?? { organizers: [], categories: [] })]
     : [];
   const liveVenueIssues = liveDraft && liveDirty ? organizerGuidedDraftIssues(liveDraft, "venue", catalog) : [];
   const liveIssues = [...liveEventIssues, ...liveVenueIssues];
@@ -745,7 +758,7 @@ function ReadinessRail({ detail, current, onSection, compact = false, showNextAc
         ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
         : READINESS_LABEL[item.state]}</small>
     </button>)}</div>
-    <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>{showNext ? "沒有需要修正的項目；還沒開始的工作看上面的下一步。" : "沒有需要修正的項目。"}</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section)}>
+    <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>{showNext ? "沒有需要修正的項目；還沒開始的工作看上面的下一步。" : "沒有需要修正的項目。"}</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section, organizerIssueTarget(blocker, liveDraft ?? detail.draft))}>
       <strong>{organizerSectionLabel(detail, blocker.section)}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>
     </button>)}</div>
     {blockers.length > visibleBlockers.length && <p>另有 {blockers.length - visibleBlockers.length} 項，請到對應項目處理。</p>}
@@ -774,34 +787,35 @@ function CreateEntry({ onStarted, onCreated, onInvitationFailed }: {
       if (!invitationSent) onInvitationFailed(invitationDelivery, email);
     }).catch((error) => setNotice({ kind: "error", message: message(error) }));
   }}>
-    <label>暫定名稱<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
-    <label>負責人 Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+    <label><span>暫定名稱<RequiredMark /></span><input aria-label="暫定名稱" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
+    <label><span>負責人 Email<RequiredMark /></span><input aria-label="負責人 Email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
     <div className={styles.row}><button type="submit">建立並邀請</button><button type="button" className={styles.ghost} onClick={() => setOpen(false)}>取消</button></div>
     {notice.kind === "error" && <p className={styles.error}>{notice.message}</p>}
   </form>;
 }
 
-function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange, mapLocation, onLocate }: {
+function StepContent({ session, detail, section, onSection, onChanged, onDirtyChange, onDraftSaveReady, onDraftStateChange, mapLocation, onLocate, fieldRequest }: {
   session: PortalSession;
   detail: OrganizerEventDetail;
   section: OrganizerWorkspaceSection;
   /* A section whose prerequisite lives in another one has to be able to send
    * the reader there: 「先匯入這個活動日的攤位名單」 is only useful with a way to
    * go and do it (#221 Phase 5). */
-  onSection: (section: OrganizerWorkspaceSection) => void;
+  onSection: (section: OrganizerWorkspaceSection, target?: string) => void;
   onChanged: () => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   onDraftSaveReady: (save: (() => Promise<boolean>) | null) => void;
-  onDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog) => void;
+  onDraftStateChange: (draft: OrganizerEventDraft, dirty: boolean, catalog: OrganizerVenueCatalog, references: OrganizerReferenceCatalog) => void;
   mapLocation: OrganizerMapLocation | null;
+  fieldRequest: FieldRequest | null;
   onLocate: (location: OrganizerMapLocation) => void;
 }) {
-  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} />;
+  if (section === "event" || section === "venue") return <DraftForm detail={detail} section={section} fieldRequest={fieldRequest} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onDraftStateChange={onDraftStateChange} />;
   if (section === "import") return detail.event.operation === "AMEND"
     ? <OrganizerAmendmentPanel detail={detail} onChanged={onChanged} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} />
     : <ImportPanel detail={detail} onChanged={onChanged} onSection={onSection} onDirtyChange={onDirtyChange} onSaveReady={onDraftSaveReady} onLocate={onLocate} />;
   if (section === "map") return <OrganizerMapPanel detail={detail} onChanged={onChanged} onSection={onSection} location={mapLocation} />;
-  if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} />;
+  if (section === "validate") return <ValidationPanel detail={detail} onChanged={onChanged} onSection={onSection} />;
   return <ReviewPanel session={session} detail={detail} onChanged={onChanged} />;
 }
 

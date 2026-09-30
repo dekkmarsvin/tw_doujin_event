@@ -33,6 +33,25 @@ try {
   await page.getByLabel("暫定名稱", { exact: true }).fill("分類目錄驗收");
   await page.getByLabel("負責人 Email", { exact: true }).fill(ADMIN);
   await page.getByRole("button", { name: "建立並邀請", exact: true }).click();
+  // Requirements are visible before the first save, without red errors.
+  for (const target of ["event.name", "event.id", "officialSource.url", "references.categoryCatalog"]) {
+    const field = page.locator(`[data-organizer-field="${target}"]`);
+    await field.waitFor();
+    assert.equal(await field.locator("input, select").getAttribute("required"), "");
+    await field.getByText(target.startsWith("references") ? "送審前必填" : "必填", { exact: true }).waitFor();
+  }
+  assert.equal(await page.locator('[aria-invalid="true"]').count(), 0);
+  await journey.capture(page, "required-guidance-initial");
+  await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
+  const pending = page.getByRole("group", { name: "這個表單尚待完成的項目" });
+  await pending.getByRole("button", { name: "活動代碼為必填。", exact: true }).press("Enter");
+  assert.equal(await page.getByLabel(/^活動代碼/).evaluate(el => el === document.activeElement), true);
+  assert.equal(await page.locator('[data-organizer-field="event.id"]').getAttribute("data-field-highlight"), "true");
+  // The refusal marks what stopped this task. 送審前必填 fields are not an
+  // onboarding gate, so they stay neutral until visited or located.
+  assert.equal(await page.getByLabel(/^活動代碼/).getAttribute("aria-invalid"), "true");
+  assert.equal(await page.getByRole("combobox", { name: "主辦分類目錄", exact: true }).getAttribute("aria-invalid"), null);
+  assert.equal(await page.getByText("請選擇主辦單位。", { exact: true }).count(), 0);
   await page.getByLabel("活動代碼", { exact: false }).fill(`references-${Date.now()}`);
   assert.equal(staleReads, 0, "a removed remembered candidate is checked against the event list before reading it");
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);
@@ -46,6 +65,31 @@ try {
   await page.getByRole("navigation", { name: "活動列表", exact: true }).getByRole("button", { name: /分類目錄驗收/ }).click();
   await page.getByLabel(/^官方公告網址/).waitFor();
   assert.equal(await page.getByLabel(/^官方公告網址/).inputValue(), "https://organizer.example/event");
+  // Same-section repair preserves input; cross-section repair uses the
+  // existing save/discard/cancel guard and focuses only after navigation.
+  await page.getByRole("button", { name: "查看全部項目", exact: true }).click();
+  const categoryProblem = () => page.getByRole("button", { name: "活動 請選擇含至少一個分類的主辦分類目錄。", exact: true });
+  await categoryProblem().click();
+  const categorySelect = page.getByRole("combobox", { name: "主辦分類目錄", exact: true });
+  assert.equal(await categorySelect.evaluate(el => el === document.activeElement), true);
+  assert.equal(await categorySelect.getAttribute("aria-invalid"), "true");
+  assert.ok(await categorySelect.getAttribute("aria-describedby"));
+  await page.getByLabel(/^來源名稱/).fill("尚未儲存的來源名稱");
+  await categoryProblem().click();
+  assert.equal(await page.getByRole("dialog", { name: "尚有未儲存變更", exact: true }).count(), 0);
+  assert.equal(await page.getByLabel(/^來源名稱/).inputValue(), "尚未儲存的來源名稱");
+  assert.equal(await categorySelect.evaluate(el => el === document.activeElement), true);
+  await journey.capture(page, "required-guidance-category");
+  const venueNav = () => page.getByRole("group", { name: "活動項目", exact: true }).getByRole("button", { name: /^場館與場地/ });
+  await venueNav().click();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await page.getByLabel(/^來源名稱/).inputValue(), "尚未儲存的來源名稱");
+  await venueNav().click();
+  await page.getByRole("button", { name: "儲存並切換", exact: true }).click();
+  await page.getByRole("heading", { name: "場館與場地", exact: true }).waitFor();
+  await categoryProblem().click();
+  assert.equal(await categorySelect.evaluate(el => el === document.activeElement), true);
+  await page.getByRole("button", { name: "回到基本設定", exact: true }).click();
   // #396: the picture is optional, staged privately, and part of the draft
   // only once saved. The preview comes from the private upload.
   await page.getByLabel("選擇圖片", { exact: true }).setInputFiles({ name: "narrow.png", mimeType: "image/png", buffer: png(800, 450) });
@@ -103,6 +147,23 @@ try {
   // not pass until someone answers it.
   await page.getByLabel("第一天日期", { exact: true }).fill("2026-11-07");
   await page.getByRole("button", { name: "新增一天", exact: true }).click();
+  // A nonempty but invalid day code must open its folded details, not blame
+  // the valid date. The keyboard enters the same repair action as a click.
+  const firstDayDetails = page.locator("details").filter({ has: page.getByLabel("第 1 天代碼", { exact: true }) });
+  await firstDayDetails.locator("summary").click();
+  const firstDayCode = page.getByLabel("第 1 天代碼", { exact: true });
+  const validDayCode = await firstDayCode.inputValue();
+  await firstDayCode.fill("ABC");
+  if (await firstDayDetails.evaluate(el => el.open)) await firstDayDetails.locator("summary").click();
+  await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
+  await pending.getByRole("button", { name: "活動日需要代碼、名稱與日期。", exact: true }).press("Enter");
+  assert.equal(await firstDayDetails.evaluate(el => el.open), true);
+  assert.equal(await page.getByLabel("第 1 天名稱", { exact: true }).inputValue(), "第一天");
+  assert.equal(await firstDayCode.evaluate(el => el === document.activeElement), true);
+  assert.equal(await firstDayCode.getAttribute("aria-invalid"), "true");
+  assert.equal(await page.getByLabel("第一天日期", { exact: true }).getAttribute("aria-invalid"), null);
+  await journey.capture(page, "required-guidance-day-code");
+  await firstDayCode.fill(validDayCode);
   await page.getByRole("button", { name: "儲存並繼續", exact: true }).click();
   await page.getByRole("heading", { name: "場館與場地", exact: true }).waitFor();
   const dates = page.getByRole("group", { name: "活動日期", exact: true });
@@ -117,6 +178,10 @@ try {
   assert.equal(await page.getByRole("button", { name: "新增場地", exact: true }).count(), 0);
   await page.getByText("目前沒有未儲存的變更", { exact: true }).waitFor();
   assert.equal(await page.getByRole("group", { name: "這個表單尚待完成的項目" }).count(), 0);
+  await page.getByRole("button", { name: "完成基本設定", exact: true }).click();
+  await pending.getByRole("button", { name: "至少需要一個場地。", exact: true }).click();
+  assert.equal(await page.getByRole("combobox", { name: "場館", exact: true }).evaluate(el => el === document.activeElement), true);
+  await journey.capture(page, "required-guidance-empty-venue");
   // #298: 場館／場地／展區 are near-synonyms in everyday Chinese, so the step
   // that asks for all three opens with two published events answering it.
   // 展區 belongs to the event, not to the building.

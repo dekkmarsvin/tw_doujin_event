@@ -52,3 +52,11 @@ test("amendment map advice points to the declaration panel instead of a replacem
   assert.match(html, /「名單修正」調整並儲存/);
   assert.doesNotMatch(html, /「攤位匯入」|「攤位名單」/);
 });
+
+test("前往修正 appears only where the organizer's own form repairs the issue", () => {
+  const withRepair = (issue) => renderToStaticMarkup(React.createElement(OrganizerValidationIssueCard, { issue, detail, onSection: () => {} }));
+  assert.match(withRepair({ step: "event", code: "missing_category_catalog", severity: "error", target: "references", message: "請選擇含至少一個分類的主辦分類目錄。" }), /前往修正/);
+  // Missing canonical records say to contact the site maintainer; a repair
+  // button would lead to a form with nothing on it to fix.
+  assert.doesNotMatch(withRepair({ step: "event", code: "invalid_reference_records", severity: "error", target: "references", message: "選取的主辦、分類或場館缺少完整官方來源記錄，請聯絡網站管理者。" }), /前往修正/);
+});

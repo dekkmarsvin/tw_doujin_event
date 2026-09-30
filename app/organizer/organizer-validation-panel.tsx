@@ -3,6 +3,8 @@
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
+import { organizerIssueTarget } from "./organizer-field-guidance";
+import type { OrganizerWorkspaceSection } from "../organizer-workspace";
 import AccessibleEventMapRenderer from "../accessible-event-map-renderer";
 import { previewOrganizerEvent, validateOrganizerEvent, type OrganizerEventDetail, type OrganizerReaderPreview } from "../organizer-client";
 import { type OrganizerValidationIssue } from "../organizer-event";
@@ -21,7 +23,7 @@ const CHECK_STATE: Record<string, string> = {
   blocked: "前面的項目還沒完成，完成後再執行檢查。",
 };
 
-export function ValidationPanel({ detail, onChanged }: { detail: OrganizerEventDetail; onChanged: () => Promise<void> }) {
+export function ValidationPanel({ detail, onChanged, onSection }: { detail: OrganizerEventDetail; onChanged: () => Promise<void>; onSection?: (section: OrganizerWorkspaceSection, target?: string) => void }) {
   const validateState = detail.workspace.readiness.sections.find((item) => item.id === "validate")?.state ?? "available";
   const [issues, setIssues] = useState<OrganizerValidationIssue[] | null>(null);
   const [preview, setPreview] = useState<OrganizerReaderPreview | null>(null);
@@ -44,12 +46,12 @@ export function ValidationPanel({ detail, onChanged }: { detail: OrganizerEventD
       }}>建立預覽</button>
     </div><ActionNotice notice={checkFeedback.notice} /><ActionNotice notice={previewFeedback.notice} /></div>
     {grouped && <div className={styles.validationSummary}><b>{grouped.errors.length} 項必須修正</b><span>{grouped.warnings.length} 項建議確認</span></div>}
-    {issues?.map((issue, index) => <OrganizerValidationIssueCard key={`${issue.code}-${index}`} issue={issue} detail={detail} />)}
+    {issues?.map((issue, index) => <OrganizerValidationIssueCard key={`${issue.code}-${index}`} issue={issue} detail={detail} onSection={onSection} />)}
     <div ref={previewRef}>{preview !== null && <OrganizerReaderPreviewPanel preview={preview} venueCatalog={detail.venueCatalog} />}</div>
   </section>;
 }
 
-export function OrganizerValidationIssueCard({ issue, detail }: { issue: OrganizerValidationIssue; detail: OrganizerEventDetail }) {
+export function OrganizerValidationIssueCard({ issue, detail, onSection }: { issue: OrganizerValidationIssue; detail: OrganizerEventDetail; onSection?: (section: OrganizerWorkspaceSection, target?: string) => void }) {
   const amendment = detail.event.operation === "AMEND";
   const [dayId, venueSpaceId] = issue.step === "map" ? (issue.target ?? "").split("/") : [];
   const scopeLabel = dayId && venueSpaceId
@@ -62,8 +64,10 @@ export function OrganizerValidationIssueCard({ issue, detail }: { issue: Organiz
   // the two booth sentences, which is why the sidebar still showed the
   // validator's poorer one beside it (#223).
   const description = organizerIssueMessage(issue, detail.venueCatalog, detail.draft);
+  const repairTarget = (issue.step === "event" || issue.step === "venue") ? organizerIssueTarget(issue, detail.draft) : undefined;
   return <div className={issue.severity === "error" ? styles.issueError : styles.issueWarning}>
     <p><b>{issue.severity === "error" ? "必須修正" : "建議確認"}・{STEP_LABEL[issue.step]}</b>{scopeLabel && <>・{scopeLabel}</>}<br />{description}</p>
+    {onSection && !amendment && repairTarget && <button type="button" className={styles.issueLink} onClick={() => onSection(issue.step === "venue" ? "venue" : "event", repairTarget)}>前往修正</button>}
     {(unknown || missing) && <>
       <p>比對來源：已儲存的地圖 ↔ {detail.import ? `${detail.import.source.fileName}${detail.import.source.worksheet ? `／工作表「${detail.import.source.worksheet}」` : ""}` : "尚無匯入資料"}（此活動日與場地共 {rows.length} 筆匯入資料）。</p>
       <p>{amendment ? "請到「地圖」對照修正後的攤位位置與代碼；若修正宣告有誤，請到「名單修正」調整並儲存。未分配給社團的空攤位可以保留。" : unknown
