@@ -15,6 +15,7 @@ export type RasterImage = { width: number; height: number; data: Uint8Array };
  * working arrays (about 13 bytes a pixel in all), so larger plans are refused
  * rather than risking an out-of-memory reset halfway through. */
 export const MAX_PIXELS = 7_000_000;
+const PIXEL_LIMIT_MESSAGE = `圖片超過 ${(MAX_PIXELS / 1e6).toFixed(0)} 百萬像素，請縮小後再上傳。`;
 
 export class UnsupportedImageError extends Error {}
 
@@ -27,12 +28,21 @@ export async function decodeImage(bytes: Uint8Array): Promise<RasterImage> {
 function checkSize(width: number, height: number) {
   if (!(width > 0 && height > 0)) throw new UnsupportedImageError("圖片尺寸無效。");
   if (width * height > MAX_PIXELS) {
-    throw new UnsupportedImageError(`圖片超過 ${(MAX_PIXELS / 1e6).toFixed(0)} 百萬像素，請縮小後再上傳。`);
+    throw new UnsupportedImageError(PIXEL_LIMIT_MESSAGE);
   }
 }
 
 function decodeJpegImage(bytes: Uint8Array): RasterImage {
-  const image = decodeJpeg(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: MAX_PIXELS / 1e6, maxMemoryUsageInMB: 96 });
+  let image;
+  try {
+    image = decodeJpeg(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: MAX_PIXELS / 1e6, maxMemoryUsageInMB: 96 });
+  } catch (error) {
+    // jpeg-js rejects oversized frames before returning dimensions to checkSize.
+    if (error instanceof Error && error.message.startsWith("maxResolutionInMP limit exceeded")) {
+      throw new UnsupportedImageError(PIXEL_LIMIT_MESSAGE);
+    }
+    throw error;
+  }
   checkSize(image.width, image.height);
   return { width: image.width, height: image.height, data: image.data };
 }

@@ -126,6 +126,20 @@ test("refuses files that are neither PNG nor JPEG", async () => {
   await assert.rejects(decodeImage(new TextEncoder().encode("GIF89a")), UnsupportedImageError);
 });
 
+test("oversized JPEG frames return an actionable size error before pixel decoding", async () => {
+  for (const marker of [0xc0, 0xc2]) {
+    // A 10000 × 4800 frame header, matching the public Pier-2 source image.
+    // No pixel data is needed: size validation must stop at the frame header.
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, marker, 0, 11, 8, 0x12, 0xc0, 0x27, 0x10, 1, 1, 0x11, 0, 0xff, 0xd9]);
+    await assert.rejects(decodeImage(bytes), (error) => error instanceof UnsupportedImageError && /7 百萬像素/.test(error.message));
+    const form = new FormData();
+    form.set("image", new Blob([bytes], { type: "image/jpeg" }), "large-plan.jpg");
+    const response = await worker.fetch(new Request("http://prototype.test/recognize", { method: "POST", body: form }));
+    assert.equal(response.status, 422);
+    assert.match((await response.json()).error, /7 百萬像素.*縮小後再上傳/);
+  }
+});
+
 test("reads the booth list: ranges, prefixes with separators and list order", () => {
   const { rows, ignored } = parseBoothList("B01~B03, A01 A02\nB5-01~B5-02 ??");
   assert.deepEqual(rows.map((row) => [row.label, row.entries.map((entry) => entry.code)]), [
