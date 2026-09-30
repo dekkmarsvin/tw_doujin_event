@@ -64,9 +64,10 @@ export function OrganizerValidationIssueCard({ issue, detail, onSection }: { iss
   // the two booth sentences, which is why the sidebar still showed the
   // validator's poorer one beside it (#223).
   const description = organizerIssueMessage(issue, detail.venueCatalog, detail.draft);
+  const repairTarget = (issue.step === "event" || issue.step === "venue") ? organizerIssueTarget(issue, detail.draft) : undefined;
   return <div className={issue.severity === "error" ? styles.issueError : styles.issueWarning}>
     <p><b>{issue.severity === "error" ? "必須修正" : "建議確認"}・{STEP_LABEL[issue.step]}</b>{scopeLabel && <>・{scopeLabel}</>}<br />{description}</p>
-    {onSection && !amendment && (issue.step === "event" || issue.step === "venue") && issue.target && <button type="button" className={styles.issueLink} onClick={() => onSection(issue.step === "venue" ? "venue" : "event", organizerIssueTarget(issue, detail.draft))}>前往修正</button>}
+    {onSection && !amendment && repairTarget && <button type="button" className={styles.issueLink} onClick={() => onSection(issue.step === "venue" ? "venue" : "event", repairTarget)}>前往修正</button>}
     {(unknown || missing) && <>
       <p>比對來源：已儲存的地圖 ↔ {detail.import ? `${detail.import.source.fileName}${detail.import.source.worksheet ? `／工作表「${detail.import.source.worksheet}」` : ""}` : "尚無匯入資料"}（此活動日與場地共 {rows.length} 筆匯入資料）。</p>
       <p>{amendment ? "請到「地圖」對照修正後的攤位位置與代碼；若修正宣告有誤，請到「名單修正」調整並儲存。未分配給社團的空攤位可以保留。" : unknown

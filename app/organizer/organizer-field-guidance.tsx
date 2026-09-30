@@ -8,6 +8,9 @@ export const FieldGuidance = createContext<{ issues: OrganizerValidationIssue[];
 /** The API also serves older saved candidates, whose reference issues all
  * pointed at `references`. Resolve those codes without parsing prose. */
 export function organizerIssueTarget(issue: { code: string; target?: string }, draft: OrganizerEventDraft): string | undefined {
+  // Missing canonical records are the site maintainer's to repair; no field
+  // on the organizer's form fixes them, so there is nowhere to go.
+  if (issue.code === "invalid_reference_records") return undefined;
   if (issue.code === "missing_venue") return "venue.assignments.0.venueId";
   if (issue.code === "missing_category_catalog" || issue.code === "invalid_category_catalog") return "references.categoryCatalog";
   if (["missing_organizer", "unknown_organizer", "duplicate_organizer", "organizer_lead"].includes(issue.code)) return "references.organizerAssignments";
