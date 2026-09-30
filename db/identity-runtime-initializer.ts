@@ -80,10 +80,10 @@ export function createIdentityInitializer(database: D1Database) {
 
 }
 
-export function referenceInsertStatement(database: D1Database, record: OrganizerReferenceRecord, actor: string, conflict = "") {
+export function referenceInsertStatement(database: D1Database, record: OrganizerReferenceRecord, actor: string, conflict = "", requireChange = false) {
   return database.prepare(`INSERT INTO organizer_reference_records
     (path, kind, reference_id, organizer_id, revision, display_name, public_reference_json, source_captured_at, created_by)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ${conflict}`)
+    SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE ${requireChange ? 'changes() = 1' : '1 = 1'} ${conflict}`)
     .bind(record.path, record.kind, record.id, record.organizerId, record.revision, record.displayName,
       record.publicReferenceJson, record.sourceCapturedAt, actor);
 }

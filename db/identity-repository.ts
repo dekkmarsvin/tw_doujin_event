@@ -126,8 +126,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       .bind(email, now)));
   }
 
-  function referenceInsertStatement(record: OrganizerReferenceRecord, actor: string, conflict = "") {
-    return prepareReferenceInsert(database, record, actor, conflict);
+  function referenceInsertStatement(record: OrganizerReferenceRecord, actor: string, conflict = "", requireChange = false) {
+    return prepareReferenceInsert(database, record, actor, conflict, requireChange);
   }
 
   async function listOrganizerReferenceRecords(): Promise<OrganizerReferenceRecord[]> {
@@ -243,7 +243,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return results[0].meta.changes === 1 ? "removed" as const : "missing" as const;
   }
 
-  function auditStatement(entry: IdentityAuditEntry, applicationToken: string | null = null) {
+  function auditStatement(entry: IdentityAuditEntry, applicationToken: string | null = null, requireChange = false) {
     return database.prepare(
       `INSERT INTO audit_log (
          id, at, actor_account_id, actor_role, action, subject_type, subject_id,
@@ -258,7 +258,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          SELECT CASE WHEN ?3 IS NULL OR EXISTS (
            SELECT 1 FROM accounts WHERE id = ?3 AND deletion_started_at IS NULL
          ) THEN 1 ELSE 0 END AS actor_allowed
-       ) WHERE (?10 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?10))`,
+       ) WHERE (?10 IS NULL OR EXISTS (SELECT 1 FROM organizer_applications WHERE review_token = ?10))
+         ${requireChange ? 'AND changes() = 1' : ''}`,
     ).bind(
       crypto.randomUUID(), entry.at, entry.actorAccountId ?? null, entry.actorRole,
       entry.action, entry.subjectType, entry.subjectId,
@@ -1692,11 +1693,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       const results = await database.batch([database.prepare(
         `INSERT INTO organizer_venue_spaces (
            id, venue_id, name, name_key, source_url, default_area_mode, created_by, created_at
-         ) VALUES (?1, ?8, ?2, ?3, ?4, ?5, ?6, ?7)`,
+         ) SELECT ?1, ?8, ?2, ?3, ?4, ?5, ?6, ?7 WHERE EXISTS (SELECT 1 FROM organizer_venues WHERE id = ?8)`,
       ).bind(
         input.id, input.name, organizerVenueNameKey(input.name), input.sourceUrl,
         input.defaultAreaMode, input.createdByAccountId, input.now, input.venueId,
-      ), ...(input.sourceUrl ? [referenceInsertStatement(createVenueSpaceReference(input, input.now), input.createdByAccountId)] : []), auditStatement(input.audit)]);
+      ), ...(input.sourceUrl ? [referenceInsertStatement(createVenueSpaceReference(input, input.now), input.createdByAccountId, '', true)] : []), auditStatement(input.audit, null, true)]);
       return results.every((result) => result.meta.changes === 1)
         ? { ok: true as const }
         : { ok: false as const, reason: "conflict" as const };
@@ -2506,6 +2507,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          WHERE id = ?7 AND current_version = ?8
            AND status IN ('draft', 'changes_requested')
            AND (event_id_locked_at IS NULL OR event_id = ?1)
+           AND NOT EXISTS (SELECT 1 FROM json_each(?3, '$.references.organizerAssignments') a
+             WHERE NOT EXISTS (SELECT 1 FROM organizer_reference_records r WHERE r.kind = 'organizer' AND r.reference_id = json_extract(a.value, '$.organizerId')))
+           AND (json_extract(?3, '$.references.categoryCatalog') IS NULL OR EXISTS (SELECT 1 FROM organizer_reference_records r
+             WHERE r.kind = 'category-catalog' AND r.reference_id = json_extract(?3, '$.references.categoryCatalog.id')
+               AND r.organizer_id = json_extract(?3, '$.references.categoryCatalog.organizerId') AND r.revision = json_extract(?3, '$.references.categoryCatalog.revision')))
+           AND NOT EXISTS (SELECT 1 FROM json_each(?3, '$.venue.assignments') a WHERE NOT EXISTS
+             (SELECT 1 FROM organizer_venue_spaces s JOIN organizer_venues v ON v.id = s.venue_id
+              WHERE s.id = json_extract(a.value, '$.venueSpaceId') AND v.id = json_extract(a.value, '$.venueId')))
            ${input.admin ? "" : `AND EXISTS (
              SELECT 1 FROM organizer_event_grants g
              WHERE g.candidate_id = organizer_event_candidates.id
@@ -2522,7 +2531,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
            ) SELECT ?1, id, current_version, event_id, current_draft_json, ?2, ?3, ?4
              FROM organizer_event_candidates
-             WHERE id = ?5 AND current_version = ?6 AND last_updated_by = ?2 AND updated_at = ?4`,
+             WHERE id = ?5 AND current_version = ?6 AND last_updated_by = ?2 AND updated_at = ?4 AND changes() = 1`,
         ).bind(crypto.randomUUID(), input.actorAccountId, actorRole, input.now, input.candidateId, nextVersion),
       ]);
       return results.every((result) => result.meta.changes === 1)
@@ -3408,7 +3417,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ]);
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
-      "organizer_amendment_changes", "organizer_amendments", "organizer_applications",
+      "organizer_amendment_changes", "organizer_amendments", "organizer_applications", "organizer_category_sequences",
       "organizer_import_rows", "organizer_import_sources", "organizer_event_reviews", "organizer_event_invitations", "organizer_event_grants", "organizer_event_revisions", "organizer_workspace_preferences", "organizer_workspace_state", "organizer_event_candidates", "organizer_venue_spaces", "organizer_venues", "organizer_reference_records",
       "map_draft_exports", "map_draft_files", "map_draft_reviews", "map_draft_comments", "map_draft_revisions", "map_drafts", "map_contributor_grants",
       "login_tokens", "sessions", "circle_claims", "circle_overrides", "overrides_doc", "audit_log", "preview_mail_sink", "accounts",
