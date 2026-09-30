@@ -63,6 +63,8 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
     return [recognitionChoiceKey(item.choice), result.ok ? "" : result.errors.join(" ")];
   })), [candidates, layout, report]);
   const proposedCodes = new Set(report?.layout.rows.flatMap(row => row.slots.map(slot => slot.code)) ?? []);
+  const matchedRows = report?.layout.rows.filter(row => !row.label.startsWith("?")) ?? [];
+  const provisionalSlots = report?.layout.rows.filter(row => row.label.startsWith("?")).reduce((sum, row) => sum + row.slots.length, 0) ?? 0;
   const existingCodes = new Set(layout.rows.flatMap(row => row.slots.map(slot => slot.code)));
   const missing = boothCodes.filter(code => !proposedCodes.has(code) && !existingCodes.has(code));
   const chosen = candidates.filter(item => selected.includes(recognitionChoiceKey(item.choice)));
@@ -146,7 +148,7 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
           </svg>
         </div>
         {report && <div className={styles.checklist}>
-          <p>{report.layout.rows.length} 排 · {report.layout.rows.reduce((n, row) => n + row.slots.length, 0)} 個推測攤位 · 已勾選 {selected.length} 項</p><p>只加入勾選項目；既有攤位與設施會保留。</p>
+          <p>已配對 {matchedRows.length} 排 · {matchedRows.reduce((n, row) => n + row.slots.length, 0)} 攤{provisionalSlots > 0 ? ` · 未配對 ${provisionalSlots} 格` : ""} · 已勾選 {selected.length} 項</p><p>只加入勾選項目；既有攤位與設施會保留。</p>
           {candidates.map(item => { const key = recognitionChoiceKey(item.choice), conflict = conflicts.get(key); return <div key={key} className={styles.item}>
             <div><button type="button" aria-pressed={focus === key} onClick={() => { setSelecting(false); setFocus(key); }}>查看 {item.title}</button><label><input type="checkbox" disabled={!!conflict} aria-label={`已核對 ${item.title}`} checked={selected.includes(key)} onChange={event => setSelected(event.target.checked ? [...selected, key] : selected.filter(value => value !== key))} />已核對</label></div>
             <small>{item.provisional ? "未配對，採用後需重新編號。" : item.detail}</small>{conflict && <p className={styles.error}>{conflict}</p>}
