@@ -135,6 +135,8 @@ node scripts/run-tests.mjs module cli --concurrency=2
 
 ### 瀏覽器驗收
 
+CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只在 PR 與手動 dispatch 執行；main 不重跑全套，也不讓 browser 的完成時間占住正式部署佇列。活動發布 PR 仍須取得同 head SHA 的成功結果才能自動合併。
+
 新增或補強 UI 行為驗收時，同一 PR 核對並移除它已等效涵蓋的 JSX／CSS／原始碼字串斷言，在 PR 逐項記錄替代關係；未覆蓋者保留並說明缺口。優先擴充既有 journey，不為同一流程新增另一套。純邏輯、API／D1、授權、資料完整性與發布恢復仍留在適合的測試層，不以測試總數下降作為驗收。
 
 `tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：

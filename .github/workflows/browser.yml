@@ -1,0 +1,81 @@
+name: Browser verification
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Browser work never holds the Pages deployment queue. Replace obsolete PR
+# verification, but leave explicit manual verification independently runnable.
+concurrency:
+  group: browser-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scope:
+    name: Classify browser scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      profile: ${{ steps.scope.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Classify all changed paths
+        id: scope
+        run: node scripts/ci-scope.mjs
+
+  # Keep this check name: the publication adapter requires its actual success
+  # on the publication PR head before merging. Main does not repeat the suite.
+  browser-acceptance:
+    name: Browser acceptance
+    needs: scope
+    if: needs.scope.outputs.profile == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      # npm ci locks the Playwright package; only this job installs its browser
+      # binary and the shared libraries a bare runner image does not carry.
+      - name: Install Chromium
+        run: |
+          npm run test:browser:install
+          npx playwright install-deps chromium
+
+      # Each journey declares what it needs and `test:browser` stands it up: the
+      # pinned FF47 data it fetches itself, the fixtures it stages, and the
+      # isolated local portal — Wrangler with local D1 and R2, always-pass
+      # Turnstile and mail captured in D1 — that the signed-in journeys need.
+      # Nothing here reaches a remote binding or sends mail.
+      - name: Run representative browser journeys
+        run: npm run test:browser
+
+      - name: Upload browser reports, server diagnostics and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-acceptance
+          path: outputs/map-viewport-pr
+          retention-days: 7
+          if-no-files-found: warn
+

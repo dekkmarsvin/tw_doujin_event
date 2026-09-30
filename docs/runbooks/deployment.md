@@ -195,6 +195,8 @@ npx wrangler pages deployment tail https://<deployment-id>.tw-catalog.pages.dev 
 
 ## CI 行為
 
+Browser 驗證由 `.github/workflows/browser.yml` 在 PR 與手動 dispatch 執行，使用獨立的取消／排隊範圍。`Browser acceptance` 仍是活動發布 PR 在相同 head SHA 上必須實際成功的檢查；main 不重跑 browser 全套。Browser workflow 的失敗不占住 Pages 的 main 部署鎖，也不改變正式部署的固定 SHA、attempt、必要 smoke 與舊版本拒絕規則。
+
 `.github/workflows/deploy-pages.yml`：
 
 先由 `Classify verification scope` 比較整次 push 的 before→after，或 PR base→受測 merge tree；新增、刪除及 rename 的兩端都納入。[ci-scope.mjs](../../scripts/ci-scope.mjs) 僅允許已列出的內部 Markdown、設計證據、`.evidence/`、issue／PR 模板及開發工具走輕量流程。公開隱私權頁、產品程式、data pin、bindings、依賴、測試／CI 基礎設施與未知路徑維持完整 gate；歷史不完整時也回到完整 gate。分類失敗不放行後續工作。
