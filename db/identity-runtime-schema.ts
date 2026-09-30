@@ -312,6 +312,10 @@ export const IDENTITY_TABLES = [
     "source_captured_at INTEGER NOT NULL",
     "created_by TEXT NOT NULL",
   ]),
+  table("organizer_category_sequences", [
+    "reference_id TEXT PRIMARY KEY NOT NULL",
+    "revision INTEGER NOT NULL",
+  ]),
   table("organizer_venues", [
     "id TEXT PRIMARY KEY NOT NULL",
     "name TEXT NOT NULL",
