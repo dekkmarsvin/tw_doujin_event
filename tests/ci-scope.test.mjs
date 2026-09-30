@@ -16,6 +16,14 @@ test("only known non-product inputs take a short path", () => {
   assert.equal(classifyPaths([]).profile, "full");
 });
 
+test("publication data requires a pure conservative allowlist", () => {
+  const publication = ["data/published-events.json", "data/event-data-pins/fgo-only-2026.json", "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"];
+  assert.equal(classifyPaths(publication).profile, "publication-data");
+  for (const file of ["README.md", "data/new.json", "data/event-data-pins/nested/event.json", "app/event-catalog.ts", "package-lock.json", "data/circle-identities/new.json"]) {
+    assert.equal(classifyPaths([...publication, file]).profile, "full", file);
+  }
+});
+
 async function repository(t) {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "ci-scope-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -90,6 +98,30 @@ test("PR, dispatch and product changes do not need a deployment lookup", async t
   assert.equal((await determineWorkflowScope({ eventName: "workflow_dispatch", event: {} }, noLookup)).profile, "full");
   await r.put("app/product.ts");
   assert.equal((await determineWorkflowScope({ eventName: "push", event: { before: docs }, sha: r.commit(), cwd: r.cwd }, noLookup)).profile, "full");
+});
+
+test("publication PR and push include undelivered code and require a verified ancestor baseline", async t => {
+  const r = await repository(t);
+  await r.put("app/product.ts");
+  const product = r.commit();
+  await r.put("data/event-data-pins/new-event.json", "{}");
+  const sha = r.commit();
+  for (const [eventName, event] of [["pull_request", { pull_request: { base: { sha: product } } }], ["push", { before: product, ref: "refs/heads/main" }]]) {
+    const args = { eventName, event, sha, cwd: r.cwd };
+    assert.equal(determineScope(args).profile, "publication-data");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => ({ sha: r.base, runId: 1 }) })).profile, "full");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => ({ sha: product, runId: 2 }) })).profile, "publication-data");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => null })).profile, "full");
+    assert.equal((await determineWorkflowScope(args, { findBaseline: async () => { throw new Error("API unavailable"); } })).profile, "full");
+  }
+  // The PR cannot borrow a baseline from a newer/different main history.
+  const args = { eventName: "pull_request", event: { pull_request: { base: { sha: product } } }, sha, cwd: r.cwd };
+  assert.equal((await determineWorkflowScope(args, { findBaseline: async () => ({ sha, runId: 3 }) })).profile, "full");
+  // A pin-shaped path must not become a symlink or executable build input.
+  r.git(["update-index", "--chmod=+x", "data/event-data-pins/new-event.json"]);
+  r.git(["-c", "commit.gpgsign=false", "commit", "-m", "mode"]);
+  const modeSha = r.git(["rev-parse", "HEAD"]);
+  assert.equal(determineScope({ ...args, sha: modeSha }).profile, "full");
 });
 
 test("baseline lookup skips lightweight runs and requires an identifiable successful deploy", async () => {

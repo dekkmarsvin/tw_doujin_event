@@ -199,9 +199,13 @@ Browser 驗證由 `.github/workflows/browser.yml` 在 PR 與手動 dispatch 執�
 
 `.github/workflows/deploy-pages.yml`：
 
-先由 `Classify verification scope` 比較整次 push 的 before→after，或 PR base→受測 merge tree；新增、刪除及 rename 的兩端都納入。[ci-scope.mjs](../../scripts/ci-scope.mjs) 僅允許已列出的內部 Markdown、設計證據、`.evidence/`、issue／PR 模板及開發工具走輕量流程。公開隱私權頁、產品程式、data pin、bindings、依賴、測試／CI 基礎設施與未知路徑維持完整 gate；歷史不完整時也回到完整 gate。分類失敗不放行後續工作。
+先由 `Classify verification scope` 比較整次 push 的 before→after，或 PR base→受測 merge tree；新增、刪除及 rename 的兩端都納入。[ci-scope.mjs](../../scripts/ci-scope.mjs) 允許已列出的內部 Markdown、設計證據、`.evidence/`、issue／PR 模板及開發工具走非產品流程。另只有 event-data pins、`published-events.json`、circle identity allocations／evidence 的純資料變更可成為 `publication-data` 候選。公開隱私權頁、產品程式、bindings、依賴、測試／CI 基礎設施、混合及未知路徑維持完整 gate；歷史不完整時也回到完整 gate。分類失敗不放行後續工作。
 
-main 的輕量候選另比較最近成功 main push 的部署 SHA→目前版本，避免文件 push 取消前一個產品 run 後，未交付的產品差異被跳過。基準必須來自同一 workflow，整個 run 及唯一的 `Verify and deploy` job 都成功；輕量 run 的 skipped deploy 不算基準。只查最近 20 個成功 run，找不到、API／歷史不可驗證或遇到手動部署時保守執行完整 gate；僅分類 job 需要 `actions: read`。
+main 的非完整候選、以及 PR 的 `publication-data` 候選，另比較最近成功 main push 的部署 SHA→目前版本，避免未交付的程式差異被跳過。基準須為比較範圍的 ancestor，來自同一 workflow，整個 run 及唯一的 `Verify and deploy` job 都成功；非產品 run 的 skipped deploy 不算基準。只查最近 20 個成功 run，找不到、API／歷史不可驗證或遇到手動部署時保守執行完整 gate；兩個 workflow 的分類 job 需要 `actions: read`。
+
+`publication-data` 保留 `Verify and deploy`、`Full preview portal E2E`、`Browser acceptance` 的實際成功 gate 與同 head 檢查。它重新 fetch／驗證每個已發布 pin、identity grouping、reference、schema、map/day/venue coverage，建置正式成品，再核對完整發布集合、placement 的日期與場地、staging 與 dist bytes、HTML/JS 入口及 deployment manifest hashes。只有未變動程式的完整 Node suite、lint、type-check、Worker rebuild 不適用。Browser 在正式 build 上開啟所有已發布活動的日期／場地、桌面／手機、社團選取及 warm reload，不再為純資料更新重跑 fixture portal journeys。預覽 portal E2E、Access 與正式 smoke 保留，必要 check 不以空 job 或 skipped 代替。
+
+Browser job 使用與 Playwright lockfile 版本相符的官方容器，內含 browser 與 Linux libraries，避免每次執行 apt。更新 Playwright 時同步更新 image tag；容器拉取時間算進整個 job 耗時，不只比較安裝 step。
 
 輕量流程的 `Check non-product changes` 執行 contribution-files（已含 doc-map），tooling 類另檢查 Claude JSON、hook 語法與非遠端模式。不部署、不跑產品 Node／browser／remote preview E2E；summary 明確標示它們不適用且未執行，不能當成那些測試通過的證據。以下部署表適用完整 gate；手動 dispatch 一律完整執行。
 

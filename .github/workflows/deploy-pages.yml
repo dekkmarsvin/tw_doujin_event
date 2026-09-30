@@ -78,7 +78,7 @@ jobs:
   deploy:
     name: Verify and deploy
     needs: scope
-    if: needs.scope.outputs.profile == 'full' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: (needs.scope.outputs.profile == 'full' || needs.scope.outputs.profile == 'publication-data') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -99,19 +99,23 @@ jobs:
         run: npm ci
 
       - name: Build and test public artifact
+        if: needs.scope.outputs.profile == 'full'
         run: npm test
 
       - name: Lint
+        if: needs.scope.outputs.profile == 'full'
         run: npm run lint
 
       - name: Type-check
+        if: needs.scope.outputs.profile == 'full'
         run: npx tsc --noEmit --incremental false
 
       - name: Build independent Workers and record source fingerprints
+        if: needs.scope.outputs.profile == 'full'
         run: node scripts/worker-delivery.mjs --build-only
 
       - name: Upload Worker build evidence
-        if: always()
+        if: always() && needs.scope.outputs.profile == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: worker-build-evidence
@@ -127,6 +131,9 @@ jobs:
         env:
           DEPLOYMENT_COMMIT: ${{ github.sha }}
         run: node scripts/build-deployment-manifest.mjs "$DEPLOYMENT_COMMIT"
+
+      - name: Verify every published artifact
+        run: node scripts/check-published-artifact.mjs
 
       - name: Normalize Cloudflare API token
         id: cloudflare-auth
@@ -279,7 +286,7 @@ jobs:
   # a failed deployment after the Pages origin has already passed its smoke test.
   production-availability:
     name: Observe public production custom domain
-    if: needs.scope.outputs.profile == 'full' && github.event_name != 'pull_request' && github.ref_name == 'main'
+    if: (needs.scope.outputs.profile == 'full' || needs.scope.outputs.profile == 'publication-data') && github.event_name != 'pull_request' && github.ref_name == 'main'
     needs: [scope, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -351,7 +358,7 @@ jobs:
   # run-scoped cleanup retains other runs and manual data even on cancellation.
   preview-e2e:
     name: Full preview portal E2E
-    if: needs.scope.outputs.profile == 'full' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (needs.scope.outputs.profile == 'full' || needs.scope.outputs.profile == 'publication-data') && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     needs: [scope, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 10
