@@ -5,6 +5,7 @@ import { createCategoryReference, createOrganizerReference, createVenueReference
 import { isOrganizerVenueSpaceAreaMode, normalizeOrganizerVenueAddress, normalizeOrganizerVenueName, normalizeOrganizerVenueSourceUrl } from './organizer-venue-catalog';
 import { sharedReferenceCatalog } from './shared-reference-catalog';
 import { sha256Hex } from './portal-crypto';
+import { editSharedReference } from './admin-reference-edit';
 
 type Gate = { ok: false; response: Response } | { ok: true; session: { accountId: string } };
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -12,8 +13,8 @@ export function createAdminReferenceHandlers(repository: IdentityRepository, req
   async function adminListReferences(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
-    const [venues, records] = await Promise.all([repository.listOrganizerVenueCatalog(), repository.listOrganizerReferenceRecords()]);
-    return json(await sharedReferenceCatalog(venues, records));
+    const [venues, records, access] = await Promise.all([repository.listOrganizerVenueCatalog(), repository.listOrganizerReferenceRecords(), repository.listAdminReferenceAccess()]);
+    return json(await sharedReferenceCatalog(venues, records, access));
   }
   async function adminCreateReference(request: Request) {
     const gate = await requireAdmin(request);
@@ -26,6 +27,26 @@ export function createAdminReferenceHandlers(repository: IdentityRepository, req
     } catch { return json({ error: '請求格式無效。' }, 400); }
     const timestamp = now();
     const actor = { actorAccountId: gate.session.accountId, now: timestamp };
+    if (body.action === 'edit' || body.action === 'delete') {
+      const records = await repository.listOrganizerReferenceRecords();
+      const previous = records.find(row => row.path === body.path && row.kind === body.kind);
+      if (!previous) return json({ error: '找不到這筆共用資料，請重新讀取。' }, 404);
+      const venues = await repository.listOrganizerVenueCatalog();
+      const space = previous.kind === 'venue-space' ? venues.venues.flatMap(venue => venue.spaces).find(item => item.id === previous.id) : undefined;
+      const version = await sha256Hex(previous.publicReferenceJson + (space ? `\n${space.defaultAreaMode}` : ''));
+      if (body.version !== version) return json({ error: '資料已變更，請重新讀取後核對。' }, 409);
+      if (body.action === 'edit' && space && !isOrganizerVenueSpaceAreaMode(body.defaultAreaMode)) return json({ error: '請選擇展區預設。' }, 400);
+      let record;
+      try {
+        if (body.action === 'edit') record = editSharedReference(previous, body, timestamp,
+          previous.kind === 'category-catalog' ? await repository.nextAdminCategoryRevision(previous.id) : undefined);
+      } catch (error) { return json({ error: error instanceof Error ? error.message : '資料格式無效。' }, 400); }
+      const saved = await repository.mutateAdminReference({ ...actor, previous, record, action: body.action,
+        ...(space ? { previousAreaMode: space.defaultAreaMode, defaultAreaMode: isOrganizerVenueSpaceAreaMode(body.defaultAreaMode) ? body.defaultAreaMode : space.defaultAreaMode } : {}) });
+      if (!saved) return json({ error: '資料已被使用、已變更或權限已失效，請重新讀取後核對。' }, 409);
+      return json({ ok: true, id: previous.id, ...(record?.revision ? { revision: record.revision } : {}) });
+    }
+    if (body.action !== undefined) return json({ error: '操作無效。' }, 400);
     let mutation: AdminReferenceWrite;
     try {
       if (body.kind === 'organizer') mutation = { ...actor, record: createOrganizerReference({ name: body.name, sourceUrl: body.sourceUrl }, timestamp) };

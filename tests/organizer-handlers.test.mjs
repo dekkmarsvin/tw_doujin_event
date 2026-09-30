@@ -1801,3 +1801,134 @@ test('shared source completion cannot overwrite existing records and rechecks ad
   assert.equal(response.status, 409);
   assert.equal((await repository.listOrganizerReferenceRecords()).length, before);
 });
+
+test('shared category edits preserve identities and descriptions, serialize revisions and never reuse a deleted revision', async () => {
+  const admin = await signIn('admin@example.test');
+  const path = '/api/admin/references';
+  const write = body => handlers.adminCreateReference(request(path, 'POST', body, admin));
+  const list = async () => (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+  const organizerId = (await (await write({ kind: 'organizer', name: '順序主辦', sourceUrl: 'https://example.test/' })).json()).id;
+  await write({ kind: 'category-catalog', organizerId, name: '順序分類', sourceUrl: 'https://example.test/', categories: [{ label: '原創', description: '原創說明' }, { label: '二創' }] });
+  const original = (await list()).categories[0];
+  const body = { action: 'edit', kind: 'category-catalog', path: original.path, version: original.version,
+    name: '順序分類', sourceUrl: original.sourceUrl, categories: [{ label: '二創' }, { label: '原創' }] };
+  assert.equal((await write({ ...body, version: 'stale' })).status, 409);
+  assert.equal((await write({ ...body, categories: [{ label: '全部類別' }] })).status, 400);
+  assert.equal((await write({ ...body, categories: [{ label: '二創' }, { label: '二創' }] })).status, 400);
+  // Force both handlers to compute the same next revision before either writes.
+  let arrivals = 0, release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const concurrent = createCirclePortalHandlers({ ...handlerOptions, repository: { ...repository, nextAdminCategoryRevision: async id => {
+    const value = await repository.nextAdminCategoryRevision(id); if (++arrivals === 2) release(); await barrier; return value;
+  } } });
+  const results = await Promise.all([1, 2].map(() => concurrent.adminCreateReference(request(path, 'POST', body, admin))));
+  assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
+  let catalogs = (await list()).categories;
+  assert.deepEqual(catalogs.find(item => item.revision === '1').categories, original.categories);
+  const revised = catalogs.find(item => item.revision === '2');
+  assert.deepEqual(revised.categories, [...original.categories].reverse());
+  assert.equal(revised.id, original.id);
+  const remove = { action: 'delete', kind: 'category-catalog', path: revised.path, version: revised.version };
+  assert.equal((await write(remove)).status, 200);
+  assert.equal((await write(remove)).status, 404);
+  await database.prepare("UPDATE audit_log SET detail_json = NULL WHERE subject_type = 'organizer_reference'").run();
+  assert.equal((await write(body)).status, 200);
+  catalogs = (await list()).categories;
+  assert.deepEqual(catalogs.map(item => item.revision), ['1', '3']);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM audit_log WHERE action = 'organizer_reference.revised'").first()).n, 2);
+});
+
+test('shared management protects dependencies and records used by draft history, including deletion racing with selection', async () => {
+  const admin = await signIn('admin@example.test');
+  const path = '/api/admin/references';
+  const write = body => handlers.adminCreateReference(request(path, 'POST', body, admin));
+  const list = async () => (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+  const orgId = (await (await write({ kind: 'organizer', name: '共用主辦', sourceUrl: 'https://example.test/' })).json()).id;
+  let org = (await list()).organizers.find(item => item.id === orgId);
+  const edit = { action: 'edit', kind: 'organizer', path: org.path, version: org.version, name: '修改主辦', sourceUrl: org.officialUrl };
+  assert.equal((await write(edit)).status, 200);
+  assert.equal((await write(edit)).status, 409);
+  org = (await list()).organizers.find(item => item.id === orgId);
+  await write({ kind: 'category-catalog', organizerId: orgId, name: '分類', sourceUrl: org.officialUrl, categories: [{ label: '原創' }] });
+  const category = (await list()).categories[0];
+  assert.equal((await write({ action: 'delete', kind: 'organizer', path: org.path, version: org.version })).status, 409);
+  const { candidateId } = await (await handlers.adminCreateOrganizerCandidate(request('/api/admin/organizer/events', 'POST', { tentativeName: '共用測試', ownerEmail: 'admin@example.test' }, admin))).json();
+  const actor = await database.prepare("SELECT id FROM accounts WHERE email = 'admin@example.test'").first();
+  const candidate = await repository.getOrganizerCandidate(candidateId);
+  const draft = JSON.parse(candidate.current_draft_json);
+  draft.references = { organizerAssignments: [{ organizerId: orgId, role: 'lead' }], categoryCatalog: { id: category.id, organizerId: orgId, revision: category.revision } };
+  const save = { candidateId, actorAccountId: actor.id, admin: true, expectedVersion: 1, eventId: null, draftJson: JSON.stringify(draft), now };
+  assert.equal((await repository.saveOrganizerCandidate(save)).ok, true);
+  assert.equal((await write({ ...edit, version: org.version })).status, 409);
+  assert.equal((await write({ action: 'delete', kind: 'category-catalog', path: category.path, version: category.version })).status, 409);
+  const listed = await list();
+  assert.equal(listed.organizers[0].editBlocked, true);
+  assert.equal(listed.categories[0].deleteBlocked, true);
+  assert.equal(listed.categories[0].editBlocked, false);
+  // An unused version can be removed, even if a different version is in use.
+  assert.equal((await write({ action: 'edit', kind: 'category-catalog', path: category.path, version: category.version, name: '分類二', sourceUrl: category.sourceUrl, categories: [{ label: '二創' }] })).status, 200);
+  const next = (await list()).categories.find(item => item.revision === '2');
+  draft.references.categoryCatalog.revision = '2';
+  assert.equal((await write({ action: 'delete', kind: 'category-catalog', path: next.path, version: next.version })).status, 200);
+  assert.equal((await repository.saveOrganizerCandidate({ ...save, expectedVersion: 2, draftJson: JSON.stringify(draft) })).ok, false, 'selection cannot commit after the referenced version is deleted');
+  assert.equal((await database.prepare('SELECT COUNT(*) n FROM organizer_event_revisions WHERE candidate_id = ?1').bind(candidateId).first()).n, 2);
+});
+
+test('shared venue and space edits update metadata atomically, and revoked admins cannot edit or delete', async () => {
+  const admin = await signIn('admin@example.test'), member = await signIn('ordinary@example.test');
+  const path = '/api/admin/references';
+  const write = body => handlers.adminCreateReference(request(path, 'POST', body, admin));
+  const list = async () => (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+  const venueId = (await (await write({ kind: 'venue-create', name: '可編輯場館', address: '測試路1號', sourceUrl: 'https://venue.example/', spaceName: '全館', defaultAreaMode: 'none' })).json()).id;
+  let venue = (await list()).venues.find(item => item.id === venueId);
+  const edit = { action: 'edit', kind: 'venue', path: venue.path, version: venue.version, name: '修改場館', sourceUrl: venue.officialUrl, address: '測試路2號' };
+  assert.equal((await handlers.adminCreateReference(request(path, 'POST', edit, member))).status, 403);
+  assert.equal((await write(edit)).status, 200);
+  venue = (await list()).venues.find(item => item.id === venueId);
+  assert.equal(venue.name, '修改場館'); assert.equal(venue.publicName, '修改場館'); assert.equal(venue.address, '測試路2號');
+  assert.equal((await write({ action: 'delete', kind: 'venue', path: venue.path, version: venue.version })).status, 409);
+  const space = venue.spaces[0];
+  const spaceEdit = { action: 'edit', kind: 'venue-space', path: space.path, version: space.version, name: space.name, sourceUrl: space.officialUrl, defaultAreaMode: 'imported' };
+  assert.equal((await write(spaceEdit)).status, 200);
+  assert.equal((await write(spaceEdit)).status, 409);
+  venue = (await list()).venues.find(item => item.id === venueId);
+  assert.equal(venue.spaces[0].defaultAreaMode, 'imported');
+  assert.equal((await write({ action: 'delete', kind: 'venue-space', path: space.path, version: venue.spaces[0].version })).status, 200);
+  const before = (await database.prepare("SELECT COUNT(*) n FROM audit_log WHERE action = 'organizer_reference.deleted'").first()).n;
+  const revoked = createCirclePortalHandlers({ ...handlerOptions, repository: { ...repository, mutateAdminReference: async input => {
+    await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run(); return repository.mutateAdminReference(input);
+  } } });
+  assert.equal((await revoked.adminCreateReference(request(path, 'POST', { action: 'delete', kind: 'venue', path: venue.path, version: venue.version }, admin))).status, 409);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM audit_log WHERE action = 'organizer_reference.deleted'").first()).n, before);
+  assert.ok((await repository.listOrganizerVenueCatalog()).venues.some(item => item.id === venueId));
+});
+
+test('shared venue deletion racing with organizer space creation leaves no orphan or audit', async () => {
+  const admin = await signIn('admin@example.test'), path = '/api/admin/references';
+  const write = body => handlers.adminCreateReference(request(path, 'POST', body, admin));
+  const venueId = (await (await write({ kind: 'venue-create', name: '競態場館', address: '測試路1號', sourceUrl: 'https://venue.example/', spaceName: '全館' })).json()).id;
+  const catalog = await (await handlers.adminListReferences(request(path, 'GET', undefined, admin))).json();
+  const venue = catalog.venues.find(item => item.id === venueId), space = venue.spaces[0];
+  await write({ action: 'delete', kind: 'venue-space', path: space.path, version: space.version });
+  const previous = (await repository.listOrganizerReferenceRecords()).find(row => row.id === venueId);
+  const actorAccountId = (await database.prepare("SELECT id FROM accounts WHERE email = 'admin@example.test'").first()).id;
+  let armed = false;
+  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    if (key === 'batch') return async statements => {
+      if (armed) {
+        armed = false;
+        assert.equal(await repository.mutateAdminReference({ previous, action: 'delete', actorAccountId, now }), true);
+      }
+      return target.batch(statements);
+    };
+    const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+  } }));
+  await racing.ensureTables(); armed = true;
+  const result = await racing.createOrganizerVenueSpace({ id: 'racing-space', venueId, name: '新增場地', sourceUrl: 'https://venue.example/',
+    defaultAreaMode: 'none', createdByAccountId: actorAccountId, now,
+    audit: { at: now, actorAccountId, actorRole: 'admin', action: 'organizer_venue_space.created', subjectType: 'venue-space', subjectId: 'racing-space' } });
+  assert.equal(result.ok, false);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM organizer_venue_spaces WHERE id = 'racing-space'").first()).n, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM organizer_reference_records WHERE reference_id = 'racing-space'").first()).n, 0);
+  assert.equal((await database.prepare("SELECT COUNT(*) n FROM audit_log WHERE subject_id = 'racing-space'").first()).n, 0);
+});

@@ -1,4 +1,5 @@
 import { AdminReferencePanel } from "./admin-reference-panel";
+import referenceStyles from './admin-reference-panel.module.css';
 import { useCallback, useEffect, useState } from "react";
 import { readSession, setPortalEventId, signOut, type PortalSession } from "../circle-editor-client";
 import { getPublishedEvent, PUBLISHED_EVENTS } from "../event-catalog";
@@ -63,7 +64,7 @@ export default function AdminApp() {
     document.getElementById("map-review")?.scrollIntoView({ block: "start" });
   };
 
-  return <div className={`${styles.page} ${styles.adminPage}`}>
+  return <div className={`${styles.page} ${styles.adminPage} ${sharedReferences ? referenceStyles.workspace : ''}`}>
     <header className={styles.masthead}>
       <div><h1>網站管理</h1>
         <p className={styles.backLink}><a href="/circle">社團入口</a> · <a href="/organizer">主辦工作區</a></p>

@@ -326,6 +326,7 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
         permissions: { contents: "read", pull_requests: "read", checks: "read", metadata: "read" }, now: () => Date.now() }),
     }) : undefined,
     loadPublishedAmendmentBaseline: env.ORGANIZER_PUBLICATION_MODE === "github" ? createPublishedAmendmentBaselineLoader({
+      onUnavailable: (diagnostic) => console.warn(JSON.stringify({ event: "organizer.amendment.baseline_unavailable", ...diagnostic })),
       tokenProvider: createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
         privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
         permissions: { contents: "read", metadata: "read" }, now: () => Date.now() }),
