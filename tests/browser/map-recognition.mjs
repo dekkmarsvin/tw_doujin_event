@@ -1,3 +1,4 @@
+import { openToolGroup } from "./support/map-authoring.mjs";
 // staged-data: fixture
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
@@ -16,10 +17,10 @@ try {
   const codes = ["Z01", ...["A", "B", "C"].flatMap(label => Array.from({ length: label === "C" ? 6 : 16 }, (_, i) => `${label}${String(i + 1).padStart(2, "0")}`))];
   const authoring = { guides: [{ id: "g1", axis: "x", position: 12, locked: true }] };
   const { page, editor, state } = await openSurface(journey, "organizer", initial, { codes, authoring, background: Buffer.from(encodePng(ruledPlan())) });
+  await openToolGroup(editor, "辨識（實驗）");
   const panel = editor.getByRole("group", { name: "配置圖辨識", exact: true });
-  const svg = editor.getByRole("img", { name: /^可編輯 SAMPLE 向量地圖/ });
+  const svg = editor.locator("svg[tabindex=\"0\"]");
   const booth = code => svg.locator(`[data-slot-code='${code}']`);
-  await panel.getByRole("button", { name: "自動建立草稿（實驗）" }).click();
   await panel.locator("summary").filter({ hasText: "辨識用攤位清單" }).click();
   assert.equal((await panel.getByRole("textbox").inputValue()).split("\n").length, 39);
   await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
@@ -36,6 +37,11 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   assert.ok((await panel.getByRole("img").boundingBox()).width >= 400, "preview keeps a readable width");
   await page.setViewportSize({ width: 1600, height: 1100 });
+  // With the booth list folded, the preview takes the recognition tool's spare height instead of a fixed 430px box.
+  const listSection = panel.locator("summary").filter({ hasText: "辨識用攤位清單" });
+  await listSection.click();
+  assert.ok((await panel.getByRole("img").boundingBox()).height > 430, "preview grows with the recognition tool");
+  await listSection.click();
   assert.equal(await booth("A01").count(), 0, "preview never changes the editor");
   assert.equal(state.saves, 0);
   await panel.getByRole("button", { name: "查看 A 排 · 16 攤", exact: true }).click();
@@ -60,9 +66,11 @@ try {
   await panel.getByText("A 排的 A01 已在地圖上；需要調整時請使用排段工具。", { exact: true }).waitFor();
   // A canvas edit retires the preview and says so instead of leaving the review prompt behind.
   // The locked guide runs over Z01's left side, so take hold of its right edge.
+  await editor.getByRole("button", { name: "辨識（實驗）", exact: true }).click();
   const z01 = booth("Z01").locator("rect").first();
   await z01.click({ position: { x: (await z01.boundingBox()).width - 2, y: 4 } });
   await page.keyboard.press("ArrowRight");
+  await openToolGroup(editor, "辨識（實驗）");
   await panel.getByText("地圖已變更，請重新辨識。", { exact: true }).waitFor();
   assert.equal(await panel.getByRole("button", { name: /採用已核對/ }).count(), 0);
   await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
@@ -81,12 +89,12 @@ try {
   await panel.getByRole("textbox").fill(codes.filter(code => !code.startsWith("C")).join("\n"));
   await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
   await panel.getByRole("button", { name: "查看 未配對區塊 1 · 6 格", exact: true }).waitFor();
-  const toggle = panel.getByRole("button", { name: "自動建立草稿（實驗）" });
+  const toggle = editor.getByRole("button", { name: "辨識（實驗）", exact: true });
   await toggle.click();
   await toggle.click();
   await panel.getByRole("button", { name: "查看 未配對區塊 1 · 6 格", exact: true }).waitFor();
+  assert.equal(await panel.getByRole("textbox").inputValue(), codes.filter(code => !code.startsWith("C")).join("\n"), "switching tools preserves the open list and its edits");
   // Changing inputs discards old proposals, even though the map is unchanged.
-  await list.click();
   await panel.getByRole("textbox").fill("C01~C06");
   assert.equal(await panel.getByRole("button", { name: /採用已核對/ }).count(), 0);
   await panel.getByRole("button", { name: "框選辨識範圍" }).click();
@@ -100,7 +108,7 @@ try {
   assert.ok(rect.x >= 200 && rect.x < 320 && rect.y >= 20 && rect.y < 55, "cropped geometry returns to full-sheet coordinates");
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
   await page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
-  assert.equal(await panel.getByRole("button", { name: "自動建立草稿（實驗）" }).getAttribute("aria-expanded"), "true", "saving keeps the panel open");
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true", "saving keeps the panel open");
   assert.equal(state.saves, 1);
   assert.equal(state.layout.rows.flatMap(row => row.slots).length, 39);
   assert.deepEqual(state.authoring, authoring);

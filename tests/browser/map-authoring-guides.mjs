@@ -1,3 +1,4 @@
+import { openToolGroup } from "./support/map-authoring.mjs";
 // staged-data: fixture
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
@@ -12,6 +13,7 @@ try {
     const initial = { ...source, width, height, floor: { x: 0, y: 0, width, height }, rows: [], pillars: [], landmarks: [], accessPoints: [] };
     const { page, editor, state } = await openSurface(journey, surface, initial);
     const svg = editor.locator("svg[tabindex='0']");
+    await openToolGroup(editor, "輔助線");
     const guides = editor.getByRole("combobox", { name: "選取輔助線", exact: true });
     const picker = editor.getByRole("combobox", { name: "選取地圖元素", exact: true });
     const undo = editor.getByRole("button", { name: "復原上一步編輯" });
@@ -20,6 +22,7 @@ try {
     const drag = async (a, b, alt = false) => { const from = await at(...a), to = await at(...b); if (alt) await page.keyboard.down("Alt"); await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(to.x, to.y, { steps: 6 }); await page.mouse.up(); if (alt) await page.keyboard.up("Alt"); };
     const near = (value, expected) => assert.ok(Math.abs(value - expected) < .01, `${value} != ${expected}`);
     const placeGuide = async (axis, position) => {
+      await openToolGroup(editor, "輔助線");
       await editor.getByRole("button", { name: `新增${axis === "x" ? "垂直" : "水平"}輔助線`, exact: true }).click();
       await click(axis === "x" ? position : 20, axis === "y" ? position : 20);
       const field = editor.getByRole("spinbutton", { name: `輔助線 ${axis.toUpperCase()}`, exact: true });
@@ -36,15 +39,16 @@ try {
       // the older rule about an unchanged map is not what holds the button --
       // saving this would move the candidate on a version and write a revision
       // recording no booths, then count itself as 1 張地圖.
-      const mapActions = page.getByRole("group", { name: "地圖儲存動作" });
+      const mapActions = page.getByRole("dialog", { name: "地圖編輯工作區" });
       assert.equal(await mapActions.getByRole("button", { name: "儲存地圖變更", exact: true }).isDisabled(), true);
-      await mapActions.getByText("先在畫布上放入至少一個攤位或設施，才能儲存這張地圖。", { exact: true }).waitFor();
+      await mapActions.getByText("先放入攤位或設施，才能儲存。", { exact: true }).waitFor();
       await journey.capture(page, "organizer-empty-map-blocked");
       await page.getByRole("button", { name: "空白畫布", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "空白畫布會清掉畫面上的內容" });
       await dialog.waitFor();
       await dialog.getByRole("button", { name: "取消", exact: true }).click();
       assert.equal(await editor.locator("[data-guide-id]").count(), 1);
+      await openToolGroup(editor, "底圖與畫布");
       near(Number(await editor.getByRole("spinbutton", { name: "畫布寬", exact: true }).inputValue()), width);
       assert.equal(await undo.isEnabled(), true);
       await undo.click();
@@ -55,13 +59,15 @@ try {
     await placeGuide("x", rightX); await placeGuide("x", secondX); await placeGuide("x", secondRight);
     await placeGuide("y", top); await placeGuide("y", bottom);
     assert.equal(await editor.locator("[data-guide-id]").count(), 6);
+    await openToolGroup(editor, "輔助線");
     await guides.selectOption(firstGuide);
     await editor.getByRole("checkbox", { name: "鎖定輔助線位置", exact: true }).check();
     assert.equal(await editor.getByRole("spinbutton", { name: "輔助線 X", exact: true }).isDisabled(), true);
     await drag([firstX, height * .9], [firstX + width * .05, height * .9]);
     near(Number(await editor.getByRole("spinbutton", { name: "輔助線 X", exact: true }).inputValue()), firstX);
     const drawRow = async (startNumber, numberingStart, fromX, toX) => {
-      await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
+      await openToolGroup(editor, "攤位");
+    await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
       await editor.getByRole("textbox", { name: "排標籤", exact: true }).fill("A");
       await editor.getByRole("textbox", { name: "起始編號", exact: true }).fill(String(startNumber));
       await editor.getByRole("textbox", { name: "結束編號", exact: true }).fill(String(startNumber + 3));
@@ -72,11 +78,13 @@ try {
     };
     await drawRow(1, "top", firstX, rightX);
     await drawRow(5, "bottom", secondX, secondRight);
+    await openToolGroup(editor, "攤位");
     await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
     await editor.getByRole("textbox", { name: "排標籤", exact: true }).fill("H");
     await editor.getByRole("textbox", { name: "結束編號", exact: true }).fill("4");
     await editor.getByRole("combobox", { name: "方向", exact: true }).selectOption("horizontal");
     await drag([width * .5, top + 2], [width * .9, top + height * .05]); await svg.press("Escape");
+    await openToolGroup(editor, "設施");
     await editor.getByRole("button", { name: "新增出入口", exact: true }).click(); await click(secondX + 2, bottom + 2);
     await journey.capture(page, `${surface}-guides-opposite-columns`);
     const save = page.getByRole("button", { name: surface === "organizer" ? "儲存地圖變更" : "儲存新版本", exact: true });
@@ -99,7 +107,9 @@ try {
     await page.reload();
     if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
     else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+    await openToolGroup(editor, "輔助線");
     await guides.waitFor(); assert.equal(await editor.locator("[data-guide-id]").count(), 6);
+    await openToolGroup(editor, "輔助線");
     await guides.selectOption(firstGuide); assert.equal(await editor.getByRole("checkbox", { name: "鎖定輔助線位置", exact: true }).isChecked(), true);
     await editor.getByRole("checkbox", { name: "鎖定輔助線位置", exact: true }).uncheck();
     await drag([firstX, height * .9], [firstX - width * .05, height * .9]);
@@ -112,6 +122,7 @@ try {
     await editor.getByRole("checkbox", { name: "顯示輔助線", exact: true }).uncheck();
     assert.equal(await editor.locator("[data-guide-id]").count(), 0);
     await editor.getByRole("checkbox", { name: "顯示輔助線", exact: true }).check();
+    await openToolGroup(editor, "設施");
     await editor.getByRole("button", { name: "新增出入口", exact: true }).click();
     await editor.getByRole("status").filter({ hasText: "目前工具" }).getByRole("combobox", { name: "類型", exact: true }).selectOption("exit");
     await page.keyboard.down("Alt"); await click(secondX + 2, bottom + 2); await page.keyboard.up("Alt");
@@ -136,6 +147,7 @@ try {
     await undo.click();
     const newBottom = bottom + height * .06;
     await placeGuide("y", newBottom);
+    await openToolGroup(editor, "攤位");
     await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
     await click(centreX, top + span / 8);
     await drag([rightX, bottom], [rightX + 2, newBottom - 2]);
@@ -146,12 +158,17 @@ try {
     await svg.press("Escape"); await undo.click();
     // Resizing the canvas keeps its private construction coordinates aligned,
     // and a single undo restores both the canvas and the guides.
+    await openToolGroup(editor, "底圖與畫布");
     await editor.getByRole("spinbutton", { name: "畫布寬", exact: true }).fill(String(width * 2));
+    await openToolGroup(editor, "底圖與畫布");
     await editor.getByRole("spinbutton", { name: "畫布寬", exact: true }).press("Tab");
+    await openToolGroup(editor, "輔助線");
     await guides.selectOption(firstGuide);
     near(Number(await editor.getByRole("spinbutton", { name: "輔助線 X", exact: true }).inputValue()), firstX * 2);
     await undo.click();
+    await openToolGroup(editor, "底圖與畫布");
     near(Number(await editor.getByRole("spinbutton", { name: "畫布寬", exact: true }).inputValue()), width);
+    await openToolGroup(editor, "輔助線");
     await guides.selectOption(firstGuide);
     near(Number(await editor.getByRole("spinbutton", { name: "輔助線 X", exact: true }).inputValue()), firstX);
     await journey.capture(page, `${surface}-group-and-segment-guide-snap`);

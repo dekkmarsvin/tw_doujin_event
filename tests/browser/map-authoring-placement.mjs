@@ -1,3 +1,4 @@
+import { openToolGroup } from "./support/map-authoring.mjs";
 // staged-data: fixture
 // Real shared editor through both control surfaces; synthetic API persistence.
 // Authorization/version enforcement remains covered by handler and D1 tests.
@@ -16,7 +17,7 @@ try {
     const picker = editor.getByRole("combobox", { name: "選取地圖元素" });
     const count = () => picker.locator("option").count();
     const before = await count();
-    const activate = label => editor.getByRole("button", { name: `新增${label}`, exact: true }).click();
+    const activate = async label => { await openToolGroup(editor, label === "排／排段" ? "攤位" : "設施"); await editor.getByRole("button", { name: `新增${label}`, exact: true }).click(); };
     const at = async (x, y) => { await svg.scrollIntoViewIfNeeded(); const b = await svg.boundingBox(); return { x: b.x + x * b.width, y: b.y + y * b.height }; };
     const click = async (x, y) => { const p = await at(x, y); await page.mouse.click(p.x, p.y); };
     const drag = async (from, to, cancel = false) => {
@@ -106,6 +107,7 @@ try {
     await svg.press("Escape");
     await editor.getByRole("button", { name: "復原上一步編輯" }).click();
     assert.equal(await count(), beforeRow, "one undo removes the row segment");
+    await openToolGroup(editor, "攤位");
     await editor.getByRole("button", { name: "手動畫攤位", exact: true }).click();
     await editor.getByRole("combobox", { name: "所屬排標籤", exact: true }).fill("T");
     await drag([.05, .03], [.1, .15], true);
