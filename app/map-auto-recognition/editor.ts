@@ -30,5 +30,3 @@ export function recognizeEditorDraft(input: RecognitionInput): LayoutReport {
   const validation = validateEventMapLayout(layout);
   return { ...report, valid: validation.ok, errors: validation.errors };
 }
-
-

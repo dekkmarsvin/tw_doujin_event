@@ -54,4 +54,3 @@ export function adoptRecognitionDraft(current: EventMapLayout, proposal: EventMa
   if (!validation.ok) errors.push(...validation.errors);
   return errors.length ? { ok: false, errors } : { ok: true, layout: next };
 }
-

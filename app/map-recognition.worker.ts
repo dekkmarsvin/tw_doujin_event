@@ -7,4 +7,3 @@ self.onmessage = (event: MessageEvent<RecognitionInput>) => {
     self.postMessage({ error: error instanceof Error ? error.message : "辨識失敗，請重新選取範圍。" });
   }
 };
-

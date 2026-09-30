@@ -96,4 +96,3 @@ function encodePng({ width, height, data }, { cycleFilters = false } = {}) {
 }
 
 export { canvas, fill, text, ruledPlan, centreOf, near, encodePng };
-

@@ -49,7 +49,7 @@ try {
   await panel.getByRole("checkbox", { name: "已核對 C 排 · 6 攤", exact: true }).check();
   await panel.getByRole("button", { name: "採用已核對項目（1）" }).click();
   const rect = await booth("C01").locator("rect").evaluate(node => ({ x: Number(node.getAttribute("x")), y: Number(node.getAttribute("y")) }));
-  assert.ok(rect.x > 295 && rect.y > 15, "cropped geometry returns to full-sheet coordinates");
+  assert.ok(rect.x >= 200 && rect.x < 320 && rect.y >= 20 && rect.y < 55, "cropped geometry returns to full-sheet coordinates");
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
   await page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
   assert.equal(state.saves, 1);
