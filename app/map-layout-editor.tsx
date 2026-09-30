@@ -469,6 +469,14 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     setRowErrors([]);
   };
 
+  const changeToolGroup = (next: string | null) => {
+    // A category switch ends the pending canvas operation, not the map draft.
+    cancelPlacement();
+    setCopyDraft(null);
+    setSharedEdgeDraft(null);
+    setToolGroup(next);
+  };
+
   /** Scoped to the editor subtree rather than the canvas, so undo also works
    * while the inspector has focus. Text fields keep their own native undo.
    * Registered every render so the handler closes over the current history. */
@@ -1505,9 +1513,9 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   return <MapEditorSurface title={title} save={save} saveButtonRef={saveButtonRef}><section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
     <div className={styles.editingBody} inert={save?.busy || undefined}>
     <div className={styles.toolRail} aria-label="地圖工具">
-      <button type="button" aria-pressed={!placementTool && !areaTool && !toolGroup} onClick={() => { cancelPlacement(); setToolGroup(null); }}><UiIcon name="locate" />選取</button>
-      {([['booths', '攤位'], ['facilities', '設施'], ['areas', '區域'], ['guides', '輔助線'], ['background', '底圖與畫布']] as const).map(([group, label]) => <button type="button" key={group} aria-expanded={toolGroup === group} onClick={() => setToolGroup(toolGroup === group ? null : group)}>{label}</button>)}
-      {recognitionEnabled && backgroundImageUrl && <button type="button" aria-expanded={toolGroup === "recognition"} onClick={() => setToolGroup(toolGroup === "recognition" ? null : "recognition")}>辨識（實驗）</button>}
+      <button type="button" aria-pressed={!placementTool && !areaTool && !toolGroup} onClick={() => changeToolGroup(null)}><UiIcon name="locate" />選取</button>
+      {([['booths', '攤位'], ['facilities', '設施'], ['areas', '區域'], ['guides', '輔助線'], ['background', '底圖與畫布']] as const).map(([group, label]) => <button type="button" key={group} aria-expanded={toolGroup === group} onClick={() => changeToolGroup(toolGroup === group ? null : group)}>{label}</button>)}
+      {recognitionEnabled && backgroundImageUrl && <button type="button" aria-expanded={toolGroup === "recognition"} onClick={() => changeToolGroup(toolGroup === "recognition" ? null : "recognition")}>辨識（實驗）</button>}
       <span className={styles.railSpacer} />
       <button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button>
       <select className={styles.precisePicker} aria-label="選取地圖元素" value={activeKey} onChange={event => selectElement(event.target.value)}><option value="">選取攤位或設施</option>{elementOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select>
@@ -1522,7 +1530,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
     {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "access" && <label className={styles.serviceKindPicker}>類型<select value={accessKind} onChange={(event) => setAccessKind(event.target.value as MapAccessKind)}>{MAP_ACCESS_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
     <div className={`${styles.workspace} ${rosterOpen ? styles.withRoster : ""}`}>
-    {recognitionEnabled && backgroundImageUrl && <div className={styles.recognitionMode} hidden={toolGroup !== "recognition"}><MapRecognitionPanel key={`${backgroundImageUrl}:${scope?.allowedBoothCodes.join(",")}`} layout={layout} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} paused={recognitionPaused} onApply={next => {
+    {recognitionEnabled && backgroundImageUrl && <div className={styles.recognitionMode} hidden={toolGroup !== "recognition"}><MapRecognitionPanel key={`${backgroundImageUrl}:${scope?.allowedBoothCodes.join(",")}`} active={toolGroup === "recognition"} layout={layout} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} paused={recognitionPaused} onApply={next => {
       cancelPlacement(); setSelections([]); setSelectedGuideId(null);
       setHistory(current => pushLayoutHistory(current, { layout: next, authoring }));
       onChange(next, authoring);

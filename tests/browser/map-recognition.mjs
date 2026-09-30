@@ -21,7 +21,6 @@ try {
   const panel = editor.getByRole("group", { name: "配置圖辨識", exact: true });
   const svg = editor.locator("svg[tabindex=\"0\"]");
   const booth = code => svg.locator(`[data-slot-code='${code}']`);
-  await panel.getByRole("button", { name: "自動建立草稿（實驗）" }).click();
   await panel.locator("summary").filter({ hasText: "辨識用攤位清單" }).click();
   assert.equal((await panel.getByRole("textbox").inputValue()).split("\n").length, 39);
   await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
@@ -85,12 +84,12 @@ try {
   await panel.getByRole("textbox").fill(codes.filter(code => !code.startsWith("C")).join("\n"));
   await panel.getByRole("button", { name: "辨識配置圖", exact: true }).click();
   await panel.getByRole("button", { name: "查看 未配對區塊 1 · 6 格", exact: true }).waitFor();
-  const toggle = panel.getByRole("button", { name: "自動建立草稿（實驗）" });
+  const toggle = editor.getByRole("button", { name: "辨識（實驗）", exact: true });
   await toggle.click();
   await toggle.click();
   await panel.getByRole("button", { name: "查看 未配對區塊 1 · 6 格", exact: true }).waitFor();
+  assert.equal(await panel.getByRole("textbox").inputValue(), codes.filter(code => !code.startsWith("C")).join("\n"), "switching tools preserves the open list and its edits");
   // Changing inputs discards old proposals, even though the map is unchanged.
-  await list.click();
   await panel.getByRole("textbox").fill("C01~C06");
   assert.equal(await panel.getByRole("button", { name: /採用已核對/ }).count(), 0);
   await panel.getByRole("button", { name: "框選辨識範圍" }).click();
@@ -104,7 +103,7 @@ try {
   assert.ok(rect.x >= 200 && rect.x < 320 && rect.y >= 20 && rect.y < 55, "cropped geometry returns to full-sheet coordinates");
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
   await page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
-  assert.equal(await panel.getByRole("button", { name: "自動建立草稿（實驗）" }).getAttribute("aria-expanded"), "true", "saving keeps the panel open");
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true", "saving keeps the panel open");
   assert.equal(state.saves, 1);
   assert.equal(state.layout.rows.flatMap(row => row.slots).length, 39);
   assert.deepEqual(state.authoring, authoring);

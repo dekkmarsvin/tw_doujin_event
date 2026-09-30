@@ -6,7 +6,7 @@ import type { RecognitionInput } from "./map-auto-recognition/editor";
 import { adoptRecognitionDraft, recognitionChoiceKey, type RecognitionChoice } from "./map-recognition-draft";
 import styles from "./map-recognition-panel.module.css";
 
-type Props = { layout: EventMapLayout; backgroundImageUrl: string; boothCodes: readonly string[]; paused?: boolean; onApply: (layout: EventMapLayout) => void };
+type Props = { active: boolean; layout: EventMapLayout; backgroundImageUrl: string; boothCodes: readonly string[]; paused?: boolean; onApply: (layout: EventMapLayout) => void };
 type Candidate = { choice: RecognitionChoice; title: string; detail: string; rect: MapRect };
 const bounds = (rects: MapRect[]): MapRect => {
   const x = Math.min(...rects.map(rect => rect.x)), y = Math.min(...rects.map(rect => rect.y));
@@ -17,10 +17,9 @@ const bounds = (rects: MapRect[]): MapRect => {
  * changes, and recheck conflicts before the editor records one undo step.
  * `paused` holds adoption while the map is being saved or its plan replaced:
  * an edit landing mid-save would be marked saved without being stored. */
-export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothCodes, paused = false, onApply }: Props) {
+export default function MapRecognitionPanel({ active, layout, backgroundImageUrl, boothCodes, paused = false, onApply }: Props) {
   const id = useId();
   const roster = boothCodes.join("\n");
-  const [open, setOpen] = useState(false);
   const [list, setList] = useState(roster);
   const [source, setSource] = useState<HTMLImageElement | null>(null);
   const [crop, setCrop] = useState<MapRect | null>(null);
@@ -51,14 +50,14 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
     return () => { generation.current++; worker.current?.terminate(); worker.current = null; };
   }, [layout]);
   useEffect(() => {
-    if (!open) return;
-    let active = true;
+    if (!active) return;
+    let current = true;
     const image = new Image();
-    image.onload = () => { if (active) setSource(image); };
-    image.onerror = () => { if (active) setMessage("配置圖讀取失敗，請重新上傳配置圖。"); };
+    image.onload = () => { if (current) setSource(image); };
+    image.onerror = () => { if (current) setMessage("配置圖讀取失敗，請重新上傳配置圖。"); };
     image.src = backgroundImageUrl;
-    return () => { active = false; image.onload = null; image.onerror = null; };
-  }, [backgroundImageUrl, open]);
+    return () => { current = false; image.onload = null; image.onerror = null; };
+  }, [backgroundImageUrl, active]);
   const report = preview?.base === layout ? preview.report : null;
   const candidates = useMemo((): Candidate[] => !report ? [] : [
     ...report.layout.rows.map((row, index) => row.label.startsWith("?")
@@ -130,9 +129,8 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
   // Keep this group's keyboard actions away from the surrounding canvas shortcuts.
   // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
   return <div className={styles.panel} role="group" aria-label="配置圖辨識" onKeyDown={event => event.stopPropagation()}>
-    {/* Collapsing only hides the panel; the result is discarded by its own button or by a changed input. */}
-    <button type="button" aria-expanded={open} onClick={() => { drag.current = null; setSelecting(false); setOpen(!open); }}>自動建立草稿（實驗）</button>
-    {open && <div className={styles.body}>
+    {/* The editor's recognition tool owns visibility; keep inputs and results mounted between visits. */}
+    <div className={styles.body}>
       <p>依配置圖與攤位清單推測位置。攤位數相符仍可能排錯方向，請核對後採用。</p>
       <div className={styles.controls}>
         <button type="button" disabled={!source || busy} aria-pressed={selecting} onClick={() => { invalidate(); setSelecting(!selecting); }}>框選辨識範圍</button>
@@ -176,6 +174,6 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
         {!!report.warnings.length && <details><summary>辨識提醒（{report.warnings.length}）</summary><ul>{report.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
         <div className={styles.controls}><button type="button" disabled={!selected.length || busy || paused} onClick={apply}>採用已核對項目（{selected.length}）</button><button type="button" onClick={invalidate}>捨棄辨識結果</button></div>
       </>}
-    </div>}
+    </div>
   </div>;
 }
