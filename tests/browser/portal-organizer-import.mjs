@@ -289,7 +289,7 @@ try {
   await journey.capture(organizer, "roster-conflict"); await discard();
   await search.fill("");
   await list.getByRole("button", { name: "展區名稱", exact: true }).click();
-  const alias = organizer.getByRole("dialog").getByLabel("合成驗證場館・A 場地 A 顯示名稱（選填）", { exact: true });
+  const alias = organizer.getByRole("dialog").getByLabel("合成驗證場館・A 場地 A 展區名稱", { exact: true });
   await alias.fill("版攤活動");
   await organizer.getByRole("dialog").getByRole("button", { name: "儲存展區名稱", exact: true }).click();
   await status("展區名稱已儲存。"); assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "版攤活動");
@@ -311,7 +311,7 @@ try {
     ["day-1", "day-2"], "activity day offers this event's defined days");
   await form.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("day-1");
   await form.getByRole("group", { name: "場地", exact: true }).getByLabel("固定值").selectOption("space-a");
-  await form.getByRole("group", { name: "展區", exact: true }).getByLabel("固定值").fill("A");
+  await form.getByRole("group", { name: "展區", exact: true }).getByLabel("固定值").fill("版攤活動");
   await form.getByLabel("攤位代碼", { exact: true }).selectOption("0");
   await form.getByLabel("社團名稱", { exact: true }).selectOption("1");
   await form.getByRole("button", { name: "預覽對應結果", exact: true }).click();
@@ -337,8 +337,9 @@ try {
   await list.waitFor(); assert.equal(detail.import.rows.length, 2);
   assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "版攤活動", "reimport preserves the alias");
   await list.getByRole("button", { name: "展區名稱", exact: true }).click();
-  await alias.fill(""); await organizer.getByRole("dialog").getByRole("button", { name: "儲存展區名稱", exact: true }).click();
-  await status("展區名稱已儲存。"); assert.equal(detail.draft.venue.assignments[0].areaLabels.A, undefined);
+  await organizer.getByRole("dialog").getByLabel("合成驗證場館・A 場地 版攤活動 展區名稱", { exact: true }).fill("新版攤活動");
+  await organizer.getByRole("dialog").getByRole("button", { name: "儲存展區名稱", exact: true }).click();
+  await status("展區名稱已儲存。"); assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "新版攤活動");
   await organizer.reload(); await list.waitFor();
   assert.equal(await rowsOnPage.count(), 2);
   await journey.capture(organizer, "roster-after-reimport");

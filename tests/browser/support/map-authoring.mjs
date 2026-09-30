@@ -13,6 +13,7 @@ const detail = { event: summary, publicationAvailable: false, publication: null,
 export async function openSurface(journey, surface, initialLayout = source, options = {}) {
   const eventDetail = structuredClone(detail);
   if (options.codes) eventDetail.import.rows[0].codes = options.codes;
+  if (options.areaLabels) eventDetail.draft.venue.assignments[0].areaLabels = options.areaLabels;
   const state = { layout: structuredClone(initialLayout), authoring: options.authoring ?? { guides: [] }, saves: 0, failSaves: options.failSaves ?? 0, background: !!options.background };
   const page = await journey.page({ url: `${base}/${surface}`, viewport: { width: 1600, height: 1100 }, routes: async page => {
     await page.route("**/api/**", async route => {

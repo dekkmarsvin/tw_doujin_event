@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { PortalError } from "../circle-editor-client";
 import { listOrganizerMaps, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation, type OrganizerMapSummary } from "../organizer-client";
 import { boothGroupCoverage } from "../map-booth-coverage";
-import { withOrganizerImportedAreaIds } from "../organizer-event";
+import { createOrganizerAreaNames, withOrganizerImportedAreaIds } from "../organizer-event";
 import type { OrganizerNormalizedImportRow } from "../organizer-import";
 import { mergeRosterRows, normalizeRosterRow, rosterFieldIssues, rosterMergeError, splitRosterRow, suspiciousRosterCodes, type RosterField } from "../organizer-roster";
 import { message, organizerDayLabel, organizerVenueSpaceLabel } from "./organizer-shared";
@@ -60,11 +60,13 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const [aliasesOpen, setAliasesOpen] = useState(false);
   const [aliasCloseRequested, setAliasCloseRequested] = useState(false);
   const [labels, setLabels] = useState<AreaNames>({});
+  const [newAreaLabels, setNewAreaLabels] = useState<AreaNames>({});
   const [pending, setPending] = useState<"import" | "aliases" | "discard" | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const editable = detail.event.operation !== "AMEND" && ["draft", "changes_requested"].includes(detail.event.status);
   const aliasesDirty = Object.keys(labels).length > 0;
+  const aliasesInvalid = Object.values(labels).some(names => Object.values(names).some(name => !name.trim() || name.length > 60));
   const anyDirty = dirty || aliasesDirty;
   if (!anyDirty && loadedVersion !== detail.event.version && detail.event.version >= expectedVersion) {
     const next = entriesOf(detail.import?.rows ?? []);
@@ -72,6 +74,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     setEntries(next); setViewEntries(next); setNextKey(next.length);
     setExpectedVersion(detail.event.version); setLoadedVersion(detail.event.version);
     setWriteDraft(detail.draft);
+    setNewAreaLabels({});
     setSelected([]); setAction(null);
   }
   useEffect(() => {
@@ -102,8 +105,12 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     window.addEventListener("resize", size);
     return () => { observer.disconnect(); window.removeEventListener("resize", size); };
   }, [notice, dirty, selected.length, coverageError]);
-  const normalized = useMemo(() => entries.map(entry => normalizeRosterRow(entry.row, detail.draft)), [entries, detail.draft]);
-  const errors = useMemo(() => rosterFieldIssues(normalized, detail.draft), [normalized, detail.draft]);
+  const editingDraft = useMemo(() => ({ ...detail.draft, venue: { ...detail.draft.venue, assignments: detail.draft.venue.assignments.map(assignment => ({
+    ...assignment, areaIds: [...new Set([...assignment.areaIds, ...Object.keys(newAreaLabels[assignment.venueSpaceId] ?? {})])],
+    areaLabels: { ...assignment.areaLabels, ...newAreaLabels[assignment.venueSpaceId] },
+  })) } }), [detail.draft, newAreaLabels]);
+  const normalized = useMemo(() => entries.map(entry => normalizeRosterRow(entry.row, editingDraft)), [entries, editingDraft]);
+  const errors = useMemo(() => rosterFieldIssues(normalized, editingDraft), [normalized, editingDraft]);
   const needsAreaUpdate = normalized.some((row, index) => row.areaId !== entries[index].row.areaId);
   // Only the saved list counts as finished; pending edits and issues already say so beside their own controls.
   const done = !anyDirty && !needsAreaUpdate && !conflict && !refreshRequired && errors.size === 0
@@ -116,7 +123,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     if (!dirty && !needsAreaUpdate) return true;
     setBusy("save"); setNotice("");
     try {
-      const withAreas = withOrganizerImportedAreaIds(writeDraft, normalized);
+      const withAreas = withOrganizerImportedAreaIds(writeDraft, normalized, newAreaLabels);
       let version = expectedVersion;
       if (JSON.stringify(withAreas) !== JSON.stringify(writeDraft)) {
         version = (await saveOrganizerEvent(detail.event.id, version, withAreas)).version;
@@ -133,7 +140,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
     } catch (error) {
       setNotice(message(error)); if (error instanceof PortalError && error.status === 409) setConflict(true); return false;
     } finally { setBusy(null); }
-  }, [detail, editable, busy, conflict, aliasesOpen, refreshRequired, writeDraft, errors.size, limitError, dirty, needsAreaUpdate, normalized, entries, expectedVersion, onDirtyChange, onChanged]);
+  }, [detail, editable, busy, conflict, aliasesOpen, refreshRequired, writeDraft, newAreaLabels, errors.size, limitError, dirty, needsAreaUpdate, normalized, entries, expectedVersion, onDirtyChange, onChanged]);
   useEffect(() => { onSaveReady(save); return () => onSaveReady(null); }, [save, onSaveReady]);
   const change = (next: Entry[]) => {
     const restored = next.map(entry => {
@@ -145,7 +152,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const update = (key: number, patch: Partial<OrganizerNormalizedImportRow>) => change(entries.map(entry => entry.key === key ? { ...entry, row: { ...entry.row, ...patch } } : entry));
   const discard = async () => {
     setBusy("reload");
-    try { await onChanged(); setDirty(false); setConflict(false); setLabels({}); setExpectedVersion(0); setLoadedVersion(-1); setNotice(""); return true; }
+    try { await onChanged(); setDirty(false); setConflict(false); setLabels({}); setNewAreaLabels({}); setExpectedVersion(0); setLoadedVersion(-1); setNotice(""); return true; }
     catch (error) { setNotice(message(error)); return false; } finally { setBusy(null); }
   };
   const perform = (target: "import" | "aliases" | "discard") => {
@@ -177,7 +184,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
   const showSpace = assignments.length !== 1 || entries.some(entry => entry.row.venueSpaceId !== assignments[0]?.venueSpaceId);
   const areaLabel = (spaceId: string, id: string) => {
     const assignment = assignments.find(item => item.venueSpaceId === spaceId);
-    return assignment?.areaMode === "none" ? "無分區" : assignment?.areaLabels?.[id] ? `${assignment.areaLabels[id]}（${id}）` : id;
+    return assignment?.areaMode === "none" ? "無分區" : newAreaLabels[spaceId]?.[id] ?? assignment?.areaLabels?.[id] ?? id;
   };
   const focusError = (index: number) => {
     const entry = entries[index]; clearFilters();
@@ -232,7 +239,12 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
         const cell = (field: RosterField, title: string, value: string, display?: string, options?: { value: string; label: string }[]) => <RosterCell key={field} focusKey={`${key}-${field}`} label={`${row.codes.join("、") || "新增攤位"} ${title}`} value={value} display={display} options={options} disabled={disabled} errors={errors.get(index)?.[field]}
           onRestore={() => update(key, row)} onChange={value => {
             if (field === "codes") update(key, { codes: value.split(/[、,，;；/\s]+/u) });
-            else if (field === "venueSpaceId") {
+            else if (field === "areaId") {
+              const names = createOrganizerAreaNames(editingDraft.venue.assignments, detail.event.version);
+              const areaId = names.resolve(row.venueSpaceId, value);
+              setNewAreaLabels(current => ({ ...current, [row.venueSpaceId]: { ...current[row.venueSpaceId], ...names.labels()[row.venueSpaceId] } }));
+              update(key, { areaId });
+            } else if (field === "venueSpaceId") {
               const assignment = assignments.find(item => item.venueSpaceId === value);
               update(key, { venueSpaceId: value, areaId: assignment?.areaMode === "none" ? "ALL" : assignment?.areaIds.length === 1 ? assignment.areaIds[0] : "" });
             } else update(key, { [field]: field === "stableKey" ? value || null : value });
@@ -242,7 +254,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
           {cell("codes", "攤位代碼", row.codes.join("、"))}{cell("circleName", "社團名稱", row.circleName)}
           {showDay && cell("dayId", "活動日", row.dayId, organizerDayLabel(days, row.dayId), days.map(item => ({ value: item.id, label: item.label })))}
           {showSpace && cell("venueSpaceId", "場地", row.venueSpaceId, organizerVenueSpaceLabel(detail.venueCatalog, row.venueSpaceId), assignments.map(item => ({ value: item.venueSpaceId, label: organizerVenueSpaceLabel(detail.venueCatalog, item.venueSpaceId) })))}
-          {assignments.some(item => item.venueSpaceId === row.venueSpaceId && item.areaMode === "none") ? <td>無分區</td> : cell("areaId", "展區", row.areaId, areaLabel(row.venueSpaceId, row.areaId))}
+          {assignments.some(item => item.venueSpaceId === row.venueSpaceId && item.areaMode === "none") ? <td>無分區</td> : cell("areaId", "展區", areaLabel(row.venueSpaceId, row.areaId))}
           {showInternal && cell("stableKey", "主辦內部編號", row.stableKey ?? "")}
           <td>{coverage ? <><span>{coverage.label} {coverage.completed}/{coverage.total}</span>{row.codes.filter(code => saved?.drawn?.has(code)).map(code => <button type="button" className={styles.textButton} key={code} disabled={dirty || !!busy || conflict || refreshRequired} onClick={() => onLocate({ candidateId: detail.event.id, mapId: saved!.map.id, code, nonce: Date.now() })}>定位 {code}</button>)}</> : "尚未取得"}</td>
           <td><button type="button" className={styles.ghost} onClick={() => setAction({ kind: "details", key })}>明細</button>{editable && <><button type="button" className={styles.textButton} disabled={disabled || row.codes.length < 2 || entries.length >= 20_000 || errors.has(index)} onClick={() => { setSplitCodes([]); setAction({ kind: "split", key }); }}>拆分</button><button type="button" className={styles.textButton} disabled={disabled} onClick={() => setAction({ kind: "delete", key })}>刪除</button></>}</td>
@@ -264,7 +276,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
       <button type="button" className={styles.secondary} disabled={!!busy} onClick={() => { void discard().then(ok => { if (ok) perform(pending); }); }}>放棄變更</button><button type="button" className={styles.ghost} disabled={!!busy} onClick={() => setPending(null)}>取消</button></div>{notice && <p role="status">{notice}</p>}</RosterDialog>}
     {aliasesOpen && <RosterDialog title="展區名稱" busy={!!busy} onClose={() => { if (aliasesDirty) setAliasCloseRequested(true); else setAliasesOpen(false); }}>
       <AreaNameFields detail={detail} spaces={assignments} labels={labels} disabled={!!busy || conflict} onChange={(spaceId, areaId, label) => { setNotice(""); setLabels(current => ({ ...current, [spaceId]: { ...current[spaceId], [areaId]: label } })); }} />
-      {notice && <p role="status">{notice}</p>}<div className={styles.row}><button type="button" disabled={!aliasesDirty || !!busy || conflict} onClick={() => {
+      {notice && <p role="status">{notice}</p>}<div className={styles.row}><button type="button" disabled={!aliasesDirty || aliasesInvalid || !!busy || conflict} onClick={() => {
         setBusy("aliases"); setNotice("");
         const draft = { ...detail.draft, venue: { ...detail.draft.venue, assignments: assignments.map(assignment => {
           const names = { ...assignment.areaLabels, ...labels[assignment.venueSpaceId] };

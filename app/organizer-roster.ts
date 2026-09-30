@@ -30,7 +30,8 @@ export function rosterFieldIssues(rows: readonly Row[], draft: OrganizerEventDra
     if (!days.has(row.dayId)) add(index, "dayId", "請選擇活動設定中的活動日。");
     const space = spaces.get(row.venueSpaceId);
     if (!space) add(index, "venueSpaceId", "請選擇活動設定中的場地。");
-    if (space && space.areaMode !== "none" && !isOrganizerAreaId(row.areaId)) add(index, "areaId", "展區只能使用英數字、底線與連字號。");
+    if (space && space.areaMode !== "none" && !isOrganizerAreaId(row.areaId)) add(index, "areaId", "請填寫展區名稱。");
+    if ((space?.areaLabels?.[row.areaId]?.length ?? 0) > 60) add(index, "areaId", "展區名稱不能超過 60 字。");
     if (!row.circleName || row.circleName.length > 200) add(index, "circleName", "請填寫 200 字以內的社團名稱。");
     if (!row.codes.length || row.codes.some(code => !code || code.length > 80)) add(index, "codes", "每組至少一個攤位代碼，每碼最多 80 字。");
     for (const code of row.codes) {

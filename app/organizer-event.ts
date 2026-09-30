@@ -28,7 +28,7 @@ type OrganizerVenueAssignment = {
   venueId: string;
   venueSpaceId: string;
   areaIds: string[];
-  /** Optional names keyed by the imported code, never a replacement for it. */
+  /** Display names keyed by internal area identity; absent on legacy drafts. */
   areaLabels?: Record<string, string>;
   mapTemplate: string;
   /** Event-specific. The catalog only supplies a default for a new assignment. */
@@ -175,6 +175,52 @@ export function withOrganizerImportedAreaIds(
  * The import preview flags the ones that are not instead of failing later. */
 export function isOrganizerAreaId(value: string) {
   return AREA_ID.test(value);
+}
+
+export function normalizeOrganizerAreaName(value: string) {
+  return value.normalize("NFKC").trim().replace(/\s+/gu, " ");
+}
+
+/** Keep names separate from placement IDs. The candidate version namespaces
+ * new numbers so a later import cannot reuse a removed area's map identity. */
+export function createOrganizerAreaNames(
+  assignments: readonly Pick<OrganizerVenueAssignment, "venueSpaceId" | "areaIds" | "areaLabels">[],
+  generation: number,
+) {
+  const spaces = new Map<string, Map<string, string>>();
+  const used = new Set(assignments.flatMap(assignment => assignment.areaIds));
+  const idCounts = new Map<string, number>();
+  for (const assignment of assignments) for (const id of assignment.areaIds) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+  let next = 1;
+  const labels = new Map<string, Map<string, string>>();
+  for (const assignment of assignments) {
+    const names = new Map<string, string>();
+    for (const id of [...assignment.areaIds].sort()) {
+      // Historical per-space codes can collide. New imports must not carry
+      // that collision into the event-wide area list used by publication.
+      if (idCounts.get(id) !== 1) continue;
+      const name = normalizeOrganizerAreaName(assignment.areaLabels && Object.hasOwn(assignment.areaLabels, id) ? assignment.areaLabels[id] || id : id);
+      if (!names.has(name)) names.set(name, id);
+    }
+    spaces.set(assignment.venueSpaceId, names);
+  }
+  return {
+    resolve(venueSpaceId: string, value: string) {
+      const name = normalizeOrganizerAreaName(value);
+      if (!name) return "";
+      const space = spaces.get(venueSpaceId) ?? new Map<string, string>();
+      spaces.set(venueSpaceId, space);
+      let id = space.get(name);
+      if (!id) {
+        do { id = `area-${generation}-${next++}`; } while (used.has(id));
+        space.set(name, id); used.add(id);
+      }
+      const names = labels.get(venueSpaceId) ?? new Map<string, string>();
+      names.set(id, name); labels.set(venueSpaceId, names);
+      return id;
+    },
+    labels: () => Object.fromEntries([...labels].map(([spaceId, names]) => [spaceId, Object.fromEntries(names)])),
+  };
 }
 
 export function parseOrganizerEventDraft(value: unknown): OrganizerEventDraft | null {
