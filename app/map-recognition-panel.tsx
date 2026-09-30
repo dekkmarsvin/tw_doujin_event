@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { EventMapLayout, MapRect } from "./event-map";
 import type { LayoutReport } from "./map-auto-recognition/build-layout";
 import type { RecognitionInput } from "./map-auto-recognition/editor";
 import { adoptRecognitionDraft, recognitionChoiceKey, type RecognitionChoice } from "./map-recognition-draft";
 import styles from "./map-recognition-panel.module.css";
 
-type Props = { layout: EventMapLayout; backgroundImageUrl: string; boothCodes: readonly string[]; onApply: (layout: EventMapLayout) => void };
+type Props = { layout: EventMapLayout; backgroundImageUrl: string; boothCodes: readonly string[]; paused?: boolean; onApply: (layout: EventMapLayout) => void };
 type Candidate = { choice: RecognitionChoice; title: string; detail: string; rect: MapRect; provisional?: boolean };
 const bounds = (rects: MapRect[]): MapRect => {
   const x = Math.min(...rects.map(rect => rect.x)), y = Math.min(...rects.map(rect => rect.y));
@@ -13,8 +13,11 @@ const bounds = (rects: MapRect[]): MapRect => {
 };
 
 /** Preview stays outside the saved layout. Cancel workers when their context
- * changes, and recheck conflicts before the editor records one undo step. */
-export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothCodes, onApply }: Props) {
+ * changes, and recheck conflicts before the editor records one undo step.
+ * `paused` holds adoption while the map is being saved or its plan replaced:
+ * an edit landing mid-save would be marked saved without being stored. */
+export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothCodes, paused = false, onApply }: Props) {
+  const id = useId();
   const roster = boothCodes.join("\n");
   const [open, setOpen] = useState(false);
   const [list, setList] = useState(roster);
@@ -35,6 +38,8 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
   const cancel = () => { generation.current++; worker.current?.terminate(); worker.current = null; setBusy(false); };
   const invalidate = () => { cancel(); setPreview(null); setSelected([]); setFocus(null); setMessage(""); };
   if (baseLayout !== layout) {
+    // Adopting clears its own preview first, so only an edit made elsewhere reaches this notice.
+    if (preview || busy) setMessage("地圖已變更，請重新辨識。");
     setBaseLayout(layout); setBusy(false); setPreview(null); setSelected([]); setFocus(null);
   }
   useEffect(() => {
@@ -108,9 +113,9 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
     setCrop({ x, y, width: Math.max(1, Math.ceil(Math.max(start.x, end.x)) - x), height: Math.max(1, Math.ceil(Math.max(start.y, end.y)) - y) });
   };
   const apply = () => {
-    if (!report || busy) return;
+    if (!report || busy || paused) return;
     const result = adoptRecognitionDraft(layout, report.layout, chosen.map(item => item.choice));
-    if (!result.ok) { setMessage(result.errors.join(" ")); return; }
+    if (!result.ok) { setMessage(`沒有採用任何項目：${result.errors.join(" ")}`); return; }
     invalidate(); setMessage(`已加入 ${chosen.length} 項，可用「復原」一次撤回。`); onApply(result.layout);
   };
   // Keep this group's keyboard actions away from the surrounding canvas shortcuts.
@@ -150,15 +155,15 @@ export default function MapRecognitionPanel({ layout, backgroundImageUrl, boothC
         {report && <div className={styles.checklist}>
           <p>已配對 {matchedRows.length} 排 · {matchedRows.reduce((n, row) => n + row.slots.length, 0)} 攤{provisionalSlots > 0 ? ` · 未配對 ${provisionalSlots} 格` : ""} · 已勾選 {selected.length} 項</p><p>只加入勾選項目；既有攤位與設施會保留。</p>
           {candidates.map(item => { const key = recognitionChoiceKey(item.choice), conflict = conflicts.get(key); return <div key={key} className={styles.item}>
-            <div><button type="button" aria-pressed={focus === key} onClick={() => { setSelecting(false); setFocus(key); }}>查看 {item.title}</button><label><input type="checkbox" disabled={!!conflict} aria-label={`已核對 ${item.title}`} checked={selected.includes(key)} onChange={event => setSelected(event.target.checked ? [...selected, key] : selected.filter(value => value !== key))} />已核對</label></div>
-            <small>{item.provisional ? "未配對，採用後需重新編號。" : item.detail}</small>{conflict && <p className={styles.error}>{conflict}</p>}
+            <div><button type="button" aria-pressed={focus === key} onClick={() => { setSelecting(false); setFocus(key); }}>查看 {item.title}</button><label><input type="checkbox" disabled={!!conflict} aria-label={`已核對 ${item.title}`} aria-describedby={conflict ? `${id}-${key}` : undefined} checked={selected.includes(key)} onChange={event => setSelected(event.target.checked ? [...selected, key] : selected.filter(value => value !== key))} />已核對</label></div>
+            <small>{item.provisional ? "未配對，採用後需重新編號。" : item.detail}</small>{conflict && <p id={`${id}-${key}`} className={styles.error}>{conflict}</p>}
           </div>; })}
         </div>}
       </div>
       {report && <>
         {!!missing.length && <details><summary>尚未涵蓋的活動攤位（{missing.length}）</summary><p>{missing.join("、")}</p></details>}
         {!!report.warnings.length && <details><summary>辨識提醒（{report.warnings.length}）</summary><ul>{report.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
-        <div className={styles.controls}><button type="button" disabled={!selected.length || busy} onClick={apply}>採用已核對項目（{selected.length}）</button><button type="button" onClick={invalidate}>捨棄辨識結果</button></div>
+        <div className={styles.controls}><button type="button" disabled={!selected.length || busy || paused} onClick={apply}>採用已核對項目（{selected.length}）</button><button type="button" onClick={invalidate}>捨棄辨識結果</button></div>
       </>}
     </div>}
   </div>;

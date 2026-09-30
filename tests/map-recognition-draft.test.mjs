@@ -51,7 +51,7 @@ test("duplicate codes or overlapping geometry reject the whole selection without
     const before = structuredClone(current);
     const result = adoptRecognitionDraft(current, report.layout, [{ kind: "row", index: 1 }, { kind: "row", index: 0 }]);
     assert.equal(result.ok, false);
-    assert.match(result.errors.join(), /已存在|重疊/);
+    assert.match(result.errors.join(), /已在地圖上|重疊/);
     assert.deepEqual(current, before);
   }
 });

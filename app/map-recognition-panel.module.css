@@ -1,7 +1,9 @@
-.panel { border-bottom: 1px solid #dce3e5; padding: 12px 20px; background: #f5f9fa; color: #17383f; }
+.panel { border-bottom: 1px solid #dce3e5; padding: 12px 20px; background: #f5f9fa; color: #17383f; container-type: inline-size; }
 .panel button { border: 1px solid #9fb8bf; border-radius: 6px; padding: 7px 10px; background: #fff; color: #174b57; cursor: pointer; font: inherit; }
+/* Matches the Organizer page's own hover rule, which would otherwise paint these buttons dark under dark text. */
+.panel button:hover:not(:disabled) { background: #eaf4f6; border-color: #087c99; }
 .panel button:disabled { opacity: .45; cursor: default; }
-.panel button[aria-pressed="true"] { background: #d9eef2; border-color: #087c99; }
+.panel button[aria-pressed="true"], .panel button[aria-pressed="true"]:hover:not(:disabled) { background: #d9eef2; border-color: #087c99; }
 .panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible, .panel summary:focus-visible { outline: 3px solid #087c99; outline-offset: 2px; }
 .body { display: grid; gap: 12px; margin-top: 12px; }
 .body p { margin: 4px 0; font-size: 14px; line-height: 1.6; }
@@ -23,4 +25,6 @@
 .item small { display: block; margin-top: 5px; }
 .item label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 14px; }
 .error { color: #973209; }
-@media (max-width: 800px) { .review { grid-template-columns: minmax(0, 1fr); } .panel { padding: 12px; } .preview, .crop { height: 340px; } .checklist { max-height: 300px; } }
+/* The editor shares the page with the workspace sidebars, so the panel is much narrower than the window. */
+@container (max-width: 780px) { .review { grid-template-columns: minmax(0, 1fr); } .checklist { max-height: 300px; } }
+@media (max-width: 800px) { .panel { padding: 12px; } .preview, .crop { height: 340px; } }

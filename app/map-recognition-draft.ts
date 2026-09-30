@@ -27,7 +27,7 @@ export function adoptRecognitionDraft(current: EventMapLayout, proposal: EventMa
       const duplicate = row.slots.find(slot => existing.some(item => item.code === slot.code));
       const overlap = row.slots.find(slot => existing.some(item => intersects(item.rect, slot.rect)));
       if (duplicate || overlap) {
-        errors.push(`${row.label} 排${duplicate ? `的 ${duplicate.code} 已存在` : "與已畫攤位重疊"}，請取消勾選後使用排段工具調整。`);
+        errors.push(`${row.label} 排${duplicate ? `的 ${duplicate.code} 已在地圖上` : "與已畫攤位重疊"}；需要調整時請使用排段工具。`);
         continue;
       }
       const same = next.rows.find(item => item.label === row.label);
@@ -36,17 +36,17 @@ export function adoptRecognitionDraft(current: EventMapLayout, proposal: EventMa
     } else if (choice.kind === "pillar") {
       const value = proposal.pillars[choice.index];
       if (!value) { errors.push("辨識柱子已失效。"); continue; }
-      if (next.pillars.some(pillar => intersects(pillar, value))) { errors.push("辨識柱子與已畫柱子重疊，請取消勾選。"); continue; }
+      if (next.pillars.some(pillar => intersects(pillar, value))) { errors.push("辨識柱子與已畫柱子重疊。"); continue; }
       next.pillars.push({ ...value, id: idFor(next.pillars.map(p => p.id), "recognized-pillar") });
     } else if (choice.kind === "access") {
       const value = proposal.accessPoints[choice.index];
       if (!value) { errors.push("辨識出入口已失效。"); continue; }
-      if (next.accessPoints.some(door => Math.hypot(door.x - value.x, door.y - value.y) < 5)) { errors.push("辨識出入口附近已有出入口，請取消勾選。"); continue; }
+      if (next.accessPoints.some(door => Math.hypot(door.x - value.x, door.y - value.y) < 5)) { errors.push("辨識出入口附近已有出入口。"); continue; }
       next.accessPoints.push({ ...value, id: idFor(next.accessPoints.map(p => p.id), "recognized-door") });
     } else {
       const value = proposal.landmarks[choice.index];
       if (!value) { errors.push("辨識區域已失效。"); continue; }
-      if (next.landmarks.some(area => intersects(area.rect, value.rect))) { errors.push("辨識區域與已畫區域重疊，請取消勾選。"); continue; }
+      if (next.landmarks.some(area => intersects(area.rect, value.rect))) { errors.push("辨識區域與已畫區域重疊。"); continue; }
       next.landmarks.push({ ...structuredClone(value), id: idFor(next.landmarks.map(p => p.id), "recognized-area") });
     }
   }
