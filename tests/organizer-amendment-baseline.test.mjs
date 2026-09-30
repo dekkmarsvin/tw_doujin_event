@@ -107,6 +107,7 @@ test("baseline diagnostics distinguish GitHub responses, transport, authenticati
   const { PublicationFailure } = await vite.environments.ssr.runner.import("/app/organizer-publication.ts");
   const privateText = "private token, URL, account and upstream body";
   for (const [extra, expected] of [
+    [{ fetch: async () => new Response(privateText, { status: 404 }) }, { stage: "github_ref", repository: "main", failure: "github_api_response", httpStatus: 404 }],
     [{ fetch: async () => new Response(privateText, { status: 429 }) }, { stage: "github_ref", repository: "main", failure: "github_api_response", httpStatus: 429 }],
     [{ fetch: async () => { throw new TypeError(privateText); } }, { stage: "github_ref", repository: "main", failure: "network", httpStatus: null }],
     [{ fetch: async () => { throw new DOMException(privateText, "TimeoutError"); } }, { stage: "github_ref", repository: "main", failure: "timeout", httpStatus: null }],
@@ -126,6 +127,47 @@ test("baseline diagnostics distinguish GitHub responses, transport, authenticati
     assert.ok(Number.isFinite(elapsedMs) && elapsedMs >= 0);
     assert.ok(!JSON.stringify(diagnostics).includes(privateText));
   }
+});
+
+test("token refresh failures are not attributed to a completed unauthorized request", async (t) => {
+  const data = await fixture();
+  const { PublicationFailure } = await vite.environments.ssr.runner.import("/app/organizer-publication.ts");
+  const completedRequest = new AbortController();
+  t.mock.method(AbortSignal, "timeout", () => completedRequest.signal);
+  let tokenReads = 0;
+  const rejectedTokens = [];
+  const diagnostics = [];
+  const read = api.createPublishedAmendmentBaselineLoader({ tokenProvider: {
+    getToken: async () => {
+      if (++tokenReads === 1) return "rejected-token";
+      completedRequest.abort(new DOMException("Expired earlier request", "TimeoutError"));
+      throw new PublicationFailure("github_app_request", "private authentication response", true);
+    }, invalidate: (token) => rejectedTokens.push(token),
+  }, fetch: async () => new Response(null, { status: 401 }), published: async () => data.published,
+  onUnavailable: (diagnostic) => diagnostics.push(diagnostic) });
+  await assert.rejects(read(data.source), { code: "amendment_baseline_unavailable", status: 503 });
+  assert.equal(tokenReads, 2);
+  assert.deepEqual(rejectedTokens, ["rejected-token"]);
+  assert.equal(diagnostics.length, 1);
+  const { elapsedMs, ...actual } = diagnostics[0];
+  assert.ok(Number.isFinite(elapsedMs) && elapsedMs >= 0);
+  assert.deepEqual(actual, { stage: "github_ref", repository: "main", failure: "github_app_request", httpStatus: null });
+});
+
+test("a failed fetch after token refresh does not retain the earlier unauthorized status", async () => {
+  const data = await fixture();
+  let fetches = 0;
+  const diagnostics = [];
+  const read = api.createPublishedAmendmentBaselineLoader({ tokenProvider: { getToken: async () => "test-token", invalidate: () => {} },
+    fetch: async () => {
+      if (++fetches === 1) return new Response(null, { status: 401 });
+      throw new TypeError("private network error");
+    }, published: async () => data.published, onUnavailable: (diagnostic) => diagnostics.push(diagnostic) });
+  await assert.rejects(read(data.source), { code: "amendment_baseline_unavailable", status: 503 });
+  assert.equal(fetches, 2);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].failure, "network");
+  assert.equal(diagnostics[0].httpStatus, null);
 });
 
 test("parallel GitHub reads retain their own response status and diagnostics do not change baseline decisions", async () => {

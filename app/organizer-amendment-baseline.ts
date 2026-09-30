@@ -60,9 +60,15 @@ export function createPublishedAmendmentBaselineLoader(options: Pick<GitHubAdapt
     const started = Date.now();
     const transport: { httpStatus: number | null; failure: "timeout" | "network" | null; signal?: AbortSignal } = { httpStatus: null, failure: null };
     try { return await read(transport); } catch (error) {
-      const failure = transport.signal?.aborted ? "timeout" : transport.failure ?? (error instanceof PublicationFailure && diagnosticCodes.has(error.code)
-        ? error.code as AmendmentBaselineDiagnostic["failure"] : error instanceof SyntaxError ? "invalid_json" : "unexpected");
-      try { options.onUnavailable?.({ ...diagnostic, failure, httpStatus: transport.httpStatus, elapsedMs: Math.max(0, Date.now() - started) }); }
+      const code = error instanceof PublicationFailure && diagnosticCodes.has(error.code)
+        ? error.code as AmendmentBaselineDiagnostic["failure"] : null;
+      // A rejected API token can trigger authentication after that fetch has
+      // finished. Its old timeout/status must not describe a token failure.
+      const authenticationFailure = code?.startsWith("github_app_") ? code : null;
+      const failure = authenticationFailure ?? (transport.signal?.aborted ? "timeout" : transport.failure
+        ?? code ?? (error instanceof SyntaxError ? "invalid_json" : "unexpected"));
+      try { options.onUnavailable?.({ ...diagnostic, failure, httpStatus: authenticationFailure ? null : transport.httpStatus,
+        elapsedMs: Math.max(0, Date.now() - started) }); }
       catch { /* A diagnostic sink must not change the established API error. */ }
       throw unavailable();
     }
@@ -77,6 +83,8 @@ export function createPublishedAmendmentBaselineLoader(options: Pick<GitHubAdapt
         fetch: async (url, init) => {
           const signal = AbortSignal.timeout(8_000);
           transport.signal = signal;
+          transport.httpStatus = null;
+          transport.failure = null;
           try {
             const response = await (options.fetch ?? globalThis.fetch)(url, { ...init, signal });
             transport.httpStatus = response.status;
@@ -107,8 +115,11 @@ export function createPublishedAmendmentBaselineLoader(options: Pick<GitHubAdapt
       const pinPath = `data/event-data-pins/${eventId}.json`;
       const mainRepo = GITHUB_PUBLICATION_REPOSITORIES[1];
       const dataRepo = GITHUB_PUBLICATION_REPOSITORIES[0];
-      const mainCommit = await readGit(mainRepo, "github_ref", (adapter) => adapter.readRef(mainRepo, "main"));
-      if (!mainCommit) throw unavailable();
+      const mainCommit = await readGit(mainRepo, "github_ref", async (adapter) => {
+        const commit = await adapter.readRef(mainRepo, "main");
+        if (!commit) throw new PublicationFailure("github_api_response", "GitHub main ref is unavailable.", true);
+        return commit;
+      });
       const [mainFiles, originalFiles, published] = await Promise.all([
         files(mainRepo, mainCommit, [pinPath, "data/published-events.json", "data/circle-identities/allocations.json", "data/circle-identities/evidence.json"]),
         files(mainRepo, source.mainCommit, [pinPath]),
