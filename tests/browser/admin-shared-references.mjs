@@ -55,14 +55,14 @@ try {
   await page.getByLabel('目錄名稱', { exact: true }).fill('第一版分類');
   await page.getByLabel('官方來源網址', { exact: true }).fill('https://organizer.example/categories');
   await page.getByRole('combobox', { name: /^所屬主辦/ }).selectOption('org');
-  await page.getByLabel('分類名稱（每行一個）', { exact: true }).fill('原創\n二創');
+  await page.getByRole('textbox', { name: '分類名稱（每行一個）', exact: true }).fill('原創\n二創');
   await page.getByRole('button', { name: '儲存', exact: true }).click();
   await page.getByText('第一版分類', { exact: true }).waitFor();
   const categoryRow = page.getByRole('button', { name: '第一版分類', exact: true });
   await categoryRow.click();
   await page.getByRole('button', { name: '編輯', exact: true }).click();
   await page.getByRole('dialog', { name: '編輯分類目錄' }).waitFor();
-  await page.getByLabel('分類名稱（每行一個）', { exact: true }).fill('二創\n原創\n遊戲\n其他');
+  await page.getByRole('textbox', { name: '分類名稱（每行一個）', exact: true }).fill('二創\n原創\n遊戲\n其他');
   await journey.capture(page, 'shared-category-edit');
   await page.getByRole('button', { name: '儲存新版本', exact: true }).click();
   const current = page.getByRole('region', { name: '第一版分類第 2 版', exact: true });
@@ -79,7 +79,7 @@ try {
   await page.getByRole('button', { name: '刪除此版', exact: true }).first().click();
   await page.getByRole('dialog', { name: '確認刪除第一版分類第 2 版' }).waitFor();
   await page.getByRole('button', { name: '確認刪除', exact: true }).click();
-  assert.equal(await current.count(), 0);
+  await current.waitFor({ state: 'detached' });
   await previous.waitFor();
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole('button', { name: '場館與場地', exact: true }).click();
