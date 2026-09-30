@@ -107,7 +107,7 @@ stage.addEventListener("pointerdown", (event) => {
   stage.setPointerCapture(event.pointerId);
 });
 stage.addEventListener("pointermove", (event) => {
-  if (!drag) return;
+  if (!drag || !selection) return;
   clearResult();
   const box = stage.getBoundingClientRect();
   const x = event.clientX - box.left + stage.scrollLeft, y = event.clientY - box.top + stage.scrollTop;
@@ -119,7 +119,8 @@ stage.addEventListener("pointerup", () => {
   if (drag && selection && (parseFloat(selection.style.width) < 8 || parseFloat(selection.style.height) < 8)) { selection.remove(); selection = null; form.crop.value = ""; }
   drag = null;
 });
-$("clearCrop").addEventListener("click", () => { clearResult(); selection?.remove(); selection = null; form.crop.value = ""; });
+stage.addEventListener("lostpointercapture", () => { drag = null; });
+$("clearCrop").addEventListener("click", () => { clearResult(); selection?.remove(); selection = null; drag = null; form.crop.value = ""; });
 $("overlay").addEventListener("change", (event) => {
   stage.classList.toggle("overlaid", event.target.checked);
   stage.classList.toggle("vector-only", !event.target.checked);
@@ -161,7 +162,7 @@ function show(result) {
   inner.setAttribute("y", result.image.offsetY);
   outer.append(document.importNode(inner, true));
   stage.append(outer);
-  selection?.remove(); selection = null;
+  selection?.remove(); selection = null; drag = null;
   const s = result.summary;
   const matched = result.report.rows.filter((row) => !row.label.startsWith("?"));
   const matchedBooths = matched.reduce((sum, row) => sum + row.booths, 0);
