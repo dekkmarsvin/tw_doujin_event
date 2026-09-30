@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import styles from "./portal.module.css";
 
 /**
@@ -15,11 +15,21 @@ import styles from "./portal.module.css";
  *
  * A token is single-use and expires a few minutes after it is issued, so the
  * parent remounts this component after every submit rather than reusing one.
+ *
+ * The widget is an iframe of fixed size: 300px wide normally, 150px wide and
+ * 140px tall in its compact form. Inside a sign-in card on a 320px phone the
+ * form is narrower than 300px, and the normal widget pushed the page sideways.
+ * (The `flexible` size is no help there: it stretches to its host but never
+ * below 300px.) So the host is measured first and the compact form is used
+ * wherever the normal one would not fit.
  */
+
+type TurnstileSize = "normal" | "compact";
 
 type TurnstileApi = {
   render: (target: HTMLElement, options: {
     sitekey: string;
+    size: TurnstileSize;
     callback: (token: string) => void;
     "expired-callback": () => void;
     "error-callback": () => void;
@@ -35,6 +45,7 @@ declare global {
 }
 
 const READY_CALLBACK = "__ff47TurnstileReady";
+const NORMAL_WIDTH = 300;
 const SCRIPT_URL = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=${READY_CALLBACK}`;
 
 /** One load per document, shared by every mount. */
@@ -69,14 +80,21 @@ export function TurnstileWidget({ sitekey, onToken, onUnavailable }: {
 }) {
   const host = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // A layout effect, so the height reserved for the chosen size is in place
+  // before the first paint rather than jumping once it is known.
+  useLayoutEffect(() => {
     let widgetId: string | undefined;
     let cancelled = false;
+    const target = host.current;
+    if (!target) return;
+    const size: TurnstileSize = target.clientWidth >= NORMAL_WIDTH ? "normal" : "compact";
+    target.dataset.size = size;
 
     void loadTurnstile().then((turnstile) => {
-      if (cancelled || !host.current) return;
-      widgetId = turnstile.render(host.current, {
+      if (cancelled) return;
+      widgetId = turnstile.render(target, {
         sitekey,
+        size,
         callback: (token) => onToken(token),
         "expired-callback": () => onToken(null),
         "error-callback": () => onToken(null),
