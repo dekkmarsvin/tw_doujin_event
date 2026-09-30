@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import { createServer } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const { planRowCopies: plan, copyRowLabels: labels, copyRowLimitError: limit } = await vite.environments.ssr.runner.import("/app/map-row-copies.ts");
+const { overlappingSlotCodes } = await vite.environments.ssr.runner.import("/app/map-contribution-draft.ts");
 after(() => vite.close());
 const row = { label: "A", orientation: "vertical", confidence: 1, slots: [
   { code: "A01", rect: { x: 20, y: 20, width: 10, height: 10 } },
@@ -60,4 +61,15 @@ test("a preset sequence that runs out names its reach instead of asking for labe
   assert.equal(limit("alphabet", "B", 30), "A–Z 從 B 起最多 25 排；請減少份數或改用自訂排名。");
   assert.equal(limit("branches", "丑", 12), "十二地支從丑起最多 11 排；請減少份數或改用自訂排名。");
   assert.equal(limit("branches", "子", 12), null);
+});
+test("zero-gap copies of fractional booths share edges instead of overlapping by round-off", () => {
+  // 1/7 + 3 × 3/13 starts one unit in the last place before 1/7 + 2 × 3/13 + 3/13 ends.
+  const cell = (code, x, y) => ({ code, rect: { x, y, width: 3 / 13, height: 3 / 13 } });
+  for (const [direction, source] of [["right", cell("A01", 1 / 7, 1 / 7)], ["left", cell("A01", 5 + 1 / 7, 1 / 7)], ["down", cell("A01", 1 / 7, 1 / 7)], ["up", cell("A01", 1 / 7, 5 + 1 / 7)]]) {
+    const single = { label: "A", orientation: "horizontal", confidence: 1, slots: [source] };
+    const small = { ...layout, width: 10, height: 10, rows: [single] };
+    const result = plan(single, small, { count: 3, gap: 0, labels: ["B", "C", "D"], direction });
+    assert.equal(result.ok, true, `${direction}: ${result.error}`);
+    assert.deepEqual(overlappingSlotCodes({ ...small, rows: [single, ...result.rows] }), [], `${direction}: saved copies do not overlap`);
+  }
 });
