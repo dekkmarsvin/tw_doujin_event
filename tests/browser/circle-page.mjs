@@ -206,6 +206,17 @@ try {
       await visit.getByRole("heading", { name: "登入", exact: true }).waitFor();
       const arrived = new URL(visit.url());
       assert.deepEqual([arrived.pathname, arrived.searchParams.get("event"), arrived.searchParams.get("circle")], ["/circle", "sample", ONE_DAY]);
+      // Cloudflare's verification box is drawn by its own script after the
+      // form, so the page is measured only once the box is there; otherwise
+      // how fast that script arrived decided what this checked. On the
+      // narrowest phone the box stays within the email field's width. It sits
+      // in a closed shadow root, out of a locator's reach, but its frame is
+      // still one of the page's own; the frame loads before it is shown.
+      const isChallenge = (frame) => frame.url().startsWith("https://challenges.cloudflare.com/");
+      const challenge = await (visit.frames().find(isChallenge) ?? await visit.waitForEvent("framenavigated", { predicate: isChallenge })).frameElement();
+      await challenge.waitForElementState("visible");
+      const [box, field] = await Promise.all([challenge.boundingBox(), visit.getByLabel("Email", { exact: true }).boundingBox()]);
+      assert.ok(box.x >= field.x && box.x + box.width <= field.x + field.width, `the verification box fits the form at 320px: ${JSON.stringify({ box, field })}`);
       await journey.capture(visit, "introduction-header-leads-to-sign-in-320");
     }
     await visit.close();

@@ -257,9 +257,14 @@
 .challenge span { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
 .challenge code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 14px; font-weight: 700; letter-spacing: .06em; user-select: all; }
 
-/* Turnstile renders its own 300×65 iframe. Reserving the box keeps the submit
-   button from jumping down once the challenge finishes loading. */
-.turnstile { margin-top: 12px; min-height: 65px; }
+/* Turnstile renders its own iframe: 300×65, or 150×140 where the form is
+   narrower than 300px (`turnstile-widget.tsx` picks, and marks `data-size`).
+   Reserving that height keeps the submit button from jumping down once the
+   challenge finishes loading. The iframe sits on a text line inside the
+   widget, so without `line-height: 0` the line's descender space would still
+   add some 7px below it. */
+.turnstile { margin-top: 12px; min-height: 65px; line-height: 0; }
+.turnstile[data-size="compact"] { min-height: 140px; }
 
 .policyLink { margin-top: 10px; color: var(--muted); font-size: 10px; line-height: 1.7; }
 .policyLink a { color: var(--ink); }
