@@ -6,7 +6,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const environment = vite.environments.ssr;
 if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test environment is not runnable.");
 const imports = await environment.runner.import("/app/organizer-import.ts");
-const { withOrganizerImportedAreaIds } = await environment.runner.import("/app/organizer-event.ts");
+const { withOrganizerImportedAreaIds, createOrganizerAreaNames } = await environment.runner.import("/app/organizer-event.ts");
 const roster = await environment.runner.import("/app/organizer-roster.ts");
 after(() => vite.close());
 
@@ -285,6 +285,22 @@ test("area names group across days within a space and reimports retain identitie
   ] });
   assert.notEqual(collided.rows[0].areaId, collided.rows[3].areaId, "legacy codes shared by spaces cannot become duplicate public areas");
   assert.notEqual(collided.rows[0].areaId, "A");
+});
+
+test("editing a roster name reuses the local group even when legacy spaces share its code", () => {
+  const draft = { venue: { assignments: [
+    { venueSpaceId: "east", areaIds: ["A", "B"], areaLabels: { A: "原創插畫", B: "遊戲" } },
+    { venueSpaceId: "west", areaIds: ["A"], areaLabels: { A: "交流" } },
+  ] } };
+  const names = createOrganizerAreaNames(draft.venue.assignments, 7, "edit");
+  const target = names.resolve("east", "原創插畫");
+  assert.equal(target, "A");
+  const saved = withOrganizerImportedAreaIds(draft, [
+    { venueSpaceId: "east", areaId: "A" }, { venueSpaceId: "east", areaId: target }, { venueSpaceId: "west", areaId: "A" },
+  ], names.labels());
+  assert.deepEqual(saved.venue.assignments.map(({ areaIds, areaLabels }) => ({ areaIds, areaLabels })), [
+    { areaIds: ["A"], areaLabels: { A: "原創插畫" } }, { areaIds: ["A"], areaLabels: { A: "交流" } },
+  ]);
 });
 
 test("correcting the venue space re-decides whether the row needs an area at all", () => {

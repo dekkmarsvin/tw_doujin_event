@@ -170,7 +170,7 @@ export function prepareOrganizerImport(input: {
     .map((row) => input.overrides?.[row.sourceRow]?.boothCode ?? mapped(row, input.mapping.boothCode)));
   const placements = new Map<string, { sourceRow: number; boothCode: string }>();
   const excluded = new Set(input.excludedRows ?? []);
-  const areaNames = createOrganizerAreaNames(input.areaAssignments ?? [], input.areaGeneration ?? 0);
+  const areaNames = createOrganizerAreaNames(input.areaAssignments ?? [], input.areaGeneration ?? 0, "import");
 
   for (const source of input.rows.slice(input.headerRow)) {
     // A removed row leaves before it can claim a placement, so removing one of

@@ -118,6 +118,17 @@ try {
   assert.equal(detail.draft.venue.assignments[0].areaLabels.A, "原創插畫", "a saved name survives subsequent edits");
   journey.report.checks.push("name write/read failure, required name, retry, same code across spaces");
 
+  const secondRow = list.locator('tr[data-roster-key="1"]');
+  await secondRow.getByRole("button", { name: /展區$/ }).click();
+  await secondRow.getByRole("textbox").fill("原創插畫");
+  await secondRow.getByRole("textbox").press("Enter");
+  await list.getByRole("button", { name: "儲存變更", exact: true }).click();
+  await list.getByText("名單已儲存。", { exact: true }).waitFor();
+  assert.equal(detail.import.rows[0].areaId, "A");
+  assert.equal(detail.import.rows[1].areaId, "A", "editing reuses the existing group in the same space");
+  assert.equal(detail.import.rows[2].areaId, "A", "editing does not migrate another space's legacy code");
+  journey.report.checks.push("roster name edits reuse a legacy group shared across spaces");
+
   // Composition Enter must not confirm an unfinished Chinese name.
   await row.getByRole("button", { name: /社團名稱$/ }).click();
   const input = row.getByRole("textbox");

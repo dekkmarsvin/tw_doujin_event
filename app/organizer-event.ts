@@ -186,6 +186,7 @@ export function normalizeOrganizerAreaName(value: string) {
 export function createOrganizerAreaNames(
   assignments: readonly Pick<OrganizerVenueAssignment, "venueSpaceId" | "areaIds" | "areaLabels">[],
   generation: number,
+  mode: "import" | "edit",
 ) {
   const spaces = new Map<string, Map<string, string>>();
   const used = new Set(assignments.flatMap(assignment => assignment.areaIds));
@@ -198,7 +199,7 @@ export function createOrganizerAreaNames(
     for (const id of [...assignment.areaIds].sort()) {
       // Historical per-space codes can collide. New imports must not carry
       // that collision into the event-wide area list used by publication.
-      if (idCounts.get(id) !== 1) continue;
+      if (mode === "import" && idCounts.get(id) !== 1) continue;
       const name = normalizeOrganizerAreaName(assignment.areaLabels && Object.hasOwn(assignment.areaLabels, id) ? assignment.areaLabels[id] || id : id);
       if (!names.has(name)) names.set(name, id);
     }

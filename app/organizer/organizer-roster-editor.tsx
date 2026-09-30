@@ -240,7 +240,7 @@ export function SavedImportList({ detail, onChanged, onDirtyChange, onSaveReady,
           onRestore={() => update(key, row)} onChange={value => {
             if (field === "codes") update(key, { codes: value.split(/[、,，;；/\s]+/u) });
             else if (field === "areaId") {
-              const names = createOrganizerAreaNames(editingDraft.venue.assignments, detail.event.version);
+              const names = createOrganizerAreaNames(editingDraft.venue.assignments, detail.event.version, "edit");
               const areaId = names.resolve(row.venueSpaceId, value);
               setNewAreaLabels(current => ({ ...current, [row.venueSpaceId]: { ...current[row.venueSpaceId], ...names.labels()[row.venueSpaceId] } }));
               update(key, { areaId });
