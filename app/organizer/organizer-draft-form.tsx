@@ -145,9 +145,12 @@ export function DraftForm({
     .map(issue => ({ ...issue, target: organizerIssueTarget(issue, draft) }));
   const locate = (target: string) => { setAttempted(true); if (form.current) focusOrganizerField(form.current, target); };
   const taskIssues = guidedTask ? organizerGuidedDraftIssues(draft, guidedTask, venueCatalog) : venueIssues;
+  const attemptedTargets = attempted && guidedTask
+    ? new Set(taskIssues.flatMap(issue => organizerIssueTarget(issue, draft) ?? []))
+    : attempted;
   const showIdentity = section === "event" && (!guidedTask || guidedTask === "identity_source");
   const showDays = section === "event" && (!guidedTask || guidedTask === "days");
-  return <FieldGuidance value={{ issues: allIssues, attempted, target: fieldRequest?.target }}><section ref={form} onChangeCapture={() => form.current?.querySelectorAll("[data-field-highlight]").forEach(item => item.removeAttribute("data-field-highlight"))} className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
+  return <FieldGuidance value={{ issues: allIssues, attempted: attemptedTargets, target: fieldRequest?.target }}><section ref={form} onChangeCapture={() => form.current?.querySelectorAll("[data-field-highlight]").forEach(item => item.removeAttribute("data-field-highlight"))} className={`${styles.panel} ${guidedTask ? styles.guidedForm : ""}`}>
     <div className={styles.panelHead}><div><h3>{guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料" : "場館與場地"}</h3>
       {guidedTask && <p>{TASK_QUESTION[guidedTask]}</p>}</div></div>
     <fieldset className={styles.formFields} disabled={saving} aria-label={guidedTask ? GUIDED_LABEL[guidedTask] : section === "event" ? "活動基本資料欄位" : "場館與場地欄位"}>

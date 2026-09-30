@@ -47,6 +47,11 @@ try {
   await pending.getByRole("button", { name: "活動代碼為必填。", exact: true }).press("Enter");
   assert.equal(await page.getByLabel(/^活動代碼/).evaluate(el => el === document.activeElement), true);
   assert.equal(await page.locator('[data-organizer-field="event.id"]').getAttribute("data-field-highlight"), "true");
+  // The refusal marks what stopped this task. 送審前必填 fields are not an
+  // onboarding gate, so they stay neutral until visited or located.
+  assert.equal(await page.getByLabel(/^活動代碼/).getAttribute("aria-invalid"), "true");
+  assert.equal(await page.getByRole("combobox", { name: "主辦分類目錄", exact: true }).getAttribute("aria-invalid"), null);
+  assert.equal(await page.getByText("請選擇主辦單位。", { exact: true }).count(), 0);
   await page.getByLabel("活動代碼", { exact: false }).fill(`references-${Date.now()}`);
   assert.equal(staleReads, 0, "a removed remembered candidate is checked against the event list before reading it");
   assert.equal(await page.getByText("找不到活動。", { exact: true }).count(), 0);

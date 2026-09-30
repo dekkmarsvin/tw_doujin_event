@@ -3,7 +3,13 @@ import type { OrganizerEventDraft, OrganizerValidationIssue } from "../organizer
 import styles from "./organizer.module.css";
 
 export type FieldRequest = { candidateId: string; section: string; target: string };
-export const FieldGuidance = createContext<{ issues: OrganizerValidationIssue[]; attempted: boolean; target?: string }>({ issues: [], attempted: false });
+/** `attempted` is either the whole form or, in a guided task, only the targets
+ * that task checks: a refused 儲存並繼續 names what stopped it, and a
+ * 送審前必填 field turning red beside it would read as one more gate. */
+type Guidance = { issues: OrganizerValidationIssue[]; attempted: boolean | ReadonlySet<string>; target?: string };
+export const FieldGuidance = createContext<Guidance>({ issues: [], attempted: false });
+const attemptedAt = (guidance: Guidance, target: string) =>
+  typeof guidance.attempted === "boolean" ? guidance.attempted : guidance.attempted.has(target);
 
 /** The API also serves older saved candidates, whose reference issues all
  * pointed at `references`. Resolve those codes without parsing prose. */
@@ -31,7 +37,7 @@ export function RequiredMark({ review = false }: { review?: boolean }) {
 export function FieldIssue({ target }: { target: string }) {
   const guidance = useContext(FieldGuidance);
   const issue = guidance.issues.find(item => item.target === target);
-  return issue && (guidance.attempted || guidance.target === target)
+  return issue && (attemptedAt(guidance, target) || guidance.target === target)
     ? <p className={styles.fieldError}>{issue.message}</p> : null;
 }
 
@@ -43,7 +49,7 @@ export function GuidedField({ target, required = false, children }: { target: st
   const errorId = useId();
   const labelId = useId();
   const issue = guidance.issues.find(item => item.target === target);
-  const error = (touched || guidance.attempted || guidance.target === target) ? issue?.message : undefined;
+  const error = (touched || attemptedAt(guidance, target) || guidance.target === target) ? issue?.message : undefined;
   const parts = Children.toArray(children);
   const start = parts.findIndex(child => isValidElement(child) && (child.type === "input" || child.type === "select"));
   return <label data-organizer-field={target} onBlur={() => setTouched(true)}>
