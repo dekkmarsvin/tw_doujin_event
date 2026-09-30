@@ -1,3 +1,4 @@
+import { openToolGroup } from "./support/map-authoring.mjs";
 // staged-data: fixture
 //
 // Slice 3 of #279: looking at the plan while tracing it. The background
@@ -38,6 +39,7 @@ try {
     const zoomIn = editor.getByRole("button", { name: "放大編輯地圖", exact: true });
     const zoomOut = editor.getByRole("button", { name: "縮小編輯地圖", exact: true });
     const zoomLevel = editor.locator("output[aria-live='polite']");
+    await openToolGroup(editor, "底圖與畫布");
     const tracing = editor.getByRole("checkbox", { name: "描摹模式", exact: true });
     const nudgeStep = editor.getByRole("combobox", { name: "微移步進", exact: true });
     const booth = code => svg.locator(`[data-slot-code="${code}"]`);
@@ -88,6 +90,7 @@ try {
     // --- Tracing view -----------------------------------------------------
     const filled = await styleOf("A01", "fill");
     assert.notEqual(filled, "none");
+    await openToolGroup(editor, "底圖與畫布");
     await tracing.check();
     assert.equal(await styleOf("A01", "fill"), "none", "tracing leaves booths as outlines");
     assert.equal(await booth("A01").locator("text").isVisible(), false, "tracing hides the printed codes");
@@ -252,6 +255,7 @@ try {
     // the maintainer saw at 350%. Sampled every frame: the final rectangle
     // alone cannot tell a smooth drag from a stuck one.
     await picker.selectOption("slot:0:0");
+    await openToolGroup(editor, "攤位");
     await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
     await editor.getByRole("textbox", { name: "排標籤", exact: true }).fill("Z");
     await editor.getByRole("textbox", { name: "起始編號", exact: true }).fill("1");
@@ -275,11 +279,15 @@ try {
     // Placing a segment leaves the row panel open and its booths selected. The
     // tool has to be put away before the canvas goes back to moving things:
     // with it open a press on a booth grabs a segment instead of dragging it.
+    await openToolGroup(editor, "攤位");
     await editor.getByRole("button", { name: "新增排／排段", exact: true }).click();
     const one = await toScreen(dense.x - 10, dense.y - 10), two = await toScreen(dense.x + dense.width + 10, dense.y + dense.height + 10);
     await page.mouse.move(one.x, one.y); await page.mouse.down(); await page.mouse.move(two.x, two.y, { steps: 8 }); await page.mouse.up();
-    const copy = editor.getByRole("button", { name: /複製選取的 \d+ 格/ });
-    await copy.click();
+    await editor.getByRole("button", { name: "複製多排", exact: true }).click();
+    await editor.getByRole("spinbutton", { name: "複製份數", exact: true }).fill("1");
+    await editor.getByRole("combobox", { name: "排名序列", exact: true }).selectOption("custom");
+    await editor.getByRole("textbox", { name: "排名清單", exact: true }).fill("Z2");
+    await editor.getByRole("button", { name: "加入 1 排", exact: true }).click();
     const boundsOf = () => page.evaluate(() => {
       const picked = [...document.querySelectorAll("[data-slot-code]")].filter(node => node.className.baseVal.includes("selected")).map(node => node.querySelector("rect"));
       const value = (node, name) => Number(node.getAttribute(name));
@@ -387,6 +395,7 @@ try {
     await picker.selectOption("slot:0:0");
 
     // --- Display settings are personal, not part of the draft -------------
+    await openToolGroup(editor, "底圖與畫布");
     await tracing.check();
     await nudgeStep.selectOption("5");
     assert.equal(state.saves, 0, "nothing in the display toolbar advances a revision");
@@ -398,6 +407,7 @@ try {
     await page.reload();
     if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
     else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+    await openToolGroup(editor, "底圖與畫布");
     await nudgeStep.waitFor();
     assert.equal(await tracing.isChecked(), true, "the tracing view is remembered in this browser");
     assert.equal(await nudgeStep.inputValue(), "5");

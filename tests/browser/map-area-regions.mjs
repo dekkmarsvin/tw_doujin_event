@@ -1,3 +1,4 @@
+import { openToolGroup } from "./support/map-authoring.mjs";
 // staged-data: fixture
 // Organizer polygon authoring and Reader overview/detail visibility use the
 // same real renderer, with a synthetic map API and fixture catalog.
@@ -13,6 +14,7 @@ try {
   const { page, editor, state } = await openSurface(journey, "organizer");
   const svg = editor.locator("svg[tabindex='0']");
   const draw = async (points) => {
+    await openToolGroup(editor, "區域");
     await editor.getByRole("button", { name: "新增展區範圍" }).click();
     await svg.scrollIntoViewIfNeeded();
     for (const [x, y] of points) {

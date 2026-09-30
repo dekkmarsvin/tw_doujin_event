@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_ACCESS_KINDS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
-import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, facingRowOffset, mergeSelections, pasteRowAtOffset, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
+import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, mergeSelections, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
 import type { MapBoothScope } from "./map-booth-coverage";
 import { MapBoothList } from "./map-booth-list";
@@ -16,6 +16,8 @@ import { UiIcon } from "./ui-icons";
 import { FACILITY_TOOLS, PLACEMENT_LABELS, isAreaFacilityTool, isPointFacilityTool, resolveFacilityPlacement, type FacilityTool, type PlacementTool } from "./map-placement-tool";
 import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
+import { MapEditorSurface, type MapEditorSave } from "./map-editor-surface";
+import { copyRowLabels, planRowCopies, ROW_LABEL_SEQUENCES, type CopyDirection } from "./map-row-copies";
 import styles from "./map-layout-editor.module.css";
 
 /** A gesture holds the box every selected element had when it started, so each
@@ -62,6 +64,9 @@ export type MapEditorFocusTarget = { kind: "slot" | "landmark"; ref: string; non
 
 type Props = {
   layout: EventMapLayout;
+  title?: string;
+  save?: MapEditorSave;
+  saveButtonRef?: Ref<HTMLButtonElement>;
   backgroundImageUrl?: string;
   recognitionEnabled?: boolean;
   recognitionPaused?: boolean;
@@ -219,7 +224,7 @@ function findFocusSelection(layout: EventMapLayout, target: MapEditorFocusTarget
 
 type EditorSnapshot = { layout: EventMapLayout; authoring: MapAuthoringState };
 
-export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, recognitionEnabled = false, recognitionPaused = false, focusTarget, scope, areaLabels = {}, onChange }: Props) {
+export default function MapLayoutEditor({ layout, title, save, saveButtonRef, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, recognitionEnabled = false, recognitionPaused = false, focusTarget, scope, areaLabels = {}, onChange }: Props) {
   const areaName = (id: string) => Object.hasOwn(areaLabels, id) ? areaLabels[id] : id;
   const [preferences, setPreferences] = useState(() => readMapEditorPreferences(mapEditorPreferenceStorage()));
   // Held in a ref as well as in state: the pointer handler below runs on the
@@ -324,7 +329,16 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
   }, [activeSegment, layout, selections]);
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [band, setBand] = useState<MapRect | null>(null);
-  const [copyLabel, setCopyLabel] = useState("");
+  const [toolGroup, setToolGroup] = useState<string | null>(null);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [copyDraft, setCopyDraft] = useState<{ base: EventMapLayout; selection: string; count: string; gap: string; direction: CopyDirection; sequence: "alphabet" | "branches" | "custom"; start: string; custom: string } | null>(null);
+  if (copyDraft && (copyDraft.base !== layout || copyDraft.selection !== selectionSetKey(selections))) setCopyDraft(null);
+  const copyItems = slotSelections(selections);
+  const copySourceRow = copyItems.length === selections.length && copyItems.length && copyItems.every(item => item.rowIndex === copyItems[0].rowIndex) ? layout.rows[copyItems[0].rowIndex] : undefined;
+  const copySource = copySourceRow ? { ...copySourceRow, slots: copyItems.map(item => copySourceRow.slots[item.itemIndex]).filter(Boolean) } : undefined;
+  const copyLabels = copyDraft ? copyDraft.sequence === "custom" ? copyDraft.custom.split(/[\s,，、]+/u).filter(Boolean) : copyRowLabels(copyDraft.sequence, copyDraft.start, Number(copyDraft.count)) : [];
+  const copyPreview = copyDraft && copySource ? planRowCopies(copySource, layout, { count: Number(copyDraft.count), gap: copyDraft.gap.trim() ? Number(copyDraft.gap) : NaN, labels: copyLabels, direction: copyDraft.direction }) : null;
+  const inspectorOpen = !!(selections.length || rowForm || slotDrawForm || selectedGuide || selectedAreaRegion || copyDraft || ["areas", "guides", "background"].includes(toolGroup ?? ""));
   const drag = useRef<DragState | null>(null);
   const editorRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -467,6 +481,9 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         holdSpace(true);
         return;
       }
+      if (event.key === "Escape" && copyDraft) {
+        event.preventDefault(); event.stopPropagation(); setCopyDraft(null); return;
+      }
       if (event.key === "Escape" && sharedEdgeDraft) {
         event.preventDefault();
         event.stopPropagation();
@@ -478,6 +495,9 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         event.stopPropagation();
         cancelPlacement();
         return;
+      }
+      if (event.key === "Escape" && toolGroup) {
+        event.preventDefault(); event.stopPropagation(); setToolGroup(null); return;
       }
       if (!event.ctrlKey && !event.metaKey) return;
       const key = event.key.toLowerCase();
@@ -1090,19 +1110,18 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
    * in its real place by dragging it there. Holding the booths in a clipboard
    * first, then asking for a position as two numbers, made the contributor work
    * out coordinates for something they were about to drag anyway. */
+  const startRowCopies = () => {
+    if (!copySource) return;
+    const sequence = ROW_LABEL_SEQUENCES.branches.includes(copySource.label) ? "branches" : "alphabet";
+    const names = ROW_LABEL_SEQUENCES[sequence];
+    setCopyDraft({ base: layout, selection: selectionSetKey(selections), count: "3", gap: "0", direction: copySource.orientation === "vertical" ? "right" : "down", sequence, start: names[names.indexOf(copySource.label) + 1] ?? names[0], custom: "" });
+  };
   const copySelectedSlots = () => {
-    const picked = slotSelections(selections);
-    const slots = picked.map(({ rowIndex, itemIndex }) => layout.rows[rowIndex]?.slots[itemIndex]).filter((slot): slot is BoothSlot => !!slot);
-    if (!slots.length) return;
-    const copied = { label: layout.rows[picked[0].rowIndex]?.label ?? "", slots: slots.map((slot) => ({ code: slot.code, rect: { ...slot.rect } })) };
-    const offset = facingRowOffset(copied.slots.map(({ rect }) => rect), layout);
-    const result = pasteRowAtOffset(copied, layout, { ...offset, label: copyLabel });
-    if (!result.ok) { setRowErrors(result.errors); return; }
-    const rowIndex = layout.rows.length;
-    commit((draft) => draft.rows.push(result.row));
-    setRowErrors([]);
-    setCopyLabel("");
-    setSelections(result.row.slots.map((slot, itemIndex) => ({ kind: "slot", rowIndex, itemIndex })));
+    if (!copyPreview?.ok) return;
+    const firstRow = layout.rows.length;
+    commit(draft => { draft.rows.push(...copyPreview.rows); });
+    setCopyDraft(null); setActiveSegment(null); setSegmentForm(null);
+    setSelections(copyPreview.rows.flatMap((row, offset) => row.slots.map((_, itemIndex) => ({ kind: "slot" as const, rowIndex: firstRow + offset, itemIndex }))));
   };
 
   const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
@@ -1483,30 +1502,39 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
 
   const numberField = (label: string, value: number, onValue: (value: number) => void, disabled = false) => <label><span>{label}</span><input type="number" step="0.1" disabled={disabled} value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onValue(next); }} /></label>;
 
-  return <section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
-    <header><div><h3>細部位置編輯器</h3><p>拖曳元素調整位置；Shift 點選加選，空白處拖曳框選。方向鍵依步進微移，Shift 加速 10 倍；Space 拖曳或中鍵平移畫布。</p>
-      {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button disabled={!scope?.areaIds?.length} className={areaTool ? styles.drawActive : ""} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button><button className={placementTool === "row" ? styles.drawActive : ""} aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button>{FACILITY_TOOLS.map((tool) => <button key={tool} aria-pressed={placementTool === tool} className={placementTool === tool ? styles.drawActive : ""} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} className={guideTool === axis ? styles.drawActive : ""} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</div></header>
+  return <MapEditorSurface title={title} save={save} saveButtonRef={saveButtonRef}><section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
+    <div className={styles.editingBody} inert={save?.busy || undefined}>
+    <div className={styles.toolRail} aria-label="地圖工具">
+      <button type="button" aria-pressed={!placementTool && !areaTool && !toolGroup} onClick={() => { cancelPlacement(); setToolGroup(null); }}><UiIcon name="locate" />選取</button>
+      {([['booths', '攤位'], ['facilities', '設施'], ['areas', '區域'], ['guides', '輔助線'], ['background', '底圖與畫布']] as const).map(([group, label]) => <button type="button" key={group} aria-expanded={toolGroup === group} onClick={() => setToolGroup(toolGroup === group ? null : group)}>{label}</button>)}
+      {recognitionEnabled && backgroundImageUrl && <button type="button" aria-expanded={toolGroup === "recognition"} onClick={() => setToolGroup(toolGroup === "recognition" ? null : "recognition")}>辨識（實驗）</button>}
+      <span className={styles.railSpacer} />
+      <button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button>
+      <select className={styles.precisePicker} aria-label="選取地圖元素" value={activeKey} onChange={event => selectElement(event.target.value)}><option value="">選取攤位或設施</option>{elementOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select>
+    </div>
+    <div className={styles.addTools} hidden={!['booths', 'facilities', 'areas', 'guides'].includes(toolGroup ?? '')}>
+      <span hidden={toolGroup !== "areas"}><button disabled={!scope?.areaIds?.length} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button>{!scope?.areaIds?.length && <span>先在場地設定展區，再新增範圍。</span>}</span>
+      <span hidden={toolGroup !== "booths"}><button aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button></span>
+      <span hidden={toolGroup !== "facilities"}>{FACILITY_TOOLS.map(tool => <button key={tool} aria-pressed={placementTool === tool} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}</span>
+      <span hidden={toolGroup !== "guides"}>{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</span>
+    </div>
+    {overlaps.length > 0 && <div className={styles.overlapNotice}>攤位重疊{overlaps.map(code => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</div>}
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
     {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "access" && <label className={styles.serviceKindPicker}>類型<select value={accessKind} onChange={(event) => setAccessKind(event.target.value as MapAccessKind)}>{MAP_ACCESS_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
-    {recognitionEnabled && backgroundImageUrl && <MapRecognitionPanel key={`${backgroundImageUrl}:${scope?.allowedBoothCodes.join(",")}`} layout={layout} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} paused={recognitionPaused} onApply={next => {
+    <div className={`${styles.workspace} ${inspectorOpen ? styles.withInspector : ""} ${rosterOpen ? styles.withRoster : ""}`}>
+    {recognitionEnabled && backgroundImageUrl && <div className={styles.recognitionMode} hidden={toolGroup !== "recognition"}><MapRecognitionPanel key={`${backgroundImageUrl}:${scope?.allowedBoothCodes.join(",")}`} layout={layout} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} paused={recognitionPaused} onApply={next => {
       cancelPlacement(); setSelections([]); setSelectedGuideId(null);
       setHistory(current => pushLayoutHistory(current, { layout: next, authoring }));
       onChange(next, authoring);
-    }} />}
-    <div className={styles.workspace}>
-      <div className={styles.canvas}>
+    }} /></div>}
+
+      <div className={styles.canvas} hidden={toolGroup === "recognition"}>
         <div className={styles.guideToolbar}><label><input type="checkbox" checked={showGuides} onChange={event => setShowGuides(event.target.checked)} />顯示輔助線</label><label><input type="checkbox" checked={snappingEnabled} onChange={event => setSnappingEnabled(event.target.checked)} />啟用吸附</label><span>Alt 暫停本次吸附</span></div>
-        <div className={styles.displayToolbar} aria-label="描摹與微移設定">
-          <label><input type="checkbox" checked={preferences.showBackground} disabled={!backgroundImageUrl} onChange={event => changePreferences({ showBackground: event.target.checked })} />顯示配置圖</label>
-          <label>透明度<input type="range" min="0" max="100" step="1" aria-label="配置圖透明度" disabled={!backgroundImageUrl} value={preferences.backgroundOpacity} onChange={event => changePreferences({ backgroundOpacity: Number(event.target.value) })} /><output>{preferences.backgroundOpacity}%</output></label>
-          <button type="button" disabled={!backgroundImageUrl} onClick={() => changePreferences({ backgroundOpacity: DEFAULT_BACKGROUND_OPACITY })}>重設透明度</button>
-          <label><input type="checkbox" checked={preferences.tracing} onChange={event => changePreferences({ tracing: event.target.checked })} />描摹模式</label>
-          <label>微移步進<select aria-label="微移步進" value={preferences.nudge} onChange={event => changePreferences({ nudge: Number(event.target.value) })}>{NUDGE_STEPS.map(step => <option key={step} value={step}>{step}</option>)}</select></label><span>Shift × 10</span>
-        </div>
-        <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><button aria-label="復原上一步編輯" disabled={!canUndo} onClick={undo}>復原</button><button aria-label="重做已復原的編輯" disabled={!canRedo} onClick={redo}>重做</button></div><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
+        <div className={styles.canvasToolbar} aria-label="編輯器畫布工具列"><div><span>檢視倍率</span><button aria-label="縮小編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom <= MIN_EDITOR_ZOOM} onClick={() => changeZoom(zoom - EDITOR_ZOOM_STEP)}><UiIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button aria-label="放大編輯地圖" aria-controls="map-layout-editor-canvas" disabled={zoom >= MAX_EDITOR_ZOOM} onClick={() => changeZoom(zoom + EDITOR_ZOOM_STEP)}><UiIcon name="plus" /></button><button aria-label="重設編輯地圖倍率" onClick={resetView}><UiIcon name="locate" /><span>重設倍率</span></button><button aria-label="聚焦選取的地圖元素" disabled={!selections.length} onClick={() => selections[0] && focusSelection(selections[0])}><UiIcon name="map-pin" /><span>聚焦選取</span></button></div></div>
         <div ref={viewportRef} id="map-layout-editor-canvas" className={styles.canvasViewport}>
         <div className={styles.zoomSurface} style={{ width: `${layout.width * renderScale}px`, height: `${layout.height * renderScale}px` }}>
         <svg ref={svgRef} className={`${placementTool || areaTool ? styles.drawing : ""} ${preferences.tracing ? styles.tracing : ""} ${spaceHeld || panning ? styles.panReady : ""} ${panning ? styles.panning : ""}`} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-label={`可編輯 ${layout.template} 向量地圖，目前 ${Math.round(zoom * 100)}%`} tabIndex={0} onKeyDown={handleKeyDown} onKeyUp={handleKeyUp} onBlur={() => holdSpace(false)} onPointerDownCapture={startPan} onAuxClick={event => { if (event.button === 1) event.preventDefault(); }} onPointerLeave={() => { if (!drag.current) { setFacilityDraft(null); setGuidePreview(null); } }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={startBand}>
+
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} style={{ opacity: preferences.backgroundOpacity / 100, visibility: preferences.showBackground ? "visible" : "hidden" }} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
           <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />
@@ -1537,6 +1565,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
               awaiting a decision would hide exactly what the decision is about. */}
           {draftRow?.slots.map((slot, index) => <g key={slot.code} className={draftRow.keep[index] ? styles.draftSlotKept : styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
           {anchors?.map((anchor) => <g key={`${anchor.index}:${anchor.x}:${anchor.y}`} className={styles.anchor} aria-hidden="true"><circle cx={anchor.x} cy={anchor.y} r={7 * layoutUnitsPerPixel} /><text x={anchor.x} y={anchor.y - 12 * layoutUnitsPerPixel}>{anchor.index}</text></g>)}
+          {copyPreview?.ok && <g className={styles.copyPreview} data-row-copy-preview="true" aria-hidden="true">{copyPreview.rows.flatMap(row => row.slots.map(slot => <g key={slot.code}><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>))}</g>}
           {sharedEdgePreview?.ok && <g className={styles.sharedEdgePreview} aria-hidden="true" data-shared-edge-preview="true">{sharedEdgePreview.boxes.map((box, index) => <rect key={index} {...box} />)}</g>}
           {slotDraftRect && <rect className={styles.manualDraft} {...slotDraftRect} aria-hidden="true" />}
           {rowFrame && <rect className={styles.manualDraft} {...rowFrame} aria-hidden="true" />}
@@ -1557,23 +1586,51 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
         </div>
         </div>
       </div>
-      <aside className={styles.inspector} aria-label="選取元素屬性">
-        <div className={styles.areaPanel}><b>展區範圍（{layout.areaRegions?.length ?? 0}）</b><p>同一展區的多塊範圍使用相同底色；底色會在 Reader 放大後隱藏。</p>
+      <button type="button" className={styles.rosterToggle} hidden={toolGroup === "recognition"} aria-expanded={rosterOpen} onClick={() => setRosterOpen(!rosterOpen)}>攤位清單</button>
+      <aside className={styles.rosterDrawer} hidden={!rosterOpen || toolGroup === "recognition"} aria-label="攤位與排清單">
+        {scope && <MapBoothList key={`${scope.periodKey}:${scope.venueSpaceId}`} layout={layout} scope={scope} selectedCode={selectedSlot?.code} onLocate={focusSlotCode} />}
+        {!rowForm && !!layout.rows.length && <div className={styles.rowList}>
+          <b>已建立的排（{layout.rows.length}）</b>
+          <ul>{layout.rows.map((row, rowIndex) => <li key={row.label}>
+            <span>{row.label}<small>{row.orientation === "horizontal" ? "橫" : "直"} · {row.slots.length} 格</small></span>
+            <button type="button" onClick={() => removeRow(rowIndex)} aria-label={`移除 ${row.label} 排`}>移除整排</button>
+          </li>)}</ul>
+        </div>}
+      </aside>
+      <aside className={styles.inspector} hidden={!inspectorOpen || toolGroup === "recognition"} aria-label="選取元素屬性">
+        {copyDraft && <section className={styles.rowPanel} aria-label="複製多排預覽"><b>複製多排</b>
+          <div className={styles.fields}><label>複製份數<input type="number" min="1" max="100" value={copyDraft.count} onChange={event => setCopyDraft({ ...copyDraft, count: event.target.value })} /></label><label>邊緣間距<input type="number" min="0" step="any" value={copyDraft.gap} onChange={event => setCopyDraft({ ...copyDraft, gap: event.target.value })} /></label></div>
+          <label>複製方向<select value={copyDraft.direction} onChange={event => setCopyDraft({ ...copyDraft, direction: event.target.value as CopyDirection })}><option value="right">向右</option><option value="left">向左</option><option value="down">向下</option><option value="up">向上</option></select></label>
+          <label>排名序列<select value={copyDraft.sequence} onChange={event => { const sequence = event.target.value as typeof copyDraft.sequence; setCopyDraft({ ...copyDraft, sequence, start: sequence === "custom" ? "" : ROW_LABEL_SEQUENCES[sequence][0] }); }}><option value="alphabet">A–Z</option><option value="branches">十二地支</option><option value="custom">自訂排名</option></select></label>
+          {copyDraft.sequence === "custom" ? <label>排名清單<input value={copyDraft.custom} placeholder="例：逃、追、賽" onChange={event => setCopyDraft({ ...copyDraft, custom: event.target.value })} /></label> : <label>起始排名<select value={copyDraft.start} onChange={event => setCopyDraft({ ...copyDraft, start: event.target.value })}>{ROW_LABEL_SEQUENCES[copyDraft.sequence].map(label => <option key={label}>{label}</option>)}</select></label>}
+          <p>新增排名：{copyLabels.join("、") || "尚未填入"}</p>
+          {copyPreview?.ok ? <p role="status">將新增 {copyPreview.rows.length} 排、{copyPreview.rows.reduce((sum, row) => sum + row.slots.length, 0)} 攤</p> : <p className={styles.rowErrors} role="alert">{copyPreview?.error}</p>}
+          <div className={styles.rowFormActions}><button type="button" className={styles.rowConfirm} disabled={!copyPreview?.ok} onClick={copySelectedSlots}>加入 {copyDraft.count || "0"} 排</button><button type="button" onClick={() => setCopyDraft(null)}>取消複製</button></div>
+        </section>}
+        <div hidden={!!copyDraft}>
+        <div className={styles.displayToolbar} aria-label="描摹與微移設定" hidden={toolGroup !== "background"}>
+          <label><input type="checkbox" checked={preferences.showBackground} disabled={!backgroundImageUrl} onChange={event => changePreferences({ showBackground: event.target.checked })} />顯示配置圖</label>
+          <label>透明度<input type="range" min="0" max="100" step="1" aria-label="配置圖透明度" disabled={!backgroundImageUrl} value={preferences.backgroundOpacity} onChange={event => changePreferences({ backgroundOpacity: Number(event.target.value) })} /><output>{preferences.backgroundOpacity}%</output></label>
+          <button type="button" disabled={!backgroundImageUrl} onClick={() => changePreferences({ backgroundOpacity: DEFAULT_BACKGROUND_OPACITY })}>重設透明度</button>
+          <label><input type="checkbox" checked={preferences.tracing} onChange={event => changePreferences({ tracing: event.target.checked })} />描摹模式</label>
+          <label>微移步進<select aria-label="微移步進" value={preferences.nudge} onChange={event => changePreferences({ nudge: Number(event.target.value) })}>{NUDGE_STEPS.map(step => <option key={step} value={step}>{step}</option>)}</select></label><span>Shift × 10</span>
+        </div>
+
+        <div className={styles.areaPanel} hidden={toolGroup !== "areas" && !selectedAreaRegion}><b>展區範圍（{layout.areaRegions?.length ?? 0}）</b><p>同一展區的多塊範圍使用相同底色；底色會在 Reader 放大後隱藏。</p>
           {!!layout.areaRegions?.length && <label>選取範圍<select value={selectedAreaRegionId} onChange={(event) => setSelectedAreaRegionId(event.target.value)}><option value="">請選擇</option>{layout.areaRegions.map((region, index) => <option key={region.id} value={region.id}>{region.areaId} · {areaName(region.areaId)} · 第 {index + 1} 塊</option>)}</select></label>}
           {selectedAreaRegion && <><label>展區<select value={selectedAreaRegion.areaId} onChange={(event) => { const nextAreaId = event.target.value; updateAreaRegion({ areaId: nextAreaId, color: layout.areaRegions?.find((region) => region.areaId === nextAreaId)?.color ?? selectedAreaRegion.color }); }}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>底色<select value={selectedAreaRegion.color} onChange={(event) => updateAreaRegion({ color: event.target.value as MapAreaColor })}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label>
             <div className={styles.areaVertices}>{selectedAreaRegion.points.map((point, index) => <div key={index}><span>點 {index + 1}</span><input type="number" aria-label={`點 ${index + 1} X`} value={Number(point.x.toFixed(1))} onChange={(event) => { const x = Number(event.target.value); if (!Number.isFinite(x)) return; updateAreaRegion({ points: selectedAreaRegion.points.map((item, position) => position === index ? { ...item, x: clamp(x, 0, layout.width) } : item) }); }} /><input type="number" aria-label={`點 ${index + 1} Y`} value={Number(point.y.toFixed(1))} onChange={(event) => { const y = Number(event.target.value); if (!Number.isFinite(y)) return; updateAreaRegion({ points: selectedAreaRegion.points.map((item, position) => position === index ? { ...item, y: clamp(y, 0, layout.height) } : item) }); }} /><button disabled={selectedAreaRegion.points.length <= 3} onClick={() => updateAreaRegion({ points: selectedAreaRegion.points.filter((_, position) => position !== index) })}>移除</button></div>)}</div>
             <button className={styles.remove} onClick={() => { commit((draft) => { draft.areaRegions = draft.areaRegions?.filter((region) => region.id !== selectedAreaRegion.id); }); setSelectedAreaRegionId(""); }}>刪除範圍</button></>}
         </div>
-        {scope && <MapBoothList key={`${scope.periodKey}:${scope.venueSpaceId}`} layout={layout} scope={scope} selectedCode={selectedSlot?.code} onLocate={focusSlotCode} />}
         {!!snapGuides.length && <output className={styles.snapReadout} aria-live="polite">吸附：{snapGuides.map(guide => `${guide.axis.toUpperCase()} ${Number(guide.position.toFixed(2))}`).join("、")}</output>}
-        {!!authoring.guides.length && <div className={styles.guidePanel}><label>選取輔助線<select aria-label="選取輔助線" value={selectedGuideId ?? ""} onChange={event => { cancelPlacement(); setSelectedGuideId(event.target.value || null); setSelections([]); setActiveSegment(null); }}><option value="">請選擇</option>{authoring.guides.map(guide => <option key={guide.id} value={guide.id}>{guide.axis === "x" ? "垂直 X" : "水平 Y"} {Number(guide.position.toFixed(2))}{guide.locked ? "（已鎖定）" : ""}</option>)}</select></label>
+        {!!authoring.guides.length && <div className={styles.guidePanel} hidden={toolGroup !== "guides" && !selectedGuide}><label>選取輔助線<select aria-label="選取輔助線" value={selectedGuideId ?? ""} onChange={event => { cancelPlacement(); setSelectedGuideId(event.target.value || null); setSelections([]); setActiveSegment(null); }}><option value="">請選擇</option>{authoring.guides.map(guide => <option key={guide.id} value={guide.id}>{guide.axis === "x" ? "垂直 X" : "水平 Y"} {Number(guide.position.toFixed(2))}{guide.locked ? "（已鎖定）" : ""}</option>)}</select></label>
           {selectedGuide && <><div className={styles.fields}>{numberField(`輔助線 ${selectedGuide.axis.toUpperCase()}`, selectedGuide.position, value => { if (!selectedGuide.locked) updateGuide(selectedGuide, { position: clamp(value, 0, selectedGuide.axis === "x" ? layout.width : layout.height) }, `guide-field:${selectedGuide.id}`); }, selectedGuide.locked)}</div><label><input type="checkbox" checked={selectedGuide.locked} onChange={event => updateGuide(selectedGuide, { locked: event.target.checked })} />鎖定輔助線位置</label><button type="button" className={styles.remove} onClick={deleteGuide}>刪除輔助線</button></>}
         </div>}
-        <div className={`${styles.fields} ${styles.canvasSize}`}>
+        <div className={`${styles.fields} ${styles.canvasSize}`} hidden={toolGroup !== "background"}>
           {numberField("畫布寬", layout.width, (value) => resizeCanvas({ width: value }, "field:canvas:width"))}
           {numberField("畫布高", layout.height, (value) => resizeCanvas({ height: value }, "field:canvas:height"))}
         </div>
-        <label className={styles.elementPicker}><span>精確選取地圖元素</span><select aria-label="選取地圖元素" value={activeKey} onChange={(event) => selectElement(event.target.value)}><option value="">請選擇攤位或設施</option>{elementOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
+
         {selection?.kind === "slot" && !activeSegment && <div className={styles.rowFormActions}><button type="button" onClick={() => activateSegment(selection.rowIndex, selection.itemIndex)}>編輯整個排段</button></div>}
         {activeSegment && activeSegmentFrame && <div className={styles.rowPanel} aria-label="排段整體調整">
           <b>{layout.rows[activeSegment.rowIndex]?.label} 排段 · {activeSegment.items.length} 格</b>
@@ -1659,19 +1716,7 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
           </div>
           </details>
         </div>}
-        {!rowForm && !!layout.rows.length && <div className={styles.rowList}>
-          <b>已建立的排（{layout.rows.length}）</b>
-          <ul>{layout.rows.map((row, rowIndex) => <li key={row.label}>
-            <span>{row.label}<small>{row.orientation === "horizontal" ? "橫" : "直"} · {row.slots.length} 格</small></span>
-            <button type="button" onClick={() => removeRow(rowIndex)} aria-label={`移除 ${row.label} 排`}>移除整排</button>
-          </li>)}</ul>
-        </div>}
-        {!rowForm && !!copyableSlots && <div className={styles.rowPanel}>
-          <b>複製整排</b>
-          {!!rowErrors.length && <div className={styles.rowErrors} role="alert">{rowErrors.map((message) => <span key={message}>{message}</span>)}</div>}
-          {rowField("新排標籤", copyLabel, setCopyLabel, "留空則沿用原標籤")}
-          <div className={styles.rowFormActions}><button type="button" className={styles.rowConfirm} onClick={copySelectedSlots}>複製選取的 {copyableSlots} 格</button></div>
-        </div>}
+        {!rowForm && !!copyableSlots && <div className={styles.rowFormActions}><button type="button" disabled={!copySource} onClick={startRowCopies}>複製多排</button>{!copySource && <p className={styles.hint}>請選取同一排的攤位。</p>}</div>}
         {!selections.length && <div className={styles.empty}><b>選取地圖元素</b></div>}
         {selections.length > 1 && !activeSegment && <>
           <div className={styles.selectionTitle}><small>已選取</small><b>{selections.length} 個元素</b></div>
@@ -1720,7 +1765,9 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
           {selection.kind !== "floor" && <button className={styles.remove} onClick={removeSelection}>移除此元素</button>}
           <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : isPointSelection(selection) ? "拖曳會直接更新預覽。" : "拖曳物件可移動，拖曳四角可調整大小。"}{selection.kind !== "floor" && " 按 Delete 可移除選取的元素。"}</p>
         </>}
+        </div>
       </aside>
     </div>
-  </section>;
+    </div>
+  </section></MapEditorSurface>;
 }

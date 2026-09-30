@@ -68,6 +68,12 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   const missingEvidence = ([[!sourceUrl, "source"], [!documentDate, "date"], [!file, "file"]] as const)
     .filter(([missing]) => missing).map(([, field]) => field);
   const evidenceFields = { source: sourceField, date: dateField, file: fileField };
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
   const ringed = (field: (typeof missingEvidence)[number]) => called === "evidence" && missingEvidence.includes(field) ? styles.calledOut : undefined;
   const previewFile = detail?.files.find((item) => item.revision === detail.draft.current_revision
     && item.raw_deleted_at == null && item.mime.startsWith("image/"));
@@ -75,7 +81,7 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
   return <section className={`${styles.card} ${styles.editorCard}`} id="map-contribution">
     <h2>活動地圖貢獻</h2>
     <p>草稿與來源檔僅供審閱。提交或核准都不會直接變更公開地圖，公開內容仍須另行審查後才會更新。</p>
-    <DraftList event={event} drafts={drafts} selected={selectedId} onSelect={(id) => void run(() => selectDraft(id), "草稿已載入。")} />
+    <DraftList event={event} drafts={drafts} selected={selectedId} onSelect={(id) => { if (!hasUnsavedChanges || window.confirm("尚有未儲存變更。要放棄變更並開啟另一份草稿嗎？")) void run(() => selectDraft(id), "草稿已載入。"); }} />
     {!detail && <div className={styles.mapDraftCreate}>
       <label>活動日<select value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>{event.days.map((day) => <option key={String(day.id)} value={String(day.id)}>{day.label}</option>)}</select></label>
       <label>場地<select value={venueSpaceId} onChange={(event) => setVenueSpaceId(event.target.value)}>{event.venueAssignments.map((venue) => <option key={venue.venueSpaceId} value={venue.venueSpaceId}>{venue.venueSpaceName}</option>)}</select></label>
@@ -89,15 +95,16 @@ export function MapContributorPanel({ event }: { event: EventDefinition }) {
     </div>}
     {detail && layout && <>
       <dl className={styles.reviewSummary}><div><dt>範圍</dt><dd>{draftScopeLabel(event, detail.draft.period_key, detail.draft.venue_space_id)}</dd></div><div><dt>狀態</dt><dd>{STATUS_LABEL[detail.draft.status]}・版本 {detail.draft.current_revision}</dd></div></dl>
-      {editable && <MapLayoutEditor key={detail.draft.id} layout={layout} scope={detail.scope} authoring={authoring} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); }} />}
+      {editable && <div><MapLayoutEditor key={detail.draft.id} layout={layout}
+        title={draftScopeLabel(event, detail.draft.period_key, detail.draft.venue_space_id)}
+        saveButtonRef={saveButton} save={{ label: "儲存新版本", disabled: !hasUnsavedChanges, busy: status.kind === "busy", error: status.kind === "error", message: status.kind === "error" ? status.message : hasUnsavedChanges ? "尚有未儲存變更" : "目前沒有未儲存的變更", onSave: () => void run(async () => {
+          await saveMapContributionDraft(detail.draft.id, detail.draft.current_revision, layout, authoring);
+          await openDraft(detail.draft.id); await refreshList();
+        }, "草稿已儲存。") }} scope={detail.scope} authoring={authoring} backgroundImageUrl={previewFile ? previewUrl(previewFile.id) : undefined} focusTarget={focusTarget} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); }} /></div>}
       <h3>公開地圖預覽</h3><Preview event={event} layout={layout} />
       {editable && <>
         <div className={styles.editorActions}>
-          <button ref={saveButton} type="button" className={called === "save" && hasUnsavedChanges ? styles.calledOut : undefined} onClick={() => void run(async () => {
-            const saved = await saveMapContributionDraft(detail.draft.id, detail.draft.current_revision, layout, authoring);
-            await openDraft(detail.draft.id); await refreshList();
-            setStatus({ kind: "ok", message: `已儲存版本 ${saved.revision}；請為這個版本上傳來源檔。` });
-          }, "草稿已儲存。")}>儲存新版本</button>
+
           <button type="button" aria-disabled={hasUnsavedChanges || undefined} onClick={() => {
             if (hasUnsavedChanges) { setCalled("save"); pointTo(saveButton.current); return; }
             void run(async () => {

@@ -1,3 +1,4 @@
+import { openToolGroup } from "./support/map-authoring.mjs";
 // staged-data: fixture
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
@@ -16,8 +17,9 @@ try {
   const codes = ["Z01", ...["A", "B", "C"].flatMap(label => Array.from({ length: label === "C" ? 6 : 16 }, (_, i) => `${label}${String(i + 1).padStart(2, "0")}`))];
   const authoring = { guides: [{ id: "g1", axis: "x", position: 12, locked: true }] };
   const { page, editor, state } = await openSurface(journey, "organizer", initial, { codes, authoring, background: Buffer.from(encodePng(ruledPlan())) });
+  await openToolGroup(editor, "辨識（實驗）");
   const panel = editor.getByRole("group", { name: "配置圖辨識", exact: true });
-  const svg = editor.getByRole("img", { name: /^可編輯 SAMPLE 向量地圖/ });
+  const svg = editor.locator("svg[tabindex=\"0\"]");
   const booth = code => svg.locator(`[data-slot-code='${code}']`);
   await panel.getByRole("button", { name: "自動建立草稿（實驗）" }).click();
   await panel.locator("summary").filter({ hasText: "辨識用攤位清單" }).click();
@@ -60,9 +62,11 @@ try {
   await panel.getByText("A 排的 A01 已在地圖上；需要調整時請使用排段工具。", { exact: true }).waitFor();
   // A canvas edit retires the preview and says so instead of leaving the review prompt behind.
   // The locked guide runs over Z01's left side, so take hold of its right edge.
+  await editor.getByRole("button", { name: "辨識（實驗）", exact: true }).click();
   const z01 = booth("Z01").locator("rect").first();
   await z01.click({ position: { x: (await z01.boundingBox()).width - 2, y: 4 } });
   await page.keyboard.press("ArrowRight");
+  await openToolGroup(editor, "辨識（實驗）");
   await panel.getByText("地圖已變更，請重新辨識。", { exact: true }).waitFor();
   assert.equal(await panel.getByRole("button", { name: /採用已核對/ }).count(), 0);
   await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();

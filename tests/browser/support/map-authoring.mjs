@@ -13,7 +13,7 @@ const detail = { event: summary, publicationAvailable: false, publication: null,
 export async function openSurface(journey, surface, initialLayout = source, options = {}) {
   const eventDetail = structuredClone(detail);
   if (options.codes) eventDetail.import.rows[0].codes = options.codes;
-  const state = { layout: structuredClone(initialLayout), authoring: options.authoring ?? { guides: [] }, saves: 0, background: !!options.background };
+  const state = { layout: structuredClone(initialLayout), authoring: options.authoring ?? { guides: [] }, saves: 0, failSaves: options.failSaves ?? 0, background: !!options.background };
   const page = await journey.page({ url: `${base}/${surface}`, viewport: { width: 1600, height: 1100 }, routes: async page => {
     await page.route("**/api/**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname, method = request.method();
@@ -34,13 +34,13 @@ export async function openSurface(journey, surface, initialLayout = source, opti
         return route.fulfill({ status: 200, contentType: "image/png", body: options.background ?? PIXEL });
       }
       if (path.endsWith("/maps/test-map")) {
-        if (method === "PATCH") { state.layout = request.postDataJSON().layout; state.authoring = request.postDataJSON().authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, version: 1, mapRevision: 1 }); }
+        if (method === "PATCH") { if (state.failSaves-- > 0) return reply({ error: "save_failed" }, 500); state.layout = request.postDataJSON().layout; state.authoring = request.postDataJSON().authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, version: 1, mapRevision: 1 }); }
         return reply({ map });
       }
       const draft = { id: "test-map", event_id: "sample", period_key: "1", venue_space_id: "test-space", status: "draft", current_revision: 1, updated_at: now, content: { schema: "map-contribution-draft/1", layout: state.layout, authoring: state.authoring } };
       if (path === "/api/map-contributions/drafts") return reply({ drafts: [draft] });
       if (path === "/api/map-contributions/drafts/test-map") {
-        if (method === "PUT") { state.layout = request.postDataJSON().content.layout; state.authoring = request.postDataJSON().content.authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, revision: 1 }); }
+        if (method === "PUT") { if (state.failSaves-- > 0) return reply({ error: "save_failed" }, 500); state.layout = request.postDataJSON().content.layout; state.authoring = request.postDataJSON().content.authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, revision: 1 }); }
         return reply({ draft, files: [], reviews: [], comments: [] });
       }
       throw new Error(`Unexpected API: ${method} ${path}`);
@@ -51,4 +51,10 @@ export async function openSurface(journey, surface, initialLayout = source, opti
   const editor = page.getByRole("region", { name: "活動地圖編輯器" });
   await editor.waitFor();
   return { page, editor, state };
+}
+
+// Tool categories preserve their open state; journeys use the same entry as a user.
+export async function openToolGroup(editor, name) {
+  const button = editor.getByRole("button", { name, exact: true });
+  if (await button.getAttribute("aria-expanded") !== "true") await button.click();
 }

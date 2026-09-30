@@ -328,7 +328,9 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     </div>
     <div className={styles.mapTabs}>{maps.map((map) => <button type="button" className={selected?.id === map.id ? styles.eventActive : styles.ghost} key={map.id} onClick={() => discarding(() => { void open(map).catch((error) => loadFailed(message(error))); })}>{organizerDayLabel(detail.draft.event.days, map.periodKey)}{detail.draft.venue.assignments.length > 1 ? `・${organizerVenueSpaceLabel(detail.venueCatalog, map.venueSpaceId)}` : ""}</button>)}</div>
     {layout ? <>
-      <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
+      <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout}
+        title={`${organizerDayLabel(detail.draft.event.days, periodKey)} · ${organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}`}
+        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || (!!selected && !edited), busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位或設施，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step
@@ -337,15 +339,11 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
           moves the candidate on and writes a revision recording nothing, and
           then counts itself as 1 張地圖 (#218). */}
       <div className={styles.mapActions} role="group" aria-label="地圖儲存動作">
-        <button type="button" disabled={!editable || savingMap || !layoutHasContent(layout) || (!!selected && !edited)} onClick={() => { void saveMap(); }}>{savingMap ? "儲存中…" : selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖"}</button>
+
         <button type="button" className={styles.ghost} disabled={savingMap} onClick={() => unsaved ? setConfirmingClose(true) : closeEditor()}>關閉編輯器</button>
         {/* One line, one truth: the result replaces the dirty state instead of
           standing beside a contradiction of it (#220). */}
-      <span aria-live="polite" className={saveResult && !saveResult.ok ? styles.error : undefined}>
-        {savingMap ? "儲存中，請稍候。" : saveResult ? saveResult.text
-          : !layoutHasContent(layout) ? "先在畫布上放入至少一個攤位或設施，才能儲存這張地圖。"
-          : selected ? edited ? "尚有未儲存變更" : "目前沒有未儲存的變更" : ""}
-      </span>
+
       </div>
     </> : <div className={styles.placeholder}>
       {/* The next step is a job with a name, not a menu of starting points:
