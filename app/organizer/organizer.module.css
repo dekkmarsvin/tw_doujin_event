@@ -426,4 +426,3 @@
 .page [data-organizer-field] { scroll-margin-block: 24px; }
 .page [data-field-highlight] { outline: 2px solid var(--ink); outline-offset: 5px; border-radius: 5px; background: var(--paper); }
 .page .issueLink { display: block; margin: 4px 0; padding: 6px 0; border: 0; background: transparent; color: var(--danger); font-size: 12px; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
-.page label .fieldError, .page p.fieldError { color: var(--danger); }

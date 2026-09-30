@@ -191,8 +191,11 @@ test("the workspace carries one navigation, one progress count, and counts only 
   // outstanding right now, unsaved edits included. That is not progress.
   assert.ok(app.includes("liveDraft && liveDirty ? organizerGuidedDraftIssues"), "outstanding items still follow the screen");
 
-  // portal-organizer-references now checks the refused primary save and the
-  // incomplete draft saved by 儲存並離開, without inspecting JSX wiring.
+  // portal-organizer-references checks the refused primary save through its
+  // controls. Its 儲存並離開 runs on a finished task, so it cannot show that
+  // leaving skips the task check: a half-finished draft is a legitimate thing
+  // to store and come back to.
+  assert.ok(app.includes("void save(onSecondarySaved)"), "leaving does not require the task");
 
   // The replacement-count warning is checked before confirmation by
   // portal-organizer-import, alongside the resulting saved rows.

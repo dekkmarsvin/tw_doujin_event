@@ -1,9 +1,9 @@
-import { RequiredMark } from "./organizer-field-guidance";
 /** 攤位匯入：欄位對應、預覽逐列修正、已存清單與場館目錄新增。
  *
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
+import { RequiredMark } from "./organizer-field-guidance";
 import { createOrganizerVenue, createOrganizerVenueSpace, putOrganizerImport, saveOrganizerEvent, type OrganizerEventDetail, type OrganizerMapLocation } from "../organizer-client";
 import { isOrganizerAreaId, organizerSourceLabel, withOrganizerImportedAreaIds } from "../organizer-event";
 import { buildOrganizerImportMetadata, buildOrganizerImportSample, prepareOrganizerImport, suggestOrganizerBoothCodeWidth, toOrganizerCsv, type OrganizerImportFieldMapping, type OrganizerImportMapping, type OrganizerImportOverrideField, type OrganizerImportOverrides, type OrganizerRejectedImportRow } from "../organizer-import";
