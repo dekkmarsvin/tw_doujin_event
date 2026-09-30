@@ -9,7 +9,8 @@
  */
 import decodeJpeg from "jpeg-js/lib/decoder.js";
 
-export type RasterImage = { width: number; height: number; data: Uint8Array };
+import type { RasterImage } from "../../../app/map-auto-recognition/raster";
+export type { RasterImage } from "../../../app/map-auto-recognition/raster";
 
 /** A 128 MB isolate holds the RGBA copy plus the recognizer's per-pixel
  * working arrays (about 13 bytes a pixel in all), so larger plans are refused

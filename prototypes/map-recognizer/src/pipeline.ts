@@ -4,9 +4,9 @@
  * Pure computation over the request body, so it runs the same in a Worker, in
  * Node and in a browser tab.
  */
-import { buildLayout, layoutSummary, type LayoutReport } from "./build-layout";
+import { buildLayout, layoutSummary, type LayoutReport } from "../../../app/map-auto-recognition/build-layout";
 import { cropImage, decodeImage, type RasterImage } from "./decode-image";
-import { recognizeBoothGrid } from "./recognize";
+import { recognizeBoothGrid } from "../../../app/map-auto-recognition/recognize";
 import { renderLayoutSvg } from "./render-svg";
 
 export type PipelineOptions = {

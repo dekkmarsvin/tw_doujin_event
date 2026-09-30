@@ -23,7 +23,7 @@
  * work inside each cell's bounding box: roughly a second of CPU for a
  * 4-megapixel plan, and never a model or an external service.
  */
-import type { RasterImage } from "./decode-image";
+import type { RasterImage } from "./raster";
 import { extractGlyphs, type Glyph } from "./glyphs";
 
 export type Rect = { x: number; y: number; width: number; height: number };

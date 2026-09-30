@@ -1,0 +1,26 @@
+.panel { border-bottom: 1px solid #dce3e5; padding: 12px 20px; background: #f5f9fa; color: #17383f; }
+.panel button { border: 1px solid #9fb8bf; border-radius: 6px; padding: 7px 10px; background: #fff; color: #174b57; cursor: pointer; font: inherit; }
+.panel button:disabled { opacity: .45; cursor: default; }
+.panel button[aria-pressed="true"] { background: #d9eef2; border-color: #087c99; }
+.panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible, .panel summary:focus-visible { outline: 3px solid #087c99; outline-offset: 2px; }
+.body { display: grid; gap: 12px; margin-top: 12px; }
+.body p { margin: 4px 0; font-size: 14px; line-height: 1.6; }
+.body details { font-size: 14px; }
+.body summary { cursor: pointer; padding: 6px 0; }
+.body textarea { display: block; width: 100%; box-sizing: border-box; font: inherit; padding: 8px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
+.controls label { display: flex; align-items: center; gap: 6px; }
+.panel input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; flex: 0 0 16px; }
+.controls input[type="number"] { width: 80px; padding: 5px; }
+.review { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 340px); gap: 16px; }
+.review > div { min-width: 0; }
+.review > div:only-child { grid-column: 1 / -1; }
+.preview, .crop { display: block; width: 100%; height: 430px; margin-top: 8px; background: white; border: 1px solid #b8cbd0; }
+.crop { touch-action: none; cursor: crosshair; }
+.checklist { max-height: 480px; overflow: auto; }
+.item { padding: 10px 4px; border-bottom: 1px solid #dce3e5; }
+.item > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.item small { display: block; margin-top: 5px; }
+.item label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 14px; }
+.error { color: #973209; }
+@media (max-width: 800px) { .review { grid-template-columns: minmax(0, 1fr); } .panel { padding: 12px; } .preview, .crop { height: 340px; } .checklist { max-height: 300px; } }

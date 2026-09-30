@@ -7,6 +7,7 @@ import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBox
 import { overlappingSlotCodes } from "./map-contribution-draft";
 import type { MapBoothScope } from "./map-booth-coverage";
 import { MapBoothList } from "./map-booth-list";
+import MapRecognitionPanel from "./map-recognition-panel";
 import { canRedoLayoutHistory, canUndoLayoutHistory, createLayoutHistory, pushLayoutHistory, redoLayoutHistory, sealLayoutHistory, undoLayoutHistory, type LayoutHistory } from "./map-editor-history";
 import { EMPTY_MAP_AUTHORING, MAX_MAP_GUIDES, scaleMapAuthoringState, type MapAuthoringState, type MapGuide } from "./map-authoring-state";
 import { DEFAULT_BACKGROUND_OPACITY, NUDGE_STEPS, mapEditorPreferenceStorage, readMapEditorPreferences, saveMapEditorPreferences, type MapEditorPreferences } from "./map-editor-preferences";
@@ -62,6 +63,7 @@ export type MapEditorFocusTarget = { kind: "slot" | "landmark"; ref: string; non
 type Props = {
   layout: EventMapLayout;
   backgroundImageUrl?: string;
+  recognitionEnabled?: boolean;
   authoring?: MapAuthoringState;
   focusTarget?: MapEditorFocusTarget | null;
   scope?: MapBoothScope | null;
@@ -216,7 +218,7 @@ function findFocusSelection(layout: EventMapLayout, target: MapEditorFocusTarget
 
 type EditorSnapshot = { layout: EventMapLayout; authoring: MapAuthoringState };
 
-export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, focusTarget, scope, areaLabels = {}, onChange }: Props) {
+export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORING, backgroundImageUrl, recognitionEnabled = false, focusTarget, scope, areaLabels = {}, onChange }: Props) {
   const areaName = (id: string) => Object.hasOwn(areaLabels, id) ? areaLabels[id] : id;
   const [preferences, setPreferences] = useState(() => readMapEditorPreferences(mapEditorPreferenceStorage()));
   // Held in a ref as well as in state: the pointer handler below runs on the
@@ -1485,6 +1487,11 @@ export default function MapLayoutEditor({ layout, authoring = EMPTY_MAP_AUTHORIN
       {overlaps.length > 0 && <p className={styles.overlapNotice}>攤位重疊{overlaps.map((code) => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</p>}</div><div className={styles.addTools}><button disabled={!scope?.areaIds?.length} className={areaTool ? styles.drawActive : ""} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button><button className={placementTool === "row" ? styles.drawActive : ""} aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button className={slotDrawForm ? styles.drawActive : ""} aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button>{FACILITY_TOOLS.map((tool) => <button key={tool} aria-pressed={placementTool === tool} className={placementTool === tool ? styles.drawActive : ""} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} className={guideTool === axis ? styles.drawActive : ""} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</div></header>
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{id} · {areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
     {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "access" && <label className={styles.serviceKindPicker}>類型<select value={accessKind} onChange={(event) => setAccessKind(event.target.value as MapAccessKind)}>{MAP_ACCESS_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
+    {recognitionEnabled && backgroundImageUrl && <MapRecognitionPanel key={`${backgroundImageUrl}:${scope?.allowedBoothCodes.join(",")}`} layout={layout} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} onApply={next => {
+      cancelPlacement(); setSelections([]); setSelectedGuideId(null);
+      setHistory(current => pushLayoutHistory(current, { layout: next, authoring }));
+      onChange(next, authoring);
+    }} />}
     <div className={styles.workspace}>
       <div className={styles.canvas}>
         <div className={styles.guideToolbar}><label><input type="checkbox" checked={showGuides} onChange={event => setShowGuides(event.target.checked)} />顯示輔助線</label><label><input type="checkbox" checked={snappingEnabled} onChange={event => setSnappingEnabled(event.target.checked)} />啟用吸附</label><span>Alt 暫停本次吸附</span></div>

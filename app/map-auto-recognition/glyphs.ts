@@ -8,7 +8,7 @@
  * produces tight glyph classes; a wrong one mixes digits. That comparison is
  * how the numbering direction is chosen without a model.
  */
-import type { RasterImage } from "./decode-image";
+import type { RasterImage } from "./raster";
 import type { Rect } from "./recognize";
 
 export const GLYPH_W = 8;

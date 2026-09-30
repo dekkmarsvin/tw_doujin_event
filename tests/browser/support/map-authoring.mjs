@@ -10,8 +10,10 @@ const detail = { event: summary, publicationAvailable: false, publication: null,
   import: { source: {}, rows: [{ dayId: "1", venueSpaceId: "test-space", codes: ["S01"], circleName: "測試社" }] },
   workspace: { mode: "binder", onboardingCompletedAt: now, resume: { guidedTask: "identity_source", section: "map" }, readiness: { completed: 3, total: 6, suggestedNextSection: "map", blockers: [], sections: ["event", "venue", "import", "map", "validate", "review"].map(id => ({ id, state: "available" })) } } };
 
-export async function openSurface(journey, surface, initialLayout = source) {
-  const state = { layout: structuredClone(initialLayout), authoring: { guides: [] }, saves: 0, background: false };
+export async function openSurface(journey, surface, initialLayout = source, options = {}) {
+  const eventDetail = structuredClone(detail);
+  if (options.codes) eventDetail.import.rows[0].codes = options.codes;
+  const state = { layout: structuredClone(initialLayout), authoring: options.authoring ?? { guides: [] }, saves: 0, background: !!options.background };
   const page = await journey.page({ url: `${base}/${surface}`, viewport: { width: 1600, height: 1100 }, routes: async page => {
     await page.route("**/api/**", async route => {
       const request = route.request(), path = new URL(request.url()).pathname, method = request.method();
@@ -21,7 +23,7 @@ export async function openSurface(journey, surface, initialLayout = source) {
       if (path.endsWith("/claims")) return reply({ claims: [], eventId: "sample" });
       if (path === "/api/organizer/events") return reply({ events: [summary] });
       if (path.endsWith("/workspace")) return reply({ ok: true });
-      if (path.endsWith("/events/placement")) return reply(detail);
+      if (path.endsWith("/events/placement")) return reply(eventDetail);
       const map = { id: "test-map", periodKey: "1", venueSpaceId: "test-space", mapRevision: 1, layout: state.layout, authoring: state.authoring };
       if (path.endsWith("/maps")) return reply({ maps: [map] });
       // The traced plan is stored beside the map, so a journey that needs the
@@ -29,7 +31,7 @@ export async function openSurface(journey, surface, initialLayout = source) {
       if (path.endsWith("/background")) {
         if (method === "PUT") { state.background = true; return reply({ ok: true, width: 1, height: 1 }); }
         if (!state.background) return reply({ error: "missing" }, 404);
-        return route.fulfill({ status: 200, contentType: "image/png", body: PIXEL });
+        return route.fulfill({ status: 200, contentType: "image/png", body: options.background ?? PIXEL });
       }
       if (path.endsWith("/maps/test-map")) {
         if (method === "PATCH") { state.layout = request.postDataJSON().layout; state.authoring = request.postDataJSON().authoring ?? { guides: [] }; state.saves++; return reply({ ok: true, version: 1, mapRevision: 1 }); }
