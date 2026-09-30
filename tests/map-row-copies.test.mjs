@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { createServer } from "vite";
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { planRowCopies: plan, copyRowLabels: labels } = await vite.environments.ssr.runner.import("/app/map-row-copies.ts");
+const { planRowCopies: plan, copyRowLabels: labels, copyRowLimitError: limit } = await vite.environments.ssr.runner.import("/app/map-row-copies.ts");
 after(() => vite.close());
 const row = { label: "A", orientation: "vertical", confidence: 1, slots: [
   { code: "A01", rect: { x: 20, y: 20, width: 10, height: 10 } },
@@ -53,4 +53,11 @@ test("copies down, up and left use the selected bounds plus edge gap", () => {
     assert.equal(result.rows[0].slots[0].rect.x, x);
     assert.equal(result.rows[0].slots[0].rect.y, y);
   }
+});
+test("a preset sequence that runs out names its reach instead of asking for labels", () => {
+  assert.equal(limit("alphabet", "B", 25), null);
+  assert.equal(limit("alphabet", "B", 26), "A–Z 從 B 起最多 25 排；請減少份數或改用自訂排名。");
+  assert.equal(limit("alphabet", "B", 30), "A–Z 從 B 起最多 25 排；請減少份數或改用自訂排名。");
+  assert.equal(limit("branches", "丑", 12), "十二地支從丑起最多 11 排；請減少份數或改用自訂排名。");
+  assert.equal(limit("branches", "子", 12), null);
 });

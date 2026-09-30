@@ -39,10 +39,10 @@ const openSection = async (page, name) => {
  * 其餘等待都是「畫面重繪了沒有」，共用預設值仍然正確；只有跨越整條流程的等待
  * 需要跨越整條流程的預算。這不是固定等待——流程壞掉時它照樣失敗。 */
 const PUBLICATION_TIMEOUT = 60_000;
-/** A map save answers on the line beside its button. Waiting for either answer
- * lets a version conflict fail as a conflict, not as a ten-second timeout. */
+/** A map save answers in the editor header, beside its button. Waiting for either
+ * answer lets a version conflict fail as a conflict, not as a ten-second timeout. */
 const mapSaveResult = async (page) => {
-  const line = page.getByRole("group", { name: "地圖儲存動作" }).locator("[aria-live]")
+  const line = page.getByRole("dialog", { name: "地圖編輯工作區" }).getByRole("status")
     .filter({ hasText: /^(地圖已儲存，尚未公開。|版本或狀態已變更。)$/ });
   await line.waitFor();
   return line.innerText();
@@ -222,6 +222,8 @@ try {
   // first save has to send that detail's candidate version, not the one the
   // panel mounted with.
   const editor = owner.getByRole("region", { name: "活動地圖編輯器" });
+  // Facility tools sit in the 設施 group of the editor's tool rail.
+  await editor.getByRole("button", { name: "設施", exact: true }).click();
   await editor.getByRole("button", { name: "新增服務設施", exact: true }).click();
   await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption({ label: "醫護站" });
   const canvas = editor.locator("svg[tabindex='0']");

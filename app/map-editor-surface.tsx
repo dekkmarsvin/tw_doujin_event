@@ -47,7 +47,8 @@ export function MapEditorSurface({ children, title, save, saveButtonRef }: { chi
   }, [expanded]);
   return <dialog ref={dialog} open className={`${styles.editorSurface} ${expanded ? styles.expanded : ""}`} aria-label="地圖編輯工作區" aria-modal={expanded || undefined} onCancel={event => { event.preventDefault(); changeExpanded(false); }}>
     <div className={styles.surfaceHeader}>
-      <button ref={toggle} type="button" aria-expanded={expanded} onClick={() => changeExpanded(!expanded)}><UiIcon name={expanded ? "chevron-left" : "external"} />{expanded ? "返回地圖步驟" : "展開全視窗"}</button>
+      <button ref={toggle} type="button" className={styles.expandToggle} aria-expanded={expanded} onClick={() => changeExpanded(!expanded)}><UiIcon name={expanded ? "chevron-left" : "external"} />{expanded ? "返回地圖步驟" : "展開全視窗"}</button>
+      {!expanded && <span className={styles.expandHint}>畫布較小，建議展開全視窗。</span>}
       <div className={styles.surfaceTitle}><strong>地圖編輯器</strong>{title && <span>{title}</span>}</div>
       {save && <><span role="status" className={save.error ? styles.saveError : styles.saveStatus}>{save.message}</span><button ref={saveButtonRef} type="button" className={styles.savePrimary} disabled={save.disabled || save.busy} onClick={save.onSave}>{save.busy ? "儲存中…" : save.label}</button></>}
     </div>

@@ -37,6 +37,11 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   assert.ok((await panel.getByRole("img").boundingBox()).width >= 400, "preview keeps a readable width");
   await page.setViewportSize({ width: 1600, height: 1100 });
+  // With the booth list folded, the preview takes the recognition tool's spare height instead of a fixed 430px box.
+  const listSection = panel.locator("summary").filter({ hasText: "辨識用攤位清單" });
+  await listSection.click();
+  assert.ok((await panel.getByRole("img").boundingBox()).height > 430, "preview grows with the recognition tool");
+  await listSection.click();
   assert.equal(await booth("A01").count(), 0, "preview never changes the editor");
   assert.equal(state.saves, 0);
   await panel.getByRole("button", { name: "查看 A 排 · 16 攤", exact: true }).click();

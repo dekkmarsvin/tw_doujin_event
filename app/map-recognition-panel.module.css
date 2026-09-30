@@ -1,33 +1,39 @@
-/* Colours and type follow map-layout-editor.module.css so the experiment reads as one of the editor's tools. */
-.panel { border-bottom: 1px solid #d4dad5; padding: 10px 14px; background: #f7f8f5; color: #344039; font-size: calc(11px * var(--ui-font-scale,1)); container-type: inline-size; }
-.panel button { min-height: 30px; border: 1px solid #d4dad5; border-radius: 7px; padding: 5px 9px; background: #fff; color: #344039; cursor: pointer; font-size: calc(10px * var(--ui-font-scale,1)); font-weight: 800; }
+/* Colours and type follow the editor workspace (map-layout-editor.module.css) so recognition reads as one of its tools.
+   The panel fills the recognition tool's area; the preview takes whatever height is left. */
+.panel { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; padding: 12px 16px; background: #f8f7f2; color: #202a35; font-size: calc(12px * var(--ui-font-scale,1)); container-type: inline-size; }
+.panel button { min-height: 34px; border: 1px solid #dfe3df; border-radius: 7px; padding: 6px 10px; background: #f9faf8; color: #202a35; cursor: pointer; font-size: calc(12px * var(--ui-font-scale,1)); font-weight: 700; }
 /* Matches the Organizer page's own hover rule, which would otherwise paint these buttons dark under dark text. */
-.panel button:hover:not(:disabled) { background: #f2f4f1; border-color: #79857d; }
-.panel button:disabled, .panel button[aria-disabled="true"] { opacity: .45; cursor: default; }
-.panel button[aria-pressed="true"], .panel button[aria-pressed="true"]:hover:not(:disabled) { background: #e2ede6; border-color: #3f7a5e; color: #26503c; }
-.panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible, .panel summary:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
-.body { display: grid; gap: 10px; margin-top: 10px; }
+.panel button:hover:not(:disabled) { background: #f2f0e8; border-color: #707a82; }
+.panel button:disabled, .panel button[aria-disabled="true"] { opacity: .5; cursor: default; }
+.panel button[aria-pressed="true"], .panel button[aria-pressed="true"]:hover:not(:disabled) { background: #f2f0e8; border-color: #707a82; color: #202a35; }
+.panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible, .panel summary:focus-visible { outline: 2px solid #202a35; outline-offset: 2px; }
+.body { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .body p { margin: 2px 0; line-height: 1.6; }
-.body summary { cursor: pointer; padding: 4px 0; font-weight: 800; }
+.body summary { cursor: pointer; padding: 4px 0; font-weight: 700; }
 .body textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; font: inherit; padding: 8px; }
 .body label:has(textarea) { display: block; margin: 6px 0; }
 .gate textarea { border-color: #e86f5d; }
-.body .gateNote { color: #9b352a; font-weight: 800; }
+.body .gateNote { color: #a43e30; font-weight: 700; }
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .controls label { display: flex; align-items: center; gap: 6px; }
 .panel input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; flex: 0 0 16px; }
 .controls input[type="number"] { width: 80px; padding: 5px; }
-.review { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 340px); gap: 16px; }
-.review > div { min-width: 0; }
+.review { flex: 1; min-height: 420px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 340px); grid-template-rows: minmax(0, 1fr); gap: 16px; }
+.review > div { min-width: 0; min-height: 0; }
+.review > div:first-child { display: flex; flex-direction: column; }
 .review > div:only-child { grid-column: 1 / -1; }
-.preview, .crop { display: block; width: 100%; height: 430px; margin-top: 8px; background: white; border: 1px solid #cdd3ce; border-radius: 8px; }
+.preview, .crop { display: block; flex: 1; width: 100%; min-height: 340px; margin-top: 8px; background: #fff; border: 1px solid #dfe3df; border-radius: 8px; }
 .crop { touch-action: none; cursor: crosshair; }
-.checklist { max-height: 480px; overflow: auto; }
-.item { padding: 8px 4px; border-bottom: 1px solid #e7ebe7; }
+.checklist { overflow: auto; }
+.item { padding: 8px 4px; border-bottom: 1px solid #dfe3df; }
 .item > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.item small { display: block; margin-top: 4px; color: #748078; }
+.item small { display: block; margin-top: 4px; color: #707a82; }
 .item label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.item .error { color: #9b352a; }
-/* The editor shares the page with the workspace sidebars, so the panel is much narrower than the window. */
-@container (max-width: 780px) { .review { grid-template-columns: minmax(0, 1fr); } .checklist { max-height: 300px; } }
-@media (max-width: 800px) { .panel { padding: 10px 12px; } .preview, .crop { height: 340px; } }
+.item .error { color: #a43e30; }
+/* Inline on a laptop the editor is much narrower than the window: stack the preview above the checklist. */
+@container (max-width: 780px) {
+  .review { flex: none; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .preview, .crop { flex: none; height: 340px; }
+  .checklist { max-height: 300px; }
+}
+@media (max-width: 800px) { .panel { padding: 10px 12px; } }

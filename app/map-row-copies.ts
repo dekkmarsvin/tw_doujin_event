@@ -10,6 +10,16 @@ export function copyRowLabels(sequence: keyof typeof ROW_LABEL_SEQUENCES, start:
   return index < 0 || !Number.isInteger(count) || count < 1 || count > labels.length ? [] : labels.slice(index, index + count);
 }
 
+/** A preset sequence ends (Z, 亥). Say how far it reaches from `start`
+ * instead of letting the short list read as names the user forgot to fill. */
+export function copyRowLimitError(sequence: keyof typeof ROW_LABEL_SEQUENCES, start: string, count: number): string | null {
+  const labels = ROW_LABEL_SEQUENCES[sequence];
+  const remaining = labels.length - labels.indexOf(start);
+  if (labels.indexOf(start) < 0 || !Number.isInteger(count) || count <= remaining) return null;
+  const range = sequence === "alphabet" ? `A–Z 從 ${start} 起` : `十二地支從${start}起`;
+  return `${range}最多 ${remaining} 排；請減少份數或改用自訂排名。`;
+}
+
 /** Preview an entire batch without changing either input. Never clamp a copy,
  * invent a suffix, or partially accept a sequence: the displayed codes and
  * spacing are exactly what will be saved. Keep every segment's geometry. */
