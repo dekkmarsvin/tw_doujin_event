@@ -20,7 +20,7 @@
  * Without a list the blocks still become rows, labelled `?1`, `?2`… in
  * reading order and numbered by the best-scoring path, for a person to rename.
  */
-import { EVENT_MAP_VERSION, validateEventMapLayout, type EventMapLayout, type MapAccessPoint, type MapOrientation } from "../../../app/event-map";
+import { EVENT_MAP_VERSION, validateEventMapLayout, type EventMapLayout, type MapAccessPoint, type MapOrientation } from "../event-map";
 import { cellCost, learnPrototypes, readingCost } from "./glyphs";
 import type { BoothCell, CellBlock, RecognitionResult, Rect } from "./recognize";
 
