@@ -5,7 +5,7 @@ import { openSurface, source } from "./support/map-authoring.mjs";
 const journey = await start("map-authoring-workspace");
 try {
   for (const surface of ["organizer", "circle"]) {
-    const initial = { ...structuredClone(source), width: 1200, height: 900, floor: { x: 0, y: 0, width: 1200, height: 900 }, pillars: [], landmarks: [], accessPoints: [], rows: [{ label: "A", orientation: "vertical", confidence: 1, slots: Array.from({ length: 16 }, (_, i) => ({ code: `A${String(i + 1).padStart(2, "0")}`, rect: { x: 150, y: 100 + i * 30, width: 60, height: 30 } })) }] };
+    const initial = { ...structuredClone(source), width: 1200, height: 900, floor: { x: 0, y: 0, width: 1200, height: 900 }, pillars: [], landmarks: [], accessPoints: [], rows: [{ label: "A", orientation: "vertical", confidence: 1, slots: Array.from({ length: 16 }, (_, i) => ({ code: `A${String(i + 1).padStart(2, "0")}`, rect: { x: i < 8 ? 240 : 180, y: 200 + (i < 8 ? 7 - i : i - 8) * 55, width: 60, height: 55 } })) }] };
     const { page, editor, state } = await openSurface(journey, surface, initial, { failSaves: 1 });
     await page.setViewportSize({ width: 1440, height: 1024 });
     const picker = editor.getByRole("combobox", { name: "選取地圖元素" });
@@ -24,6 +24,11 @@ try {
     });
     // Interior scroll position avoids the intentional clamping at map edges.
     await editor.locator("#map-layout-editor-canvas").evaluate(node => { node.scrollLeft = 250; node.scrollTop = 250; });
+    const clipping = await editor.locator("#map-layout-editor-canvas").evaluate(node => {
+      const bounds = node.getBoundingClientRect(), inspector = node.closest("section").querySelector("aside[aria-label=\"選取元素屬性\"]").getBoundingClientRect();
+      return { canvasRight: bounds.right, panelLeft: inspector.left, overflow: getComputedStyle(node).overflowX };
+    });
+    assert.ok(clipping.canvasRight <= clipping.panelLeft && ["auto", "scroll", "hidden"].includes(clipping.overflow), "zoomed content is clipped before the inspector");
     const before = await center();
     await page.getByRole("button", { name: "返回地圖步驟", exact: true }).click();
     await page.waitForFunction(() => !!document.querySelector("dialog:not(:modal)"));
@@ -36,7 +41,9 @@ try {
     assert.match(await svg.getAttribute("aria-label"), /200%/);
     assert.equal(await picker.inputValue(), "slot:0:0");
     await editor.getByRole("button", { name: "重設編輯地圖倍率" }).click();
-    await editor.getByRole("button", { name: "編輯整個排段", exact: true }).click();
+    await editor.getByRole("button", { name: "攤位清單", exact: true }).click();
+    await editor.getByRole("button", { name: "選取 A 排", exact: true }).click();
+    await editor.getByRole("button", { name: "攤位清單", exact: true }).click();
     await editor.getByRole("button", { name: "複製多排", exact: true }).click();
     await editor.getByRole("spinbutton", { name: "邊緣間距", exact: true }).fill("48");
     assert.equal(await count(), 16, "preview is not committed");
@@ -67,7 +74,7 @@ try {
     await picker.selectOption("slot:0:0");
     await editor.getByRole("button", { name: "複製多排", exact: true }).click();
     assert.equal(await editor.getByRole("button", { name: "加入 3 排", exact: true }).isDisabled(), true, "duplicate labels cannot apply");
-    await editor.getByRole("spinbutton", { name: "複製份數", exact: true }).press("Escape");
+    await page.getByRole("button", { name: "返回地圖步驟", exact: true }).press("Escape");
     assert.equal(await editor.getByRole("region", { name: "複製多排預覽" }).count(), 0);
     assert.equal(await page.locator("dialog:modal").count(), 1, "first Escape cancels the inner preview");
     await svg.press("Escape");

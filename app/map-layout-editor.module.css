@@ -255,7 +255,7 @@
 .editingBody { display:flex; flex-direction:column; flex:1; min-height:0; }
 .toolRail { display:flex; align-items:center; gap:5px; padding:8px 12px; border-bottom:1px solid #dfe3df; background:#f9faf8; flex-wrap:wrap; }
 .railSpacer { flex:1; }
-.editorSurface .surfaceHeader button,.editorSurface .toolRail button,.editorSurface .rosterToggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid #dfe3df; border-radius:7px; background:#f9faf8; color:#202a35; font:700 calc(12px * var(--ui-font-scale,1)) var(--font-sans,Geist,system-ui,sans-serif); cursor:pointer; }
+.editorSurface .surfaceHeader button,.editorSurface .toolRail button,.editorSurface .rosterToggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid #dfe3df; border-radius:7px; background:#f9faf8; color:#202a35; font:700 calc(12px * var(--ui-font-scale,1)) var(--font-geist),system-ui,"Noto Sans TC",sans-serif; cursor:pointer; }
 .editorSurface .surfaceHeader .savePrimary { background:#202a35; color:#f9faf8; white-space:nowrap; }
 .editorSurface :is(.editor,.surfaceHeader) button:hover:not(:disabled) { background:#f2f0e8; color:#202a35; border-color:#707a82; }
 .editorSurface .surfaceHeader .savePrimary:hover:not(:disabled) { background:#34404c; color:#f9faf8; }
@@ -266,9 +266,8 @@
 .editor .addTools { justify-content:flex-start; padding:8px 12px; border-bottom:1px solid #dfe3df; background:#f9faf8; }
 .addTools>span { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12px; }
 .editor .addTools button { background:#f9faf8; color:#202a35; font-size:calc(12px * var(--ui-font-scale,1)); }
-.canvasViewport { flex:1; order:0; padding:48px 292px 16px 16px; }
-.withInspector .canvasViewport { padding-right:292px; }
-.withRoster .canvasViewport { padding-left:280px; }
+.canvasViewport { flex:1; order:0; margin-right:276px; padding:48px 16px 16px; }
+.withRoster .canvasViewport { margin-left:264px; }
 .editor .canvasToolbar { order:2; border-top:1px solid #dfe3df; border-bottom:0; background:#f9faf8; justify-content:flex-end; padding:6px 12px; }
 .editor .canvasToolbar button,.editor .canvasToolbar span,.editor .canvasToolbar output { font-size:calc(10px * var(--ui-font-scale,1)); }
 .editor .guideToolbar { order:1; padding:6px 12px; border-top:1px solid #dfe3df; background:#f9faf8; }
@@ -288,7 +287,10 @@
 .rosterDrawer .boothList ul { max-height:none; }
 .copyPreview { pointer-events:none; }
 .copyPreview rect { fill:#edf8f3; fill-opacity:.55; stroke:#306d59; stroke-width:1; stroke-dasharray:5 3; vector-effect:non-scaling-stroke; }
-.copyPreview text { fill:#306d59; font-size:12px; text-anchor:middle; }
+.copyPreview text { fill:#306d59; font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; }
+.copyPreview .rowLabel { font-size:19px; }
+.editor .rowList .rowSelect { flex:1; text-align:left; background:#f9faf8; color:#202a35; border:0; }
+.rowSelect small { display:block; font-weight:400; color:#707a82; }
 .recognitionMode { height:100%; overflow:auto; background:#f8f7f2; }
 .editor .overlapNotice { padding:6px 12px; margin:0!important; }
 .editor .zoomSurface,.editor .canvasViewport svg { background:#f2f0e8; }
@@ -296,7 +298,7 @@
   .surfaceHeader { flex-wrap:wrap; }
   .saveStatus,.saveError { order:3; max-width:none; width:100%; }
   .inspector { width:230px; }
-  .canvasViewport { padding-right:254px; }
+  .canvasViewport { margin-right:242px; }
   .rosterDrawer { width:210px; }
-  .withRoster .canvasViewport { padding-left:230px; }
+  .withRoster .canvasViewport { margin-left:214px; }
 }
