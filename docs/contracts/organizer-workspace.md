@@ -326,6 +326,8 @@ AMEND 的分支、PR、核准 check 或 merge 回應遺失，仍以原工作識�
 
 Deployment seam 缺少實作時仍回 `publication_deployment_unavailable`，不能完成 published；Pages 與 cron 共用的 runtime 使用 [`github-publication-deployment.ts`](../../app/github-publication-deployment.ts) 的 adapter。只接受 main repository、`deploy-pages.yml`（workflow ID 331570396）、push/main、本 job `main_merge_sha` 的唯一 run。先保存 run ID／attempt，再讀該 attempt 的 jobs；`Deploy to Cloudflare Pages` 成功才進入 verifying，該 attempt 的 `Verify and deploy` 與 `Smoke test production deployment` 均 completed + success 才檢查公開來源。Skipped 不通過，custom domain 結果不影響 blocking gate。
 
+GitHub job 已回報 completed + success，但必要 step 仍為 queued／pending／in_progress 且沒有 conclusion 時，沿用既有 pending 排程重讀同一 attempt，等步驟結果同步，不立即記為部署失敗，也不據此完成 published。已完成的失敗／skipped、缺少或重複的必要 step 仍拒絕；不得以等待中的另一個 step 掩蓋它們。
+
 CI 在 pinned production build 後產生 `deployment-manifest.json`，記錄部署 commit、所有 published event 的 data pin commit 與實際輸出 JSON SHA-256；production smoke 同時核對部署 commit。Runtime 僅查固定 `https://tw-catalog.pages.dev`、不帶認證且不接受 redirect，核對本次 main SHA／data SHA、固定 main commit 的完整公開活動清單、全部列出的活動 JSON bytes（含既有活動、地圖）、Reader HTML 與匿名 session 401，最後重讀 manifest 確認驗證途中未換版。通過後保存 manifest SHA-256 才可 published。這不取代 CH20 真實 Reader UI 驗收。
 
 部署或 workflow smoke 失敗記錄 retryable `publication_deployment_failed`；既有 Owner／Admin retry 交易僅授權原 run 的下一個 attempt，保留 snapshot、data／main SHA、PR 與原 stage。Adapter 重跑原 run，接受 GitHub 空 body 201，回應遺失後先 reconcile 已出現的下一 attempt；未經 retry 的 attempt 改變 fail closed。重跑前在既有 lease／remote intent 下重查 main，若已前進就拒絕部署舊 checkout。只有 origin 檢查失敗則重驗 origin，不重新建立 PR 或主動重部署。模擬 GitHub／本機 D1 證據不能代替真正的發布失敗恢復。

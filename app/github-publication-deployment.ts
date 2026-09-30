@@ -32,6 +32,11 @@ function successfulStep(job: GitHubWorkflowJob, name: string) {
   const steps = job.steps.filter((step) => step.name === name);
   return steps.length === 1 && steps[0].status === "completed" && steps[0].conclusion === "success";
 }
+function pendingStep(job: GitHubWorkflowJob, name: string) {
+  const steps = job.steps.filter((step) => step.name === name);
+  return steps.length === 1 && !steps[0].conclusion
+    && ["queued", "pending", "in_progress"].includes(steps[0].status);
+}
 
 export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOptions, "owner" | "beforeWrite"> & {
   originFetch?: typeof globalThis.fetch;
@@ -82,7 +87,11 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
     }
     if (input.step === "waiting_deployment") {
       if (!successfulStep(job, "Deploy to Cloudflare Pages")) {
-        if (job.status === "completed") fail("publication_deployment_failed", "正式部署步驟沒有成功完成。", true);
+        // GitHub can report a completed job before its step results converge.
+        // Keep polling this attempt; unfinished steps are not failed steps.
+        if (job.status === "completed" && !pendingStep(job, "Deploy to Cloudflare Pages")) {
+          fail("publication_deployment_failed", "正式部署步驟沒有成功完成。", true);
+        }
         return { pending: true };
       }
       return {};
@@ -90,6 +99,8 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
     if (input.step !== "verifying_production") fail("unknown_step", "部署 adapter 不接受此發布階段。");
     if (job.status !== "completed") return { pending: true };
     if (!successfulStep(job, "Deploy to Cloudflare Pages") || !successfulStep(job, "Smoke test production deployment")) {
+      if (["Deploy to Cloudflare Pages", "Smoke test production deployment"]
+        .every((name) => successfulStep(job, name) || pendingStep(job, name))) return { pending: true };
       fail("publication_deployment_failed", "目前 attempt 的 Pages production smoke 沒有成功完成。", true);
     }
     const commit = await adapter.readCommit(repository, sha);
