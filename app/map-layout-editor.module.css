@@ -255,7 +255,7 @@
 .editingBody { display:flex; flex-direction:column; flex:1; min-height:0; }
 .toolRail { display:flex; align-items:center; gap:5px; padding:8px 12px; border-bottom:1px solid #dfe3df; background:#f9faf8; flex-wrap:wrap; }
 .railSpacer { flex:1; }
-.editorSurface .surfaceHeader button,.editorSurface .toolRail button,.editorSurface .rosterToggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid #dfe3df; border-radius:7px; background:#f9faf8; color:#202a35; font:700 calc(12px * var(--ui-font-scale,1)) var(--font-geist),system-ui,"Noto Sans TC",sans-serif; cursor:pointer; }
+.editorSurface .surfaceHeader button,.editorSurface .toolRail button,.editorSurface .rosterToggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid #dfe3df; border-radius:7px; background:#f9faf8; color:#202a35; font-family:inherit; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:700; line-height:1.4; cursor:pointer; }
 .editorSurface .surfaceHeader .savePrimary { background:#202a35; color:#f9faf8; white-space:nowrap; }
 .editorSurface :is(.editor,.surfaceHeader) button:hover:not(:disabled) { background:#f2f0e8; color:#202a35; border-color:#707a82; }
 .editorSurface .surfaceHeader .savePrimary:hover:not(:disabled) { background:#34404c; color:#f9faf8; }
@@ -287,7 +287,7 @@
 .rosterDrawer .boothList ul { max-height:none; }
 .copyPreview { pointer-events:none; }
 .copyPreview rect { fill:#edf8f3; fill-opacity:.55; stroke:#306d59; stroke-width:1; stroke-dasharray:5 3; vector-effect:non-scaling-stroke; }
-.copyPreview text { fill:#306d59; font-family:var(--font-mono),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; }
+.copyPreview text { fill:#306d59; font-family:var(--font-mono,"Geist Mono"),ui-monospace,monospace; font-size:7px; font-weight:800; text-anchor:middle; dominant-baseline:middle; }
 .copyPreview .rowLabel { font-size:19px; }
 .editor .rowList .rowSelect { flex:1; text-align:left; background:#f9faf8; color:#202a35; border:0; }
 .rowSelect small { display:block; font-weight:400; color:#707a82; }
