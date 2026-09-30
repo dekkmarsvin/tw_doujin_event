@@ -132,6 +132,55 @@ test("same run and attempt require deployment plus blocking smoke; advisory cust
   await assert.rejects(driver.run(input), (error) => error.code === "publication_deployment_failed");
 });
 
+test("completed jobs wait for unfinished deployment step results before advancing", async () => {
+  for (const status of ["queued", "pending", "in_progress"]) {
+    const { state, input, driver, origin } = fixture();
+    input.step = "waiting_deployment";
+    const checkpoint = structuredClone(input.job);
+    Object.assign(state.jobs[0].steps[0], { status, conclusion: null });
+    assert.deepEqual(await driver.run(input), { pending: true });
+    assert.deepEqual(input.job, checkpoint);
+    assert.equal(state.writes, 0);
+    assert.equal(origin.seen.length, 0, "an unfinished step cannot certify the public origin");
+    Object.assign(state.jobs[0].steps[0], { status: "completed", conclusion: "success" });
+    assert.deepEqual(await driver.run(input), {});
+    input.step = "verifying_production";
+    assert.equal((await driver.run(input)).productionVerified, true);
+  }
+});
+
+test("completed jobs wait for both blocking step results before verifying production", async () => {
+  for (const index of [0, 1]) {
+    const { state, input, driver, origin } = fixture();
+    Object.assign(state.jobs[0].steps[index], { status: "in_progress", conclusion: null });
+    assert.deepEqual(await driver.run(input), { pending: true });
+    assert.equal(state.writes, 0);
+    assert.equal(origin.seen.length, 0);
+    Object.assign(state.jobs[0].steps[index], { status: "completed", conclusion: "success" });
+    assert.equal((await driver.run(input)).productionVerified, true);
+  }
+});
+
+test("unfinished results never hide failed, skipped, missing or duplicate blocking steps", async () => {
+  for (const step of ["waiting_deployment", "verifying_production"]) {
+    for (const mutate of [
+      (job) => { job.steps[0].conclusion = "failure"; },
+      (job) => { job.steps[0].conclusion = "skipped"; },
+      (job) => { job.steps[0].conclusion = "cancelled"; },
+      (job) => { job.steps.shift(); },
+      (job) => { job.steps.push({ ...job.steps[0] }); },
+    ]) {
+      const { state, input, driver, origin } = fixture();
+      input.step = step;
+      Object.assign(state.jobs[0].steps[1], { status: "in_progress", conclusion: null });
+      mutate(state.jobs[0]);
+      await assert.rejects(driver.run(input), error => error.code === "publication_deployment_failed" && error.retryable);
+      assert.equal(state.writes, 0);
+      assert.equal(origin.seen.length, 0);
+    }
+  }
+});
+
 test("deployment metadata from another SHA, event, workflow, repository or attempt is refused", async () => {
   for (const mutate of [
     (s) => { s.run.head_sha = "a".repeat(40); }, (s) => { s.run.head_branch = "other"; },
