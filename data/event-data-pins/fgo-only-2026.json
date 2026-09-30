@@ -1,0 +1,48 @@
+{
+  "schema": "event-data-pin/2",
+  "eventId": "fgo-only-2026",
+  "repository": "dekkmarsvin/tw_doujin_event-data",
+  "commit": "668976de160fb701c55bafaf4bdfc278e6f84b99",
+  "files": [
+    {
+      "path": "events/fgo-only-2026/circle-identity-groups.json",
+      "sha256": "f047f3c0ea7a2b431c304c158775b8273c1d70511b4fa0287dcd82e6fe8cf24d"
+    },
+    {
+      "path": "events/fgo-only-2026/event.json",
+      "sha256": "932d319d4133e4c8cac5e76913293477ca87e36a73b25f19180aa9d7be54c7bd"
+    },
+    {
+      "path": "events/fgo-only-2026/map.json",
+      "sha256": "f9a64ec912853f049dba10a372734676cb1188df2fb7415588bdbb4c42fa69de"
+    },
+    {
+      "path": "events/fgo-only-2026/official-booths.json",
+      "sha256": "f0b060f10a0b880f561a6108974b986feda3d91294db717aff373eae5fad23de"
+    },
+    {
+      "path": "events/fgo-only-2026/reference-selection.json",
+      "sha256": "7e42fa9a9296dd2223e328a1beea64e85c7feda1778a0741638803b0ab549e02"
+    },
+    {
+      "path": "references/category-catalogs/organizer-9adcd49a-00ab-4eaa-ac7e-3d87c4697b84/catalog-1862bf4d-4f35-41a6-89d4-52ce8c0e18c9/1.json",
+      "sha256": "68528ef1348802e8e29f14827ac9b033d4bf2830c64f1751abe8ceb3c2cb6f95"
+    },
+    {
+      "path": "references/organizers/organizer-9adcd49a-00ab-4eaa-ac7e-3d87c4697b84.json",
+      "sha256": "c07184c2b86c33f74e7ac039373de014dd10e0141815537f0bc12d9a75b5e71d"
+    },
+    {
+      "path": "references/organizers/organizer-d10dc870-2e2a-4f4a-b2e7-3899f860ce54.json",
+      "sha256": "aa1ac9ba19cfd071c78ab351a4a026d8886764b3ee0d755722860bfea8547469"
+    },
+    {
+      "path": "references/venue-spaces/venue-space-677b4283-d392-4b83-9d38-5aa81e2df511.json",
+      "sha256": "14eb5bf9f411ec577329ee11ca30ed52d273b7d26b643b4ed661fd5eb1c7d49d"
+    },
+    {
+      "path": "references/venues/venue-c2a522f0-e534-4a91-ba1d-b347c112e092.json",
+      "sha256": "42674a0ef59268384b991d2444b25f1c688f26cbe8fa77c61aa10d5848583e75"
+    }
+  ]
+}

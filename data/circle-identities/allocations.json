@@ -1,6 +1,6 @@
 {
   "schema": "circle-id-allocations/1",
-  "nextSequence": 2236,
+  "nextSequence": 2292,
   "allocations": [
     {
       "id": "c-000001",
@@ -11176,6 +11176,286 @@
       "id": "c-002235",
       "allocatedAt": "2026-09-20",
       "reason": "New reviewed pf45-rf14 catalog evidence"
+    },
+    {
+      "id": "c-002236",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002237",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002238",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002239",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002240",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002241",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002242",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002243",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002244",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002245",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002246",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002247",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002248",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002249",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002250",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002251",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002252",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002253",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002254",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002255",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002256",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002257",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002258",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002259",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002260",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002261",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002262",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002263",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002264",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002265",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002266",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002267",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002268",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002269",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002270",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002271",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002272",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002273",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002274",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002275",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002276",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002277",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002278",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002279",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002280",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002281",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002282",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002283",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002284",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002285",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002286",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002287",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002288",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002289",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002290",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002291",
+      "allocatedAt": "2026-09-30",
+      "reason": "New reviewed fgo-only-2026 catalog evidence"
     }
   ]
 }

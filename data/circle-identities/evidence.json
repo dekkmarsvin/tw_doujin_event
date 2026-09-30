@@ -34496,6 +34496,718 @@
           "value": "2:R40"
         }
       ]
+    },
+    {
+      "circleId": "c-002236",
+      "currentName": "閱讀不孤獨",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002237",
+      "currentName": "九穫個人",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002238",
+      "currentName": "棉花歐姆蛋",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002239",
+      "currentName": "喬喬君",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002240",
+      "currentName": "迦勒底特供橘子果醬",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002241",
+      "currentName": "卡多君的記事本",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002242",
+      "currentName": "林北一個人打麻將,缺三,約嗎?",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002243",
+      "currentName": "Nachtlied✦夜歌",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002244",
+      "currentName": "比起聖杯戰爭更喜歡你",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A09"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002245",
+      "currentName": "剩悲戰爭Plus",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A11"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002246",
+      "currentName": "海底撈月",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A13"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002247",
+      "currentName": "大騙子會夢見小白蛾嗎",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002248",
+      "currentName": "泥棒貓與他的垃圾朋友",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:A16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002249",
+      "currentName": "我玩fgo不是因為我有品味 而是因為 錢不能退",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002250",
+      "currentName": "ॐ聖誕島假面遊印度ॐ",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002251",
+      "currentName": "我沒有抽滿新選組我是不會幸福的",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002252",
+      "currentName": "王廚專賣店",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002253",
+      "currentName": "雨之書齋",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002254",
+      "currentName": "阿清甜點舖(狐狸洞)",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002255",
+      "currentName": "我伽總在哈哈哈",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002256",
+      "currentName": "鎖鏈QP窮鬼",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002257",
+      "currentName": "popcorn studio",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002258",
+      "currentName": "大腦冠位檢定",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002259",
+      "currentName": "炙烤企鵝",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B11"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002260",
+      "currentName": "寢言空想",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002261",
+      "currentName": "夢火難民底迦啦",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002262",
+      "currentName": "ELLLLL",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002263",
+      "currentName": "我真的芙辣",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B15"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:B16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002264",
+      "currentName": "為王的榮光而喜悅",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002265",
+      "currentName": "為綠髮吃草人而喜悅",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002266",
+      "currentName": "琳靜的兩色",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C03"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002267",
+      "currentName": "綸子ぽい",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002268",
+      "currentName": "迦勒底必須留下為我而留",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002269",
+      "currentName": "Lonizing工坊",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002270",
+      "currentName": "LYCORIS GARDEN",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002271",
+      "currentName": "熊老大朱氏會社",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002272",
+      "currentName": "公館彩券行兩千塊中一千萬",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002273",
+      "currentName": "混沌製造所",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C11"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002274",
+      "currentName": "捲款潛逃自立門戶優良員工",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C13"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002275",
+      "currentName": "FGO好玩一直玩",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002276",
+      "currentName": "羽琉",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:C16"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002277",
+      "currentName": "SHIO SHIO",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D01"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002278",
+      "currentName": "突襲黑糖珍珠",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D02"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002279",
+      "currentName": "強化蕪肖",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D03"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002280",
+      "currentName": "整個人生都被獅心王理查一世給毀了",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D04"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002281",
+      "currentName": "白塔魔術工作室",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D05"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002282",
+      "currentName": "朝霧箱庭",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D06"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002283",
+      "currentName": "12世紀的英格蘭Only fans可以刷卡嗎",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D07"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002284",
+      "currentName": "我推爺爺之想吃過期十年草莓蛋糕",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D08"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002285",
+      "currentName": "稚稚丸",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D09"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002286",
+      "currentName": "蹦槺超市(三箱店)",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D10"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002287",
+      "currentName": "鉛筆盒",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D11"
+        },
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D12"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002288",
+      "currentName": "楓糖蛋塔",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D13"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002289",
+      "currentName": "LiuHan",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D14"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002290",
+      "currentName": "不人氣",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D15"
+        }
+      ]
+    },
+    {
+      "circleId": "c-002291",
+      "currentName": "Co John",
+      "aliases": [],
+      "sources": [
+        {
+          "eventId": "fgo-only-2026",
+          "kind": "organizer-booth",
+          "value": "1:D16"
+        }
+      ]
     }
   ]
 }
