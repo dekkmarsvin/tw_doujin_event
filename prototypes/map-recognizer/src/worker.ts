@@ -44,7 +44,9 @@ export default {
     if (!file || typeof file === "string") return json({ error: "請選擇配置圖。" }, 400);
     if (file.size > MAX_UPLOAD_BYTES) return json({ error: "檔案太大，請上傳 12 MB 以內的配置圖。" }, 413);
     const boothList = String(form.get("boothList") ?? "");
-    const crop = parseCrop(String(form.get("crop") ?? ""));
+    const cropText = String(form.get("crop") ?? "");
+    const crop = parseCrop(cropText);
+    if (cropText.trim() && !crop) return json({ error: "框選範圍格式不正確。請輸入 x,y,寬,高，或取消框選。" }, 400);
     const template = String(form.get("template") ?? "").slice(0, 64);
     try {
       const result = await recognizePlan(new Uint8Array(await file.arrayBuffer()), { boothList, crop, template });

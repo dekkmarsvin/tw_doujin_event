@@ -26,7 +26,7 @@ export const PAGE = `<!doctype html>
   .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: auto; max-height: 78vh; touch-action: none; }
   .stage img, .stage svg.overlay { display: block; width: 100%; height: auto; }
   .stage svg.overlay { position: absolute; inset: 0; pointer-events: none; }
-  .stage.vector-only img { opacity: 0; }
+  .stage.vector-only:has(svg.overlay) img { opacity: 0; }
   .stage.overlaid svg.overlay { opacity: .82; }
   .selection { position: absolute; border: 2px dashed var(--accent); background: rgba(47, 93, 138, .08); pointer-events: none; }
   .empty { padding: 48px 16px; color: var(--muted); text-align: center; }
@@ -64,23 +64,36 @@ export const PAGE = `<!doctype html>
 <script>
 const $ = (id) => document.getElementById(id);
 const form = $("form"), stage = $("stage"), status = $("status");
-let image = null, selection = null, drag = null, lastResult = null, sourceName = "map";
+let image = null, selection = null, drag = null, lastResult = null, sourceName = "map", activeRequest = null;
 
 function scale() { return image ? image.naturalWidth / image.getBoundingClientRect().width : 1; }
 
+function clearResult() {
+  activeRequest?.abort(); activeRequest = null;
+  $("run").disabled = false;
+  lastResult = null;
+  stage.querySelector("svg.overlay")?.remove();
+  $("summary").textContent = ""; $("order").textContent = ""; $("warnings").innerHTML = ""; $("rows").hidden = true;
+  $("downloadMap").hidden = $("downloadSvg").hidden = true;
+  status.className = "status"; status.textContent = "";
+}
+
+form.boothList.addEventListener("input", clearResult);
+form.crop.addEventListener("input", clearResult);
+
 form.image.addEventListener("change", () => {
+  clearResult();
   const file = form.image.files[0];
+  if (image) URL.revokeObjectURL(image.src);
+  stage.innerHTML = "";
+  image = null; selection = null; drag = null;
+  form.crop.value = "";
   if (!file) return;
   sourceName = file.name.replace(/\\.[^.]+$/, "");
-  stage.innerHTML = "";
   image = new Image();
   image.src = URL.createObjectURL(file);
   image.alt = "上傳的配置圖";
   stage.append(image);
-  form.crop.value = "";
-  lastResult = null;
-  $("summary").textContent = ""; $("order").textContent = ""; $("warnings").innerHTML = ""; $("rows").hidden = true;
-  $("downloadMap").hidden = $("downloadSvg").hidden = true;
 });
 
 stage.addEventListener("pointerdown", (event) => {
@@ -95,6 +108,7 @@ stage.addEventListener("pointerdown", (event) => {
 });
 stage.addEventListener("pointermove", (event) => {
   if (!drag) return;
+  clearResult();
   const box = stage.getBoundingClientRect();
   const x = event.clientX - box.left + stage.scrollLeft, y = event.clientY - box.top + stage.scrollTop;
   Object.assign(selection.style, { left: Math.min(x, drag.x) + "px", top: Math.min(y, drag.y) + "px", width: Math.abs(x - drag.x) + "px", height: Math.abs(y - drag.y) + "px" });
@@ -105,7 +119,7 @@ stage.addEventListener("pointerup", () => {
   if (drag && selection && (parseFloat(selection.style.width) < 8 || parseFloat(selection.style.height) < 8)) { selection.remove(); selection = null; form.crop.value = ""; }
   drag = null;
 });
-$("clearCrop").addEventListener("click", () => { selection?.remove(); selection = null; form.crop.value = ""; });
+$("clearCrop").addEventListener("click", () => { clearResult(); selection?.remove(); selection = null; form.crop.value = ""; });
 $("overlay").addEventListener("change", (event) => {
   stage.classList.toggle("overlaid", event.target.checked);
   stage.classList.toggle("vector-only", !event.target.checked);
@@ -114,21 +128,26 @@ $("overlay").addEventListener("change", (event) => {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!form.image.files[0]) return;
+  clearResult();
+  const request = new AbortController();
+  activeRequest = request;
   $("run").disabled = true;
   status.className = "status";
   status.textContent = "辨識中…";
   try {
-    const response = await fetch("/recognize", { method: "POST", body: new FormData(form) });
+    const response = await fetch("/recognize", { method: "POST", body: new FormData(form), signal: request.signal });
     const body = await response.json();
+    if (activeRequest !== request) return;
     if (!response.ok) throw new Error(body.error || "辨識失敗。");
     lastResult = body;
     show(body);
     status.textContent = "完成。這是草稿，請逐排核對後再使用。";
   } catch (error) {
+    if (activeRequest !== request) return;
     status.className = "status error";
     status.textContent = error.message;
   } finally {
-    $("run").disabled = false;
+    if (activeRequest === request) { activeRequest = null; $("run").disabled = false; }
   }
 });
 
@@ -144,7 +163,9 @@ function show(result) {
   stage.append(outer);
   selection?.remove(); selection = null;
   const s = result.summary;
-  $("summary").textContent = s.rows + " 排、" + s.booths + " 個攤位、" + s.pillars + " 根柱子、" + s.accessPoints + " 個出入口、" + s.landmarks + " 個大型區域";
+  const matched = result.report.rows.filter((row) => !row.label.startsWith("?"));
+  const matchedBooths = matched.reduce((sum, row) => sum + row.booths, 0);
+  $("summary").textContent = "推定對應清單 " + matched.length + " 排、" + matchedBooths + " 格；未對應 " + (s.rows - matched.length) + " 區塊、" + (s.booths - matchedBooths) + " 格。" + s.pillars + " 根柱子、" + s.accessPoints + " 個出入口、" + s.landmarks + " 個大型區域";
   $("order").textContent = result.report.walk ? "排名依位置推定（" + result.report.walk + "），攤位數相同的排請核對排名。" : "";
   $("warnings").innerHTML = "";
   for (const text of result.report.warnings) { const li = document.createElement("li"); li.textContent = text; $("warnings").append(li); }

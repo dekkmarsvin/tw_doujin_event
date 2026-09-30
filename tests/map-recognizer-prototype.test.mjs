@@ -223,3 +223,16 @@ test("the Worker serves its page and answers uploads without any binding", async
   assert.match(body.svg, /^<svg /);
   assert.equal(validateEventMapLayout(body.layout).ok, true);
 });
+
+test("the Worker rejects a nonempty invalid crop instead of recognizing the whole sheet", async () => {
+  for (const crop of ["not coordinates", "1,2,3", "0,0,0,20", "-1,0,20,20", "0,0,NaN,20"]) {
+    const form = new FormData();
+    form.set("image", new Blob([encodePng(ruledPlan())], { type: "image/png" }), "plan.png");
+    form.set("crop", crop);
+    const response = await worker.fetch(new Request("http://prototype.test/recognize", { method: "POST", body: form }));
+    assert.equal(response.status, 400, crop);
+    const body = await response.json();
+    assert.match(body.error, /框選範圍格式不正確/);
+    assert.equal(body.layout, undefined);
+  }
+});
