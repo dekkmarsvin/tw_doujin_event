@@ -115,7 +115,7 @@ test("first observation pins the failed deployment before reporting failure", as
   state.noRun = false;
   state.run.conclusion = "cancelled"; state.jobs[0].conclusion = "cancelled";
   const result = await driver.run(input);
-  assert.deepEqual(result, { pending: true, metadata: { workflow_run_id: 55, workflow_run_attempt: 1 } });
+  assert.deepEqual(result, { pending: true, pendingReason: "deployment_metadata", metadata: { workflow_run_id: 55, workflow_run_attempt: 1 } });
   Object.assign(input.job, result.metadata);
   await assert.rejects(driver.run(input), (error) => error.code === "publication_deployment_failed" && error.retryable);
   assert.equal(state.writes, 0, "failure alone never requests a rerun");
@@ -138,7 +138,7 @@ test("completed jobs wait for unfinished deployment step results before advancin
     input.step = "waiting_deployment";
     const checkpoint = structuredClone(input.job);
     Object.assign(state.jobs[0].steps[0], { status, conclusion: null });
-    assert.deepEqual(await driver.run(input), { pending: true });
+    assert.deepEqual(await driver.run(input), { pending: true, pendingReason: "deployment_metadata" });
     assert.deepEqual(input.job, checkpoint);
     assert.equal(state.writes, 0);
     assert.equal(origin.seen.length, 0, "an unfinished step cannot certify the public origin");
@@ -153,7 +153,7 @@ test("completed jobs wait for both blocking step results before verifying produc
   for (const index of [0, 1]) {
     const { state, input, driver, origin } = fixture();
     Object.assign(state.jobs[0].steps[index], { status: "in_progress", conclusion: null });
-    assert.deepEqual(await driver.run(input), { pending: true });
+    assert.deepEqual(await driver.run(input), { pending: true, pendingReason: "deployment_metadata" });
     assert.equal(state.writes, 0);
     assert.equal(origin.seen.length, 0);
     Object.assign(state.jobs[0].steps[index], { status: "completed", conclusion: "success" });
@@ -202,7 +202,7 @@ test("an authorized retry accepts empty 201, reconciles a lost response and pins
     state.lostResponse = lost;
     if (lost) await assert.rejects(driver.run(input), (error) => error.code === "github_api_request");
     else assert.deepEqual(await driver.run(input), { pending: true });
-    assert.deepEqual(await driver.run(input), { pending: true, metadata: { workflow_run_attempt: 2 } });
+    assert.deepEqual(await driver.run(input), { pending: true, pendingReason: "deployment_metadata", metadata: { workflow_run_attempt: 2 } });
     input.job.workflow_run_attempt = 2;
     state.jobs[0].status = "in_progress";
     assert.deepEqual(await driver.run(input), { pending: true });

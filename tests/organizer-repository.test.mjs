@@ -24,7 +24,8 @@ const { createPublicationDispatcher } = await environment.runner.import("/app/pu
 const { portalHandlers } = await environment.runner.import("/functions/_portal.ts");
 const { hmacSign } = await environment.runner.import("/app/portal-crypto.ts");
 const { runPublicationTick, createScheduledPublicationDispatcher,
-  PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS } = await environment.runner.import("/app/publication-scheduler.ts");
+  PUBLICATION_CRON, PUBLICATION_RETRY_MAX_MS, PUBLICATION_TICK_MAX_TRANSITIONS, PUBLICATION_JOB_MAX_TRANSITIONS,
+  PUBLICATION_TICK_START_BUDGET_MS } = await environment.runner.import("/app/publication-scheduler.ts");
 const { signGitHubWebhookForTest } = await environment.runner.import("/app/publication-bundle-assembler.ts");
 const { onRequest: middleware } = await environment.runner.import("/functions/_middleware.ts");
 const { onRequestPost: webhook } = await environment.runner.import("/functions/api/integrations/github/webhook.ts");
@@ -56,18 +57,19 @@ const initialDraft = {
   officialSource: { label: "", url: null },
 };
 
-async function publicationFixture() {
-  const id = "publication-candidate";
+async function publicationFixture(suffix = "") {
+  const id = `publication-candidate${suffix}`;
+  const eventId = `second-event${suffix}`;
   await repository.createOrganizerCandidate({ id, tentativeName: "Publication", ownerEmail: "owner@example.test",
-    createdByAccountId: adminId, draftJson: JSON.stringify({ ...initialDraft, event: { ...initialDraft.event, id: "second-event" } }), now: NOW });
+    createdByAccountId: adminId, draftJson: JSON.stringify({ ...initialDraft, event: { ...initialDraft.event, id: eventId } }), now: NOW });
   await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
-  await database.prepare("UPDATE organizer_event_candidates SET event_id = 'second-event' WHERE id = ?1").bind(id).run();
-  const snapshotJson = JSON.stringify({ candidateId: id, candidateVersion: 1, eventId: "second-event" });
+  await database.prepare("UPDATE organizer_event_candidates SET event_id = ?2 WHERE id = ?1").bind(id, eventId).run();
+  const snapshotJson = JSON.stringify({ candidateId: id, candidateVersion: 1, eventId });
   const hash = await sha256Hex(snapshotJson);
   const snapshot = await repository.storeOrganizerSubmissionSnapshot({ candidateId: id, candidateVersion: 1,
     actorAccountId: ownerId, snapshotJson, sha256: hash, now: NOW + 2 });
   await repository.submitOrganizerCandidate({ candidateId: id, actorAccountId: ownerId, expectedVersion: 1, now: NOW + 3 });
-  const publication = { jobId: "publication-job", snapshotId: snapshot.snapshotId, approvalHash: hash };
+  const publication = { jobId: `publication-job${suffix}`, snapshotId: snapshot.snapshotId, approvalHash: hash };
   const approved = await repository.reviewOrganizerCandidate({ candidateId: id, expectedVersion: 1,
     decision: "approve", actorAccountId: adminId, publication, now: NOW + 4 });
   assert.equal(approved.status, "publishing");
@@ -211,6 +213,66 @@ test("durable ticks resume all waiting stages after runtime recreation without w
   assert.equal(PUBLICATION_CRON, "* * * * *");
 });
 
+test("ready publications advance in the same tick within the shared transition budget", async () => {
+  const jobs = [];
+  for (const suffix of ["-one", "-two", "-three"]) jobs.push(await publicationFixture(suffix));
+  const calls = [];
+  const driver = { eventExists: async () => false, run: async ({ job, step, assertLease }) => {
+    await assertLease();
+    calls.push(`${job.id}/${step}`);
+    return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
+  } };
+  const tick = await runPublicationTick({ repository, driver, now: () => NOW + 10 });
+  assert.equal(tick.results.reduce((sum, item) => sum + item.transitions, 0), PUBLICATION_TICK_MAX_TRANSITIONS);
+  assert.ok(tick.results.every(item => item.transitions <= PUBLICATION_JOB_MAX_TRANSITIONS && item.result === "advanced"));
+  const statuses = await Promise.all(jobs.map(async ({ jobId }) => (await repository.getOrganizerPublicationJob(jobId)).status));
+  assert.deepEqual(statuses.sort(), ["published", "published", "queued"]);
+  await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
+  for (const { jobId } of jobs) assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
+  assert.equal(new Set(calls).size, calls.length, "completed checkpoints are never re-run");
+});
+
+test("elapsed time stops new transitions after preserving the completed checkpoint", async () => {
+  const { jobId } = await publicationFixture();
+  let clock = NOW + 10;
+  const calls = [];
+  const driver = { eventExists: async () => false, run: async ({ step }) => {
+    calls.push(step);
+    if (calls.length === 1) clock += PUBLICATION_TICK_START_BUDGET_MS;
+    return { metadata: checkpoint(step), productionVerified: step === "verifying_production" };
+  } };
+  const tick = await runPublicationTick({ repository, driver, now: () => clock });
+  assert.deepEqual(calls, ["preparing_data"]);
+  assert.equal(tick.results[0].elapsedMs, PUBLICATION_TICK_START_BUDGET_MS);
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).step, "waiting_data_checks");
+  await runPublicationTick({ repository, driver, now: () => clock + 1 });
+  assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "published");
+  assert.equal(calls.filter(step => step === "preparing_data").length, 1);
+});
+
+test("deployment metadata convergence uses one minute even after a long external wait", async () => {
+  const { jobId } = await publicationFixture();
+  await database.prepare("UPDATE organizer_publication_jobs SET step = 'waiting_deployment', data_merge_sha = ?2, main_merge_sha = ?3 WHERE id = ?1")
+    .bind(jobId, "b".repeat(40), "d".repeat(40)).run();
+  let clock = NOW + 10;
+  let pendingReason;
+  const dispatch = createScheduledPublicationDispatcher(repository, { eventExists: async () => false,
+    run: async () => ({ pending: true, pendingReason, metadata: { workflow_run_id: 3, workflow_run_attempt: 1 } }) }, () => clock);
+  for (let i = 0; i < 4; i++) {
+    assert.equal(await dispatch(jobId), "pending");
+    const job = await repository.getOrganizerPublicationJob(jobId);
+    if (i === 3) assert.equal(job.next_attempt_at - clock, PUBLICATION_RETRY_MAX_MS);
+    clock = job.next_attempt_at;
+  }
+  pendingReason = "deployment_metadata";
+  assert.equal(await dispatch(jobId), "pending");
+  const job = await repository.getOrganizerPublicationJob(jobId);
+  assert.equal(job.next_attempt_at - clock, 60_000);
+  assert.equal(job.step, "waiting_deployment");
+  assert.equal(job.workflow_run_id, 3);
+  assert.equal(job.workflow_run_attempt, 1);
+});
+
 test("cron expires abandoned queued work without any UI request and never dispatches old revisions", async () => {
   const { id, jobId } = await publicationFixture();
   const driver = { eventExists: async () => assert.fail("must not query"), run: async () => assert.fail("must not run") };
@@ -305,12 +367,13 @@ test("a cron overlapping webhook and another tick has one leased mutation and ke
   let entered;
   const started = new Promise((resolve) => { entered = resolve; });
   let calls = 0;
-  const driver = { eventExists: async () => false, run: async () => { calls += 1; entered(); await barrier; return {}; } };
-  const first = runPublicationTick({ repository, driver, now: () => NOW + 60_000 });
+  let clock = NOW + 60_000;
+  const driver = { eventExists: async () => false, run: async () => { calls += 1; entered(); await barrier; clock += PUBLICATION_TICK_START_BUDGET_MS; return {}; } };
+  const first = runPublicationTick({ repository, driver, now: () => clock });
   await started;
   assert.equal((await webhookRequest()).status, 202);
   const competing = await runPublicationTick({ repository: createIdentityRepository(database), driver, now: () => NOW + 60_000 });
-  assert.deepEqual(competing.results, [{ jobId, result: "skipped" }]);
+  assert.deepEqual(competing.results, [{ jobId, result: "skipped", transitions: 1, elapsedMs: 0 }]);
   release();
   await first;
   assert.equal(calls, 1);
@@ -328,9 +391,7 @@ test("scheduled Worker entry ignores disabled environments and advances only a p
     assert.equal((await repository.getOrganizerPublicationJob(jobId)).status, "queued");
   }
   t.mock.method(console, "log", () => {});
-  for (let i = 0; i < 8; i += 1) {
-    await scheduledWorker.scheduled({}, { DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" });
-  }
+  await scheduledWorker.scheduled({}, { DB: database, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1" });
   const finalJob = await repository.getOrganizerPublicationJob(jobId);
   assert.equal(finalJob.status, "published", JSON.stringify({ step: finalJob.step, failureCode: finalJob.failure_code, error: finalJob.error }));
   assert.equal(scheduledWorker.fetch, undefined);

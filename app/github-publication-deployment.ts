@@ -59,14 +59,14 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
       run = runs[0];
       assertRun(run, sha);
       // Persist identity before interpreting failures, so retry retains it.
-      return { pending: true, metadata: { workflow_run_id: run.id, workflow_run_attempt: run.run_attempt } };
+      return { pending: true, pendingReason: "deployment_metadata", metadata: { workflow_run_id: run.id, workflow_run_attempt: run.run_attempt } };
     }
     run = await adapter.readWorkflowRun(repository, input.job.workflow_run_id);
     assertRun(run, sha, input.job.workflow_run_id);
     if (run.run_attempt !== input.job.workflow_run_attempt) {
       if (input.job.workflow_run_attempt === null || (run.run_attempt === input.job.workflow_retry_attempt
         && run.run_attempt === input.job.workflow_run_attempt + 1)) {
-        return { pending: true, metadata: { workflow_run_attempt: run.run_attempt } };
+        return { pending: true, pendingReason: "deployment_metadata", metadata: { workflow_run_attempt: run.run_attempt } };
       }
       fail("publication_deployment_identity", "部署 attempt 已改變，沒有對應的重試核准。");
     }
@@ -92,7 +92,7 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
         if (job.status === "completed" && !pendingStep(job, "Deploy to Cloudflare Pages")) {
           fail("publication_deployment_failed", "正式部署步驟沒有成功完成。", true);
         }
-        return { pending: true };
+        return { pending: true, ...(job.status === "completed" ? { pendingReason: "deployment_metadata" as const } : {}) };
       }
       return {};
     }
@@ -100,7 +100,7 @@ export function createGitHubPublicationDeployment(options: Omit<GitHubAdapterOpt
     if (job.status !== "completed") return { pending: true };
     if (!successfulStep(job, "Deploy to Cloudflare Pages") || !successfulStep(job, "Smoke test production deployment")) {
       if (["Deploy to Cloudflare Pages", "Smoke test production deployment"]
-        .every((name) => successfulStep(job, name) || pendingStep(job, name))) return { pending: true };
+        .every((name) => successfulStep(job, name) || pendingStep(job, name))) return { pending: true, pendingReason: "deployment_metadata" };
       fail("publication_deployment_failed", "目前 attempt 的 Pages production smoke 沒有成功完成。", true);
     }
     const commit = await adapter.readCommit(repository, sha);
