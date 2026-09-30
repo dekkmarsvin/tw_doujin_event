@@ -68,11 +68,13 @@ function loadOrganizerMapImage(source: string) {
   });
 }
 
-export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
+export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDirtyChange, onSaveReady }: {
   detail: OrganizerEventDetail;
   onChanged: () => Promise<void>;
   onSection: (section: "import") => void;
   location: OrganizerMapLocation | null;
+  onDirtyChange: (dirty: boolean) => void;
+  onSaveReady: (save: (() => Promise<boolean>) | null) => void;
 }) {
   const [maps, setMaps] = useState<OrganizerMapSummary[]>([]);
   const [selected, setSelected] = useState<OrganizerMapDetail | null>(null);
@@ -132,7 +134,13 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
 
   // A map that was never saved is entirely unsaved, edits or not: one built
   // from a plan and not touched since is still only on this screen.
-  const unsaved = edited || (!!layout && !selected);
+  const unsaved = !!layout && (edited || !selected || !!pendingBackground);
+  useEffect(() => {
+    onDirtyChange(unsaved);
+    const warn = (event: BeforeUnloadEvent) => { if (unsaved) event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => { onDirtyChange(false); window.removeEventListener("beforeunload", warn); };
+  }, [unsaved, onDirtyChange]);
 
   /** Every way of putting something else on the canvas asks first when there is
    * something on it that is not stored anywhere. Nothing to lose goes straight
@@ -228,18 +236,22 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     return `${traced}儲存地圖時會一起存下配置圖。`;
   };
 
-  const closeEditor = () => {
+  const closeEditor = useCallback(() => {
     setConfirmingClose(false); setEdited(false); setPendingBackground(null); clearPlanNotice();
     setLayout(null); setAuthoring(EMPTY_MAP_AUTHORING); setSelected(null); setBackground("");
-  };
+  }, [clearPlanNotice]);
 
   /** Saving leaves the editor open, because a map takes several sittings and
    * closing it is a separate decision. What that costs is bookkeeping: the
    * candidate and the map both move on a version, and the next save has to send
    * the new ones. A first save also stops being a creation — from then on the
    * same editor is updating the map it just made, not making another. */
-  const saveMap = async (close = false) => {
-    if (!layout) return;
+  const saveMap = useCallback(async (close = false): Promise<boolean> => {
+    if (!editable || savingMap || !layout) return false;
+    if (!layoutHasContent(layout)) {
+      setSaveResult({ ok: false, text: "先放入攤位或設施，才能儲存。" });
+      return false;
+    }
     setConfirmingClose(false);
     setSavingMap(true);
     try {
@@ -253,6 +265,9 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
         setSavedVersion(created.version);
         saved = (await readOrganizerMap(detail.event.id, created.draftId)).map;
       }
+      // Keep the saved map's identity/revision even if its plan upload fails,
+      // so retrying the navigation save updates this map instead of creating it again.
+      setSelected(saved);
       // The plan the map is being traced from goes up with it. Saying which of
       // the two failed matters: the layout is already stored by this point, so
       // pressing save again is about the plan and nothing else.
@@ -269,12 +284,15 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
       await onChanged();
       await reload();
       setSaveResult({ ok: true, text: "地圖已儲存，尚未公開。" });
+      return true;
     } catch (error) {
       setSaveResult({ ok: false, text: message(error) });
+      return false;
     } finally {
       setSavingMap(false);
     }
-  };
+  }, [editable, savingMap, layout, selected, detail.event.id, expectedVersion, authoring, periodKey, venueSpaceId, pendingBackground, closeEditor, onChanged, reload]);
+  useEffect(() => { onSaveReady(saveMap); return () => onSaveReady(null); }, [saveMap, onSaveReady]);
 
   return <section className={`${styles.panel} ${styles.mapPanel}`}>
     <ActionNotice notice={loadNotice} />
@@ -330,7 +348,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location }: {
     {layout ? <>
       <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout}
         title={`${organizerDayLabel(detail.draft.event.days, periodKey)} · ${organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}`}
-        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || (!!selected && !edited), busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位或設施，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
+        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || !unsaved, busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位或設施，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step

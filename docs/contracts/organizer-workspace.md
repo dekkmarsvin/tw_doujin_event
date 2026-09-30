@@ -49,7 +49,7 @@
 - **完成基本設定後開在下一步，不開在剛填完的表單。** 完成鍵隨引導站卸載，它的結果沒有地方可放，所以建置冊直接開在重新讀取後的建議下一步（新活動一定是攤位匯入），並把它存成上次的建置冊區段，下次登入也從這裡開始。那個區段的面板上方出現一次「基本設定完成」，說明接下來做什麼、其餘項目改由右側準備進度進入，焦點也移到這一行；讀者切換區段或在面板裡發動任何操作後即消失，不放在整個工作區頂端。完成失敗時沿用表單在儲存鍵旁的「已儲存，但後續動作未完成」。
 - 「查看全部項目」不完成 onboarding；它只暫時打開六個區段。每位協作者的上次引導任務與建置冊區段由 `PATCH …/workspace` 分別保存，跨登入恢復且不互相覆蓋。
 - workspace 偏好與 onboarding 狀態不屬於候選內容：更新它們不增加 `current_version`，也不建立活動 revision。ADR-0047 上線前已存在、沒有 workspace state 的候選一律從建置冊開啟。
-- 表單有未儲存變更時，切換活動、引導任務或建置冊區段會提供「儲存並切換／放棄／取消」；離開瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
+- 表單或地圖有未儲存變更時，切換活動、引導任務或建置冊區段（含準備進度項目與「下一步」、「查看全部項目」／「回到基本設定」）會提供「儲存並切換／放棄／取消」；取消保留目前內容，沒有未儲存變更時直接切換。重新整理或關閉瀏覽器頁面則使用瀏覽器既有的未儲存變更確認。對話框沿用全站 shared modal focus lifecycle。Revision 一旦儲存成功，畫面會先同步新版本再執行引導或離開動作；後續動作失敗不會讓下一次儲存沿用舊版本。「儲存並離開」後保持未選取活動，不會因清單刷新自動重開第一筆。
 - 建置冊直接開放活動、場館與場地、攤位匯入、地圖、驗證與預覽、送審與發布六區。Readiness 顯示完成區段數、具名阻擋項與建議下一步，不顯示百分比；`blocked` 只代表缺少技術前置資料，區段本身仍可開啟查看。活動或場館表單有未儲存變更時，Readiness 以目前表單內容即時顯示「尚未儲存」，不沿用上一版結果。
 - 六區共用 [`app/organizer-workspace.ts`](../../app/organizer-workspace.ts) 的 prerequisite evaluator。活動與場館來自草稿 validation；匯入要求至少一列且沒有 import error；地圖要求匯入已完成、完整 day × venue-space coverage，且每份已保存地圖必須通過與正式 validation 相同的攤位覆蓋、未知攤位、重疊與幾何規則（未知攤位在候選活動是 warning，不擋住地圖區；理由見下方[地圖](#地圖)）；驗證只在沒有 error 且 `last_validated_version` 等於目前 candidate version 時完成；只有 published 才把送審與發布區段標為完成。
 
@@ -225,6 +225,7 @@ validate／preview／submit 共用 selected-reference resolver。`organizer-read
 - **已發布修正沿用來源底圖。** 修正地圖尚未上傳自己的配置圖時，登入且具修正候選權限的協作者可讀取固定 baseline 中同活動日／場地的已發布來源底圖，連續修正也沿用這條來源關係；不接受客戶端提供來源 id 或 bucket key。更換配置圖只寫修正地圖自己的物件，不影響原版。GET 不寫入、不推進版本，來源底圖維持原保存期限；來源已清除時維持找不到配置圖，不複製資料以延長保存。
 - **上傳配置圖不推進版本。** 配置圖是描圖用的底圖，不是送審內容，所以它不增加 candidate version、不寫 map revision，只留一筆 `organizer_event.map_background_updated` 稽核。儲存鍵的停用條件因此不受影響。
 - **會清掉畫面內容的動作都先問。** 空白畫布（畫面上有內容時）、切換地圖分頁、從同場地複製、切換場地（有未儲存變更時），以及已經有配置圖時再次上傳，都要先確認再執行。
+- 地圖的未儲存狀態與儲存動作接入工作區導覽；「儲存並切換」沿用地圖儲存規則，空白地圖不能儲存，儲存失敗保留內容與原因且不切換。新地圖尚未儲存、既有地圖編輯後，以及待儲存的配置圖都受到保護；已儲存後未再編輯不重複詢問。這不改變地圖面板內的切換／關閉確認，也不新增自動儲存。
 - 候選地圖的 scope 由 [`resolveCandidateAuthoringScope()`](../../app/event-authoring-scope.ts) 從草稿與匯入列推導：`allowedBoothCodes` 與 `requiredBoothCodes` 都是該 scope 實際匯入的攤位代碼。
 - **候選活動的地圖可以含沒有社團的攤位格。** 配置圖畫的是整個場地，包含沒賣掉的攤位，而那些格子沒有任何匯入列可以指認。已發布活動有 reviewed snapshot 透過 `existingBoothCodes` 認領這些格子，所以在那裡出現的陌生代碼是打錯字，仍然是 error；候選活動的第一份地圖沒有 snapshot 可依靠，因此 `unknown_booth` 降為 warning，代碼照樣列出來給人看。這是 `allowsUnallocatedBooths` 這個 scope 欄位唯一的用途。`missing_booth`、`overlap` 與幾何錯誤不受影響。
 - **候選地圖沒有公開檔案位址**（`targetPath: null`）。已發布活動的 authoring scope 才有 `targetPath`，只有一組「活動日 × 場地」時是 `map.json`，多組時是 `maps/<periodKey>/<venueSpaceId>.json`。
