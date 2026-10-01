@@ -288,7 +288,7 @@ try {
   assert.equal(JSON.parse(approvedSnapshot.snapshot_json).operation,"AMEND");
   await journey.capture(owner,"amendment-real-d1-submitted"); await owner.close();
   const admin = await journey.page({ url: `${base}/organizer`, routes: routes("admin") });
-  await admin.getByRole("button", { name: /發布後修正/ }).click();
+  await admin.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
   await openSection(admin, /^送審與發布/);
   await admin.getByRole("textbox", { name: "審閱說明", exact: true }).fill("隔離合成資料核准");
   await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
@@ -300,7 +300,7 @@ try {
   await admin.getByRole("button", { name: "重試發布", exact: true }).scrollIntoViewIfNeeded();
   await journey.capture(admin,"amendment-real-d1-recoverable-failure"); await admin.close();
   const retryOwner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
-  await retryOwner.getByRole("button", { name: /發布後修正/ }).click();
+  await retryOwner.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
   await openSection(retryOwner, /^送審與發布/);
   await retryOwner.getByRole("button", { name: "重試發布", exact: true }).click();
   await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });

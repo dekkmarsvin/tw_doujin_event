@@ -222,9 +222,10 @@ try {
   assert.match(await lateDialog.innerText(), /開啟已建立的修正候選/);
   await lateDialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.equal(await name.inputValue(), "另一場還沒儲存的內容");
-  assert.equal(await moving.getByRole("button", { name: /發布後修正/ }).count(), 1);
+  const correctedActivity = moving.getByRole("button", { name: /#190 合成修正驗收 第 2 版/ });
+  assert.equal(await correctedActivity.count(), 1);
   await journey.capture(moving, "organizer-amendment-late-response-preserves-other-draft");
-  await moving.getByRole("button", { name: /發布後修正/ }).click();
+  await correctedActivity.click();
   await lateDialog.getByRole("button", { name: "儲存並切換", exact: true }).click();
   await moving.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");

@@ -240,7 +240,7 @@ try {
   ownerRoutes.release();
   await ownerResponse;
   await owner.getByRole("heading", { name: "發布狀態（先前儲存的內容）", exact: true }).waitFor();
-  assert.match(await ownerReview.innerText(), /目前版本為第 2 版/);
+  assert.match(await ownerReview.innerText(), /目前狀態\s+要求修改/);
   assert.match(await ownerReview.innerText(), /舊工作不會再重試/);
   assert.equal(await owner.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "the recovery action is gone after reopening");
   assert.equal(await owner.getByRole("button", { name: "重試發布", exact: true }).count(), 0, "the prior failed job cannot be retried after reopening");
