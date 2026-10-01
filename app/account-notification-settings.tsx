@@ -4,7 +4,7 @@ import { readAccountNotificationPreferences, saveAccountNotificationPreferences,
 import type { AccountNotificationCadence, AccountNotificationPreferences } from "./account-notifications";
 import styles from "./account-notification-settings.module.css";
 
-export function AccountNotificationSettings({ session }: { session: PortalSession }) {
+export function AccountNotificationSettings({ session, className }: { session: PortalSession; className?: string }) {
   const [open, setOpen] = useState(() => new URLSearchParams(window.location.search).get("notifications") === "1");
   const close = () => {
     setOpen(false);
@@ -12,7 +12,7 @@ export function AccountNotificationSettings({ session }: { session: PortalSessio
     url.searchParams.delete("notifications");
     window.history.replaceState(null, "", url);
   };
-  return <><button type="button" onClick={() => setOpen(true)}>通知設定</button>
+  return <><button type="button" className={className} onClick={() => setOpen(true)}>通知設定</button>
     {open && createPortal(<SettingsDialog session={session} close={close} />, document.body)}
   </>;
 }
@@ -46,7 +46,7 @@ function SettingsDialog({ session, close }: { session: PortalSession; close: () 
   return <dialog className={styles.dialog} ref={dialog} aria-labelledby="account-notification-title"
     onCancel={event => { event.preventDefault(); requestClose(); }}>
     <header className={styles.header}><h2 id="account-notification-title">通知設定</h2><button type="button" disabled={busy} onClick={requestClose}>關閉</button></header>
-    <p>套用所有活動，只影響你的通知。</p>
+    <p className={styles.muted}>套用所有活動，只影響你的通知。</p>
     <p className={styles.email}>收件信箱：{session.email}</p>
     <section className={styles.required}><h3>審核與權限通知</h3><p>認領、活動審核、權限異動與發布結果為必要通知，無法關閉。</p></section>
     {loading && <p role="status">載入中…</p>}
@@ -72,7 +72,7 @@ function SettingsDialog({ session, close }: { session: PortalSession; close: () 
     {error && <div><p className={styles.error} role="alert">{error}</p><button type="button" disabled={loading || busy} onClick={() => {
       setLoading(true); setError(""); setMessage(""); setDiscard(false); setGeneration(value => value + 1);
     }}>重新載入設定</button></div>}
-    {message && <p role="status">{message}</p>}
+    {message && <p className={styles.notice} role="status">{message}</p>}
     {discard && <div className={styles.discard} role="alert"><p>通知設定尚未儲存，要放棄這次修改嗎？</p>
       <button type="button" onClick={close}>放棄並關閉</button><button type="button" onClick={() => setDiscard(false)}>繼續編輯</button></div>}
     {session.isAdmin && <p className={styles.admin}>管理者的待審摘要另外設定：<a href="/admin#review-notifications" target="_blank" rel="noreferrer">管理待審通知（另開分頁）</a></p>}

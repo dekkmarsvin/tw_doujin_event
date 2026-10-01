@@ -297,9 +297,10 @@ export default function CirclePortalApp() {
     queueMicrotask(() => { void refreshClaims(); });
   }, [refreshClaims, session]);
 
-  if (entry.eventId && !getPublishedEvent(entry.eventId)) return <main className={styles.page}>
-    <h1>找不到指定的活動</h1><p>這個連結的活動目前無法開啟。</p><a href="/circle">返回社團資料</a>
-  </main>;
+  if (entry.eventId && !getPublishedEvent(entry.eventId)) return <div className={styles.page}>
+    <header className={styles.masthead}><div><h1>社團資料</h1></div></header>
+    <main className={styles.card}><h2>找不到指定的活動</h2><p className={styles.backLink}><a href="/circle">返回社團資料</a></p></main>
+  </div>;
 
   return <div className={styles.page}>
     <header className={styles.masthead}>
