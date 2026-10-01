@@ -170,6 +170,7 @@ export default function MapRecognitionPanel({ active, layout, authoring, backgro
         <button type="button" disabled={!source || busy || paused} aria-disabled={listMissing || undefined} aria-describedby={listMissing ? `${id}-list-gate` : undefined} onClick={() => listMissing ? askForList() : run()}>{busy ? "辨識中…" : "辨識配置圖"}</button>
         {busy && <button type="button" onClick={() => { invalidate(); setMessage("已取消辨識。"); }}>取消辨識</button>}
       </div>
+      {paused && <p>儲存或讀取配置圖中，辨識與採用暫停，請稍候。</p>}
       <details ref={listSection} open={!roster} className={listMissing ? styles.gate : undefined}><summary>辨識用攤位清單（{boothCodes.length} 個活動攤位）</summary>
         {listMissing && <p id={`${id}-list-gate`} className={styles.gateNote}>{roster ? "請輸入要辨識的攤位代碼或範圍。" : "這個活動日與場地還沒有攤位名單；請先匯入，或在這裡輸入攤位代碼。"}</p>}
         <p>修改此處不會變更活動名單。</p>
@@ -216,7 +217,7 @@ export default function MapRecognitionPanel({ active, layout, authoring, backgro
       {report && <>
         {!!missing.length && <details><summary>尚未涵蓋的活動攤位（{missing.length}）</summary><p>{missing.join("、")}</p></details>}
         {!!warnings.length && <details><summary>辨識提醒（{warnings.length}）</summary><ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
-        <div className={styles.controls}><button type="button" disabled={!chosen.length || busy || paused} onClick={apply}>採用已核對項目（{chosen.length}）</button><button type="button" onClick={invalidate}>捨棄辨識結果</button>{paused && <span>儲存或讀取配置圖中，請稍候。</span>}</div>
+        <div className={styles.controls}><button type="button" disabled={!chosen.length || busy || paused} onClick={apply}>採用已核對項目（{chosen.length}）</button><button type="button" onClick={invalidate}>捨棄辨識結果</button></div>
         {applyMessage && <p role="status" className={styles.applyMessage}>{applyMessage}</p>}
       </>}
     </div>

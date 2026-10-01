@@ -108,7 +108,7 @@ try {
   await page.route("**/maps/test-map", heldSave);
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
   const nextBatch = panel.getByRole("button", { name: "採用已核對項目（1）", exact: true });
-  await panel.getByText("儲存或讀取配置圖中，請稍候。", { exact: true }).waitFor();
+  await panel.getByText("儲存或讀取配置圖中，辨識與採用暫停，請稍候。", { exact: true }).waitFor();
   assert.equal(await nextBatch.isDisabled(), true, "a selected remaining row cannot land during save");
   await nextBatch.evaluate(node => node.click());
   assert.equal(await svg.locator("[data-slot-code]").count(), 17);
@@ -222,7 +222,7 @@ try {
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
   const adoption = panel.getByRole("button", { name: /採用已核對/ });
   assert.equal(await adoption.isDisabled(), true);
-  await panel.getByText("儲存或讀取配置圖中，請稍候。", { exact: true }).waitFor();
+  await panel.getByText("儲存或讀取配置圖中，辨識與採用暫停，請稍候。", { exact: true }).waitFor();
   saveGate.resolve();
   await page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
   assert.equal(await toggle.getAttribute("aria-expanded"), "true", "saving keeps the panel open");
