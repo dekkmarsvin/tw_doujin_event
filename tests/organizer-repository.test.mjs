@@ -858,6 +858,82 @@ test("an admin named as their own event's owner is granted it in the creating tr
   }), [{ candidateId: "candidate-invited", role: "owner" }]);
 });
 
+test("editor invitations cannot downgrade an active owner, including legacy invitations", async () => {
+  const candidateId = "owner-downgrade";
+  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  const grant = () => database.prepare("SELECT * FROM organizer_event_grants WHERE candidate_id = ?1 AND account_id = ?2")
+    .bind(candidateId, ownerId).first();
+  const original = await grant();
+  const invite = action => repository.manageOrganizerCollaborator({ candidateId, actorAccountId: ownerId,
+    email: "owner@example.test", role: "editor", action, now: NOW + 2 });
+  assert.deepEqual(await invite("invite"), { ok: false, reason: "already_owner" });
+  // A pending Editor invitation left by an older release must also be harmless.
+  await database.prepare(`INSERT INTO organizer_event_invitations
+    (id, candidate_id, email, role, invited_by, created_at) VALUES ('legacy-editor', ?1, 'owner@example.test', 'editor', ?2, ?3)`)
+    .bind(candidateId, ownerId, NOW + 3).run();
+  assert.deepEqual(await invite("resend"), { ok: false, reason: "already_owner" });
+  assert.deepEqual(await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 4 }), []);
+  assert.deepEqual(await grant(), original, "the active Owner grant and its provenance remain unchanged");
+  assert.equal((await database.prepare("SELECT accepted_at FROM organizer_event_invitations WHERE id = 'legacy-editor'").first()).accepted_at, NOW + 4);
+  assert.deepEqual(await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 5 }), []);
+  assert.deepEqual(await grant(), original);
+});
+
+test("editor invitation insertion rechecks the recipient's current owner grant", async () => {
+  const candidateId = "owner-promotion-race";
+  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  let armed = false;
+  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    if (key === "prepare") return sql => {
+      const statement = target.prepare(sql);
+      if (!armed || !sql.includes("INSERT INTO organizer_event_invitations")) return statement;
+      return { bind: (...args) => {
+        const bound = statement.bind(...args);
+        return { run: async () => {
+          armed = false;
+          await repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId, email: "editor@example.test", action: "invite", now: NOW + 2 });
+          await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+          return bound.run();
+        } };
+      } };
+    };
+    const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+  } }));
+  await racing.ensureTables();
+  armed = true;
+  assert.deepEqual(await racing.manageOrganizerCollaborator({ candidateId, actorAccountId: ownerId,
+    email: "editor@example.test", role: "editor", action: "invite", now: NOW + 4 }), { ok: false, reason: "already_owner" });
+  assert.equal(armed, false);
+  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND role = 'editor'")
+    .bind(candidateId).first()).n, 0);
+});
+
+test("owner downgrade protection still permits Editor promotion and later re-invitation after revocation", async () => {
+  const candidateId = "owner-promotion";
+  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  const editorInvite = now => repository.manageOrganizerCollaborator({ candidateId, actorAccountId: ownerId,
+    email: "editor@example.test", role: "editor", action: "invite", now });
+  const ownerAction = (action, now) => repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId,
+    email: "editor@example.test", action, now });
+  const accept = now => repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now });
+  assert.deepEqual(await editorInvite(NOW + 2), { ok: true, result: "invited" });
+  assert.deepEqual(await accept(NOW + 3), [{ candidateId, role: "editor" }]);
+  assert.deepEqual(await ownerAction("invite", NOW + 4), { ok: true, result: "invited" });
+  assert.deepEqual(await accept(NOW + 5), [{ candidateId, role: "owner" }]);
+  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
+  assert.deepEqual(await ownerAction("revoke", NOW + 6), { ok: true, result: "revoked" });
+  assert.deepEqual(await editorInvite(NOW + 7), { ok: true, result: "invited" });
+  assert.deepEqual(await accept(NOW + 8), [{ candidateId, role: "editor" }]);
+  assert.equal(await repository.organizerRole(candidateId, ownerId), "owner");
+});
+
 test("workspace progress is per candidate and resume location is per collaborator without candidate revisions", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-workspace",
@@ -1444,7 +1520,8 @@ test("account deletion shreds the private workbook name alongside its uploader",
   assert.equal(source.sha256, "d".repeat(64));
 });
 
-test("the last Owner survives two admins revoking the final two at once", async () => {
+for (const actors of ["admins", "owners"]) {
+test(`the last Owner survives two ${actors} revoking the final two at once`, async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-race", tentativeName: "活動", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
@@ -1456,12 +1533,12 @@ test("the last Owner survives two admins revoking the final two at once", async 
   });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
 
-  const revoke = (email) => repository.manageOrganizerOwner({
-    candidateId: "candidate-race", actorAccountId: adminId, email, action: "revoke", now: NOW + 4,
+  const revoke = (email, actorId) => repository.manageOrganizerOwner({
+    candidateId: "candidate-race", actorAccountId: actors === "admins" ? adminId : actorId, email, action: "revoke", now: NOW + 4,
   });
   // Both see two active Owners; a count read before the write would let both
   // through and leave the candidate with none.
-  const [first, second] = await Promise.all([revoke("owner@example.test"), revoke("editor@example.test")]);
+  const [first, second] = await Promise.all([revoke("owner@example.test", ownerId), revoke("editor@example.test", editorId)]);
   const outcomes = [first, second];
   assert.equal(outcomes.filter((result) => result.ok).length, 1, "exactly one revoke may win");
   assert.deepEqual(outcomes.find((result) => !result.ok), { ok: false, reason: "last_owner" });
@@ -1471,3 +1548,60 @@ test("the last Owner survives two admins revoking the final two at once", async 
   ).first();
   assert.equal(owners.n, 1, "the candidate must never be left ownerless");
 });
+}
+
+for (const actor of ["owner", "admin"]) {
+for (const operation of ["invite", "resend", "revoke-grant", "revoke-invitation"]) {
+test(`owner management rechecks ${actor} authority at ${operation}`, async () => {
+  const candidateId = "owner-authority-race";
+  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId, email: "editor@example.test", action: "invite", now: NOW + 2 });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+  await repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId, email: "pending@example.test", action: "invite", now: NOW + 4 });
+  const actorAccountId = actor === "admin" ? adminId : ownerId;
+  const email = operation === "revoke-grant" ? "editor@example.test" : operation === "invite" ? "new@example.test" : "pending@example.test";
+  let armed = false;
+  let authorityReads = 0;
+  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    if (key === "prepare") return sql => {
+      const statement = target.prepare(sql);
+      return { bind: (...args) => {
+        const bound = statement.bind(...args);
+        const shouldRevoke = armed && (operation === "resend"
+          ? sql.includes("SELECT 1 AS allowed") && ++authorityReads === 2
+          : (operation === "invite" ? sql.includes("INSERT INTO organizer_event_invitations")
+            : operation === "revoke-grant" ? sql.includes("UPDATE organizer_event_grants")
+              : sql.includes("UPDATE organizer_event_invitations")));
+        if (!shouldRevoke) return bound;
+        const method = operation === "resend" ? "first" : "run";
+        return new Proxy(bound, { get(statement, key) {
+          if (key === method) return async (...values) => {
+            armed = false;
+            if (actor === "admin") await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+            else await database.prepare("UPDATE organizer_event_grants SET revoked_at = ?1 WHERE candidate_id = ?2 AND account_id = ?3")
+              .bind(NOW + 5, candidateId, ownerId).run();
+            return statement[method](...values);
+          };
+          const value = Reflect.get(statement, key);
+          return typeof value === "function" ? value.bind(statement) : value;
+        } });
+      }, run: statement.run.bind(statement), all: statement.all.bind(statement), first: statement.first.bind(statement) };
+    };
+    const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+  } }));
+  await racing.ensureTables();
+  armed = true;
+  const action = operation.startsWith("revoke") ? "revoke" : operation;
+  assert.deepEqual(await racing.manageOrganizerOwner({ candidateId, actorAccountId, email, action, now: NOW + 6 }),
+    { ok: false, reason: "forbidden" });
+  assert.equal(armed, false, "the authority change must occur at the operation boundary");
+  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'pending@example.test' AND revoked_at IS NULL")
+    .bind(candidateId).first()).n, 1);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'new@example.test'")
+    .bind(candidateId).first()).n, 0);
+});
+}
+}

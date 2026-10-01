@@ -3098,7 +3098,7 @@ export function createCirclePortalHandlers({
     if (!isEmailShaped(email) || (action !== "invite" && action !== "resend" && action !== "revoke")) {
       return json({ error: "Email 與動作（邀請／重寄／移除）為必填。" }, 400);
     }
-    if (role === "owner" && !access.admin) return json({ error: "只有網站管理者可以增減負責人。" }, 403);
+    if (role === "owner" && !access.admin && access.role !== "owner") return json({ error: "只有這個活動的負責人或網站管理者可以管理負責人。" }, 403);
     if (role === "editor" && access.role !== "owner") return json({ error: "只有負責人可以管理協作者。" }, 403);
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
@@ -3118,8 +3118,10 @@ export function createCirclePortalHandlers({
         role: "editor", action, now: config.now(),
       });
     if (!result.ok) {
-      const error = result.reason === "forbidden" ? "只有負責人可以管理協作者。"
+      const error = result.reason === "forbidden" ? role === "owner"
+        ? "只有這個活動的負責人或網站管理者可以管理負責人。" : "只有負責人可以管理協作者。"
         : result.reason === "last_owner" ? "每個活動至少需要一位負責人。"
+        : result.reason === "already_owner" ? "這個信箱已是活動負責人，不需要再邀請為協作者。"
         : result.reason === "pending" ? "這個信箱已有待接受的邀請，請按「重寄邀請信」。"
         : result.reason === "other_role" ? "這個信箱已有另一種角色的待接受邀請。"
         : result.reason === "active" ? "這個信箱已具備這項活動角色，不需要再邀請。"
@@ -3137,7 +3139,7 @@ export function createCirclePortalHandlers({
     let invitationDelivery: "sent" | "failed" | "unknown" = "sent";
     try {
       await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId,
-        { eventName: candidate.tentative_name, inviterRole: role === "owner" ? "admin" : "owner" });
+        { eventName: candidate.tentative_name, inviterRole: role === "owner" && access.admin ? "admin" : "owner" });
     } catch (error) {
       const failure = mailFailure(error);
       invitationDelivery = failure.delivery;

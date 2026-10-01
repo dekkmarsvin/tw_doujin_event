@@ -57,11 +57,12 @@
 
 - 候選活動只能由**全域管理者**以 `POST /api/admin/organizer/events` 建立，必須提供暫定名稱與 Owner email，並要求有效 session。
 - 建立成功即寄出主辦工作區邀請信；受邀者以該連結登入後自動接受待處理邀請並取得 grant。信件由 `app/mail-letter.ts` 產生，同時寄出 HTML 與純文字；連結過期時，信中指示受邀者到 `/organizer` 用同一信箱重新索取登入連結，任何 `organizer` 登入都會接受該信箱的待處理邀請。
-- 首次邀請與重寄的 HTML／純文字均列出寄送當下的活動暫定名稱，以及此次邀請操作的角色：建立活動或管理負責人邀請為「網站管理者」，邀請協作者為「活動負責人」（即使同時是網站管理者）。邀請者 Email 不寫入信件內容，名稱與角色由伺服器取得。
-- **管理者把自己填成負責人時，owner grant 在建立活動的同一個 transaction 內直接成立**，該筆邀請同時標記為建立時即接受，不必先收信。管理者本來就是唯一能增減 Owner 的角色，繞一圈收信不增加任何保證，卻讓建立者停在 `admin` 事件角色、看不到 Owner 專屬的送審控制項。稽核寫的是 `organizer_event.owner_granted_on_create`，與接受邀請分開。信照常寄出（那是一條可用的登入連結），寄信預算與寄送失敗的處理都不變；負責人填別人時行為完全不變，仍由對方收信登入後取得 grant。送審與核准的 有效 session 要求不因此放寬。
-- Owner 可邀請或撤銷 Editor；**只有全域管理者可以增減 Owner**。撤銷對尚未登入者同樣有效——撤掉 grant 或撤掉尚未接受的邀請，任一成立即算成功。
+- 首次邀請與重寄的 HTML／純文字均列出寄送當下的活動暫定名稱，以及此次邀請操作的角色：建立活動或管理者邀請負責人為「網站管理者」；一般 Owner 邀請負責人、任何 Owner 邀請協作者為「活動負責人」。邀請者 Email 不寫入信件內容，名稱與角色由伺服器取得。
+- **管理者把自己填成負責人時，owner grant 在建立活動的同一個 transaction 內直接成立**，該筆邀請同時標記為建立時即接受，不必先收信。管理者具有指派 Owner 的權限，繞一圈收信不增加任何保證，卻讓建立者停在 `admin` 事件角色、看不到 Owner 專屬的送審控制項。稽核寫的是 `organizer_event.owner_granted_on_create`，與接受邀請分開。信照常寄出（那是一條可用的登入連結），寄信預算與寄送失敗的處理都不變；負責人填別人時行為完全不變，仍由對方收信登入後取得 grant。送審與核准的 有效 session 要求不因此放寬。
+- Owner 可邀請或撤銷同一候選活動的 Editor，也可邀請、重寄或撤銷同一候選活動的 Owner；全域管理者仍可管理 Owner。Editor 與其他候選活動的 Owner 無此權限。Owner 管理在資料庫寫入時重查有效帳號及該候選的 Owner grant／目前管理者名冊，撤權後不能沿用先前讀取的授權。撤銷對尚未登入者同樣有效——撤掉 grant 或撤掉尚未接受的邀請，任一成立即算成功。撤銷已接受的 Owner 時必須仍有另一位有效 Owner grant，待接受邀請不算；此條件由同一 SQL 寫入保護，並行移除也不能清空 Owner。另有 Owner 時可移除自己，工作區重新載入可存取的活動清單。
 - 寄信失敗保留已建立的活動與邀請；回傳 `invitationSent: false` 及 `invitationDelivery`（`failed` 為明確拒絕，`unknown` 為逾時或無法確認），清除本次寄信建立的登入權杖並寫入 `organizer_event.invitation_failed`。邀請建立的稽核先於寄信，不會因寄信失敗遺失。成功受理回 `sent`，不代表已送達。
 - 協作者／負責人表單可用「重寄邀請信」對既有 Email 重寄，包含重新開啟工作區後；`POST …/collaborators` 的 `resend` 只接受同一候選、信箱與角色下尚未接受且未撤銷的邀請，沿用邀請的權限。重寄不新增邀請、grant 或候選版本，成功另留 `organizer_event.editor_resend`／`owner_resend` 稽核。已具該角色不再新增邀請，另一角色的待接受邀請不會被重寄或覆寫。
+- 有效 Owner 不可被邀請或重寄為 Editor，API 回 409 且不寄信；建立 Editor 邀請的 SQL 也重查目前 grant，避免預讀後已升為 Owner 仍寄出協作者邀請。既有 Editor 邀請在登入時會結束待接受狀態，但接受交易不得覆寫有效 Owner 的角色、授權來源或時間。Editor 接受 Owner 邀請仍可升為 Owner；已透過負責人撤銷流程移除的 grant 可重新接受 Editor 邀請，不把曾經是 Owner 視為永久角色。
 - 邀請會鑄造真正的登入連結，因此受三道獨立預算限制：每小時每收件匣 3 封**他人寄來的**邀請、每小時每邀請人 10 封，另沿用每 IP 每小時 20 封登入連結的上限。收件匣預算刻意不與本人自助索取的登入連結共用計數器，否則邀請人可以花光對方的額度把人鎖在帳號外。
 - 首次寄送與重寄均以登入權杖計數，邀請人依 `minted_by` 及建立時間計算，不能重用舊邀請繞過額度。preview 不允許的收件地址在新增邀請或寄信前拒絕，既有邀請不受影響。
 
@@ -243,6 +244,7 @@ AMEND 沿用驗證、Reader 預覽、Owner 送審及 Admin 核准。送審固定
 - `POST …/submit` 只有 Owner 可以呼叫，且要求有效 session。CREATE 新送審固定 `organizer-submission-snapshot/5`：草稿、完整 reference selection、各 reference 的 path／原始 JSON bytes／SHA-256、匯入來源 metadata、`codes[]` 攤位群組與地圖內容；`contentUpdatedAt` 取該 candidate version 的 immutable revision.created_at。既有 `/1`、`/2`、`/3` snapshot bytes/hash 保持不變，`/3` 產物沿用只依明確編號分組的規則。產檔只能使用 snapshot，不可回讀 live catalog 或推測舊 snapshot 缺少的公開資料。
 - **validate、preview 與 submit 讀同一份 bytes**：候選、匯入與每份地圖各只讀一次，所以送審固定的內容與剛才驗證過的內容不可能不同。
 - `POST /api/admin/organizer/events/:candidateId/review` 由全域管理者以有效 session 核准或要求修改。核准前重跑驗證；找不到該 revision 的 immutable snapshot 就拒絕。
+- 送審頁的「網站管理者審閱」表單僅對全域管理者顯示；一般 Owner／Editor 保留送審狀態與發布進度，不顯示停用的管理者審閱表單。負責人管理表單僅對該候選的 Owner／全域管理者顯示，新增 Owner 不授予全域建活動或核准權限。
 - **管理者可以核准自己送出的 revision**，但稽核會記下 `selfApproval`、actor、snapshot hash、版本與時間。
 
 ## 發布邊界
