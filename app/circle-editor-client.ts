@@ -56,6 +56,7 @@ export type QueuedClaim = PendingClaim & { eventId: string; circleClaimed: boole
 
 export type ReviewQueue = {
   claims: QueuedClaim[];
+  pendingClaimCount?: number;
   mapDrafts: { eventId: string; submitted: number }[];
   organizer: { applications: number; submissions: number };
 };

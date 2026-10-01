@@ -739,12 +739,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function listPendingEventClaims(eventId: string, limit = 500) {
     await ensureTables();
-    const rows = await database.prepare(`SELECT c.*, EXISTS (
+    const rows = await database.prepare(`SELECT c.*, COUNT(*) OVER () AS pending_count, EXISTS (
       SELECT 1 FROM circle_claims v WHERE v.event_id = c.event_id
         AND v.circle_id = c.circle_id AND v.status = 'verified'
       ) AS circle_claimed FROM circle_claims c
       WHERE c.event_id = ?1 AND c.status = 'pending' ORDER BY c.created_at ASC LIMIT ?2`)
-      .bind(eventId, limit).all<ClaimRow & { circle_claimed: number }>();
+      .bind(eventId, limit).all<ClaimRow & { circle_claimed: number; pending_count: number }>();
     return rows.results;
   }
 

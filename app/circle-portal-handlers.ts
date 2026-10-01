@@ -1772,7 +1772,7 @@ export function createCirclePortalHandlers({
     const access = await organizerClaimAccess(request, candidateId);
     if (!access.ok) return access.response;
     const claims = await repository.listPendingEventClaims(access.eventId);
-    return json({ claims: claims.map(claim => ({
+    return json({ pendingClaimCount: claims[0]?.pending_count ?? 0, claims: claims.map(claim => ({
       id: claim.id, eventId: claim.event_id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
       evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
       createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,

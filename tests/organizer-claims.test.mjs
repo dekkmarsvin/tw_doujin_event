@@ -199,7 +199,9 @@ for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor
     const cookie = await signIn(email);
     const response = await handlers.organizerListClaims(request("candidate-a", cookie), "candidate-a");
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).claims.map(c => [c.id, c.eventId]), [["claim-a", "event-a"]]);
+    const queue = await response.json();
+    assert.deepEqual(queue.claims.map(c => [c.id, c.eventId]), [["claim-a", "event-a"]]);
+    assert.equal(queue.pendingClaimCount, 1);
     assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "approve"), "candidate-a")).status, 200);
     assert.equal((await repo.getClaim("claim-a")).method, "organizer");
     assert.equal((await repo.getClaim("claim-b")).status, "pending");
@@ -208,6 +210,23 @@ for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor
     assert.equal(JSON.parse(audit.detail_json).eventId, "event-a");
   });
 }
+
+test("pending total includes claims beyond the 500-row queue limit and excludes other events", async () => {
+  const cookie = await signIn("editor@example.test");
+  await database.prepare(`WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n<500)
+    INSERT INTO circle_claims (id,account_id,event_id,circle_id,circle_name_key,circle_name_at_claim,status,created_at)
+    SELECT 'bulk-'||n,c.account_id,c.event_id,'bulk-circle-'||n,'bulk-'||n,'社團 '||n,'pending',c.created_at+n
+    FROM numbers CROSS JOIN circle_claims c WHERE c.id='claim-a'`).run();
+  const queue = await (await handlers.organizerListClaims(request("candidate-a", cookie), "candidate-a")).json();
+  assert.equal(queue.claims.length, 500);
+  assert.equal(queue.pendingClaimCount, 501);
+  assert.ok(queue.claims.every(claim => claim.eventId === "event-a"));
+  await database.prepare("UPDATE circle_claims SET status='withdrawn' WHERE event_id='event-a' AND status='pending'").run();
+  const empty = await (await handlers.organizerListClaims(request("candidate-a", cookie), "candidate-a")).json();
+  assert.equal(empty.pendingClaimCount, 0);
+  assert.deepEqual(empty.claims, []);
+  assert.equal((await repo.getClaim("claim-b")).status, "pending");
+});
 
 test("anonymous, strangers, other events, and unpublished events cannot be reviewed", async () => {
   assert.equal((await handlers.organizerListClaims(request("candidate-a"), "candidate-a")).status, 401);

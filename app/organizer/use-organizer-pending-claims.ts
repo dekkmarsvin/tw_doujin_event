@@ -8,7 +8,7 @@ export function useOrganizerPendingClaims(candidateId: string | null, eventId: s
   const onQueueLoaded = useCallback((queue: ReviewQueue | null) => {
     if (!candidateId) return;
     ++sequence.current.value;
-    setResult({ candidateId, count: queue ? queue.claims.filter(claim => claim.eventId === eventId).length : "error" });
+    setResult({ candidateId, count: queue ? queue.pendingClaimCount ?? queue.claims.filter(claim => claim.eventId === eventId).length : "error" });
   }, [candidateId, eventId]);
 
   useEffect(() => {

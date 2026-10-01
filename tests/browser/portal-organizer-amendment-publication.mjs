@@ -168,7 +168,7 @@ try {
       else {
       const method = ({ maps: "listOrganizerMaps", amendments: "createOrganizerAmendment", amendment: req.method() === "GET" ? "getOrganizerAmendment" : "saveOrganizerAmendment",
         workspace: "updateOrganizerWorkspacePreference", validate: "validateOrganizerCandidate", preview: "previewOrganizerCandidate",
-        submit: "submitOrganizerCandidate", review: "adminReviewOrganizerCandidate" })[action] ?? (!action ? "getOrganizerCandidate" : null);
+        submit: "submitOrganizerCandidate", review: "adminReviewOrganizerCandidate", claims: "organizerListClaims" })[action] ?? (!action ? "getOrganizerCandidate" : null);
       assert.ok(method, `Unexpected UI action ${path}`); response = await handlers[method](request,id);
       }
     } else throw new Error(`Unexpected UI request ${path}`);

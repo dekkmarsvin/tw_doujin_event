@@ -18,6 +18,7 @@ const detail = id => ({ claimReviewAvailable: true, event: { ...summaries.find(e
 let status = "live";
 let claims = [1, 2].map(index => ({ id: `social-claim-${index}`, eventId: "sample", circleId: "c-900001", circleName: "北風畫室", circleClaimed: false, evidenceUrl: null, evidenceNote: "社團代表", targetUrl: null, createdAt: now + index }));
 let claimsUnavailable = false;
+let reportedClaimCount = 602;
 const writes = [];
 try {
   const page = await journey.page({ url: `${base}/organizer`, routes: async page => {
@@ -34,7 +35,7 @@ try {
           return reply({ ok: true });
         }
         if (claimsUnavailable) return route.fulfill({ status: 503, json: { error: "暫時無法讀取" } });
-        return reply({ claims, mapDrafts: [], organizer: { applications: 0, submissions: 0 } });
+        return reply({ pendingClaimCount: reportedClaimCount ?? claims.length, claims, mapDrafts: [], organizer: { applications: 0, submissions: 0 } });
       }
       if (path.endsWith("/overrides")) {
         if (req.method() === "POST") { writes.push({ candidate: path.split("/")[4], ...req.postDataJSON() }); status = "takendown"; return reply({ ok: true }); }
@@ -51,11 +52,13 @@ try {
   assert.equal(await page.getByRole("combobox", { name: "活動版本", exact: true }).inputValue(), "social-latest");
   await page.getByLabel("活動審核與發布狀態").getByText("審核中", { exact: true }).waitFor();
   const header = page.getByLabel("活動審核與發布狀態");
-  await header.getByText("待審 2 筆", { exact: true }).waitFor();
+  await header.getByText("待審 602 筆", { exact: true }).waitFor();
+  reportedClaimCount = null;
   const sidebar = page.getByRole("complementary");
   assert.equal(await sidebar.getByRole("combobox", { name: "活動版本", exact: true }).count(), 1);
   await page.getByRole("button", { name: "社團認領", exact: true }).click();
   await page.getByRole("heading", { name: "社團認領", exact: true }).waitFor();
+  await header.getByText("待審 2 筆", { exact: true }).waitFor();
   await page.getByRole("button", { name: "婉拒", exact: true }).first().click();
   await header.getByText("待審 1 筆", { exact: true }).waitFor();
   await page.getByRole("button", { name: "核准", exact: true }).click();
