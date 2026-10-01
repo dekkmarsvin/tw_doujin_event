@@ -103,7 +103,10 @@
 .eventGroupActions { padding: 3px 10px 10px 30px; }
 .eventGroupActions[hidden] { display: none; }
 .eventGroupActions button { display: block; width: 100%; text-align: left; margin-top: 4px; }
-.eventGroupActions button[aria-current="page"], .workspaceTabs button[aria-pressed="true"] { background: var(--ink) !important; color: var(--surface) !important; }
+.eventGroupActions button[aria-current="page"],
+.eventGroupActions button[aria-current="page"]:hover:not(:disabled),
+.workspaceTabs button[aria-pressed="true"],
+.workspaceTabs button[aria-pressed="true"]:hover:not(:disabled) { background: var(--ink) !important; color: var(--surface) !important; }
 .workspaceTools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .workspaceTabs { display: flex; gap: 6px; }
 .editionSelect { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
