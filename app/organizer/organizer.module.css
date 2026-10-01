@@ -55,6 +55,7 @@
    instead of centring them against the label above them. */
 .fieldRow { align-items: end; }
 .identity { color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.identity a { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
 .secondary, .ghost { border-color: var(--line) !important; background: var(--surface) !important; color: var(--ink) !important; }
 .secondary:hover:not(:disabled), .ghost:hover:not(:disabled) { border-color: #aeb6b3 !important; background: var(--map-paper) !important; }
 .textButton { border-color: transparent !important; padding: 4px 0 !important; background: transparent !important; color: var(--ink) !important; text-decoration: underline; text-underline-offset: 3px; }
@@ -106,7 +107,7 @@
 .eventGroupActions button[aria-current="page"],
 .eventGroupActions button[aria-current="page"]:hover:not(:disabled) { background: var(--ink) !important; color: var(--surface) !important; }
 .eventGroupActions .editionSelect { display: grid; gap: 5px; padding: 8px 0; font-size: 11px; color: var(--muted); }
-.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 12px; }
+.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
 .activityHeader { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 22px; margin-bottom: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .activityIdentity { flex: 1; min-width: 200px; }
 .activityIdentity p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }
