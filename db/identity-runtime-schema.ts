@@ -48,6 +48,24 @@ function index(name: string, tableName: string, expression: string, options: { u
 }
 
 export const IDENTITY_TABLES = [
+  table("account_notification_preferences", [
+    "account_id TEXT PRIMARY KEY NOT NULL", "cadence TEXT NOT NULL CHECK (cadence IN ('off', 'hourly', 'daily'))",
+    "version INTEGER NOT NULL", "enabled_since INTEGER NOT NULL", "write_token TEXT NOT NULL",
+  ]),
+  table("account_notification_items", [
+    "id TEXT PRIMARY KEY NOT NULL", "account_id TEXT NOT NULL", "kind TEXT NOT NULL", "occurrence TEXT NOT NULL",
+    "schema_version INTEGER NOT NULL DEFAULT 1", "event_id TEXT", "circle_id TEXT", "candidate_id TEXT",
+    "source_id TEXT NOT NULL", "audience TEXT NOT NULL", "name TEXT NOT NULL", "version INTEGER", "detail TEXT NOT NULL DEFAULT ''",
+    "occurred_at INTEGER NOT NULL", "due_at INTEGER NOT NULL", "batch_id TEXT",
+    "state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'cancelled', 'failed'))", "completed_at INTEGER",
+  ]),
+  table("account_notification_batches", [
+    "id TEXT PRIMARY KEY NOT NULL", "account_id TEXT NOT NULL", "lane TEXT NOT NULL",
+    "state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'cancelled', 'failed'))",
+    "attempts INTEGER NOT NULL DEFAULT 0", "first_attempt_at INTEGER", "retry_at INTEGER NOT NULL",
+    "lease_token TEXT", "lease_until INTEGER NOT NULL DEFAULT 0", "created_at INTEGER NOT NULL",
+    "completed_at INTEGER", "provider_id TEXT", "error_code TEXT",
+  ]),
   table("identity_runtime_state", [
     "id INTEGER PRIMARY KEY CHECK (id = 1)",
     "version INTEGER NOT NULL CHECK (version >= 0)",
@@ -530,6 +548,12 @@ export const IDENTITY_TABLES = [
 ] as const;
 
 export const IDENTITY_INDEXES = [
+  index("account_notification_occurrence_idx", "account_notification_items", "occurrence, account_id", { unique: true }),
+  index("account_notification_due_idx", "account_notification_items", "state, batch_id, due_at"),
+  index("account_notification_recipient_idx", "account_notification_items", "account_id, state"),
+  index("account_notification_batch_items_idx", "account_notification_items", "batch_id, state"),
+  index("account_notification_active_batch_idx", "account_notification_batches", "account_id, lane", { unique: true, where: "state = 'pending'" }),
+  index("account_notification_retry_idx", "account_notification_batches", "state, retry_at, lease_until"),
   index("review_notification_occurrence_idx", "review_notification_items", "kind, subject_id, submission_id, recipient", { unique: true }),
   index("review_notification_active_batch_idx", "review_notification_batches", "recipient", { unique: true, where: "state = 'pending'" }),
   index("review_notification_due_idx", "review_notification_batches", "state, retry_at"),

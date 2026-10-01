@@ -54,6 +54,7 @@ type PurgeSummary = {
     login_tokens: number; sessions: number; preview_mail_sink: number; circle_overrides: number;
     map_drafts: number; map_draft_revisions: number; map_raw_objects: number;
     review_notification_items: number; review_notification_batches: number;
+    account_notification_items: number; account_notification_batches: number;
   };
   anonymized: { audit_ip_hashes: number; map_drafts: number };
   /** Tables that do not exist here. Preview and production hold the same
@@ -68,7 +69,7 @@ const MAP_RETENTION_RAW_OBJECT_BATCH_SIZE = 450;
 const MAP_RETENTION_D1_BIND_BATCH_SIZE = 90;
 
 const PURGE_TABLES = [
-  "review_notification_items", "review_notification_batches",
+  "review_notification_items", "review_notification_batches", "account_notification_items", "account_notification_batches",
   "login_tokens", "sessions", "preview_mail_sink", "circle_overrides", "overrides_doc", "audit_log",
   "map_drafts", "map_draft_revisions", "map_draft_reviews", "map_draft_comments", "map_draft_files",
 ] as const;
@@ -347,13 +348,14 @@ export async function purgeExpiredRecords(
   const present = await existingTables(database);
   const deleted = {
     review_notification_items: 0, review_notification_batches: 0,
+    account_notification_items: 0, account_notification_batches: 0,
     login_tokens: 0, sessions: 0, preview_mail_sink: 0, circle_overrides: 0,
     map_drafts: 0, map_draft_revisions: 0, map_raw_objects: 0,
   };
   const anonymized = { audit_ip_hashes: 0, map_drafts: 0 };
   const skipped: string[] = [];
 
-  for (const table of ["review_notification_items", "review_notification_batches"] as const) {
+  for (const table of ["review_notification_items", "review_notification_batches", "account_notification_items", "account_notification_batches"] as const) {
     if (present.has(table)) deleted[table] = await deleteWhere(database,
       `DELETE FROM ${table} WHERE state <> 'pending' AND completed_at < ?1`, now - windows.reviewNotifications);
     else skipped.push(table);

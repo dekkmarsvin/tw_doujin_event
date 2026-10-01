@@ -1,4 +1,5 @@
 import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
+import { accountNotificationConfig } from "../app/account-notifications";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -197,7 +198,7 @@ const repositories = new WeakMap<D1Database, IdentityRepository>();
 export function repositoryFor(env: PortalEnv) {
   const existing = repositories.get(env.DB);
   if (existing) return existing;
-  const created = createIdentityRepository(env.DB, { bootstrapAdmins: bootstrapAdmins(env) });
+  const created = createIdentityRepository(env.DB, { bootstrapAdmins: bootstrapAdmins(env), accountNotifications: accountNotificationConfig(env) });
   repositories.set(env.DB, created);
   return created;
 }

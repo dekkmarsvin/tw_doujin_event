@@ -1565,6 +1565,18 @@ test(`owner management rechecks ${actor} authority at ${operation}`, async () =>
   let armed = false;
   let authorityReads = 0;
   const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    // Revoking a grant and its notification now commit together. Inject the
+    // authority loss immediately before that transaction, rather than a .run()
+    // that batch does not execute. Keep the same authorization assertions.
+    if (key === "batch") return async statements => {
+      if (armed && operation === "revoke-grant") {
+        armed = false;
+        if (actor === "admin") await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+        else await database.prepare("UPDATE organizer_event_grants SET revoked_at = ?1 WHERE candidate_id = ?2 AND account_id = ?3")
+          .bind(NOW + 5, candidateId, ownerId).run();
+      }
+      return target.batch(statements);
+    };
     if (key === "prepare") return sql => {
       const statement = target.prepare(sql);
       return { bind: (...args) => {

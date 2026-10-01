@@ -1,5 +1,14 @@
+import type { AccountNotificationPreferences } from "./account-notifications";
+import { notificationParameters } from "./notification-navigation";
 import type { MapAuthoringState } from "./map-authoring-state";
 import type { NotificationPreferences } from "./review-notifications";
+
+export function readAccountNotificationPreferences() {
+  return call<AccountNotificationPreferences>("/api/account/notification-preferences");
+}
+export function saveAccountNotificationPreferences(preferences: AccountNotificationPreferences) {
+  return call<AccountNotificationPreferences>("/api/account/notification-preferences", { method: "PUT", body: JSON.stringify(preferences) });
+}
 
 export function readNotificationPreferences() {
   return call<NotificationPreferences>("/api/admin/notification-preferences");
@@ -139,7 +148,8 @@ export function readTurnstileSitekey() {
 }
 
 export function requestLoginLink(email: string, turnstileToken: string, audience: "circle" | "organizer" = "circle", circleId?: string) {
-  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience, circleId }) });
+  const destination = typeof window === "undefined" ? {} : Object.fromEntries(notificationParameters(Object.fromEntries(new URLSearchParams(window.location.search)), audience));
+  return call<{ ok: true }>("/api/auth/request-link", { method: "POST", body: JSON.stringify({ email, turnstileToken, audience, circleId, destination }) });
 }
 
 export function verifyLoginToken(token: string) {

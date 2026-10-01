@@ -11,6 +11,8 @@ import { createOrganizerAmendmentRepository } from "./organizer-amendment-reposi
 import { createOrganizerRecoveryRepository } from "./organizer-recovery-repository";
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
+import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource } from "./account-notification-repository";
+import type { AccountNotificationConfig } from "../app/account-notifications";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -87,7 +89,15 @@ function chunked<T>(values: readonly T[], size: number): T[][] {
   return chunks;
 }
 
-export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[] } = {}) {
+// Object insertion order is not a content change. json_tree keeps array
+// positions and value types, while comparing object members independently.
+function differentJson(left: string, right: string) {
+  const rows = (value: string) => `SELECT fullkey, type, atom FROM json_tree(${value})`;
+  return `(EXISTS (${rows(left)} EXCEPT ${rows(right)}) OR EXISTS (${rows(right)} EXCEPT ${rows(left)}))`;
+}
+
+export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[]; accountNotifications?: AccountNotificationConfig } = {}) {
+  const notify = createAccountNotificationWriter(database, options.accountNotifications);
   let tablesReady: Promise<void> | null = null;
 
   const ensureRuntimeReady = createIdentityInitializer(database);
@@ -400,6 +410,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          ) AND revoked_at IS NULL`,
       ).bind(now, email),
       ...cancelNotificationRecipient(database, email, now),
+      ...["account_notification_items", "account_notification_batches"].map(table => database.prepare(
+        `UPDATE ${table} SET state = 'cancelled', completed_at = ?2 WHERE account_id = (SELECT id FROM accounts WHERE email = ?1)
+          AND state = 'pending'`).bind(email, now)),
     ]);
     if (results[0].meta.changes === 1) {
       return "disabled" as const;
@@ -456,6 +469,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
     statements.push(
       ...deleteNotificationRecipient(database, input.email),
+      ...deleteAccountNotifications(database, input.accountId),
       database.prepare(`DELETE FROM map_draft_exports WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_files WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
       database.prepare(`DELETE FROM map_draft_comments WHERE draft_id IN (SELECT id FROM map_drafts WHERE owner_account_id = ?1 AND status = 'draft' AND candidate_id IS NULL)`).bind(input.accountId),
@@ -666,7 +680,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.challengeTokenHash, input.challengeExpiresAt, input.evidenceUrl, input.evidenceNote,
       input.now, input.status === "verified" ? input.now : null,
       notificationSubmissionId,
-    ), enqueueReviewNotification(database, "claim", notificationSubmissionId, input.now)]);
+    ), enqueueReviewNotification(database, "claim", notificationSubmissionId, input.now),
+      ...notify({ kind: "claim.approved", occurrence: `${notificationSubmissionId}:approved`, now: input.now },
+        `${claimNotificationSource} WHERE c.notification_submission_id = ?1 AND c.status = 'verified'`, [notificationSubmissionId])]);
     // The id of the claim now in force, which is the reused row's own id after a
     // resubmission: the audit trail already points at it, and moving it would
     // orphan those entries. Null when nothing was written.
@@ -773,16 +789,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function markClaimVerified(id: string, method: ClaimMethod, now: number, reviewedBy: string | null) {
     await ensureTables();
     try {
-      const result = await database.prepare(
+      const [result] = await database.batch([database.prepare(
         `UPDATE circle_claims SET status = 'verified', method = ?1, verified_at = ?2, reviewed_by = ?3, reviewed_at = ?2
          WHERE id = ?4 AND status = 'pending' AND EXISTS (
            SELECT 1 FROM accounts a WHERE a.id = circle_claims.account_id
              AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
          )`,
-      ).bind(method, now, reviewedBy, id).run();
+      ).bind(method, now, reviewedBy, id),
+        ...notify({ kind: "claim.approved", occurrence: crypto.randomUUID(), now },
+          `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]),
+      ]);
       return result.meta.changes === 1;
-    } catch {
-      return false;
+    } catch (error) {
+      if (/unique constraint/i.test(error instanceof Error ? error.message : String(error))) return false;
+      throw error;
     }
   }
 
@@ -790,9 +810,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * against, so a decision made on a stale list cannot rewrite a later one. */
   async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null, from?: ClaimStatus) {
     await ensureTables();
-    const result = await database.prepare(
-      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND (?5 IS NULL OR status = ?5)`,
-    ).bind(status, reviewedBy, now, id, from ?? null).run();
+    const [result] = await database.batch([database.prepare(
+      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND status <> ?1 AND (?5 IS NULL OR status = ?5)`,
+    ).bind(status, reviewedBy, now, id, from ?? null),
+      ...(status === "rejected" || status === "revoked" ? notify({ kind: status === "rejected" ? "claim.rejected" : "claim.revoked", occurrence: crypto.randomUUID(), now },
+        `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]) : []),
+    ]);
     return result.meta.changes === 1;
   }
 
@@ -832,7 +855,23 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }) {
     await ensureTables();
     const changesHostedThumbnail = Object.prototype.hasOwnProperty.call(input, "hostedThumbnailKey");
-    const result = await database.prepare(
+    const results = await database.batch([
+      ...notify({ kind: "circle.updated", occurrence: crypto.randomUUID(), now: input.now, detailFromSource: true },
+        `${circleNotificationSource.replace(" FROM circle_claims c", `,
+          trim(CASE WHEN o.id IS NULL OR ${differentJson("json_remove(o.fields_json, '$.catalogImages')", "json_remove(?3, '$.catalogImages')")} THEN '補充資料、' ELSE '' END
+            || CASE WHEN ${differentJson("json_extract(o.fields_json, '$.catalogImages')", "json_extract(?3, '$.catalogImages')")} THEN '品書、' ELSE '' END
+            || CASE WHEN o.status <> 'live' THEN '恢復公開、' ELSE '' END
+            || CASE WHEN ?5 IS NOT NULL AND o.retention_choice IS NOT ?5 THEN '保存設定、' ELSE '' END
+            || CASE WHEN ?6 = 1 AND o.hosted_thumbnail_key IS NOT ?7 THEN '代表圖片、' ELSE '' END, '、') AS detail
+          FROM circle_claims c`)} LEFT JOIN circle_overrides o ON o.event_id = c.event_id AND o.circle_id = c.circle_id
+        WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified'
+          AND (?4 IS NULL OR EXISTS (SELECT 1 FROM accounts WHERE id = ?4 AND disabled_at IS NULL AND deletion_started_at IS NULL))
+          AND (o.id IS NULL OR ${differentJson('o.fields_json', '?3')} OR o.status <> 'live'
+            OR (?5 IS NOT NULL AND o.retention_choice IS NOT ?5)
+            OR (?6 = 1 AND o.hosted_thumbnail_key IS NOT ?7))`,
+        [input.eventId, input.circleId, input.fieldsJson, input.accountId ?? null,
+          input.retention?.choice ?? null, changesHostedThumbnail ? 1 : 0, input.hostedThumbnailKey ?? null]),
+      database.prepare(
       `INSERT INTO circle_overrides (id, event_id, circle_id, fields_json, updated_by, created_at, updated_at, retention_choice, retention_expires_at, hosted_thumbnail_key)
        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9
        WHERE ?11 IS NULL OR EXISTS (
@@ -855,8 +894,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       crypto.randomUUID(), input.eventId, input.circleId, input.fieldsJson, input.updatedBy, input.now,
       input.retention?.choice ?? null, input.retention?.expiresAt ?? null,
       input.hostedThumbnailKey ?? null, changesHostedThumbnail ? 1 : 0, input.accountId ?? null,
-    ).run();
-    return result.meta.changes === 1;
+    )]);
+    return results[results.length - 1].meta.changes === 1;
   }
 
   /**
@@ -866,21 +905,25 @@ export function createIdentityRepository(database: D1Database, options: { bootst
    * it" and "its deadline passed" cannot leave different remains — including
    * `previous_fields_json`, which a status change would have kept.
    */
-  async function deleteOverride(input: { accountId: string; eventId: string; circleId: string }) {
+  async function deleteOverride(input: { accountId: string; eventId: string; circleId: string; now?: number }) {
     await ensureTables();
-    const result = await database.prepare(
+    const [result] = await database.batch([database.prepare(
       `DELETE FROM circle_overrides WHERE event_id = ?1 AND circle_id = ?2 AND EXISTS (
          SELECT 1 FROM circle_claims c JOIN accounts a ON a.id = c.account_id
          WHERE c.account_id = ?3 AND c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified'
            AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
        )`,
-    ).bind(input.eventId, input.circleId, input.accountId).run();
+    ).bind(input.eventId, input.circleId, input.accountId),
+      ...notify({ kind: "circle.updated", occurrence: crypto.randomUUID(), now: input.now ?? Date.now(), detail: "補充資料已刪除" },
+        `${circleNotificationSource} WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.account_id = ?3 AND c.status = 'verified' AND changes() = 1`,
+        [input.eventId, input.circleId, input.accountId]),
+    ]);
     return (result.meta.changes ?? 0) === 1;
   }
 
   async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number; fieldsJson?: string }) {
     await ensureTables();
-    const result = await database.prepare(
+    const [result] = await database.batch([database.prepare(
       `UPDATE circle_overrides SET status = 'takendown', takedown_reason = ?1, takendown_by = ?2, takendown_at = ?3,
          fields_json = CASE WHEN ?6 = 1 THEN ?7 ELSE fields_json END,
          hosted_thumbnail_key = CASE WHEN ?6 = 1 THEN NULL ELSE hosted_thumbnail_key END
@@ -888,7 +931,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(
       input.reason, input.by, input.now, input.eventId, input.circleId,
       input.fieldsJson === undefined ? 0 : 1, input.fieldsJson ?? null,
-    ).run();
+    ), ...notify({ kind: "circle.takendown", occurrence: crypto.randomUUID(), now: input.now },
+      `${circleNotificationSource} WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified' AND changes() = 1`, [input.eventId, input.circleId])]);
     return result.meta.changes === 1;
   }
 
@@ -925,17 +969,22 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
-  async function setPostEventHidden(accountId: string, eventId: string, circleId: string, hidden: boolean) {
+  async function setPostEventHidden(accountId: string, eventId: string, circleId: string, hidden: boolean, now = Date.now()) {
     await ensureTables();
-    const result = await database.prepare(
+    const results = await database.batch([
+      ...notify({ kind: "circle.updated", occurrence: crypto.randomUUID(), now, detail: "活動結束後的公開設定" },
+        `${circleNotificationSource} JOIN circle_overrides o ON o.event_id = c.event_id AND o.circle_id = c.circle_id
+          WHERE c.account_id = ?1 AND c.event_id = ?2 AND c.circle_id = ?3 AND c.status = 'verified' AND o.post_event_hidden <> ?4`,
+        [accountId, eventId, circleId, hidden ? 1 : 0]),
+      database.prepare(
       `UPDATE circle_overrides SET post_event_hidden = ?1
        WHERE event_id = ?2 AND circle_id = ?3 AND EXISTS (
          SELECT 1 FROM circle_claims c JOIN accounts a ON a.id = c.account_id
          WHERE c.account_id = ?4 AND c.event_id = ?2 AND c.circle_id = ?3 AND c.status = 'verified'
            AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
        )`,
-    ).bind(hidden ? 1 : 0, eventId, circleId, accountId).run();
-    return result.meta.changes === 1;
+    ).bind(hidden ? 1 : 0, eventId, circleId, accountId)]);
+    return results[results.length - 1].meta.changes === 1;
   }
 
   /**
@@ -1784,8 +1833,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function createOrganizerCandidate(input: OrganizerCandidateInput) {
     await ensureTables();
     try {
-      const results = await database.batch(organizerCandidateStatements(input));
-      return results.every((result) => result.meta.changes === 1)
+      const statements = organizerCandidateStatements(input);
+      const results = await database.batch([...statements,
+        ...(input.ownerGrant ? notify({ kind: "member.granted", occurrence: `created:${input.id}`, now: input.now },
+          `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = ?2 AND changes() = 1`,
+          [input.id, input.ownerGrant.accountId]) : []),
+      ]);
+      return results.slice(0, statements.length).every((result) => result.meta.changes === 1)
         ? { ok: true as const, version: 1 }
         : { ok: false as const, reason: "conflict" as const };
     } catch (error) {
@@ -1817,15 +1871,18 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           `INSERT INTO organizer_event_grants (
              id, candidate_id, account_id, role, granted_by, granted_at, revoked_by, revoked_at
            ) SELECT ?1, candidate_id, ?2, role, invited_by, ?3, NULL, NULL
-             FROM organizer_event_invitations WHERE id = ?4 AND accepted_by = ?2
+             FROM organizer_event_invitations WHERE id = ?4 AND accepted_by = ?2 AND changes() = 1
            ON CONFLICT(candidate_id, account_id) DO UPDATE SET
              role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at,
              revoked_by = NULL, revoked_at = NULL
-           WHERE organizer_event_grants.role <> 'owner'
-             OR organizer_event_grants.revoked_at IS NOT NULL OR excluded.role <> 'editor'`,
+           WHERE (organizer_event_grants.role <> 'owner' OR organizer_event_grants.revoked_at IS NOT NULL OR excluded.role <> 'editor')
+             AND (organizer_event_grants.role <> excluded.role OR organizer_event_grants.revoked_at IS NOT NULL)`,
         ).bind(crypto.randomUUID(), input.accountId, input.now, invitation.id),
+        ...notify({ kind: "member.granted", occurrence: `invitation:${invitation.id}`, now: input.now },
+          `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = ?2 AND changes() = 1`,
+          [invitation.candidate_id, input.accountId]),
       ]);
-      if (results.every((result) => result.meta.changes === 1)) {
+      if (results.slice(0, 2).every((result) => result.meta.changes === 1)) {
         accepted.push({ candidateId: invitation.candidate_id, role: invitation.role });
       }
     }
@@ -2087,18 +2144,22 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     // revoke has to succeed on either row. Reporting the grant alone would tell
     // the Owner nothing changed while the pending invitation was in fact
     // withdrawn — see manageOrganizerOwner, which draws the same distinction.
-    const [grant, invitation] = await database.batch([
+    const outcomes = await database.batch([
       database.prepare(
         `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
          WHERE candidate_id = ?3 AND role = 'editor' AND revoked_at IS NULL
            AND account_id = (SELECT id FROM accounts WHERE email = ?4)`,
       ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
+      ...notify({ kind: "member.revoked", occurrence: crypto.randomUUID(), now: input.now },
+        `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = (SELECT id FROM accounts WHERE email = ?2) AND changes() = 1`,
+        [input.candidateId, input.email]),
       database.prepare(
         `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2
          WHERE candidate_id = ?3 AND email = ?4 AND role = 'editor'
            AND accepted_at IS NULL AND revoked_at IS NULL`,
       ).bind(input.actorAccountId, input.now, input.candidateId, input.email),
     ]);
+    const grant = outcomes[0], invitation = outcomes[outcomes.length - 1];
     return grant.meta.changes === 1 || invitation.meta.changes === 1
       ? { ok: true as const, result: "revoked" as const }
       : { ok: false as const, reason: "missing" as const };
@@ -2159,7 +2220,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       // count read before it. Two actors revoking the last two Owners at once
       // would both see a count of two and both proceed, leaving the candidate
       // ownerless; as one statement, the loser of the race matches no row.
-      const result = await database.prepare(
+      const [result] = await database.batch([database.prepare(
         `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?4
          WHERE candidate_id = ?2 AND account_id = ?3 AND role = 'owner' AND revoked_at IS NULL
            AND ${authority}
@@ -2168,7 +2229,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              WHERE other.candidate_id = ?2 AND other.role = 'owner'
                AND other.revoked_at IS NULL AND other.account_id <> ?3
            )`,
-      ).bind(input.actorAccountId, input.candidateId, target.account_id, input.now).run();
+      ).bind(input.actorAccountId, input.candidateId, target.account_id, input.now),
+        ...notify({ kind: "member.revoked", occurrence: crypto.randomUUID(), now: input.now },
+          `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = ?2 AND changes() = 1`, [input.candidateId, target.account_id]),
+      ]);
       if (result.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
       if (!await authorized()) return { ok: false as const, reason: "forbidden" as const };
       // Nothing changed: either the grant went away under us, or it is now the
@@ -2692,8 +2756,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
             AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?3 AND r.candidate_id = ?1)`)
           .bind(input.candidateId, publication.jobId, transitionToken),
       ] : []),
+      ...notify({ kind: status === "approved" ? "review.approved" : "review.changes_requested", occurrence: transitionToken, now: input.now },
+        `${ownerNotificationSource} WHERE c.id = ?1 AND EXISTS (SELECT 1 FROM organizer_event_reviews r WHERE r.id = ?2 AND r.candidate_id = c.id)`,
+        [input.candidateId, transitionToken]),
     ]);
-    return results.every((result, index) => result.meta.changes === (reuseQueuedJob && index === 2 ? 0 : 1))
+    return results.slice(0, publication ? 4 : 2).every((result, index) => result.meta.changes === (reuseQueuedJob && index === 2 ? 0 : 1))
       ? { ok: true as const, status: publication ? "publishing" : status,
         ...(publication ? { publicationJobId: publication.jobId } : {}) }
       : { ok: false as const, reason: "conflict" as const, currentVersion: candidate.current_version };
@@ -2967,6 +3034,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.candidateId, nextVersion, input.jobId, input.leaseToken, input.now,
       input.actorAccountId, actorRole,
     );
+    const notices = notify({ kind: "review.changes_requested", occurrence: crypto.randomUUID(), now: input.now },
+      `${ownerNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [input.candidateId]);
     const results = await database.batch([
       database.prepare(
         `UPDATE organizer_event_candidates SET status = 'changes_requested',
@@ -2995,6 +3064,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
            )`}`,
       ).bind(nextVersion, input.now, input.actorAccountId, actorRole, input.candidateId,
         input.expectedVersion, input.jobId, input.leaseToken),
+      ...notices,
       database.prepare(
         `INSERT INTO organizer_event_revisions (
            id, candidate_id, version, event_id, draft_json, created_by, created_by_role, created_at
@@ -3048,8 +3118,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         "DELETE FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?1 AND token = ?2",
       ).bind(input.jobId, input.leaseToken),
     ]);
-    if (results.length === 6 && results.slice(0, 5).every((result) => result.meta.changes === 1)
-      && results[5].meta.changes === 1) {
+    if (results.filter((_, index) => index < 1 || index >= 1 + notices.length).every(result => result.meta.changes === 1)) {
       return { ok: true as const, status: "changes_requested" as const, version: nextVersion, jobId: input.jobId };
     }
     return { ok: false as const, reason: "conflict" as const };
@@ -3214,8 +3283,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
                AND j.candidate_id = organizer_event_candidates.id
                AND j.candidate_version = organizer_event_candidates.current_version)`,
       ).bind(input.now, jobId),
+      ...notify({ kind: "publication.failed", occurrence: crypto.randomUUID(), now: input.now },
+        `${ownerNotificationSource} JOIN organizer_publication_jobs j ON j.candidate_id = c.id
+          WHERE j.id = ?1 AND c.current_version = j.candidate_version AND changes() = 1`, [jobId]),
     ]));
-    return { expired: expired.filter((_, index) => results[index * 2].meta.changes === 1) };
+    return { expired: expired.filter((_, index) => results[index * (results.length / expired.length)].meta.changes === 1) };
   }
 
   async function listDueOrganizerPublicationJobs(now: number, limit = 10) {
@@ -3333,13 +3405,16 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       input.nextAttemptAt ?? null, input.pendingAttempts ?? null,
       input.metadata?.workflow_run_attempt ?? null, input.metadata?.production_manifest_sha256 ?? null);
     if (input.status !== "published") {
-      const result = await jobUpdate.run();
-      if (result.meta.changes !== 1) return false;
-      await database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
-        WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?3)
-          AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?3)
-          AND status IN ('approved', 'publishing', 'failed')`).bind(input.status, input.now, input.jobId).run();
-      return true;
+      const [result] = await database.batch([jobUpdate,
+        database.prepare(`UPDATE organizer_event_candidates SET status = ?1, updated_at = ?2, last_updated_role = 'system'
+          WHERE id = (SELECT candidate_id FROM organizer_publication_jobs WHERE id = ?3)
+            AND current_version = (SELECT candidate_version FROM organizer_publication_jobs WHERE id = ?3)
+            AND status IN ('approved', 'publishing', 'failed') AND changes() = 1`).bind(input.status, input.now, input.jobId),
+        ...(input.status === "failed" ? notify({ kind: "publication.failed", occurrence: crypto.randomUUID(), now: input.now },
+          `${ownerNotificationSource} JOIN organizer_publication_jobs j ON j.candidate_id = c.id
+            WHERE j.id = ?1 AND c.current_version = j.candidate_version AND changes() = 1`, [input.jobId]) : []),
+      ]);
+      return result.meta.changes === 1;
     }
     // Completion is one transaction. If any part fails, none of it lands: the
     // job stays at verifying_production, the executor records a retryable
@@ -3353,6 +3428,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       AND EXISTS (SELECT 1 FROM organizer_publication_lease WHERE id = 'global' AND job_id = ?2 AND token = ?3)`;
     const [job] = await database.batch([
       jobUpdate,
+      ...notify({ kind: "publication.published", occurrence: `published:${input.jobId}`, now: input.now },
+        `${ownerNotificationSource} JOIN organizer_publication_jobs j ON j.candidate_id = c.id
+          WHERE j.id = ?1 AND c.current_version = j.candidate_version AND changes() = 1`, [input.jobId]),
       database.prepare(
         `UPDATE organizer_event_candidates SET status = 'published', published_version = current_version,
            published_at = ?1, updated_at = ?1, last_updated_role = 'system'
@@ -3444,7 +3522,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function clearPreviewData() {
     await ensureTables();
     await database.batch([
-      ...["review_notification_items", "review_notification_batches"].map(table => database.prepare(`DELETE FROM ${table}`)),
+      ...["review_notification_items", "review_notification_batches", "account_notification_items", "account_notification_batches", "account_notification_preferences"].map(table => database.prepare(`DELETE FROM ${table}`)),
     ]);
     await database.batch([
       "github_webhook_deliveries", "organizer_publication_lease", "organizer_publication_jobs", "organizer_submission_snapshots",
@@ -3458,9 +3536,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   return {
     ...createReviewNotificationRepository(database, ensureTables),
+    ...createAccountNotificationRepository(database, ensureTables, options.accountNotifications),
     ...createOrganizerAmendmentRepository(database, ensureTables),
     ...createOrganizerRecoveryRepository(database, ensureTables),
-    ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements),
+    ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),
     ensureTables, writeAudit,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,

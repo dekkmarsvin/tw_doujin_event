@@ -4,7 +4,7 @@ export type MailEnvironment = Pick<PortalEnv, "MAILGUN_API_KEY" | "MAILGUN_DOMAI
   "PREVIEW_MAIL_SINK" | "PREVIEW_TEST_RECIPIENTS" | "PREVIEW_SANDBOX_RECIPIENTS">;
 /** `html`, when present, goes alongside `text`; the text part must stand on its own. */
 export type PortalMail = {
-  purpose: "login_link" | "organizer_invitation" | "review_digest";
+  purpose: "login_link" | "organizer_invitation" | "review_digest" | "account_notification";
   to: string; subject: string; text: string; html?: string;
 };
 
