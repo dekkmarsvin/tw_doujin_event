@@ -55,8 +55,8 @@ export type ClaimReviewScope = {
   decide: (claimId: string, decision: ClaimDecision) => Promise<unknown>;
 };
 
-export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope }: {
-  initialEventId: string; onOpenMaps?: (eventId: string) => void; claimScope?: ClaimReviewScope;
+export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQueueLoaded }: {
+  initialEventId: string; onOpenMaps?: (eventId: string) => void; claimScope?: ClaimReviewScope; onQueueLoaded?: (queue: ReviewQueue | null) => void;
 }) {
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
   /** Read with each answer, so a page left open past midnight moves events on. */
@@ -97,20 +97,21 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope }: {
         if (version !== requestVersion.current.version) return;
         const live = new Set(answer.claims.map((claim) => claim.id));
         setQueue(answer);
+        onQueueLoaded?.(answer);
         setToday(taipeiDate(Date.now()));
         setLoadError("");
         setSelected((current) => new Set([...current].filter((id) => live.has(id))));
         setMessages((current) => Object.fromEntries(Object.entries(current).filter(([id]) => live.has(id))));
       })
       .catch((error: unknown) => {
-        if (version === requestVersion.current.version) setLoadError(errorMessage(error));
+        if (version === requestVersion.current.version) { setLoadError(errorMessage(error)); onQueueLoaded?.(null); }
       })
       // The button is disabled while an announced request is in flight, so no
       // second announced request can supersede it and leave it stuck.
       .finally(() => {
         if (announce) setLoading(false);
       });
-  }, [claimScope]);
+  }, [claimScope, onQueueLoaded]);
 
   useEffect(() => {
     const requests = requestVersion.current;

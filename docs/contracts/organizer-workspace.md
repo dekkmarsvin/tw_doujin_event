@@ -1,6 +1,6 @@
 # 主辦單位工作區契約
 
-**實作**：`app/organizer-status-summary.ts`、`app/organizer/organizer-workspace-header.tsx`、`app/organizer/organizer-takedown-panel.tsx`
+**實作**：`app/organizer-status-summary.ts`、`app/organizer/organizer-workspace-header.tsx`、`app/organizer/use-organizer-pending-claims.ts`、`app/organizer/organizer-takedown-panel.tsx`
 
 主辦單位在獨立入口 `/organizer` 建立候選活動、匯入攤位資料、畫地圖、驗證、預覽並送審。它產生的是**候選內容**，不是公開資料：公開場刊仍只來自 data repository 的 reviewed snapshot 與 pin。
 
@@ -27,6 +27,8 @@
 ## 活動內社團認領審核
 
 活動資料、社團認領與撤下補充資料是獨立工作面板；後兩者不算入六項活動建置進度。只有活動已在目前部署的公開清單中，工作區才顯示社團處置入口。它們處理的是該活動目前的認領與補充資料，不是所選候選的歷史快照。
+
+右側頂部顯示此活動的社團認領待審筆數；初版及修正版共用目前待審清單，不統計社團數或歷史裁決。核准、婉拒及清單重新整理後同步更新；其他面板在可見時每 30 秒與返回視窗時更新。未能讀取不顯示為零，切換活動不沿用另一活動的筆數。
 
 `GET／POST /api/organizer/events/:candidateId/claims` 要求有效 session 與該候選的有效 Owner／Editor grant，或網站管理者身分。活動由伺服器讀取候選的 `event_id` 決定；不接受由 body 或 query 改寫活動範圍。沒有候選授權、活動未公開或認領屬於另一活動時回 404。列表只回此活動的待審認領與佐證，不回跨活動管理總覽或其他帳號 email。
 

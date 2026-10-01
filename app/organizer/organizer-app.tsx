@@ -7,6 +7,7 @@ import { OrganizerApplicationsPanel } from "./organizer-applications-panel";
 import { OrganizerClaimsPanel } from "./organizer-claims-panel";
 import { OrganizerTakedownPanel } from "./organizer-takedown-panel";
 import { OrganizerWorkspaceHeader } from "./organizer-workspace-header";
+import { useOrganizerPendingClaims } from "./use-organizer-pending-claims";
 import { groupOrganizerEvents, latestOrganizerEdition } from "../organizer-event-groups";
 import { ReviewPanel } from "./organizer-review-panel";
 import { OrganizerMapPanel } from "./organizer-map-panel";
@@ -209,6 +210,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   const [eventListOpen, setEventListOpen] = useState(true);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
   const [surface, setSurface] = useState<"data" | "claims" | "takedown">("data");
+  const { pendingClaims, onQueueLoaded } = useOrganizerPendingClaims(
+    detail?.claimReviewAvailable ? detail.event.id : null, detail?.event.eventId ?? null, surface === "claims",
+  );
   // Async navigation (including a published-baseline read) must consult the
   // current panel's edits, not the dirty state captured when the request began.
   const dirty = useRef(false);
@@ -510,7 +514,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
-      {detail && <OrganizerWorkspaceHeader detail={detail} onReview={() => chooseSection("review")} />}
+      {detail && <OrganizerWorkspaceHeader detail={detail} pendingClaims={pendingClaims} onReview={() => chooseSection("review")} />}
       {surface === "data" && detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
         <div><strong>修正已發布名單</strong><p>建立修正草稿，原本的公開活動會持續提供，直到新版核准並完成發布。</p></div>
         <button type="button" disabled={startingAmendment} onClick={() => {
@@ -540,7 +544,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
             : "收到主辦邀請後，活動會出現在左側。"}</p>
       </div>
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId
-          ? surface === "claims" ? <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} />
+          ? surface === "claims" ? <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} onQueueLoaded={onQueueLoaded} />
             : <OrganizerTakedownPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} />
           : <WorkspaceSurface
           key={detail.event.id}
