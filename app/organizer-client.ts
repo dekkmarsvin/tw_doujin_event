@@ -1,6 +1,6 @@
 import type { MapAuthoringState } from "./map-authoring-state";
 import type { OrganizerApplication, OrganizerApplicationInput } from "./organizer-applications";
-import { PortalError, reportSessionResponse } from "./circle-editor-client";
+import { PortalError, reportSessionResponse, type ReviewQueue } from "./circle-editor-client";
 import type { OrganizerReferenceCatalog } from "./organizer-reference-catalog";
 import type {
   OrganizerCandidateStatus,
@@ -63,6 +63,8 @@ export type OrganizerEventSummary = {
   eventId: string | null;
   status: OrganizerCandidateStatus;
   version: number;
+  createdAt?: number;
+  edition?: number;
   updatedAt: number;
   updatedByRole: string;
   role: OrganizerRole | "admin";
@@ -70,6 +72,7 @@ export type OrganizerEventSummary = {
 };
 
 export type OrganizerEventDetail = {
+  claimReviewAvailable?: boolean;
   recoveryAvailable?: boolean;
   publicationAvailable?: boolean;
   event: OrganizerEventSummary & { eventIdLocked: boolean };
@@ -111,6 +114,16 @@ export function listOrganizerEvents() {
 
 export function readOrganizerEvent(candidateId: string) {
   return organizerCall<OrganizerEventDetail>(`/api/organizer/events/${encodeURIComponent(candidateId)}`);
+}
+
+export function listOrganizerClaims(candidateId: string) {
+  return organizerCall<ReviewQueue>(`/api/organizer/events/${encodeURIComponent(candidateId)}/claims`);
+}
+
+export function decideOrganizerClaim(candidateId: string, claimId: string, decision: "approve" | "reject") {
+  return organizerCall<{ ok: true }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/claims`, {
+    method: "POST", body: JSON.stringify({ claimId, decision }),
+  });
 }
 
 export type OrganizerAmendmentDestination = { dayId: string; code: string; areaId: string };

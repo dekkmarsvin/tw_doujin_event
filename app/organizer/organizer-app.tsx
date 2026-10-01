@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { OrganizerAmendmentPanel } from "./organizer-amendment-panel";
 import { OrganizerApplicationsPanel } from "./organizer-applications-panel";
+import { OrganizerClaimsPanel } from "./organizer-claims-panel";
+import { groupOrganizerEvents, latestOrganizerEdition } from "../organizer-event-groups";
 import { ReviewPanel } from "./organizer-review-panel";
 import { OrganizerMapPanel } from "./organizer-map-panel";
 import { ImportPanel } from "./organizer-import-panel";
@@ -66,6 +68,7 @@ export default function OrganizerApp() {
       {session && <div className={styles.identity}>
         <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
+        {session.isAdmin && <a href="/admin" className={styles.ghost}>管理</a>}
         <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
@@ -202,6 +205,8 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   // Collapsed, the list gives its width to the workspace. Wide editing surfaces
   // -- the map above all -- are what that width is for.
   const [eventListOpen, setEventListOpen] = useState(true);
+  const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
+  const [claimsOpen, setClaimsOpen] = useState(false);
   // Async navigation (including a published-baseline read) must consult the
   // current panel's edits, not the dirty state captured when the request began.
   const dirty = useRef(false);
@@ -228,11 +233,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       if (entry.has("candidate") && !next.some(item => item.id === entry.get("candidate"))) {
         setSelectedId(null);
         setNotice({ kind: "error", message: "找不到信件指定的工作區，或此帳號已無權限。請從活動列表選擇可使用的活動。" });
-      } else setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
+      } else setSelectedId((current) => entry.has("candidate") ? current : latestOrganizerEdition(next, current) ?? latestOrganizerEdition(next));
       return next;
     }
     setSelectedId((current) => current === null ? null
-      : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
+      : next.some((item) => item.id === current) ? current : latestOrganizerEdition(next));
     return next;
   }, [entry]);
   const reloadDetail = useCallback(async (
@@ -389,7 +394,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
   };
 
   const chooseEvent = (candidateId: string) => {
-    requestNavigation("切換活動", () => { setApplicationsOpen(false); setSelectedId(candidateId); });
+    requestNavigation("切換活動", () => {
+      setApplicationsOpen(false); setClaimsOpen(false);
+      if (candidateId !== selectedId) { setDetail(null); setSelectedId(candidateId); }
+    });
   };
 
   const chooseSection = (nextSection: OrganizerWorkspaceSection, target?: string) => {
@@ -429,6 +437,9 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     <OrganizerApplicationsPanel session={session} onReviewed={async () => { await reloadList(); }} />
   </main>;
 
+  const groups = groupOrganizerEvents(events);
+  const selectedGroup = groups.find(group => group.editions.some(event => event.id === selectedId));
+
   return <main className={eventListOpen ? styles.shell : `${styles.shell} ${styles.shellNarrow}`}>
     <aside className={styles.sidebar}>
       <div className={styles.sidebarHead}>
@@ -453,16 +464,49 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
             + (email.normalize("NFKC").trim().toLowerCase() === session.email ? "" : "請到「送審與發布狀態」重寄負責人邀請信。") })}
         />}
         <nav aria-label="活動列表" className={styles.eventList}>
-          {events.map((item) => <button type="button" key={item.id} aria-current={item.id === selectedId ? "page" : undefined} className={item.id === selectedId ? styles.eventActive : styles.eventButton} onClick={() => chooseEvent(item.id)}>
-            <span>{item.tentativeName}{item.operation === "AMEND" ? "（發布後修正）" : ""}</span><small>{STATUS_LABEL[item.status]}・{item.workspaceMode === "guided" ? "編輯中" : "全部項目"}</small>
-          </button>)}
+          {groups.map(group => {
+            const active = group.id === selectedGroup?.id;
+            const expanded = expandedEvents[group.id] ?? active;
+            return <div key={group.id} className={styles.eventGroup}>
+              <button type="button" aria-expanded={expanded} aria-controls={`event-group-${group.latest.id}`}
+                className={active ? styles.eventActive : styles.eventButton} onClick={() => {
+                  if (expanded) setExpandedEvents(current => ({ ...current, [group.id]: false }));
+                  else requestNavigation("切換活動", () => {
+                    setExpandedEvents(current => ({ ...current, [group.id]: true }));
+                    setApplicationsOpen(false); setClaimsOpen(false);
+                    if (selectedId !== group.latest.id) { setDetail(null); setSelectedId(group.latest.id); }
+                  });
+                }}>
+                <span className={styles.eventGroupName} data-expanded={expanded}><UiIcon name="chevron-right" />{group.name}</span>
+                <small>第 {group.latest.edition ?? 1} 版・{STATUS_LABEL[group.latest.status]}</small>
+              </button>
+              <div id={`event-group-${group.latest.id}`} hidden={!expanded} className={styles.eventGroupActions}>
+                <button type="button" className={styles.ghost} aria-current={active && !claimsOpen ? "page" : undefined}
+                  onClick={() => {
+                    if (active) requestNavigation("開啟活動資料", () => setClaimsOpen(false));
+                    else chooseEvent(group.latest.id);
+                  }}>活動資料</button>
+                {active && detail?.claimReviewAvailable && <button type="button" className={styles.ghost} aria-current={claimsOpen ? "page" : undefined}
+                  onClick={() => requestNavigation("查看社團認領", () => setClaimsOpen(true))}>社團認領</button>}
+              </div>
+            </div>;
+          })}
           {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
         </nav>
       </div>
     </aside>
     <section className={styles.workspace}>
       {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
-      {detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
+      {detail && selectedGroup && <div className={styles.workspaceTools}>
+        <div className={styles.workspaceTabs} role="group" aria-label="活動工作">
+          <button type="button" className={styles.ghost} aria-pressed={!claimsOpen} onClick={() => requestNavigation("開啟活動資料", () => setClaimsOpen(false))}>活動資料</button>
+          {detail.claimReviewAvailable && <button type="button" className={styles.ghost} aria-pressed={claimsOpen} onClick={() => requestNavigation("查看社團認領", () => setClaimsOpen(true))}>社團認領</button>}
+        </div>
+        <label className={styles.editionSelect}>版本<select aria-label="活動版本" value={selectedId ?? ""} onChange={event => chooseEvent(event.target.value)}>
+          {selectedGroup.editions.map((edition, index) => <option key={edition.id} value={edition.id}>第 {edition.edition ?? selectedGroup.editions.length - index} 版{index === 0 ? "（最新）" : ""}・{STATUS_LABEL[edition.status]}</option>)}
+        </select></label>
+      </div>}
+      {!claimsOpen && detail?.event.status === "published" && (detail.event.role === "owner" || session.isAdmin) && <div className={styles.guideBanner}>
         <div><strong>修正已發布名單</strong><p>建立修正草稿，原本的公開活動會持續提供，直到新版核准並完成發布。</p></div>
         <button type="button" disabled={startingAmendment} onClick={() => {
           setStartingAmendment(true); setNotice({ kind: "busy", message: "正在核對已發布版本…" });
@@ -490,7 +534,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           : session.isAdmin ? "用左側的「建立新活動」開始第一場。"
             : "收到主辦邀請後，活動會出現在左側。"}</p>
       </div>
-        : <WorkspaceSurface
+        : claimsOpen && detail.claimReviewAvailable && detail.event.eventId ? <>
+          <div className={styles.workspaceHead}><h2>{detail.draft.event.name || detail.event.tentativeName}</h2></div>
+          <OrganizerClaimsPanel key={detail.event.id} candidateId={detail.event.id} eventId={detail.event.eventId} />
+        </> : <WorkspaceSurface
           key={detail.event.id}
           session={session}
           detail={detail}
