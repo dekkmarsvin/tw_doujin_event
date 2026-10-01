@@ -105,8 +105,8 @@
 .eventGroupActions button { display: block; width: 100%; text-align: left; margin-top: 4px; }
 .eventGroupActions button[aria-current="page"],
 .eventGroupActions button[aria-current="page"]:hover:not(:disabled) { background: var(--ink) !important; color: var(--surface) !important; }
-.eventGroupActions .editionSelect { display: grid; gap: 5px; padding: 8px 0; font-size: 10px; color: var(--muted); }
-.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 11px; }
+.eventGroupActions .editionSelect { display: grid; gap: 5px; padding: 8px 0; font-size: 11px; color: var(--muted); }
+.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 12px; }
 .activityHeader { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 22px; margin-bottom: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .activityIdentity { flex: 1; min-width: 200px; }
 .activityIdentity p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }

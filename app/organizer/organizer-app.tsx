@@ -70,7 +70,7 @@ export default function OrganizerApp() {
       {session && <div className={styles.identity}>
         <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
-        {session.isAdmin && <a href="/admin" className={styles.ghost}>管理</a>}
+        {session.isAdmin && <a href="/admin">管理</a>}
         <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
