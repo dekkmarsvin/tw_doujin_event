@@ -56,6 +56,7 @@ export type QueuedClaim = PendingClaim & { eventId: string; circleClaimed: boole
 
 export type ReviewQueue = {
   claims: QueuedClaim[];
+  pendingClaimCount?: number;
   mapDrafts: { eventId: string; submitted: number }[];
   organizer: { applications: number; submissions: number };
 };
@@ -257,6 +258,11 @@ export function decideClaim(claimId: string, decision: "approve" | "reject" | "r
 
 export function takedownOverride(circleId: string, reason: string, eventId?: string) {
   return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) }, eventId);
+}
+
+export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean };
+export function searchTakedownCircles(query: string, eventId: string) {
+  return call<{ circles: TakedownCircle[] }>(`/api/admin/overrides?q=${encodeURIComponent(query)}`, undefined, eventId);
 }
 
 export type AdminEntry = { email: string; addedBy: string | null; addedAt: number };

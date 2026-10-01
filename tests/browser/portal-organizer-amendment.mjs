@@ -41,6 +41,7 @@ function fixtureRoutes(role, existing = false, delayStart = false) {
   const plan = () => planOrganizerAmendment({ ...baseline, changes: state.changes, today: () => "2026-09-15" });
   const summary = (id) => ({ id, tentativeName: id === "other" ? "另一場待編輯活動" : "#190 合成修正驗收", eventId: id === "other" ? "other-event" : baseline.event.id,
     operation: id === "amendment" ? "AMEND" : "CREATE", status: id === "source" ? "published" : "draft",
+    createdAt: id === "source" ? fixture.now - 1 : fixture.now, edition: id === "amendment" ? 2 : 1,
     version: id === "source" ? 1 : id === "other" ? state.otherVersion : state.version, updatedAt: fixture.now, updatedByRole: role, role, workspaceMode: "binder" });
   const detail = (id) => ({ event: { ...summary(id), eventIdLocked: true }, publicationAvailable: false,
     draft: id === "other" ? state.otherDraft : baseline.draft,
@@ -113,7 +114,7 @@ try {
   await page.getByRole("button", { name: "開始修正已發布活動", exact: true }).click();
   await page.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(ownerRoutes.state.starts, 1);
-  assert.equal(await page.getByRole("button", { name: /發布後修正/ }).count(), 1);
+  assert.equal(await page.getByRole("combobox", { name: "活動版本", exact: true }).inputValue(), "amendment");
   const form = page.getByRole("form", { name: "修正宣告表單" });
   await form.waitFor();
   const add = async (kind, source, name, code) => {
@@ -221,9 +222,10 @@ try {
   assert.match(await lateDialog.innerText(), /開啟已建立的修正候選/);
   await lateDialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.equal(await name.inputValue(), "另一場還沒儲存的內容");
-  assert.equal(await moving.getByRole("button", { name: /發布後修正/ }).count(), 1);
+  const correctedActivity = moving.getByRole("button", { name: /#190 合成修正驗收 第 2 版/ });
+  assert.equal(await correctedActivity.count(), 1);
   await journey.capture(moving, "organizer-amendment-late-response-preserves-other-draft");
-  await moving.getByRole("button", { name: /發布後修正/ }).click();
+  await correctedActivity.click();
   await lateDialog.getByRole("button", { name: "儲存並切換", exact: true }).click();
   await moving.getByRole("heading", { name: "已發布活動修正", exact: true }).waitFor();
   assert.equal(delayed.state.otherDraft.event.name, "另一場還沒儲存的內容");

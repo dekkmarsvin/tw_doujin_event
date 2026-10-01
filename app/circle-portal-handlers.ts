@@ -136,8 +136,8 @@ type PortalDependencies = {
    * the address — a gate here would turn that into an inbox oracle.
    */
   mailRecipientAllowed?: (email: string) => boolean;
-  lookupCircle: (circleId: string) => Promise<CircleLookup | null>;
-  searchCircles: (query: string, limit: number) => Promise<CircleLookup[]>;
+  lookupCircle: (circleId: string, eventId?: string) => Promise<CircleLookup | null>;
+  searchCircles: (query: string, limit: number, eventId?: string) => Promise<CircleLookup[]>;
   /** Returns page text, or null when the host cannot be read from a Worker. */
   fetchEvidence: (url: string) => Promise<string | null>;
   /**
@@ -1754,44 +1754,86 @@ export function createCirclePortalHandlers({
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
 
+    return decideReviewClaim(request, gate.session, "admin", config.eventId);
+  }
+
+  async function organizerClaimAccess(request: Request, candidateId: string) {
+    const access = await organizerAccess(request, candidateId);
+    if (!access.ok) return access;
+    const candidate = await repository.getOrganizerCandidate(candidateId);
+    const eventId = candidate?.event_id;
+    if (!eventId || !(config.publishedEvent ? await config.publishedEvent(eventId) : eventId === config.eventId)) {
+      return { ok: false as const, response: json({ error: "此活動尚未公開社團認領。" }, 404) };
+    }
+    return { ...access, eventId };
+  }
+
+  async function organizerListClaims(request: Request, candidateId: string) {
+    const access = await organizerClaimAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    const claims = await repository.listPendingEventClaims(access.eventId);
+    return json({ pendingClaimCount: claims[0]?.pending_count ?? 0, claims: claims.map(claim => ({
+      id: claim.id, eventId: claim.event_id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
+      evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
+      createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,
+    })), mapDrafts: [], organizer: { applications: 0, submissions: 0 } });
+  }
+
+  async function organizerDecideClaim(request: Request, candidateId: string) {
+    const access = await organizerClaimAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    return decideReviewClaim(request, access.current, organizerAuditRole(access), access.eventId,
+      { candidateId, accountId: access.current.accountId });
+  }
+
+  async function decideReviewClaim(request: Request, session: { accountId: string; email: string },
+    actorRole: "admin" | "organizer_owner" | "organizer_editor", eventId: string,
+    authority?: { candidateId: string; accountId: string }) {
+
     const body = await readJson(request);
     const claimId = typeof body?.claimId === "string" ? body.claimId : "";
     const decision = body?.decision;
-    if (decision !== "approve" && decision !== "reject" && decision !== "revoke") {
-      return json({ error: "decision 必須是 approve、reject 或 revoke。" }, 400);
+    if (decision !== "approve" && decision !== "reject" && (authority || decision !== "revoke")) {
+      return json({ error: authority ? "請選擇核准或婉拒。" : "decision 必須是 approve、reject 或 revoke。" }, 400);
     }
 
     const claim = await repository.getClaim(claimId);
     // A revoke rebuilds this event's public document. Deciding another event's
     // claim from here would withdraw ownership in that event while leaving its
     // document — and so the revoked content — standing.
-    if (!claimInScope(claim)) return json({ error: "找不到這筆認領。" }, 404);
+    if (!claim || claim.event_id !== eventId) return json({ error: "找不到這筆認領。" }, 404);
 
     const now = config.now();
-    const method: ClaimMethod = "admin";
+    const method: ClaimMethod = authority ? "organizer" : "admin";
     // Approving and rejecting decide a pending claim. The queue a reviewer
     // decides from can be seconds old, and a batch can hold many rows: a
     // rejection that landed on a claim approved meanwhile would withdraw the
     // owner's content under the name of a rejection. Withdrawing an owner is
     // what revoke is for.
     const ok = decision === "approve"
-      ? await repository.markClaimVerified(claimId, method, now, gate.session.email)
-      : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, gate.session.email,
-        decision === "reject" ? "pending" : undefined);
+      ? await repository.markClaimVerified(claimId, method, now, session.email, authority)
+      : await repository.setClaimStatus(claimId, decision === "reject" ? "rejected" : "revoked", now, session.email,
+        decision === "reject" ? "pending" : undefined, authority);
 
     // Revoking ownership withdraws that circle's content in the same step. The
     // phase has to be the current one: rebuilding as "during" after the event
     // would republish every circle that had opted out of the post-event window.
-    if (decision !== "approve" && ok) {
-      await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
+    if (decision !== "approve" && ok && !authority) {
+      await repository.rebuildOverridesDoc(eventId, await dataUpdatedAt(), now, await currentPhase());
     }
     await repository.writeAudit({
-      at: now, actorAccountId: gate.session.accountId, actorRole: "admin",
-      action: `claim.admin_${decision}`, subjectType: "claim", subjectId: claimId,
-      detail: { circleId: claim.circle_id, applied: ok, evidenceUrl: claim.evidence_url },
+      at: now, actorAccountId: session.accountId, actorRole,
+      action: `claim.${authority ? "organizer" : "admin"}_${decision}`, subjectType: "claim", subjectId: claimId,
+      detail: { eventId, circleId: claim.circle_id, applied: ok, evidenceUrl: claim.evidence_url,
+        ...(authority ? { candidateId: authority.candidateId } : {}) },
       ipHash: await clientIpHash(request),
     });
     if (ok) return json({ ok: true });
+    if (authority) {
+      const access = await organizerClaimAccess(request, authority.candidateId);
+      if (!access.ok) return access.response;
+      if (access.eventId !== eventId) return json({ error: "找不到這筆認領。" }, 404);
+    }
     return json({ error: decision !== "revoke" && claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
   }
 
@@ -1903,21 +1945,61 @@ export function createCirclePortalHandlers({
   async function adminTakedown(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
+    return applyTakedown(request, gate.session, "admin", config.eventId);
+  }
+
+  async function adminSearchTakedownCircles(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    return searchTakedownCircles(request, config.eventId);
+  }
+
+  async function organizerSearchTakedownCircles(request: Request, candidateId: string) {
+    const access = await organizerClaimAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    return searchTakedownCircles(request, access.eventId);
+  }
+
+  async function searchTakedownCircles(request: Request, eventId: string) {
+    const query = (new URL(request.url).searchParams.get("q") ?? "").normalize("NFKC").trim();
+    if (!query) return json({ circles: [] });
+    if (query.length > 100) return json({ error: "社團名稱不可超過 100 字。" }, 400);
+    const matches = await searchCircles(query, SEARCH_LIMIT, eventId);
+    const circles = await Promise.all(matches.map(async circle => {
+      const override = await repository.getOverride(eventId, circle.id);
+      const cleanupPending = override?.status === "takendown" && thumbnailStore
+        ? (await thumbnailStore.list(circleObjectPrefix(eventId, circle.id))).length > 0 : false;
+      return { circleId: circle.id, name: circle.name, status: override?.status ?? "none", ...(cleanupPending ? { cleanupPending: true } : {}) };
+    }));
+    return json({ circles });
+  }
+
+  async function organizerTakedown(request: Request, candidateId: string) {
+    const access = await organizerClaimAccess(request, candidateId);
+    if (!access.ok) return access.response;
+    return applyTakedown(request, access.current, organizerAuditRole(access), access.eventId,
+      { candidateId, accountId: access.current.accountId });
+  }
+
+  async function applyTakedown(request: Request, session: { accountId: string; email: string },
+    actorRole: "admin" | "organizer_owner" | "organizer_editor", eventId: string,
+    authority?: { candidateId: string; accountId: string }) {
 
     const body = await readJson(request);
     const circleId = typeof body?.circleId === "string" ? body.circleId : "";
-    const reason = typeof body?.reason === "string" ? body.reason.slice(0, 500) : "";
-    if (!circleId || !reason) return json({ error: "circleId 與 reason 是必填欄位。" }, 400);
+    const reason = typeof body?.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+    if (!circleId || !reason) return json({ error: "請選擇社團並填寫撤下原因。" }, 400);
+    if (authority && !await lookupCircle(circleId, eventId)) return json({ error: "找不到這個活動的社團。" }, 404);
 
     const now = config.now();
-    const previous = await repository.getOverride(config.eventId, circleId);
+    const previous = await repository.getOverride(eventId, circleId);
+    if (!previous) return json({ error: "這個社團目前沒有上線中的補充資料。" }, 404);
     if ((previous?.hosted_thumbnail_key || hasCatalogImages(previous)) && !thumbnailStore) return json({ error: "暫時無法使用圖片功能，請稍後再試。" }, 503);
-    if (thumbnailStore) {
-      const keys = await thumbnailStore.list(circleObjectPrefix(config.eventId, circleId));
-      await deleteObjectKeys(thumbnailStore, keys);
-    }
-    // The bytes are gone, so the row must stop naming them: a later edit would
-    // otherwise republish addresses that answer nothing.
+    const keys = thumbnailStore ? await thumbnailStore.list(circleObjectPrefix(eventId, circleId)) : [];
+    const retryCleanup = previous.status === "takendown";
+    if (previous.status !== "live" && !(retryCleanup && keys.length)) return json({ error: "這個社團目前沒有上線中的補充資料。" }, 404);
+    // Withdraw and clear media references only after the conditional write
+    // confirms current authority and the content we actually inspected.
     const fieldsJson = previous?.hosted_thumbnail_key || hasCatalogImages(previous)
       ? JSON.stringify({
         ...(JSON.parse(previous!.fields_json) as CircleOverrideFields),
@@ -1925,14 +2007,31 @@ export function createCirclePortalHandlers({
         ...(hasCatalogImages(previous) ? { catalogImages: [] } : {}),
       })
       : undefined;
-    const ok = await repository.takedownOverride({ eventId: config.eventId, circleId, reason, by: gate.session.email, now, fieldsJson });
-    if (ok) await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
+    const ok = await repository.takedownOverride({ eventId, circleId, reason, by: session.email, now, fieldsJson,
+      authority, expected: { updatedAt: previous.updated_at, fieldsJson: previous.fields_json }, retryCleanup });
+    if (ok) {
+      const published = config.publishedEvent ? await config.publishedEvent(eventId)
+        : { dataUpdatedAt: await dataUpdatedAt(), eventEndsAt: await eventEndsAt() };
+      if (published) await repository.rebuildOverridesDoc(eventId, published.dataUpdatedAt, now,
+        now > Date.parse(published.eventEndsAt) ? "after" : "during");
+    }
     await repository.writeAudit({
-      at: now, actorAccountId: gate.session.accountId, actorRole: "admin", action: "override.takendown",
-      subjectType: "override", subjectId: circleId, detail: { reason, applied: ok },
+      at: now, actorAccountId: session.accountId, actorRole, action: authority ? "override.organizer_takendown" : "override.takendown",
+      subjectType: "override", subjectId: circleId, detail: { eventId, reason, applied: ok, retryCleanup,
+        ...(authority ? { candidateId: authority.candidateId } : {}) },
       ipHash: await clientIpHash(request),
     });
-    return ok ? json({ ok: true }) : json({ error: "這個社團目前沒有上線中的補充資料。" }, 404);
+    if (ok) {
+      try { if (thumbnailStore) await deleteObjectKeys(thumbnailStore, keys); }
+      catch { return json({ error: "補充資料已撤下，部分圖片尚未刪除。請再次確認撤下以完成清除。" }, 503); }
+      return json({ ok: true });
+    }
+    if (authority) {
+      const access = await organizerClaimAccess(request, authority.candidateId);
+      if (!access.ok) return access.response;
+      if (access.eventId !== eventId) return json({ error: "找不到這個活動的社團。" }, 404);
+    }
+    return json({ error: "補充資料已更新或撤下，請重新搜尋後再操作。" }, 409);
   }
 
   /**
@@ -2236,6 +2335,8 @@ export function createCirclePortalHandlers({
       status: event.status,
       version: event.current_version,
       updatedAt: event.updated_at,
+      createdAt: event.created_at,
+      edition: event.edition,
       updatedByRole: event.last_updated_role,
       role: event.role,
       operation: event.publication_operation,
@@ -2417,6 +2518,8 @@ export function createCirclePortalHandlers({
         })),
       } : null,
       publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
+      claimReviewAvailable: Boolean(candidate.event_id && (config.publishedEvent
+        ? await config.publishedEvent(candidate.event_id) : candidate.event_id === config.eventId)),
       recoveryAvailable: Boolean(access.admin && auditPublicationRecovery && loadPublishedAmendmentBaseline
         && candidate.publication_operation === "AMEND" && candidate.status === "failed"
         && publication?.status === "failed" && publication.candidate_version === candidate.current_version
@@ -3562,6 +3665,7 @@ export function createCirclePortalHandlers({
     // published event this deployment serves — would refuse every one of them.
     // Authority comes from the candidate's own grant, checked in each handler.
     adminCreateOrganizerCandidate, listOrganizerCandidates, getOrganizerCandidate, updateOrganizerCandidate,
+    organizerListClaims, organizerDecideClaim, organizerSearchTakedownCircles, organizerTakedown,
     listOrganizerVenues, createOrganizerVenue, createOrganizerVenueSpace, createOrganizerReferenceEntry,
     updateOrganizerWorkspacePreference, completeOrganizerWorkspaceOnboarding, putOrganizerImport,
     listOrganizerMaps, getOrganizerMap, createOrganizerMap, updateOrganizerMap,
@@ -3585,6 +3689,7 @@ export function createCirclePortalHandlers({
     adminListClaims: eventScoped(adminListClaims),
     adminDecideClaim: eventScoped(adminDecideClaim),
     adminTakedown: eventScoped(adminTakedown),
+    adminSearchTakedownCircles: eventScoped(adminSearchTakedownCircles),
     adminListStaleMapDrafts: eventScoped(adminListStaleMapDrafts),
     listMyMapDrafts: eventScoped(listMyMapDrafts),
     getMapDraft: eventScoped(getMapDraft),

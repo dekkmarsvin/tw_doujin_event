@@ -55,6 +55,7 @@
    instead of centring them against the label above them. */
 .fieldRow { align-items: end; }
 .identity { color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.identity a { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
 .secondary, .ghost { border-color: var(--line) !important; background: var(--surface) !important; color: var(--ink) !important; }
 .secondary:hover:not(:disabled), .ghost:hover:not(:disabled) { border-color: #aeb6b3 !important; background: var(--map-paper) !important; }
 .textButton { border-color: transparent !important; padding: 4px 0 !important; background: transparent !important; color: var(--ink) !important; text-decoration: underline; text-underline-offset: 3px; }
@@ -96,6 +97,26 @@
 .createButton { width: 100%; margin-bottom: 16px; }
 .createForm { display: grid; gap: 10px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); }
 .eventList { display: grid; gap: 5px; }
+.eventGroup { min-width: 0; }
+.eventGroupName { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.eventGroupName svg { width: 14px; height: 14px; flex-shrink: 0; }
+.eventGroupName[data-expanded="true"] svg { transform: rotate(90deg); }
+.eventGroupActions { padding: 3px 10px 10px 30px; }
+.eventGroupActions[hidden] { display: none; }
+.eventGroupActions button { display: block; width: 100%; text-align: left; margin-top: 4px; }
+.eventGroupActions button[aria-current="page"],
+.eventGroupActions button[aria-current="page"]:hover:not(:disabled) { background: var(--ink) !important; color: var(--surface) !important; }
+.eventGroupActions .editionSelect { display: grid; gap: 5px; padding: 8px 0; font-size: 11px; color: var(--muted); }
+.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
+.activityHeader { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 22px; margin-bottom: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.activityIdentity { flex: 1; min-width: 200px; }
+.activityIdentity p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }
+.activityIdentity h2 { font-size: 20px; overflow-wrap: anywhere; }
+.activityStatus { display: flex; gap: 28px; margin: 0; padding-left: 24px; border-left: 1px solid var(--line); }
+.activityStatus dt { color: var(--muted); font-size: 10px; margin-bottom: 6px; }
+.activityStatus dd { margin: 0; font-size: 13px; font-weight: 700; }
+.activityStatus dd[data-state="published"], .activityStatus dd[data-state="approved"] { color: var(--success); }
+.activityStatus dd[data-state="failed"], .activityStatus dd[data-state="changes_requested"] { color: var(--danger); }
 .eventButton, .eventActive { display: grid; gap: 5px; width: 100%; padding: 11px !important; border-color: transparent !important; text-align: left; background: transparent !important; color: var(--ink) !important; }
 .eventButton:hover { border-color: var(--line) !important; background: var(--paper) !important; }
 .eventActive { border-color: var(--line) !important; background: var(--map-paper) !important; }

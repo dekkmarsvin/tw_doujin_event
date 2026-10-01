@@ -85,7 +85,7 @@ try {
   }
   await repo.addAdmin("admin@example.test", "bootstrap", data.now);
   await repo.createOrganizerCandidate({ id: "source", tentativeName: "測試活動", ownerEmail: "owner@example.test",
-    createdByAccountId: actors.admin.id, draftJson: JSON.stringify(data.baseline.draft), now: data.now });
+    createdByAccountId: actors.admin.id, draftJson: JSON.stringify(data.baseline.draft), now: data.now - 1 });
   await repo.acceptOrganizerInvitations({ accountId: actors.owner.id, email: "owner@example.test", now: data.now });
   await db.prepare("UPDATE organizer_event_candidates SET event_id='event-alpha',event_id_locked_at=?1,status='published',published_version=1,published_at=?1 WHERE id='source'").bind(data.now).run();
   await db.prepare(`INSERT INTO organizer_submission_snapshots (id,candidate_id,candidate_version,snapshot_json,sha256,created_by,created_at)
@@ -168,7 +168,7 @@ try {
       else {
       const method = ({ maps: "listOrganizerMaps", amendments: "createOrganizerAmendment", amendment: req.method() === "GET" ? "getOrganizerAmendment" : "saveOrganizerAmendment",
         workspace: "updateOrganizerWorkspacePreference", validate: "validateOrganizerCandidate", preview: "previewOrganizerCandidate",
-        submit: "submitOrganizerCandidate", review: "adminReviewOrganizerCandidate" })[action] ?? (!action ? "getOrganizerCandidate" : null);
+        submit: "submitOrganizerCandidate", review: "adminReviewOrganizerCandidate", claims: "organizerListClaims" })[action] ?? (!action ? "getOrganizerCandidate" : null);
       assert.ok(method, `Unexpected UI action ${path}`); response = await handlers[method](request,id);
       }
     } else throw new Error(`Unexpected UI request ${path}`);
@@ -288,7 +288,7 @@ try {
   assert.equal(JSON.parse(approvedSnapshot.snapshot_json).operation,"AMEND");
   await journey.capture(owner,"amendment-real-d1-submitted"); await owner.close();
   const admin = await journey.page({ url: `${base}/organizer`, routes: routes("admin") });
-  await admin.getByRole("button", { name: /發布後修正/ }).click();
+  await admin.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
   await openSection(admin, /^送審與發布/);
   await admin.getByRole("textbox", { name: "審閱說明", exact: true }).fill("隔離合成資料核准");
   await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
@@ -300,7 +300,7 @@ try {
   await admin.getByRole("button", { name: "重試發布", exact: true }).scrollIntoViewIfNeeded();
   await journey.capture(admin,"amendment-real-d1-recoverable-failure"); await admin.close();
   const retryOwner = await journey.page({ url: `${base}/organizer`, routes: routes("owner") });
-  await retryOwner.getByRole("button", { name: /發布後修正/ }).click();
+  await retryOwner.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
   await openSection(retryOwner, /^送審與發布/);
   await retryOwner.getByRole("button", { name: "重試發布", exact: true }).click();
   await retryOwner.getByText("已要求從失敗步驟繼續，請查看發布進度。", { exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });

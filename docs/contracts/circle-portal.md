@@ -1,9 +1,11 @@
 # 社團自助控制面契約
 
+**實作**：`app/admin/admin-panels.tsx`
+
 參展社團在獨立入口 `/circle` 維護**自己的**公開資料。它**補充**而非取代人工快照發布：主辦提供的攤位與社團身分仍由版本控制的快照決定，社團填寫的內容是疊加其上、可即時撤下的補充層。
 
 **實作**：[`app/circle-portal/`](../../app/circle-portal)、[`app/public-header.ts`](../../app/public-header.ts)、[`app/workspace-nav.tsx`](../../app/workspace-nav.tsx)、[`app/circle-share.ts`](../../app/circle-share.ts)、[`app/circle-share-image.ts`](../../app/circle-share-image.ts)、[`app/catalog-image-prepare.ts`](../../app/catalog-image-prepare.ts)、[`app/hosted-thumbnails.ts`](../../app/hosted-thumbnails.ts)、[`app/admin/admin-review-queue.tsx`](../../app/admin/admin-review-queue.tsx)、[`app/admin/claim-batch.ts`](../../app/admin/claim-batch.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`app/circle-overrides.ts`](../../app/circle-overrides.ts)、[`app/mail-letter.ts`](../../app/mail-letter.ts)、[`app/portal-crypto.ts`](../../app/portal-crypto.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`functions/`](../../functions)
-**測試**：`tests/circle-portal-route.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/circle-share-image.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
+**測試**：`tests/organizer-claims.test.mjs`、`tests/circle-portal-route.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/circle-share-image.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
 **測試**：`tests/review-notifications.test.mjs`、`tests/account-notifications.test.mjs`
@@ -74,7 +76,11 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 **驗證碼只存在於第二層。** 人工審核不發驗證碼：管理者看的是 `evidence_url` 與 `evidence_note`，判斷依據是人工核對。介面在人工審核路徑不得索取驗證碼。
 
+人工審核也可由持有所屬候選活動有效 Owner／Editor grant 的主辦人員，在 `/organizer` 的活動內社團認領面板完成。僅開放當前部署已公開活動的待審認領核准／婉拒，範圍與寫入授權重查依[主辦工作區契約](./organizer-workspace.md#活動內社團認領審核)；撤銷既有認領仍限網站管理者。主辦裁決與管理者裁決共用狀態與唯一擁有者約束，audit 分別記為 `claim.organizer_approve／reject` 與 `claim.admin_approve／reject／revoke`。
+
 資料庫層保證**一個社團同時只有一位擁有者**。所有認領與撤下決策寫入稽核記錄。
+
+已公開活動的有效 Owner／Editor 也可撤下所屬活動的社團補充資料；名稱搜尋、選取與確認面板與 `/admin` 共用，寫入／R2 清除及清除失敗重試的活動隔離依[主辦工作區契約](./organizer-workspace.md#活動內撤下社團補充資料)。撤下不撤銷認領，也不修改主辦快照的攤位資料。`GET /api/admin/overrides?q=...&event=...` 為管理者的名稱搜尋，`POST` 沿用管理者撤下入口。
 
 **驗證碼遺失或過期由社團自己解決。** 明文驗證碼不保存（只留 hash），所以遺失後沒有可再顯示的東西；恢復路徑是**撤回自己仍在審核中的認領，再重新送出**，重送會發新的驗證碼。這條路不需要管理者介入。
 

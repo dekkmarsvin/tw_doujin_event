@@ -364,11 +364,11 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
     mailRecipientAllowed: env.PREVIEW_MAIL_SINK === "d1"
       ? (email: string) => previewMailRouteFor(env, email) !== null
       : undefined,
-    lookupCircle: async (circleId) => (await catalogIndex(env, request, eventId)).get(circleId) ?? null,
-    searchCircles: async (query, limit) => {
+    lookupCircle: async (circleId, scopedEventId = eventId) => (await catalogIndex(env, request, scopedEventId)).get(circleId) ?? null,
+    searchCircles: async (query, limit, scopedEventId = eventId) => {
       const needle = query.normalize("NFKC").toLocaleLowerCase("zh-Hant");
       const matches: CircleLookup[] = [];
-      for (const circle of (await catalogIndex(env, request, eventId)).values()) {
+      for (const circle of (await catalogIndex(env, request, scopedEventId)).values()) {
         if (!circle.nameKey.includes(needle)) continue;
         matches.push(circle);
         if (matches.length >= limit) break;

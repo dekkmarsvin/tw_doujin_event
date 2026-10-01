@@ -49,7 +49,15 @@ type Summary = { kind: "ok" | "mixed"; text: string };
  * scoped to the claim's own event, so authorization and the audit trail stay
  * exactly what a single decision gives.
  */
-export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventId: string; onOpenMaps: (eventId: string) => void }) {
+export type ClaimReviewScope = {
+  eventId: string;
+  load: () => Promise<ReviewQueue>;
+  decide: (claimId: string, decision: ClaimDecision) => Promise<unknown>;
+};
+
+export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQueueLoaded }: {
+  initialEventId: string; onOpenMaps?: (eventId: string) => void; claimScope?: ClaimReviewScope; onQueueLoaded?: (queue: ReviewQueue | null) => void;
+}) {
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
   /** Read with each answer, so a page left open past midnight moves events on. */
   const [today, setToday] = useState(() => taipeiDate(Date.now()));
@@ -84,25 +92,26 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
     if (busy.current && !announce) return;
     const version = ++requestVersion.current.version;
     if (announce) setLoading(true);
-    void listReviewQueue()
+    void (claimScope ? claimScope.load() : listReviewQueue())
       .then((answer) => {
         if (version !== requestVersion.current.version) return;
         const live = new Set(answer.claims.map((claim) => claim.id));
         setQueue(answer);
+        onQueueLoaded?.(answer);
         setToday(taipeiDate(Date.now()));
         setLoadError("");
         setSelected((current) => new Set([...current].filter((id) => live.has(id))));
         setMessages((current) => Object.fromEntries(Object.entries(current).filter(([id]) => live.has(id))));
       })
       .catch((error: unknown) => {
-        if (version === requestVersion.current.version) setLoadError(errorMessage(error));
+        if (version === requestVersion.current.version) { setLoadError(errorMessage(error)); onQueueLoaded?.(null); }
       })
       // The button is disabled while an announced request is in flight, so no
       // second announced request can supersede it and leave it stuck.
       .finally(() => {
         if (announce) setLoading(false);
       });
-  }, []);
+  }, [claimScope, onQueueLoaded]);
 
   useEffect(() => {
     const requests = requestVersion.current;
@@ -125,7 +134,8 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
   const closeDialog = useCallback(() => { if (!busy.current) setPlan(null); }, []);
   useModalFocus(plan !== null, dialog, closeDialog);
 
-  const ordered = useMemo(() => eventsByProximity(PUBLISHED_EVENTS, today), [today]);
+  const ordered = useMemo(() => eventsByProximity(claimScope
+    ? PUBLISHED_EVENTS.filter(event => event.id === claimScope.eventId) : PUBLISHED_EVENTS, today), [today, claimScope]);
   const eventEntry = useMemo(() => new Map(ordered.map((entry, index) => [entry.event.id, { ...entry, rank: index }])), [ordered]);
   const claims = useMemo(() => (queue?.claims ?? [])
     .filter((claim) => eventEntry.has(claim.eventId))
@@ -177,7 +187,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
     // would read as a reason for something that has not happened since.
     setSummary(null);
     setMessages({});
-    void decideClaim(claim.id, decision, claim.eventId)
+    void (claimScope ? claimScope.decide(claim.id, decision) : decideClaim(claim.id, decision, claim.eventId))
       .then(() => {
         if (!mounted.current) return;
         setSummary({ kind: "ok", text: `已${VERB[decision]}「${claim.circleName}」。` });
@@ -209,13 +219,13 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
     for (const [index, claim] of batch.go.entries()) {
       setProgress({ done: index, total: batch.go.length });
       try {
-        await decideClaim(claim.id, batch.decision, claim.eventId);
+        await (claimScope ? claimScope.decide(claim.id, batch.decision) : decideClaim(claim.id, batch.decision, claim.eventId));
         done += 1;
       } catch (error) {
         reasons[claim.id] = errorMessage(error);
         // Signed out or no longer an administrator: every later request would
         // fail the same way, so say so on each rather than sending them.
-        if (error instanceof PortalError && (error.status === 401 || error.status === 403)) {
+        if (error instanceof PortalError && (error.status === 401 || error.status === 403 || (claimScope && error.status === 404))) {
           for (const rest of batch.go.slice(index + 1)) reasons[rest.id] = errorMessage(error);
           break;
         }
@@ -256,7 +266,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
   const skippedCount = plan?.skipped.reduce((sum, skip) => sum + skip.ids.length, 0) ?? 0;
 
   return <>
-    <section className={`${styles.card} ${styles.admin}`} id="overview" aria-labelledby="overview-heading">
+    {!claimScope && <section className={`${styles.card} ${styles.admin}`} id="overview" aria-labelledby="overview-heading">
       <div className={styles.queueHeading}>
         <h2 id="overview-heading">待審總覽</h2>
         <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading}>{loading ? "更新中…" : "重新整理"}</button>
@@ -274,7 +284,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
             <button type="button" className={styles.countButton} onClick={() => showClaims(event.id)}>
               <span>社團認領</span><b data-zero={claimCount(event.id) === 0 || undefined}>{queue ? claimCount(event.id) : "–"}</b>
             </button>
-            <button type="button" className={styles.countButton} onClick={() => onOpenMaps(event.id)}>
+            <button type="button" className={styles.countButton} onClick={() => onOpenMaps?.(event.id)}>
               <span>地圖草稿</span><b data-zero={mapCount(event.id) === 0 || undefined}>{queue ? mapCount(event.id) : "–"}</b>
             </button>
           </div>
@@ -292,23 +302,25 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps }: { initialEventI
         const pastClaims = claimCount(event.id);
         const pastMaps = mapCount(event.id);
         return <button key={event.id} type="button" className={styles.pastLine}
-          onClick={() => (pastClaims ? showClaims(event.id) : onOpenMaps(event.id))}>
+          onClick={() => (pastClaims ? showClaims(event.id) : onOpenMaps?.(event.id))}>
           <span className={styles.lifecycleMuted}>{GROUP_LABEL.past}</span>
           <b>{event.name}</b>
           <span className={styles.overviewDate}>{label}</span>
           <span className={styles.pastCounts}>{[pastClaims ? `社團認領 ${pastClaims}` : "", pastMaps ? `地圖草稿 ${pastMaps}` : ""].filter(Boolean).join("・")}</span>
         </button>;
       })}
-    </section>
+    </section>}
 
-    <section className={`${styles.card} ${styles.admin}`} id="admin" aria-labelledby="claims-heading">
+    <section className={`${styles.card} ${styles.admin}${claimScope ? ` ${styles.eventClaimPanel}` : ""}`} id="admin" aria-labelledby="claims-heading">
       <div className={styles.queueHeading}>
         <h2 id="claims-heading">社團認領</h2>
-        {claims.length > 0 && <div role="group" aria-label="依活動篩選" className={styles.filterChips}>
+        {claimScope && <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading || working}>{loading ? "更新中…" : "重新整理"}</button>}
+        {!claimScope && claims.length > 0 && <div role="group" aria-label="依活動篩選" className={styles.filterChips}>
           {chips.map((chip) => <button key={chip.id || "all"} type="button" className={styles.filterChip}
             aria-pressed={filter === chip.id} onClick={() => setFilter(chip.id)}>{chip.label} <span>{chip.count}</span></button>)}
         </div>}
       </div>
+      {claimScope && loadError && <p className={styles.error} role="alert">{loadError}</p>}
       {summary && <p ref={summaryLine} tabIndex={-1} className={summary.kind === "ok" ? styles.notice : styles.warningNotice} role="status">{summary.text}</p>}
       {!queue ? loading && <p className={styles.notice}>載入中…</p>
         : visible.length === 0 ? <p>目前沒有待審項目。</p>

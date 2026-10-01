@@ -93,7 +93,7 @@ function PublicationSection(props: SectionProps & {
   const { detail, session, owner, historicalPublication } = props;
   const { act, notice, pending } = useSectionAction(props);
   if (!detail.publication) return null;
-  return <div className={styles.subpanel} aria-live="polite"><h4>{historicalPublication ? `發布狀態（第 ${detail.publication.candidateVersion} 版歷史紀錄）` : "發布狀態"}</h4>{historicalPublication && <p className={styles.warning}>這是舊版本的發布紀錄，目前版本為第 {detail.event.version} 版；舊工作不會再重試，是否可編輯依目前活動狀態決定。</p>}<p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
+  return <div className={styles.subpanel} aria-live="polite"><h4>{historicalPublication ? "發布狀態（先前儲存的內容）" : "發布狀態"}</h4>{historicalPublication && <p className={styles.warning}>這是先前儲存內容的發布紀錄；舊工作不會再重試，是否可編輯依目前活動狀態決定。</p>}<p>{PUBLICATION_STATUS_LABEL[detail.publication.status] ?? "正在確認發布狀態"}</p>
       <ol>{publicationProgress(detail.publication).map((stage) => <li key={stage.label}>{stage.label}：{({ complete: "已完成", current: "處理中", failed: "未完成，發布停止", pending: "尚未開始" })[stage.state]}</li>)}</ol>
       {detail.event.status === "abandoned" ? <p>這次修正已終止，失敗紀錄保留。原公開內容未變；請在活動清單選擇已發布版本，再開始修正。</p> : <>
         {detail.publication.status !== "published" && !historicalPublication && <p>公開結果確認成功前，活動尚未完成發布。</p>}

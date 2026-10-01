@@ -103,7 +103,7 @@ export function OrganizerAmendmentPanel({ detail, onChanged, onDirtyChange, onSa
     <div className={styles.panelHead}><div><h3>已發布活動修正</h3><p>明確宣告要更正的活動設定與名單變動，儲存後核對影響。沒有更正的設定與名單保持原狀。</p></div></div>
     {notice && <p role="alert" className={styles.warning}>{notice}</p>}
     {!loaded ? <><p>正在讀取已發布名單…</p>{notice && <button type="button" onClick={() => void reload()}>重新讀取修正</button>}</> : <>
-      <p>來源：第 {loaded.baseline.sourceVersion} 版，{new Date(loaded.baseline.publishedAt).toLocaleString("zh-TW")} 發布。此修正尚未變更公開活動。</p>
+      <p>來源：{new Date(loaded.baseline.publishedAt).toLocaleString("zh-TW")} 發布的內容。此修正尚未變更公開活動。</p>
       {conflict && <div className={styles.subpanel}><p>其他人已修改內容或權限已變更。你的輸入仍保留在此頁，請先核對；重新讀取會捨棄尚未儲存的修正。</p><button type="button" disabled={busy} onClick={() => void reload()}>捨棄未儲存修正並讀取最新版本</button></div>}
       {settings && <SettingsFields candidateId={detail.event.id} baseline={loaded.baseline} value={settings} disabled={!editable || busy || conflict} onChange={setSettings} />}
       {editable && <AmendmentForm key={formKey} baseline={loaded.baseline} initial={editing === null ? null : changes[editing]}

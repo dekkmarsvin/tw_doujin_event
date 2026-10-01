@@ -203,7 +203,9 @@ try {
     const box = await rowsOnPage.first().locator("td").nth(2).boundingBox();
     assert.ok(box.width >= 210, "circle name keeps useful width");
     const table = rowsOnPage.locator("..").locator("..").locator("..");
-    assert.ok((await table.boundingBox()).height > 420, "the list uses the available height");
+    const tableBox = await table.boundingBox();
+    const availableHeight = Math.max(280, 1000 - tableBox.y - 76);
+    assert.ok(Math.abs(tableBox.height - availableHeight) <= 2, "the list fills the remaining viewport below the workspace header and filters");
     journey.report.matrix.push({ width, height: 1000, scale: "standard" });
   }
   await organizer.setViewportSize({ width: 1600, height: 1000 });

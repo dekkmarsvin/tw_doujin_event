@@ -27,9 +27,10 @@ import type { AccountNotificationConfig } from "../app/account-notifications";
  */
 
 export type OverridesPhase = "during" | "after";
-/** `withdrawn` is the claimant's own doing; `rejected` and `revoked` are an admin's. */
+/** `withdrawn` is the claimant's own doing; reviewers reject, only admins revoke. */
 type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
-export type ClaimMethod = "email_domain" | "link_token" | "admin";
+export type ClaimMethod = "email_domain" | "link_token" | "admin" | "organizer";
+type OrganizerClaimAuthority = { candidateId: string; accountId: string };
 export type MapDraftStatus = "draft" | "submitted" | "changes_requested" | "approved" | "rejected" | "exported" | "withdrawn";
 export type OrganizerRole = "owner" | "editor";
 export type OrganizerCandidateStatus = "draft" | "changes_requested" | "submitted" | "approved" | "publishing" | "published" | "failed" | "abandoned";
@@ -736,6 +737,29 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
+  async function listPendingEventClaims(eventId: string, limit = 500) {
+    await ensureTables();
+    const rows = await database.prepare(`SELECT c.*, COUNT(*) OVER () AS pending_count, EXISTS (
+      SELECT 1 FROM circle_claims v WHERE v.event_id = c.event_id
+        AND v.circle_id = c.circle_id AND v.status = 'verified'
+      ) AS circle_claimed FROM circle_claims c
+      WHERE c.event_id = ?1 AND c.status = 'pending' ORDER BY c.created_at ASC LIMIT ?2`)
+      .bind(eventId, limit).all<ClaimRow & { circle_claimed: number; pending_count: number }>();
+    return rows.results;
+  }
+
+  // The selected candidate identifies the event; request bodies cannot choose
+  // another one. Recheck membership and event identity at the actual write.
+  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
+    return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
+      JOIN accounts actor ON actor.id = ?${accountParam}
+      WHERE candidate.id = ?${candidateParam} AND candidate.event_id = ${eventColumn}
+        AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
+        AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
+          OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = candidate.id
+            AND g.account_id = actor.id AND g.role IN ('owner', 'editor') AND g.revoked_at IS NULL)))`;
+  }
+
   /**
    * Everything an administrator can act on, in every event at once. The caller
    * keeps only the events this deployment serves; decisions still go through
@@ -786,7 +810,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   /** Verification races the partial unique index; a loser is reported, not crashed. */
-  async function markClaimVerified(id: string, method: ClaimMethod, now: number, reviewedBy: string | null) {
+  async function markClaimVerified(id: string, method: ClaimMethod, now: number, reviewedBy: string | null, authority?: OrganizerClaimAuthority) {
     await ensureTables();
     try {
       const [result] = await database.batch([database.prepare(
@@ -794,8 +818,8 @@ export function createIdentityRepository(database: D1Database, options: { bootst
          WHERE id = ?4 AND status = 'pending' AND EXISTS (
            SELECT 1 FROM accounts a WHERE a.id = circle_claims.account_id
              AND a.disabled_at IS NULL AND a.deletion_started_at IS NULL
-         )`,
-      ).bind(method, now, reviewedBy, id),
+         ) ${authority ? `AND ${organizerClaimAuthoritySql(5, 6)}` : ""}`,
+      ).bind(method, now, reviewedBy, id, ...(authority ? [authority.candidateId, authority.accountId] : [])),
         ...notify({ kind: "claim.approved", occurrence: crypto.randomUUID(), now },
           `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]),
       ]);
@@ -808,11 +832,12 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   /** `from` makes the change conditional on the status the caller decided
    * against, so a decision made on a stale list cannot rewrite a later one. */
-  async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null, from?: ClaimStatus) {
+  async function setClaimStatus(id: string, status: ClaimStatus, now: number, reviewedBy: string | null, from?: ClaimStatus, authority?: OrganizerClaimAuthority) {
     await ensureTables();
     const [result] = await database.batch([database.prepare(
-      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND status <> ?1 AND (?5 IS NULL OR status = ?5)`,
-    ).bind(status, reviewedBy, now, id, from ?? null),
+      `UPDATE circle_claims SET status = ?1, reviewed_by = ?2, reviewed_at = ?3 WHERE id = ?4 AND status <> ?1 AND (?5 IS NULL OR status = ?5)
+        ${authority ? `AND ${organizerClaimAuthoritySql(6, 7)}` : ""}`,
+    ).bind(status, reviewedBy, now, id, from ?? null, ...(authority ? [authority.candidateId, authority.accountId] : [])),
       ...(status === "rejected" || status === "revoked" ? notify({ kind: status === "rejected" ? "claim.rejected" : "claim.revoked", occurrence: crypto.randomUUID(), now },
         `${claimNotificationSource} WHERE c.id = ?1 AND changes() = 1`, [id]) : []),
     ]);
@@ -921,18 +946,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return (result.meta.changes ?? 0) === 1;
   }
 
-  async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number; fieldsJson?: string }) {
+  async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number; fieldsJson?: string;
+    authority?: OrganizerClaimAuthority; expected?: { updatedAt: number; fieldsJson: string }; retryCleanup?: boolean }) {
     await ensureTables();
     const [result] = await database.batch([database.prepare(
-      `UPDATE circle_overrides SET status = 'takendown', takedown_reason = ?1, takendown_by = ?2, takendown_at = ?3,
+      `UPDATE circle_overrides SET status = 'takendown',
+         takedown_reason = CASE WHEN status = 'live' THEN ?1 ELSE takedown_reason END,
+         takendown_by = CASE WHEN status = 'live' THEN ?2 ELSE takendown_by END,
+         takendown_at = CASE WHEN status = 'live' THEN ?3 ELSE takendown_at END,
          fields_json = CASE WHEN ?6 = 1 THEN ?7 ELSE fields_json END,
          hosted_thumbnail_key = CASE WHEN ?6 = 1 THEN NULL ELSE hosted_thumbnail_key END
-       WHERE event_id = ?4 AND circle_id = ?5 AND status = 'live'`,
+       WHERE event_id = ?4 AND circle_id = ?5 AND status = '${input.retryCleanup ? "takendown" : "live"}'
+         ${input.authority ? `AND ${organizerClaimAuthoritySql(8, 9, "circle_overrides.event_id")}` : ""}
+         ${input.expected ? `AND updated_at = ?10 AND fields_json = ?11` : ""}`,
     ).bind(
       input.reason, input.by, input.now, input.eventId, input.circleId,
       input.fieldsJson === undefined ? 0 : 1, input.fieldsJson ?? null,
-    ), ...notify({ kind: "circle.takendown", occurrence: crypto.randomUUID(), now: input.now },
-      `${circleNotificationSource} WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified' AND changes() = 1`, [input.eventId, input.circleId])]);
+      ...(input.authority || input.expected ? [input.authority?.candidateId ?? null, input.authority?.accountId ?? null] : []),
+      ...(input.expected ? [input.expected.updatedAt, input.expected.fieldsJson] : []),
+    ), ...(input.retryCleanup ? [] : notify({ kind: "circle.takendown", occurrence: crypto.randomUUID(), now: input.now },
+      `${circleNotificationSource} WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified' AND changes() = 1`, [input.eventId, input.circleId]))]);
     return result.meta.changes === 1;
   }
 
@@ -1891,10 +1924,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   async function listOrganizerCandidatesForAccount(accountId: string, admin: boolean) {
     await ensureTables();
+    const edition = `(SELECT COUNT(*) FROM organizer_event_candidates previous
+      WHERE previous.event_id = c.event_id AND (previous.created_at < c.created_at
+        OR (previous.created_at = c.created_at AND previous.id <= c.id)))`;
     if (admin) {
       const rows = await database.prepare(
         `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
-                c.last_updated_role, c.publication_operation, 'admin' AS role,
+                c.last_updated_role, c.publication_operation, c.created_at,
+                CASE WHEN c.event_id IS NULL THEN 1 ELSE ${edition} END AS edition, 'admin' AS role,
                 CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                   THEN 'binder' ELSE 'guided' END AS workspace_mode
          FROM organizer_event_candidates c
@@ -1903,13 +1940,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).all<{
         id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
         current_version: number; updated_at: number; last_updated_role: string; role: "admin";
-        workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND";
+        workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND"; created_at: number; edition: number;
       }>();
       return rows.results;
     }
     const rows = await database.prepare(
       `SELECT c.id, c.tentative_name, c.event_id, c.status, c.current_version, c.updated_at,
-              c.last_updated_role, c.publication_operation, g.role,
+              c.last_updated_role, c.publication_operation, c.created_at,
+              CASE WHEN c.event_id IS NULL THEN 1 ELSE ${edition} END AS edition, g.role,
               CASE WHEN w.candidate_id IS NULL OR w.onboarding_completed_at IS NOT NULL
                 THEN 'binder' ELSE 'guided' END AS workspace_mode
        FROM organizer_event_candidates c
@@ -1920,7 +1958,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(accountId).all<{
       id: string; tentative_name: string; event_id: string | null; status: OrganizerCandidateStatus;
       current_version: number; updated_at: number; last_updated_role: string; role: OrganizerRole;
-      workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND";
+      workspace_mode: "guided" | "binder"; publication_operation: "CREATE" | "AMEND"; created_at: number; edition: number;
     }>();
     return rows.results;
   }
@@ -3546,7 +3584,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listAdminReviewQueue,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewQueue,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,

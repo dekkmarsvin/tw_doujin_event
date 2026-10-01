@@ -49,6 +49,7 @@ async function open(role, entry = "admin") {
         if (method === "POST") { admins = body.action === "add" ? [...admins, { email: body.email, addedBy: "admin@example.test", addedAt: now }] : admins.filter(x => x.email !== body.email); return reply({ ok: true }); }
         return reply({ admins, self: "admin@example.test" });
       }
+      if (path === "/api/admin/overrides" && method === "GET") return reply({ circles: [{ circleId: "c-900001", name: "待審測試社", status: "live" }] });
       if (path === "/api/admin/overrides" || path === "/api/admin/accounts") return reply({ ok: true });
       if (path === "/api/admin/map-contributions/drafts") return reply({ drafts: url.searchParams.get("event") === "sample" ? [draft()] : [] });
       if (path === "/api/admin/map-contributions/drafts/map-one") return reply({ draft: draft(), files: [], reviews: [], comments: [], scope: null });
@@ -116,9 +117,12 @@ try {
   await panel.getByText("目前沒有待審項目。", { exact: true }).waitFor();
   assert.deepEqual(requests.filter(x => x.path === "/api/admin/claims" && x.method === "POST").at(-1), { path: "/api/admin/claims", method: "POST", event: "sample-two", body: { claimId: "claim-two", decision: "reject" } });
   await takedown.getByLabel("活動", { exact: true }).selectOption("sample");
-  await takedown.getByLabel("社團 ID", { exact: true }).fill("c-900001");
+  await takedown.getByLabel("社團名稱", { exact: true }).fill("待審測試社");
+  await takedown.getByRole("button", { name: "搜尋", exact: true }).click();
+  await takedown.getByRole("button", { name: "選擇待審測試社", exact: true }).click();
   await takedown.getByLabel("原因", { exact: true }).fill("測試撤下");
   await takedown.getByRole("button", { name: "撤下", exact: true }).click();
+  await takedown.getByRole("dialog").getByRole("button", { name: "確認撤下", exact: true }).click();
   await takedown.getByText("已撤下。", { exact: true }).waitFor();
   await accounts.getByLabel("新增管理者 email", { exact: true }).fill("second@example.test");
   await accounts.getByRole("button", { name: "新增", exact: true }).click();
@@ -128,7 +132,7 @@ try {
   await accounts.getByLabel("帳號 email", { exact: true }).fill("disabled@example.test");
   await accounts.getByRole("button", { name: "停用", exact: true }).click();
   await accounts.getByText("帳號已停用。", { exact: true }).waitFor();
-  const takedownRequest = requests.find(x => x.path === "/api/admin/overrides");
+  const takedownRequest = requests.find(x => x.path === "/api/admin/overrides" && x.method === "POST");
   assert.deepEqual(takedownRequest.body, { circleId: "c-900001", reason: "測試撤下" });
   assert.equal(takedownRequest.event, "sample");
   assert.deepEqual(requests.filter(x => x.path === "/api/admin/admins" && x.method === "POST").map(x => x.body.action), ["add", "remove"]);
