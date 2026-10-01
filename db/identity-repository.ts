@@ -1804,6 +1804,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(input.email).all<{ id: string; candidate_id: string; role: OrganizerRole; invited_by: string }>();
     const accepted: Array<{ candidateId: string; role: OrganizerRole }> = [];
     for (const invitation of pending.results) {
+      // Consume legacy Editor invitations without changing an active Owner.
+      // The upsert checks the grant inside this transaction, including a
+      // promotion that completed after the pending-invitation read.
       const results = await database.batch([
         database.prepare(
           `UPDATE organizer_event_invitations
@@ -1817,7 +1820,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
              FROM organizer_event_invitations WHERE id = ?4 AND accepted_by = ?2
            ON CONFLICT(candidate_id, account_id) DO UPDATE SET
              role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at,
-             revoked_by = NULL, revoked_at = NULL`,
+             revoked_by = NULL, revoked_at = NULL
+           WHERE organizer_event_grants.role <> 'owner'
+             OR organizer_event_grants.revoked_at IS NOT NULL OR excluded.role <> 'editor'`,
         ).bind(crypto.randomUUID(), input.accountId, input.now, invitation.id),
       ]);
       if (results.every((result) => result.meta.changes === 1)) {
@@ -2021,16 +2026,19 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   async function organizerInvitationState(candidateId: string, email: string, role: OrganizerRole) {
+    const grant = await database.prepare(
+      `SELECT g.role FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
+       WHERE g.candidate_id = ?1 AND a.email = ?2 AND g.revoked_at IS NULL`,
+    ).bind(candidateId, email).first<{ role: OrganizerRole }>();
+    // Check before pending invitations so an old Editor invitation cannot be
+    // resent to someone who is now an Owner. Editor-to-Owner promotion remains valid.
+    if (role === "editor" && grant?.role === "owner") return "already_owner" as const;
     const pending = await database.prepare(
       `SELECT role FROM organizer_event_invitations
        WHERE candidate_id = ?1 AND email = ?2 AND accepted_at IS NULL AND revoked_at IS NULL`,
     ).bind(candidateId, email).first<{ role: string }>();
     if (pending) return pending.role === role ? "pending" as const : "other_role" as const;
-    const grant = await database.prepare(
-      `SELECT g.role FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
-       WHERE g.candidate_id = ?1 AND a.email = ?2 AND g.role = ?3 AND g.revoked_at IS NULL`,
-    ).bind(candidateId, email, role).first();
-    return grant ? "active" as const : "missing" as const;
+    return grant?.role === role ? "active" as const : "missing" as const;
   }
 
   async function manageOrganizerCollaborator(input: {
@@ -2048,6 +2056,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (input.action !== "revoke") {
       if (input.role !== "editor") return { ok: false as const, reason: "owner_requires_admin" as const };
       const state = await organizerInvitationState(input.candidateId, input.email, input.role);
+      if (state === "already_owner") return { ok: false as const, reason: state };
       if (input.action === "resend") return state === "pending"
         ? { ok: true as const, result: "resent" as const }
         : { ok: false as const, reason: "not_pending" as const };
@@ -2059,11 +2068,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         const result = await database.prepare(
           `INSERT INTO organizer_event_invitations (
              id, candidate_id, email, role, invited_by, created_at
-           ) VALUES (?1, ?2, ?3, 'editor', ?4, ?5)`,
+           ) SELECT ?1, ?2, ?3, 'editor', ?4, ?5
+             WHERE NOT EXISTS (
+               SELECT 1 FROM organizer_event_grants g JOIN accounts a ON a.id = g.account_id
+               WHERE g.candidate_id = ?2 AND a.email = ?3 AND g.role = 'owner' AND g.revoked_at IS NULL
+             )`,
         ).bind(crypto.randomUUID(), input.candidateId, input.email, input.actorAccountId, input.now).run();
         return result.meta.changes === 1
           ? { ok: true as const, result: "invited" as const }
-          : { ok: false as const, reason: "unchanged" as const };
+          : { ok: false as const, reason: "already_owner" as const };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (/unique constraint/i.test(message)) return { ok: false as const, reason: "unchanged" as const };

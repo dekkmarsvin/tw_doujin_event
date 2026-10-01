@@ -1567,6 +1567,40 @@ async function invitationFixture() {
   return { cookie, candidateId, manage };
 }
 
+test("editor invitations cannot downgrade an ordinary Owner through login", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "Owner preservation", ownerEmail: "owner@example.test" }, adminCookie));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const path = `/api/organizer/events/${candidateId}/collaborators`;
+  const manage = action => handlers.manageOrganizerCollaborators(request(path, "POST",
+    { email: "owner@example.test", role: "editor", action }, ownerCookie), candidateId);
+  const sentBefore = sent.length;
+  const initial = await manage("invite");
+  assert.equal(initial.status, 409);
+  assert.equal((await initial.json()).error, "這個信箱已是活動負責人，不需要再邀請為協作者。");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND role = 'editor'")
+    .bind(candidateId).first()).n, 0);
+  const owner = await database.prepare("SELECT id FROM accounts WHERE email = 'owner@example.test'").first();
+  await database.prepare(`INSERT INTO organizer_event_invitations
+    (id, candidate_id, email, role, invited_by, created_at) VALUES ('legacy-editor', ?1, 'owner@example.test', 'editor', ?2, ?3)`)
+    .bind(candidateId, owner.id, now - 1).run();
+  for (const action of ["invite", "resend"]) {
+    const response = await manage(action);
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /已是活動負責人/);
+  }
+  assert.equal(sent.length, sentBefore, "rejected Editor invitations do not send mail");
+  const newCookie = await signIn("owner@example.test", "organizer");
+  const detail = await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, newCookie), candidateId);
+  assert.equal(detail.status, 200);
+  assert.equal((await detail.json()).event.role, "owner");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_grants WHERE candidate_id = ?1 AND role = 'owner' AND revoked_at IS NULL")
+    .bind(candidateId).first()).n, 1);
+  assert.equal((await database.prepare("SELECT accepted_at FROM organizer_event_invitations WHERE id = 'legacy-editor'").first()).accepted_at, now);
+});
+
 test("ordinary owners manage owners only within their candidate without acquiring review authority", async () => {
   const adminCookie = await signIn("admin@example.test");
   const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",

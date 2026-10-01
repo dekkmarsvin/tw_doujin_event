@@ -3121,6 +3121,7 @@ export function createCirclePortalHandlers({
       const error = result.reason === "forbidden" ? role === "owner"
         ? "只有這個活動的負責人或網站管理者可以管理負責人。" : "只有負責人可以管理協作者。"
         : result.reason === "last_owner" ? "每個活動至少需要一位負責人。"
+        : result.reason === "already_owner" ? "這個信箱已是活動負責人，不需要再邀請為協作者。"
         : result.reason === "pending" ? "這個信箱已有待接受的邀請，請按「重寄邀請信」。"
         : result.reason === "other_role" ? "這個信箱已有另一種角色的待接受邀請。"
         : result.reason === "active" ? "這個信箱已具備這項活動角色，不需要再邀請。"
