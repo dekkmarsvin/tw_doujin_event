@@ -239,7 +239,7 @@ try {
   assert.equal(ownerRoutes.reopenRequests, 1, "a second click while pending does not send another request");
   ownerRoutes.release();
   await ownerResponse;
-  await owner.getByRole("heading", { name: "發布狀態（第 1 版歷史紀錄）", exact: true }).waitFor();
+  await owner.getByRole("heading", { name: "發布狀態（先前儲存的內容）", exact: true }).waitFor();
   assert.match(await ownerReview.innerText(), /目前版本為第 2 版/);
   assert.match(await ownerReview.innerText(), /舊工作不會再重試/);
   assert.equal(await owner.getByRole("button", { name: "退回修改", exact: true }).count(), 0, "the recovery action is gone after reopening");
@@ -304,7 +304,7 @@ try {
   assert.equal(auditRoutes.state, "failed", "remote-audit failure leaves the candidate failed");
   assert.equal(await auditReopen.isDisabled(), false, "the recovery action is available for a later retry");
   assert.match(await auditReview.innerText(), /發布失敗/);
-  assert.equal(await audit.getByRole("heading", { name: /發布狀態（第 1 版歷史紀錄）/ }).count(), 0, "remote-audit failure does not create a historical reopen state");
+  assert.equal(await audit.getByRole("heading", { name: "發布狀態（先前儲存的內容）", exact: true }).count(), 0, "remote-audit failure does not create a historical reopen state");
   assert.equal(await auditReview.getByRole("button", { name: "重試發布", exact: true }).isDisabled(), true, "publication retry remains disabled while publication is unavailable");
   assert.equal(auditRoutes.reopenRequests, 1);
   assert.deepEqual(auditRoutes.reopenBodies, [{ expectedVersion: 1, reason: "等待儲存庫狀態恢復後再試" }]);

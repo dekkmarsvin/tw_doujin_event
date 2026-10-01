@@ -85,7 +85,7 @@ try {
   }
   await repo.addAdmin("admin@example.test", "bootstrap", data.now);
   await repo.createOrganizerCandidate({ id: "source", tentativeName: "測試活動", ownerEmail: "owner@example.test",
-    createdByAccountId: actors.admin.id, draftJson: JSON.stringify(data.baseline.draft), now: data.now });
+    createdByAccountId: actors.admin.id, draftJson: JSON.stringify(data.baseline.draft), now: data.now - 1 });
   await repo.acceptOrganizerInvitations({ accountId: actors.owner.id, email: "owner@example.test", now: data.now });
   await db.prepare("UPDATE organizer_event_candidates SET event_id='event-alpha',event_id_locked_at=?1,status='published',published_version=1,published_at=?1 WHERE id='source'").bind(data.now).run();
   await db.prepare(`INSERT INTO organizer_submission_snapshots (id,candidate_id,candidate_version,snapshot_json,sha256,created_by,created_at)

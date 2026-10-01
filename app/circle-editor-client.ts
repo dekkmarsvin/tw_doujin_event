@@ -259,6 +259,11 @@ export function takedownOverride(circleId: string, reason: string, eventId?: str
   return call<{ ok: true }>("/api/admin/overrides", { method: "POST", body: JSON.stringify({ circleId, reason }) }, eventId);
 }
 
+export type TakedownCircle = { circleId: string; name: string; status: "live" | "takendown" | "none"; cleanupPending?: boolean };
+export function searchTakedownCircles(query: string, eventId: string) {
+  return call<{ circles: TakedownCircle[] }>(`/api/admin/overrides?q=${encodeURIComponent(query)}`, undefined, eventId);
+}
+
 export type AdminEntry = { email: string; addedBy: string | null; addedAt: number };
 
 export function listAdmins() {

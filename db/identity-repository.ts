@@ -750,10 +750,10 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   // The selected candidate identifies the event; request bodies cannot choose
   // another one. Recheck membership and event identity at the actual write.
-  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number) {
+  function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
     return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
       JOIN accounts actor ON actor.id = ?${accountParam}
-      WHERE candidate.id = ?${candidateParam} AND candidate.event_id = circle_claims.event_id
+      WHERE candidate.id = ?${candidateParam} AND candidate.event_id = ${eventColumn}
         AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
         AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
           OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = candidate.id
@@ -946,18 +946,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return (result.meta.changes ?? 0) === 1;
   }
 
-  async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number; fieldsJson?: string }) {
+  async function takedownOverride(input: { eventId: string; circleId: string; reason: string; by: string; now: number; fieldsJson?: string;
+    authority?: OrganizerClaimAuthority; expected?: { updatedAt: number; fieldsJson: string }; retryCleanup?: boolean }) {
     await ensureTables();
     const [result] = await database.batch([database.prepare(
-      `UPDATE circle_overrides SET status = 'takendown', takedown_reason = ?1, takendown_by = ?2, takendown_at = ?3,
+      `UPDATE circle_overrides SET status = 'takendown',
+         takedown_reason = CASE WHEN status = 'live' THEN ?1 ELSE takedown_reason END,
+         takendown_by = CASE WHEN status = 'live' THEN ?2 ELSE takendown_by END,
+         takendown_at = CASE WHEN status = 'live' THEN ?3 ELSE takendown_at END,
          fields_json = CASE WHEN ?6 = 1 THEN ?7 ELSE fields_json END,
          hosted_thumbnail_key = CASE WHEN ?6 = 1 THEN NULL ELSE hosted_thumbnail_key END
-       WHERE event_id = ?4 AND circle_id = ?5 AND status = 'live'`,
+       WHERE event_id = ?4 AND circle_id = ?5 AND status = '${input.retryCleanup ? "takendown" : "live"}'
+         ${input.authority ? `AND ${organizerClaimAuthoritySql(8, 9, "circle_overrides.event_id")}` : ""}
+         ${input.expected ? `AND updated_at = ?10 AND fields_json = ?11` : ""}`,
     ).bind(
       input.reason, input.by, input.now, input.eventId, input.circleId,
       input.fieldsJson === undefined ? 0 : 1, input.fieldsJson ?? null,
-    ), ...notify({ kind: "circle.takendown", occurrence: crypto.randomUUID(), now: input.now },
-      `${circleNotificationSource} WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified' AND changes() = 1`, [input.eventId, input.circleId])]);
+      ...(input.authority || input.expected ? [input.authority?.candidateId ?? null, input.authority?.accountId ?? null] : []),
+      ...(input.expected ? [input.expected.updatedAt, input.expected.fieldsJson] : []),
+    ), ...(input.retryCleanup ? [] : notify({ kind: "circle.takendown", occurrence: crypto.randomUUID(), now: input.now },
+      `${circleNotificationSource} WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified' AND changes() = 1`, [input.eventId, input.circleId]))]);
     return result.meta.changes === 1;
   }
 

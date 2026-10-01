@@ -116,6 +116,15 @@ export function readOrganizerEvent(candidateId: string) {
   return organizerCall<OrganizerEventDetail>(`/api/organizer/events/${encodeURIComponent(candidateId)}`);
 }
 
+export function searchOrganizerTakedownCircles(candidateId: string, query: string) {
+  return organizerCall<{ circles: import("./circle-editor-client").TakedownCircle[] }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/overrides?q=${encodeURIComponent(query)}`);
+}
+export function takedownOrganizerOverride(candidateId: string, circleId: string, reason: string) {
+  return organizerCall<{ ok: true }>(`/api/organizer/events/${encodeURIComponent(candidateId)}/overrides`, {
+    method: "POST", body: JSON.stringify({ circleId, reason }),
+  });
+}
+
 export function listOrganizerClaims(candidateId: string) {
   return organizerCall<ReviewQueue>(`/api/organizer/events/${encodeURIComponent(candidateId)}/claims`);
 }

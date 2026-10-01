@@ -7,6 +7,7 @@ import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } fro
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const { createIdentityRepository } = await vite.environments.ssr.runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers } = await vite.environments.ssr.runner.import("/app/circle-portal-handlers.ts");
+const { circleObjectPrefix } = await vite.environments.ssr.runner.import("/app/hosted-thumbnails.ts");
 const runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, script: await organizerRepositoryFixtureScript(), d1Databases: { DB: "organizer-claims-test" } }));
 const database = await runtime.getD1Database("DB");
 const repo = createIdentityRepository(database);
@@ -45,7 +46,7 @@ beforeEach(async () => {
   options = { repository: repo, sendMail: async message => mail.push(message), lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test", projectCircle: async () => null,
     config: { eventId: "event-a", origin, sessionSecret: "test-secret", hashPepper: "test-pepper", adminEmails: ["admin@example.test"], dataUpdatedAt: "2026-10-01", eventEndsAt: "2026-12-31T23:59:59+08:00", now: () => now,
-      publishedEvent: async id => ["event-a", "event-b"].includes(id) ? { id } : null } };
+      publishedEvent: async id => ["event-a", "event-b"].includes(id) ? { dataUpdatedAt: id, eventEndsAt: id === "event-b" ? "2020-01-01" : "2030-01-01" } : null } };
   handlers = createCirclePortalHandlers(options);
   await candidate("candidate-a", "event-a");
   await candidate("candidate-b", "event-b");
@@ -53,6 +54,144 @@ beforeEach(async () => {
   await grant("candidate-a", ids.editorId, "editor");
   await claim("claim-a", "event-a", "c-1");
   await claim("claim-b", "event-b", "c-1");
+});
+
+function overridesRequest(candidateId, cookie, body, query = "社團") {
+  return new Request(`${origin}/api/organizer/events/${candidateId}/overrides?q=${encodeURIComponent(query)}&event=event-b`, {
+    method: body ? "POST" : "GET", headers: { origin, ...(cookie ? { cookie } : {}), ...(body ? { "content-type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+async function supplement(eventId, circleId = "c-1", media = false) {
+  const claimId = eventId === "event-a" ? "claim-a" : "claim-b";
+  await repo.markClaimVerified(claimId, "admin", now, "admin@example.test");
+  const key = `${circleObjectPrefix(eventId, circleId)}image.webp`;
+  await repo.putOverride({ eventId, circleId, fieldsJson: JSON.stringify({ saleInfo: eventId, ...(media ? { thumbnail: { url: "https://image.example.test/a.webp" } } : {}) }),
+    updatedBy: "admin@example.test", accountId: ids.adminId, now, ...(media ? { hostedThumbnailKey: key } : {}) });
+  return key;
+}
+function takedownHandlers(extra = {}) {
+  return createCirclePortalHandlers({ ...options,
+    lookupCircle: async (circleId, eventId) => circleId === "c-1" ? { id: circleId, name: `社團 ${eventId}`, nameKey: "社團", sourceRow: null, links: [] } : null,
+    searchCircles: async (query, limit, eventId) => query === "社團" ? [{ id: "c-1", name: `社團 ${eventId}`, nameKey: "社團", sourceRow: null, links: [] }] : [],
+    ...extra });
+}
+
+for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor@example.test", "organizer_editor"], ["admin@example.test", "admin"]]) {
+  test(`${role} searches and withdraws only the candidate event supplement`, async () => {
+    await supplement("event-a"); await supplement("event-b");
+    const cookie = await signIn(email);
+    handlers = takedownHandlers();
+    const search = await handlers.organizerSearchTakedownCircles(overridesRequest("candidate-a", cookie), "candidate-a");
+    assert.equal(search.status, 200);
+    assert.deepEqual((await search.json()).circles, [{ circleId: "c-1", name: "社團 event-a", status: "live" }]);
+    const result = await handlers.organizerTakedown(overridesRequest("candidate-a", cookie, { circleId: "c-1", eventId: "event-b", reason: "權利人要求" }), "candidate-a");
+    assert.equal(result.status, 200);
+    assert.equal((await repo.getOverride("event-a", "c-1")).status, "takendown");
+    assert.equal((await repo.getOverride("event-b", "c-1")).status, "live");
+    assert.equal((await repo.getClaim("claim-a")).status, "verified");
+    assert.deepEqual(JSON.parse((await repo.getOverridesDoc("event-a")).json).overrides, []);
+    const audit = await database.prepare("SELECT actor_role,detail_json FROM audit_log WHERE action='override.organizer_takendown'").first();
+    assert.equal(audit.actor_role, role);
+    assert.equal(JSON.parse(audit.detail_json).eventId, "event-a");
+    assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-a", cookie, { circleId: "c-1", reason: "重複" }), "candidate-a")).status, 404);
+  });
+}
+
+test("takedown search and writes reject anonymous, outsiders, wrong candidates and unpublished events", async () => {
+  await supplement("event-a");
+  const owner = await signIn("owner@example.test"), outsider = await signIn("stranger@example.test");
+  handlers = takedownHandlers();
+  for (const [id, cookie, status] of [["candidate-a", null, 401], ["candidate-a", outsider, 404], ["candidate-b", owner, 404]]) {
+    assert.equal((await handlers.organizerSearchTakedownCircles(overridesRequest(id, cookie), id)).status, status);
+    assert.equal((await handlers.organizerTakedown(overridesRequest(id, cookie, { circleId: "c-1", reason: "測試" }), id)).status, status);
+  }
+  await candidate("unpublished-takedown", "not-served"); await grant("unpublished-takedown", ids.ownerId, "owner");
+  assert.equal((await handlers.organizerSearchTakedownCircles(overridesRequest("unpublished-takedown", owner), "unpublished-takedown")).status, 404);
+  assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-a", owner, { circleId: "other-event-circle", reason: "測試" }), "candidate-a")).status, 404);
+  assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-a", owner, { circleId: "c-1", reason: "  " }), "candidate-a")).status, 400);
+  assert.equal((await repo.getOverride("event-a", "c-1")).status, "live");
+});
+
+test("takedown rechecks revoked grants before changing content or deleting media", async () => {
+  const key = await supplement("event-a", "c-1", true);
+  const cookie = await signIn("editor@example.test");
+  const deleted = [];
+  handlers = takedownHandlers({ thumbnailStore: { list: async () => [key], delete: async key => deleted.push(key) },
+    repository: { ...repo, takedownOverride: async input => {
+      await database.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE account_id=?2").bind(now, ids.editorId).run();
+      return repo.takedownOverride(input);
+    } } });
+  assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-a", cookie, { circleId: "c-1", reason: "測試" }), "candidate-a")).status, 404);
+  assert.equal((await repo.getOverride("event-a", "c-1")).status, "live");
+  assert.deepEqual(deleted, []);
+});
+
+test("takedown refuses a concurrent supplement edit without deleting its images", async () => {
+  const key = await supplement("event-a", "c-1", true), deleted = [];
+  const cookie = await signIn("editor@example.test");
+  handlers = takedownHandlers({ thumbnailStore: { list: async () => [key], delete: async key => deleted.push(key) },
+    repository: { ...repo, takedownOverride: async input => {
+      await repo.putOverride({ eventId: "event-a", circleId: "c-1", fieldsJson: '{"saleInfo":"新的內容"}', updatedBy: "admin@example.test", now, accountId: ids.adminId });
+      return repo.takedownOverride(input);
+    } } });
+  assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-a", cookie, { circleId: "c-1", reason: "測試" }), "candidate-a")).status, 409);
+  assert.equal(JSON.parse((await repo.getOverride("event-a", "c-1")).fields_json).saleInfo, "新的內容");
+  assert.deepEqual(deleted, []);
+});
+
+test("authorized takedown clears media references, removes scoped objects and preserves after-event hiding", async () => {
+  const key = await supplement("event-b", "c-1", true), deleted = [];
+  await grant("candidate-b", ids.editorId, "editor");
+  await claim("hidden-claim", "event-b", "c-hidden", ids.ownerId);
+  await repo.markClaimVerified("hidden-claim", "admin", now, "admin@example.test");
+  await repo.putOverride({ eventId: "event-b", circleId: "c-hidden", fieldsJson: '{"saleInfo":"隱藏內容"}', updatedBy: "owner@example.test", now, accountId: ids.ownerId });
+  await database.prepare("UPDATE circle_overrides SET post_event_hidden=1 WHERE circle_id='c-hidden'").run();
+  const cookie = await signIn("editor@example.test");
+  handlers = takedownHandlers({ thumbnailStore: { list: async prefix => { assert.equal(prefix, circleObjectPrefix("event-b", "c-1")); return [key]; }, delete: async key => deleted.push(key) } });
+  assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-b", cookie, { circleId: "c-1", reason: "測試" }), "candidate-b")).status, 200);
+  const row = await repo.getOverride("event-b", "c-1");
+  assert.equal(row.hosted_thumbnail_key, null);
+  assert.equal(JSON.parse(row.fields_json).thumbnail, null);
+    assert.deepEqual(deleted, [[key]]);
+  assert.deepEqual(JSON.parse((await repo.getOverridesDoc("event-b")).json).overrides, []);
+});
+
+test("an R2 failure leaves content withdrawn and permits authorized cleanup retry", async () => {
+  const key = await supplement("event-a", "c-1", true);
+  const cookie = await signIn("editor@example.test");
+  const stored = new Set([key]);
+  let fail = true;
+  handlers = takedownHandlers({ thumbnailStore: { list: async () => [...stored], delete: async keys => {
+    if (fail) throw new Error("temporary R2 failure");
+    for (const key of keys) stored.delete(key);
+  } } });
+  const req = () => overridesRequest("candidate-a", cookie, { circleId: "c-1", reason: "初次撤下原因" });
+  assert.equal((await handlers.organizerTakedown(req(), "candidate-a")).status, 503);
+  assert.equal((await repo.getOverride("event-a", "c-1")).status, "takendown");
+  assert.deepEqual(JSON.parse((await repo.getOverridesDoc("event-a")).json).overrides, []);
+  const found = await (await handlers.organizerSearchTakedownCircles(overridesRequest("candidate-a", cookie), "candidate-a")).json();
+  assert.equal(found.circles[0].cleanupPending, true);
+  fail = false;
+  assert.equal((await handlers.organizerTakedown(overridesRequest("candidate-a", cookie, { circleId: "c-1", reason: "清理重試" }), "candidate-a")).status, 200);
+  assert.equal(stored.size, 0);
+  assert.equal((await repo.getOverride("event-a", "c-1")).takedown_reason, "初次撤下原因");
+  assert.equal((await handlers.organizerTakedown(req(), "candidate-a")).status, 404);
+});
+
+test("a cleanup retry cannot delete R2 after its organizer grant was revoked", async () => {
+  const key = await supplement("event-a", "c-1", true), deleted = [];
+  const cookie = await signIn("editor@example.test");
+  const store = { list: async () => [key], delete: async () => { throw new Error("R2 failure"); } };
+  handlers = takedownHandlers({ thumbnailStore: store });
+  const req = () => overridesRequest("candidate-a", cookie, { circleId: "c-1", reason: "測試" });
+  assert.equal((await handlers.organizerTakedown(req(), "candidate-a")).status, 503);
+  handlers = takedownHandlers({ thumbnailStore: { ...store, delete: async keys => deleted.push(keys) }, repository: { ...repo, takedownOverride: async input => {
+    await database.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE account_id=?2").bind(now, ids.editorId).run();
+    return repo.takedownOverride(input);
+  } } });
+  assert.equal((await handlers.organizerTakedown(req(), "candidate-a")).status, 404);
+  assert.deepEqual(deleted, []);
 });
 
 for (const [email, role] of [["owner@example.test", "organizer_owner"], ["editor@example.test", "organizer_editor"], ["admin@example.test", "admin"]]) {
