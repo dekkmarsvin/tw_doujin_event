@@ -20,10 +20,11 @@ try {
   const dialog = page.getByRole("dialog", { name: "通知設定", exact: true });
   await open();
   const cadence = dialog.getByLabel("社團內容更新", { exact: true });
-  const save = dialog.getByRole("button", { name: "儲存設定", exact: true });
   await cadence.waitFor();
+  // One menu: choosing saves, with no save button or discard prompt.
+  assert.equal(await dialog.getByRole("button", { name: "儲存設定" }).count(), 0);
   await cadence.selectOption((await cadence.inputValue()) === "hourly" ? "daily" : "hourly");
-  await save.click(); await dialog.getByText("通知設定已儲存。", { exact: true }).waitFor();
+  await dialog.getByText("已儲存", { exact: true }).waitFor();
   const saved = await cadence.inputValue();
   await journey.capture(page, "account-notifications-desktop");
   // Durable PR evidence excludes account addresses, including fictional ones.
@@ -43,18 +44,15 @@ try {
   // Durable PR evidence excludes account addresses, including fictional ones.
   await page.screenshot({ path: `${output}/account-notifications-mobile.png`, mask: [page.getByText(CIRCLE, { exact: true }), dialog.getByText(`收件信箱：${CIRCLE}`, { exact: true })] });
   const rect = await dialog.boundingBox(); assert.ok(rect.width >= 389 && rect.height >= 843);
-  await cadence.selectOption("off");
   await page.route("**/api/account/notification-preferences*", route => route.request().method() === "PUT"
     ? route.fulfill({ status: 409, json: { error: "設定已變更，請重新載入後再儲存。" } }) : route.continue());
-  await save.click(); await dialog.getByRole("alert").waitFor(); assert.equal(await cadence.inputValue(), "off");
+  // A refused choice is not left showing as if it were stored.
+  await cadence.selectOption("off"); await dialog.getByRole("alert").waitFor(); assert.equal(await cadence.inputValue(), saved);
   await page.unroute("**/api/account/notification-preferences*");
   await dialog.getByRole("button", { name: "重新載入設定" }).click();
   await dialog.getByText("載入中…", { exact: true }).waitFor({ state: "hidden" }); assert.equal(await cadence.inputValue(), saved);
-  await cadence.selectOption("off"); await dialog.getByRole("button", { name: "關閉", exact: true }).click();
-  await dialog.getByText("通知設定尚未儲存，要放棄這次修改嗎？", { exact: true }).waitFor();
-  await dialog.getByRole("button", { name: "繼續編輯" }).click(); await save.click();
-  await dialog.getByText("通知設定已儲存。", { exact: true }).waitFor();
-  await page.keyboard.press("Escape");
+  await cadence.selectOption("off"); await dialog.getByText("已儲存", { exact: true }).waitFor();
+  await dialog.getByRole("button", { name: "關閉", exact: true }).click(); await dialog.waitFor({ state: "hidden" });
   // Cross-device login: the newly minted login link, not local storage, carries the destination.
   const link = await loginLink(CIRCLE, "organizer", { destination: { notifications: "1", candidate: "missing-candidate", section: "review" } });
   assert.match(link, /notifications=1/); assert.match(link, /candidate=missing-candidate/);

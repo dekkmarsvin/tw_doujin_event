@@ -363,6 +363,6 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 
 本人補充資料、品書、保存／公開設定實質變更納入摘要；相同內容儲存不入列，摘要只保存變更項目、不保存完整內容。每日台北 09:00 為新帳號預設，亦可每小時或關閉。關閉取消摘要及重試，重開只收新事件；改頻率保留項目、改排下個時段。
 
-`GET/PUT /api/account/notification-preferences` 僅依本人 session 操作，PUT 有同源 JSON 防護及 version CAS（首次讀取 version 0）；其他帳號及收件地址不可指定。`/circle`、`/organizer` 共用「通知設定」Modal，桌機浮動／手機全螢幕，關閉保留原編輯內容。載入失敗不假裝有預設已儲存，儲存失敗保留輸入；管理者待審設定維持獨立。
+`GET/PUT /api/account/notification-preferences` 僅依本人 session 操作，PUT 有同源 JSON 防護及 version CAS（首次讀取 version 0）；其他帳號及收件地址不可指定。`/circle`、`/organizer` 共用「通知設定」Modal，桌機浮動／手機全螢幕，關閉保留原編輯內容。唯一的頻率選單選定即儲存，不設儲存鍵或關閉確認；儲存失敗時選單回到已儲存的值並說明原因。載入失敗不假裝有預設已儲存；管理者待審設定維持獨立。
 
 信件只有本站的 event／circle 或通知設定目的地，不帶登入憑證、不授權；重新登入信攜帶白名單選擇參數，GET 不執行業務異動。不存在的活動不回退另一場活動。

@@ -30,15 +30,12 @@
 .required h3 { margin: 0 0 4px; font-size: 14px; }
 .form { display: grid; gap: 8px; }
 .form label { font-size: 14px; font-weight: 700; }
-.form button { justify-self: start; border-color: var(--ink); background: var(--ink); color: var(--surface); }
-.form button:hover:not(:disabled) { border-color: var(--ink); background: var(--ink); filter: brightness(1.15); }
-.notice, .error { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 12px; }
-.notice { border: 1px solid #cfe4da; background: #edf8f3; color: #306d59; }
-.error { border: 1px solid #f0cdc6; background: #fff3f1; color: var(--danger); }
+/* Kept at one line's height while empty, so the hint below does not jump
+   when the result appears beside the menu. */
+.form .result { min-height: 19px; font-weight: 700; }
+.form .done { color: #306d59; }
+.error { margin-top: 12px; padding: 9px 11px; border: 1px solid #f0cdc6; border-radius: 8px; background: #fff3f1; color: var(--danger); font-size: 12px; }
 .error + button { margin-top: 8px; }
-.discard { margin-top: 12px; padding: 12px; border: 1px solid #ecd9b5; border-radius: 9px; background: #fbf3e4; }
-.discard p { margin-bottom: 8px; }
-.discard button + button { margin-left: 8px; }
 @media (max-width: 760px) {
   .dialog { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
   .dialog button { min-height: 44px; }
