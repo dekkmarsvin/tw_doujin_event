@@ -9,6 +9,7 @@ const EMPTY: OrganizerApplicationInput = { name: "", officialUrl: "", startDate:
 const STATUS = { pending: "待審核", approved: "已核准建置", rejected: "未核准" };
 
 export function OrganizerApplicationsPanel({ session, onReviewed }: { session: PortalSession; onReviewed?: () => Promise<void> }) {
+  const [target] = useState(() => new URLSearchParams(window.location.search).get("application"));
   const [applications, setApplications] = useState<OrganizerApplication[]>([]);
   const [canApply, setCanApply] = useState(Boolean(session.canApplyForEvent));
   const [loaded, setLoaded] = useState(false);
@@ -35,9 +36,10 @@ export function OrganizerApplicationsPanel({ session, onReviewed }: { session: P
     </div>
     {notice.kind !== "idle" && <p role="status" className={notice.kind === "error" ? styles.error : styles.notice}>{notice.message}</p>}
     {!loaded && <p>載入申請…</p>}
+    {loaded && target && !applications.some(item => item.id === target) && <p role="alert">找不到信件指定的申請，或此帳號已無權限。<a href="/organizer">返回工作區</a></p>}
     {loaded && applications.length === 0 && <p>目前沒有申請。</p>}
     <div className={styles.stack}>
-      {applications.map((application) => <ApplicationCard key={application.id} application={application} session={session} onReviewed={async () => {
+      {applications.filter(application => !target || application.id === target).map((application) => <ApplicationCard key={application.id} application={application} session={session} onReviewed={async () => {
         await reload(); await onReviewed?.();
       }} />)}
     </div>
@@ -90,7 +92,7 @@ function ApplicationCard({ application, session, onReviewed }: {
       {application.note && <><dt>申請說明</dt><dd>{application.note}</dd></>}
     </dl>}
     {application.reason && <p>審核說明：{application.reason}</p>}
-    {application.status === "approved" && application.candidateId && <a href="/organizer" onClick={() => {
+    {application.status === "approved" && application.candidateId && <a href={`/organizer?candidate=${encodeURIComponent(application.candidateId)}`} onClick={() => {
       try { localStorage.setItem(`organizer.resumeCandidate:${session.email}`, application.candidateId!); } catch { /* Optional preference. */ }
     }}>進入活動工作區</a>}
     {session.isAdmin && application.status === "pending" && <form className={styles.applicationReview} onSubmit={(event) => {

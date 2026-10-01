@@ -6,7 +6,8 @@
 **測試**：`tests/circle-portal-route.test.mjs`、`tests/public-artifact.test.mjs`、`tests/admin-claim-batch.test.mjs`、`tests/circle-overrides.test.mjs`、`tests/catalog-images.test.mjs`、`tests/circle-page-share-component.test.mjs`、`tests/circle-share-image.test.mjs`、`tests/identity-repository.test.mjs`、`tests/mail-letter.test.mjs`、`tests/portal-crypto.test.mjs`、`tests/portal-transport.test.mjs`
 **部署與密鑰**：[部署 runbook](../runbooks/deployment.md)
 **實作**：`app/admin/admin-notification-panel.tsx`、`app/review-notifications.ts`、`app/portal-mail.ts`、`app/review-notification-scheduler.ts`、`db/review-notification-repository.ts`、`functions/api/admin/notification-preferences.ts`、`workers/publication-dispatch`
-**測試**：`tests/review-notifications.test.mjs`
+**測試**：`tests/review-notifications.test.mjs`、`tests/account-notifications.test.mjs`
+**實作**：`app/account-notifications.ts`、`app/account-notification-scheduler.ts`、`app/account-notification-settings.tsx`、`app/notification-navigation.ts`、`db/account-notification-repository.ts`、`functions/api/account/notification-preferences.ts`
 
 > **活動範圍**：`/circle` 是跨活動共用入口，寫入面與公開讀取面都支援多活動；帳號跨活動、認領逐活動，`env.EVENT_ID` 只是請求沒有指名活動時的預設值（[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md)）。
 
@@ -355,3 +356,13 @@ Pull request 與不可變 preview deployment 位於 `*.tw-catalog.pages.dev`，�
 - 所有認領與撤下決策都可在稽核記錄中查到。
 - 過期的登入權杖、session 與 preview 信件會被清除，而清除不會動到速率限制視窗內的列。
 - 對一個沒有任何表的資料庫執行清除之後，那個資料庫仍然沒有任何表。
+
+## 帳號通知信
+
+社團認領自動／人工通過、拒絕、撤銷與管理者撤下補充資料，由成功的業務交易同時寫入 `account_notification_items`，必要服務通知不可關閉。寄前核對帳號與逐活動社團關係；本人撤權結果可保留最低必要歷史事實，停用／刪除仍取消。撤銷後不寄舊的通過信或內容摘要，同次撤銷不再寄撤下信。
+
+本人補充資料、品書、保存／公開設定實質變更納入摘要；相同內容儲存不入列，摘要只保存變更項目、不保存完整內容。每日台北 09:00 為新帳號預設，亦可每小時或關閉。關閉取消摘要及重試，重開只收新事件；改頻率保留項目、改排下個時段。
+
+`GET/PUT /api/account/notification-preferences` 僅依本人 session 操作，PUT 有同源 JSON 防護及 version CAS（首次讀取 version 0）；其他帳號及收件地址不可指定。`/circle`、`/organizer` 共用「通知設定」Modal，桌機浮動／手機全螢幕，關閉保留原編輯內容。載入失敗不假裝有預設已儲存，儲存失敗保留輸入；管理者待審設定維持獨立。
+
+信件只有本站的 event／circle 或通知設定目的地，不帶登入憑證、不授權；重新登入信攜帶白名單選擇參數，GET 不執行業務異動。不存在的活動不回退另一場活動。

@@ -297,3 +297,9 @@ pepper 是固定值，不輪替。`login_tokens` 的值隨該列在 24 小時內
 preview mail sink 只接受保留的 `.test` 地址，人工 preview 信則經 Mailgun 由 `verify.kotoban.top` 寄出；政策正文仍只描述正式服務。兩者的隔離與 7 天清除由部署契約與測試把關，不把測試環境細節重複成一般使用者告知。
 
 已定案而**不再**列於此的：既有資料類別的保存期與到期處置（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)）、清除機制（[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)）、每一類的 owner（ADR-0021：專案維運者）、政策文件的位置與變更通知方式（[ADR-0023](../adr/0023-the-privacy-notice-ships-without-professional-review.md)，告知第七節）。
+
+### 帳號結果與內容通知資料
+
+`account_notification_preferences` 以 account ID 保存內容摘要 cadence、version、啟用起點及交易 token；不新增收件地址。`account_notification_items` 保存事件型別、schema 版本、單次轉換識別、收件 account ID、event/circle/candidate/source 範圍、當事人關係、當時名稱與內容版本、變更項目及時間；不保存完整修改內容、證據、token 或其他人 email。`account_notification_batches` 保存固定批次、lease、首次嘗試／重試時間、次數、provider ID、安全錯誤分類及終態。
+
+必要通知各自批次、一般內容按帳號摘要，避免摘要重試擋住結果信。暫時失敗倍增至 6 小時，自首次嘗試起至多 48 小時；永久拒絕／明確配置錯誤終止。accepted 是供應商受理，不是收件匣或已讀；外部結果不確定可重複寄出。三類終態 accepted/cancelled/failed 自完成起 30 天由原 retention Worker 清除；停用取消 pending，帳號刪除清除三表本人資料，含已選批次。既有待審摘要保留原偏好與重試規則，兩種 consumer 分表消費。

@@ -2,6 +2,7 @@ import type { OrganizerApplicationInput } from "../app/organizer-applications";
 import { createEmptyOrganizerEventDraft, ORGANIZER_DEFAULT_SOURCE_LABEL } from "../app/organizer-event";
 import type { OrganizerCandidateInput } from "./identity-repository";
 import { enqueueReviewNotification } from "./review-notification-repository";
+import type { createAccountNotificationWriter } from "./account-notification-repository";
 
 type ApplicationRow = {
   id: string; account_id: string; data_json: string;
@@ -14,6 +15,7 @@ type ApplicationRow = {
 export function createOrganizerApplicationRepository(
   database: D1Database, ensureTables: () => Promise<void>,
   candidateStatements: (input: OrganizerCandidateInput, token: string) => D1PreparedStatement[],
+  notify: ReturnType<typeof createAccountNotificationWriter>,
 ) {
   const select = `SELECT a.id, a.account_id, a.data_json, a.status, a.created_at,
     a.reviewed_at, a.reason, a.candidate_id, u.email AS applicant_email, g.role AS applicant_role
@@ -91,6 +93,10 @@ export function createOrganizerApplicationRepository(
       .bind(crypto.randomUUID(), input.now, input.reviewerAccountId, `organizer_application.${input.decision}`, input.ipHash, token));
     // D1 batch is the transaction: decision, candidate, initial revision,
     // accepted invitation and owner grant either all commit or all roll back.
+    statements.push(...notify({ kind: input.decision === "approved" ? "application.approved" : "application.rejected", occurrence: token, now: input.now },
+      `SELECT account_id, NULL AS event_id, NULL AS circle_id, candidate_id, id AS source_id,
+        'applicant' AS audience, json_extract(data_json, '$.name') AS name, NULL AS version
+       FROM organizer_applications WHERE review_token = ?1`, [token]));
     await database.batch(statements);
     const result = await getOrganizerApplication(input.id);
     return result?.status === input.decision ? result : null;

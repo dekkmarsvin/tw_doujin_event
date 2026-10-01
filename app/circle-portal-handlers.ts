@@ -1,3 +1,5 @@
+import { isAccountNotificationCadence } from "./account-notifications";
+import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
@@ -402,6 +404,7 @@ export function createCirclePortalHandlers({
         }
       }
     }
+    for (const [key, value] of notificationParameters(body?.destination, audience)) destination.searchParams.set(key, value);
     const token = randomToken();
     destination.searchParams.set("login", token);
     const expiresAt = now + LOGIN_TOKEN_TTL_MS;
@@ -1015,7 +1018,7 @@ export function createCirclePortalHandlers({
       const keys = await thumbnailStore.list(circleObjectPrefix(config.eventId, circleId));
       await deleteObjectKeys(thumbnailStore, keys);
     }
-    if (!await repository.deleteOverride({ accountId: current.accountId, eventId: config.eventId, circleId })) {
+    if (!await repository.deleteOverride({ accountId: current.accountId, eventId: config.eventId, circleId, now: config.now() })) {
       return json({ error: "沒有可刪除的內容。" }, 404);
     }
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
@@ -1094,7 +1097,7 @@ export function createCirclePortalHandlers({
     if (typeof body?.hidden !== "boolean") return json({ error: "hidden 必須是 true 或 false。" }, 400);
 
     const now = config.now();
-    const applied = await repository.setPostEventHidden(current.accountId, config.eventId, circleId, body.hidden);
+    const applied = await repository.setPostEventHidden(current.accountId, config.eventId, circleId, body.hidden, config.now());
     if (!applied) return json({ error: "請先儲存一次內容再設定。" }, 409);
 
     await repository.rebuildOverridesDoc(config.eventId, await dataUpdatedAt(), now, await currentPhase());
@@ -1800,6 +1803,25 @@ export function createCirclePortalHandlers({
       admins: admins.map((admin) => ({ email: admin.email, addedBy: admin.added_by, addedAt: admin.added_at })),
       self: gate.session.email,
     });
+  }
+
+  async function getAccountNotificationPreferences(request: Request) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    return json(await repository.getAccountNotificationPreferences(current.accountId));
+  }
+
+  async function saveAccountNotificationPreferences(request: Request) {
+    const current = await currentSession(request);
+    if (!current) return json({ error: "尚未登入。" }, 401);
+    const body = await readJson(request);
+    if (!body || Object.keys(body).some(key => !["cadence", "version"].includes(key))
+      || !isAccountNotificationCadence(body.cadence) || !Number.isSafeInteger(body.version) || (body.version as number) < 0) {
+      return json({ error: "通知設定格式無效。" }, 400);
+    }
+    const preferences = await repository.saveAccountNotificationPreferences({ accountId: current.accountId,
+      sessionId: current.sessionId, cadence: body.cadence, version: body.version as number, now: config.now() });
+    return preferences ? json(preferences) : json({ error: "設定已變更，請重新載入後再儲存。" }, 409);
   }
 
   async function adminGetNotificationPreferences(request: Request) {
@@ -3526,7 +3548,7 @@ export function createCirclePortalHandlers({
 
   return {
     ...createAdminReferenceHandlers(repository, requireAdmin, config.now),
-    adminGetNotificationPreferences, adminSaveNotificationPreferences,
+    adminGetNotificationPreferences, adminSaveNotificationPreferences, getAccountNotificationPreferences, saveAccountNotificationPreferences,
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,

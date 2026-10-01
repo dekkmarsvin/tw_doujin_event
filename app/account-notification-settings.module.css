@@ -1,0 +1,20 @@
+.dialog { box-sizing: border-box; width: min(36rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.5rem; border: 1px solid #d8d3ca; border-radius: 1rem; background: #fffdf8; color: #292b2b; box-shadow: 0 1rem 4rem #20262630; overflow-y: auto; font: inherit; line-height: 1.6; }
+.dialog::backdrop { background: #17202380; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.header h2 { margin: 0; font-size: 1.4rem; }
+.dialog button, .dialog select { font: inherit; min-height: 2.75rem; padding: .5rem .8rem; border: 1px solid #9ca9a6; border-radius: .45rem; background: #fff; color: inherit; cursor: pointer; }
+.dialog button:focus-visible, .dialog select:focus-visible, .dialog a:focus-visible { outline: 3px solid #19726b; outline-offset: 3px; }
+.dialog button:disabled, .dialog select:disabled { cursor: default; opacity: .55; }
+.email { overflow-wrap: anywhere; }
+.required, .admin { border-top: 1px solid #ddd; padding-top: 1rem; }
+.required h3 { font-size: 1rem; margin-bottom: .25rem; }
+.form { display: grid; gap: .75rem; border-top: 1px solid #ddd; padding: 1rem 0; }
+.form label { font-weight: 700; }
+.form p { margin: 0; }
+.form button { justify-self: start; background: #225e55; color: #fff; }
+.error { color: #a62222; }
+.discard { background: #f7ead5; padding: 1rem; margin-top: 1rem; border-radius: .5rem; }
+.discard button + button { margin-left: .5rem; }
+.admin { font-size: .9rem; }
+.dialog a { color: #175d58; }
+@media (max-width: 600px) { .dialog { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); } }

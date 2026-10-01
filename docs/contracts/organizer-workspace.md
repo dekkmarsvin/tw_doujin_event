@@ -384,3 +384,11 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 
 **實作**：[`app/admin-reference-handlers.ts`](../../app/admin-reference-handlers.ts)、[`app/shared-reference-catalog.ts`](../../app/shared-reference-catalog.ts)、[`app/admin/admin-reference-panel.tsx`](../../app/admin/admin-reference-panel.tsx)、[`db/admin-reference-repository.ts`](../../db/admin-reference-repository.ts)、[`functions/api/admin/references.ts`](../../functions/api/admin/references.ts)。
 **驗證**：[`tests/organizer-handlers.test.mjs`](../../tests/organizer-handlers.test.mjs)、[`tests/browser/admin-shared-references.mjs`](../../tests/browser/admin-shared-references.mjs)。
+
+## 工作區通知信
+
+帳號通知模組沿用現有權限：邀請沿用即時登入信；實際接受而成立／變更 grant 才通知當事人及同 candidate 其他有效 Owner，同帳號去重。取消未接受邀請不產生撤權事件。被撤權本人收到歷史異動事實，不能由信件取得工作區資料；其餘失去資格者取消待寄，新增成員不補舊件。
+
+活動建置申請依本人關係通知核准／拒絕；核准與首次 Owner grant 合併一封。內容（含更正）審核通過／退修、失敗重開，以及 publication failed／published 通知當時有效 Owner，協作者只接自身權限異動。完成既有 production verified gate 才通知已公開；舊核准進度／失敗信可在同版本已公開或版本更替時取消。業務轉換與通知在同一 D1 batch，寄送失敗不撤銷業務結果。
+
+`/organizer?candidate=…&section=review` 優先於上次活動；`application=…` 打開指定申請，`notifications=1` 開啟跨工作區共用設定。未登入時參數經白名單帶入登入信，無權限／不存在不默開其他活動。手機可讀指定活動目前狀態與通知設定，編輯仍須桌機，同一信件保留目的地。信件指向公開活動時使用 `/events/{eventId}/`。

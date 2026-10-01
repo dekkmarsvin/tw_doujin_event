@@ -275,3 +275,15 @@ Pages 每次部署都是不可變 deployment。若正式版本有問題：
 
 1. 到 Pages project 的 **Deployments** 選擇上一個已驗證 deployment 並執行 rollback。
 2. **同時在 repository 回復有問題的 snapshot 或程式變更**，避免下一次 build 再次發布錯誤版本。
+
+## 帳號結果與內容通知（#469）
+
+沿用 publication-dispatch 與 retention 的既有排程、D1、Mailgun，新增產品／排程角色為 0。schema runtime version 3 新增三張 account notification 表及索引；不改舊 review notification 表、偏好與 pending，舊 consumer 也不讀新表。部署順序：先 Pages 的 schema／事件寫入／設定介面，再同版本的 publication-dispatch 與 retention Worker；先在獨立 preview D1 sink 驗證。沒有旗標時新入列與消費均停用，UI 可先設定偏好。
+
+正式啟用須在 Pages 與 publication-dispatch **同環境** 設定 `ACCOUNT_NOTIFICATIONS_ENABLED=true` 及相同的 `ACCOUNT_NOTIFICATIONS_SINCE`（含時區的 ISO 時間）。建議先部署兩端，再設定同一未來起點；缺失或無法解析的時間不啟用，不掃歷史資料補寄。停用後重開必須更新起點，早於起點的舊 pending 只會取消。原 `ADMIN_REVIEW_NOTIFICATIONS_ENABLED`、publication mode、登入／邀請路徑獨立。Origin 仍使用 `NOTIFICATION_ORIGIN` 的本站 HTTPS origin。
+
+正式啟用前依 Worker delivery audit 核對 active version、binding、schedule、source fingerprint，並取得有授權 preview 信箱的社團結果、主辦結果與摘要收信證據。D1 sink、provider accepted、delivered、人工觀察分開記錄在 issue／PR；不由 CI 或 Pages 部署推定 Worker／收件匣已完成。preview 白名單與 Mailgun secrets 沿用既有隔離規則，不將 production 地址放入測試。
+
+`account_notifications.tick` 含 batch ID 與結果；D1 批次保存安全錯誤分類及 provider ID，不記錄地址／信件全文於正式 logs。每 tick 最多 10 個批次、每摘要最多 100 項；租約 120 秒，批次內容固定，暫時錯誤退避至 6 小時，首次嘗試 48 小時後終止，完成／取消／失敗 30 天清除。外部已受理但寫回失敗可能重複，禁止以重試成功宣稱 exactly-once。
+
+回滾時先將新通知旗標關閉（Pages 與 Worker），再回滾程式；保留新增表及 monotonic schema marker，不刪既有業務資料或舊管理者偏好。重新啟用使用新起點，不能直接補送過期事件。費用增加來源是控制面每收件者一筆入列、有限批次 D1 讀寫與 Mailgun 封數，無公開讀取路徑新增持久化寫入；量測與月用量假設寫在實作 PR。

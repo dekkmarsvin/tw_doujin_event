@@ -20,6 +20,7 @@ import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGui
 
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
+import { AccountNotificationSettings } from "../account-notification-settings";
 import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 
 
@@ -66,6 +67,7 @@ export default function OrganizerApp() {
         <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
         <SessionDeadline session={session} />
+        <AccountNotificationSettings key={session.email} session={session} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
       </div>}
     </header>
@@ -83,11 +85,32 @@ export default function OrganizerApp() {
           ? <main><OrganizerNoAccess session={session} /></main>
         : !session.isAdmin && !session.hasOrganizerAccess ? <main className={styles.applicationMain}><OrganizerApplicationsPanel session={session} /></main>
         : isDesktop ? <OrganizerWorkspace session={session} />
+          : new URLSearchParams(window.location.search).has("candidate") && !new URLSearchParams(window.location.search).has("application")
+            ? <main className={styles.applicationMain}><MobileNotificationResult /></main>
           : session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
             <p>活動資料與地圖編輯請改用桌機。</p>
             <OrganizerApplicationsPanel session={session} />
           </main> : <main><NarrowScreenBlocker onSignedOut={() => setSession(null)} /></main>}
   </div>;
+}
+
+function MobileNotificationResult() {
+  const [detail, setDetail] = useState<OrganizerEventDetail | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let current = true;
+    const candidateId = new URLSearchParams(window.location.search).get("candidate") ?? "";
+    void readOrganizerEvent(candidateId).then(value => { if (current) setDetail(value); })
+      .catch(() => { if (current) setError("找不到信件指定的工作區，或此帳號已無權限。"); });
+    return () => { current = false; };
+  }, []);
+  return <section className={styles.centerCard}>
+    {error ? <p role="alert">{error}</p> : detail ? <><h2>{detail.event.tentativeName}</h2>
+      <p>目前狀態：{STATUS_LABEL[detail.event.status]}</p>
+      {detail.publication && <p>發布狀態：{detail.publication.status === "published" ? "已公開" : detail.publication.status === "failed" ? "發布未完成" : "正在處理"}</p>}
+      <p>活動資料與地圖編輯請改用桌機。請在桌機開啟同一封信的連結，接續這個工作區。</p></> : <p role="status">載入結果…</p>}
+    <a href="/organizer">返回主辦單位工作區</a>
+  </section>;
 }
 
 function NarrowScreenBlocker({ onSignedOut }: { onSignedOut: () => void }) {
@@ -160,11 +183,13 @@ function OrganizerNoAccess({ session }: { session: PortalSession }) {
 }
 
 function OrganizerWorkspace({ session }: { session: PortalSession }) {
-  const [applicationsOpen, setApplicationsOpen] = useState(false);
+  const [entry] = useState(() => new URLSearchParams(window.location.search));
+  const [applicationsOpen, setApplicationsOpen] = useState(() => entry.has("application"));
   const [events, setEvents] = useState<OrganizerEventSummary[]>([]);
   const [listLoaded, setListLoaded] = useState(false);
   const resumeKey = `organizer.resumeCandidate:${session.email}`;
   const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (entry.has("candidate")) return entry.get("candidate");
     try { return localStorage.getItem(resumeKey); } catch { return null; }
   });
   const [publicationReadError, setPublicationReadError] = useState<{ candidateId: string; needsLogin: boolean } | null>(null);
@@ -200,13 +225,16 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     setListLoaded(true);
     if (!selectionInitialized.current) {
       selectionInitialized.current = true;
-      setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
+      if (entry.has("candidate") && !next.some(item => item.id === entry.get("candidate"))) {
+        setSelectedId(null);
+        setNotice({ kind: "error", message: "找不到信件指定的工作區，或此帳號已無權限。請從活動列表選擇可使用的活動。" });
+      } else setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
       return next;
     }
     setSelectedId((current) => current === null ? null
       : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
     return next;
-  }, []);
+  }, [entry]);
   const reloadDetail = useCallback(async (
     candidateId: string,
     isCurrent: () => boolean = () => true,
@@ -221,9 +249,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     // arrive after the user has moved to another section; its older workspace
     // preference must not move them back or close the all-tasks view.
     if (location === "restore") {
-      setSection(next.workspace.resume.section);
+      const fromLetter = entry.get("candidate") === candidateId && entry.get("section") === "review";
+      setSection(fromLetter ? "review" : next.workspace.resume.section);
       setGuidedTask(next.workspace.resume.guidedTask);
-      setShowAllTasks(false);
+      setShowAllTasks(fromLetter);
     }
     // Finishing the basic settings opens the binder on the work that comes
     // next. Set in the same pass as the detail, so the binder's first frame is
@@ -233,7 +262,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       setShowAllTasks(false);
     }
     return next;
-  }, []);
+  }, [entry]);
   useEffect(() => { queueMicrotask(() => { void reloadList().catch((error) => setNotice({ kind: "error", message: message(error) })); }); }, [reloadList]);
   useEffect(() => {
     // Validate a remembered selection against the list before reading it. A

@@ -1,3 +1,5 @@
+import { accountNotificationConfig } from "../../app/account-notifications";
+import { runAccountNotificationTick } from "../../app/account-notification-scheduler";
 import { createIdentityRepository, type IdentityRepository } from "../../db/identity-repository";
 import { runPublicationTick } from "../../app/publication-scheduler";
 import { createRuntimePublicationDriver, readPublishedEventAtOrigin } from "../../app/publication-runtime";
@@ -5,7 +7,7 @@ import { createFakePublicationDriver } from "../../app/publication-dispatch";
 import { runReviewNotificationTick } from "../../app/review-notification-scheduler";
 import { sendPortalMail, type MailEnvironment } from "../../app/portal-mail";
 
-type Env = MailEnvironment & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE" | "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY" | "ADMIN_REVIEW_NOTIFICATIONS_ENABLED" | "NOTIFICATION_ORIGIN">;
+type Env = MailEnvironment & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE" | "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY" | "ACCOUNT_NOTIFICATIONS_ENABLED" | "ACCOUNT_NOTIFICATIONS_SINCE" | "ADMIN_REVIEW_NOTIFICATIONS_ENABLED" | "NOTIFICATION_ORIGIN">;
 
 /**
  * One repository per isolate, not per tick — the same reason `repositoryFor`
@@ -22,10 +24,11 @@ type Env = MailEnvironment & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE"
  */
 const repositories = new WeakMap<D1Database, IdentityRepository>();
 
-function repositoryFor(database: D1Database) {
+function repositoryFor(env: Env) {
+  const database = env.DB;
   const existing = repositories.get(database);
   if (existing) return existing;
-  const created = createIdentityRepository(database);
+  const created = createIdentityRepository(database, { accountNotifications: accountNotificationConfig(env) });
   repositories.set(database, created);
   return created;
 }
@@ -38,20 +41,28 @@ export default {
         if (env.ORGANIZER_PUBLICATION_MODE !== "github" && !(env.ORGANIZER_PUBLICATION_MODE === "fake" && env.PREVIEW_MAIL_SINK === "d1")) return;
         const driver = env.ORGANIZER_PUBLICATION_MODE === "fake" ? createFakePublicationDriver(async () => false)
           : createRuntimePublicationDriver(env, readPublishedEventAtOrigin);
-        const summary = await runPublicationTick({ repository: repositoryFor(env.DB), driver });
+        const summary = await runPublicationTick({ repository: repositoryFor(env), driver });
         console.log(JSON.stringify({ event: "publication.tick", ...summary }));
       })(),
       (async () => {
         if (env.ADMIN_REVIEW_NOTIFICATIONS_ENABLED !== "true") return;
-        const repository = repositoryFor(env.DB);
+        const repository = repositoryFor(env);
         const results = await runReviewNotificationTick({ repository, origin: env.NOTIFICATION_ORIGIN ?? "",
           sendMail: message => sendPortalMail(env, message,
             mail => repository.storePreviewMail({ email: mail.to, subject: mail.subject, text: mail.text, now: Date.now() })) });
         if (results.length) console.log(JSON.stringify({ event: "review_notifications.tick", results }));
       })(),
+      (async () => {
+        if (!accountNotificationConfig(env).enabled) return;
+        const repository = repositoryFor(env);
+        const results = await runAccountNotificationTick({ repository, origin: env.NOTIFICATION_ORIGIN ?? "",
+          sendMail: message => sendPortalMail(env, message,
+            mail => repository.storePreviewMail({ email: mail.to, subject: mail.subject, text: mail.text, now: Date.now() })) });
+        if (results.length) console.log(JSON.stringify({ event: "account_notifications.tick", results }));
+      })(),
     ]);
     outcomes.forEach((outcome, index) => {
-      if (outcome.status === "rejected") console.error(JSON.stringify({ event: index === 0 ? "publication.tick_failed" : "review_notifications.tick_failed" }));
+      if (outcome.status === "rejected") console.error(JSON.stringify({ event: ["publication.tick_failed", "review_notifications.tick_failed", "account_notifications.tick_failed"][index] }));
     });
   },
 };

@@ -20,6 +20,7 @@ import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { nearestEvent, taipeiDate } from "../event-calendar";
+import { AccountNotificationSettings } from "../account-notification-settings";
 import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
@@ -232,6 +233,7 @@ export default function CirclePortalApp() {
     // Set here as well as in the effect below: the claim list is the first
     // event-scoped call after a sign-in, and reading it for the wrong event
     // would show the account claims it does not hold in this one.
+    if (entry.eventId && !getPublishedEvent(entry.eventId)) return;
     setPortalEventId(event.id);
     const requested = event.id;
     try {
@@ -247,11 +249,12 @@ export default function CirclePortalApp() {
     } catch {
       if (requested === maintainedEventId.current) { setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(requested); }
     }
-  }, [event.id]);
+  }, [event.id, entry.eventId]);
 
   // Declared before the session effect so the scope is in place for every
   // event-scoped call of this commit.
   useEffect(() => {
+    if (entry.eventId && !getPublishedEvent(entry.eventId)) return;
     maintainedEventId.current = event.id;
     setPortalEventId(event.id);
     try {
@@ -294,6 +297,10 @@ export default function CirclePortalApp() {
     queueMicrotask(() => { void refreshClaims(); });
   }, [refreshClaims, session]);
 
+  if (entry.eventId && !getPublishedEvent(entry.eventId)) return <main className={styles.page}>
+    <h1>找不到指定的活動</h1><p>這個連結的活動目前無法開啟。</p><a href="/circle">返回社團資料</a>
+  </main>;
+
   return <div className={styles.page}>
     <header className={styles.masthead}>
       <div>
@@ -316,6 +323,7 @@ export default function CirclePortalApp() {
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
         <SessionDeadline session={session} />
+        <AccountNotificationSettings key={session.email} session={session} />
         {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
         {session.isAdmin && <a href="/admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
