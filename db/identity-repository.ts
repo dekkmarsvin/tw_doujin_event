@@ -27,7 +27,7 @@ import type { AccountNotificationConfig } from "../app/account-notifications";
  */
 
 export type OverridesPhase = "during" | "after";
-/** `withdrawn` is the claimant's own doing; `rejected` and `revoked` are an admin's. */
+/** `withdrawn` is the claimant's own doing; reviewers reject, only admins revoke. */
 type ClaimStatus = "pending" | "verified" | "rejected" | "revoked" | "withdrawn";
 export type ClaimMethod = "email_domain" | "link_token" | "admin" | "organizer";
 type OrganizerClaimAuthority = { candidateId: string; accountId: string };

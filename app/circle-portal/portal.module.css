@@ -75,6 +75,7 @@
   background: var(--surface);
 }
 .editorCard { max-width: none; }
+.eventClaimPanel { max-width: none; margin: 0; }
 /* The workspace entries sit in the sign-in card's column, just above it. */
 .entryNav { max-width: 720px; margin: 18px auto 0; }
 .entryNav + .card { margin-top: 12px; }

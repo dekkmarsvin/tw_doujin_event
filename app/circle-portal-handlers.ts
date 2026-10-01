@@ -1829,6 +1829,11 @@ export function createCirclePortalHandlers({
       ipHash: await clientIpHash(request),
     });
     if (ok) return json({ ok: true });
+    if (authority) {
+      const access = await organizerClaimAccess(request, authority.candidateId);
+      if (!access.ok) return access.response;
+      if (access.eventId !== eventId) return json({ error: "找不到這筆認領。" }, 404);
+    }
     return json({ error: decision !== "revoke" && claim.status !== "pending" ? "這筆認領已不在待審中。" : "此社團已有通過的認領。" }, 409);
   }
 

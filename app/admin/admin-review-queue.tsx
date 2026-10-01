@@ -310,7 +310,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope }: {
       })}
     </section>}
 
-    <section className={`${styles.card} ${styles.admin}`} id="admin" aria-labelledby="claims-heading">
+    <section className={`${styles.card} ${styles.admin}${claimScope ? ` ${styles.eventClaimPanel}` : ""}`} id="admin" aria-labelledby="claims-heading">
       <div className={styles.queueHeading}>
         <h2 id="claims-heading">社團認領</h2>
         {claimScope && <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading || working}>{loading ? "更新中…" : "重新整理"}</button>}

@@ -111,7 +111,7 @@ for (const decision of ["approve", "reject"]) {
       await database.prepare("UPDATE organizer_event_grants SET revoked_at = ?1 WHERE account_id = ?2").bind(now, ids.editorId).run();
       return repo[method](...args);
     } } });
-    assert.notEqual((await handlers.organizerDecideClaim(request("candidate-a", cookie, decision), "candidate-a")).status, 200);
+    assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, decision), "candidate-a")).status, 404);
     assert.equal((await repo.getClaim("claim-a")).status, "pending");
   });
 }

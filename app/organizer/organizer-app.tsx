@@ -502,7 +502,10 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           <button type="button" className={styles.ghost} aria-pressed={!claimsOpen} onClick={() => requestNavigation("開啟活動資料", () => setClaimsOpen(false))}>活動資料</button>
           {detail.claimReviewAvailable && <button type="button" className={styles.ghost} aria-pressed={claimsOpen} onClick={() => requestNavigation("查看社團認領", () => setClaimsOpen(true))}>社團認領</button>}
         </div>
-        <label className={styles.editionSelect}>版本<select aria-label="活動版本" value={selectedId ?? ""} onChange={event => chooseEvent(event.target.value)}>
+        <label className={styles.editionSelect}>版本<select aria-label="活動版本" value={selectedId ?? ""} onChange={event => {
+          const candidateId = event.target.value;
+          requestNavigation("切換版本", () => { setDetail(null); setSelectedId(candidateId); });
+        }}>
           {selectedGroup.editions.map((edition, index) => <option key={edition.id} value={edition.id}>第 {edition.edition ?? selectedGroup.editions.length - index} 版{index === 0 ? "（最新）" : ""}・{STATUS_LABEL[edition.status]}</option>)}
         </select></label>
       </div>}
@@ -528,7 +531,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           nothing in it. The line now names the one thing that can be done from
           here, and for someone who cannot create activities that is waiting
           for an invitation, not pressing a button they do not have (#225). */}
-      {!detail ? <div className={styles.empty}>
+      {!detail && selectedId ? <div className={styles.empty}><p role="status">載入活動…</p></div> : !detail ? <div className={styles.empty}>
         <h2>{events.length === 0 ? "還沒有活動" : "選擇活動"}</h2>
         <p>{events.length > 0 ? "從左側開啟活動，開始準備送審資料。"
           : session.isAdmin ? "用左側的「建立新活動」開始第一場。"
