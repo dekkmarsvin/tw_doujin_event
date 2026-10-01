@@ -18,7 +18,7 @@ try {
       await picker.selectOption("slot:0:0");
       await openToolGroup(editor, nextGroup);
       if (surface === "organizer") {
-        assert.equal(await panel.getByRole("img", { name: "辨識草稿預覽" }).isVisible(), true, "first click opens the recognition image and controls");
+        assert.equal(await panel.getByRole("group", { name: "辨識草稿預覽" }).isVisible(), true, "first click opens the recognition image and controls");
         assert.equal(await panel.getByRole("button", { name: "辨識配置圖", exact: true }).isVisible(), true);
         assert.equal(await canvas.isVisible(), false);
       } else {
@@ -34,7 +34,7 @@ try {
       assert.equal(await editor.getByRole("button", { name: "取消放置", exact: true }).count(), 0, "switching cancels pending facility placement");
       assert.equal(await editor.getByRole("button", { name: "新增服務設施", exact: true }).isVisible(), false);
       if (surface === "organizer") {
-        assert.equal(await panel.getByRole("img", { name: "辨識草稿預覽" }).isVisible(), true);
+        assert.equal(await panel.getByRole("group", { name: "辨識草稿預覽" }).isVisible(), true);
         assert.equal(await editor.getByRole("complementary", { name: "選取元素屬性" }).isVisible(), false);
       }
       await journey.capture(page, `${surface}-${expanded ? "expanded" : "inline"}-${surface === "organizer" ? "recognition" : "background"}-after-facility`);

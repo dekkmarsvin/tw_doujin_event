@@ -4,6 +4,8 @@
 
 **實作**：[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-layout-editor-geometry.ts`](../../app/map-layout-editor-geometry.ts)、[`app/map-layout-editor-selection.ts`](../../app/map-layout-editor-selection.ts)、[`app/map-segment-edit.ts`](../../app/map-segment-edit.ts)、[`app/map-placement-tool.ts`](../../app/map-placement-tool.ts)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-editor-preferences.ts`](../../app/map-editor-preferences.ts)、[`app/map-authoring-state.ts`](../../app/map-authoring-state.ts)、[`app/map-booth-list.tsx`](../../app/map-booth-list.tsx)、[`app/map-booth-coverage.ts`](../../app/map-booth-coverage.ts)、[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/map-template-registry.ts`](../../app/map-template-registry.ts)
 **測試**：`tests/map-authoring-state.test.mjs`、`tests/map-editor-preferences.test.mjs`、`tests/map-placement-tool.test.mjs`、`tests/map-segment-edit.test.mjs`、`tests/map-import.test.mjs`、`tests/map-template-shape.test.mjs`
+**實作**：[`app/map-recognition-panel.tsx`](../../app/map-recognition-panel.tsx)、[`app/map-recognition-draft.ts`](../../app/map-recognition-draft.ts)、[`app/map-recognition-review.ts`](../../app/map-recognition-review.ts)、[`app/map-auto-recognition/build-layout.ts`](../../app/map-auto-recognition/build-layout.ts)
+**測試**：`tests/map-recognition-draft.test.mjs`、`tests/map-recognizer-prototype.test.mjs`、[`tests/browser/map-recognition.mjs`](../../tests/browser/map-recognition.mjs)
 
 ## 檢視
 
@@ -12,6 +14,16 @@
 ## 攤位清單對照
 
 共用編輯器可選填活動日 × 場地的攤位 scope。兩個正式入口都提供該範圍的清單，依目前 layout 即時計算已畫／待畫數量、可搜尋的待畫代碼與社團群組；只有已有座標的代碼提供定位，選取攤位也顯示對應群組。切換範圍清除清單篩選與選取。清單外代碼沿用 API 判定：候選活動為提醒，已發布活動為錯誤；畫面提示不取代送審驗證。未提供 scope 的嵌入仍保留基本編輯能力。
+
+## 實驗性辨識校對
+
+主辦在既有配置圖上辨識後，預覽與校對進度留在編輯器內，不寫入 `EventMapLayout`。每批只加入明確勾選的項目；以目前地圖重新檢查攤位代碼、攤位幾何、同類設施衝突與整份 layout 有效性，整批拒絕或整批成功，既有人工內容及輔助線保留。每批成功採用各算一步復原。
+
+辨識面板自己的成功採用是唯一的基準更新例外：剩餘結果接到本次產生的同一份 layout，原 proposal 項目鍵不改變，已採用項目保留顯示但不能再次加入。剩餘項目重新計算衝突。手動編輯（含輔助線）、復原／重做、替換 layout、換圖、換活動日／場地／攤位清單、修改辨識範圍或重新辨識，仍使舊結果失效；晚到的 Worker 訊息不能恢復結果。儲存及配置圖讀取期間不能採用。有效結果可跨工具切換及全視窗展開／返回保留，成功通知不跨工具留存。
+
+預覽與清單共用待核對、已勾選、已採用與衝突狀態；未配對另作可並存的屬性。點預覽的排以清單內捲動與焦點定位對應項目，不自動勾選；Enter／Space 有相同行為，清單既有勾選與查看操作保留。
+
+缺漏提醒依內部結構化診斷的攤位代碼，排除目前 layout 實際已有的格。整排已畫不再要求新增；部分已畫只列剩餘代碼，不以排名相同或任一格已存在代替完整覆蓋。排內少格採相同判定。清單格式錯誤、未配對區塊與待命名區域等其他有效提醒保留；未採用的預覽不能代替保存及送審的攤位覆蓋驗證。
 
 ## 放置工具
 
