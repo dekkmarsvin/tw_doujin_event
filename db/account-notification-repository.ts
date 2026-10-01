@@ -80,7 +80,8 @@ export function createAccountNotificationRepository(database: D1Database, ensure
           AND EXISTS (SELECT 1 FROM account_notification_preferences WHERE account_id = ?1 AND write_token = ?5)`)
         .bind(input.accountId, input.cadence, input.now, nextNotificationSlot(input.cadence === "hourly" ? "hourly" : "daily", input.now), token),
       database.prepare(`UPDATE account_notification_batches SET state = CASE WHEN ?2 = 'off' THEN 'cancelled' ELSE state END,
-        completed_at = CASE WHEN ?2 = 'off' THEN ?3 ELSE completed_at END, retry_at = ?4
+        completed_at = CASE WHEN ?2 = 'off' THEN ?3 ELSE completed_at END, retry_at = ?4,
+        lease_token = NULL, lease_until = 0
         WHERE account_id = ?1 AND lane = 'digest' AND state = 'pending'
           AND EXISTS (SELECT 1 FROM account_notification_preferences WHERE account_id = ?1 AND write_token = ?5)`)
         .bind(input.accountId, input.cadence, input.now, nextNotificationSlot(input.cadence === "hourly" ? "hourly" : "daily", input.now), token),

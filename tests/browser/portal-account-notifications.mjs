@@ -1,7 +1,7 @@
 // staged-data: portal
 import assert from "node:assert/strict";
 import { CIRCLE, clearMail, loginLink, signIn } from "./support/portal.mjs";
-import { base, start } from "./support/journey.mjs";
+import { base, output, start } from "./support/journey.mjs";
 const journey = await start("portal-account-notifications");
 const event = { id: "invitation-fixture", tentativeName: "邀請恢復測試", eventId: null, status: "draft",
   version: 1, updatedAt: 1, updatedByRole: "admin", role: "owner", workspaceMode: "binder" };
@@ -26,6 +26,8 @@ try {
   await save.click(); await dialog.getByText("通知設定已儲存。", { exact: true }).waitFor();
   const saved = await cadence.inputValue();
   await journey.capture(page, "account-notifications-desktop");
+  // Durable PR evidence excludes account addresses, including fictional ones.
+  await page.screenshot({ path: `${output}/account-notifications-desktop.png`, mask: [page.getByText(CIRCLE, { exact: true }), dialog.getByText(`收件信箱：${CIRCLE}`, { exact: true })] });
   await page.keyboard.press("Escape"); await dialog.waitFor({ state: "hidden" });
   assert.equal(await page.getByRole("button", { name: "通知設定", exact: true }).evaluate(e => e === document.activeElement), true);
   await page.route("**/api/account/notification-preferences*", r => r.fulfill({ status: 503, json: { error: "暫時無法載入通知設定。" } }));
@@ -38,6 +40,8 @@ try {
   await cadence.waitFor(); assert.equal(await cadence.inputValue(), saved);
   await page.setViewportSize({ width: 390, height: 844 });
   await journey.capture(page, "account-notifications-mobile");
+  // Durable PR evidence excludes account addresses, including fictional ones.
+  await page.screenshot({ path: `${output}/account-notifications-mobile.png`, mask: [page.getByText(CIRCLE, { exact: true }), dialog.getByText(`收件信箱：${CIRCLE}`, { exact: true })] });
   const rect = await dialog.boundingBox(); assert.ok(rect.width >= 389 && rect.height >= 843);
   await cadence.selectOption("off");
   await page.route("**/api/account/notification-preferences*", route => route.request().method() === "PUT"

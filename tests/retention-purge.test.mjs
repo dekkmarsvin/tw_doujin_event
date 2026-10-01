@@ -117,6 +117,8 @@ test("records every run in the audit log, including the empty ones", async () =>
   assert.equal(entry.subject_type, "retention");
   assert.equal(entry.at, NOW);
   assert.deepEqual(JSON.parse(entry.detail_json).deleted, {
+    account_notification_items: 0,
+    account_notification_batches: 0,
     review_notification_items: 0,
     review_notification_batches: 0,
     login_tokens: 0,
@@ -247,6 +249,8 @@ test("never creates a table it does not find", async () => {
   const summary = await purgeExpiredRecords(untouched, NOW);
 
   assert.deepEqual(summary.deleted, {
+    account_notification_items: 0,
+    account_notification_batches: 0,
     review_notification_items: 0,
     review_notification_batches: 0,
     login_tokens: 0,
@@ -258,6 +262,8 @@ test("never creates a table it does not find", async () => {
     map_raw_objects: 0,
   });
   assert.deepEqual(summary.skipped.sort(), [
+    "account_notification_batches",
+    "account_notification_items",
     "audit_log",
     "circle_overrides",
     "login_tokens",

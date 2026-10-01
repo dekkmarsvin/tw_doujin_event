@@ -27,10 +27,10 @@ export function isAccountNotificationCadence(value: unknown): value is AccountNo
 const descriptions: Record<AccountNotificationKind, { title: string; text: string; action: string }> = {
   "claim.approved": { title: "認領通過", text: "你的認領已通過。請登入查看目前狀態及可管理的補充資料。", action: "管理社團資料" },
   "claim.rejected": { title: "認領未通過", text: "這次認領未通過。", action: "查看認領狀態" },
-  "claim.revoked": { title: "認領已撤銷", text: "你的認領曾於以下時間被撤銷。請登入查看目前認領狀態；如需協助，請聯絡網站管理者。", action: "查看認領狀態" },
+  "claim.revoked": { title: "認領已撤銷", text: "你的認領曾於以下時間被撤銷。撤銷會移除該次認領的管理權限，相關補充資料將停止公開。請登入查看目前認領狀態；如需協助，請聯絡網站管理者。", action: "查看認領狀態" },
   "circle.updated": { title: "補充資料已更新", text: "你的社團補充資料有更新。", action: "查看社團資料" },
-  "circle.takendown": { title: "補充資料已撤下", text: "網站管理者已處理這筆補充資料。請登入查看目前狀態；如需協助，請聯絡網站管理者。", action: "查看社團資料" },
-  "application.approved": { title: "活動建置申請通過", text: "你的申請已通過，可以開始建置活動。活動內容仍須送審後發布。", action: "查看申請結果" },
+  "circle.takendown": { title: "補充資料撤下通知", text: "網站管理者已對這筆補充資料作撤下處理。請登入查看目前狀態；如需協助，請聯絡網站管理者。", action: "查看社團資料" },
+  "application.approved": { title: "活動建置申請通過", text: "這次申請已核准建置。請查看目前申請結果與可使用的工作區；活動內容仍須送審後發布。", action: "查看申請結果" },
   "application.rejected": { title: "活動建置申請未通過", text: "你的活動建置申請未通過。", action: "查看申請結果" },
   "member.granted": { title: "工作區權限已更新", text: "此工作區有成員取得權限。", action: "查看工作區" },
   "member.revoked": { title: "工作區權限已移除", text: "此工作區有成員的權限被移除。", action: "查看工作區" },

@@ -89,6 +89,13 @@ function chunked<T>(values: readonly T[], size: number): T[][] {
   return chunks;
 }
 
+// Object insertion order is not a content change. json_tree keeps array
+// positions and value types, while comparing object members independently.
+function differentJson(left: string, right: string) {
+  const rows = (value: string) => `SELECT fullkey, type, atom FROM json_tree(${value})`;
+  return `(EXISTS (${rows(left)} EXCEPT ${rows(right)}) OR EXISTS (${rows(right)} EXCEPT ${rows(left)}))`;
+}
+
 export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[]; accountNotifications?: AccountNotificationConfig } = {}) {
   const notify = createAccountNotificationWriter(database, options.accountNotifications);
   let tablesReady: Promise<void> | null = null;
@@ -851,15 +858,15 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     const results = await database.batch([
       ...notify({ kind: "circle.updated", occurrence: crypto.randomUUID(), now: input.now, detailFromSource: true },
         `${circleNotificationSource.replace(" FROM circle_claims c", `,
-          trim(CASE WHEN o.id IS NULL OR json_remove(o.fields_json, '$.catalogImages') IS NOT json_remove(?3, '$.catalogImages') THEN '補充資料、' ELSE '' END
-            || CASE WHEN json_extract(o.fields_json, '$.catalogImages') IS NOT json_extract(?3, '$.catalogImages') THEN '品書、' ELSE '' END
+          trim(CASE WHEN o.id IS NULL OR ${differentJson("json_remove(o.fields_json, '$.catalogImages')", "json_remove(?3, '$.catalogImages')")} THEN '補充資料、' ELSE '' END
+            || CASE WHEN ${differentJson("json_extract(o.fields_json, '$.catalogImages')", "json_extract(?3, '$.catalogImages')")} THEN '品書、' ELSE '' END
             || CASE WHEN o.status <> 'live' THEN '恢復公開、' ELSE '' END
             || CASE WHEN ?5 IS NOT NULL AND o.retention_choice IS NOT ?5 THEN '保存設定、' ELSE '' END
             || CASE WHEN ?6 = 1 AND o.hosted_thumbnail_key IS NOT ?7 THEN '代表圖片、' ELSE '' END, '、') AS detail
           FROM circle_claims c`)} LEFT JOIN circle_overrides o ON o.event_id = c.event_id AND o.circle_id = c.circle_id
         WHERE c.event_id = ?1 AND c.circle_id = ?2 AND c.status = 'verified'
           AND (?4 IS NULL OR EXISTS (SELECT 1 FROM accounts WHERE id = ?4 AND disabled_at IS NULL AND deletion_started_at IS NULL))
-          AND (o.id IS NULL OR o.fields_json IS NOT ?3 OR o.status <> 'live'
+          AND (o.id IS NULL OR ${differentJson('o.fields_json', '?3')} OR o.status <> 'live'
             OR (?5 IS NOT NULL AND o.retention_choice IS NOT ?5)
             OR (?6 = 1 AND o.hosted_thumbnail_key IS NOT ?7))`,
         [input.eventId, input.circleId, input.fieldsJson, input.accountId ?? null,
@@ -1826,8 +1833,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   async function createOrganizerCandidate(input: OrganizerCandidateInput) {
     await ensureTables();
     try {
-      const results = await database.batch(organizerCandidateStatements(input));
-      return results.every((result) => result.meta.changes === 1)
+      const statements = organizerCandidateStatements(input);
+      const results = await database.batch([...statements,
+        ...(input.ownerGrant ? notify({ kind: "member.granted", occurrence: `created:${input.id}`, now: input.now },
+          `${memberNotificationSource} WHERE target.candidate_id = ?1 AND target.account_id = ?2 AND changes() = 1`,
+          [input.id, input.ownerGrant.accountId]) : []),
+      ]);
+      return results.slice(0, statements.length).every((result) => result.meta.changes === 1)
         ? { ok: true as const, version: 1 }
         : { ok: false as const, reason: "conflict" as const };
     } catch (error) {
