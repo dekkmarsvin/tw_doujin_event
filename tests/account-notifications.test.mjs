@@ -321,8 +321,8 @@ test("feature flag and rollout epoch do not backfill; preview sink is isolated",
 
 test("letter HTML escapes names, text links match and login destinations use a strict allowlist", async () => {
   await claim(); const item = (await items())[0];
-  const letter = accountNotificationLetter("https://map.kotoban.top", [{ ...item, name: '<script>"&' }]);
-  assert.doesNotMatch(letter.html, /<script>/); assert.match(letter.text, /\/circle\?event=sample&circle=claim/);
+  const letter = accountNotificationLetter("https://map.kotoban.top", [{ ...item, name: '<ScRiPt>"&' }]);
+  assert.doesNotMatch(letter.html, /<script\b/i); assert.match(letter.text, /\/circle\?event=sample&circle=claim/);
   const parameters = notificationParameters({ candidate: "right", application: "request", section: "review", notifications: "1", redirect: "https://evil.test", login: "secret", event: "wrong" }, "organizer");
   assert.equal(parameters.toString(), "candidate=right&application=request&section=review&notifications=1");
   assert.equal(notificationParameters({ candidate: "//evil.test", section: "javascript:alert(1)" }, "organizer").toString(), "");
