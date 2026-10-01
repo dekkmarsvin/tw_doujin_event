@@ -1,0 +1,44 @@
+{
+  "schema": "event-data-pin/2",
+  "eventId": "arktw-only-2026",
+  "repository": "dekkmarsvin/tw_doujin_event-data",
+  "commit": "44c437efc9133e1a37a68b93f3ed3e49175684e2",
+  "files": [
+    {
+      "path": "events/arktw-only-2026/circle-identity-groups.json",
+      "sha256": "3f766f5dff0d81b5117e62fbe4e8616d77a4b1a072e1268ac8f13e67a6457609"
+    },
+    {
+      "path": "events/arktw-only-2026/event.json",
+      "sha256": "0f355330a8701edc22c2013b1dc8f09b008cd11e27fc72a2e29d3f2500d0451a"
+    },
+    {
+      "path": "events/arktw-only-2026/map.json",
+      "sha256": "e0ff112ff29e94c6b07cc252f613847fd870e765e24f18cbde14bb0ef64bd155"
+    },
+    {
+      "path": "events/arktw-only-2026/official-booths.json",
+      "sha256": "b49a68dc28d95503016da91d1eb21afd205e35533652997ac1e37fab7670c735"
+    },
+    {
+      "path": "events/arktw-only-2026/reference-selection.json",
+      "sha256": "21100e3760550c0c7c197f30dee65704a5f6c6281b5e9a2cbda78a4c9e7f49ab"
+    },
+    {
+      "path": "references/category-catalogs/organizer-02670078-bd4c-466b-8a29-33a735693aec/catalog-69c988fd-332a-4849-a29b-2c016d620154/1.json",
+      "sha256": "f1af8aef3544fafc58c5b90b3a03761b959cb10cf31480a8d5fb8688b5db68db"
+    },
+    {
+      "path": "references/organizers/organizer-02670078-bd4c-466b-8a29-33a735693aec.json",
+      "sha256": "0158b8f794bb4b753675221a9bee10f0692d8e3b4342c8aa03a593a0bceb3611"
+    },
+    {
+      "path": "references/venue-spaces/taipei-hakka-cultural-center-5f-exhibition-hall.json",
+      "sha256": "460cedfaada6e12740905dab54cb49e82027e9a1b36ac90b930cc44f44693fb6"
+    },
+    {
+      "path": "references/venues/taipei-hakka-cultural-center.json",
+      "sha256": "2df51bf95905e4a6e199482403bf016189282635eb46c27370a5638f07496ba0"
+    }
+  ]
+}

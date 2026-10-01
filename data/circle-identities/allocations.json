@@ -1,6 +1,6 @@
 {
   "schema": "circle-id-allocations/1",
-  "nextSequence": 2292,
+  "nextSequence": 2376,
   "allocations": [
     {
       "id": "c-000001",
@@ -11456,6 +11456,426 @@
       "id": "c-002291",
       "allocatedAt": "2026-09-30",
       "reason": "New reviewed fgo-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002292",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002293",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002294",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002295",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002296",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002297",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002298",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002299",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002300",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002301",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002302",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002303",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002304",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002305",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002306",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002307",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002308",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002309",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002310",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002311",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002312",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002313",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002314",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002315",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002316",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002317",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002318",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002319",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002320",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002321",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002322",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002323",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002324",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002325",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002326",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002327",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002328",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002329",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002330",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002331",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002332",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002333",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002334",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002335",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002336",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002337",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002338",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002339",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002340",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002341",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002342",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002343",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002344",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002345",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002346",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002347",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002348",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002349",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002350",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002351",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002352",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002353",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002354",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002355",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002356",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002357",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002358",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002359",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002360",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002361",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002362",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002363",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002364",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002365",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002366",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002367",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002368",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002369",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002370",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002371",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002372",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002373",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002374",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
+    },
+    {
+      "id": "c-002375",
+      "allocatedAt": "2026-10-01",
+      "reason": "New reviewed arktw-only-2026 catalog evidence"
     }
   ]
 }
