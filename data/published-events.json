@@ -1,4 +1,10 @@
 {
   "schema": "published-events/1",
-  "events": ["ff47", "ch-20", "pf45-rf14", "fgo-only-2026"]
+  "events": [
+    "ff47",
+    "ch-20",
+    "pf45-rf14",
+    "fgo-only-2026",
+    "arktw-only-2026"
+  ]
 }
