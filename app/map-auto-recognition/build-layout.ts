@@ -395,12 +395,15 @@ function finalize(result: RecognitionResult, unit: Unit, hypotheses: Hypothesis[
 }
 
 export type RowReport = { label: string; booths: number; blocks: number; numbering: string; confidence: number };
+export type RecognitionDiagnostic = { kind: "notice"; message: string }
+  | { kind: "missing-row" | "missing-slots"; label: string; codes: string[] };
 
 export type LayoutReport = {
   layout: EventMapLayout;
   valid: boolean;
   errors: string[];
   warnings: string[];
+  diagnostics: RecognitionDiagnostic[];
   confidence: number;
   rows: RowReport[];
   walk: string | null;
@@ -412,9 +415,11 @@ export type BuildOptions = { template?: string; boothList?: string };
 
 export function buildLayout(result: RecognitionResult, options: BuildOptions = {}): LayoutReport {
   const warnings: string[] = [];
+  const diagnostics: RecognitionDiagnostic[] = [];
+  const notice = (message: string) => { warnings.push(message); diagnostics.push({ kind: "notice", message }); };
   const { cells, blocks } = result;
   const list = options.boothList?.trim() ? parseBoothList(options.boothList) : null;
-  if (list?.ignored.length) warnings.push(`攤位清單有 ${list.ignored.length} 個無法解讀的項目（例：${list.ignored.slice(0, 3).join("、")}）。`);
+  if (list?.ignored.length) notice(`攤位清單有 ${list.ignored.length} 個無法解讀的項目（例：${list.ignored.slice(0, 3).join("、")}）。`);
 
   const rowsOut: EventMapLayout["rows"] = [];
   const reports: RowReport[] = [];
@@ -429,7 +434,7 @@ export function buildLayout(result: RecognitionResult, options: BuildOptions = {
     walkName = match.walkNames.join("；") || null;
     list.rows.forEach((row, rowIndex) => {
       const unit = match.assigned.get(rowIndex);
-      if (!unit) { missingRows.push(row.label); return; }
+      if (!unit) { missingRows.push(row.label); diagnostics.push({ kind: "missing-row", label: row.label, codes: row.entries.map(entry => entry.code) }); return; }
       for (const b of unit.blocks) usedBlocks.add(b);
       jobs.push({ label: row.label, unit, entries: row.entries, provisional: false });
     });
@@ -445,7 +450,7 @@ export function buildLayout(result: RecognitionResult, options: BuildOptions = {
     const entries = Array.from({ length: count }, (_, n) => ({ code: `${label}-${String(n + 1).padStart(2, "0")}`, number: n + 1, digits: 2 }));
     jobs.push({ label, unit: { blocks: [b], count }, entries, provisional: true });
   });
-  if (list && leftovers.length) warnings.push(`有 ${leftovers.length} 個區塊沒有對應到清單中的排，暫以 ?1、?2… 標示；可能是企業攤或辨識多出的格子。`);
+  if (list && leftovers.length) notice(`有 ${leftovers.length} 個區塊沒有對應到清單中的排，暫以 ?1、?2… 標示；可能是企業攤或辨識多出的格子。`);
 
   // Numbering in two rounds. Rows whose cell count matches the list are read
   // on their own evidence first; their answers teach one glyph prototype per
@@ -479,7 +484,12 @@ export function buildLayout(result: RecognitionResult, options: BuildOptions = {
   };
   jobs.forEach((job, k) => {
     const hypotheses = ranked[k];
-    if (!hypotheses.length) { missingRows.push(job.label); return; }
+    if (!hypotheses.length) {
+      missingRows.push(job.label);
+      diagnostics.push({ kind: "missing-row", label: job.label, codes: job.entries.map(entry => entry.code) });
+      warnings.push(`找不到可編號的區塊：${job.label} 排。請在編輯器中手動新增。`);
+      return;
+    }
     let chosen = hypotheses[0];
     const { scheme } = describe(result, job.unit, chosen);
     const rule = majority(scheme.split("|")[0]);
@@ -502,7 +512,10 @@ export function buildLayout(result: RecognitionResult, options: BuildOptions = {
       }),
     });
     reports.push({ label: job.label, booths: numbering.cells.length, blocks: job.unit.blocks.length, numbering: numbering.description, confidence });
-    if (numbering.dropped.length) warnings.push(`${job.label} 排比清單少 ${numbering.dropped.length} 格，推定 ${numbering.dropped.join("、")} 未畫出或未辨識，請人工補上。`);
+    if (numbering.dropped.length) {
+      warnings.push(`${job.label} 排比清單少 ${numbering.dropped.length} 格，推定 ${numbering.dropped.join("、")} 未畫出或未辨識，請人工補上。`);
+      diagnostics.push({ kind: "missing-slots", label: job.label, codes: numbering.dropped });
+    }
   });
   const provisional = leftovers.length;
 
@@ -534,13 +547,14 @@ export function buildLayout(result: RecognitionResult, options: BuildOptions = {
   const validation = validateEventMapLayout(layout);
   const booths = rowsOut.reduce((sum, row) => sum + row.slots.length, 0);
   const confidence = booths ? rowsOut.reduce((sum, row) => sum + row.confidence * row.slots.length, 0) / booths : 0;
-  if (!result.cells.length) warnings.push("沒有找到攤位格。這張配置圖可能不是格狀攤位，請改用空白地圖描摹。");
-  if (result.largeBlocks.length) warnings.push(`有 ${result.largeBlocks.length} 個大型區塊（企業攤、舞台或特區）已框出，名稱需要人工填寫。`);
+  if (!result.cells.length) notice("沒有找到攤位格。這張配置圖可能不是格狀攤位，請改用空白地圖描摹。");
+  if (result.largeBlocks.length) notice(`有 ${result.largeBlocks.length} 個大型區塊（企業攤、舞台或特區）已框出，名稱需要人工填寫。`);
   return {
     layout,
     valid: validation.ok,
     errors: validation.errors,
     warnings,
+    diagnostics,
     confidence: Math.round(confidence * 100) / 100,
     rows: reports,
     walk: walkName,

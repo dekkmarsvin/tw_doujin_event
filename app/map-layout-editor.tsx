@@ -1543,7 +1543,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
           </li>)}</ul>
         </div>}
       </aside>
-    {recognitionEnabled && backgroundImageUrl && <div className={styles.recognitionMode} hidden={toolGroup !== "recognition"}><MapRecognitionPanel key={`${backgroundImageUrl}:${scope?.allowedBoothCodes.join(",")}`} active={toolGroup === "recognition"} layout={layout} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} paused={recognitionPaused} onApply={next => {
+    {recognitionEnabled && backgroundImageUrl && <div className={styles.recognitionMode} hidden={toolGroup !== "recognition"}><MapRecognitionPanel key={JSON.stringify([backgroundImageUrl, scope?.periodKey, scope?.venueSpaceId, scope?.allowedBoothCodes])} active={toolGroup === "recognition"} layout={layout} authoring={authoring} backgroundImageUrl={backgroundImageUrl} boothCodes={scope?.allowedBoothCodes ?? []} paused={recognitionPaused} onApply={next => {
       cancelPlacement(); setSelections([]); setSelectedGuideId(null);
       setHistory(current => pushLayoutHistory(current, { layout: next, authoring }));
       onChange(next, authoring);
