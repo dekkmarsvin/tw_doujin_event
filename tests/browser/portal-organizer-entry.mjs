@@ -42,7 +42,7 @@ try {
   // The browser may deny the storage accessor itself. Publication polling
   // must still mount, distinguish stale progress, and offer a recovery path.
   const event = { id: "poll-fixture", tentativeName: "本機發布測試", eventId: "poll-test", status: "publishing",
-    version: 1, updatedAt: 1, updatedByRole: "system", role: "owner", workspaceMode: "binder" };
+    version: 1, edition: 2, createdAt: 10, updatedAt: 1, updatedByRole: "system", role: "owner", workspaceMode: "binder" };
   const fixture = { event: { ...event, eventIdLocked: true }, publicationAvailable: true,
     draft: { schema: "organizer-event-draft/1", event: { id: "poll-test", name: "本機發布測試", days: [] },
       venue: { assignments: [] }, officialSource: { label: "", url: null } },
@@ -53,7 +53,12 @@ try {
         sections: ["event", "venue", "import", "map", "validate", "review"].map((id) => ({ id, state: "available" })) } } };
   let readStatus = 200;
   let reads = 0;
-  await organizer.route("**/api/organizer/events", (route) => route.fulfill({ json: { events: [event] } }));
+  const previous = { ...event, id: "poll-original", status: "published", edition: 1, createdAt: 1 };
+  // List metadata is not repeated by the detail endpoint. Polling must retain
+  // the edition order rather than treating the live candidate as edition 1.
+  delete fixture.event.edition;
+  delete fixture.event.createdAt;
+  await organizer.route("**/api/organizer/events", (route) => route.fulfill({ json: { events: [event, previous] } }));
   await organizer.route("**/api/organizer/events/poll-fixture", (route) => {
     reads++;
     return route.fulfill({ status: readStatus, json: readStatus === 200 ? fixture : { error: "fixture read failure" } });
@@ -64,6 +69,10 @@ try {
   await organizer.clock.install();
   await organizer.reload();
   await organizer.getByRole("heading", { name: "送審與發布狀態" }).waitFor();
+  await organizer.clock.runFor(5000);
+  assert.equal(await organizer.getByRole("combobox", { name: "活動版本" }).inputValue(), "poll-fixture");
+  assert.equal(await organizer.getByRole("option", { name: "第 2 版（最新）・發布中", exact: true }).count(), 1,
+    "publication polling keeps the latest edition's list metadata");
   readStatus = 401;
   await organizer.clock.runFor(5000);
   await organizer.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();

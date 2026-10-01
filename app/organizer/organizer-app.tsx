@@ -303,7 +303,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
           failures = 0;
           setPublicationReadError(null);
           setDetail(next);
-          setEvents((items) => items.map((item) => item.id === next.event.id ? next.event : item));
+          setEvents((items) => items.map((item) => item.id === next.event.id ? { ...item, ...next.event } : item));
         }
       }).catch((error) => {
         if (!active) return;
