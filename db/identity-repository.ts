@@ -2100,11 +2100,26 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }) {
     await ensureTables();
     if (!await getOrganizerCandidate(input.candidateId)) return { ok: false as const, reason: "not_found" as const };
+    // Recheck the current candidate grant/admin roster in each write. A former
+    // owner must not grant access after another owner has removed them.
+    const authority = `EXISTS (
+      SELECT 1 FROM accounts actor WHERE actor.id = ?1
+        AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
+        AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
+          OR EXISTS (SELECT 1 FROM organizer_event_grants actor_grant
+            WHERE actor_grant.account_id = actor.id AND actor_grant.candidate_id = ?2
+              AND actor_grant.role = 'owner' AND actor_grant.revoked_at IS NULL))
+    )`;
+    const authorized = async () => !!await database.prepare(`SELECT 1 AS allowed WHERE ${authority}`)
+      .bind(input.actorAccountId, input.candidateId).first();
+    if (!await authorized()) return { ok: false as const, reason: "forbidden" as const };
     if (input.action !== "revoke") {
       const state = await organizerInvitationState(input.candidateId, input.email, "owner");
-      if (input.action === "resend") return state === "pending"
-        ? { ok: true as const, result: "resent" as const }
-        : { ok: false as const, reason: "not_pending" as const };
+      if (input.action === "resend") {
+        if (!await authorized()) return { ok: false as const, reason: "forbidden" as const };
+        return state === "pending" ? { ok: true as const, result: "resent" as const }
+          : { ok: false as const, reason: "not_pending" as const };
+      }
       if (state !== "missing") return { ok: false as const, reason: state };
     }
     if (input.action === "invite") {
@@ -2112,11 +2127,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         const result = await database.prepare(
           `INSERT INTO organizer_event_invitations (
              id, candidate_id, email, role, invited_by, created_at
-           ) VALUES (?1, ?2, ?3, 'owner', ?4, ?5)`,
-        ).bind(crypto.randomUUID(), input.candidateId, input.email, input.actorAccountId, input.now).run();
+           ) SELECT ?5, ?2, ?3, 'owner', ?1, ?4 WHERE ${authority}`,
+        ).bind(input.actorAccountId, input.candidateId, input.email, input.now, crypto.randomUUID()).run();
         return result.meta.changes === 1
           ? { ok: true as const, result: "invited" as const }
-          : { ok: false as const, reason: "unchanged" as const };
+          : { ok: false as const, reason: "forbidden" as const };
       } catch (error) {
         if (error instanceof Error && /unique constraint/i.test(error.message)) return { ok: false as const, reason: "unchanged" as const };
         throw error;
@@ -2128,19 +2143,21 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ).bind(input.candidateId, input.email).first<{ account_id: string }>();
     if (target) {
       // "At least one Owner survives" is enforced by the write itself, not by a
-      // count read before it. Two admins revoking the last two Owners at once
+      // count read before it. Two actors revoking the last two Owners at once
       // would both see a count of two and both proceed, leaving the candidate
       // ownerless; as one statement, the loser of the race matches no row.
       const result = await database.prepare(
-        `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?2
-         WHERE candidate_id = ?3 AND account_id = ?4 AND role = 'owner' AND revoked_at IS NULL
+        `UPDATE organizer_event_grants SET revoked_by = ?1, revoked_at = ?4
+         WHERE candidate_id = ?2 AND account_id = ?3 AND role = 'owner' AND revoked_at IS NULL
+           AND ${authority}
            AND EXISTS (
              SELECT 1 FROM organizer_event_grants other
-             WHERE other.candidate_id = ?3 AND other.role = 'owner'
-               AND other.revoked_at IS NULL AND other.account_id <> ?4
+             WHERE other.candidate_id = ?2 AND other.role = 'owner'
+               AND other.revoked_at IS NULL AND other.account_id <> ?3
            )`,
-      ).bind(input.actorAccountId, input.now, input.candidateId, target.account_id).run();
+      ).bind(input.actorAccountId, input.candidateId, target.account_id, input.now).run();
       if (result.meta.changes === 1) return { ok: true as const, result: "revoked" as const };
+      if (!await authorized()) return { ok: false as const, reason: "forbidden" as const };
       // Nothing changed: either the grant went away under us, or it is now the
       // only one left. Re-read to tell the Owner which, rather than guessing.
       const remaining = await database.prepare(
@@ -2151,10 +2168,11 @@ export function createIdentityRepository(database: D1Database, options: { bootst
         : { ok: false as const, reason: "missing" as const };
     }
     const invitation = await database.prepare(
-      `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?2
-       WHERE candidate_id = ?3 AND email = ?4 AND role = 'owner'
-         AND accepted_at IS NULL AND revoked_at IS NULL`,
-    ).bind(input.actorAccountId, input.now, input.candidateId, input.email).run();
+      `UPDATE organizer_event_invitations SET revoked_by = ?1, revoked_at = ?4
+       WHERE candidate_id = ?2 AND email = ?3 AND role = 'owner'
+         AND accepted_at IS NULL AND revoked_at IS NULL AND ${authority}`,
+    ).bind(input.actorAccountId, input.candidateId, input.email, input.now).run();
+    if (invitation.meta.changes === 0 && !await authorized()) return { ok: false as const, reason: "forbidden" as const };
     return invitation.meta.changes === 1 ? { ok: true as const, result: "revoked" as const } : { ok: false as const, reason: "missing" as const };
   }
 

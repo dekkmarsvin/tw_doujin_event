@@ -201,10 +201,11 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
     if (!selectionInitialized.current) {
       selectionInitialized.current = true;
       setSelectedId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
-      return;
+      return next;
     }
     setSelectedId((current) => current === null ? null
       : next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
+    return next;
   }, []);
   const reloadDetail = useCallback(async (
     candidateId: string,
@@ -287,7 +288,14 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
    * still corrected, because reloadList's own update re-runs the detail
    * effect. */
   const refresh = useCallback(async () => {
-    await Promise.all([reloadList(), selectedId ? reloadDetail(selectedId, undefined, "keep") : Promise.resolve()]);
+    const list = reloadList();
+    await Promise.all([list, selectedId ? reloadDetail(selectedId, undefined, "keep").catch(async (error) => {
+      // Removing one's own owner grant may make this detail unavailable.
+      // The refreshed list already selects an accessible activity or clears it.
+      if (error instanceof PortalError && error.status === 404
+        && !(await list).some((event) => event.id === selectedId)) return;
+      throw error;
+    }) : Promise.resolve()]);
   }, [reloadDetail, reloadList, selectedId]);
 
   const persistLocation = useCallback(async (
@@ -389,7 +397,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
 
   if (applicationsOpen) return <main className={styles.applicationMain}>
     <button type="button" className={styles.ghost} onClick={() => setApplicationsOpen(false)}>返回活動工作區</button>
-    <OrganizerApplicationsPanel session={session} onReviewed={reloadList} />
+    <OrganizerApplicationsPanel session={session} onReviewed={async () => { await reloadList(); }} />
   </main>;
 
   return <main className={eventListOpen ? styles.shell : `${styles.shell} ${styles.shellNarrow}`}>

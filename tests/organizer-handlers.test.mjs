@@ -156,8 +156,8 @@ test("admin invitation creates an organizer event entry that only its owner can 
  * The admin who names themselves the owner used to hold the `admin` event role
  * until they opened the mailed link. The submit control is rendered only for
  * `owner`, so an admin could build a whole activity and never see it — not
- * disabled, absent. Only admins may add Owners at all, so the trip through the
- * mailbox proved nothing.
+ * disabled, absent. The creating admin can grant ownership, so the trip through
+ * the mailbox proved nothing.
  */
 test("an admin who creates an activity for themselves is its owner without opening the invitation", async () => {
   const adminCookie = await signIn("admin@example.test");
@@ -1566,6 +1566,66 @@ async function invitationFixture() {
       { role, email, action }, targetCookie), targetId);
   return { cookie, candidateId, manage };
 }
+
+test("ordinary owners manage owners only within their candidate without acquiring review authority", async () => {
+  const adminCookie = await signIn("admin@example.test");
+  const created = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "Owner delegation", ownerEmail: "owner@example.test" }, adminCookie));
+  const { candidateId } = await created.json();
+  const ownerCookie = await signIn("owner@example.test", "organizer");
+  const path = `/api/organizer/events/${candidateId}/collaborators`;
+  const manage = (email, action, cookie = ownerCookie, role = "owner") =>
+    handlers.manageOrganizerCollaborators(request(path, "POST", { email, action, role }, cookie), candidateId);
+
+  assert.equal((await manage("co-owner@example.test", "invite")).status, 200);
+  const invitation = await database.prepare("SELECT id FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2")
+    .bind(candidateId, "co-owner@example.test").first();
+  for (const part of ["text", "html"]) {
+    assert.match(sent.at(-1)[part], /活動負責人/);
+    assert.doesNotMatch(sent.at(-1)[part], /網站管理者|owner@example\.test/);
+  }
+  assert.equal((await manage("co-owner@example.test", "resend")).status, 200);
+  assert.match(sent.at(-1).text, /活動負責人/);
+  assert.equal((await database.prepare("SELECT id FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = ?2")
+    .bind(candidateId, "co-owner@example.test").first()).id, invitation.id);
+  const lastOwner = await manage("owner@example.test", "revoke");
+  assert.equal(lastOwner.status, 409, "a pending invitation cannot replace the last accepted owner");
+  assert.match((await lastOwner.json()).error, /至少需要一位負責人/);
+
+  const coOwnerCookie = await signIn("co-owner@example.test", "organizer");
+  assert.equal((await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, coOwnerCookie), candidateId)).status, 200);
+  assert.equal((await handlers.adminReviewOrganizerCandidate(request(`/api/admin/organizer/events/${candidateId}/review`, "POST",
+    { expectedVersion: 1, decision: "approve" }, coOwnerCookie), candidateId)).status, 403);
+
+  assert.equal((await manage("pending-owner@example.test", "invite")).status, 200);
+  assert.equal((await manage("pending-owner@example.test", "revoke")).status, 200);
+  const pendingCookie = await signIn("pending-owner@example.test", "organizer");
+  assert.equal((await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, pendingCookie), candidateId)).status, 404);
+
+  assert.equal((await manage("member@example.test", "invite", ownerCookie, "editor")).status, 200);
+  const editorCookie = await signIn("member@example.test", "organizer");
+  const other = await handlers.adminCreateOrganizerCandidate(request("/api/admin/organizer/events", "POST",
+    { tentativeName: "Other scope", ownerEmail: "other-owner@example.test" }, adminCookie));
+  const otherId = (await other.json()).candidateId;
+  const otherCookie = await signIn("other-owner@example.test", "organizer");
+  const beforeDenied = sent.length;
+  for (const action of ["invite", "resend", "revoke"]) {
+    assert.equal((await manage("co-owner@example.test", action, editorCookie)).status, 403);
+    assert.equal((await manage("co-owner@example.test", action, otherCookie)).status, 404);
+    assert.equal((await handlers.manageOrganizerCollaborators(request(`/api/organizer/events/${otherId}/collaborators`, "POST",
+      { email: "other-owner@example.test", role: "owner", action }, ownerCookie), otherId)).status, 404);
+  }
+  assert.equal(sent.length, beforeDenied, "denied actors cannot send invitations");
+
+  assert.equal((await manage("owner@example.test", "revoke")).status, 200, "an owner may leave once another has accepted");
+  assert.equal((await manage("new-owner@example.test", "invite")).status, 404);
+  assert.equal((await manage("co-owner@example.test", "revoke", coOwnerCookie)).status, 409);
+  assert.equal((await repository.getOrganizerCandidate(candidateId)).current_version, 1);
+  const audits = (await database.prepare("SELECT actor_role, action FROM audit_log WHERE subject_id = ?1 AND action IN ('organizer_event.owner_invite', 'organizer_event.owner_resend', 'organizer_event.owner_revoke')")
+    .bind(candidateId).all()).results;
+  assert.equal(audits.length, 5);
+  assert.ok(audits.every(row => row.actor_role === "organizer_owner"));
+});
 
 for (const role of ["editor", "owner"]) {
   test(`${role} invitation failure keeps the invitation, cleans only its token, and can resend`, async () => {

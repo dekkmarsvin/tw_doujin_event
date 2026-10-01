@@ -62,7 +62,7 @@ function OwnerSection(props: SectionProps) {
   const { detail } = props;
   const { act, notice, pending: busy } = useSectionAction(props);
   const pending = busy || props.blocked === true;
-  return <div className={styles.subpanel}><h4>負責人</h4><p>只有網站管理者可增減負責人；每場活動至少保留一位。</p><form className={styles.invitationForm} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), invitationMessage); }}><input aria-label="負責人 Email" type="email" required disabled={pending} placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
+  return <div className={styles.subpanel}><h4>負責人</h4><p>每場活動至少保留一位已接受邀請的負責人。</p><form className={styles.invitationForm} onSubmit={(event: FormEvent) => { event.preventDefault(); act(manageOrganizerOwner(detail.event.id, ownerEmail, "invite"), invitationMessage); }}><input aria-label="負責人 Email" type="email" required disabled={pending} placeholder="owner@example.com" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} /><button type="submit" disabled={pending}>新增負責人</button><button type="button" disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "resend"), invitationMessage)}>重寄邀請信</button><button type="button" className={styles.dangerText} disabled={!ownerEmail || pending} onClick={() => act(manageOrganizerOwner(detail.event.id, ownerEmail, "revoke"), "已移除這位負責人。")}>移除此負責人</button></form><ActionNotice notice={notice} /></div>;
 }
 
 function SubmitSection(props: SectionProps) {
@@ -140,8 +140,9 @@ export function ReviewPanel({ session, detail, onChanged }: {
   const stage = detail.event.status;
   const missingRoles = [
     !owner && (stage === "draft" || stage === "changes_requested" || stage === "submitted" || stage === "failed")
-      ? "你是這個活動的協作者。管理協作者與送出審閱需要負責人身分，請聯絡網站管理者指派。" : null,
-    !session.isAdmin ? "增減負責人與審閱送審內容只有網站管理者可以做。" : null,
+      ? session.isAdmin
+        ? "送出審閱與管理協作者需要這個活動的負責人身分。"
+        : "管理成員與送出審閱需要負責人身分，請聯絡這個活動的負責人。" : null,
   ].filter((reason): reason is string => reason !== null);
   return <section className={styles.panel}>
     <h3>送審與發布狀態</h3>
@@ -152,9 +153,9 @@ export function ReviewPanel({ session, detail, onChanged }: {
         said what was missing, so the work looked finished and stuck. */}
     {missingRoles.map((reason) => <p key={reason} className={styles.warning}>{reason}</p>)}
     <CollaboratorSection {...section} blocked={!owner} />
-    <OwnerSection {...section} blocked={!session.isAdmin} />
+    {(owner || session.isAdmin) && <OwnerSection {...section} />}
     {(detail.event.status === "draft" || detail.event.status === "changes_requested") && <SubmitSection {...section} blocked={!owner} />}
-    {detail.event.status === "submitted" && <AdminReviewSection {...section} blocked={!session.isAdmin} />}
+    {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
     {session.isAdmin && detail.recoveryAvailable ? <RecoverySection {...section} />
       : (session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}
     {!detail.publicationAvailable && detail.event.status !== "published" && <p className={styles.warning}>自動發布尚未啟用，{detail.event.operation === "AMEND" ? "本次修正" : "活動"}尚未公開。內容會保留，請聯絡網站管理者完成發布啟用檢查。</p>}

@@ -1444,7 +1444,8 @@ test("account deletion shreds the private workbook name alongside its uploader",
   assert.equal(source.sha256, "d".repeat(64));
 });
 
-test("the last Owner survives two admins revoking the final two at once", async () => {
+for (const actors of ["admins", "owners"]) {
+test(`the last Owner survives two ${actors} revoking the final two at once`, async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-race", tentativeName: "活動", ownerEmail: "owner@example.test",
     createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
@@ -1456,12 +1457,12 @@ test("the last Owner survives two admins revoking the final two at once", async 
   });
   await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
 
-  const revoke = (email) => repository.manageOrganizerOwner({
-    candidateId: "candidate-race", actorAccountId: adminId, email, action: "revoke", now: NOW + 4,
+  const revoke = (email, actorId) => repository.manageOrganizerOwner({
+    candidateId: "candidate-race", actorAccountId: actors === "admins" ? adminId : actorId, email, action: "revoke", now: NOW + 4,
   });
   // Both see two active Owners; a count read before the write would let both
   // through and leave the candidate with none.
-  const [first, second] = await Promise.all([revoke("owner@example.test"), revoke("editor@example.test")]);
+  const [first, second] = await Promise.all([revoke("owner@example.test", ownerId), revoke("editor@example.test", editorId)]);
   const outcomes = [first, second];
   assert.equal(outcomes.filter((result) => result.ok).length, 1, "exactly one revoke may win");
   assert.deepEqual(outcomes.find((result) => !result.ok), { ok: false, reason: "last_owner" });
@@ -1471,3 +1472,60 @@ test("the last Owner survives two admins revoking the final two at once", async 
   ).first();
   assert.equal(owners.n, 1, "the candidate must never be left ownerless");
 });
+}
+
+for (const actor of ["owner", "admin"]) {
+for (const operation of ["invite", "resend", "revoke-grant", "revoke-invitation"]) {
+test(`owner management rechecks ${actor} authority at ${operation}`, async () => {
+  const candidateId = "owner-authority-race";
+  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  await repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId, email: "editor@example.test", action: "invite", now: NOW + 2 });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+  await repository.manageOrganizerOwner({ candidateId, actorAccountId: ownerId, email: "pending@example.test", action: "invite", now: NOW + 4 });
+  const actorAccountId = actor === "admin" ? adminId : ownerId;
+  const email = operation === "revoke-grant" ? "editor@example.test" : operation === "invite" ? "new@example.test" : "pending@example.test";
+  let armed = false;
+  let authorityReads = 0;
+  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    if (key === "prepare") return sql => {
+      const statement = target.prepare(sql);
+      return { bind: (...args) => {
+        const bound = statement.bind(...args);
+        const shouldRevoke = armed && (operation === "resend"
+          ? sql.includes("SELECT 1 AS allowed") && ++authorityReads === 2
+          : (operation === "invite" ? sql.includes("INSERT INTO organizer_event_invitations")
+            : operation === "revoke-grant" ? sql.includes("UPDATE organizer_event_grants")
+              : sql.includes("UPDATE organizer_event_invitations")));
+        if (!shouldRevoke) return bound;
+        const method = operation === "resend" ? "first" : "run";
+        return new Proxy(bound, { get(statement, key) {
+          if (key === method) return async (...values) => {
+            armed = false;
+            if (actor === "admin") await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+            else await database.prepare("UPDATE organizer_event_grants SET revoked_at = ?1 WHERE candidate_id = ?2 AND account_id = ?3")
+              .bind(NOW + 5, candidateId, ownerId).run();
+            return statement[method](...values);
+          };
+          const value = Reflect.get(statement, key);
+          return typeof value === "function" ? value.bind(statement) : value;
+        } });
+      }, run: statement.run.bind(statement), all: statement.all.bind(statement), first: statement.first.bind(statement) };
+    };
+    const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+  } }));
+  await racing.ensureTables();
+  armed = true;
+  const action = operation.startsWith("revoke") ? "revoke" : operation;
+  assert.deepEqual(await racing.manageOrganizerOwner({ candidateId, actorAccountId, email, action, now: NOW + 6 }),
+    { ok: false, reason: "forbidden" });
+  assert.equal(armed, false, "the authority change must occur at the operation boundary");
+  assert.equal(await repository.organizerRole(candidateId, editorId), "owner");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'pending@example.test' AND revoked_at IS NULL")
+    .bind(candidateId).first()).n, 1);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'new@example.test'")
+    .bind(candidateId).first()).n, 0);
+});
+}
+}
