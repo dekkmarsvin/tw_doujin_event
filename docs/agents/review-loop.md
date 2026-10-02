@@ -33,7 +33,13 @@ ADR-0040 決策 1 的「單一維護者、單一序列指令、本機檔案系�
 
 ## Reviewer 編成與 verification
 
-預設一位未參與實作的主要獨立 reviewer；有修正時，優先由同一 reviewer 做聚焦 verification。額外 reviewer 必須負責尚未涵蓋的具體風險，先說明其範圍，不重做同一份全面審查。自動 review 的觸發保持手動、按風險判斷。
+Reviewer 按本次變更風險編成，不因開 PR 就自動增加 agent：
+
+- **低風險**：純文案、樣式、內部說明文件與範圍明確且不改行為的整理，由實作者自查、相稱驗證與既有 CI 即可，不強制第二位 agent。公開政策、影響操作的文案或混合行為變更依實際影響升級。
+- **一般功能／行為變更**：一位未參與實作的主要獨立 reviewer；有修正時，優先由同一 reviewer 做聚焦 verification。
+- **授權、資料刪除、發布與 schema 變更**：安排一位未參與實作且了解該邊界的主要 reviewer，聚焦必要風險。
+
+額外 reviewer 必須負責尚未涵蓋的具體風險，先說明其範圍，不重做同一份全面審查。自動 review 的觸發保持手動、按風險判斷。既有 required checks／required reviews 在正式調整前仍須遵守，不能以本文件自行略過。
 
 Verification 只驗原 blocker、修正引入的 regression 及必要證據；可讀取相關呼叫路徑以確認修正，但不重新進行全面架構審查。新證據依前述關卡判斷，不能因換 reviewer 就重審已處置的同一事項。
 
@@ -49,7 +55,7 @@ UI 的任務式瀏覽器操作與視覺驗收維持適用要求；減少全面 r
 
 ## Review Done 與熔斷
 
-預設流程是 implementation → primary review → 必要修正 → 聚焦 verification → review Done。沒有修正時不為了流程再加一輪 verification。
+預設流程是 implementation → 按風險自查或 primary review → 必要修正 → 聚焦 verification → review Done。低風險變更自查與適用驗證完成即可達 Done；沒有修正時不為了流程再加一輪 verification。
 
 目前範圍的 blocker 為零、適用驗證完成，且不存在尚未處置的重大授權、資料、秘密或發布風險時，**review 必須結束**。不要求非阻擋觀察清空。Review Done 不等於 production 啟用或產品里程碑完成；合併仍依使用者授權與既有 CI gate。
 

@@ -10,7 +10,7 @@
 
 ## 範圍邊界
 
-<!-- 這張 PR 刻意不做什麼，以及為什麼對應 issue 不需要它。沒有則填「無」。見 docs/agents/review-loop.md。 -->
+<!-- 這張 PR 刻意不做什麼，以及為什麼對應 issue 不需要它。新增防禦時，簡述目前可到達的失敗路徑、具體影響、既有機制不足及最小修正；沒有則填「無」。見 AGENTS.md 與 docs/agents/review-loop.md。 -->
 
 ## 驗收證據
 
@@ -27,6 +27,8 @@
 - 本機聚焦命令、結果與對應驗收條件：
 - 人工／真實環境驗收及剩餘未完成項：
 - 沿用既有證據或不適用項的依據：
+- 測試保護變動及原因（一句話；低價值斷言可直接刪除，不要求等量補測）：
+- Review：低風險自查／一般主要 reviewer／邊界 reviewer，及選擇依據（既有 required reviews 仍適用）：
 - 行為契約更新：對應 contract／不適用理由。
 
 <!-- 純內部文件：node --test tests/contribution-files.test.mjs 已包含 check-doc-map，不需重跑。公開頁面來源仍屬產品變更。詳見 docs/runbooks/local-development.md。 -->

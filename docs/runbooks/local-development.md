@@ -139,7 +139,18 @@ CI 的 `Browser acceptance` 位於獨立 `Browser verification` workflow，只�
 
 純發布資料由 `publication-data` profile 驗證：先核對成功 main 部署基準與完整累積差異，再保留 production build、成品完整性、preview E2E 與 deployment smoke。Browser 以 `npm run build:production` 後執行 `node scripts/test-published-reader.mjs`，對所有實際發布 pins 開啟桌面／手機日期與場地組合及 warm reload。此 profile 不重跑未變動程式的完整 suite／lint／type-check／Worker rebuild；未知、混合或無可靠基準仍完整執行。CI 使用 Playwright 官方固定版本容器，本機仍可用既有安裝指令。
 
-新增或補強 UI 行為驗收時，同一 PR 核對並移除它已等效涵蓋的 JSX／CSS／原始碼字串斷言，在 PR 逐項記錄替代關係；未覆蓋者保留並說明缺口。優先擴充既有 journey，不為同一流程新增另一套。純邏輯、API／D1、授權、資料完整性與發布恢復仍留在適合的測試層，不以測試總數下降作為驗收。
+新增或補強 UI 行為驗收時，優先修改既有 journey，不為同一流程新增另一套。核對附近的 JSX／CSS／原始碼斷言：有價值的行為保護，確認另一層已涵蓋或改成適當行為測試後移除；低價值、重複、過時或只鎖定實作的斷言，可直接刪除，不要求一對一補測。PR 用一句話說明新增／刪除的保護與原因即可，不建立測試清冊或新 gate。
+
+### 修改類型與預設驗證
+
+| 修改類型 | 預設新增測試 | 主要驗證方式 |
+| --- | --- | --- |
+| 文案、顏色、間距、非行為性整理 | 通常為 0 | 受影響畫面／既有 journey；不新增精確文字或 CSS 寫法斷言 |
+| 一般 UI 行為 | 優先修改既有 journey | 驗證使用者從入口完成操作後的結果，不為每個元件補一套 |
+| 純邏輯、地圖幾何、資料轉換 | 少量代表性 unit／table tests | 正常案例與真正不同的邊界，不列舉所有排列 |
+| 授權、D1 寫入、公開／刪除、發布恢復 | 保留必要 integration tests | 在能證明邊界的層驗證，browser 只補接線與操作證據 |
+
+上述是測試選擇的預設，不改變目前 CI profile 或 required checks。新增前先找既有測試；同一問題增加另一層時，須說明前一層未涵蓋的失敗類型，不預設每個 bug 都補 unit＋integration＋browser。修改行為時一併移除失效或重複保護，不以測試總數或刪減比例作為驗收。
 
 `tests/browser/` 不屬於上述任何 tier，因為它需要瀏覽器；`npm test` 不會執行它。它有自己的入口：
 
