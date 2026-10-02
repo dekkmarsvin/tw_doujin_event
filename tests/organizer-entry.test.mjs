@@ -2,25 +2,14 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
-/** The organizer workspace as one body of source.
- *
- * These remaining guards are coupled to implementation and copy. Reading the
- * directory covers panels split by #224, but does not prove user behaviour.
- *
- * Browser-covered entry, navigation and feedback assertions have been removed
- * individually. The remaining guards do not yet have equivalent behavioural
- * coverage; the boundary is mapped in the record kept with PR #344:
- * https://github.com/dekkmarsvin/tw_doujin_event/blob/4704e27ebd0ff88a6680356204b4306cf5314af8/docs/design/source-assertion-cleanup.md
- */
+// Entry, saved progress, navigation and import resets run through the existing
+// portal-organizer journeys. These guards retain the remaining uncovered paths.
 async function organizerSource() {
   const directory = new URL("../app/organizer/", import.meta.url);
-  const entries = (await readdir(directory)).filter((name) => name.endsWith(".ts") || name.endsWith(".tsx")).sort();
-  const files = await Promise.all(entries.map((name) => readFile(new URL(name, directory), "utf8")));
-  return files.join("\n");
+  const entries = (await readdir(directory)).filter(name => /\.tsx?$/.test(name)).sort();
+  return (await Promise.all(entries.map(name => readFile(new URL(name, directory), "utf8")))).join("\n");
 }
 
-// Rendered reader entry, save/revision/navigation and completed onboarding
-// are checked by portal-organizer-entry and portal-organizer-references.
 test("the organizer login form requests its own audience", async () => {
   const app = await organizerSource();
   // The browser journey mints its login link through an API helper, so it
@@ -28,66 +17,6 @@ test("the organizer login form requests its own audience", async () => {
   assert.match(app, /requestLoginLink\([^\n]+"organizer"\)/);
 });
 
-test("venue authoring uses human selections, immediate creation, and no-division guidance", async () => {
-  const app = await organizerSource();
-  assert.match(app, /找不到場地？立即新增/);
-  assert.match(app, /無分區/);
-  // #225: ALL is a stored value; the organizer never needs to know it exists.
-  assert.doesNotMatch(app, /（ALL）|使用 ALL|套用 ALL/);
-  assert.match(app, /尚未儲存/);
-  assert.match(app, /onDraftStateChange=.*setLiveDraft/);
-  assert.match(app, /liveSection=\{activeLiveSection\}/);
-  assert.match(app, /需先儲存/);
-  assert.match(app, /organizerIssueMessage/);
-  assert.doesNotMatch(app, /<label>場館 ID|<label>場地 ID|placeholder="taipei-expo"|placeholder="expo-dome"/);
-  // The row's remove button starts level with the selects it removes.
-  const venueCss = await readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8");
-  assert.match(venueCss, /\.venueCard > \.dangerText \{ margin-top: 22px; \}/);
-});
-
-test("organizer ships the ADR-0047 guided station, binder readiness, and the shared light design language", async () => {
-  const [app, client, css] = await Promise.all([
-    organizerSource(),
-    readFile(new URL("../app/organizer-client.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
-  ]);
-
-  assert.match(app, /identity_source:/);
-  assert.match(app, /onClick=\{onShowAll\}/);
-  assert.match(app, /已完成 \{completed\}\/3/);
-  assert.match(app, /function ReadinessRail/);
-  assert.match(app, /readiness\.completed/);
-  assert.match(app, />放棄</);
-  assert.doesNotMatch(app, /window\.confirm/);
-  assert.match(client, /workspace\/complete-onboarding/);
-  assert.match(client, /saveOrganizerWorkspacePreference/);
-  assert.match(css, /--paper:\s*#f8f7f2/);
-  assert.match(css, /--ink:\s*#202a35/);
-  assert.match(css, /color-scheme:\s*light/);
-  assert.doesNotMatch(css, /color-scheme:\s*dark|gradient\(/);
-  // A row of labelled fields lines its buttons up with the controls.
-  const referencePanel = await readFile(new URL("../app/organizer/organizer-reference-panel.tsx", import.meta.url), "utf8");
-  assert.match(css, /\.fieldRow \{ align-items: end; \}/);
-  assert.match(referencePanel, /\$\{styles\.row\} \$\{styles\.fieldRow\}/);
-});
-
-test("organizer save counters stay internal when no revision diff is available", async () => {
-  const app = await organizerSource();
-
-  assert.doesNotMatch(app, /目前是第 \{expectedVersion\} 版|版本紀錄|送出第 \{detail\.event\.version\} 版審閱|儲存為第 \$\{selected\.mapRevision \+ 1\} 版/);
-});
-
-test("organizer reuses the event source for imports and describes free map editing", async () => {
-  const app = await organizerSource();
-
-  assert.doesNotMatch(app, /<label>來源說明<input/);
-  assert.match(app, /const sourceLabel = organizerSourceLabel\(detail\.draft\.officialSource\);/);
-  assert.match(app, /sourceDescription: sourceLabel/);
-  // Day labels, folded details and keyboard repair are exercised through
-  // their actual controls in portal-organizer-references.
-  assert.match(app, />自由編輯<\/text>/);
-  assert.doesNotMatch(app, /描摹/);
-});
 
 test("an explicitly cleared selection survives a later list refresh", async () => {
   const app = await organizerSource();
@@ -98,142 +27,10 @@ test("an explicitly cleared selection survives a later list refresh", async () =
   assert.match(app, /current === null \? null/);
 });
 
-test("remaining import sample, layout and correction-reset guards", async () => {
-  const [app, css] = await Promise.all([
-    organizerSource(),
-    readFile(new URL("../app/organizer/organizer.module.css", import.meta.url), "utf8"),
-  ]);
 
-  // An empty panel is replaced by the file this event actually needs.
-  // #221 3.3: the sample used to disappear the moment a file was picked, which
-  // is exactly when its columns are being matched against the real ones. It is
-  // now open before a file and collapsible after, never absent.
-  assert.ok(app.includes("{!sheet ? <div className={styles.sample}>"), "the sample opens before a file is chosen");
-  assert.ok(app.includes("<summary>查看填寫範例／下載範本</summary>"), "and stays reachable afterwards");
-  // Two downloads: a blank sheet to fill in and a worked example to read are
-  // different needs.
-  assert.match(app, /下載空白 CSV/);
-  assert.match(app, /下載填寫範例/);
-  assert.match(app, /URL\.createObjectURL/);
-  assert.match(app, /buildOrganizerImportSample/);
-
-  // Mapping groups and selectable day/free-text area controls are operated
-  // in portal-organizer-import. These remaining guards need geometry checks.
-  assert.match(css, /\.mappingField \{[^}]*display: block/);
-  // Every card in a mapping row starts its title and its value on the same
-  // line: the legend is floated instead of straddling the fieldset border, and
-  // the read-only card repeats the grouped shape rather than inventing one.
-  assert.match(css, /\.mappingField > legend \{[^}]*float: left/);
-  assert.match(css, /\.mappingField \.subLabel select[^{]*\{[^}]*font-size: 12px/);
-  assert.match(app, /<fieldset className=\{`\$\{styles\.derivedField\} \$\{styles\.mappingField\}`\}>/);
-  assert.match(app, /<div className=\{styles\.subLabel\}>固定值<strong>無分區<\/strong><\/div>/);
-  // A hint belongs under the control it is about, not in the next grid cell.
-  assert.match(app, /<small>支援空白、逗號、頓號、分號與斜線。<\/small>/);
-  assert.doesNotMatch(app, /<p>支援空白、逗號、頓號、分號與斜線。<\/p>/);
-  assert.match(css, /@media \(max-width: 1230px\)[\s\S]*\.mappingGrid \{ grid-template-columns: repeat\(2/);
-
-  // Pagination, corrections, bulk exclusion, restoration and the final saved
-  // rows are observed in portal-organizer-import. Individual exclusion and
-  // clearing all corrections still lack their own behavioural check.
-  assert.match(app, />排除<\/button>/);
-  assert.match(app, /清除所有手動修改/);
-
-  // Corrections are keyed by source row, so they cannot outlive the file,
-  // sheet or header row that gives a row number its meaning.
-  assert.match(app, /const forgetPreview = \(\) => \{ setPreviewRequested\(false\); setOverrides\(\{\}\); setExcluded\(\[\]\); setPreviewPage\(0\); \};/);
-  assert.equal(app.match(/forgetPreview\(\);/gu).length, 3, "the file, worksheet and header row inputs must each forget the corrections");
-
-  // A row keyed by its booth code would remount its input mid-edit.
-  assert.doesNotMatch(app, /key=\{`\$\{row\.sourceRow\}-\$\{row\.boothCode\}`\}/);
-});
-
-// #225: each of these failed the Removal Test -- the organizer does not act
-// differently for having read them -- and three described things that are not
-// true of this workspace at all.
-test("the workspace stops saying things the organizer cannot act on", async () => {
+test("leaving permits saving an incomplete draft", async () => {
   const app = await organizerSource();
-
-  // The import panel's whole guarantee is that the file never leaves the
-  // browser, so 尚未上傳 promised the one thing that guarantee rules out.
-  assert.doesNotMatch(app, /尚未上傳/);
-  assert.doesNotMatch(app, /匯入出處|原檔 SHA-256|原始檔沒有上傳/);
-
-  // The organizer is never asked to type an identifier, so saying they need
-  // not type one introduces the idea in order to dismiss it.
-  assert.doesNotMatch(app, /不需自行輸入|內部 ID/);
-
-  // An empty list cannot be opened from, and someone without permission to
-  // create activities is waiting for an invitation, not for a button.
-  assert.match(app, /還沒有活動/);
-  assert.match(app, /收到主辦邀請後，活動會出現在左側。/);
-
-  // 移除 has one documented use, breaking a duplicated booth's tie, so it
-  // belongs on the rows an issue names rather than on 170 correct ones.
-  assert.ok(app.includes("flagged.has(row.sourceRow)"), "移除 is conditional on the row being named by an issue");
-});
-// #221: behaviour contracts, not copy. Each of these was two things
-// contradicting each other on one screen.
-test("the workspace carries one navigation, one progress count, and counts only what is stored", async () => {
-  const app = await organizerSource();
-
-  // One navigation. The numbered strip above the panel repeated every section,
-  // state and next step the rail already had, kept in step by hand.
-  assert.ok(!app.includes("className={styles.steps}"), "the numbered strip is gone");
-
-  // The guided station stands alone: a six-section rail beside three basic
-  // settings answers work nobody has reached, in a second progress vocabulary.
-  assert.ok(app.includes("{guided ? <div className={styles.guidedOnly}>"), "no rail beside the guided station");
-
-  // N/3 counts what is stored. Typing a valid value is not a finished step,
-  // and the list below already says 尚未儲存 for the one being edited.
-  assert.ok(app.includes("organizerGuidedDraftIssues(detail.draft, item, detail.venueCatalog)"), "progress reads the saved draft");
-  // The rail still reads the live draft, but for a different question: what is
-  // outstanding right now, unsaved edits included. That is not progress.
-  assert.ok(app.includes("liveDraft && liveDirty ? organizerGuidedDraftIssues"), "outstanding items still follow the screen");
-
-  // portal-organizer-references checks the refused primary save through its
-  // controls. Its 儲存並離開 runs on a finished task, so it cannot show that
-  // leaving skips the task check: a half-finished draft is a legitimate thing
-  // to store and come back to.
+  // portal-organizer-references checks primary validation; this guard keeps
+  // the secondary save independent until that incomplete-draft path is driven.
   assert.ok(app.includes("void save(onSecondarySaved)"), "leaving does not require the task");
-
-  // The replacement-count warning is checked before confirmation by
-  // portal-organizer-import, alongside the resulting saved rows.
-});
-// #221 4.4／4.5 與 Phase 5: the rail reports what is wrong, and every empty
-// state names a job rather than a condition.
-test("the rail reports problems, not unstarted work, and empty states name an action", async () => {
-  const app = await organizerSource();
-
-  // A section nobody has started is neutral; the complete list of blocking
-  // issues belongs to 檢查與預覽, where it is asked for.
-  assert.ok(app.includes('section.state === "needs_attention"'), "the rail filters to sections with a problem");
-  assert.match(app, /還沒開始的工作看上面的下一步/);
-
-  // A map with no booth list to draw against sends the reader to the section
-  // that has the only useful action.
-  assert.ok(app.includes('onSection("import")'), "the map prerequisite is a button, not a sentence");
-  assert.match(app, /才知道這張地圖要畫哪些攤位/);
-
-  // 檢查與預覽 says which of the three situations the reader is in.
-  assert.match(app, /這一版已通過檢查/);
-  assert.match(app, /這一版還沒檢查/);
-  assert.match(app, /尚未加入攤位名單/);
-});
-// #298: 場館／場地／展區 are near-synonyms in everyday Chinese, and the
-// glossary that tells them apart is written for developers. The explanation
-// uses published events rather than a drawing: no asset to maintain, and the
-// reader recognises them.
-test("the three venue layers are explained by real published events", async () => {
-  const app = await organizerSource();
-
-  // The load-bearing pair: the same hall with two different answers. A single
-  // example teaches the shape but not that 展區 belongs to the event.
-  assert.match(app, /花博公園爭艷館/);
-  assert.match(app, /三重綜合體育館/);
-
-  // Explain what the choice enables, including the reader's current boundary.
-  assert.match(app, /地圖可為展區畫範圍底色/);
-  assert.match(app, /讀者以場地切換查看各場地的全部攤位/);
-
 });

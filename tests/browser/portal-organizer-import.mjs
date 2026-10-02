@@ -6,6 +6,7 @@
 // uploading a private workbook or writing a large fixture into D1.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { ADMIN, clearMail, loginLink } from "./support/portal.mjs";
 import { start } from "./support/journey.mjs";
 import { selectMatrix } from "./support/matrix.mjs";
@@ -302,8 +303,47 @@ try {
 
   // More than a page of rejected rows must be individually reachable and recoverable.
   await list.getByRole("button", { name: "匯入檔案", exact: true }).click();
+  // Corrections refer to source row numbers. A new file, sheet or header must
+  // discard both edits and exclusions, even when row numbers are reused.
+  const sourceFile = organizer.getByLabel(/^來源檔案/);
+  const resetForm = organizer.getByRole("group", { name: "匯入檔案與欄位對應", exact: true });
+  const workbook = fileURLToPath(new URL("./support/import-reset.xlsx", import.meta.url));
+  await sourceFile.setInputFiles(workbook);
+  await resetForm.getByLabel("標題列", { exact: true }).fill("2");
+  const previewResetSource = async () => {
+    await resetForm.getByRole("button", { name: "下一步：欄位對照", exact: true }).click();
+    await resetForm.getByRole("group", { name: "活動日", exact: true }).getByLabel("固定值").selectOption("day-1");
+    await resetForm.getByRole("group", { name: "場地", exact: true }).getByLabel("固定值").selectOption("space-a");
+    await resetForm.getByRole("group", { name: "展區", exact: true }).getByLabel("固定值").fill("版攤活動");
+    await resetForm.getByLabel("攤位代碼", { exact: true }).selectOption("0");
+    await resetForm.getByLabel("社團名稱", { exact: true }).selectOption("1");
+    await resetForm.getByRole("button", { name: "預覽對應結果", exact: true }).click();
+  };
+  await previewResetSource();
+  for (const change of ["sheet", "header", "file"]) {
+    await resetForm.getByLabel("來源列 3 的社團名稱", { exact: true }).fill("舊來源手動修正");
+    await resetForm.getByLabel("來源列 3 的社團名稱", { exact: true }).press("Tab");
+    await resetForm.getByRole("button", { name: "排除", exact: true }).last().click();
+    await resetForm.getByRole("button", { name: "已排除 1", exact: true }).waitFor();
+    await resetForm.getByRole("button", { name: "上一步", exact: true }).click();
+    await resetForm.getByRole("button", { name: "預覽對應結果", exact: true }).waitFor();
+    await resetForm.getByRole("button", { name: "上一步", exact: true }).click();
+    await resetForm.getByRole("button", { name: "下一步：欄位對照", exact: true }).waitFor();
+    if (change === "sheet") await resetForm.getByLabel(/^工作表/).selectOption("Second");
+    if (change === "header") await resetForm.getByLabel("標題列", { exact: true }).fill("1");
+    if (change === "file") await sourceFile.setInputFiles({ name: "replacement.csv", mimeType: "text/csv", buffer: Buffer.from("攤位,社團\n攤位,社團\nC001,\nC002,\n") });
+    await previewResetSource();
+    await resetForm.getByRole("button", { name: "已排除 0", exact: true }).waitFor();
+    assert.equal(await resetForm.getByText("舊來源手動修正", { exact: true }).count(), 0, `${change}: old correction was discarded`);
+    // Source row 3 exists in every variant and is rejected again after reset.
+    assert.equal(await resetForm.getByLabel("來源列 3 的社團名稱", { exact: true }).inputValue(), "", `${change}: original source value returns`);
+  }
+  await resetForm.getByRole("button", { name: "上一步", exact: true }).click();
+  await resetForm.getByRole("button", { name: "預覽對應結果", exact: true }).waitFor();
+  await resetForm.getByRole("button", { name: "上一步", exact: true }).click();
+  await resetForm.getByRole("button", { name: "下一步：欄位對照", exact: true }).waitFor();
   const csv = "攤位,社團\n" + Array.from({ length: 105 }, (_, index) => `C${String(index + 1).padStart(3, "0")},`).join("\n");
-  await organizer.getByLabel("來源檔案", { exact: true }).setInputFiles({ name: "corrections.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await organizer.getByLabel(/^來源檔案/).setInputFiles({ name: "corrections.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
   await organizer.getByRole("button", { name: "下一步：欄位對照", exact: true }).click();
   const form = organizer.getByRole("group", { name: "匯入檔案與欄位對應", exact: true });
   const dayMapping = form.getByRole("group", { name: "活動日", exact: true });

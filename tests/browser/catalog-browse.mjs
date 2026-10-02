@@ -37,7 +37,15 @@ try {
   await page.getByRole("button", { name: /詳細搜尋/ }).click();
   const dialog = page.getByRole("dialog", { name: "詳細搜尋條件" });
   await dialog.waitFor();
+  const firstControl = dialog.getByRole("combobox").first();
+  const lastControl = dialog.getByRole("button", { name: "套用搜尋", exact: true });
+  assert.equal(await firstControl.evaluate(node => node === document.activeElement), true, "opening moves focus into the dialog");
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await lastControl.evaluate(node => node === document.activeElement), true, "reverse Tab wraps inside the dialog");
+  await page.keyboard.press("Tab");
+  assert.equal(await firstControl.evaluate(node => node === document.activeElement), true, "forward Tab wraps inside the dialog");
   await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden" });
   assert.equal(await page.getByRole("button", { name: /詳細搜尋/ }).evaluate((button) => button === document.activeElement), true);
   await page.keyboard.press("Enter"); await dialog.waitFor();
   await dialog.getByRole("button", { name: "只看 R18", exact: true }).click();
