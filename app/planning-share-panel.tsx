@@ -10,6 +10,7 @@ import {
   addSharedToPlan,
   projectSharedList,
   readSharedListFromHash,
+  SHARE_MAX_ITEMS,
   resolveSharedList,
   sharedListFile,
   sharedListUrl,
@@ -83,8 +84,9 @@ export function SharePanel({ eventId, document }: { eventId: string; document: P
       {candidates.map((item) => <label key={itemKey(item)}><input type="checkbox" checked={!unchecked.has(itemKey(item))} onChange={() => toggle(itemKey(item))} />{item.label}</label>)}
     </fieldset>
     <div className={styles.confirmActions}>
-      <button className={styles.primary} disabled={selected.length === 0} onClick={create}>產生分享連結</button>
+      <button className={styles.primary} disabled={selected.length === 0 || selected.length > SHARE_MAX_ITEMS} onClick={create}>產生分享連結</button>
     </div>
+    {selected.length > SHARE_MAX_ITEMS && <p className={styles.errorText}>一次最多分享 {SHARE_MAX_ITEMS} 個，請取消勾選 {selected.length - SHARE_MAX_ITEMS} 個。</p>}
     {link && (link.fits
       ? <div className={styles.shareLink}>
         <input readOnly aria-label="分享連結" value={link.url} onFocus={(event) => event.currentTarget.select()} />
@@ -144,11 +146,17 @@ function SharedListBody({ list, eventId, document, update, blocked }: { list: Sh
   const [message, setMessage] = useState("");
 
   if (!event) return <p className={styles.errorText} role="alert">這份清單的活動目前沒有公開。</p>;
-  if (list.eventId !== eventId) return <div className={styles.section}><p>這份清單是「{event.name}」的攤位。</p>
-    <a className={styles.linkButton} href={sharedListUrl(window.location.origin, list).url}>到 {event.name} 查看</a></div>;
+  if (list.eventId !== eventId) {
+    const link = sharedListUrl(window.location.origin, list);
+    // A list too long for a link only travels as the file it came in.
+    return <div className={styles.section}><p>這份清單是「{event.name}」的攤位。</p>
+      {link.fits ? <a className={styles.linkButton} href={link.url}>到 {event.name} 查看</a>
+        : <p>請到 {event.name} 的「資料管理」，用「匯入計畫」再開啟這個分享檔。</p>}</div>;
+  }
 
   const circleIds = [...new Set(usable.map((item) => item.circleId))];
-  const onDay = circleIds.filter((circleId) => usable.some((item) => item.circleId === circleId && item.records.some((record) => String(record.placement.day) === day)));
+  // `days` are the days the circle has an active booth now; display records may be an old one.
+  const onDay = circleIds.filter((circleId) => usable.some((item) => item.circleId === circleId && item.days.some((value) => String(value) === day)));
   return <>
     <p className={styles.notice}>先看看再決定；按下加入前不會改動你的收藏與行程。</p>
     {resolved.status !== "ready" && <p className={styles.notice} role="status">{resolved.status === "loading" ? "正在讀取活動資料…" : "活動資料讀取失敗，暫時無法核對這份清單。"}</p>}

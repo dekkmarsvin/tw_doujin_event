@@ -23,7 +23,8 @@ export type ResolvedSharedItem = SharedList["items"][number] & {
 export const SHARE_URL_MAX_BYTES = 8192;
 
 const MAX_FILE_BYTES = 256 * 1024;
-const MAX_ITEMS = 500;
+/** A share link or file never carries more items; the picker stops at the same number. */
+export const SHARE_MAX_ITEMS = 500;
 const itemKey = (circleId: string, day: EventDayKey | null) => JSON.stringify([circleId, day === null ? null : String(day)]);
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const onlyKeys = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every((key) => keys.includes(key));
@@ -68,7 +69,7 @@ function validateList(value: unknown, file = false): SharedListReadResult {
   if (file && value.kind !== "circle-share/1") return failure("不支援的分享檔格式。");
   if (value.version !== 1) return failure("不支援的分享清單版本。");
   if (typeof value.eventId !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(value.eventId)) return failure("分享清單的活動代碼不正確。");
-  if (!Array.isArray(value.items) || value.items.length > MAX_ITEMS) return failure("分享清單最多可包含 500 個項目。");
+  if (!Array.isArray(value.items) || value.items.length > SHARE_MAX_ITEMS) return failure("分享清單最多可包含 500 個項目。");
   const items: SharedList["items"] = [];
   for (const item of value.items) {
     if (!isObject(item) || !onlyKeys(item, ["circleId", "day"])
@@ -93,7 +94,7 @@ export function readSharedListFromHash(hash: string): SharedListReadResult | nul
     if (encodePayload(text) !== payload) return failure("分享連結格式不正確。");
     const value: unknown = JSON.parse(text);
     if (!isObject(value) || !onlyKeys(value, ["v", "e", "c"]) || !Array.isArray(value.c)) return failure("分享清單格式不正確。");
-    if (value.c.length > MAX_ITEMS) return failure("分享清單最多可包含 500 個項目。");
+    if (value.c.length > SHARE_MAX_ITEMS) return failure("分享清單最多可包含 500 個項目。");
     const items = [];
     for (const tuple of value.c) {
       if (!Array.isArray(tuple) || tuple.length < 1 || tuple.length > 2) return failure("分享清單格式不正確。");
