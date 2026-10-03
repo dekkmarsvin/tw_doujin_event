@@ -4,6 +4,9 @@ import { useRef, useState } from "react";
 import { getCircleCatalogState } from "./circle-records";
 import { PUBLISHED_EVENTS } from "./event-catalog";
 import { inspectPlanningStorage, type PlanningDocument } from "./planning-store";
+import { readSharedListFile } from "./planning-share";
+import { downloadText } from "./download-text";
+import { openSharedList } from "./planning-share-panel";
 import {
   exportPlanningCsv,
   exportPlanningJson,
@@ -19,14 +22,6 @@ import styles from "./planning-tools.module.css";
 /** Same limit the parser enforces; checked first so a huge file is never read into memory. */
 const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 
-export function downloadText(name: string, text: string, type: string) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 const backupName = () => `場刊Map-規劃備份-${new Date().toISOString().slice(0, 10)}.json`;
 const eventName = (eventId: string) => PUBLISHED_EVENTS.find((event) => event.id === eventId)?.name ?? eventId;
@@ -67,6 +62,13 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
     setResult(null); setReplacing("off"); setMode("keep");
     if (file.size > MAX_BACKUP_BYTES) { setPending(null); setResult({ kind: "error", message: "檔案超過 10 MiB，沒有復原任何資料。" }); return; }
     const text = await file.text();
+    // A friend's share file opens its own read-only preview instead (#415).
+    if (/"kind"\s*:\s*"circle-share\/1"/.test(text.slice(0, 200))) {
+      const shared = readSharedListFile(text);
+      if (inputRef.current) inputRef.current.value = "";
+      if (shared.ok) { setPending(null); openSharedList(shared.list); } else setResult({ kind: "error", message: `無法開啟分享檔：${shared.error}` });
+      return;
+    }
     const base = stored().document;
     setPending({ fileName: file.name, text, base, preview: previewPlanningBackup(text, base, catalogStatus) });
   }

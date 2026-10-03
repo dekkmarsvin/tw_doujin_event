@@ -60,3 +60,15 @@
 /* 準備離線使用 (#415) */
 .offlineStatus { grid-column:1/-1; font-size:calc(12px * var(--ui-font-scale,1)); }
 .offlineStatus p { margin:0; }
+/* 分享我選的攤位 (#415) */
+.sharePick { grid-column:1/-1; display:grid; gap:6px; max-height:220px; margin:0; padding:8px 10px; overflow:auto; border:1px solid #e6e9e4; border-radius:8px; }
+.sharePick legend { padding:0 4px; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; }
+.sharePick label { display:flex; gap:6px; align-items:center; font-size:calc(12px * var(--ui-font-scale,1)); }
+.section>.confirmActions { grid-column:1/-1; }
+.shareLink { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:calc(12px * var(--ui-font-scale,1)); }
+.shareLink input { flex:1 1 220px; min-width:0; min-height:32px; padding:0 8px; border:1px solid #d4d9d4; border-radius:7px; font-size:calc(12px * var(--ui-font-scale,1)); }
+.shareLink span { flex:1 1 220px; color:#59626c; }
+.sharedItems { display:grid; gap:6px; margin:12px 20px; padding:0; list-style:none; }
+.sharedItems li { display:grid; gap:2px; padding:8px 10px; border:1px solid #e6e9e4; border-radius:8px; background:#fff; }
+.sharedItems b { font-size:calc(14px * var(--ui-font-scale,1)); }
+.sharedItems small { color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }

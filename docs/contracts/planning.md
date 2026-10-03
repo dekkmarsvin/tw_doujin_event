@@ -2,8 +2,8 @@
 
 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。
 
-**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、`app/reader-planning.tsx`
-**測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`
+**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、[`app/planning-share.ts`](../../app/planning-share.ts)、[`app/planning-share-panel.tsx`](../../app/planning-share-panel.tsx)、[`app/download-text.ts`](../../app/download-text.ts)、`app/reader-planning.tsx`
+**測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`、`tests/planning-share.test.mjs`
 
 規劃資料只儲存在使用者當下的瀏覽器，不跨裝置同步。這是刻意的隱私姿態，不是尚未完成的功能——決策與代價見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 
@@ -139,6 +139,13 @@ type PlanningDocument = {
   - 瀏覽器保有無法讀取的舊資料（受保護的原始字串）時不開放匯入。
   - 本站未公開的活動無法從閱讀端開啟，其收藏與行程列在「目前無法匹配的規劃資料」，可逐筆移除並隨完整備份匯出。
 - **仍屬 P2**：CSV 匯入、外部服務匯入（[資料匯入契約](./data-import.md)、[ADR-0005](../adr/0005-import-stays-p2-export-only.md)），以及登入後持續同步與協作清單。轉移是單次的，之後兩台裝置各自修改。
+
+## 分享我選的攤位
+
+- 讀者在單一活動選取收藏／行程，先看「將分享的內容」再產生唯讀清單連結（[ADR-0079](../adr/0079-shared-booth-lists-travel-in-the-url-fragment.md)）。
+- 分享內容只有版本、活動 ID、社團 ID、必要的活動日與清單順序；私人備註、群組、購買項目、預算、已走訪／下一站、帳號、時間戳與瀏覽紀錄一律不進入連結或分享檔。
+- 連結以 URL fragment 承載，上限 8 KiB；超過時改提供同一白名單格式的分享檔（`circle-share/1`），不截斷、不改用完整備份。連結可被轉傳、無法撤銷或更新，產生前明說。
+- 接收者開啟連結或載入分享檔時先看唯讀預覽，不寫入；項目分為可用、已退出、已移動、目前無法解析，不以同名社團代替未知 ID。按「加入收藏」或選日期「加入行程」才寫入：只加入尚未存在的項目，行程新增為「待前往」接在既有順序之後，不改動既有備註、順序與下一站。
 
 ## 驗收條件
 
