@@ -7,7 +7,7 @@ import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } fro
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
 import { MapAccessBadge, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
-import { MapNoteDrawing, MapPathDrawing } from "./map-annotations";
+import { MapNoteDrawing, MapPathDrawing } from "./map-annotation-drawing";
 import { MapShapeDrawing } from "./map-shape-drawing";
 
 export type MapSlotView = {

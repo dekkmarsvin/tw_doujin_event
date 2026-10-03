@@ -2,7 +2,7 @@
 
 **實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
 **測試**：`tests/map-shape-geometry.test.mjs`
-**實作**：[`app/map-annotations.tsx`](../../app/map-annotations.tsx)
+**實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)
 **測試**：`tests/map-annotations.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
 
 主辦單位工作區與地圖貢獻控制面共用同一個 `MapLayoutEditor`。本契約管兩個入口共同的畫布編輯行為；草稿的保存、權限、版本與審閱各見[主辦單位工作區契約](./organizer-workspace.md#地圖)與[地圖貢獻控制面契約](./map-contributions.md)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。

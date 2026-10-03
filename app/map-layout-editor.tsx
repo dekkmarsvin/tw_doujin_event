@@ -7,7 +7,8 @@ import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBox
 import { overlappingSlotCodes } from "./map-contribution-draft";
 import { assignShapeBox, cloneShape, isSimplePolygon, polygonBounds, shapeInterior, type MapShape } from "./map-shape-geometry";
 import { MapShapeDrawing } from "./map-shape-drawing";
-import { annotationBoothConflicts, MAP_NOTE_MAX_LENGTH, MAP_PATH_MAX_POINTS, MapNoteDrawing, MapPathDrawing, transformPath, validNoteText, validPathPoints } from "./map-annotations";
+import { annotationBoothConflicts, MAP_NOTE_MAX_LENGTH, MAP_PATH_MAX_POINTS, transformPath, validNoteText, validPathPoints } from "./map-annotations";
+import { MapNoteDrawing, MapPathDrawing } from "./map-annotation-drawing";
 import type { MapBoothScope } from "./map-booth-coverage";
 import { MapBoothList } from "./map-booth-list";
 import MapRecognitionPanel from "./map-recognition-panel";

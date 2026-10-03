@@ -4,7 +4,7 @@
 
 **實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
 **測試**：`tests/map-shape-geometry.test.mjs`
-**實作**：[`app/map-annotations.tsx`](../../app/map-annotations.tsx)、[`app/staged-event-data.ts`](../../app/staged-event-data.ts)
+**實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)、[`app/staged-event-data.ts`](../../app/staged-event-data.ts)
 **測試**：`tests/map-annotations.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
 
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)

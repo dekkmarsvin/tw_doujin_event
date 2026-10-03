@@ -6,7 +6,8 @@ import { createServer } from "vite";
 import { parseFragment } from "parse5";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { annotationBoothConflicts, MapNoteDrawing, MapPathDrawing, pathArrowhead, pathBounds, transformPath, validNoteText, validPathPoints } = await vite.environments.ssr.runner.import("/app/map-annotations.tsx");
+const { annotationBoothConflicts, pathArrowhead, pathBounds, transformPath, validNoteText, validPathPoints } = await vite.environments.ssr.runner.import("/app/map-annotations.ts");
+const { MapNoteDrawing, MapPathDrawing } = await vite.environments.ssr.runner.import("/app/map-annotation-drawing.tsx");
 after(() => vite.close());
 const booth = { code: "A01", rect: { x: 40, y: 40, width: 20, height: 20 } };
 
