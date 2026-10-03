@@ -40,7 +40,8 @@ try {
             viewport: { width: innerWidth, height: innerHeight }, height: node.getBoundingClientRect().height,
             title: h1.textContent, titleRect: rect(h1), titleOverflow: h1.scrollWidth - h1.clientWidth,
             link: rect(link), search: rect(search), scale: rect(scale),
-            brandIcon: rect(node.querySelector(".brand>span")), brandTitle: rect(node.querySelector(".brand b")),
+            brandIcon: rect(node.querySelector(".brand>span")), brandTitle: rect(node.querySelector(".brand b")), brand: rect(node.querySelector(".brand")),
+            login: rect(node.querySelector("a.reader-login")),
             event: rect(node.querySelector(".event")), toolsMenu: rect(node.querySelector("summary")),
             switch: rect(node.querySelector('[class*="eventSwitch"]')),
             toolHeights: tools.map((el) => el.getBoundingClientRect().height),
@@ -52,9 +53,12 @@ try {
         assert.equal(header.titleOverflow, 0, "the event title is not clipped");
         if (width <= 760) {
           const centre = (box) => box.top + box.height / 2;
-          assert.ok(Math.abs(centre(header.brandIcon) - centre(header.brandTitle)) < 1, "brand icon aligns with the title independently of event navigation");
+          // Below 420px the brand name gives way to the event name (#488); only the mark remains.
+          if (header.brandTitle.width > 0) assert.ok(Math.abs(centre(header.brandIcon) - centre(header.brandTitle)) < 1, "brand icon aligns with the title independently of event navigation");
+          else assert.ok(width <= 420, "the brand name is only hidden on narrow phones");
           assert.equal(header.brandIcon.width, 34, "brand icon cannot shrink");
-          assert.ok(header.brandTitle.right <= header.event.left && header.event.right <= header.toolsMenu.left, "event uses the space between brand and tools");
+          assert.ok(header.brand.right <= header.event.left && header.event.right <= header.toolsMenu.left, "event uses the space between brand and tools");
+          assert.ok(header.login.width > 0 && header.toolsMenu.right <= header.login.left && header.login.right <= width, "登入 stays visible beside the tools menu (#439)");
           assert.ok(header.event.top < header.brandIcon.bottom && header.event.top < header.toolsMenu.bottom, "event shares the first row with brand and tools");
           assert.ok(header.event.bottom <= header.search.top && header.toolsMenu.bottom <= header.search.top, "search follows the entire top row");
           if (header.switch) assert.ok(header.switch.right <= header.event.right && header.switch.bottom <= header.event.bottom, "switch prompt fits inside the event link, clear of tools");
@@ -66,7 +70,7 @@ try {
             title.textContent = "長活動名稱換行驗證".repeat(12);
             const result = {
               icon: node.querySelector(".brand>span").getBoundingClientRect().toJSON(),
-              title: node.querySelector(".brand b").getBoundingClientRect().toJSON(),
+              title: node.querySelector(".brand").getBoundingClientRect().toJSON(),
               event: node.querySelector(".event").getBoundingClientRect().toJSON(),
               name: title.getBoundingClientRect().toJSON(),
               nameOverflow: title.scrollWidth - title.clientWidth,
@@ -78,7 +82,7 @@ try {
             return result;
           });
           assert.equal(wrapped.icon.top, header.brandIcon.top, "wrapping event name does not move icon");
-          assert.equal(wrapped.title.top, header.brandTitle.top, "wrapping event name does not move brand title");
+          assert.equal(wrapped.title.top, header.brand.top, "wrapping event name does not move the brand");
           assert.ok(wrapped.name.height > header.titleRect.height, "stress name actually wraps");
           assert.equal(wrapped.nameOverflow, 0, "wrapped title is not clipped");
           assert.ok(wrapped.title.right <= wrapped.event.left && wrapped.name.right <= wrapped.tools.left, "long name stays between brand and tools");
