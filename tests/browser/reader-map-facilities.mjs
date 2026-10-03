@@ -168,6 +168,9 @@ try {
       { id: "toilet-south", kind: "toilet", x: 180, y: 1400 },
       { id: "toilet-north", kind: "toilet", x: 2150, y: 300, label: "女廁" },
       { id: "desk", kind: "information", x: 400, y: 500, label: "大會服務台" },
+      { id: "bags", kind: "cloakroom", x: 500, y: 1400 },
+      { id: "tickets", kind: "ticket-office", x: 700, y: 1400 },
+      { id: "changing", kind: "changing-room", x: 900, y: 1400 },
     ];
     const page = await journey.mapPage({ event: "ff47", viewport: { width: 1440, height: 900 }, routes: async page => {
       await page.route("**/data/events/ff47/map.json", async route => {
@@ -180,19 +183,34 @@ try {
     await page.getByRole("button", { name: "查看全場", exact: true }).click();
     await settle(page);
     const badges = await page.locator('[data-marker^="service:"]').evaluateAll(nodes => nodes.map(node => [node.getAttribute("role"), node.getAttribute("aria-label"), Math.round(node.querySelector("rect").getBoundingClientRect().width)]));
-    assert.deepEqual(badges, [["img", "廁所", 21], ["img", "女廁，廁所", 21], ["img", "大會服務台", 21]], "each service point is a badge named by its type");
+    assert.deepEqual(badges, [["img", "廁所", 21], ["img", "女廁，廁所", 21], ["img", "大會服務台", 21], ["img", "寄物處", 21], ["img", "售票處", 21], ["img", "更衣室", 21]], "each service point is a badge named by its type");
     checkBounds(await markers(page), 1, "1440x900 service points fitted");
     await page.getByRole("button", { name: "設施", exact: true }).click();
     const panel = page.getByRole("group", { name: "場內設施" });
     await panel.waitFor();
     const group = panel.getByRole("group", { name: "服務設施" });
-    assert.deepEqual(await group.getByRole("button").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))), ["廁所", "女廁，廁所", "大會服務台"], "toilets are listed together, an unnamed one by its type");
-    assert.match(await panel.getByRole("group", { name: "圖例" }).innerText(), /廁所[\s\S]*服務台/);
+    assert.deepEqual(await group.getByRole("button").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))), ["廁所", "女廁，廁所", "大會服務台", "寄物處", "售票處", "更衣室"], "toilets are listed together, an unnamed one by its type");
+    assert.match(await panel.getByRole("group", { name: "圖例" }).innerText(), /廁所[\s\S]*服務台[\s\S]*寄物處[\s\S]*售票處[\s\S]*更衣室/);
     await journey.capture(page, "facilities-service-points-list");
     await group.getByRole("button", { name: "女廁，廁所", exact: true }).click();
     await settle(page);
     assert.equal(await page.locator('[data-marker="service:toilet-north"] [class*="locatedRing"]').count(), 1, "the located service point is ringed");
     await journey.capture(page, "facilities-service-points-located");
+    for (const [name, id] of [["售票處", "tickets"], ["更衣室", "changing"]]) {
+      const before = await markers(page), url = page.url();
+      await page.getByRole("button", { name: "設施", exact: true }).click();
+      const entry = panel.getByRole("group", { name: "服務設施" }).getByRole("button", { name, exact: true });
+      await entry.focus(); await page.keyboard.press("Enter");
+      await settle(page);
+      assert.equal(await panel.count(), 0);
+      assert.equal((await markers(page)).zoom, before.zoom, "locating the new service keeps the zoom");
+      assert.equal(page.url(), url, "locating the new service keeps the booth selection");
+      assert.equal(await page.locator(`[data-marker="service:${id}"] [class*="locatedRing"]`).count(), 1);
+      await journey.capture(page, `facilities-${id}-located`);
+    }
+    const booth = page.locator('[data-slot-code="A01"]');
+    await booth.focus(); await page.keyboard.press("Enter");
+    assert.equal(new URL(page.url()).searchParams.get("selectedBooth"), "A01", "services do not change booth selection");
     await page.close();
   }
 

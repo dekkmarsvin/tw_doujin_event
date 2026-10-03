@@ -49,5 +49,10 @@ export function MapServiceBadge({ kind }: { kind: MapServicePointKind }) {
     {kind === "first-aid" && <path d="M0-6V6M-6 0H6" {...glyph} strokeWidth={3.2} strokeLinecap="butt" />}
     {kind === "stairs" && <path d="M-7 6H-3.5V2.5H0V-1H3.5V-4.5H7" {...glyph} strokeWidth={2} />}
     {kind === "elevator" && <path d="M-3.5-1.5 0-6 3.5-1.5ZM-3.5 1.5 0 6 3.5 1.5Z" fill="#fff" />}
+    {kind === "ticket-office" && <>
+      <path d="M-7-5H7V-2A2 2 0 0 0 7 2V5H-7V2A2 2 0 0 0-7-2Z" {...glyph} strokeWidth={1.6} />
+      <path d="M2-3V-2M2-.5V.5M2 2V3" {...glyph} strokeWidth={1.3} />
+    </>}
+    {kind === "changing-room" && <path d="M-3-6A3 3 0 0 0 3-6L7-3 5 0 3-1V6H-3V-1L-5 0-7-3Z" {...glyph} strokeWidth={1.6} />}
   </>;
 }

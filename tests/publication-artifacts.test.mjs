@@ -265,7 +265,12 @@ test("an unnamed official source is published as the event's official source", a
 
 test("service points in an approved map survive publication and staging into the reader's map", async () => {
   const snapshot = await sample();
-  const servicePoints = [{ id: "toilet", kind: "toilet", x: 20, y: 20 }, { id: "desk", kind: "information", x: 60, y: 20, label: "大會服務台" }];
+  const servicePoints = [
+    { id: "toilet", kind: "toilet", x: 20, y: 20 },
+    { id: "desk", kind: "information", x: 60, y: 20, label: "大會服務台" },
+    { id: "tickets", kind: "ticket-office", x: 20, y: 80 },
+    { id: "changing", kind: "changing-room", x: 60, y: 80, label: "簡易更衣室" },
+  ];
   snapshot.maps[0].content.layout.servicePoints = servicePoints;
   snapshot.maps[0].content.layout.accessPoints = [{ id: "side", kind: "both", direction: "east", x: 5, y: 50, label: "側門" }];
   const approved = source(snapshot);

@@ -235,8 +235,10 @@ test("a version mismatch names the template the way a person saw it", () => {
 test("service points are an optional part of the draft shape and of the candidate diff", () => {
   const toilet = { id: "toilet", kind: "toilet", x: 10, y: 10 };
   const named = { id: "aid", kind: "first-aid", x: 190, y: 90, label: "北側醫護站" };
-  const withServices = { ...layout, servicePoints: [toilet, named] };
-  assert.deepEqual(parseMapContributionDraftContent(content(withServices))?.layout.servicePoints, [toilet, named]);
+  const tickets = { id: "tickets", kind: "ticket-office", x: 80, y: 90 };
+  const changing = { id: "changing", kind: "changing-room", x: 120, y: 90, label: "更衣與寄物區" };
+  const withServices = { ...layout, servicePoints: [toilet, named, tickets, changing] };
+  assert.deepEqual(parseMapContributionDraftContent(content(withServices))?.layout.servicePoints, [toilet, named, tickets, changing]);
   assert.equal(parseMapContributionDraftContent(content(layout))?.layout.servicePoints, undefined, "a draft saved before service points stays as it was");
   for (const invalid of [
     { ...toilet, colour: "red" },
@@ -248,6 +250,6 @@ test("service points are an optional part of the draft shape and of the candidat
   assert.equal(parseMapContributionDraftContent(content({ ...layout, servicePoints: [toilet, { ...named, id: "toilet" }] })), null, "ids are unique");
   assert.equal(parseMapContributionDraftContent(content({ ...layout, servicePoints: {} })), null);
   const previous = { eventId: "sample", revision: 1, sourceName: "sample", confidence: 1, updatedAt: "2026-01-01T00:00:00.000Z", layout: { ...layout, servicePoints: [toilet] } };
-  const { diff } = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: { ...layout, servicePoints: [{ ...toilet, x: 12 }, named] }, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
-  assert.deepEqual(diff.changedServicePointIds, ["aid", "toilet"]);
+  const { diff } = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: { ...withServices, servicePoints: [{ ...toilet, x: 12 }, named, tickets, changing] }, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
+  assert.deepEqual(diff.changedServicePointIds, ["aid", "changing", "tickets", "toilet"]);
 });

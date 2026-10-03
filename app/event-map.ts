@@ -48,7 +48,7 @@ export type MapLandmarkKind = "enterprise" | "stage" | "other";
 
 /** Venue services a reader looks for, each drawn as one badge at a point. The
  * list is fixed: a badge a reader cannot recognise does not help them. */
-export const MAP_SERVICE_POINT_KINDS = ["toilet", "accessible-toilet", "information", "cloakroom", "first-aid", "stairs", "elevator"] as const;
+export const MAP_SERVICE_POINT_KINDS = ["toilet", "accessible-toilet", "information", "cloakroom", "first-aid", "stairs", "elevator", "ticket-office", "changing-room"] as const;
 export type MapServicePointKind = (typeof MAP_SERVICE_POINT_KINDS)[number];
 export const MAP_SERVICE_POINT_LABEL_LIMIT = 40;
 

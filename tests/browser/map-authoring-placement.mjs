@@ -67,6 +67,20 @@ try {
     await click(.55, .8);
     assert.match(await picker.inputValue(), /^service:/);
     await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("北側");
+    for (const [type, x] of [["售票處", .35], ["更衣室", .4]]) {
+      await activate("服務設施");
+      await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption({ label: type });
+      const previous = await count();
+      await click(x, .8);
+      assert.equal(await count(), previous + 1);
+      assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), type === "售票處" ? "ticket-office" : "changing-room");
+      await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+      assert.equal(await count(), previous, `${type} placement is one undo step`);
+      await editor.getByRole("button", { name: "重做已復原的編輯" }).click();
+      assert.equal(await count(), previous + 1);
+      await picker.selectOption(await picker.locator('option[value^="service:"]').last().getAttribute("value"));
+    }
+    await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("簡易更衣室");
     await journey.capture(page, `${surface}-canvas-facility-placement`);
     if (surface === "circle") {
       // With unsaved changes 提交審閱 is held back by 儲存新版本; pressing it
@@ -90,10 +104,23 @@ try {
     near(region.x + region.width / 2, source.width * .65); near(region.y + region.height / 2, source.height * .25);
     near(point.x, source.width * .75); near(point.y, source.height * .8); assert.equal(point.direction, "north");
     assert.equal(point.kind, "entrance"); assert.equal(point.label, "入口");
-    const service = state.layout.servicePoints.at(-1);
+    const [service, tickets, changing] = state.layout.servicePoints.slice(-3);
     assert.equal(service.kind, "first-aid"); assert.equal(service.label, "北側");
     near(service.x, source.width * .55); near(service.y, source.height * .8);
+    assert.equal(tickets.kind, "ticket-office"); assert.equal(tickets.label, undefined);
+    near(tickets.x, source.width * .35); near(tickets.y, source.height * .8);
+    assert.equal(changing.kind, "changing-room"); assert.equal(changing.label, "簡易更衣室");
+    near(changing.x, source.width * .4); near(changing.y, source.height * .8);
     assert.deepEqual(state.layout.rows, source.rows, "facility placement preserves all booths");
+    await page.reload();
+    if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
+    else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+    await editor.waitFor();
+    await picker.selectOption(`service:${state.layout.servicePoints.length - 1}`);
+    assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "changing-room");
+    assert.equal(await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).inputValue(), "簡易更衣室", "saved service type and name reopen");
+    await picker.selectOption(`service:${state.layout.servicePoints.length - 2}`);
+    assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "ticket-office");
     // Returning from a facility tool to the existing continuous row/slot tools
     // must still place on release, preserve numbering, and cancel cleanly.
     await activate("舞台"); await activate("排／排段");

@@ -172,6 +172,9 @@ test("service points name themselves by type and are grouped so the toilets sit 
       { id: "t1", kind: "toilet", x: 10, y: 20 },
       { id: "desk", kind: "information", x: 30, y: 20, label: "大會服務台" },
       { id: "t2", kind: "toilet", x: 50, y: 20, label: "女廁" },
+      { id: "tickets", kind: "ticket-office", x: 10, y: 80 },
+      { id: "changing", kind: "changing-room", x: 30, y: 80, label: "更衣與寄物區" },
+      { id: "bags", kind: "cloakroom", x: 50, y: 80 },
     ],
   });
   assert.deepEqual(directory.entries.map((entry) => [entry.key, entry.group, entry.label, entry.ariaLabel]), [
@@ -179,8 +182,11 @@ test("service points name themselves by type and are grouped so the toilets sit 
     ["service:t1", "service", "廁所", "廁所"],
     ["service:t2", "service", "女廁", "女廁，廁所"],
     ["service:desk", "service", "大會服務台", "大會服務台"],
+    ["service:bags", "service", "寄物處", "寄物處"],
+    ["service:tickets", "service", "售票處", "售票處"],
+    ["service:changing", "service", "更衣與寄物區", "更衣與寄物區，更衣室"],
   ]);
-  assert.deepEqual(directory.legend.map((item) => item.label), ["出入兩用", "廁所", "服務台"]);
+  assert.deepEqual(directory.legend.map((item) => item.label), ["出入兩用", "廁所", "服務台", "寄物處", "售票處", "更衣室"]);
 });
 
 test("a service point badge is an obstacle, and only a name of its own is drawn", () => {

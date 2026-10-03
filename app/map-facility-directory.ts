@@ -19,6 +19,7 @@ export type MapLegendEntry = { kind: MapAccessKind | MapServicePointKind | "pill
 export const MAP_FACILITY_TYPE_LABELS: Record<MapFacilityEntry["kind"], string> = {
   entrance: "入口", exit: "出口", both: "出入兩用",
   toilet: "廁所", "accessible-toilet": "無障礙廁所", information: "服務台", cloakroom: "寄物處", "first-aid": "醫護站", stairs: "樓梯", elevator: "電梯",
+  "ticket-office": "售票處", "changing-room": "更衣室",
   enterprise: "企業攤", stage: "舞台", other: "區域",
 };
 

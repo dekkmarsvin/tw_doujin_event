@@ -15,7 +15,7 @@
 - `rows[].label` 在同一 layout 中唯一。排號與方向由該活動的 template adapter 決定，不是共用 schema 常數。
 - slot 掛在排底下（`rows[].slots[]`，`EventMapLayout` 沒有頂層 `slots`）；`code` 在同一 layout 中唯一。slot 保存矩形 `x/y/width/height`，互動使用 slot 而非圖片座標點。
 - pillar 必須保存 `x/y/width/height`；access point 必須保存 `kind`（`entrance`、`exit` 或出入兩用的 `both`；`both` 的方向指向場內）、位置與方向。
-- `servicePoints` 是**選填**欄位：每個服務設施保存唯一 `id`、`kind`（`toilet`、`accessible-toilet`、`information`、`cloakroom`、`first-aid`、`stairs`、`elevator` 七類固定）、畫布內的 `x/y`，以及選填、40 字以內的 `label`。服務設施出現以前發布的快照沒有這個欄位，不需遷移；沒有服務設施的 layout 也不必帶空陣列。
+- `servicePoints` 是**選填**欄位：每個服務設施保存唯一 `id`、`kind`（`toilet`、`accessible-toilet`、`information`、`cloakroom`、`first-aid`、`stairs`、`elevator`、`ticket-office`、`changing-room` 九類固定）、畫布內的 `x/y`，以及選填、40 字以內的 `label`。`ticket-office` 為售票處（票券圖示）、`changing-room` 為更衣室（上衣圖示），與 `cloakroom` 寄物處（衣架圖示）分開；更衣與寄物合用區可分別放置兩種設施點並命名。編輯器、Reader 與設施清單共用圖示及名稱。服務設施出現以前發布的快照沒有這個欄位，不需遷移；沒有服務設施的 layout 也不必帶空陣列。舊七類資料維持有效，新種類須由已支援的草稿 API、Reader 與 publication Worker 一起消費。
 - `areaRegions` 是選填欄位：每塊保存唯一 `id`、所屬的匯入 `areaId`、固定淡色 palette 的 `color` 與至少三個畫布內 `points`。同一展區可有多塊不規則範圍，顏色必須一致；核准前以該活動日 × 場地所宣告的展區代碼驗證。舊地圖沒有此欄位仍有效。
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
 - **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
