@@ -1185,6 +1185,13 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   layout.landmarks.push({ id: "stage", kind: "stage", label: "舞台", rect: { x: 4, y: 4, width: 10, height: 10 } });
   layout.rows.push({ label: "A", orientation: "vertical", confidence: 1, slots: [{ code: "A01", rect: { x: 30, y: 30, width: 10, height: 10 } }] });
   layout.servicePoints = [{ id: "toilet", kind: "toilet", x: 60, y: 70 }, { id: "desk", kind: "information", x: 80, y: 70, label: "大會服務台" }];
+  layout.floor.points = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }, { x: 50, y: 80 }, { x: 50, y: 60 }, { x: 0, y: 60 }];
+  layout.landmarks[0].rect = { x: 4, y: 4, width: 20, height: 20, points: [{ x: 4, y: 4 }, { x: 24, y: 4 }, { x: 24, y: 12 }, { x: 12, y: 12 }, { x: 12, y: 24 }, { x: 4, y: 24 }] };
+  layout.rows[0].labelSide = "right";
+  layout.servicePoints.push({ id: "ticket", kind: "ticket-office", x: 80, y: 8 }, { id: "changing", kind: "changing-room", x: 90, y: 65 });
+  layout.spaceMarks = [{ id: "empty", kind: "reserved", rect: { x: 60, y: 35, width: 10, height: 10 } }, { id: "cancelled", kind: "cancelled", rect: { x: 75, y: 35, width: 10, height: 10 } }];
+  layout.notes = [{ id: "time", text: "一般入場 10:30–15:30", rect: { x: 0, y: 66, width: 55, height: 12 } }];
+  layout.paths = [{ id: "walk", points: [{ x: 0, y: 25 }, { x: 20, y: 25 }, { x: 20, y: 60 }] }];
   const authoring = { guides: [{ id: "horizontal", axis: "y", position: 22.5, locked: true }] };
   const saved = await handlers.updateOrganizerMap(request(
     `/api/organizer/events/${candidateId}/maps/${draftId}`, "PATCH",
@@ -1200,6 +1207,7 @@ test("organizer map API keeps one candidate-scoped immutable map revision stream
   const reopened = await (await handlers.getOrganizerMap(request(path, "GET", undefined, ownerCookie), candidateId, draftId)).json();
   assert.deepEqual(reopened.map.authoring, authoring);
   assert.deepEqual(reopened.map.layout.servicePoints, layout.servicePoints, "service points survive saving and reopening");
+  assert.deepEqual(reopened.map.layout, layout, "all authoring elements survive real authenticated handler and D1 save/reopen");
   const stale = await handlers.updateOrganizerMap(request(path, "PATCH", { expectedVersion: 3, expectedMapRevision: 1, layout, authoring: { guides: [] } }, ownerCookie), candidateId, draftId);
   assert.equal(stale.status, 409, "guide changes retain the existing version guard");
   const cleared = await handlers.updateOrganizerMap(request(path, "PATCH", { expectedVersion: 4, expectedMapRevision: 2, layout, authoring: { guides: [] } }, ownerCookie), candidateId, draftId);
