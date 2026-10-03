@@ -312,7 +312,8 @@ test("Admin toggle changes warm producer and delivery; reopening skips old event
     const response = await handlers.adminUpdateSiteSettings(new Request("https://map.kotoban.top/api/admin/site-settings", {
       method: "PUT", headers: { cookie: adminCookie, "content-type": "application/json" }, body: JSON.stringify({ expectedUpdatedAt: current.updatedAt,
         settings: { organizerApplicationMode: current.organizerApplicationMode, organizerAllowedEmails: current.organizerAllowedEmails,
-          accountNotificationsEnabled: enabled, adminReviewNotificationsEnabled: current.adminReviewNotificationsEnabled, publicationEnabled: current.publicationEnabled } }),
+          accountNotificationsEnabled: enabled, adminReviewNotificationsEnabled: current.adminReviewNotificationsEnabled, publicationEnabled: current.publicationEnabled,
+          contactUrl: current.contactUrl, claimReviewNotice: current.claimReviewNotice } }),
     }));
     assert.equal(response.status, 200, await response.clone().text());
   }

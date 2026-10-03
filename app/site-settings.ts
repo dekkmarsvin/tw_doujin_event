@@ -7,6 +7,10 @@ export type SiteSettingsInput = {
   accountNotificationsEnabled: boolean;
   adminReviewNotificationsEnabled: boolean;
   publicationEnabled: boolean;
+  /** One https link for circles and organizers to reach the maintainers; "" shows none. */
+  contactUrl: string;
+  /** Free text shown while a manual-review claim is pending; "" shows none. */
+  claimReviewNotice: string;
 };
 export type SiteSettings = SiteSettingsInput & {
   accountNotificationsSince: number | null;
@@ -23,19 +27,42 @@ export type AdminSiteSettings = {
   services: ServiceChecks | null;
 };
 
+export const CONTACT_URL_MAX = 500;
+export const CLAIM_REVIEW_NOTICE_MAX = 200;
+
+// The value lands in an href; never let `javascript:` or `data:` through.
+function isHttpsUrl(value: string) {
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
+/** The contact fields are free input, so a refusal names them instead of the invite list. */
+export function contactSettingsProblem(value: unknown) {
+  const body = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const url = typeof body.contactUrl === "string" ? body.contactUrl.trim() : "";
+  if (url && (!isHttpsUrl(url) || url.length > CONTACT_URL_MAX)) return "聯絡連結必須是 https:// 開頭的網址。";
+  if (typeof body.claimReviewNotice === "string" && body.claimReviewNotice.trim().length > CLAIM_REVIEW_NOTICE_MAX) {
+    return `認領審核中說明不能超過 ${CLAIM_REVIEW_NOTICE_MAX} 字。`;
+  }
+  return null;
+}
+
 /** Complete form only. Server-managed epoch and attribution never come from the caller. */
 export function parseSiteSettings(value: unknown): SiteSettingsInput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
-  const keys = ["organizerApplicationMode", "organizerAllowedEmails", "accountNotificationsEnabled", "adminReviewNotificationsEnabled", "publicationEnabled"];
+  const keys = ["organizerApplicationMode", "organizerAllowedEmails", "accountNotificationsEnabled", "adminReviewNotificationsEnabled", "publicationEnabled",
+    "contactUrl", "claimReviewNotice"];
   if (Object.keys(body).some(key => !keys.includes(key)) || keys.some(key => !(key in body))) return null;
   if (!["closed", "invite_only", "public"].includes(body.organizerApplicationMode as string)
     || !Array.isArray(body.organizerAllowedEmails) || body.organizerAllowedEmails.length > 200
     || body.organizerAllowedEmails.some(email => typeof email !== "string")
-    || [body.accountNotificationsEnabled, body.adminReviewNotificationsEnabled, body.publicationEnabled].some(value => typeof value !== "boolean")) return null;
+    || [body.accountNotificationsEnabled, body.adminReviewNotificationsEnabled, body.publicationEnabled].some(value => typeof value !== "boolean")
+    || typeof body.contactUrl !== "string" || typeof body.claimReviewNotice !== "string") return null;
   const emails = [...new Set((body.organizerAllowedEmails as string[]).map(normalizeEmail).filter(Boolean))];
   if (emails.some(email => !isEmailShaped(email))) return null;
-  return { ...body, organizerAllowedEmails: emails } as SiteSettingsInput;
+  const contactUrl = (body.contactUrl as string).trim(), claimReviewNotice = (body.claimReviewNotice as string).trim();
+  if ((contactUrl && !isHttpsUrl(contactUrl)) || contactUrl.length > CONTACT_URL_MAX || claimReviewNotice.length > CLAIM_REVIEW_NOTICE_MAX) return null;
+  return { ...body, organizerAllowedEmails: emails, contactUrl, claimReviewNotice } as SiteSettingsInput;
 }
 
 export function canSubmitEventApplication(settings: SiteSettings | null, email: string) {

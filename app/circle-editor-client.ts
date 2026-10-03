@@ -37,7 +37,8 @@ import { parseMapDraftConflict, type MapCandidateDiff, type MapDraftProblem } fr
  * anonymous, edge-cacheable read namespace.
  */
 
-export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean; hasOrganizerAccess: boolean; expiresAt?: number; canApplyForEvent?: boolean; hasEventApplications?: boolean };
+export type PortalSession = { email: string; isAdmin: boolean; isMapContributor: boolean; hasOrganizerAccess: boolean; expiresAt?: number; canApplyForEvent?: boolean; hasEventApplications?: boolean;
+  contactUrl?: string; claimReviewNotice?: string };
 
 export type ClaimSummary = {
   id: string;

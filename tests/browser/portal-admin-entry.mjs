@@ -17,7 +17,8 @@ async function open(role, entry = "admin") {
   let admins = [{ email: "admin@example.test", addedBy: "bootstrap", addedAt: now }];
   let notificationPreferences = { enabled: true, cadence: "five_minutes", version: 1 };
   let siteSettings = { organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
-    accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, updatedAt: now, updatedBy: "admin@example.test" };
+    accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, contactUrl: "", claimReviewNotice: "",
+    updatedAt: now, updatedBy: "admin@example.test" };
   const siteState = () => ({ settings: siteSettings, publicationMode: "github", services: {
     requestedAt: now, checkedAt: now, mail: { status: "unavailable", source: "Mailgun", reason: "金鑰驗證失敗。" },
     publication: { status: "unavailable", source: "GitHub App", reason: "GitHub 拒絕發布授權。" },

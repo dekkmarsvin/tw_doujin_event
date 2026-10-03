@@ -21,7 +21,7 @@ import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
-import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
+import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
@@ -325,6 +325,7 @@ export default function CirclePortalApp() {
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
         <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} />
+        <ContactLink url={session.contactUrl} />
         {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
         {session.isAdmin && <a href="/admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
@@ -348,7 +349,7 @@ export default function CirclePortalApp() {
             {/* Two columns on a desktop, cut on the editor's own lines below:
                 the list over the form, the claim over the preview. */}
             <div className={claims.length > 0 ? styles.claimRow : styles.claimSolo}>
-              <ClaimList claims={claims} onChanged={refreshClaims} />
+              <ClaimList claims={claims} session={session} onChanged={refreshClaims} />
               <div className={styles.claimColumn}>
                 {targetCircleId
                   ? <ClaimDestination circleId={targetCircleId} claims={claims} ready={claimsLoadedFor === event.id} failed={claimsFailedFor === event.id} onChanged={refreshClaims} />
@@ -456,7 +457,7 @@ function SignIn({ circleId }: { circleId: string }) {
   </section>;
 }
 
-function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: () => void }) {
+function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; session: PortalSession; onChanged: () => void }) {
   const [status, setStatus] = useState<Status>(IDLE);
   if (claims.length === 0) return null;
 
@@ -492,9 +493,9 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
         }}>撤回</button>}
       </li>)}
     </ul>
-    {/* The recovery path only works if it is visible before the code goes missing. */}
-    {claims.some((claim) => claim.status === "pending") && <p className={styles.notice}>
-      驗證碼遺失或過期時，撤回該筆認領後重新送出，即可取得新的驗證碼，不需要聯絡管理者。
+    {/* Only manual review waits on the maintainers; a code claim verifies itself. */}
+    {session.claimReviewNotice && claims.some((claim) => claim.status === "pending" && !claim.targetUrl) && <p className={styles.notice}>
+      {session.claimReviewNotice}{session.contactUrl && <> <ContactLink url={session.contactUrl} /></>}
     </p>}
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;
@@ -546,7 +547,7 @@ function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
   if (!ready) return <p className={styles.notice} role="status">正在讀取社團…</p>;
   if (claim) return <section className={styles.card}><h2>{claim.circleName}</h2>{claim.status === "verified"
     ? <a href={`#circle-editor-${claim.circleId}`}>管理社團資料</a>
-    : created?.id === claim.id && proof ? proof : <p>認領處理中，可在「我的社團」查看或撤回。</p>}</section>;
+    : created?.id === claim.id && proof ? proof : <p>審核中，進度見「我的社團」。</p>}</section>;
   if (!result) return <p className={styles.notice} role="status">正在讀取社團…</p>;
   if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{result.error}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>重新讀取</button></section>;
   // Same words as the refusal `createClaim` would give after the form was filled in.

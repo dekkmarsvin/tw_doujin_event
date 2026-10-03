@@ -1,5 +1,5 @@
 import { isAccountNotificationCadence } from "./account-notifications";
-import { canSubmitEventApplication, parseSiteSettings } from "./site-settings";
+import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
@@ -300,6 +300,13 @@ export function createCirclePortalHandlers({
     return canSubmitEventApplication(await repository.getSiteSettings(), email);
   }
 
+  /** The session fields that come from site settings: one read for all of them. */
+  async function sessionSiteFields(email: string) {
+    const settings = await repository.getSiteSettings();
+    return { canApplyForEvent: canSubmitEventApplication(settings, email),
+      contactUrl: settings?.contactUrl ?? "", claimReviewNotice: settings?.claimReviewNotice ?? "" };
+  }
+
   function applicationResponse(row: NonNullable<Awaited<ReturnType<IdentityRepository["getOrganizerApplication"]>>>, admin: boolean): OrganizerApplication {
     const data = JSON.parse(row.data_json) as Partial<OrganizerApplicationInput>;
     return {
@@ -471,7 +478,7 @@ export function createCirclePortalHandlers({
       expiresAt: now + sessionTtl,
       isMapContributor: await repository.hasActiveMapContributor(accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
-      canApplyForEvent: await canApplyForEvent(email),
+      ...await sessionSiteFields(email),
       hasEventApplications: await repository.hasOrganizerApplications(accountId),
     }, 200, {
       "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(sessionTtl / 1000)),
@@ -488,7 +495,7 @@ export function createCirclePortalHandlers({
       expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
       isMapContributor: await repository.hasActiveMapContributor(current.accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
-      canApplyForEvent: await canApplyForEvent(current.email),
+      ...await sessionSiteFields(current.email),
       hasEventApplications: await repository.hasOrganizerApplications(current.accountId),
     });
   }
@@ -1128,7 +1135,9 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     if (!body || Object.keys(body).some(key => !["settings", "expectedUpdatedAt"].includes(key))) return json({ error: "設定格式無效。" }, 400);
     const settings = parseSiteSettings(body.settings);
-    if (!settings || !Number.isSafeInteger(body.expectedUpdatedAt)) return json({ error: "請填寫完整設定與有效的邀請 email。" }, 400);
+    if (!settings || !Number.isSafeInteger(body.expectedUpdatedAt)) {
+      return json({ error: contactSettingsProblem(body.settings) ?? "請填寫完整設定與有效的邀請 email。" }, 400);
+    }
     const current = await repository.getSiteSettings();
     if ((config.organizerPublicationMode ?? "disabled") === "disabled" && settings.publicationEnabled !== current?.publicationEnabled) {
       return json({ error: "此環境尚未設定發布功能，無法變更發布開關。" }, 409);
