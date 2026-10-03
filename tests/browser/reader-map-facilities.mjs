@@ -214,6 +214,36 @@ try {
     await page.close();
   }
 
+  // The same published row accepts all four sides, including Chinese names;
+  // changing label placement must keep its real booth rectangles selectable.
+  for (const [width, height, textScale] of [[1440, 900, "standard"], [390, 844, "extra"]]) for (const side of ["above", "below", "left", "right"]) {
+    const page = await journey.mapPage({ event: "ff47", viewport: { width, height }, routes: async page => {
+      await page.addInitScript(value => localStorage.setItem("event-map-text-scale", value), textScale);
+      await page.route("**/data/events/ff47/map.json", async route => {
+        const response = await route.fetch(), map = await response.json();
+        map.layout.rows = [{ ...map.layout.rows[0], label: "逃", labelSide: side }];
+        map.layout.accessPoints = []; map.layout.landmarks = []; map.layout.pillars = []; map.layout.servicePoints = []; map.layout.areaRegions = [];
+        await route.fulfill({ response, json: map });
+      });
+    } });
+    await page.getByRole("button", { name: "查看全場", exact: true }).click();
+    await settle(page);
+    const boxes = await page.locator("svg[role=group]").evaluate(node => {
+      const label = node.querySelector('[data-marker="row:逃"] text').getBoundingClientRect().toJSON();
+      const slots = [...node.querySelectorAll("[data-slot-code] > rect")].map(item => item.getBoundingClientRect());
+      return { label, booths: { left: Math.min(...slots.map(item => item.left)), right: Math.max(...slots.map(item => item.right)), top: Math.min(...slots.map(item => item.top)), bottom: Math.max(...slots.map(item => item.bottom)) } };
+    });
+    if (side === "above") assert.ok(boxes.label.bottom < boxes.booths.top);
+    if (side === "below") assert.ok(boxes.label.top > boxes.booths.bottom);
+    if (side === "left") assert.ok(boxes.label.right < boxes.booths.left);
+    if (side === "right") assert.ok(boxes.label.left > boxes.booths.right);
+    await journey.capture(page, `row-label-${side}-${width}-${textScale}`);
+    await page.locator('[data-slot-code="A01"]').focus();
+    await page.keyboard.press("Enter");
+    assert.equal(new URL(page.url()).searchParams.get("selectedBooth"), "A01");
+    await page.close();
+  }
+
   // A double tap on a booth still selects it and does not zoom.
   const page = await journey.mapPage({ event: "ff47", viewport: { width: 1440, height: 900 } });
   const booth = page.locator('[data-slot-code="A01"]');

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
-import { resolveMapLandmarkKind, rowLabelAnchor, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_ACCESS_KINDS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect } from "./event-map";
+import { resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_ACCESS_KINDS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect, type MapRowLabelSide } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, mergeSelections, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
@@ -16,6 +16,7 @@ import { UiIcon } from "./ui-icons";
 import { FACILITY_TOOLS, PLACEMENT_LABELS, isAreaFacilityTool, isPointFacilityTool, resolveFacilityPlacement, type FacilityTool, type PlacementTool } from "./map-placement-tool";
 import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
+import { layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel } from "./map-marker-presentation";
 import { MapEditorSurface, type MapEditorSave } from "./map-editor-surface";
 import { copyRowLabels, copyRowLimitError, planRowCopies, ROW_LABEL_SEQUENCES, type CopyDirection } from "./map-row-copies";
 import styles from "./map-layout-editor.module.css";
@@ -375,6 +376,13 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     ? Math.min(viewportBox.width / layout.width, viewportBox.height / layout.height)
     : 0;
   const renderScale = fitScale * zoom;
+  const rowLabels = useMemo(() => layoutMapMarkerLabels(layout, { screenScale: renderScale, fontScale: 1 }), [layout, renderScale]);
+  const copiedRowLabels = copyPreview?.ok ? layoutMapMarkerLabels({ ...layout, rows: [...layout.rows, ...copyPreview.rows] }, { screenScale: renderScale, fontScale: 1 }) : new Map<string, MapMarkerLabel>();
+  const renderRowLabel = (row: BoothRow, labels = rowLabels) => {
+    if (renderScale <= 0) return null;
+    const label = labels.get(mapMarkerLabelKey("row", row.label));
+    return label && <g key={`label:${row.label}`} data-row-label={row.label} transform={`translate(${label.x} ${label.y}) scale(${1 / renderScale})`} aria-hidden="true"><text className={styles.rowLabel} x={label.dx} y={label.dy} style={{ fontSize: label.fontPx, textAnchor: label.anchor, dominantBaseline: "central" }}>{row.label}</text></g>;
+  };
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -1269,8 +1277,11 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     setSelections([]);
   };
 
-  const updateRow = (rowIndex: number, next: Partial<{ label: string; orientation: MapOrientation }>, coalesceKey: string | null = null) => {
-    commit((draft) => Object.assign(draft.rows[rowIndex], next), coalesceKey);
+  const updateRow = (rowIndex: number, next: Partial<Pick<BoothRow, "label" | "orientation" | "labelSide">>, coalesceKey: string | null = null) => {
+    commit((draft) => {
+      Object.assign(draft.rows[rowIndex], next);
+      if (Object.hasOwn(next, "labelSide") && next.labelSide === undefined) delete draft.rows[rowIndex].labelSide;
+    }, coalesceKey);
   };
 
   const placeFacility = (tool: FacilityTool, rect: MapRect) => {
@@ -1562,10 +1573,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
               fills the sheet would otherwise swallow every click on blank paper. */}
           <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
           {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${selectedKeys.has(`landmark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
-          {layout.rows.map((row) => {
-            const anchor = rowLabelAnchor(row);
-            return anchor && <text key={`label:${row.label}`} className={styles.rowLabel} {...anchor} aria-hidden="true">{row.label}</text>;
-          })}
+          {layout.rows.map(row => renderRowLabel(row))}
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} data-slot-code={slot.code} className={`${styles.editable} ${overlapping.has(slot.code) ? styles.overlapping : ""} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
           {layout.servicePoints?.map((point, itemIndex) => <g key={point.id} className={`${styles.editable} ${styles.service} ${selectedKeys.has(`service:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "service", itemIndex })}><g transform={`translate(${point.x} ${point.y})`}><MapServiceBadge kind={point.kind} /></g><text x={point.x} y={point.y + 24}>{point.label || MAP_FACILITY_TYPE_LABELS[point.kind]}</text></g>)}
@@ -1584,7 +1592,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
               awaiting a decision would hide exactly what the decision is about. */}
           {draftRow?.slots.map((slot, index) => <g key={slot.code} className={draftRow.keep[index] ? styles.draftSlotKept : styles.draftSlot} aria-hidden="true"><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}
           {anchors?.map((anchor) => <g key={`${anchor.index}:${anchor.x}:${anchor.y}`} className={styles.anchor} aria-hidden="true"><circle cx={anchor.x} cy={anchor.y} r={7 * layoutUnitsPerPixel} /><text x={anchor.x} y={anchor.y - 12 * layoutUnitsPerPixel}>{anchor.index}</text></g>)}
-          {copyPreview?.ok && <g className={styles.copyPreview} data-row-copy-preview="true" aria-hidden="true">{copyPreview.rows.map(row => { const anchor = rowLabelAnchor(row); return anchor && <text className={styles.rowLabel} key={row.label} {...anchor}>{row.label}</text>; })}{copyPreview.rows.flatMap(row => row.slots.map(slot => <g key={slot.code}><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>))}</g>}
+          {copyPreview?.ok && <g className={styles.copyPreview} data-row-copy-preview="true" aria-hidden="true">{copyPreview.rows.map(row => renderRowLabel(row, copiedRowLabels))}{copyPreview.rows.flatMap(row => row.slots.map(slot => <g key={slot.code}><rect {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>))}</g>}
           {sharedEdgePreview?.ok && <g className={styles.sharedEdgePreview} aria-hidden="true" data-shared-edge-preview="true">{sharedEdgePreview.boxes.map((box, index) => <rect key={index} {...box} />)}</g>}
           {slotDraftRect && <rect className={styles.manualDraft} {...slotDraftRect} aria-hidden="true" />}
           {rowFrame && <rect className={styles.manualDraft} {...rowFrame} aria-hidden="true" />}
@@ -1727,6 +1735,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
           </details>
         </div>}
         {!rowForm && !!copyableSlots && <div className={styles.rowFormActions}><button type="button" disabled={!copySource} onClick={startRowCopies}>複製多排</button>{!copySource && <p className={styles.hint}>請選取同一排的攤位。</p>}</div>}
+        {copySourceRow && <><label><span>排標籤位置</span><select value={copySourceRow.labelSide ?? ""} onChange={event => updateRow(copyItems[0].rowIndex, { labelSide: (event.target.value || undefined) as MapRowLabelSide | undefined })}><option value="">預設（{copySourceRow.orientation === "vertical" ? "上方" : "下方"}）</option><option value="above">上方</option><option value="below">下方</option><option value="left">左側</option><option value="right">右側</option></select></label>{!rowLabels.has(mapMarkerLabelKey("row", copySourceRow.label)) && <p className={styles.hint}>標籤目前無法完整顯示；可調整位置或放大檢視。</p>}</>}
         {selections.length > 1 && !activeSegment && <>
           <div className={styles.selectionTitle}><small>已選取</small><b>{selections.length} 個元素</b></div>
           {!sharedEdgeDraft && <>

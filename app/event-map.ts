@@ -6,6 +6,8 @@ export const MAP_AREA_COLORS = { mint: "#d9f4e1", sky: "#dceeff", peach: "#ffe6d
 export type MapAreaColor = keyof typeof MAP_AREA_COLORS;
 export type MapAreaRegion = { id: string; areaId: string; color: MapAreaColor; points: MapPoint[] };
 export type MapOrientation = "vertical" | "horizontal";
+export const MAP_ROW_LABEL_SIDES = ["above", "below", "left", "right"] as const;
+export type MapRowLabelSide = (typeof MAP_ROW_LABEL_SIDES)[number];
 
 export type BoothSlot = {
   code: string;
@@ -15,6 +17,8 @@ export type BoothSlot = {
 export type BoothRow = {
   label: string;
   orientation: MapOrientation;
+  /** Absent on older maps: vertical rows use above, horizontal rows below. */
+  labelSide?: MapRowLabelSide;
   confidence: number;
   slots: BoothSlot[];
 };
@@ -68,26 +72,31 @@ type MapLandmark = {
   label: string;
 };
 
-/** Where a row's label goes: centred across the booths it holds, a fixed gap
- * above a vertical row and below a horizontal one. `y` is the label's edge
- * nearest the row, so a label that grows keeps clear of its own booths. A row
- * with no booths has nowhere to put it. */
-export function rowLabelPlacement(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number; side: "above" | "below" } | null {
+/** The label's edge nearest the entire row, with the same 13-unit gap on every
+ * side. Slot order never determines the side of a U-shaped or segmented row. */
+export function rowLabelPlacement(row: Pick<BoothRow, "orientation" | "slots" | "labelSide">): { x: number; y: number; side: MapRowLabelSide } | null {
   if (!row.slots.length) return null;
   const minX = Math.min(...row.slots.map(({ rect }) => rect.x));
   const maxX = Math.max(...row.slots.map(({ rect }) => rect.x + rect.width));
   const minY = Math.min(...row.slots.map(({ rect }) => rect.y));
   const maxY = Math.max(...row.slots.map(({ rect }) => rect.y + rect.height));
-  return row.orientation === "horizontal" ? { x: (minX + maxX) / 2, y: maxY + 13, side: "below" } : { x: (minX + maxX) / 2, y: minY - 13, side: "above" };
+  const side = row.labelSide ?? (row.orientation === "horizontal" ? "below" : "above");
+  switch (side) {
+    case "above": return { x: (minX + maxX) / 2, y: minY - 13, side };
+    case "below": return { x: (minX + maxX) / 2, y: maxY + 13, side };
+    case "left": return { x: minX - 13, y: (minY + maxY) / 2, side };
+    case "right": return { x: maxX + 13, y: (minY + maxY) / 2, side };
+  }
 }
 
-/** The baseline of the editor's fixed 22-unit row label. It sits at the same
- * place the reader's label starts from, so the label a contributor lines a row
- * up against while drawing is the one readers end up seeing; below a row the
- * baseline drops by the cap height so the text top stays on the gap. */
-export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number } | null {
+/** A fixed 22-unit reference baseline. Screen-scaled renderers instead use
+ * rowLabelPlacement through map-marker-presentation to keep text outside the
+ * row as its size changes. Older above/below reference positions are stable. */
+export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots" | "labelSide">): { x: number; y: number; textAnchor?: "start" | "end" } | null {
   const placement = rowLabelPlacement(row);
-  return placement && { x: placement.x, y: placement.side === "below" ? placement.y + 17 : placement.y };
+  if (!placement) return null;
+  if (placement.side === "left" || placement.side === "right") return { x: placement.x, y: placement.y + 8.5, textAnchor: placement.side === "left" ? "end" : "start" };
+  return { x: placement.x, y: placement.side === "below" ? placement.y + 17 : placement.y };
 }
 
 export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "label">): MapLandmarkKind {
@@ -234,6 +243,7 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       else if (labels.has(row.label)) errors.push("row label 不可重複。" );
       else labels.add(row.label);
       if (row.orientation !== "vertical" && row.orientation !== "horizontal") errors.push(`${row.label || "未命名"} 排方向無效。`);
+      if (row.labelSide !== undefined && !MAP_ROW_LABEL_SIDES.includes(row.labelSide)) errors.push(`${row.label || "未命名"} 排標籤位置無效。`);
       if (!Number.isFinite(row.confidence) || Number(row.confidence) < 0 || Number(row.confidence) > 1) errors.push(`${row.label || "未命名"} 排 confidence 必須介於 0 與 1。`);
       if (!Array.isArray(row.slots)) errors.push(`${row.label || "未命名"} 排的 slots 必須是陣列。`);
       if (Array.isArray(row.slots)) row.slots.forEach((candidateSlot) => {

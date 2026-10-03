@@ -103,7 +103,7 @@ function strictLayoutShape(layout: Record<string, unknown>) {
   if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions"])) return false;
   if (!record(layout.floor) || !onlyKeys(layout.floor, ["x", "y", "width", "height"])) return false;
   if (!Array.isArray(layout.rows) || !layout.rows.every((row) => record(row)
-    && onlyKeys(row, ["label", "orientation", "confidence", "slots"])
+    && onlyKeys(row, ["label", "orientation", "labelSide", "confidence", "slots"])
     && Array.isArray(row.slots) && row.slots.every((slot) => record(slot)
       && onlyKeys(slot, ["code", "rect"]) && record(slot.rect) && onlyKeys(slot.rect, ["x", "y", "width", "height"])))) return false;
   if (!Array.isArray(layout.pillars) || !layout.pillars.every((pillar) => record(pillar)

@@ -145,6 +145,44 @@ test("row names start at the same gap the editor draws them at", () => {
   assert.ok(labels.get("row:A").dy < 0, "above a vertical row the name grows upward");
 });
 
+test("explicit row label sides stay outside U-shaped and interrupted rows at every text size", () => {
+  const slots = [slot("逃01", 400, 300), slot("逃02", 400, 314), slot("逃03", 460, 314), slot("逃04", 460, 300), slot("逃05", 460, 420)];
+  for (const side of ["above", "below", "left", "right"]) for (const scale of [.12, 1, 8]) for (const fontScale of [1, 1.24]) {
+    const row = { label: "逃", labelSide: side, orientation: "horizontal", confidence: 1, slots };
+    const plan = hall({ rows: [row] }), before = structuredClone(plan);
+    const label = layoutMapMarkerLabels(plan, { screenScale: scale, fontScale }).get("row:逃");
+    assert.ok(label, `${side} at ${scale}/${fontScale} is drawn`);
+    assertOnPlan(label, scale, plan, side);
+    const box = screenBox(label, scale);
+    if (side === "above") assert.ok(box.bottom < 300 * scale);
+    if (side === "below") assert.ok(box.top > 434 * scale);
+    if (side === "left") assert.ok(box.right < 400 * scale);
+    if (side === "right") assert.ok(box.left > 480 * scale);
+    const reversed = layoutMapMarkerLabels({ ...plan, rows: [{ ...row, slots: [...slots].reverse() }] }, { screenScale: scale, fontScale }).get("row:逃");
+    assert.deepEqual(reversed, label, "slot order does not choose the side or label anchor");
+    assert.deepEqual(plan, before, "presentation changes no codes or geometry");
+  }
+});
+
+test("row labels at canvas edges slide only along their side and omit an impossible side", () => {
+  for (const scale of [.12, 1, 8]) for (const [side, x, y] of [["above", 0, 300], ["below", 1980, 300], ["left", 900, 0], ["right", 900, 1186]]) {
+    const row = { label: "十二地支", labelSide: side, orientation: "vertical", confidence: 1, slots: [slot("子01", x, y)] };
+    const plan = hall({ rows: [row] });
+    const label = layoutMapMarkerLabels(plan, { screenScale: scale, fontScale: 1.24 }).get("row:十二地支");
+    assert.ok(label, `${side} still fits at ${scale}`);
+    assertOnPlan(label, scale, plan, side);
+    const box = screenBox(label, scale);
+    if (side === "above") assert.ok(box.bottom < y * scale);
+    if (side === "below") assert.ok(box.top > (y + 14) * scale);
+    if (side === "left") assert.ok(box.right < x * scale);
+    if (side === "right") assert.ok(box.left > (x + 20) * scale);
+  }
+  for (const [side, x, y] of [["above", 400, 0], ["below", 400, 1186], ["left", 0, 300], ["right", 1980, 300]]) {
+    const row = { label: "A", labelSide: side, orientation: "vertical", confidence: 1, slots: [slot("A01", x, y)] };
+    assert.equal(layoutMapMarkerLabels(hall({ rows: [row] }), { screenScale: 1, fontScale: 1 }).has("row:A"), false, "no side swap or shift through the row");
+  }
+});
+
 test("the facility list names each access point and each uniquely named area, and explains shared names in the legend", () => {
   const blocks = Array.from({ length: 3 }, (_, index) => ({ id: `e${index}`, kind: "enterprise", label: "企業攤", rect: { x: index * 100, y: 0, width: 80, height: 60 } }));
   const directory = mapFacilityDirectory({

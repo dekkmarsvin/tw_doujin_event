@@ -130,8 +130,10 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
   for (const row of layout.rows) {
     const placement = rowLabelPlacement(row);
     if (!placement) continue;
-    const dy = (placement.side === "below" ? 1 : -1) * rowPx * HALF_LINE_EM;
-    candidates.push([mapMarkerLabelKey("row", row.label), { text: row.label, x: placement.x, y: placement.y, dx: 0, dy, fontPx: rowPx, anchor: "middle" }]);
+    const vertical = placement.side === "above" || placement.side === "below";
+    const dy = vertical ? (placement.side === "below" ? 1 : -1) * rowPx * HALF_LINE_EM : 0;
+    const anchor = vertical ? "middle" : placement.side === "left" ? "end" : "start";
+    candidates.push([mapMarkerLabelKey("row", row.label), { text: row.label, x: placement.x, y: placement.y, dx: 0, dy, fontPx: rowPx, anchor }]);
   }
   // A service point's badge already says what it is; only a name that tells
   // two of a kind apart is drawn, below the badge.
@@ -175,6 +177,9 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
       label = slideOntoPlan(otherSide);
       if (!onPlan(label)) continue;
     }
+    // A row's chosen side cannot be swapped or pulled across its booths just
+    // to fit the name. Tangential sliding is safe; no space on that side is not.
+    if (key.startsWith("row:") && !onPlan(label)) continue;
     const box = labelBox(label, screenScale);
     if (placed.some((other) => overlaps(box, other))) continue;
     placed.push(box);

@@ -311,7 +311,7 @@ test("resizes and snaps booth and pillar rectangles exactly like a landmark rect
 test("resizing the canvas keeps rows, pillars, access points and landmarks in place proportionally", () => {
   const layout = {
     version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 100, floor: { x: 10, y: 5, width: 180, height: 90 },
-    rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 20, y: 20, width: 40, height: 28 } }] }],
+    rows: [{ label: "A", orientation: "horizontal", labelSide: "right", confidence: 1, slots: [{ code: "A01", rect: { x: 20, y: 20, width: 40, height: 28 } }] }],
     pillars: [{ id: "pillar-1", x: 90, y: 60, width: 40, height: 28 }],
     accessPoints: [{ id: "entrance-1", kind: "entrance", direction: "north", x: 100, y: 95, label: "入口" }],
     landmarks: [{ id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 140, y: 20, width: 40, height: 28 } }],
@@ -324,6 +324,7 @@ test("resizing the canvas keeps rows, pillars, access points and landmarks in pl
   assert.deepEqual([scaled.width, scaled.height], [400, 300]);
   assert.deepEqual(scaled.floor, { x: 20, y: 15, width: 360, height: 270 });
   assert.deepEqual(scaled.rows[0].slots[0], { code: "A01", rect: { x: 40, y: 60, width: 80, height: 84 } });
+  assert.equal(scaled.rows[0].labelSide, "right");
   assert.deepEqual(scaled.pillars[0], { id: "pillar-1", x: 180, y: 180, width: 80, height: 84 });
   assert.deepEqual(scaled.accessPoints[0], { id: "entrance-1", kind: "entrance", direction: "north", x: 200, y: 285, label: "入口" });
   assert.deepEqual(scaled.landmarks[0], { id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 280, y: 60, width: 80, height: 84 } });
@@ -757,7 +758,7 @@ test("two segments of a row that touch are one run, and separate columns are not
   assert.equal(contiguousSegment(rects, 30).items.length, 26);
 });
 
-test("a row label sits where both renderers and the editor agree it does", () => {
+test("legacy row labels retain their vertical and horizontal reference positions", () => {
   const vertical = drawnRow("A", { x: 100, y: 200, width: 40, height: 400 }, 8).row;
   assert.deepEqual(rowLabelAnchor(vertical), { x: 120, y: 187 }, "a vertical row is labelled above its first booth");
   const horizontal = drawnRow("W", { x: 100, y: 300, width: 480, height: 30 }, 6).row;

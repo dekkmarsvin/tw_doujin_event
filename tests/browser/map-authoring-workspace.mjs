@@ -58,6 +58,34 @@ try {
     await editor.getByRole("button", { name: "攤位清單", exact: true }).click();
     await editor.getByRole("button", { name: "選取 A 排", exact: true }).click();
     await editor.getByRole("button", { name: "攤位清單", exact: true }).click();
+    const slotsBefore = await svg.locator("[data-slot-code]").evaluateAll(nodes => nodes.map(node => [node.dataset.slotCode, ...["x", "y", "width", "height"].map(name => node.querySelector("rect").getAttribute(name))]));
+    const sidePicker = editor.getByRole("combobox", { name: "排標籤位置", exact: true });
+    assert.equal(await sidePicker.inputValue(), "", "old maps use the original default");
+    for (const side of ["above", "below", "left", "right"]) {
+      await sidePicker.selectOption(side);
+      const boxes = await svg.evaluate(node => {
+        const label = node.querySelector('[data-row-label="A"] text').getBoundingClientRect().toJSON();
+        const slots = [...node.querySelectorAll("[data-slot-code] rect")].map(item => item.getBoundingClientRect());
+        return { label, booths: { left: Math.min(...slots.map(item => item.left)), right: Math.max(...slots.map(item => item.right)), top: Math.min(...slots.map(item => item.top)), bottom: Math.max(...slots.map(item => item.bottom)) } };
+      });
+      if (side === "above") assert.ok(boxes.label.bottom < boxes.booths.top);
+      if (side === "below") assert.ok(boxes.label.top > boxes.booths.bottom);
+      if (side === "left") assert.ok(boxes.label.right < boxes.booths.left);
+      if (side === "right") assert.ok(boxes.label.left > boxes.booths.right);
+      assert.deepEqual(await svg.locator("[data-slot-code]").evaluateAll(nodes => nodes.map(node => [node.dataset.slotCode, ...["x", "y", "width", "height"].map(name => node.querySelector("rect").getAttribute(name))])), slotsBefore, "row side changes no code or booth rectangle");
+      await journey.capture(page, `${surface}-row-label-${side}`);
+    }
+    await sidePicker.selectOption("left");
+    await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+    await picker.selectOption("slot:0:0");
+    assert.equal(await sidePicker.inputValue(), "right");
+    await editor.getByRole("button", { name: "重做已復原的編輯" }).click();
+    await picker.selectOption("slot:0:0");
+    assert.equal(await sidePicker.inputValue(), "left", "label side can be undone and redone");
+    await editor.getByRole("button", { name: "攤位清單", exact: true }).click();
+    await editor.getByRole("button", { name: "選取 A 排", exact: true }).click();
+    await editor.getByRole("button", { name: "攤位清單", exact: true }).click();
+    const undoBeforePreview = await editor.getByRole("button", { name: "復原上一步編輯" }).isDisabled();
     await editor.getByRole("button", { name: "複製多排", exact: true }).click();
     await editor.getByRole("spinbutton", { name: "邊緣間距", exact: true }).fill("48");
     // A–Z runs out at Z: say how far it reaches from B rather than asking for labels.
@@ -67,7 +95,7 @@ try {
     await editor.getByRole("spinbutton", { name: "複製份數", exact: true }).fill("3");
     assert.equal(await count(), 16, "preview is not committed");
     assert.equal(await editor.locator("[data-row-copy-preview] rect").count(), 48);
-    assert.equal(await editor.getByRole("button", { name: "復原上一步編輯" }).isDisabled(), true);
+    assert.equal(await editor.getByRole("button", { name: "復原上一步編輯" }).isDisabled(), undoBeforePreview, "copy preview adds no undo step");
     await journey.capture(page, `${surface}-fullscreen-copy-preview`);
     await editor.getByRole("button", { name: "加入 3 排", exact: true }).click();
     assert.equal(await count(), 64);
@@ -90,7 +118,14 @@ try {
     await page.waitForFunction(() => document.querySelector("dialog")?.textContent.includes("目前沒有未儲存") || document.querySelector("dialog")?.textContent.includes("地圖已儲存"));
     assert.equal(state.saves, 1);
     assert.deepEqual(state.layout.rows.map(row => row.label), ["A", "B", "C", "D"]);
+    assert.deepEqual(state.layout.rows.map(row => row.labelSide), ["left", "left", "left", "left"], "copies and saving preserve each row side");
+    await page.reload();
+    if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
+    else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+    await editor.waitFor();
+    await expand.click();
     await picker.selectOption("slot:0:0");
+    assert.equal(await sidePicker.inputValue(), "left", "saved side reopens");
     await editor.getByRole("button", { name: "複製多排", exact: true }).click();
     assert.equal(await editor.getByRole("button", { name: "加入 3 排", exact: true }).isDisabled(), true, "duplicate labels cannot apply");
     await page.getByRole("button", { name: "返回地圖步驟", exact: true }).press("Escape");

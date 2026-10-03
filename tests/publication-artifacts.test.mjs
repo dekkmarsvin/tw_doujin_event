@@ -272,6 +272,7 @@ test("service points in an approved map survive publication and staging into the
     { id: "changing", kind: "changing-room", x: 60, y: 80, label: "簡易更衣室" },
   ];
   snapshot.maps[0].content.layout.servicePoints = servicePoints;
+  snapshot.maps[0].content.layout.rows[0].labelSide = "left";
   snapshot.maps[0].content.layout.accessPoints = [{ id: "side", kind: "both", direction: "east", x: 5, y: 50, label: "側門" }];
   const approved = source(snapshot);
   const data = await builder.buildPublicationDataStage(approved, base(snapshot));
@@ -289,6 +290,7 @@ test("service points in an approved map survive publication and staging into the
     execFileSync(process.execPath, ["scripts/check-staged-event-data.mjs", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
     const map = JSON.parse(await readFile(path.join(workspace, "public/data/events/next-event/map.json"), "utf8"));
     assert.deepEqual(map.layout.servicePoints, servicePoints);
+    assert.equal(map.layout.rows[0].labelSide, "left");
     assert.equal(map.layout.accessPoints[0].kind, "both");
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });

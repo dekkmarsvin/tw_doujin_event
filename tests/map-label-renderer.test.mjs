@@ -116,3 +116,15 @@ test("service points draw a badge named by type, and a two-way doorway is a diam
   assert.equal(side.childNodes.some((node) => node.tagName === "circle" || node.tagName === "rect"), false, "a two-way doorway is neither round nor square");
   assert.equal(output({ layout }).nodes.some((node) => result.attr(node, "aria-label") === "服務設施"), false, "a map without service points draws no service layer");
 });
+
+test("explicit row label sides render with the shared edge anchors without changing booth controls", () => {
+  for (const [labelSide, anchor] of [["above", "middle"], ["below", "middle"], ["left", "end"], ["right", "start"]]) {
+    const sideLayout = { ...layout, width: 400, height: 300, rows: [{ ...layout.rows[0], labelSide, slots: [{ code: "A01", rect: { x: 160, y: 120, width: 24, height: 24 } }] }] };
+    const result = output({ layout: sideLayout });
+    const marker = result.nodes.find(node => result.attr(node, "data-marker") === "row:A");
+    const label = marker.childNodes.find(node => node.tagName === "text");
+    assert.equal(result.attr(label, "text-anchor"), anchor);
+    assert.equal(result.attr(result.slot, "role"), "button");
+    assert.equal(result.attr(result.slot, "aria-label"), "A01 完整社團名稱，已收藏");
+  }
+});

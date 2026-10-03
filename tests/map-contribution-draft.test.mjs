@@ -253,3 +253,20 @@ test("service points are an optional part of the draft shape and of the candidat
   const { diff } = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: { ...withServices, servicePoints: [{ ...toilet, x: 12 }, named, tickets, changing] }, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
   assert.deepEqual(diff.changedServicePointIds, ["aid", "changing", "tickets", "toilet"]);
 });
+
+test("row label side survives draft parsing and review while invalid sides are refused", () => {
+  const previous = { eventId: "sample", revision: 1, sourceName: "sample", confidence: 1, updatedAt: "2026-01-01T00:00:00.000Z", layout };
+  for (const labelSide of ["above", "below", "left", "right"]) {
+    const next = { ...layout, rows: layout.rows.map(row => ({ ...row, labelSide })) };
+    assert.deepEqual(parseMapContributionDraftContent(content(next))?.layout, next);
+    assert.deepEqual(next.rows[0].slots, layout.rows[0].slots, "label side changes no booth geometry or codes");
+    const candidate = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: next, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
+    assert.deepEqual(candidate.candidate.layout, next);
+    assert.deepEqual(candidate.diff.changedRowLabels, layout.rows.map(row => row.label).sort());
+    assert.deepEqual(candidate.diff.movedBoothCodes, []);
+  }
+  assert.equal(parseMapContributionDraftContent(content(layout)).layout.rows[0].labelSide, undefined, "legacy maps stay absent");
+  for (const labelSide of [null, "north", "", 1]) {
+    assert.equal(parseMapContributionDraftContent(content({ ...layout, rows: layout.rows.map(row => ({ ...row, labelSide })) })), null);
+  }
+});
