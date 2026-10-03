@@ -44,6 +44,9 @@
   // Top level is production only — `vars` is non-inheritable, which is why the
   // preview environment declares its own dummy pair below.
   "vars": {
+    // One-time #477 seed: the existing production notification Worker is enabled.
+    // Remove after both environments have a verified D1 settings row; never a runtime override.
+    "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
     "ORGANIZER_PUBLICATION_MODE": "github",
     "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
@@ -86,6 +89,7 @@
       // must never reach production: there it is a real secret, set with
       // `wrangler pages secret put`.
       "vars": {
+        "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
         "EVENT_ID": "ff47",
         "PREVIEW_MAIL_SINK": "d1",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
