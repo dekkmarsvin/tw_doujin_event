@@ -1,3 +1,5 @@
+import { isSimplePolygon, polygonBounds, type MapShape } from "./map-shape-geometry";
+export type { MapShape } from "./map-shape-geometry";
 export const EVENT_MAP_VERSION = 2 as const;
 
 export type MapRect = { x: number; y: number; width: number; height: number };
@@ -73,7 +75,7 @@ export type MapServicePoint = {
 type MapLandmark = {
   id: string;
   kind?: MapLandmarkKind;
-  rect: MapRect;
+  rect: MapShape;
   label: string;
 };
 
@@ -111,8 +113,8 @@ export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "lab
   return "other";
 }
 
-function scaleRectBy(rect: MapRect, scaleX: number, scaleY: number): MapRect {
-  return { x: rect.x * scaleX, y: rect.y * scaleY, width: rect.width * scaleX, height: rect.height * scaleY };
+function scaleRectBy(rect: MapShape, scaleX: number, scaleY: number): MapShape {
+  return { x: rect.x * scaleX, y: rect.y * scaleY, width: rect.width * scaleX, height: rect.height * scaleY, ...(rect.points ? { points: rect.points.map(point => ({ x: point.x * scaleX, y: point.y * scaleY })) } : {}) };
 }
 
 /** The importer's narrower case: a replacement image only carries over the
@@ -133,7 +135,7 @@ export type EventMapLayout = {
   template: string;
   width: number;
   height: number;
-  floor: MapRect;
+  floor: MapShape;
   rows: BoothRow[];
   pillars: MapPillar[];
   accessPoints: MapAccessPoint[];
@@ -152,7 +154,7 @@ export type EventMapLayout = {
 export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<EventMapLayout, "width" | "height">): EventMapLayout {
   const scaleX = targetSize.width / layout.width;
   const scaleY = targetSize.height / layout.height;
-  const scaleRect = (rect: MapRect) => scaleRectBy(rect, scaleX, scaleY);
+  const scaleRect = (rect: MapShape) => ({ ...scaleRectBy(rect, scaleX, scaleY), ...(rect.points ? { points: rect.points.map(scalePoint) } : {}) });
   // Points are validated without the rectangles' 1-unit slack, so a point on
   // the edge must stay exactly on it: 200 × 1.1 is 220.00000000000003, and
   // 200 × 1.15 falls short at 229.99999999999997. Only a point that was on the
@@ -227,6 +229,14 @@ function finiteRect(rect: MapRect, width: number, height: number) {
     rect.width > 0 && rect.height > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width + 1 && rect.y + rect.height <= height + 1;
 }
 
+function finiteShape(shape: MapShape, width: number, height: number) {
+  if (!finiteRect(shape, width, height)) return false;
+  if (shape.points === undefined) return true;
+  if (!isSimplePolygon(shape.points) || shape.points.some(point => point.x < 0 || point.y < 0 || point.x > width + 1e-7 || point.y > height + 1e-7)) return false;
+  const bounds = polygonBounds(shape.points);
+  return (["x", "y", "width", "height"] as const).every(key => Math.abs(bounds[key] - shape[key]) < 1e-5);
+}
+
 export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly string[]): LayoutValidation {
   const errors: string[] = [];
   if (!value || typeof value !== "object") return { ok: false, errors: ["layout 必須是物件。"] };
@@ -236,7 +246,7 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
   if (!Number.isFinite(layout.width) || Number(layout.width) <= 0 || !Number.isFinite(layout.height) || Number(layout.height) <= 0) errors.push("layout 尺寸無效。" );
   const width = Number(layout.width) || 0;
   const height = Number(layout.height) || 0;
-  if (!layout.floor || !finiteRect(layout.floor, width, height)) errors.push("場館範圍無效。" );
+  if (!layout.floor || !finiteShape(layout.floor, width, height)) errors.push("場館範圍無效；多邊形須在畫布內、不可自交，且外框座標须與頂點一致。" );
   if (!Array.isArray(layout.rows)) errors.push("rows 必須是陣列。" );
   if (!Array.isArray(layout.pillars)) errors.push("pillars 必須是陣列。" );
   if (!Array.isArray(layout.accessPoints)) errors.push("accessPoints 必須是陣列。" );
@@ -299,7 +309,7 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       else landmarkIds.add(landmark.id);
       if (typeof landmark.label !== "string" || !landmark.label.trim()) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 必須有顯示名稱。`);
       if (landmark.kind !== undefined && !["enterprise", "stage", "other"].includes(landmark.kind)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的類型無效。`);
-      if (!landmark.rect || !finiteRect(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的矩形座標無效。`);
+      if (!landmark.rect || !finiteShape(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的形狀無效；多邊形不可自交或超出畫布。`);
     });
   }
   if (layout.servicePoints !== undefined && !Array.isArray(layout.servicePoints)) errors.push("servicePoints 必須是陣列。" );

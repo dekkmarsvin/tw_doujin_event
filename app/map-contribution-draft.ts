@@ -99,9 +99,14 @@ function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
   return Object.keys(value).every((key) => allowed.includes(key));
 }
 
+function strictAreaShape(value: unknown) {
+  return record(value) && onlyKeys(value, ["x", "y", "width", "height", "points"])
+    && (value.points === undefined || (Array.isArray(value.points) && value.points.every(point => record(point) && onlyKeys(point, ["x", "y"]))));
+}
+
 function strictLayoutShape(layout: Record<string, unknown>) {
   if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions", "spaceMarks"])) return false;
-  if (!record(layout.floor) || !onlyKeys(layout.floor, ["x", "y", "width", "height"])) return false;
+  if (!strictAreaShape(layout.floor)) return false;
   if (!Array.isArray(layout.rows) || !layout.rows.every((row) => record(row)
     && onlyKeys(row, ["label", "orientation", "labelSide", "confidence", "slots"])
     && Array.isArray(row.slots) && row.slots.every((slot) => record(slot)
@@ -119,7 +124,7 @@ function strictLayoutShape(layout: Record<string, unknown>) {
     && Array.isArray(region.points) && region.points.every((point) => record(point) && onlyKeys(point, ["x", "y"]))))) return false;
   return Array.isArray(layout.landmarks) && layout.landmarks.every((landmark) => record(landmark)
     && onlyKeys(landmark, ["id", "kind", "rect", "label"])
-    && record(landmark.rect) && onlyKeys(landmark.rect, ["x", "y", "width", "height"]));
+    && strictAreaShape(landmark.rect));
 }
 
 /**

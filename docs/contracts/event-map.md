@@ -2,6 +2,9 @@
 
 公開閱讀端的向量地圖：資料不變量、renderer 邊界、互動與縮放規則。
 
+**實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
+**測試**：`tests/map-shape-geometry.test.mjs`
+
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
 **測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-map-facilities.mjs`
 **活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場地」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
@@ -161,3 +164,9 @@ type AccessibleEventMapRendererProps = {
 - 收藏群組改變後，地圖、清單與詳情不需重新整理便同步更新。
 - 前台不顯示 A–K／L–W 區域切換。
 - 外部內容缺少或載入失敗時，已發布向量地圖、社團核心資訊與收藏操作仍可使用。
+
+## 場館與非攤位多邊形
+
+`floor` 及 `landmarks[].rect` 可選填 `points`（3–200 個有限座標頂點），涵蓋場館外框、企業攤、舞台與其他區域。既有 `x/y/width/height` 必須等於頂點的外接矩形；缺省 `points` 時仍為原矩形。一般攤位、柱子及保留／取消格維持矩形，服務設施與出入口維持座標點。
+
+多邊形不得有自交、重複頂點、反折重疊邊、零面積或超出畫布。移動、縮放與畫布變更同步更新頂點與外接矩形，草稿、預覽與 publication 使用同一形狀。公開 renderer 與編輯器共用形狀繪製；Reader viewBox 仍使用畫布尺寸。凹形區域的名稱與設施定位採區內錨點；名稱的完整文字範圍須能放入該區，否則沿用設施清單定位。既有 pin 與核准 snapshot 不重寫。

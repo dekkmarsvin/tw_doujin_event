@@ -277,6 +277,10 @@ test("service points and space marks in an approved map survive publication and 
   ];
   snapshot.maps[0].content.layout.servicePoints = servicePoints;
   snapshot.maps[0].content.layout.spaceMarks = spaceMarks;
+  const shapePoints = [{ x: 10, y: 10 }, { x: 90, y: 10 }, { x: 90, y: 30 }, { x: 30, y: 30 }, { x: 30, y: 90 }, { x: 10, y: 90 }];
+  const shape = { x: 10, y: 10, width: 80, height: 80, points: shapePoints };
+  snapshot.maps[0].content.layout.floor = structuredClone(shape);
+  snapshot.maps[0].content.layout.landmarks = ["enterprise", "stage", "other"].map(kind => ({ id: kind, kind, label: kind, rect: structuredClone(shape) }));
   snapshot.maps[0].content.layout.rows[0].labelSide = "left";
   snapshot.maps[0].content.layout.accessPoints = [{ id: "side", kind: "both", direction: "east", x: 5, y: 50, label: "側門" }];
   const approved = source(snapshot);
@@ -296,6 +300,9 @@ test("service points and space marks in an approved map survive publication and 
     const map = JSON.parse(await readFile(path.join(workspace, "public/data/events/next-event/map.json"), "utf8"));
     assert.deepEqual(map.layout.servicePoints, servicePoints);
     assert.deepEqual(map.layout.spaceMarks, spaceMarks);
+    assert.deepEqual(map.layout.floor, shape);
+    assert.equal(map.layout.landmarks.length, 3);
+    for (const landmark of map.layout.landmarks) assert.deepEqual(landmark.rect, shape);
     assert.equal(map.layout.rows[0].labelSide, "left");
     assert.equal(map.layout.accessPoints[0].kind, "both");
   } finally { await rm(workspace, { recursive: true, force: true }); }

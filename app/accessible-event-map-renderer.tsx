@@ -7,6 +7,7 @@ import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } fro
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
 import { MapAccessBadge, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
+import { MapShapeDrawing } from "./map-shape-drawing";
 
 export type MapSlotView = {
   tone?: "coral" | "mint" | "blue" | "amber" | "lilac";
@@ -133,12 +134,12 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     <title>{`${eventName} 社團攤位配置圖`}</title>
     {(showMedia || labelPresentation) && <defs>{layout.rows.flatMap((row) => row.slots).flatMap((slot) => labelPresentation || slots[slot.code]?.thumbnailUrl ? [<clipPath key={slot.code} id={`${clipPrefix}-${slot.code}`}><rect x={slot.rect.x} y={slot.rect.y} width={slot.rect.width} height={slot.rect.height} rx={Math.min(2.5, slot.rect.height * .16)} /></clipPath>] : [])}</defs>}
     <rect className={styles.paper} x="0" y="0" width={layout.width} height={layout.height} />
-    <rect className={styles.floor} x={layout.floor.x} y={layout.floor.y} width={layout.floor.width} height={layout.floor.height} />
+    <MapShapeDrawing className={styles.floor} shape={layout.floor} />
     {showAreaRegions && !!layout.areaRegions?.length && <g className={styles.areaRegions} aria-label="展區範圍">{layout.areaRegions.map((region) => {
       const name = Object.hasOwn(areaLabels, region.areaId) ? areaLabels[region.areaId] : region.areaId;
       return <polygon key={region.id} role="img" aria-label={`${region.areaId} · ${name}`} points={region.points.map((point) => `${point.x},${point.y}`).join(" ")} fill={MAP_AREA_COLORS[region.color]} />;
     })}</g>}
-    <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><rect className={styles.landmark} {...landmark.rect} /></g>)}</g>
+    <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><MapShapeDrawing className={styles.landmark} shape={landmark.rect} /></g>)}</g>
     {!!layout.spaceMarks?.length && <g className={styles.spaceMarks} aria-label="保留／取消格">{layout.spaceMarks.map(mark => <g key={mark.id} data-space-mark={mark.id} role="img" aria-label={MAP_SPACE_MARK_LABELS[mark.kind]}><MapSpaceMarkDrawing mark={mark} presentation={markerPresentation} /><title>{MAP_SPACE_MARK_LABELS[mark.kind]}</title></g>)}</g>}
     <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
@@ -154,7 +155,7 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
         const key = mapMarkerLabelKey("landmark", landmark.id);
         const label = markerLabels.get(key);
         return <g key={landmark.id} data-marker={key}>
-          {locatedMarker === key && <rect className={styles.locatedArea} x={landmark.rect.x} y={landmark.rect.y} width={landmark.rect.width} height={landmark.rect.height} style={{ strokeWidth: 3 * toScreen }} />}
+          {locatedMarker === key && <MapShapeDrawing className={styles.locatedArea} shape={landmark.rect} style={{ strokeWidth: 3 * toScreen }} />}
           {label && <g transform={screenGroup(label.x, label.y)}>{markerText(label, styles.landmarkLabel)}</g>}
         </g>;
       })}

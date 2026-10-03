@@ -28,7 +28,7 @@ function layoutHasContent(layout: EventMapLayout | null) {
 
 function canCropPlan(layout: EventMapLayout | null, authoring: MapAuthoringState) {
   if (!layout) return true;
-  return !layoutHasContent(layout) && !layout.areaRegions?.length && !authoring.guides.length
+  return !layoutHasContent(layout) && !layout.floor.points && !layout.areaRegions?.length && !authoring.guides.length
     && layout.floor.x === 0 && layout.floor.y === 0 && layout.floor.width === layout.width && layout.floor.height === layout.height;
 }
 

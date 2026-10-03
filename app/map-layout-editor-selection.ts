@@ -1,5 +1,6 @@
 import { resolveMapLandmarkKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapRect } from "./event-map";
 import { clamp, contiguousSegment, rowOrientationFromEndpoints, seamlessSpans } from "./map-layout-editor-geometry";
+import { assignShapeBox } from "./map-shape-geometry";
 
 export type Selection =
   | { kind: "floor" }
@@ -104,7 +105,7 @@ export function applySelectionBoxes(draft: EventMapLayout, selections: readonly 
       return;
     }
     const rect = rectFor(draft, selection);
-    if (rect) Object.assign(rect, box);
+    if (rect) assignShapeBox(rect, box);
   });
 }
 

@@ -5,6 +5,8 @@ import { resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, mergeSelections, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
 import { overlappingSlotCodes } from "./map-contribution-draft";
+import { assignShapeBox, cloneShape, isSimplePolygon, polygonBounds, shapeInterior, type MapShape } from "./map-shape-geometry";
+import { MapShapeDrawing } from "./map-shape-drawing";
 import type { MapBoothScope } from "./map-booth-coverage";
 import { MapBoothList } from "./map-booth-list";
 import MapRecognitionPanel from "./map-recognition-panel";
@@ -57,7 +59,10 @@ type RowFrameResizeState = { mode: "resize-row-frame"; pointerId: number; corner
  * the panel does — it is what the corner handles reshape. */
 type ActiveSegment = { rowIndex: number; items: number[]; orientation: MapOrientation };
 
-type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState | RowFrameDrawState | RowFrameResizeState | FacilityDrawState | GuideDrawState | GuideDragState | PanDragState;
+type ShapeSelection = Extract<Selection, { kind: "floor" | "landmark" }>;
+type ShapeKind = "floor" | MapLandmarkKind;
+type ShapeVertexDrag = { mode: "shape-vertex"; pointerId: number; target: ShapeSelection; vertex: number };
+type DragState = MoveDragState | ResizeDragState | BandDragState | SlotDrawDragState | RowFrameDrawState | RowFrameResizeState | FacilityDrawState | GuideDrawState | GuideDragState | PanDragState | ShapeVertexDrag;
 
 /** A review comment can point at one booth or landmark. `nonce` is what makes
  * the same target requestable twice: after the contributor clicks elsewhere,
@@ -199,11 +204,11 @@ const ACCESS_DEFAULT_LABELS: Record<MapAccessKind, string> = { entrance: "入口
 function cloneLayout(layout: EventMapLayout): EventMapLayout {
   return {
     ...layout,
-    floor: { ...layout.floor },
+    floor: cloneShape(layout.floor),
     rows: layout.rows.map((row) => ({ ...row, slots: row.slots.map((slot) => ({ ...slot, rect: { ...slot.rect } })) })),
     pillars: layout.pillars.map((pillar) => ({ ...pillar })),
     accessPoints: layout.accessPoints.map((point) => ({ ...point })),
-    landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: { ...landmark.rect } })),
+    landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: cloneShape(landmark.rect) })),
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map((point) => ({ ...point })) } : {}),
     ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map((point) => ({ ...point })) })) } : {}),
     ...(layout.spaceMarks ? { spaceMarks: layout.spaceMarks.map(mark => ({ ...mark, rect: { ...mark.rect } })) } : {}),
@@ -288,6 +293,11 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   const [facilityTool, setFacilityTool] = useState<FacilityTool | null>(null);
   const [areaTool, setAreaTool] = useState(false);
   const [areaDraft, setAreaDraft] = useState<MapPoint[]>([]);
+  const [shapeKind, setShapeKind] = useState<ShapeKind>("floor");
+  const [shapeTool, setShapeTool] = useState<{ kind: ShapeKind; target?: ShapeSelection } | null>(null);
+  const [shapeDraft, setShapeDraft] = useState<MapPoint[]>([]);
+  const shapeSelection = selection && (selection.kind === "floor" || selection.kind === "landmark") ? selection : null;
+  const selectedShape = shapeSelection ? rectFor(layout, shapeSelection) as MapShape | undefined : undefined;
   const [areaId, setAreaId] = useState(scope?.areaIds?.[0] ?? "");
   const [areaColor, setAreaColor] = useState<MapAreaColor>("mint");
   const [selectedAreaRegionId, setSelectedAreaRegionId] = useState("");
@@ -344,7 +354,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   const copyLimit = copyDraft && copyDraft.sequence !== "custom" ? copyRowLimitError(copyDraft.sequence, copyDraft.start, Number(copyDraft.count)) : null;
   const copyPreview = copyDraft && copySource ? copyLimit ? { ok: false as const, rows: [] as BoothRow[], error: copyLimit } : planRowCopies(copySource, layout, { count: Number(copyDraft.count), gap: copyDraft.gap.trim() ? Number(copyDraft.gap) : NaN, labels: copyLabels, direction: copyDraft.direction }) : null;
   const copyCountValid = !!copyDraft && !copyLimit && Number.isInteger(Number(copyDraft.count)) && Number(copyDraft.count) >= 1 && Number(copyDraft.count) <= 100;
-  const inspectorOpen = !!(selections.length || rowForm || slotDrawForm || selectedGuide || selectedAreaRegion || copyDraft || ["areas", "guides", "background"].includes(toolGroup ?? ""));
+  const inspectorOpen = !!(selections.length || rowForm || slotDrawForm || shapeTool || selectedGuide || selectedAreaRegion || copyDraft || ["areas", "guides", "background"].includes(toolGroup ?? ""));
   const drag = useRef<DragState | null>(null);
   const editorRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -465,6 +475,8 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     if (active && svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
     setFacilityTool(null);
     setAreaTool(false);
+    setShapeTool(null);
+    setShapeDraft([]);
     setAreaDraft([]);
     setGuideTool(null);
     setGuidePreview(null);
@@ -511,7 +523,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
         setSharedEdgeDraft(null);
         return;
       }
-      if (event.key === "Escape" && (placementTool || areaTool || anchors)) {
+      if (event.key === "Escape" && (placementTool || areaTool || shapeTool || anchors)) {
         event.preventDefault();
         event.stopPropagation();
         cancelPlacement();
@@ -544,10 +556,9 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
       if (!rect) return;
       const width = clamp(next.width ?? rect.width, .5, draft.width - rect.x);
       const height = clamp(next.height ?? rect.height, .5, draft.height - rect.y);
-      rect.x = clamp(next.x ?? rect.x, 0, draft.width - width);
-      rect.y = clamp(next.y ?? rect.y, 0, draft.height - height);
-      rect.width = clamp(width, .5, draft.width - rect.x);
-      rect.height = clamp(height, .5, draft.height - rect.y);
+      const x = clamp(next.x ?? rect.x, 0, draft.width - width);
+      const y = clamp(next.y ?? rect.y, 0, draft.height - height);
+      assignShapeBox(rect, { x, y, width: clamp(width, .5, draft.width - x), height: clamp(height, .5, draft.height - y) });
     }, coalesceKey);
   };
 
@@ -612,6 +623,27 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     };
   };
 
+  const updateShapePoints = (target: ShapeSelection, points: MapPoint[], key: string | null = null) => {
+    if (!isSimplePolygon(points) || points.some(point => point.x < 0 || point.y < 0 || point.x > layout.width || point.y > layout.height)) {
+      setRowErrors(["多邊形至少需要 3 個頂點，不可自交或超出畫布。"]); return false;
+    }
+    commit(draft => { const shape = rectFor(draft, target); if (shape) Object.assign(shape, polygonBounds(points), { points: points.map(point => ({ ...point })) }); }, key);
+    setRowErrors([]); return true;
+  };
+  const startShapeDrawing = (target?: ShapeSelection) => {
+    cancelPlacement(); setSelections([]); setSelectedGuideId(null); setSelectedAreaRegionId(""); setRowErrors([]);
+    setShapeTool({ kind: target?.kind === "floor" ? "floor" : target?.kind === "landmark" ? resolveMapLandmarkKind(layout.landmarks[target.itemIndex]) : shapeKind, target });
+  };
+  const finishShapeDrawing = () => {
+    if (!shapeTool || !isSimplePolygon(shapeDraft)) { setRowErrors(["多邊形至少需要 3 個頂點，且不可自交。"]); return; }
+    const target = shapeTool.target ?? (shapeTool.kind === "floor" ? { kind: "floor" as const } : { kind: "landmark" as const, itemIndex: layout.landmarks.length });
+    if (shapeTool.target || shapeTool.kind === "floor") updateShapePoints(target, shapeDraft);
+    else {
+      const kind = shapeTool.kind;
+      commit(draft => { draft.landmarks.push({ id: globalThis.crypto.randomUUID(), kind, label: MAP_FACILITY_TYPE_LABELS[kind], rect: { ...polygonBounds(shapeDraft), points: shapeDraft.map(point => ({ ...point })) } }); });
+    }
+    setShapeTool(null); setShapeDraft([]); setSelections([target]);
+  };
   const startAreaDrawing = () => {
     if (!scope?.areaIds?.length) return;
     cancelPlacement();
@@ -968,6 +1000,11 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
       return;
     }
     if (active.pointerId !== event.pointerId) return;
+    if (active.mode === "shape-vertex") {
+      const shape = rectFor(layout, active.target) as MapShape | undefined;
+      if (shape?.points) updateShapePoints(active.target, shape.points.map((vertex, i) => i === active.vertex ? { x: clamp(point.x, 0, layout.width), y: clamp(point.y, 0, layout.height) } : vertex), `drag:${event.pointerId}:vertex:${active.vertex}`);
+      return;
+    }
     if (active.mode === "place-guide") return;
     if (active.mode === "move-guide") {
       const delta = active.guide.axis === "x" ? point.x - active.startX : point.y - active.startY;
@@ -1536,7 +1573,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   return <MapEditorSurface title={title} save={save} saveButtonRef={saveButtonRef}><section ref={editorRef} className={styles.editor} aria-label="活動地圖編輯器">
     <div className={styles.editingBody} inert={save?.busy || undefined}>
     <div className={styles.toolRail} aria-label="地圖工具">
-      <button type="button" aria-pressed={!placementTool && !areaTool && !toolGroup} onClick={() => changeToolGroup(null)}><UiIcon name="locate" />選取</button>
+      <button type="button" aria-pressed={!placementTool && !areaTool && !shapeTool && !toolGroup} onClick={() => changeToolGroup(null)}><UiIcon name="locate" />選取</button>
       {([['booths', '攤位'], ['facilities', '設施'], ['areas', '區域'], ['guides', '輔助線'], ['background', '底圖與畫布']] as const).map(([group, label]) => <button type="button" key={group} aria-expanded={toolGroup === group} onClick={() => changeToolGroup(toolGroup === group ? null : group)}>{label}</button>)}
       {recognitionEnabled && backgroundImageUrl && <button type="button" aria-expanded={toolGroup === "recognition"} onClick={() => changeToolGroup(toolGroup === "recognition" ? null : "recognition")}>辨識（實驗）</button>}
       <span className={styles.railSpacer} />
@@ -1546,10 +1583,12 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     <div className={styles.addTools} hidden={!['booths', 'facilities', 'areas', 'guides'].includes(toolGroup ?? '')}>
       <span hidden={toolGroup !== "areas"}><button disabled={!scope?.areaIds?.length} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button>{!scope?.areaIds?.length && <span>先在場地設定展區，再新增範圍。</span>}</span>
       <span hidden={toolGroup !== "booths"}><button aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button><button aria-pressed={placementTool === "space-mark"} onClick={() => activateFacility("space-mark")}>新增保留／取消格</button></span>
-      <span hidden={toolGroup !== "facilities"}>{FACILITY_TOOLS.map(tool => <button key={tool} aria-pressed={placementTool === tool} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}</span>
+      <span hidden={toolGroup !== "facilities"}>{FACILITY_TOOLS.map(tool => <button key={tool} aria-pressed={placementTool === tool} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}<label>多邊形類型<select value={shapeKind} onChange={event => setShapeKind(event.target.value as ShapeKind)}>{(["floor", "enterprise", "stage", "other"] as const).map(kind => <option key={kind} value={kind}>{kind === "floor" ? "場館外框" : MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label><button aria-pressed={!!shapeTool} onClick={() => startShapeDrawing()}>描繪多邊形</button></span>
       <span hidden={toolGroup !== "guides"}>{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</span>
     </div>
     {overlaps.length > 0 && <div className={styles.overlapNotice}>攤位重疊{overlaps.map(code => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</div>}
+    {shapeTool && <div className={styles.areaStatus} role="status"><span>依序點選頂點，至少 3 點；曲線可用多個頂點近似。Escape 取消。</span><button disabled={shapeDraft.length < 3} onClick={finishShapeDrawing}>完成多邊形（{shapeDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
+    {!!rowErrors.length && (shapeTool || selectedShape?.points) && <p className={styles.rowErrors} role="alert">{rowErrors[0]}</p>}
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
     {placementTool && <p className={styles.placementStatus} role="status">
       目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。
@@ -1583,12 +1622,12 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
 
           <rect className={styles.paper} width={layout.width} height={layout.height} />
           {backgroundImageUrl && <image className={styles.sourceImage} href={backgroundImageUrl} style={{ opacity: preferences.backgroundOpacity / 100, visibility: preferences.showBackground ? "visible" : "hidden" }} width={layout.width} height={layout.height} preserveAspectRatio="none" />}
-          <rect className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} {...layout.floor} />
+          <MapShapeDrawing className={`${styles.floor} ${selectedKeys.has("floor") ? styles.selected : ""}`} shape={layout.floor} />
           {layout.areaRegions?.map((region) => <polygon key={region.id} className={styles.areaRegion} points={region.points.map((point) => `${point.x},${point.y}`).join(" ")} fill={MAP_AREA_COLORS[region.color]} stroke={region.id === selectedAreaRegionId ? "#365a77" : "none"} />)}
           {/* The outline, not the hall's whole area, is what drags: a floor that
               fills the sheet would otherwise swallow every click on blank paper. */}
-          <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
-          {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${selectedKeys.has(`landmark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
+          <MapShapeDrawing className={`${styles.editable} ${styles.floorHandle}`} shape={layout.floor} data-shape-floor="true" onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
+          {layout.landmarks.map((landmark, itemIndex) => { const inside = shapeInterior(landmark.rect); const label = rowLabels.get(`landmark:${landmark.id}`); return <g key={landmark.id} className={`${styles.editable} ${selectedKeys.has(`landmark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><MapShapeDrawing className={styles.landmark} shape={landmark.rect} data-shape-id={landmark.id} />{landmark.rect.points ? label && <g transform={`translate(${label.x} ${label.y}) scale(${1 / renderScale})`}><text style={{ fontSize: label.fontPx, textAnchor: label.anchor, dominantBaseline: "central" }}>{label.text}</text></g> : <text x={inside.x} y={inside.y}>{landmark.label || "未命名區域"}</text>}</g>; })}
           {layout.spaceMarks?.map((mark, itemIndex) => <g key={mark.id} data-space-mark={mark.id} role="img" aria-label={MAP_SPACE_MARK_LABELS[mark.kind]} className={`${styles.editable} ${selectedKeys.has(`space-mark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={event => startDrag(event, { kind: "space-mark", itemIndex })}><MapSpaceMarkDrawing mark={mark} presentation={{ screenScale: renderScale, fontScale: 1 }} /></g>)}
           {layout.rows.map(row => renderRowLabel(row))}
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} data-slot-code={slot.code} className={`${styles.editable} ${overlapping.has(slot.code) ? styles.overlapping : ""} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
@@ -1626,6 +1665,8 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
             ["sw", handleBounds.x, handleBounds.y + handleBounds.height],
           ] as const).map(([corner, x, y]) => <g key={corner} data-resize-corner={corner} className={`${styles.resizeHandle} ${corner === "nw" || corner === "se" ? styles.resizeNwSe : styles.resizeNeSw}`} aria-hidden="true" onPointerDown={handleResizePointerDown}><circle className={styles.resizeHitArea} cx={x} cy={y} r={resizeHitRadius} /><rect className={styles.resizeKnob} x={x - resizeKnobHalfSize} y={y - resizeKnobHalfSize} width={resizeKnobHalfSize * 2} height={resizeKnobHalfSize * 2} rx={2 * layoutUnitsPerPixel} /></g>)}
           {areaTool && <><polyline className={styles.areaDraft} points={areaDraft.map((point) => `${point.x},${point.y}`).join(" ")} />{areaDraft.map((point, index) => <circle key={index} className={styles.areaVertex} cx={point.x} cy={point.y} r={Math.max(3, layoutUnitsPerPixel * 4)} />)}<rect x={0} y={0} width={layout.width} height={layout.height} fill="transparent" style={{ cursor: "crosshair" }} onPointerDown={(event) => { if (event.button !== 0 || spaceHeldRef.current || drag.current?.mode === "pan") return; event.preventDefault(); event.stopPropagation(); const bounds = event.currentTarget.ownerSVGElement!.getBoundingClientRect(); setAreaDraft((current) => [...current, { x: clamp((event.clientX - bounds.left) * layout.width / bounds.width, 0, layout.width), y: clamp((event.clientY - bounds.top) * layout.height / bounds.height, 0, layout.height) }]); }} /></>}
+          {shapeTool && <><polyline className={styles.areaDraft} points={shapeDraft.map(point => `${point.x},${point.y}`).join(" ")} />{shapeDraft.map((point, index) => <circle key={index} className={styles.areaVertex} cx={point.x} cy={point.y} r={Math.max(3, layoutUnitsPerPixel * 4)} />)}<rect x="0" y="0" width={layout.width} height={layout.height} fill="transparent" style={{ cursor: "crosshair" }} onPointerDown={event => { if (event.button !== 0 || spaceHeldRef.current) return; event.preventDefault(); event.stopPropagation(); const point = pointIn(event.currentTarget.ownerSVGElement!, event); if (shapeDraft.length < 200) setShapeDraft(current => [...current, { x: clamp(point.x, 0, layout.width), y: clamp(point.y, 0, layout.height) }]); }} /></>}
+          {shapeSelection && selectedShape?.points && !shapeTool && selectedShape.points.map((point, vertex) => <circle key={vertex} data-shape-vertex={vertex} className={styles.areaVertex} cx={point.x} cy={point.y} r={Math.max(3, layoutUnitsPerPixel * 4)} style={{ cursor: "move" }} onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); const svg = event.currentTarget.ownerSVGElement!; svg.setPointerCapture(event.pointerId); drag.current = { mode: "shape-vertex", pointerId: event.pointerId, target: shapeSelection, vertex }; }} />)}
         </svg>
         </div>
         </div>
@@ -1798,6 +1839,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
             {selectedRect && numberField("寬", selectedRect.width, (value) => updateRect({ width: value }, `field:${activeKey}:width`))}
             {selectedRect && numberField("高", selectedRect.height, (value) => updateRect({ height: value }, `field:${activeKey}:height`))}
           </div>
+          {shapeSelection && selectedShape && <><button onClick={() => startShapeDrawing(shapeSelection)}>重新描繪多邊形</button>{selectedShape.points && <><button onClick={() => { const target = shapeSelection; commit(draft => { delete (rectFor(draft, target) as MapShape).points; }); }}>改成矩形</button><details><summary>多邊形頂點（{selectedShape.points.length}）</summary>{selectedShape.points.map((point, index) => <div className={styles.fields} key={index}>{numberField(`頂點 ${index + 1} X`, point.x, value => updateShapePoints(shapeSelection, selectedShape.points!.map((p, i) => i === index ? { ...p, x: value } : p), `field:vertex:${activeKey}:${index}:x`))}{numberField(`頂點 ${index + 1} Y`, point.y, value => updateShapePoints(shapeSelection, selectedShape.points!.map((p, i) => i === index ? { ...p, y: value } : p), `field:vertex:${activeKey}:${index}:y`))}<button disabled={selectedShape.points!.length <= 3} onClick={() => updateShapePoints(shapeSelection, selectedShape.points!.filter((_, i) => i !== index))}>移除頂點 {index + 1}</button><button disabled={selectedShape.points!.length >= 200} onClick={() => { const points = selectedShape.points!.map(p => ({ ...p })); const next = points[(index + 1) % points.length]; points.splice(index + 1, 0, { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 }); updateShapePoints(shapeSelection, points); }}>插入頂點</button></div>)}</details></>}</>}
           {selection.kind !== "floor" && <button className={styles.remove} onClick={removeSelection}>移除此元素</button>}
           <p className={styles.hint}>{selectedLandmarkKind === "enterprise" ? "拖曳移動或縮放時會貼齊相鄰企業攤；按住 Alt 可暫停吸附。" : isPointSelection(selection) ? "拖曳會直接更新預覽。" : "拖曳物件可移動，拖曳四角可調整大小。"}{selection.kind !== "floor" && " 按 Delete 可移除選取的元素。"}</p>
         </>}

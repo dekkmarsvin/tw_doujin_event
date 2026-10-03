@@ -1,5 +1,8 @@
 # 地圖編輯器契約
 
+**實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
+**測試**：`tests/map-shape-geometry.test.mjs`
+
 主辦單位工作區與地圖貢獻控制面共用同一個 `MapLayoutEditor`。本契約管兩個入口共同的畫布編輯行為；草稿的保存、權限、版本與審閱各見[主辦單位工作區契約](./organizer-workspace.md#地圖)與[地圖貢獻控制面契約](./map-contributions.md)，操作順序見[地圖 authoring](../runbooks/map-authoring.md)。
 
 **實作**：[`app/map-layout-editor.tsx`](../../app/map-layout-editor.tsx)、[`app/map-layout-editor-geometry.ts`](../../app/map-layout-editor-geometry.ts)、[`app/map-layout-editor-selection.ts`](../../app/map-layout-editor-selection.ts)、[`app/map-segment-edit.ts`](../../app/map-segment-edit.ts)、[`app/map-placement-tool.ts`](../../app/map-placement-tool.ts)、[`app/map-editor-history.ts`](../../app/map-editor-history.ts)、[`app/map-editor-preferences.ts`](../../app/map-editor-preferences.ts)、[`app/map-authoring-state.ts`](../../app/map-authoring-state.ts)、[`app/map-booth-list.tsx`](../../app/map-booth-list.tsx)、[`app/map-booth-coverage.ts`](../../app/map-booth-coverage.ts)、[`app/map-recognition.ts`](../../app/map-recognition.ts)、[`app/map-template-registry.ts`](../../app/map-template-registry.ts)
@@ -124,3 +127,7 @@ Organizer 與地圖貢獻皆把 authoring 跟隨 map revision 保存、重開，
 切換工具分組會取消尚未放置的元素及待套用預覽，不改變已完成的地圖與復原歷史。點選「辨識」直接顯示底圖與辨識操作，不需再展開第二層面板，預覽隨可用高度延伸；離開再返回時保留辨識輸入及尚未失效的結果。
 
 從主辦地圖步驟與地圖貢獻入口可展開同一個編輯器至全視窗。展開／返回不重建 layout、選取或復原歷史；返回只收合，真正離開及切換範圍仍須處理未儲存變更。全視窗隔離外層控制項、保留儲存動作與結果，儲存失敗不關閉或丟棄草稿。Escape 優先取消待套用預覽及放置工具，其次收起工具分組，最後返回地圖步驟。返回恢復展開按鈕的焦點。
+
+## 多邊形
+
+設施工具可選場館外框、企業攤、舞台或其他區域，逐點描繪多邊形；完成前只有預覽，取消不建立元素。場館外框替換該張地圖外框，其餘種類建立獨立命名區域。選取後可重新描繪、改回外接矩形、拖動或用座標移動／縮放，並在頂點面板增刪及修改座標，或拖曳畫布頂點。無效頂點編輯會顯示原因且保留原有效形狀。所有已完成操作使用同一復原／重做與保存機制；一般攤位格不提供多邊形工具。
