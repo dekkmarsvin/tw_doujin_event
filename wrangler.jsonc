@@ -47,6 +47,8 @@
     // One-time #477 seed: the existing production notification Worker is enabled.
     // Remove after both environments have a verified D1 settings row; never a runtime override.
     "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
+    // Preserve the public opening merged in #478 for the one-time D1 migration.
+    "ORGANIZER_APPLICATIONS_OPEN": "true",
     "ORGANIZER_PUBLICATION_MODE": "github",
     "EVENT_ID": "ff47",
     "TURNSTILE_SITEKEY": "0x4AAAAAAET9rAWIzjOckkSc",
