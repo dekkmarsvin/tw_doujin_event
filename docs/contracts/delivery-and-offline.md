@@ -2,8 +2,8 @@
 
 公開閱讀端如何取得場刊與地圖資料、載入時的介面行為，以及離線可用範圍。
 
-**實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)、[`app/circle-page-data.ts`](../../app/circle-page-data.ts)、[`app/circle-page/`](../../app/circle-page)
-**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`、`tests/circle-page.test.mjs`、`tests/browser/circle-page.mjs`
+**實作**：[`app/catalog-publication.ts`](../../app/catalog-publication.ts)、[`app/static-circle-catalog-client.ts`](../../app/static-circle-catalog-client.ts)、[`app/static-event-map-client.ts`](../../app/static-event-map-client.ts)、[`app/static-circle-overrides-client.ts`](../../app/static-circle-overrides-client.ts)、[`app/use-circle-catalog.ts`](../../app/use-circle-catalog.ts)、[`app/service-worker-source.js`](../../app/service-worker-source.js)、[`app/offline-readiness.ts`](../../app/offline-readiness.ts)、[`app/offline-prep-dialog.tsx`](../../app/offline-prep-dialog.tsx)、[`scripts/build-service-worker.mjs`](../../scripts/build-service-worker.mjs)、[`app/static-discovery.ts`](../../app/static-discovery.ts)、[`scripts/build-discovery-pages.mjs`](../../scripts/build-discovery-pages.mjs)、[`app/circle-page-data.ts`](../../app/circle-page-data.ts)、[`app/circle-page/`](../../app/circle-page)
+**測試**：`tests/catalog-publication.test.mjs`、`tests/service-worker.test.mjs`、`tests/public-artifact.test.mjs`、`tests/seo.test.mjs`、`tests/discovery-artifact.test.mjs`、`tests/circle-page.test.mjs`、`tests/offline-readiness.test.mjs`、`tests/multi-space-event-map.test.mjs`、`tests/browser/circle-page.mjs`、`tests/browser/reader-offline-prep.mjs`
 **設定**：[`public/_headers`](../../public/_headers)、[`public/_routes.json`](../../public/_routes.json)、[`functions/_html-security.ts`](../../functions/_html-security.ts)
 
 ## 公開搜尋介紹頁
@@ -67,7 +67,8 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 - precache 清單由 build 時產生，**只涵蓋 `index.html` 實際載入的資源**，不含社團入口。
 - **只有閱讀端自己的路徑可以更新 shell 快取。** `/circle`、`/organizer` 與 `/privacy` 是各自獨立的文件，其資產刻意不進 precache；若把它們的回應寫進 shell，下一次離線啟動閱讀端就會拿到入口文件而不是地圖，且缺少從未快取的資產。閱讀端狀態全部放在 query parameter，因此閱讀端就是這兩條路徑。
 - **絕不把被重新導向的回應當成 shell 或場刊快取。**
-- 展場離線可重新載入並繼續使用已下載的場刊、地圖、字型與介面。
+- 展場離線可重新載入並繼續使用已下載的場刊、地圖、字型與介面。只發布單一 `map.json` 的分日活動，離線時 manifest 請求在網路層失敗，與 404 相同改讀 `map.json`。
+- **準備離線使用（#415）**：行程面板提供「準備離線使用」，明示活動、日期與場地，以及不包括的內容（社團自填介紹與品書圖、外部連結）。沿用既有 Service Worker 與 cache：核對該日所需的 shell、目前頁面載入的資產、`circles.json`、地圖 manifest 與該範圍的地圖，缺少的以與 Worker 相同的條件補抓，**再核對一次才標為已就緒**；曾載入過或曾按過按鈕都不是就緒證據。部分失敗顯示可重試；不支援或同時存在多個版本快取時請使用者重新整理。不新增 Worker、排程或下載平台。
 - **離線範圍只涵蓋自家靜態產物。** 外部社團縮圖與外部連結不快取；離線時維持既有的降級狀態，不得改以本地內容假冒。
 - 提供 web app manifest 與可遮罩圖示，讓使用者能在展前把工具加入主畫面。**安裝與否不改變任何核心流程。**
 
