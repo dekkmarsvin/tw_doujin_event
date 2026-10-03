@@ -21,7 +21,7 @@ import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
-import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
+import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
 import { CirclePageShare } from "./circle-page-share";
@@ -58,8 +58,6 @@ const mapHref = (eventId: string, record?: CircleViewRecord) => {
 };
 /** The map side panel renders `externalLinks.slice(0, 6)`; the rest move to full detail. */
 const SIDE_PANEL_LINK_LIMIT = 6;
-
-const CIRCLE_CONTACT_DISCORD = "https://discord.gg/MmtjnUjEwW";
 
 const EMPTY_LINK: CircleExternalLink = { provider: "", kind: "social", url: "" };
 
@@ -327,6 +325,7 @@ export default function CirclePortalApp() {
         <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
         <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} />
+        <ContactLink url={session.contactUrl} />
         {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
         {session.isAdmin && <a href="/admin">管理</a>}
         <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
@@ -350,7 +349,7 @@ export default function CirclePortalApp() {
             {/* Two columns on a desktop, cut on the editor's own lines below:
                 the list over the form, the claim over the preview. */}
             <div className={claims.length > 0 ? styles.claimRow : styles.claimSolo}>
-              <ClaimList claims={claims} onChanged={refreshClaims} />
+              <ClaimList claims={claims} session={session} onChanged={refreshClaims} />
               <div className={styles.claimColumn}>
                 {targetCircleId
                   ? <ClaimDestination circleId={targetCircleId} claims={claims} ready={claimsLoadedFor === event.id} failed={claimsFailedFor === event.id} onChanged={refreshClaims} />
@@ -458,7 +457,7 @@ function SignIn({ circleId }: { circleId: string }) {
   </section>;
 }
 
-function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: () => void }) {
+function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; session: PortalSession; onChanged: () => void }) {
   const [status, setStatus] = useState<Status>(IDLE);
   if (claims.length === 0) return null;
 
@@ -495,8 +494,8 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
       </li>)}
     </ul>
     {/* Only manual review waits on the maintainers; a code claim verifies itself. */}
-    {claims.some((claim) => claim.status === "pending" && !claim.targetUrl) && <p className={styles.notice}>
-      預計 1–3 天內完成審核。如需聯絡，請到<a href={CIRCLE_CONTACT_DISCORD} target="_blank" rel="noopener noreferrer">社團聯絡 Discord</a>。
+    {session.claimReviewNotice && claims.some((claim) => claim.status === "pending" && !claim.targetUrl) && <p className={styles.notice}>
+      {session.claimReviewNotice}{session.contactUrl && <> <ContactLink url={session.contactUrl} /></>}
     </p>}
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;

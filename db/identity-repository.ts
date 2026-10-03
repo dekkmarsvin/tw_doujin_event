@@ -115,7 +115,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
           if (options.initializeSiteSettings !== false) await seedSiteSettings(database, {
             organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
             accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: false,
-            updatedAt: Date.now(), updatedBy: "migration",
+            contactUrl: "", claimReviewNotice: "", updatedAt: Date.now(), updatedBy: "migration",
           });
         })
         .then(async () => { await seedNotificationPreferences(database, Date.now()); })

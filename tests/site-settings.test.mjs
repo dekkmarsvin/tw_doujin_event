@@ -40,7 +40,7 @@ async function save(change, signed = cookie, version) {
   const current = await repo.getSiteSettings();
   const settings = { organizerApplicationMode: current.organizerApplicationMode, organizerAllowedEmails: current.organizerAllowedEmails,
     accountNotificationsEnabled: current.accountNotificationsEnabled, adminReviewNotificationsEnabled: current.adminReviewNotificationsEnabled,
-    publicationEnabled: current.publicationEnabled };
+    publicationEnabled: current.publicationEnabled, contactUrl: current.contactUrl, claimReviewNotice: current.claimReviewNotice };
   return handlers.adminUpdateSiteSettings(request("PUT", { settings: { ...settings, ...change }, expectedUpdatedAt: version ?? current.updatedAt }, signed));
 }
 
@@ -48,7 +48,8 @@ test("settings are admin-only, validate the complete object and atomically audit
   assert.equal((await handlers.adminGetSiteSettings(request("GET", undefined, ""))).status, 401);
   assert.equal((await handlers.adminGetSiteSettings(request("GET", undefined, memberCookie))).status, 403);
   assert.equal((await save({ organizerApplicationMode: "public" }, memberCookie)).status, 403);
-  for (const change of [{ organizerApplicationMode: "open" }, { publicationEnabled: "true" }, { organizerAllowedEmails: ["bad"] }, { accountNotificationsSince: 0 }]) {
+  for (const change of [{ organizerApplicationMode: "open" }, { publicationEnabled: "true" }, { organizerAllowedEmails: ["bad"] }, { accountNotificationsSince: 0 },
+    { contactUrl: "http://discord.gg/x" }, { contactUrl: "javascript:alert(1)" }, { claimReviewNotice: "字".repeat(201) }]) {
     assert.equal((await save(change)).status, 400);
   }
   assert.equal((await handlers.adminUpdateSiteSettings(request("PUT", { settings: { publicationEnabled: true }, expectedUpdatedAt: 1 }))).status, 400);
@@ -93,6 +94,7 @@ test("Worker does not seed settings; Pages defaults are conservative and never o
   assert.equal(initial.accountNotificationsSince, null);
   assert.equal(initial.adminReviewNotificationsEnabled, false);
   assert.equal(initial.publicationEnabled, false);
+  assert.equal(initial.contactUrl, ""); assert.equal(initial.claimReviewNotice, "");
   await resetSiteSettings(db, { organizerApplicationMode: "invite_only", organizerAllowedEmails: ["invited@example.test"],
     accountNotificationsEnabled: true, accountNotificationsSince: 1_790_000_000_000,
     adminReviewNotificationsEnabled: true, publicationEnabled: true });
@@ -138,4 +140,16 @@ test("service checks use Worker credentials, return safe sources and never send 
   await repo.requestServiceCheck(now + 1);
   await repo.completeServiceCheck(checked.requestedAt, now + 2, { mail: rejected, publication: rejected });
   assert.equal((await repo.getServiceChecks()).checkedAt, null, "an older check cannot overwrite a newer request");
+});
+
+test("contact settings reach both workspaces through the session and are cleared by saving empty values", async () => {
+  const contact = async () => {
+    const { contactUrl, claimReviewNotice } = await (await handlers.session(request("GET", undefined, memberCookie))).json();
+    return { contactUrl, claimReviewNotice };
+  };
+  assert.deepEqual(await contact(), { contactUrl: "", claimReviewNotice: "" });
+  assert.equal((await save({ contactUrl: " https://discord.gg/example ", claimReviewNotice: " 預計 1–3 天內完成審核。 " })).status, 200);
+  assert.deepEqual(await contact(), { contactUrl: "https://discord.gg/example", claimReviewNotice: "預計 1–3 天內完成審核。" });
+  assert.equal((await save({ contactUrl: "", claimReviewNotice: "" })).status, 200);
+  assert.deepEqual(await contact(), { contactUrl: "", claimReviewNotice: "" });
 });

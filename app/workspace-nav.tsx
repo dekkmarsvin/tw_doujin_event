@@ -36,3 +36,8 @@ export function WorkspaceSwitch({ current }: { current: Workspace }) {
     {WORKSPACES.map((workspace) => <a key={workspace.id} href={workspace.href} aria-current={workspace.id === current ? "page" : undefined}>{workspace.label}</a>)}
   </nav>;
 }
+
+/** Both workspaces tell people to contact the maintainers; this is where. Set in Admin. */
+export function ContactLink({ url, className }: { url?: string; className?: string }) {
+  return url ? <a href={url} className={className} target="_blank" rel="noopener noreferrer">聯絡管理者</a> : null;
+}

@@ -57,6 +57,7 @@ export const IDENTITY_TABLES = [
     "admin_review_notifications_enabled INTEGER NOT NULL CHECK (admin_review_notifications_enabled IN (0, 1))",
     "publication_enabled INTEGER NOT NULL CHECK (publication_enabled IN (0, 1))",
     "updated_at INTEGER NOT NULL", "updated_by TEXT NOT NULL",
+    "contact_url TEXT NOT NULL DEFAULT ''", "claim_review_notice TEXT NOT NULL DEFAULT ''",
   ]),
   // One on-demand Worker check, overwritten each time; no diagnostic history.
   table("site_service_check", [
@@ -667,4 +668,6 @@ export const IDENTITY_COLUMN_MIGRATIONS = [
   { table: "map_drafts", column: "transition_token", sql: "ALTER TABLE map_drafts ADD COLUMN transition_token TEXT" },
   { table: "map_drafts", column: "retention_action", sql: "ALTER TABLE map_drafts ADD COLUMN retention_action TEXT" },
   { table: "map_drafts", column: "candidate_id", sql: "ALTER TABLE map_drafts ADD COLUMN candidate_id TEXT" },
+  { table: "site_settings", column: "contact_url", sql: "ALTER TABLE site_settings ADD COLUMN contact_url TEXT NOT NULL DEFAULT ''" },
+  { table: "site_settings", column: "claim_review_notice", sql: "ALTER TABLE site_settings ADD COLUMN claim_review_notice TEXT NOT NULL DEFAULT ''" },
 ] as const;

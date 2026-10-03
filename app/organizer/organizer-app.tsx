@@ -26,7 +26,7 @@ import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGui
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
 import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
 import { AccountNotificationSettings } from "../account-notification-settings";
-import { WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
+import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 
 
 import { UiIcon } from "../ui-icons";
@@ -74,6 +74,7 @@ export default function OrganizerApp() {
         {session.isAdmin && <a href="/admin">管理</a>}
         <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
+        <ContactLink url={session.contactUrl} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
       </div>}
     </header>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { readAdminSiteSettings, requestAdminServiceCheck, saveAdminSiteSettings } from "../circle-editor-client";
-import type { AdminSiteSettings, ServiceCheck, SiteSettingsInput } from "../site-settings";
+import { CLAIM_REVIEW_NOTICE_MAX, CONTACT_URL_MAX, type AdminSiteSettings, type ServiceCheck, type SiteSettingsInput } from "../site-settings";
 import styles from "../circle-portal/portal.module.css";
 import settingsStyles from "./admin-site-settings-panel.module.css";
 
@@ -13,7 +13,8 @@ const date = (time: number) => new Date(time).toLocaleString("zh-TW", { timeZone
 function formOf(data: AdminSiteSettings): SiteSettingsInput {
   const s = data.settings;
   return { organizerApplicationMode: s.organizerApplicationMode, organizerAllowedEmails: s.organizerAllowedEmails,
-    accountNotificationsEnabled: s.accountNotificationsEnabled, adminReviewNotificationsEnabled: s.adminReviewNotificationsEnabled, publicationEnabled: s.publicationEnabled };
+    accountNotificationsEnabled: s.accountNotificationsEnabled, adminReviewNotificationsEnabled: s.adminReviewNotificationsEnabled, publicationEnabled: s.publicationEnabled,
+    contactUrl: s.contactUrl, claimReviewNotice: s.claimReviewNotice };
 }
 function ServiceStatus({ label, result, pending }: { label: string; result: ServiceCheck | null; pending: boolean }) {
   return <div className={settingsStyles.service}>
@@ -89,7 +90,7 @@ export function AdminSiteSettingsPanel() {
   if (!data || !form) return <section className={styles.card}><h2>網站設定</h2>{error ? <><p className={styles.error} role="alert">{error}</p><button type="button" onClick={() => void load()}>重新載入</button></> : <p>載入中…</p>}</section>;
   const patch = (change: Partial<SiteSettingsInput>) => setForm(current => current ? { ...current, ...change } : current);
   return <form className={settingsStyles.workspace} onSubmit={event => void submit(event)}>
-    <div className={settingsStyles.title}><h2>網站設定</h2><span>管理活動申請、通知與發布作業</span></div>
+    <div className={settingsStyles.title}><h2>網站設定</h2><span>管理活動申請、聯絡方式、通知與發布作業</span></div>
     <fieldset disabled={busy} className={settingsStyles.fields}>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>活動申請</h3><p>決定誰可以送出活動建置申請。</p>
         <fieldset className={settingsStyles.modes}><legend>申請開放對象</legend>
@@ -101,6 +102,12 @@ export function AdminSiteSettingsPanel() {
             checked={form.organizerApplicationMode === value} onChange={() => patch({ organizerApplicationMode: value })} /><span><strong>{label}</strong><small>{hint}</small></span></label>)}
         </fieldset>
         <label className={settingsStyles.emails} htmlFor="site-invite-emails">邀請名單<textarea id="site-invite-emails" rows={3} value={emails} onChange={event => setEmails(event.target.value)} placeholder="每行一個 email" /></label>
+      </section>
+      <section className={`${styles.card} ${settingsStyles.card}`}><h3>聯絡管理者</h3><p>社團資料與主辦工作區的頁首會顯示「聯絡管理者」連結。</p>
+        <label className={settingsStyles.emails} htmlFor="site-contact-url">聯絡連結<input id="site-contact-url" type="url" maxLength={CONTACT_URL_MAX} value={form.contactUrl}
+          onChange={event => patch({ contactUrl: event.target.value })} placeholder="留空則不顯示" /></label>
+        <label className={settingsStyles.emails} htmlFor="site-claim-review-notice">認領審核中說明<textarea id="site-claim-review-notice" rows={2} maxLength={CLAIM_REVIEW_NOTICE_MAX} value={form.claimReviewNotice}
+          onChange={event => patch({ claimReviewNotice: event.target.value })} placeholder="留空則不顯示" /></label>
       </section>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>通知</h3>
         <label className={settingsStyles.switch} htmlFor="site-account-mail" aria-label="全站寄送帳號通知"><span><strong>全站寄送帳號通知</strong><small>寄給社團認領人，通知認領結果與補充資料更新或撤下；活動申請人收到申請結果，主辦負責人收到審核、權限與發布結果，協作者收到自己的權限異動。</small></span>
