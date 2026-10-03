@@ -1,0 +1,264 @@
+{
+  "recordedAt": "2026-10-03T06:34:17.789Z",
+  "source": "Previously saved real UI-created layouts, official source roster names, local mocked public transport",
+  "productionWrites": 0,
+  "apiRequests": [],
+  "errors": [],
+  "units": [
+    {
+      "id": "arktw",
+      "source": "Arktw_only-2026.jpg",
+      "sourceSha256": "d7840099abdbd5d134ccc82727a04143a7a04507f043b7d16d0ca09aa71c820d",
+      "canvas": [
+        724,
+        1024
+      ],
+      "ordinaryCodes": 84,
+      "interactiveSourceCodes": 84,
+      "unallocatedNumericCodes": [],
+      "reservedMarks": 2,
+      "floorPolygonPoints": 0,
+      "notes": 0,
+      "paths": 1,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ],
+      "phoneChecks": [
+        "390x844 anonymous fit preserves all source annotations",
+        "real zoom control enlarges saved vector geometry",
+        "fit restores complete source map",
+        "no horizontal page overflow"
+      ]
+    },
+    {
+      "id": "taiwan-cup",
+      "source": "taiwan-cup-1.jpg",
+      "sourceSha256": "e1a1031809ad42836ff02b721987cf46a22c46e788a739275ba1549d90fae91b",
+      "canvas": [
+        1040,
+        1240
+      ],
+      "ordinaryCodes": 63,
+      "interactiveSourceCodes": 55,
+      "unallocatedNumericCodes": [
+        "馬1",
+        "馬2",
+        "馬8",
+        "先4",
+        "蹦2",
+        "蹦6",
+        "跳6",
+        "跳7"
+      ],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 12,
+      "notes": 1,
+      "paths": 2,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ],
+      "phoneChecks": [
+        "390x844 anonymous fit preserves all source annotations",
+        "real zoom control enlarges saved vector geometry",
+        "fit restores complete source map",
+        "no horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ch20",
+      "source": "ch-20_map2026.png",
+      "sourceSha256": "156831e7731beb4abbedad5adf3050e9b0fcd661666ea32c998584cb6d193b36",
+      "canvas": [
+        1000,
+        1414
+      ],
+      "ordinaryCodes": 202,
+      "interactiveSourceCodes": 202,
+      "unallocatedNumericCodes": [],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 0,
+      "notes": 2,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ],
+      "phoneChecks": [
+        "390x844 anonymous fit preserves all source annotations",
+        "real zoom control enlarges saved vector geometry",
+        "fit restores complete source map",
+        "no horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ff47",
+      "source": "FF47社團攤位配置圖.jpg",
+      "sourceSha256": "cd284baeeb963bf91d7f1730699b0fd2425dfb161c7edc242437ea9b1b4cbacb",
+      "canvas": [
+        2400,
+        1696
+      ],
+      "ordinaryCodes": 988,
+      "interactiveSourceCodes": 987,
+      "unallocatedNumericCodes": [
+        "F12"
+      ],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 0,
+      "notes": 0,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ffk18-p2",
+      "source": "2025_FFK_map.jpg",
+      "sourceSha256": "8e23f8a6257cc53d3ac6bb2f6e052b53a951c2c0d0b0fdfea73c0d7922bca5b2",
+      "canvas": [
+        1750,
+        4420
+      ],
+      "ordinaryCodes": 280,
+      "interactiveSourceCodes": 280,
+      "unallocatedNumericCodes": [],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 8,
+      "notes": 0,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ffk18-p3",
+      "source": "2025_FFK_map.jpg",
+      "sourceSha256": "8e23f8a6257cc53d3ac6bb2f6e052b53a951c2c0d0b0fdfea73c0d7922bca5b2",
+      "canvas": [
+        1750,
+        4420
+      ],
+      "ordinaryCodes": 314,
+      "interactiveSourceCodes": 313,
+      "unallocatedNumericCodes": [
+        "I12"
+      ],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 0,
+      "notes": 0,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ffk18-b3",
+      "source": "2025_FFK_map.jpg",
+      "sourceSha256": "8e23f8a6257cc53d3ac6bb2f6e052b53a951c2c0d0b0fdfea73c0d7922bca5b2",
+      "canvas": [
+        1190,
+        4250
+      ],
+      "ordinaryCodes": 0,
+      "interactiveSourceCodes": 0,
+      "unallocatedNumericCodes": [],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 0,
+      "notes": 0,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ffk18-b4",
+      "source": "2025_FFK_map.jpg",
+      "sourceSha256": "8e23f8a6257cc53d3ac6bb2f6e052b53a951c2c0d0b0fdfea73c0d7922bca5b2",
+      "canvas": [
+        1170,
+        4250
+      ],
+      "ordinaryCodes": 220,
+      "interactiveSourceCodes": 220,
+      "unallocatedNumericCodes": [],
+      "reservedMarks": 0,
+      "floorPolygonPoints": 0,
+      "notes": 0,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ]
+    },
+    {
+      "id": "ffk18-bicycle",
+      "source": "2025_FFK_map.jpg",
+      "sourceSha256": "8e23f8a6257cc53d3ac6bb2f6e052b53a951c2c0d0b0fdfea73c0d7922bca5b2",
+      "canvas": [
+        2260,
+        4240
+      ],
+      "ordinaryCodes": 136,
+      "interactiveSourceCodes": 136,
+      "unallocatedNumericCodes": [],
+      "reservedMarks": 2,
+      "floorPolygonPoints": 0,
+      "notes": 0,
+      "paths": 0,
+      "checks": [
+        "anonymous saved-map load",
+        "source names only, preserve merged code group",
+        "unallocated numeric slots not buttons and no tab focus",
+        "reserved marks have no circle interaction",
+        "desktop fit and zoom preserve geometry and annotations",
+        "facility directory and available legend open without horizontal page overflow"
+      ],
+      "phoneChecks": [
+        "390x844 anonymous fit preserves all source annotations",
+        "real zoom control enlarges saved vector geometry",
+        "fit restores complete source map",
+        "no horizontal page overflow"
+      ]
+    }
+  ],
+  "metadataScaffolding": "Only source event titles/dates/venues and official roster names are used; Organizer/category reference records are explicitly local acceptance scaffolding. No publication, official roster completeness, or authenticated Reader flow claimed.",
+  "unresolvedNames": "TAIWAN CUP7source name groups cover8physical codes; these8codes remain noninteractive map slots, without fabricated circles."
+}
