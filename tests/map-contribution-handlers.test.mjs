@@ -189,7 +189,7 @@ test("admin-only grants are audited and revocation immediately blocks writes", a
   ]);
 });
 
-test("private guide metadata round-trips with contributor revision and permission guards", async () => {
+test("private guides and unfinished static annotations round-trip with contributor revision and permission guards", async () => {
   scopeConfig.requiredBoothCodes = ["A07"];
   scopeConfig.allowsUnallocatedBooths = false;
   scopeConfig.groups = [{ circleName: "測試社", codes: ["A07"] }];
@@ -198,6 +198,14 @@ test("private guide metadata round-trips with contributor revision and permissio
   const { body } = await newDraft(mapperCookie);
   const path = `/api/map-contributions/drafts/${body.draftId}`;
   const content = { ...validContent(), authoring: { guides: [{ id: "vertical", axis: "x", position: 35.25, locked: false }] } };
+  content.layout.notes = [{ id: "time", text: "社團入場 9:30–10:30", rect: { ...content.layout.rows[0].slots[0].rect } }];
+  content.layout.paths = [{ id: "direction", points: [{ x: 40, y: 30 }, { x: 90, y: 30 }, { x: 90, y: 90 }] }];
+  content.layout.rows[0].labelSide = "right";
+  content.layout.spaceMarks = [{ id: "reserved", kind: "reserved", rect: { x: 35, y: 70, width: 10, height: 10 } }, { id: "cancelled", kind: "cancelled", rect: { x: 50, y: 70, width: 10, height: 10 } }];
+  content.layout.servicePoints = [{ id: "tickets", kind: "ticket-office", x: 75, y: 75 }, { id: "changing", kind: "changing-room", x: 85, y: 75 }];
+  content.layout.floor.points = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 30 }, { x: 30, y: 30 }, { x: 30, y: 100 }, { x: 0, y: 100 }];
+  content.layout.landmarks[0].rect.points = [{ x: 50, y: 50 }, { x: 70, y: 50 }, { x: 70, y: 53 }, { x: 53, y: 53 }, { x: 53, y: 60 }, { x: 50, y: 60 }];
+  // Its note still needs moving off A07; saving preserves that unfinished work.
   const save = expectedRevision => handlers.updateMapDraft(request(path, "PUT", { expectedRevision, content }, mapperCookie), body.draftId);
   assert.equal((await save(1)).status, 200);
   const read = await handlers.getMapDraft(request(path, "GET", undefined, mapperCookie), body.draftId);

@@ -3,6 +3,7 @@ import { eventUsesScopedMaps, parseEventDefinition } from "./event-catalog";
 import { isPublishedEventMap } from "./event-map";
 import { validateMapTemplateLayout } from "./map-template-registry";
 import { parseEventMapManifest } from "./event-map-manifest";
+import { annotationBoothConflicts } from "./map-annotations";
 
 type ScopedMapArtifacts = { manifest: unknown; maps: ReadonlyMap<string, unknown> };
 
@@ -25,6 +26,8 @@ export function validateStagedEventArtifacts(eventValue: unknown, referenceValue
     }
     const validation = validateMapTemplateLayout(event.mapTemplate, value.layout);
     if (!validation.ok) throw new Error(`Staged map ${scope} failed ${event.mapTemplate} validation: ${validation.errors.join("; ")}`);
+    const conflicts = annotationBoothConflicts(value.layout.notes ?? [], value.layout.paths ?? [], value.layout.rows.flatMap(row => row.slots));
+    if (conflicts.length) throw new Error(`Staged map ${scope} has annotations over booths: ${conflicts.join("; ")}`);
     return value;
   };
   const scoped = mapValue && typeof mapValue === "object" && "manifest" in mapValue && "maps" in mapValue

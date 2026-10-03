@@ -1,4 +1,6 @@
 import { isSimplePolygon, polygonBounds, type MapShape } from "./map-shape-geometry";
+import { validNoteText, validPathPoints, type MapNote, type MapPath } from "./map-annotations";
+export type { MapNote, MapPath } from "./map-annotations";
 export type { MapShape } from "./map-shape-geometry";
 export const EVENT_MAP_VERSION = 2 as const;
 
@@ -146,6 +148,9 @@ export type EventMapLayout = {
   areaRegions?: MapAreaRegion[];
   /** Tables that have no booth code or circle interaction. */
   spaceMarks?: MapSpaceMark[];
+  /** Static plain text and ordered direction polylines, scoped to this map. */
+  notes?: MapNote[];
+  paths?: MapPath[];
 };
 
 /** Rescales every coordinate onto a new canvas size. A canvas is only ever the
@@ -178,6 +183,8 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map(scalePoint) } : {}),
     ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map(scalePoint) })) } : {}),
     ...(layout.spaceMarks ? { spaceMarks: layout.spaceMarks.map((mark) => ({ ...mark, rect: scaleRect(mark.rect) })) } : {}),
+    ...(layout.notes ? { notes: layout.notes.map((note) => ({ ...note, rect: scaleRect(note.rect) })) } : {}),
+    ...(layout.paths ? { paths: layout.paths.map((path) => ({ ...path, points: path.points.map(scalePoint) })) } : {}),
   };
 }
 
@@ -336,6 +343,29 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       else ids.add(mark.id);
       if (!MAP_SPACE_MARK_KINDS.includes(mark.kind as MapSpaceMarkKind)) errors.push(`保留／取消格 ${mark.id || "未命名"} 的類型無效。`);
       if (!mark.rect || !finiteRect(mark.rect, width, height)) errors.push(`保留／取消格 ${mark.id || "未命名"} 的矩形座標無效。`);
+    }
+  }
+  if (layout.notes !== undefined && !Array.isArray(layout.notes)) errors.push("文字註記必須是陣列。");
+  if (Array.isArray(layout.notes)) {
+    const ids = new Set<string>();
+    for (const candidate of layout.notes) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("文字註記必須是物件。"); continue; }
+      const note = candidate as Partial<MapNote>;
+      if (typeof note.id !== "string" || !note.id.trim() || ids.has(note.id)) errors.push("文字註記 id 缺漏或重複。");
+      else ids.add(note.id);
+      if (!validNoteText(note.text)) errors.push("文字註記須有內容，最多 120 字、3 行。");
+      if (!note.rect || !finiteRect(note.rect, width, height)) errors.push(`文字註記 ${note.id || "未命名"} 的矩形座標無效。`);
+    }
+  }
+  if (layout.paths !== undefined && !Array.isArray(layout.paths)) errors.push("動線箭頭必須是陣列。");
+  if (Array.isArray(layout.paths)) {
+    const ids = new Set<string>();
+    for (const candidate of layout.paths) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("動線箭頭必須是物件。"); continue; }
+      const path = candidate as Partial<MapPath>;
+      if (typeof path.id !== "string" || !path.id.trim() || ids.has(path.id)) errors.push("動線箭頭 id 缺漏或重複。");
+      else ids.add(path.id);
+      if (!validPathPoints(path.points, width, height)) errors.push(`動線箭頭 ${path.id || "未命名"} 須有 2–100 個畫布內頂點，相鄰點不可重複。`);
     }
   }
   if (layout.areaRegions !== undefined && !Array.isArray(layout.areaRegions)) errors.push("areaRegions 必須是陣列。");

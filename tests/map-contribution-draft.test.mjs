@@ -296,3 +296,38 @@ test("space marks round-trip independently and never replace a required booth", 
     assert.deepEqual(result.problems.find(problem => problem.code === "missing_booth").boothCodes, ["S02"]);
   }
 });
+
+test("static time notes and ordered paths round-trip; collisions can be saved but cannot be submitted", () => {
+  const notes = [{ id: "time", text: "社團入場 9:30–10:30\n一般入場 10:30–15:30", rect: { x: 10, y: 0, width: 180, height: 25 } }];
+  const paths = [{ id: "direction", points: [{ x: 10, y: 85 }, { x: 100, y: 85 }, { x: 100, y: 70 }] }];
+  const next = { ...layout, notes, paths };
+  assert.deepEqual(parseMapContributionDraftContent(content(next))?.layout, next);
+  assert.equal(validateMapContributionDraft(content(next), scope).ok, true);
+  const candidate = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: next, previous: null, now: Date.parse("2026-01-02T00:00:00.000Z") });
+  assert.deepEqual(candidate.candidate.layout.notes, notes);
+  assert.deepEqual(candidate.candidate.layout.paths, paths);
+  assert.deepEqual(candidate.diff.changedNoteIds, ["time"]);
+  assert.deepEqual(candidate.diff.changedPathIds, ["direction"]);
+  assert.equal("notes" in parseMapContributionDraftContent(content(layout)).layout, false);
+  assert.equal("paths" in parseMapContributionDraftContent(content(layout)).layout, false);
+  const copied = structuredClone(next);
+  copied.notes[0].text = "第二天 10:30–15:30";
+  copied.paths[0].points[0].x++;
+  assert.deepEqual(next.notes, notes);
+  assert.equal(paths[0].points[0].x, 10);
+  for (const colliding of [
+    { ...next, notes: [{ ...notes[0], rect: layout.rows[0].slots[0].rect }] },
+    { ...next, paths: [{ ...paths[0], points: [{ x: 0, y: 50 }, { x: 100, y: 50 }] }] },
+  ]) {
+    assert.ok(parseMapContributionDraftContent(content(colliding)), "unfinished geometry is still a savable draft");
+    const result = validateMapContributionDraft(content(colliding), scope);
+    assert.equal(result.ok, false);
+    assert.match(result.problems.find(problem => problem.code === "annotation_overlap").message, /S01/);
+  }
+  for (const invalid of [null, { ...notes[0], id: " " }, { ...notes[0], html: "<b>time</b>" }, { ...notes[0], text: "" }, { ...notes[0], text: "x".repeat(121) }, { ...notes[0], text: "一\n二\n三\n四" }, { ...notes[0], rect: { ...notes[0].rect, width: 0 } }]) assert.equal(parseMapContributionDraftContent(content({ ...layout, notes: [invalid] })), null);
+  for (const invalid of [null, { ...paths[0], label: "invented" }, { ...paths[0], points: [] }, { ...paths[0], points: [{ x: 1, y: 1 }] }, { ...paths[0], points: [{ x: 1, y: 1 }, { x: 1, y: 1 }] }, { ...paths[0], points: [{ x: -1, y: 1 }, { x: 20, y: 1 }] }, { ...paths[0], points: [{ x: 1, y: 1, command: "svg" }, { x: 20, y: 1 }] }, { ...paths[0], points: Array.from({ length: 101 }, (_, index) => ({ x: index, y: 80 })) }]) assert.equal(parseMapContributionDraftContent(content({ ...layout, paths: [invalid] })), null);
+  for (const key of ["notes", "paths"]) {
+    assert.equal(parseMapContributionDraftContent(content({ ...next, [key]: {} })), null);
+    assert.equal(parseMapContributionDraftContent(content({ ...next, [key]: [next[key][0], next[key][0]] })), null);
+  }
+});

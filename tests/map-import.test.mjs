@@ -27,6 +27,16 @@ test("validates the staged fixture map without FF47-specific counts", async () =
   assert.equal(validateEventMapLayout(snapshot.layout).ok, true);
   assert.equal(validateFf47Layout(snapshot.layout).ok, false);
   assert.equal(validateStagedEventArtifacts(event, references, catalog, snapshot, "sample").map, snapshot);
+  const annotated = structuredClone(snapshot);
+  annotated.layout.notes = [{ id: "time", text: "社團入場 9:30–10:30", rect: { x: 10, y: 0, width: 180, height: 25 } }];
+  annotated.layout.paths = [{ id: "direction", points: [{ x: 10, y: 85 }, { x: 100, y: 85 }, { x: 100, y: 70 }] }];
+  assert.deepEqual(validateStagedEventArtifacts(event, references, catalog, annotated, "sample").map.layout, annotated.layout);
+  const covered = structuredClone(annotated);
+  covered.layout.notes[0].rect = { ...snapshot.layout.rows[0].slots[0].rect };
+  assert.throws(() => validateStagedEventArtifacts(event, references, catalog, covered, "sample"), /annotations over booths.*S01/);
+  covered.layout.notes = [];
+  covered.layout.paths[0].points = [{ x: 0, y: 50 }, { x: 100, y: 50 }];
+  assert.throws(() => validateStagedEventArtifacts(event, references, catalog, covered, "sample"), /annotations over booths.*S01/);
   assert.throws(() => validateStagedEventArtifacts(event, references, catalog, { ...snapshot, layout: { ...snapshot.layout, template: "FF47" } }, "sample"), /does not match/);
   assert.throws(() => validateStagedEventArtifacts(event, references, { ...catalog, placements: [...catalog.placements, catalog.placements[0]] }, snapshot, "sample"), /duplicate placement/);
   const multiSpaceReferences = [...references, {
@@ -1412,4 +1422,28 @@ test("space marks move, resize, scale and delete without changing any booth", ()
   assert.deepEqual(layout.spaceMarks.map(({ id }) => id), ["withdrawn"]);
   assert.deepEqual(layout.rows, rows);
   assert.equal("spaceMarks" in scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 }), false);
+});
+
+test("note boxes and arrow vertices follow selection moves, resizes, canvas scaling and deletion", () => {
+  const layout = { ...multiSelectLayout(), notes: [{ id: "time", text: "社團入場 9:30–10:30", rect: { x: 20, y: 90, width: 50, height: 15 } }],
+    paths: [{ id: "around", points: [{ x: 10, y: 40 }, { x: 90, y: 40 }, { x: 90, y: 90 }] }] };
+  const rows = structuredClone(layout.rows);
+  const band = selectionsWithinBox(layout, { x: 15, y: 85, width: 60, height: 25 });
+  assert.deepEqual(band.filter(selection => selection.kind === "note"), [{ kind: "note", itemIndex: 0 }]);
+  const selections = [{ kind: "note", itemIndex: 0 }, { kind: "path", itemIndex: 0 }];
+  const resolved = resolveSelectionBoxes(layout, selections);
+  applySelectionBoxes(layout, selections, translateBoxesWithin(resolved.boxes, 10, 5, layout));
+  assert.deepEqual(layout.notes[0].rect, { x: 30, y: 95, width: 50, height: 15 });
+  assert.deepEqual(layout.paths[0].points, [{ x: 20, y: 45 }, { x: 100, y: 45 }, { x: 100, y: 95 }]);
+  applySelectionBoxes(layout, [{ kind: "path", itemIndex: 0 }], [{ x: 30, y: 50, width: 100, height: 60 }]);
+  assert.deepEqual(layout.paths[0].points, [{ x: 30, y: 50 }, { x: 130, y: 50 }, { x: 130, y: 110 }]);
+  const scaled = scaleEventMapLayout(layout, { width: 400, height: 240 });
+  assert.deepEqual(scaled.notes[0].rect, { x: 60, y: 190, width: 100, height: 30 });
+  assert.deepEqual(scaled.paths[0].points, [{ x: 60, y: 100 }, { x: 260, y: 100 }, { x: 260, y: 220 }]);
+  assert.equal(scaled.notes[0].text, layout.notes[0].text);
+  removeSelectionsFrom(layout, selections);
+  assert.deepEqual(layout.notes, []); assert.deepEqual(layout.paths, []);
+  assert.deepEqual(layout.rows, rows);
+  const legacy = scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 });
+  assert.equal("notes" in legacy, false); assert.equal("paths" in legacy, false);
 });

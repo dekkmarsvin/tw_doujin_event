@@ -4,6 +4,8 @@
 
 **實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
 **測試**：`tests/map-shape-geometry.test.mjs`
+**實作**：[`app/map-annotations.tsx`](../../app/map-annotations.tsx)、[`app/staged-event-data.ts`](../../app/staged-event-data.ts)
+**測試**：`tests/map-annotations.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
 
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
 **測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-map-facilities.mjs`
@@ -23,6 +25,9 @@
 - `areaRegions` 是選填欄位：每塊保存唯一 `id`、所屬的匯入 `areaId`、固定淡色 palette 的 `color` 與至少三個畫布內 `points`。同一展區可有多塊不規則範圍，顏色必須一致；核准前以該活動日 × 場地所宣告的展區代碼驗證。舊地圖沒有此欄位仍有效。
 - `spaceMarks` 是選填的獨立保留／取消格集合：每格保存集合內唯一 `id`、`kind`（`reserved` 保留空桌／`cancelled` 取消攤位）與畫布內有效 `rect`，不含攤位代碼或社團資料。它不計入攤位覆蓋、社團數、搜尋、收藏、行程或設施清單，也不能抵銷 `missing_booth`；仍有有效配置時須先按既有流程修正名單。舊圖無此欄位時維持原樣；草稿、地圖複製、preview 與 publication 保留新集合，新內容使用前須由 Pages 與 publication Worker 共同支援。
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
+- `notes` 與 `paths` 為選填獨立集合，舊圖沒有它們仍有效。`notes[]` 保存集合內唯一 `id`、非空純文字 `text` 與有效畫布內 `rect`；文字最多 120 字、3 行（換行為 `\n`），控制字元拒絕，HTML 只當文字。`paths[]` 保存集合內唯一 `id` 與依方向排序的 2–100 個有限、畫布內 `points`，相鄰點不可重複，箭頭沿最後一段指向末點。沒有任意 SVG、HTML、圖片或外部連結欄位。草稿嚴格拒絕未知欄位與不合長度／幾何限制的資料。
+- 短註記可含官方時段原文，例如「社團入場 9:30–10:30」，它只屬於這張活動日 × 場地地圖的人工維護文字；不解析時間、不同步其他活動日或活動資料、不依時間切換、不產生提醒。複製保留原文，主辦須核對新活動日，修改複本不回寫來源。註記與箭頭不進設施目錄、不計攤位覆蓋或產生社團操作。
+- 草稿可保存尚未移開攤位的註記；編輯器提示文字矩形與攤位重疊、折線或箭頭頭部穿過攤位。送審、候選 publication 與 staged artifact 以同一 `annotationBoothConflicts` 拒絕這些碰撞，須由作者調整，不以 Reader 靜默刪除動線資訊。合格內容經 clone／history／縮放／preview／publication 保留，新內容使用前須由 Pages 與 publication Worker 一起支援。
 - **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
 
 ## 快照的來源語意
@@ -53,6 +58,8 @@ manifest 一旦存在，規則就是 fail closed：`eventId` 必須與活動相�
 資料模型不得把 FF47 的 A–W、988 格或特定場館幾何當成所有活動的固定規則。
 
 ## Renderer 邊界
+
+文字註記及折線採編輯器與 Reader 共用 drawing，完整純文字與箭頭方向都有可讀名稱。它們置於攤位下層且 `pointer-events:none`，不攔截攤位操作；文字依實際地圖倍率及 Reader 字級縮放，必要時縮字以保留全文，多行總高與文字寬度始終在作者指定矩形內。放大有螢幕字級上限，不改地圖座標或時間字串。
 
 `AccessibleEventMapRenderer` 是深模組，穩定 interface 只接受已整理好的顯示資料與選取事件：
 

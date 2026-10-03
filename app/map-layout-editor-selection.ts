@@ -1,6 +1,7 @@
 import { resolveMapLandmarkKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapRect } from "./event-map";
 import { clamp, contiguousSegment, rowOrientationFromEndpoints, seamlessSpans } from "./map-layout-editor-geometry";
 import { assignShapeBox } from "./map-shape-geometry";
+import { pathBounds, transformPath } from "./map-annotations";
 
 export type Selection =
   | { kind: "floor" }
@@ -9,6 +10,8 @@ export type Selection =
   | { kind: "access"; itemIndex: number }
   | { kind: "service"; itemIndex: number }
   | { kind: "space-mark"; itemIndex: number }
+  | { kind: "note"; itemIndex: number }
+  | { kind: "path"; itemIndex: number }
   | { kind: "landmark"; itemIndex: number };
 
 /** Access and service points are points; everything else is a rectangle, so
@@ -63,13 +66,15 @@ export function mergeSelections(current: readonly Selection[], added: readonly S
   return [...current, ...added.filter((item) => !current.some((existing) => sameSelection(existing, item)))];
 }
 
-/** The rectangle as it lives inside `layout`, so a caller holding a draft edits
- * the element in place. */
+/** Rectangles live in the layout; a path instead derives a box from its points.
+ * applySelectionBoxes transforms those points when its box changes. */
 export function rectFor(layout: EventMapLayout, selection: RectSelection): MapRect | undefined {
   if (selection.kind === "slot") return layout.rows[selection.rowIndex]?.slots[selection.itemIndex]?.rect;
   if (selection.kind === "pillar") return layout.pillars[selection.itemIndex];
   if (selection.kind === "landmark") return layout.landmarks[selection.itemIndex]?.rect;
   if (selection.kind === "space-mark") return layout.spaceMarks?.[selection.itemIndex]?.rect;
+  if (selection.kind === "note") return layout.notes?.[selection.itemIndex]?.rect;
+  if (selection.kind === "path") { const path = layout.paths?.[selection.itemIndex]; return path && pathBounds(path); }
   return layout.floor;
 }
 
@@ -102,6 +107,11 @@ export function applySelectionBoxes(draft: EventMapLayout, selections: readonly 
       if (!point) return;
       point.x = clamp(box.x, 0, draft.width);
       point.y = clamp(box.y, 0, draft.height);
+      return;
+    }
+    if (selection.kind === "path") {
+      const path = draft.paths?.[selection.itemIndex];
+      if (path) transformPath(path, box);
       return;
     }
     const rect = rectFor(draft, selection);
@@ -399,6 +409,8 @@ export function selectionsWithinBox(layout: EventMapLayout, area: MapRect): Sele
   layout.servicePoints?.forEach((point, itemIndex) => { if (overlaps({ x: point.x, y: point.y, width: 0, height: 0 }, area)) selections.push({ kind: "service", itemIndex }); });
   layout.landmarks.forEach((landmark, itemIndex) => { if (overlaps(landmark.rect, area)) selections.push({ kind: "landmark", itemIndex }); });
   layout.spaceMarks?.forEach((mark, itemIndex) => { if (overlaps(mark.rect, area)) selections.push({ kind: "space-mark", itemIndex }); });
+  layout.notes?.forEach((note, itemIndex) => { if (overlaps(note.rect, area)) selections.push({ kind: "note", itemIndex }); });
+  layout.paths?.forEach((path, itemIndex) => { if (overlaps(pathBounds(path), area)) selections.push({ kind: "path", itemIndex }); });
   return selections;
 }
 
@@ -429,6 +441,8 @@ export function snapTargetsOutsideSelection(layout: EventMapLayout, excluded: re
     ...layout.accessPoints.map((_, itemIndex): Selection => ({ kind: "access", itemIndex })),
     ...(layout.servicePoints ?? []).map((_, itemIndex): Selection => ({ kind: "service", itemIndex })),
     ...(layout.spaceMarks ?? []).map((_, itemIndex): Selection => ({ kind: "space-mark", itemIndex })),
+    ...(layout.notes ?? []).map((_, itemIndex): Selection => ({ kind: "note", itemIndex })),
+    ...(layout.paths ?? []).map((_, itemIndex): Selection => ({ kind: "path", itemIndex })),
   ];
   return all.filter(item => !keys.has(selectionKey(item))).map(item => ({ id: selectionKey(item), rect: boxFor(layout, item)! }));
 }
@@ -437,7 +451,7 @@ export function slotSelections(selections: readonly Selection[]): SlotSelection[
   return selections.filter((item): item is SlotSelection => item.kind === "slot");
 }
 
-function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "service" | "landmark" | "space-mark"): number[] {
+function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "service" | "landmark" | "space-mark" | "note" | "path"): number[] {
   return selections.filter((item): item is Extract<Selection, { itemIndex: number }> => item.kind === kind).map(({ itemIndex }) => itemIndex);
 }
 
@@ -465,6 +479,8 @@ export function removeSelectionsFrom(draft: EventMapLayout, selections: readonly
   descending(itemIndicesOf(selections, "service")).forEach((itemIndex) => draft.servicePoints?.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "landmark")).forEach((itemIndex) => draft.landmarks.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "space-mark")).forEach((itemIndex) => draft.spaceMarks?.splice(itemIndex, 1));
+  descending(itemIndicesOf(selections, "note")).forEach((itemIndex) => draft.notes?.splice(itemIndex, 1));
+  descending(itemIndicesOf(selections, "path")).forEach((itemIndex) => draft.paths?.splice(itemIndex, 1));
 }
 
 /** Which booths a merge replaces, and the single booth it leaves in their

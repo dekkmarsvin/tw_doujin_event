@@ -7,6 +7,7 @@ import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } fro
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
 import { MapAccessBadge, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
+import { MapNoteDrawing, MapPathDrawing } from "./map-annotations";
 import { MapShapeDrawing } from "./map-shape-drawing";
 
 export type MapSlotView = {
@@ -141,6 +142,7 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
     })}</g>}
     <g aria-label="非一般攤位區">{layout.landmarks.map((landmark) => <g key={landmark.id} role={landmark.label ? "img" : undefined} aria-label={landmark.label || undefined}><MapShapeDrawing className={styles.landmark} shape={landmark.rect} /></g>)}</g>
     {!!layout.spaceMarks?.length && <g className={styles.spaceMarks} aria-label="保留／取消格">{layout.spaceMarks.map(mark => <g key={mark.id} data-space-mark={mark.id} role="img" aria-label={MAP_SPACE_MARK_LABELS[mark.kind]}><MapSpaceMarkDrawing mark={mark} presentation={markerPresentation} /><title>{MAP_SPACE_MARK_LABELS[mark.kind]}</title></g>)}</g>}
+    {(!!layout.notes?.length || !!layout.paths?.length) && <g aria-label="地圖註記" pointerEvents="none">{layout.paths?.map(path => <MapPathDrawing key={path.id} path={path} />)}{layout.notes?.map(note => <MapNoteDrawing key={note.id} note={note} presentation={markerPresentation} />)}</g>}
     <g aria-label="一般攤位排">{layout.rows.map((row) => <g key={row.label} data-row={row.label} data-orientation={row.orientation}>
       {row.slots.filter((slot) => !slots[slot.code]?.selected).map(renderSlot)}
     </g>)}<g data-layer="selected-slots">{selectedSlots.map(renderSlot)}</g></g>

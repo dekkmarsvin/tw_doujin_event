@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 function layoutHasContent(layout: EventMapLayout | null) {
   return !!layout && (layout.rows.length > 0 || layout.pillars.length > 0
     || layout.accessPoints.length > 0 || layout.landmarks.length > 0 || (layout.servicePoints?.length ?? 0) > 0
-    || (layout.spaceMarks?.length ?? 0) > 0);
+    || (layout.spaceMarks?.length ?? 0) > 0 || (layout.notes?.length ?? 0) > 0 || (layout.paths?.length ?? 0) > 0);
 }
 
 function canCropPlan(layout: EventMapLayout | null, authoring: MapAuthoringState) {
@@ -276,7 +276,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
   const saveMap = useCallback(async (close = false): Promise<boolean> => {
     if (!editable || savingMap || !layout) return false;
     if (!layoutHasContent(layout)) {
-      setSaveResult({ ok: false, text: "先放入攤位或設施，才能儲存。" });
+      setSaveResult({ ok: false, text: "先放入攤位、設施或註記，才能儲存。" });
       return false;
     }
     setConfirmingClose(false);
@@ -375,7 +375,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
     {layout ? <>
       <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout}
         title={`${organizerDayLabel(detail.draft.event.days, periodKey)} · ${organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}`}
-        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || !unsaved, busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位或設施，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => {
+        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || !unsaved, busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位、設施或註記，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => {
           // A plan picked for an empty map must not later reopen cropping after
           // the organizer has already started drawing while the image loads.
           if (planFeedback.pending && canCropPlan(layout, authoring)) clearPlanNotice();
@@ -415,7 +415,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
         <h3 id="unsaved-map-title">尚有未儲存變更</h3>
         <p id="unsaved-map-description">{layoutHasContent(layout)
           ? "要先儲存地圖，再關閉編輯器嗎？"
-          : "這張地圖還沒有任何攤位或設施，不能儲存。關閉就會放棄畫面上的內容。"}</p>
+          : "這張地圖還沒有任何攤位、設施或註記，不能儲存。關閉就會放棄畫面上的內容。"}</p>
         <div className={styles.dialogActions}>
           {/* The same rule as the panel behind it: a map with nothing on it is
               not saved on the way out either (#218). */}
