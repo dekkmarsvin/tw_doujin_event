@@ -1,7 +1,7 @@
 /* Colours and type follow the editor workspace (map-layout-editor.module.css) so recognition reads as one of its tools.
    The panel fills the recognition tool's area; the preview takes whatever height is left. */
-.panel { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; padding: 12px 16px; background: #f8f7f2; color: #202a35; font-size: calc(12px * var(--ui-font-scale,1)); container-type: inline-size; }
-.panel button { min-height: 34px; border: 1px solid #dfe3df; border-radius: 7px; padding: 6px 10px; background: #f9faf8; color: #202a35; cursor: pointer; font-size: calc(12px * var(--ui-font-scale,1)); font-weight: 700; }
+.panel { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; padding: 12px 16px; background: #f8f7f2; color: #202a35; font-size: calc(14px * var(--ui-font-scale,1)); container-type: inline-size; }
+.panel button { min-height: 34px; border: 1px solid #dfe3df; border-radius: 7px; padding: 6px 10px; background: #f9faf8; color: #202a35; cursor: pointer; font-size: calc(14px * var(--ui-font-scale,1)); font-weight: 700; }
 /* Matches the Organizer page's own hover rule, which would otherwise paint these buttons dark under dark text. */
 .panel button:hover:not(:disabled) { background: #f2f0e8; border-color: #707a82; }
 .panel button:disabled, .panel button[aria-disabled="true"] { opacity: .5; cursor: default; }
@@ -42,7 +42,7 @@
 .checklist { overflow: auto; }
 .item { padding: 8px 4px; border-bottom: 1px solid #dfe3df; }
 .item > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.item small { display: block; margin-top: 4px; color: #707a82; }
+.item small { display: block; margin-top: 4px; color: #59626c; }
 .item label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .item .error { color: #a43e30; }
 .item[data-focused="true"] { background: #f2f0e8; }

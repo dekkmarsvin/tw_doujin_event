@@ -47,8 +47,9 @@ test("the audit list keeps its own layout instead of the chip row's", async () =
 
   // `.extraValues` was added by appending it to `.auditList`'s selector list,
   // which handed the audit list a flex row: the map contribution history lost
-  // its indent, its 10px type and its one-item-per-line reading order.
-  assert.match(css, /\.auditList \{ display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px;/);
+  // its indent and its one-item-per-line reading order. The type size is the
+  // design floor's to set (#484), not this test's.
+  assert.match(css, /\.auditList \{ display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px;/);
   assert.match(css, /^\.extraValues \{ display: flex;/m);
 });
 

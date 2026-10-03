@@ -25,7 +25,7 @@
 
 .page {
   --ink: #202a35;
-  --muted: #707a82;
+  --muted: #59626c;
   --line: #dfe3df;
   --paper: #f8f7f2;
   --map-paper: #f2f0e8;
@@ -41,7 +41,8 @@
   caret-color: var(--coral);
 }
 
-.page :global(button) { border: 1px solid var(--ink); border-radius: 7px; padding: 8px 12px; background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 800; line-height: 1.3; cursor: pointer; transition: background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out; }
+:where(.page) small { font-size: 12px; } /* The browser default `smaller` falls under the 12px floor (#484). */
+.page :global(button) { border: 1px solid var(--ink); border-radius: 7px; padding: 8px 12px; background: var(--ink); color: var(--surface); font-size: 14px; font-weight: 800; line-height: 1.3; cursor: pointer; transition: background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out; }
 .page :global(button:hover:not(:disabled)) { background: #34404c; }
 .page :global(button:disabled) { cursor: not-allowed; opacity: .46; }
 .page :global(button:focus-visible), .page :global(input:focus-visible), .page :global(textarea:focus-visible), .page :global(select:focus-visible), .page :global(a:focus-visible) { outline: 0; box-shadow: 0 0 0 3px #dfe8e3; }
@@ -49,12 +50,12 @@
 .header { min-height: 78px; padding: 14px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 18px; background: var(--surface); }
 .header h1, .sidebar h2, .workspace h2, .centerCard h2, .panel h3, .guidedStation h3, .readiness h3, .readiness h4 { margin: 0; }
 .header h1 { font-size: 20px; line-height: 1.2; letter-spacing: .02em; }
-.header p, .sidebarTitle p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.header p, .sidebarTitle p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .identity, .row { display: flex; align-items: center; gap: 10px; }
 /* A row that carries labelled fields lines its buttons up with the controls
    instead of centring them against the label above them. */
 .fieldRow { align-items: end; }
-.identity { color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+.identity { color: var(--muted); font-size: 14px; flex-wrap: wrap; }
 .identity a { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
 .secondary, .ghost { border-color: var(--line) !important; background: var(--surface) !important; color: var(--ink) !important; }
 .secondary:hover:not(:disabled), .ghost:hover:not(:disabled) { border-color: #aeb6b3 !important; background: var(--map-paper) !important; }
@@ -62,26 +63,26 @@
 
 .centerCard { width: min(520px, calc(100% - 32px)); margin: 12vh auto 0; padding: 34px; border-radius: 18px; background: var(--surface); box-shadow: 0 28px 80px #11182022; }
 .centerCard h2 { font-size: 20px; }
-.centerCard p { max-width: 68ch; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.centerCard p { max-width: 68ch; color: var(--muted); font-size: 14px; line-height: 1.65; }
 .stack { display: grid; gap: 10px; margin-top: 24px; }
 /* Signed out, the workspace entries sit in the sign-in card's column. */
 .signInEntries { width: min(520px, calc(100% - 32px)); margin: 8vh auto 0; }
 .signInEntries + .centerCard { margin-top: 16px; }
 /* The ways back from an account with no organizer access, as buttons. */
 .linkActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.linkActions a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 700; text-decoration: none; }
+.linkActions a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none; }
 .linkActions a:hover { border-color: #aeb6b3; background: var(--map-paper); }
 .invitation { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
 .invitation h3 { margin: 0; font-size: 14px; }
 .invitation > p, .invitation form p { margin: 0; }
 .invitation > p button { margin-left: 8px; }
-.page :global(label) { display: grid; align-content: start; gap: 7px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+.page :global(label) { display: grid; align-content: start; gap: 7px; min-width: 0; color: var(--ink); font-size: 14px; font-weight: 700; }
 .page :global(input), .page :global(textarea), .page :global(select) { width: 100%; min-width: 0; min-height: 38px; border: 1px solid #c9cfcb; border-radius: 7px; padding: 9px 10px; background: var(--surface); color: var(--ink); }
-.page :global(input::placeholder), .page :global(textarea::placeholder) { color: #7a858c; }
+.page :global(input::placeholder), .page :global(textarea::placeholder) { color: #59626c; }
 .page :global(textarea) { min-height: 90px; resize: vertical; }
-.finePrint { font-size: 11px !important; }
+.finePrint { font-size: 12px !important; }
 .finePrint a { color: var(--ink); text-underline-offset: 3px; }
-.notice, .error { margin: 12px 24px; border: 1px solid; border-radius: 9px; padding: 9px 12px; font-size: 12px; }
+.notice, .error { margin: 12px 24px; border: 1px solid; border-radius: 9px; padding: 9px 12px; font-size: 14px; }
 .notice { border-color: #b8d8ca; background: var(--success-soft); color: var(--success); }
 .error { border-color: #edc5bf; background: var(--danger-soft); color: var(--danger); }
 
@@ -106,40 +107,40 @@
 .eventGroupActions button { display: block; width: 100%; text-align: left; margin-top: 4px; }
 .eventGroupActions button[aria-current="page"],
 .eventGroupActions button[aria-current="page"]:hover:not(:disabled) { background: var(--ink) !important; color: var(--surface) !important; }
-.eventGroupActions .editionSelect { display: grid; gap: 5px; padding: 8px 0; font-size: 11px; color: var(--muted); }
-.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
+.eventGroupActions .editionSelect { display: grid; gap: 5px; padding: 8px 0; font-size: 12px; color: var(--muted); }
+.editionSelect select { min-height: 36px; width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; color: var(--ink); background: var(--surface); font-size: 12px; text-overflow: ellipsis; }
 .activityHeader { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 22px; margin-bottom: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .activityIdentity { flex: 1; min-width: 200px; }
-.activityIdentity p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }
+.activityIdentity p { margin: 0 0 7px; color: var(--muted); font-size: 12px; }
 .activityIdentity h2 { font-size: 20px; overflow-wrap: anywhere; }
 .activityStatus { display: flex; gap: 28px; margin: 0; padding-left: 24px; border-left: 1px solid var(--line); }
-.activityStatus dt { color: var(--muted); font-size: 10px; margin-bottom: 6px; }
-.activityStatus dd { margin: 0; font-size: 13px; font-weight: 700; }
+.activityStatus dt { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.activityStatus dd { margin: 0; font-size: 14px; font-weight: 700; }
 .activityStatus dd[data-state="published"], .activityStatus dd[data-state="approved"] { color: var(--success); }
 .activityStatus dd[data-state="failed"], .activityStatus dd[data-state="changes_requested"] { color: var(--danger); }
 .eventButton, .eventActive { display: grid; gap: 5px; width: 100%; padding: 11px !important; border-color: transparent !important; text-align: left; background: transparent !important; color: var(--ink) !important; }
 .eventButton:hover { border-color: var(--line) !important; background: var(--paper) !important; }
 .eventActive { border-color: var(--line) !important; background: var(--map-paper) !important; }
-.eventButton small, .eventActive small, .muted { color: var(--muted); font-size: 10px; font-weight: 600; }
+.eventButton small, .eventActive small, .muted { color: var(--muted); font-size: 12px; font-weight: 600; }
 
 .workspace { min-width: 0; padding: 22px 24px 64px; }
 .dialogBackdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: #202a355c; }
 .navigationDialog { width: min(430px, 100%); border: 1px solid var(--line); border-radius: 12px; padding: 24px; background: var(--surface); box-shadow: 0 28px 80px #11182033; }
 .navigationDialog h3 { margin: 0; font-size: 17px; }
-.navigationDialog p { margin: 8px 0 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.navigationDialog p { margin: 8px 0 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .dialogActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .workspaceHead, .panelHead, .guidedHead, .readinessHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .workspaceHead { align-items: center; margin-bottom: 20px; }
 .workspaceHead h2 { font-size: 20px; line-height: 1.2; letter-spacing: .02em; }
-.contextLine { margin: 0 0 3px !important; color: var(--muted) !important; font-size: 10px !important; font-weight: 700; }
-.version { border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.contextLine { margin: 0 0 3px !important; color: var(--muted) !important; font-size: 12px !important; font-weight: 700; }
+.version { border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
 .workspaceGrid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: start; }
 .workspaceMain { min-width: 0; }
 /* Finishing the basic settings: what happened and where the rest of the work
    is now, above the section the reader was brought to. */
 .handoff { margin-bottom: 14px; border: 1px solid #b8d8ca; border-radius: 9px; padding: 10px 14px; background: var(--success-soft); color: var(--success); }
-.handoff strong { font-size: 13px; }
-.handoff p { margin: 3px 0 0; font-size: 12px; line-height: 1.6; }
+.handoff strong { font-size: 14px; }
+.handoff p { margin: 3px 0 0; font-size: 14px; line-height: 1.6; }
 /* The guided station stands alone: the six-section rail belongs to work the
    reader has not reached yet, and its N/6 contradicts the N/3 in front of
    them (#221). */
@@ -147,20 +148,20 @@
 /* The day id and label are still editable, but they are not what the reader
    came to answer: the date is (#221 2.2). */
 .dayAdvanced { grid-column: 1 / -1; }
-.dayAdvanced summary { color: var(--muted); font-size: 11px; cursor: pointer; }
+.dayAdvanced summary { color: var(--muted); font-size: 12px; cursor: pointer; }
 .dayAdvanced > label { margin-top: 8px; }
 /* The way out of a required column nobody can fill lives in another section,
    so it is offered where the problem is met (#294). */
-.mappingEscape { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.mappingEscape { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.6; }
 /* Necessary explanation, not decoration: the three words are near-synonyms in
    everyday Chinese and the glossary that tells them apart is written for
    developers (#298). */
 .layerGuide { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
-.layerGuide summary { font-size: 12px; font-weight: 600; cursor: pointer; }
-.layerGuide p, .layerGuide li { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.layerGuide summary { font-size: 14px; font-weight: 600; cursor: pointer; }
+.layerGuide p, .layerGuide li { color: var(--muted); font-size: 12px; line-height: 1.7; }
 .layerGuide p { margin: 10px 0 0; }
 .layerGuide ul { margin: 8px 0 0; padding-left: 18px; }
-.layerGuide table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 11px; }
+.layerGuide table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 12px; }
 .layerGuide th, .layerGuide td { padding: 5px 7px; border-bottom: 1px solid var(--line); text-align: left; }
 .layerGuide th { color: var(--muted); font-weight: 600; }
 
@@ -170,16 +171,16 @@
 .steps button:hover { background: var(--paper) !important; }
 .steps button[aria-current="step"] { background: var(--ink) !important; color: var(--surface) !important; }
 .steps button > span:last-child { display: grid; gap: 2px; }
-.steps small { color: inherit; font-size: 9px; font-weight: 600; }
-.stepNumber, .guidedSteps button > span:first-child { display: grid; flex: 0 0 22px; height: 22px; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px; }
+.steps small { color: inherit; font-size: 12px; font-weight: 600; }
+.stepNumber, .guidedSteps button > span:first-child { display: grid; flex: 0 0 22px; height: 22px; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
 
 .guideBanner { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--map-paper); }
-.guideBanner p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.guideBanner p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .guidedStation { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
 .guidedHead { padding: 20px 22px 16px; border-bottom: 1px solid var(--line); }
 .guidedHead h3 { font-size: 14px; }
-.guidedHead p { max-width: 65ch; margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
-.progressText { display: grid; min-width: 126px; gap: 6px; color: var(--ink); font-size: 11px; text-align: right; }
+.guidedHead p { max-width: 65ch; margin: 5px 0 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.progressText { display: grid; min-width: 126px; gap: 6px; color: var(--ink); font-size: 12px; text-align: right; }
 .progressText progress { width: 126px; height: 6px; border: 0; border-radius: 5px; overflow: hidden; background: var(--line); accent-color: var(--coral); }
 .progressText progress::-webkit-progress-bar { background: var(--line); }
 .progressText progress::-webkit-progress-value { background: var(--coral); }
@@ -189,14 +190,14 @@
 .guidedSteps button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 62px; border: 0 !important; border-radius: 0 !important; background: transparent !important; color: var(--muted) !important; text-align: left; }
 .guidedSteps button[aria-current="step"] { background: var(--map-paper) !important; color: var(--ink) !important; }
 .guidedSteps button > span:last-child { display: grid; gap: 2px; }
-.guidedSteps small { color: inherit; font-size: 9px; font-weight: 600; }
+.guidedSteps small { color: inherit; font-size: 12px; font-weight: 600; }
 .guidedForm { border: 0 !important; border-radius: 0 !important; }
-.exploreRow { display: flex; align-items: center; gap: 12px; padding: 0 22px 20px; color: var(--muted); font-size: 11px; }
+.exploreRow { display: flex; align-items: center; gap: 12px; padding: 0 22px 20px; color: var(--muted); font-size: 12px; }
 
 .panel { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: var(--surface); }
 .panel h3 { font-size: 14px; }
-.panel h4 { margin: 0; font-size: 12px; }
-.panel p { max-width: 72ch; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.panel h4 { margin: 0; font-size: 14px; }
+.panel p { max-width: 72ch; color: var(--muted); font-size: 14px; line-height: 1.65; }
 .formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 20px; }
 .referencePanel { grid-column: 1 / -1; }
 .referencePanel fieldset { min-width: 0; border: 0; padding: 0; margin: 12px 0; }
@@ -204,7 +205,7 @@
 .eventImageField fieldset { min-width: 0; border: 0; padding: 0; margin: 12px 0 0; display: grid; gap: 10px; }
 .eventImagePreview { margin: 10px 0 0; }
 .eventImagePreview img { display: block; max-width: min(100%, 480px); height: auto; border: 1px solid var(--line); border-radius: 9px; }
-.eventImagePreview figcaption { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.eventImagePreview figcaption { margin-top: 4px; color: var(--muted); font-size: 12px; }
 .checkLabel { display:flex!important; flex-direction:row!important; align-items:center; gap:6px; }
 .checkLabel input { width:16px; min-height:16px; height:16px; padding:0; }
 .page :global(label small) { color: var(--muted); font-weight: 400; }
@@ -219,7 +220,7 @@
 .venueCard > .dangerText { margin-top: 22px; }
 .catalogCreator { margin: 16px 0; border: 1px solid var(--line); border-radius: 9px; padding: 16px; background: var(--paper); }
 .catalogCreator .formGrid { margin: 12px 0; }
-.derivedField { display: grid; gap: 7px; font-size: 12px; font-weight: 700; }
+.derivedField { display: grid; gap: 7px; font-size: 14px; font-weight: 700; }
 .derivedField strong { min-height: 38px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 0 11px; background: var(--paper); font-weight: 400; }
 .derivedField small { color: var(--muted); font-weight: 400; }
 .templatePreview { min-width: 0; border-left: 1px solid var(--line); padding-left: 9px; color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
@@ -227,27 +228,27 @@
 .templatePreview p { margin: 0; }
 .templatePreview ul { margin: 3px 0 0; padding-left: 15px; }
 .derivedSummary { margin: 14px 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); }
-.derivedSummary h4 { margin: 0 0 8px; font-size: 12px; }
+.derivedSummary h4 { margin: 0 0 8px; font-size: 14px; }
 .derivedSummary div { display: grid; grid-template-columns: 160px 1fr; gap: 10px; padding: 5px 0; }
-.derivedSummary p { margin: 8px 0 0; color: var(--muted); font-size: 10px; }
+.derivedSummary p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 .dangerText { border-color: transparent !important; background: transparent !important; color: var(--danger) !important; }
 .dangerText:hover:not(:disabled) { background: var(--danger-soft) !important; }
 .formActions { display: flex; align-items: center; gap: 9px; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; }
 .mapActions { display: flex; align-items: center; gap: 10px; }
-.formActions span, .mapActions span { margin-left: auto; color: var(--muted); font-size: 10px; }
+.formActions span, .mapActions span { margin-left: auto; color: var(--muted); font-size: 12px; }
 .taskIssues { margin-top: 18px; border: 1px solid #edc5bf; border-radius: 9px; padding: 8px 12px; background: var(--danger-soft); }
 .taskIssues p { margin: 4px 0; color: var(--danger); }
 
 .readiness { position: sticky; top: 18px; border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--surface); }
 .readiness h3 { font-size: 14px; }
-.readiness h4 { font-size: 12px; }
+.readiness h4 { font-size: 14px; }
 .readinessHead { align-items: center; }
 .readinessHead strong { font-family: "Geist Mono", ui-monospace, monospace; font-size: 14px; }
-.readiness > p { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.readiness > p { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .nextAction { width: 100%; margin: 6px 0 12px; text-align: left; }
 .readinessList { display: grid; border-top: 1px solid var(--line); }
 .readinessList button { display: flex; justify-content: space-between; gap: 8px; width: 100%; border: 0 !important; border-bottom: 1px solid var(--line) !important; border-radius: 0 !important; padding: 9px 0 !important; background: transparent !important; color: var(--ink) !important; text-align: left; }
-.readinessList small { color: var(--muted); font-size: 9px; }
+.readinessList small { color: var(--muted); font-size: 12px; }
 .readinessList small[data-state="complete"] { color: var(--success); }
 .readinessList small[data-state="needs_attention"] { color: var(--danger); }
 /* Where the reader is, by shape as well as tint: the bar survives a screen
@@ -256,46 +257,46 @@
 .blockerList { margin-top: 16px; }
 .blockerList button { display: grid; width: 100%; gap: 3px; margin-top: 7px; border: 1px solid var(--line) !important; padding: 9px !important; background: var(--paper) !important; color: var(--ink) !important; text-align: left; }
 .blockerList button:hover { border-color: #aeb6b3 !important; }
-.blockerList strong { font-size: 10px; }
-.blockerList span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.blockerList strong { font-size: 12px; }
+.blockerList span { color: var(--muted); font-size: 12px; line-height: 1.45; }
 
-.placeholder { min-height: 170px; margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; display: grid; place-items: center; padding: 18px; background: var(--paper); color: var(--muted); font-size: 12px; text-align: center; }
+.placeholder { min-height: 170px; margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; display: grid; place-items: center; padding: 18px; background: var(--paper); color: var(--muted); font-size: 14px; text-align: center; }
 .formFields { min-width: 0; margin: 0; border: 0; padding: 0; }
 .importGrid, .mappingGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 20px 0; }
 .mappingGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); padding-top: 18px; }
 /* A bordered fieldset keeps `display: block`: a legend inside a grid formatting
    context renders inconsistently across engines, so the grid goes on an inner
    wrapper instead. */
-.mappingField { display: block; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); font-size: 12px; font-weight: 700; }
+.mappingField { display: block; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--paper); font-size: 14px; font-weight: 700; }
 /* A legend is drawn across the fieldset's top border, which would put the
    grouped fields' titles a line higher than the single-control cards beside
    them. Floating it makes it an ordinary first line, so every card in the row
    starts its title and its first control at the same height. */
-.mappingField > legend { float: left; width: 100%; margin-bottom: 7px; padding: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+.mappingField > legend { float: left; width: 100%; margin-bottom: 7px; padding: 0; color: var(--ink); font-size: 14px; font-weight: 700; }
 .mappingField > legend + div { clear: left; }
 .mappingField > div { display: grid; gap: 8px; }
-.mappingField .subLabel { display: grid; gap: 4px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.mappingField .subLabel { display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
 /* The small caps belong to the sub-label, not to the value under it: a control
    inherits its font, so without this the value in a grouped card prints
    smaller than the same value in a single-control card beside it. */
-.mappingField .subLabel select, .mappingField .subLabel input { color: var(--ink); font-size: 12px; font-weight: 700; letter-spacing: normal; }
+.mappingField .subLabel select, .mappingField .subLabel input { color: var(--ink); font-size: 14px; font-weight: 700; letter-spacing: normal; }
 .derivedField.mappingField > small { display: block; margin-top: 7px; }
-.derivedField.mappingField strong { background: var(--surface); font-size: 12px; letter-spacing: normal; }
+.derivedField.mappingField strong { background: var(--surface); font-size: 14px; letter-spacing: normal; }
 .sample { margin-top: 20px; border: 1px dashed #bfc7c2; border-radius: 9px; padding: 16px; background: var(--paper); }
-.sample h4 { margin: 0 0 4px; font-size: 12px; }
-.sample > p { margin: 0 0 12px; font-size: 11px; }
+.sample h4 { margin: 0 0 4px; font-size: 14px; }
+.sample > p { margin: 0 0 12px; font-size: 12px; }
 .sampleTable { overflow-x: auto; }
 .sampleActions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.sampleActions p { margin: 0; font-size: 10px; }
+.sampleActions p { margin: 0; font-size: 12px; }
 .importPreview, .sampleTable { margin-top: 18px; overflow: auto; }
 .sampleTable { margin-top: 0; }
 .workspaceRoster { min-width: 0; }
-.rosterProgress { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; font-size: 12px; }
+.rosterProgress { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; font-size: 14px; }
 .rosterNavigation { position: relative; }
 .rosterNavigation > summary { cursor: pointer; padding: 9px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
 .rosterDone { color: var(--success); font-weight: 700; }
 .rosterNavigation > aside { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 300px; max-height: 70vh; overflow: auto; box-shadow: 0 12px 36px #202a3526; }
-.rosterWorkspace { min-width: 0; padding: 16px 18px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 12px; }
+.rosterWorkspace { min-width: 0; padding: 16px 18px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 14px; }
 .rosterWorkspace h3 { margin: 0 0 4px; font-size: 16px; }
 .rosterWorkspace .row { flex-wrap: wrap; gap: 8px; }
 .rosterWorkspace .panelHead { flex-wrap: wrap; gap: 12px; }
@@ -304,11 +305,11 @@
 .rosterFilters > label { flex: 0 1 auto; min-width: 112px; max-width: 240px; }
 .rosterFilters > .rosterSearch { flex: 1 1 260px; max-width: 480px; }
 .rosterFilters select { width: auto; max-width: 240px; min-width: 112px; }
-.rosterTools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 10px 0; font-size: 12px; }
+.rosterTools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 10px 0; font-size: 14px; }
 .rosterTools .rosterChoice { margin-left: auto; }
 .rosterErrors { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0; color: var(--danger); }
 .rosterTable { overflow: auto; min-width: 0; height: 60vh; border: 1px solid var(--line); border-radius: 7px; }
-.rosterTable table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.rosterTable table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
 .rosterTable th { position: sticky; top: 0; z-index: 2; padding: 10px 8px; background: var(--paper); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
 .rosterTable td { padding: 5px 8px; min-width: 100px; max-width: 360px; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: anywhere; }
 .rosterTable td:first-child:has(input[type="checkbox"]) { min-width: 32px; width: 32px; }
@@ -316,11 +317,11 @@
 .rosterTable td:last-child button + button { margin-left: 8px; }
 .rosterTable th.circleColumn { width: 32%; min-width: 220px; }
 .rosterTable tr[data-changed] { background: #f8f6e9; }
-.rosterTable td > .cellButton { display: block; width: 100%; min-height: 34px; border: 1px solid transparent; padding: 6px 4px; background: transparent; color: var(--ink); text-align: left; font-size: 12px; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
+.rosterTable td > .cellButton { display: block; width: 100%; min-height: 34px; border: 1px solid transparent; padding: 6px 4px; background: transparent; color: var(--ink); text-align: left; font-size: 14px; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
 .rosterTable td > .cellButton[hidden] { display: none; }
 .rosterTable td > .cellButton:hover:not(:disabled) { border-color: var(--line); background: var(--paper); }
 .rosterTable td > .cellButton:disabled { opacity: 1; cursor: default; }
-.rosterTable td > input, .rosterTable td > select { min-width: 100px; font-size: 12px; }
+.rosterTable td > input, .rosterTable td > select { min-width: 100px; font-size: 14px; }
 .rosterTable td > input[type="checkbox"] { min-width: 16px; width: 16px; height: 16px; min-height: 16px; }
 .rosterTable td small { display: block; max-width: 34ch; }
 .rosterTable td > .textButton { display: block; white-space: nowrap; }
@@ -332,15 +333,15 @@
 .rosterDialog { width: min(680px, calc(100vw - 48px)); max-height: calc(100dvh - 64px); overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 22px; color: var(--ink); background: var(--surface); box-shadow: 0 18px 50px #202a3533; }
 .rosterDialog::backdrop { background: #202a3566; }
 .rosterDialog h3 { font-size: 16px; margin: 0; }
-.rosterDialog p { font-size: 13px; line-height: 1.6; }
+.rosterDialog p { font-size: 14px; line-height: 1.6; }
 .rosterDialog .row { flex-wrap: wrap; margin-top: 16px; }
 .areaNames { display: grid; gap: 14px; margin: 16px 0; }
 .areaNames fieldset { border: 1px solid var(--line); padding: 12px; border-radius: 7px; min-width: 0; }
-.areaNames legend { font-size: 12px; font-weight: 600; }
+.areaNames legend { font-size: 14px; font-weight: 600; }
 .areaNames label { display: grid; grid-template-columns: minmax(48px, 100px) minmax(160px, 320px); align-items: center; gap: 12px; margin: 8px 0; }
 .areaNames input { width: 100%; }
 .importWizard .row { flex-wrap: wrap; }
-.importSteps { display: flex; flex-wrap: wrap; gap: 10px 28px; list-style: none; margin: 18px 0; padding: 0; color: var(--muted); font-size: 13px; }
+.importSteps { display: flex; flex-wrap: wrap; gap: 10px 28px; list-style: none; margin: 18px 0; padding: 0; color: var(--muted); font-size: 14px; }
 .importSteps li { padding: 9px 0; border-bottom: 2px solid transparent; }
 .importSteps li[aria-current="step"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
 .importFileFields { display: flex; flex-wrap: wrap; align-items: start; gap: 16px; margin: 20px 0; }
@@ -349,7 +350,7 @@
 .importFileFields label:nth-child(3) { width: 90px; }
 .importWizard .mappingGrid { grid-template-columns: repeat(auto-fit, minmax(220px, 320px)); }
 .importWizard .importGrid { grid-template-columns: repeat(auto-fit, minmax(220px, 320px)); }
-.areaNamePreview { margin: 16px 0; font-size: 12px; }
+.areaNamePreview { margin: 16px 0; font-size: 14px; }
 .areaNamePreview summary { cursor: pointer; }
 .previewTabs { display: flex; gap: 8px; margin: 12px 0; }
 .previewTabs button { background: var(--surface); border-color: var(--line); color: var(--ink); }
@@ -357,20 +358,20 @@
 .previewTable { max-height: 52vh; overflow: auto; }
 .previewTable th { position: sticky; top: 0; background: var(--paper); z-index: 1; }
 .previewTable td { white-space: normal; min-width: 100px; max-width: 320px; overflow-wrap: anywhere; }
-.importPreview table, .sampleTable table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.importPreview table, .sampleTable table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .importPreview th, .importPreview td, .sampleTable th, .sampleTable td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; white-space: nowrap; }
-.importPreview th, .sampleTable th { color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.importPreview th, .sampleTable th { color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
 /* Table cells are 11px, so their controls undercut the 38px flow-control height
    in docs/design/components.md; that rule is about primary form fields. */
-.importPreview td :global(input), .importPreview td :global(select) { max-width: 200px; min-height: 30px; padding: 0 7px; font-size: 11px; }
-.rowGroup td { border-bottom: 0; padding-top: 16px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: normal; }
+.importPreview td :global(input), .importPreview td :global(select) { max-width: 200px; min-height: 30px; padding: 0 7px; font-size: 12px; }
+.rowGroup td { border-bottom: 0; padding-top: 16px; color: var(--muted); font-size: 12px; font-weight: 700; white-space: normal; }
 .rowGroup td span { display: block; margin-top: 3px; font-weight: 400; }
 .issueRow td { background: var(--danger-soft); border-bottom-color: #edc5bf; }
 .issueCell :global(input), .issueCell :global(select) { border-color: #d59a90 !important; }
 .duplicateNote td { padding-top: 0; color: var(--danger); background: var(--danger-soft); border-bottom-color: #edc5bf; white-space: normal; }
 .excludedRow td { opacity: .6; }
 .rowAction { width: 1%; white-space: nowrap; }
-.rowAction button { padding: 4px 9px !important; font-size: 10px; }
+.rowAction button { padding: 4px 9px !important; font-size: 12px; }
 .mapPanel { padding: 18px; }
 .mapToolbar { display: grid; grid-template-columns: 1fr 1fr auto auto 1.2fr; gap: 10px; align-items: end; margin: 18px 0; }
 .fileButton { border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; background: var(--surface); color: var(--ink); cursor: pointer; }
@@ -390,7 +391,7 @@
    is muted by default and this one is not a hint (#219). */
 .fieldError { color: var(--danger) !important; font-weight: 600; }
 .issueWarning { border-color: #e7d4aa; background: #fff9eb; color: #795818 !important; }
-.preview { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: var(--ink); color: var(--surface); font: 10px/1.5 "Geist Mono", ui-monospace, monospace; }
+.preview { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: var(--ink); color: var(--surface); font: 12px/1.5 "Geist Mono", ui-monospace, monospace; }
 .readerPreview { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
 .readerPreview .panelHead select { width: auto; min-width: 230px; }
 .previewSelection { position: sticky; top: 12px; z-index: 1; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
@@ -406,7 +407,7 @@
 @media (max-width: 1230px) {
   .workspace { padding-right: 18px; padding-left: 18px; }
   .workspaceGrid { grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; }
-  .steps button { gap: 5px; padding: 7px !important; font-size: 10px; }
+  .steps button { gap: 5px; padding: 7px !important; font-size: 12px; }
   .stepNumber { display: none; }
   .venueCard { grid-template-columns: 1fr 1fr; }
   .venueCard .dangerText { justify-self: start; margin-top: 0; }
@@ -446,4 +447,4 @@
 .requiredMark { display: inline-block; margin-left: 7px; color: var(--muted); font-size: 10px; font-weight: 500; }
 .page [data-organizer-field] { scroll-margin-block: 24px; }
 .page [data-field-highlight] { outline: 2px solid var(--ink); outline-offset: 5px; border-radius: 5px; background: var(--paper); }
-.page .issueLink { display: block; margin: 4px 0; padding: 6px 0; border: 0; background: transparent; color: var(--danger); font-size: 12px; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+.page .issueLink { display: block; margin: 4px 0; padding: 6px 0; border: 0; background: transparent; color: var(--danger); font-size: 14px; text-align: left; text-decoration: underline; text-underline-offset: 3px; }

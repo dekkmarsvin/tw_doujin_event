@@ -3,7 +3,7 @@ name: "場刊 Map"
 description: "高密度、可搜尋、可規劃的同人展電子場刊與向量地圖工具"
 colors:
   shell-ink: "#202a35"
-  text-muted: "#707a82"
+  text-muted: "#59626c"
   structural-line: "#dfe3df"
   paper-ground: "#f8f7f2"
   map-ground: "#f2f0e8"
@@ -33,19 +33,19 @@ typography:
     letterSpacing: "normal"
   body:
     fontFamily: "Geist, system-ui, Noto Sans TC, sans-serif"
-    fontSize: "12px"
+    fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.65
     letterSpacing: "normal"
   label:
     fontFamily: "Geist, system-ui, Noto Sans TC, sans-serif"
-    fontSize: "9px"
+    fontSize: "12px"
     fontWeight: 800
     lineHeight: 1.2
     letterSpacing: "0.1em"
   data:
     fontFamily: "Geist Mono, ui-monospace, monospace"
-    fontSize: "10px"
+    fontSize: "12px"
     fontWeight: 700
     lineHeight: 1.2
     letterSpacing: "0.06em"
@@ -172,11 +172,13 @@ components:
 
 - **Headline**，700、20px、1.2：地圖標題、管理標題與主要社團名稱。
 - **Title**，700、14px、1.4：面板標題、狀態標題與重要內容名稱。
-- **Body**，400、12px、1.65：說明、社團內容與管理引導；連續文字最長 72ch。
-- **Label**，800、9px、0.1em：欄位名稱、區段標題與短英文導覽字，允許大寫。
-- **Data**，700、10px、0.06em：攤位代碼、數量、時間、信心值與版本資訊。
+- **Body**，400、14px、1.65：說明、社團內容與管理引導；連續文字最長 72ch。
+- **Label**，800、12px、0.1em：欄位名稱、區段標題與短英文導覽字，允許大寫。
+- **Data**，700、12px、0.06em：攤位代碼、數量、時間、信心值與版本資訊。
 
 **The Data-Is-Mono Rule.** 只有可比較、可排序或具座標意義的資料使用等寬字。按鈕名稱與一般中文標題禁止使用等寬字。
+
+**The 12px Floor.** 介面文字（含計數、標記與按鈕）在標準字級下不小於 12px；次要文字使用 `text-muted`，在紙色與白底上達 4.5:1。SVG 地圖內的攤位代碼依地圖縮放呈現，不適用此下限（#484）。
 
 **The Tight-Scale Rule.** 產品字級階層維持約 1.15 至 1.2 的比例，不得突然加入巨型展示字搶走作品內容的注意力。
 

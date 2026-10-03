@@ -14,7 +14,7 @@
   --card-inset: 19px;
   --column-gap: 24px;
   --ink: #202a35;
-  --muted: #707a82;
+  --muted: #59626c;
   --line: #dfe3df;
   --paper: #f8f7f2;
   --surface: #f9faf8;
@@ -28,12 +28,13 @@
   padding: 24px 18px 64px;
   color: var(--ink);
   font-family: Geist, system-ui, "Noto Sans TC", sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
 .page :is(h1, h2, p, ul, form) { margin: 0; }
 .page *, .page *::before, .page *::after { box-sizing: border-box; }
+:where(.page) small { font-size: 12px; } /* The browser default `smaller` falls under the 12px floor (#484). */
 
 .masthead {
   display: flex;
@@ -43,9 +44,9 @@
   padding-bottom: 18px;
   border-bottom: 1px solid var(--line);
 }
-.masthead small { display: block; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.masthead small { display: block; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .1em; }
 .masthead h1 { margin-top: 4px; font-size: 20px; letter-spacing: .02em; }
-.masthead p { color: var(--muted); font-size: 11px; }
+.masthead p { color: var(--muted); font-size: 12px; }
 .backLink { margin-top: 6px; }
 .backLink a { color: var(--ink); text-underline-offset: 2px; }
 
@@ -65,7 +66,7 @@
 }
 .eventPicker select:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
 
-.identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); }
+.identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
 .identity a { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
 
 .card {
@@ -86,7 +87,7 @@
 .takedownResults { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 8px; }
 .takedownResults li { display: flex; align-items: center; gap: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: white; }
 .takedownResults li div { display: grid; gap: 4px; flex: 1; }
-.takedownResults small, .takedownResults span { color: var(--muted); font-size: 11px; }
+.takedownResults small, .takedownResults span { color: var(--muted); font-size: 12px; }
 .card .takedownResults button { margin: 0; }
 .takedownSelection { border-top: 1px solid var(--line); padding-top: 18px; }
 .takedownSelection h3 { margin-top: 0; }
@@ -109,27 +110,27 @@
 .startSteps li {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
-  background: #fff; color: var(--muted); font-size: 12px;
+  background: #fff; color: var(--muted); font-size: 14px;
 }
 .startSteps li > span {
   display: grid; place-items: center; flex: 0 0 22px; height: 22px;
   border: 1px solid var(--line); border-radius: 50%; background: var(--paper);
-  font: 700 10px "Geist Mono", ui-monospace, monospace;
+  font: 700 12px "Geist Mono", ui-monospace, monospace;
 }
 .startSteps [aria-current="step"] { border-color: var(--coral); color: var(--ink); }
 .startSteps [aria-current="step"] > span { border-color: var(--ink); background: var(--ink); color: #fff; }
 .startSteps small {
   margin-left: auto; padding: 2px 7px; border-radius: 5px;
-  background: #fff3f1; color: var(--danger); font-size: 10px; font-weight: 800; white-space: nowrap;
+  background: #fff3f1; color: var(--danger); font-size: 12px; font-weight: 800; white-space: nowrap;
 }
 .card > .startSteps + p { margin-top: 10px; }
 @media (min-width: 560px) {
   .startSteps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .card h2 { font-size: 14px; }
-.card > p { margin-top: 6px; color: var(--muted); font-size: 11px; }
+.card > p { margin-top: 6px; color: var(--muted); font-size: 12px; }
 
-.card label { display: block; margin-top: 12px; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.card label { display: block; margin-top: 12px; font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
 .card :is(input, select, textarea) {
   width: 100%;
   margin-top: 5px;
@@ -157,7 +158,7 @@
   color: #6a746e;
   cursor: not-allowed;
 }
-.editorFieldset :is(input, select, textarea):disabled::placeholder { color: #87918b; }
+.editorFieldset :is(input, select, textarea):disabled::placeholder { color: #59626c; }
 .card :is(input, select, textarea):focus-visible { outline: 3px solid #dfe8e3; outline-offset: 1px; border-color: #9aa5a0; }
 .card textarea { resize: vertical; }
 /* The editor runs on one small scale: field names, states, hints and every
@@ -165,7 +166,7 @@
    it read as one line. Placed before the chip, radio and check variants below,
    which keep their own sizes by coming later. */
 .editorCard > h2 { font-size: 16px; }
-.editorCard label { font-size: 11px; font-weight: 700; letter-spacing: normal; color: var(--ink); }
+.editorCard label { font-size: 12px; font-weight: 700; letter-spacing: normal; color: var(--ink); }
 
 /* `:not(:where(.previewFrame *))` keeps these off the reader component embedded
    in the preview: it brings its own button styling, and the portal's block-button
@@ -185,7 +186,7 @@
   border-radius: 7px;
   background: var(--ink);
   color: var(--surface);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: .06em;
   cursor: pointer;
@@ -210,7 +211,7 @@
   border-radius: 7px;
   background: #fff;
   color: var(--ink);
-  font-size: 10px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -225,16 +226,16 @@
   background: #fff;
 }
 .claimList li > div { min-width: 0; flex: 1; }
-.claimList b { display: block; font-size: 12px; }
-.claimList small { display: block; color: var(--muted); font-size: 10px; word-break: break-all; }
-.claimList a { color: var(--danger); font-size: 10px; }
+.claimList b { display: block; font-size: 14px; }
+.claimList small { display: block; color: var(--muted); font-size: 12px; word-break: break-all; }
+.claimList a { color: var(--danger); font-size: 12px; }
 .claimList button { margin-top: 0; }
 
 .claim_pending, .claim_verified, .claim_rejected, .claim_revoked, .claim_withdrawn {
   flex: 0 0 auto;
   padding: 3px 8px;
   border-radius: 5px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: .06em;
 }
@@ -257,8 +258,8 @@
   font-weight: 400;
   letter-spacing: normal;
 }
-.matchList b { display: block; font-size: 12px; }
-.matchList small { color: var(--muted); font-size: 10px; }
+.matchList b { display: block; font-size: 14px; }
+.matchList small { color: var(--muted); font-size: 12px; }
 
 .challenge {
   display: flex;
@@ -270,7 +271,7 @@
   border-radius: 9px;
   background: #fff;
 }
-.challenge span { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.challenge span { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
 .challenge code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 14px; font-weight: 700; letter-spacing: .06em; user-select: all; }
 
 /* Turnstile renders its own iframe: 300×65, or 150×140 where the form is
@@ -282,11 +283,11 @@
 .turnstile { margin-top: 12px; min-height: 65px; line-height: 0; }
 .turnstile[data-size="compact"] { min-height: 140px; }
 
-.policyLink { margin-top: 10px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.policyLink { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .policyLink a { color: var(--ink); }
-.policyLink code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px; }
+.policyLink code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
 
-.notice, .error { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 11px; }
+.notice, .error { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 12px; }
 .notice { border: 1px solid #cfe4da; background: #edf8f3; color: var(--success); }
 .error { border: 1px solid #f0cdc6; background: #fff3f1; color: var(--danger); }
 
@@ -295,7 +296,7 @@
 .inlineButton {
   min-height: 0; margin: 0 0 0 6px; padding: 2px 8px;
   border: 1px solid currentColor; border-radius: 6px; background: transparent;
-  color: inherit; font-size: 11px; font-weight: 700; letter-spacing: normal;
+  color: inherit; font-size: 12px; font-weight: 700; letter-spacing: normal;
 }
 a.inlineButton { display: inline-block; text-decoration: none; }
 
@@ -314,7 +315,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-radius: 999px;
   background: #fff;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   letter-spacing: normal;
 }
@@ -327,7 +328,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
    and is not part of what the form sends. The floated legend sits inside the
    box as the panel's title instead of on its border. */
 .retention { min-width: 0; margin: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.retention legend { float: left; width: 100%; margin: 0 0 10px; padding: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
+.retention legend { float: left; width: 100%; margin: 0 0 10px; padding: 0; color: var(--ink); font-size: 14px; font-weight: 700; }
 .retentionChoices { clear: both; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .card .retentionChoices label {
   display: flex;
@@ -339,7 +340,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-radius: 8px;
   background: #fff;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -361,7 +362,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .field { margin-top: 16px; }
 .fieldHead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .card .fieldHead label { margin: 0; }
-.fieldLabel { font-size: 11px; font-weight: 700; }
+.fieldLabel { font-size: 12px; font-weight: 700; }
 .fieldHead + :is(input, select, textarea) { margin-top: 6px; }
 
 /* The map draft's save and submit row, under its canvas. */
@@ -383,7 +384,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 }
 .saveBar .problemList { max-height: 7.5em; margin: 0 0 8px; overflow: auto; }
 .saveBarRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
-.saveBarRow > p { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 11px; line-height: 1.6; }
+.saveBarRow > p { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 12px; line-height: 1.6; }
 .card .saveBarRow button { min-width: 200px; margin-top: 0; }
 /* The way back sits beside the step forward, sized to its words. */
 .card .saveBarRow .secondaryButton { min-width: 0; }
@@ -410,16 +411,16 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .mapDraftCreate { display: grid; gap: 10px; margin-top: 14px; }
 .mapReviewPreview { --slot-tone: #5fa695; max-width: 900px; margin: 12px auto 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .mapReviewPreview svg { display: block; width: 100%; height: auto; }
-.auditList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
+.auditList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 12px; line-height: 1.55; }
 /* 舊資料留下的多個值。每一個都是可移除的，因此是按鈕而不是純文字。 */
 .extraValues { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
-.extraValues > span { color: var(--muted); font-size: 11px; }
+.extraValues > span { color: var(--muted); font-size: 12px; }
 .extraValues button {
   display: inline-flex; align-items: center; gap: 5px;
   min-height: 0; margin: 0; padding: 4px 9px;
   border: 1px solid var(--line); border-radius: 999px;
   background: #fff; color: var(--ink);
-  font-size: 12px; font-weight: 400; letter-spacing: normal;
+  font-size: 14px; font-weight: 400; letter-spacing: normal;
 }
 .extraValues button:hover { border-color: var(--danger); filter: none; }
 
@@ -444,23 +445,23 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 /* The native picker keeps its behaviour but wears the portal's own secondary
    button, instead of a full-width grey box around the browser's control. */
-.editorCard input[type="file"] { padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 12px; }
+.editorCard input[type="file"] { padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 14px; }
 .editorCard input[type="file"]::file-selector-button {
   min-height: 32px; margin-right: 10px; padding: 4px 12px;
   border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink);
-  font: inherit; font-size: 11px; font-weight: 800; letter-spacing: .04em; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 800; letter-spacing: .04em; cursor: pointer;
 }
 .editorCard input[type="file"]:disabled { border: 0; background: transparent; }
 .editorCard input[type="file"]:disabled::file-selector-button { background: var(--paper); color: var(--muted); cursor: not-allowed; }
 
-.problemList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 10px; line-height: 1.55; }
+.problemList { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 12px; line-height: 1.55; }
 .auditList { overflow-wrap: anywhere; color: var(--muted); }
 .auditList a { color: inherit; }
 .problemList { color: var(--danger); }
 .problemList small { display: block; }
 .candidate { display: grid; gap: 6px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .candidate small { overflow-wrap: anywhere; color: var(--muted); }
-.candidate pre { max-height: 280px; margin: 0; padding: 10px; overflow: auto; background: #f6f7f6; font-size: 9px; }
+.candidate pre { max-height: 280px; margin: 0; padding: 10px; overflow: auto; background: #f6f7f6; font-size: 12px; }
 .card .confirmCheck { display: flex; gap: 8px; align-items: flex-start; }
 .card .confirmCheck input { width: auto; margin: 2px 0 0; }
 
@@ -468,12 +469,12 @@ a.inlineButton { display: inline-block; text-decoration: none; }
    in red. Kept visually apart from the per-field "clear" controls: ADR-0020
    requires clearing and deleting to read as two different things. */
 .danger { margin-top: 16px; padding: 12px; border: 1px solid #e7c4bd; border-radius: 10px; background: #fdf6f4; }
-.danger summary { color: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
+.danger summary { color: var(--danger); font-size: 12px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
 .danger summary:focus-visible { outline: 3px solid #f0cdc6; outline-offset: 3px; }
-.danger p { margin-top: 8px; color: var(--ink); font-size: 11px; line-height: 1.7; }
+.danger p { margin-top: 8px; color: var(--ink); font-size: 12px; line-height: 1.7; }
 .danger label { margin-top: 10px; }
-.danger code { padding: 1px 5px; border-radius: 4px; background: #f4e3df; font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
-.dangerSummary { margin: 6px 0 0; padding-left: 18px; color: var(--ink); font-size: 11px; line-height: 1.7; }
+.danger code { padding: 1px 5px; border-radius: 4px; background: #f4e3df; font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
+.dangerSummary { margin: 6px 0 0; padding-left: 18px; color: var(--ink); font-size: 12px; line-height: 1.7; }
 .accountZone { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
 .accountZone .danger { margin-top: 0; }
 .accountZone .danger > :not(summary) { max-width: 640px; }
@@ -485,16 +486,16 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 @media (hover: hover) and (pointer: fine) {
   .accountZone input { font-size: 14px; }
 }
-.accountZone label { display: block; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
-.accountZone .dangerButton { display: block; min-height: 38px; padding: 8px 14px; border: 1px solid; border-radius: 7px; font-size: 11px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
+.accountZone label { display: block; font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.accountZone .dangerButton { display: block; min-height: 38px; padding: 8px 14px; border: 1px solid; border-radius: 7px; font-size: 12px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
 /* Scoped through `.danger` so it outranks `.card button`, which would otherwise
    paint the only irreversible action in the portal the same ink as Save. */
 .danger .dangerButton { margin-top: 10px; border-color: var(--danger); background: var(--danger); color: #fff; }
 .danger .dangerButton:disabled { border-color: #e7c4bd; background: #e7c4bd; color: #fff; cursor: not-allowed; }
 
 .preview { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
-.preview h3 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
-.preview > p { margin-top: 8px; color: var(--muted); font-size: 11px; }
+.preview h3 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+.preview > p { margin-top: 8px; color: var(--muted); font-size: 12px; }
 /* Inert on purpose: the reader's planning controls render so the preview is
    faithful, but they must not act from inside a preview. */
 .previewFrame {
@@ -512,9 +513,9 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .previewColumn { display: none; min-width: 0; }
 .previewColumn.reviewOpen { display: block; }
 .livePreview > small {
-  color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .1em;
+  color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .1em;
 }
-.livePreview h3, .reviewPanel h3 { margin: 4px 0 0; font-size: 13px; }
+.livePreview h3, .reviewPanel h3 { margin: 4px 0 0; font-size: 14px; }
 .previewHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 /* Above the review overlay's z-index 50: the full density can be opened from
    either side of the editor. */
@@ -527,15 +528,15 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-radius: 12px;
   background: var(--paper);
 }
-.livePreview > p, .reviewPanel > p { margin-top: 8px; color: var(--muted); font-size: 11px; }
+.livePreview > p, .reviewPanel > p { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .reviewPanel { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .reviewHeading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .card .backButton { margin-top: 0; border-color: var(--line); background: #fff; color: var(--ink); }
-.reviewPanel h4 { margin: 16px 0 0; font-size: 11px; }
+.reviewPanel h4 { margin: 16px 0 0; font-size: 12px; }
 .reviewSummary { margin: 8px 0 0; border-top: 1px solid var(--line); }
 .reviewSummary > div { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(0, 1.3fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
-.reviewSummary dt { color: var(--muted); font-size: 10px; }
-.reviewSummary dd { margin: 0; overflow-wrap: anywhere; font-size: 11px; }
+.reviewSummary dt { color: var(--muted); font-size: 12px; }
+.reviewSummary dd { margin: 0; overflow-wrap: anywhere; font-size: 12px; }
 .reviewActions { display: flex; gap: 8px; margin-top: 14px; }
 .reviewActions button { flex: 1; margin-top: 0; }
 .problemList a { color: inherit; text-underline-offset: 2px; }
@@ -569,7 +570,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   .claimList li { flex-wrap: wrap; }
 }
 
-.editorHint { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.editorHint { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .editorHint b { color: var(--ink); }
 
 /* What the field shows now, and the two ways back, at the right of its head. */
@@ -580,7 +581,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   gap: 6px;
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .fieldMode span { margin-right: 4px; }
 .fieldMode b { color: var(--muted); font-weight: 600; }
@@ -591,7 +592,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-color: var(--line);
   background: #fff;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Every secondary button in the editor — a field's way back, moving and
@@ -606,11 +607,11 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-color: var(--line);
   background: #fff;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: .04em;
 }
 .editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:not(:disabled, [aria-disabled="true"]):hover { border-color: #b9c2bc; background: var(--paper); filter: none; }
-.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:is(:disabled, [aria-disabled="true"]) { border-color: var(--line); background: var(--paper); color: #9aa19c; }
+.editorCard :is(.fieldMode, .linkActions, .linkAdd, .catalogPageHead, .catalogPageActions, .thumbnailPreview) button:is(:disabled, [aria-disabled="true"]) { border-color: var(--line); background: var(--paper); color: #59626c; }
 .editorCard .fieldMode button[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); color: var(--ink); }
 .editorCard .thumbnailPreview button { margin-top: 8px; }
 
@@ -621,20 +622,20 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .linkList > li { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
 .linkRow { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px 10px; align-items: start; }
 .linkAdd { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.linkAdd span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.linkAdd span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .card .linkRow label { grid-column: 2; margin-top: 0; }
 .linkRow :is(input, select) { margin-top: 4px; }
 .linkPosition {
   grid-column: 1; grid-row: 1; width: 22px; height: 22px; display: grid; place-items: center;
   border-radius: 50%; background: var(--ink); color: #fff;
-  font: 700 10px "Geist Mono", ui-monospace, monospace;
+  font: 700 12px "Geist Mono", ui-monospace, monospace;
 }
 .linkActions { grid-column: 2; display: flex; gap: 6px; }
 .linkCut {
   margin: 10px -10px -10px; padding: 6px 10px;
-  border-top: 1px dashed var(--line); color: var(--muted); font-size: 11px;
+  border-top: 1px dashed var(--line); color: var(--muted); font-size: 12px;
 }
-.problemList { margin: 10px 0 0; padding-left: 18px; color: var(--danger, #a43e30); font-size: 11px; line-height: 1.7; }
+.problemList { margin: 10px 0 0; padding-left: 18px; color: var(--danger, #a43e30); font-size: 12px; line-height: 1.7; }
 
 @media (min-width: 560px) {
   /* Two lines: the short name and the kind, then the address — the one value
@@ -647,11 +648,11 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 
 .commentThread { display:grid; gap:9px; margin:0 0 13px; padding:0; list-style:none; }
 .commentThread li { display:grid; gap:4px; padding:9px 11px; border:1px solid #e2e5e1; border-radius:9px; background:#fafbf9; }
-.commentThread li>span { color:#87918b; font-size:calc(8px * var(--ui-font-scale,1)); font-weight:800; }
+.commentThread li>span { color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; }
 .commentThread li>b { justify-self:start; }
-.commentThread li>b button { min-height:28px; padding:0 9px; border:1px solid #8fa899; border-radius:7px; background:#eef4f0; color:#26503c; font-size:calc(9px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
+.commentThread li>b button { min-height:28px; padding:0 9px; border:1px solid #8fa899; border-radius:7px; background:#eef4f0; color:#26503c; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; cursor:pointer; }
 .commentThread li>b button:hover { background:#e2ede6; }
-.commentThread li>p { margin:0; color:#344039; font-size:calc(10px * var(--ui-font-scale,1)); line-height:1.6; overflow-wrap:anywhere; }
+.commentThread li>p { margin:0; color:#344039; font-size:calc(12px * var(--ui-font-scale,1)); line-height:1.6; overflow-wrap:anywhere; }
 .commentTarget { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:9px; }
 
 /* ---- /admin: cross-event review queue ----
@@ -669,11 +670,11 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .overviewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
 .overviewCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .card .overviewCard h3 { margin: 0; font-size: 14px; line-height: 1.3; }
-.overviewStatus { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: 11px; }
-.lifecycle, .lifecycleMuted { padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.overviewStatus { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-size: 12px; }
+.lifecycle, .lifecycleMuted { padding: 2px 7px; border-radius: 5px; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
 .lifecycle { background: #edf8f3; color: var(--success); }
 .lifecycleMuted { background: #efefe9; color: #4d5660; }
-.overviewDate { margin: -6px 0 0; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
+.overviewDate { margin: -6px 0 0; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
 .overviewCounts { margin-top: auto; display: grid;grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .card .countButton {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
@@ -681,22 +682,22 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   border-color: var(--line); background: var(--surface); color: var(--ink);
   font-weight: 400; letter-spacing: normal; text-align: left;
 }
-.countButton span { color: var(--muted); font-size: 11px; }
+.countButton span { color: var(--muted); font-size: 12px; }
 .countButton b { font-family: "Geist Mono", ui-monospace, monospace; font-size: 20px; line-height: 1.1; }
-.countButton b[data-zero] { color: #9aa19c; }
-.overviewFacts { display: grid; gap: 4px; margin: 0; font-size: 12px; }
+.countButton b[data-zero] { color: #59626c; }
+.overviewFacts { display: grid; gap: 4px; margin: 0; font-size: 14px; }
 .overviewFacts div { display: flex; justify-content: space-between; gap: 12px; }
 .overviewFacts dt { color: var(--muted); }
 .overviewFacts dd { margin: 0; font-family: "Geist Mono", ui-monospace, monospace; font-weight: 700; }
 .overviewLink {
   display: inline-flex; align-items: center; justify-content: center; min-height: 36px; margin-top: auto;
-  border: 1px solid var(--ink); border-radius: 7px; color: var(--ink); font-size: 11px; font-weight: 800; text-decoration: none;
+  border: 1px solid var(--ink); border-radius: 7px; color: var(--ink); font-size: 12px; font-weight: 800; text-decoration: none;
 }
 .card .pastLine {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%;
   min-height: 0; margin-top: 10px; padding: 9px 12px;
   border: 1px dashed #cfd5d0; background: transparent; color: var(--ink);
-  font-size: 12px; font-weight: 400; letter-spacing: normal; text-align: left;
+  font-size: 14px; font-weight: 400; letter-spacing: normal; text-align: left;
 }
 .card .pastLine .overviewDate { margin: 0; }
 .pastCounts { margin-left: auto; color: var(--muted); }
@@ -704,12 +705,12 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .filterChips { display: flex; flex-wrap: wrap; gap: 6px; }
 .card .filterChip {
   min-height: 30px; margin: 0; padding: 0 10px;
-  border-color: var(--line); background: #fff; color: var(--ink); font-size: 11px; letter-spacing: normal;
+  border-color: var(--line); background: #fff; color: var(--ink); font-size: 12px; letter-spacing: normal;
 }
 .card .filterChip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--surface); }
 .filterChip span { font-family: "Geist Mono", ui-monospace, monospace; }
 
-.warningNotice { margin-top: 12px; padding: 9px 11px; border: 1px solid #efd9b2; border-radius: 8px; background: #fbf1e0; color: #5c3b0b; font-size: 11px; }
+.warningNotice { margin-top: 12px; padding: 9px 11px; border: 1px solid #efd9b2; border-radius: 8px; background: #fbf1e0; color: #5c3b0b; font-size: 12px; }
 
 /* Sticks while the list scrolls, so the batch actions stay reachable from the
    last row as well as the first. */
@@ -719,35 +720,35 @@ a.inlineButton { display: inline-block; text-decoration: none; }
   margin-top: 12px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff;
 }
 .queueToolbar[data-selected] { border-color: var(--ink); background: #eef1f2; }
-.card .selectAll { display: inline-flex; align-items: center; gap: 10px; margin: 0; color: var(--ink); font-size: 12px; font-weight: 400; letter-spacing: normal; }
+.card .selectAll { display: inline-flex; align-items: center; gap: 10px; margin: 0; color: var(--ink); font-size: 14px; font-weight: 400; letter-spacing: normal; }
 .queueActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .card .queueActions button:not(:where(.inlineButton)) { min-height: 34px; margin: 0; }
 .card .queueActions .inlineButton { margin: 0; }
-.selectionCount { display: flex; flex-wrap: wrap; gap: 0 8px; color: var(--muted); font-size: 11px; }
-.selectionCount b { color: var(--ink); font-size: 12px; }
+.selectionCount { display: flex; flex-wrap: wrap; gap: 0 8px; color: var(--muted); font-size: 12px; }
+.selectionCount b { color: var(--ink); font-size: 14px; }
 
 .queueHeader, .queueRow {
   display: grid; grid-template-columns: 22px minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.4fr) 76px auto;
   gap: 12px; align-items: center;
 }
-.queueHeader { margin-top: 12px; padding: 0 12px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+.queueHeader { margin-top: 12px; padding: 0 12px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .06em; }
 .queueList { display: grid; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
 .queueRow { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .queueRow[data-selected] { border-color: var(--ink); background: #eef1f2; }
 .queueRow[data-problem] { border-color: #f0cdc6; }
 .card .queueRow input[type="checkbox"], .card .selectAll input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--ink); }
 .queueCircle, .queueEvent, .queueEvidence { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
-.card .queueCircle p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--ink); font-size: 12px; }
-.queueCircle b { font-size: 13px; }
-.queueCircle small, .queueEvent small, .queueEvidence small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.card .queueCircle p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--ink); font-size: 14px; }
+.queueCircle b { font-size: 14px; }
+.queueCircle small, .queueEvent small, .queueEvidence small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .queueCircle small { font-family: "Geist Mono", ui-monospace, monospace; }
-.flagWarn, .flagMuted { padding: 1px 6px; border-radius: 5px; font-size: 10px; font-weight: 800; }
+.flagWarn, .flagMuted { padding: 1px 6px; border-radius: 5px; font-size: 12px; font-weight: 800; }
 .flagWarn { background: #fbf1e0; color: #7a4f10; }
 .flagMuted { background: #efefe9; color: #4d5660; }
-.rowError { color: var(--danger); font-size: 11px; }
-.queueEvent { font-size: 12px; }
-.queueEvidence a { overflow: hidden; color: var(--danger); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; text-underline-offset: 2px; }
-.queueTime { color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
+.rowError { color: var(--danger); font-size: 12px; }
+.queueEvent { font-size: 14px; }
+.queueEvidence a { overflow: hidden; color: var(--danger); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; text-underline-offset: 2px; }
+.queueTime { color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
 .queueRowActions { display: flex; justify-content: flex-end; gap: 6px; }
 .card .queueRowActions button { min-height: 32px; margin: 0; padding: 4px 10px; }
 
@@ -758,10 +759,10 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 }
 .card .batchDialog h2 { margin: 0; font-size: 17px; line-height: 1.3; }
 .batchGroup { padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
-.batchGroup p { display: flex; justify-content: space-between; gap: 12px; margin: 0; font-size: 12px; }
+.batchGroup p { display: flex; justify-content: space-between; gap: 12px; margin: 0; font-size: 14px; }
 .batchGroup p + p { display: block; margin-top: 3px; color: #4d5660; }
 .batchGroup span { font-family: "Geist Mono", ui-monospace, monospace; font-weight: 700; }
-.batchSkipped { padding: 11px 13px; border: 1px solid #efd9b2; border-radius: 9px; background: #fbf1e0; color: #5c3b0b; font-size: 12px; }
+.batchSkipped { padding: 11px 13px; border: 1px solid #efd9b2; border-radius: 9px; background: #fbf1e0; color: #5c3b0b; font-size: 14px; }
 .batchSkipped ul { margin: 4px 0 0; padding-left: 18px; }
 .card .batchDialog .reviewActions { justify-content: flex-end; }
 .card .batchDialog .reviewActions button { flex: 0 0 auto; }
@@ -779,7 +780,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 /* The page a circle shares once something is published. Its own section, not
    a line of the save notice: it stays after the notice clears. */
 .sharePanel { margin-top: 18px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.sharePanel h3 { margin: 0; font-size: 13px; }
+.sharePanel h3 { margin: 0; font-size: 14px; }
 .shareImageField { margin: 12px 0; }
 /* The frame is the 1200×630 share card at every width and the picture fills it
    the way a share card does, centred and cropped: the preview shows what will be
@@ -790,10 +791,10 @@ a.inlineButton { display: inline-block; text-decoration: none; }
    content; three rows otherwise. */
 .sharePanel textarea { line-height: 1.6; field-sizing: content; }
 .shareActions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
-.shareLink { display: inline-flex; align-items: center; min-height: 38px; margin-top: 14px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-decoration: none; }
+.shareLink { display: inline-flex; align-items: center; min-height: 38px; margin-top: 14px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-decoration: none; }
 .shareLink:hover { background: var(--paper); }
 .shareLink:focus-visible { outline: 3px solid #dfe8e3; outline-offset: 2px; }
-.shareResult { min-height: 1.6em; margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+.shareResult { min-height: 1.6em; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 @media (max-width: 760px) {
   .shareActions > * { flex: 1 1 100%; justify-content: center; }
   .shareLink, .shareActions button { min-height: 44px; }
@@ -807,25 +808,25 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .catalogPage { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .catalogPage img { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 5px; background: var(--paper); object-fit: contain; }
 .catalogPageHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.catalogPageHead b { font-size: 12px; }
+.catalogPageHead b { font-size: 14px; }
 .catalogPageHead span { display: flex; gap: 4px; }
 .editorCard .catalogPageHead button { min-width: 30px; padding: 4px 0; }
 .catalogPageActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; }
 .catalogPage .notice { margin-top: 0; padding: 6px 8px; }
 .catalogAdd { position: relative; display: flex; min-height: 150px; border: 1px dashed #b9c2bc; border-radius: 9px; background: var(--paper); }
-.card .catalogAdd label { display: grid; flex: 1; place-items: center; align-content: center; margin: 0; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-align: center; cursor: pointer; }
+.card .catalogAdd label { display: grid; flex: 1; place-items: center; align-content: center; margin: 0; padding: 12px; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-align: center; cursor: pointer; }
 .catalogAdd:has(input:not(:disabled, [aria-disabled="true"])):hover { border-color: var(--ink); background: #fff; }
-.card .catalogAdd:has(input:disabled) label { color: #9aa19c; cursor: not-allowed; }
+.card .catalogAdd:has(input:disabled) label { color: #59626c; cursor: not-allowed; }
 /* Held back by the confirmation: muted, but still pressable, and saying why. */
-.card .catalogAdd:has(input[aria-disabled="true"]) label { color: #9aa19c; }
+.card .catalogAdd:has(input[aria-disabled="true"]) label { color: #59626c; }
 .catalogAdd label > span { display: block; }
-.catalogAdd label > small { display: block; margin-top: 4px; color: var(--ink); font-size: 11px; font-weight: 600; letter-spacing: normal; }
+.catalogAdd label > small { display: block; margin-top: 4px; color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: normal; }
 .catalogAdd:has(input:focus-visible) { outline: 3px solid #dfe8e3; outline-offset: 2px; }
 @media (min-width: 560px) {
   .catalogList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 /* A sentence the author has to read, not a field caption. */
-.catalogField .confirmCheck { margin-top: 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }
+.catalogField .confirmCheck { margin-top: 12px; padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: normal; line-height: 1.6; }
 /* Outlined while it holds 新增 and 替換 back, so the reason is on the page
    before anyone presses them. */
 .catalogField .gate { border-color: var(--coral); background: #fff; }
