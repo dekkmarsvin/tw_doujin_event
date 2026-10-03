@@ -36,7 +36,8 @@ function dayName(eventId: string, day: string) {
 }
 const catalogStatus = (eventId: string) => getCircleCatalogState(eventId).status;
 
-type Pending = { fileName: string; text: string; preview: BackupPreview };
+/** `base` is the stored plan the preview was computed from; summary, backup and write all use it. */
+type Pending = { fileName: string; text: string; preview: BackupPreview; base: PlanningDocument };
 type Result = { kind: "ok" | "error"; message: string } | null;
 
 /**
@@ -66,7 +67,8 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
     setResult(null); setReplacing("off"); setMode("keep");
     if (file.size > MAX_BACKUP_BYTES) { setPending(null); setResult({ kind: "error", message: "檔案超過 10 MiB，沒有匯入任何資料。" }); return; }
     const text = await file.text();
-    setPending({ fileName: file.name, text, preview: previewPlanningBackup(text, stored().document, catalogStatus) });
+    const base = stored().document;
+    setPending({ fileName: file.name, text, base, preview: previewPlanningBackup(text, base, catalogStatus) });
   }
 
   function cancel() {
@@ -80,7 +82,7 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
     const latest = stored();
     if (blocked || !latest.writable) { setResult({ kind: "error", message: "這台裝置有無法讀取的舊資料，沒有匯入任何資料。" }); return; }
     if (planningFingerprint(latest.document) !== pending.preview.baseFingerprint) {
-      setPending({ ...pending, preview: previewPlanningBackup(pending.text, latest.document, catalogStatus) });
+      setPending({ ...pending, base: latest.document, preview: previewPlanningBackup(pending.text, latest.document, catalogStatus) });
       // A choice made against the old preview must not overwrite what changed since.
       setReplacing("off"); setMode("keep");
       setResult({ kind: "error", message: "這台裝置的資料在預覽後有變更，已重新計算，請再確認一次。" });
@@ -98,7 +100,7 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
   const conflicts = preview?.ok ? preview.events.reduce((total, event) => total + event.favorites.conflicting + event.visitPlans.conflicting, 0) : 0;
   const added = preview?.ok ? preview.events.reduce((total, event) => total + event.favorites.new + event.visitPlans.new, 0) : 0;
   const nothingNew = preview?.ok === true && added === 0 && preview.groups.new.length === 0 && preview.groups.clashes.length === 0;
-  const summary = preview?.ok && replacing !== "off" ? planningReplaceSummary(document, preview.document) : null;
+  const summary = pending && preview?.ok && replacing !== "off" ? planningReplaceSummary(pending.base, preview.document) : null;
 
   return <section className={styles.section} id="planning-transfer" aria-labelledby="planning-transfer-title">
     <div>
@@ -148,7 +150,7 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
         <p>會移除 {summary.totals.favorites.removed} 筆收藏、{summary.totals.visitPlans.removed} 筆行程、{summary.totals.groups.removed} 個群組，並以備份取代 {summary.totals.favorites.replaced + summary.totals.visitPlans.replaced} 筆。</p>
         {summary.events.length > 0 && <ul className={styles.previewNotes}>{summary.events.map((item) => <li key={item.eventId}>{eventName(item.eventId)}：移除收藏 {item.favorites.removed}、行程 {item.visitPlans.removed}；取代收藏 {item.favorites.replaced}、行程 {item.visitPlans.replaced}</li>)}</ul>}
         <div className={styles.confirmActions}>
-          <button onClick={() => downloadText(backupName(), exportPlanningJson(document), "application/json")}>先下載目前備份</button>
+          <button onClick={() => downloadText(backupName(), exportPlanningJson(pending.base), "application/json")}>先下載目前備份</button>
           {replacing === "summary"
             ? <button className={styles.dangerButton} onClick={() => setReplacing("confirm")}>完整取代…</button>
             : <><span className={styles.confirmText}>確定以備份取代全部規劃資料？</span><button className={styles.dangerButton} onClick={() => commit((incoming) => incoming, "已用備份完整取代這台裝置的規劃資料。")}>確定取代</button></>}
