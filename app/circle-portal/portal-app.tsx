@@ -303,19 +303,26 @@ export default function CirclePortalApp() {
 
   // The picker says what this account holds in every event, so the other
   // events are read once per sign-in; the open one is kept current by
-  // `refreshClaims`, which is also what a later switch re-reads.
+  // `refreshClaims`, which is also what a later switch re-reads. A read that
+  // failed is tried again the next time the picker is reached for.
   const signedInAs = session?.email;
-  useEffect(() => {
-    if (!signedInAs || PUBLISHED_EVENTS.length < 2) return;
-    let active = true;
-    for (const item of PUBLISHED_EVENTS) {
-      if (item.id === maintainedEventId.current) continue;
-      void listMyClaims(item.id).then((answer) => {
-        if (active && answer.eventId === item.id) setClaimsByEvent((known) => item.id in known ? known : { ...known, [item.id]: answer.claims });
-      }, () => {});
+  /** Reads in flight for this sign-in; replaced on every sign-in so a late answer never lands under another. */
+  const claimReads = useRef({ signedIn: false, pending: new Set<string>() });
+  const readClaimsFor = useCallback((eventIds: readonly string[]) => {
+    const reads = claimReads.current;
+    if (!reads.signedIn) return;
+    for (const id of eventIds) {
+      if (id === maintainedEventId.current || reads.pending.has(id)) continue;
+      reads.pending.add(id);
+      void listMyClaims(id).then((answer) => {
+        if (claimReads.current === reads && answer.eventId === id) setClaimsByEvent((known) => id in known ? known : { ...known, [id]: answer.claims });
+      }, () => {}).finally(() => reads.pending.delete(id));
     }
-    return () => { active = false; };
-  }, [signedInAs]);
+  }, []);
+  useEffect(() => {
+    claimReads.current = { signedIn: Boolean(signedInAs), pending: new Set() };
+    if (PUBLISHED_EVENTS.length > 1) readClaimsFor(PUBLISHED_EVENTS.map((item) => item.id));
+  }, [readClaimsFor, signedInAs]);
 
   if (entry.eventId && !getPublishedEvent(entry.eventId)) return <div className={styles.page}>
     <header className={styles.masthead}><div className={styles.titleRow}><h1>社團資料</h1></div></header>
@@ -353,6 +360,7 @@ export default function CirclePortalApp() {
           ? <EventPicker
             eventId={event.id}
             claimsByEvent={claimsByEvent}
+            onReach={() => readClaimsFor(PUBLISHED_EVENTS.map((item) => item.id).filter((id) => !(id in claimsByEvent)))}
             onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />
           : <p>{event.name}・{eventCalendar(event).label}</p>}
@@ -410,8 +418,11 @@ function claimSummaryLabel(claims: readonly ClaimSummary[] | undefined) {
  * then the ended ones from the most recent back. An event whose dates cannot
  * be read stays with the current ones rather than reading as over.
  */
-function EventPicker({ eventId, claimsByEvent, onChoose }: {
-  eventId: string; claimsByEvent: Record<string, ClaimSummary[]>; onChoose: (eventId: string) => void;
+function EventPicker({ eventId, claimsByEvent, onReach, onChoose }: {
+  eventId: string; claimsByEvent: Record<string, ClaimSummary[]>;
+  /** The picker is about to be read: fill in any event whose claims are still missing. */
+  onReach: () => void;
+  onChoose: (eventId: string) => void;
 }) {
   const [today] = useState(() => taipeiDate(Date.now()));
   const ordered = eventsByProximity(PUBLISHED_EVENTS, today);
@@ -421,7 +432,8 @@ function EventPicker({ eventId, claimsByEvent, onChoose }: {
   ].filter((group) => group.entries.length > 0);
   return <div className={styles.eventPicker}>
     <label htmlFor="portal-event" className={styles.visuallyHidden}>活動</label>
-    <select id="portal-event" value={eventId} onChange={(event) => onChoose(event.target.value)}>
+    {/* Pressing and focusing both reach it: Safari opens a select without focusing it. */}
+    <select id="portal-event" value={eventId} onFocus={onReach} onPointerDown={onReach} onChange={(event) => onChoose(event.target.value)}>
       {groups.map((group) => <optgroup key={group.label} label={group.label}>
         {group.entries.map(({ event: item, label }) => <option key={item.id} value={item.id}>
           {item.name}・{label}{claimSummaryLabel(claimsByEvent[item.id])}

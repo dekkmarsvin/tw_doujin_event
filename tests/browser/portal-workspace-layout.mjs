@@ -11,8 +11,11 @@ import { base, start } from "./support/journey.mjs";
 const verified = { id: "claim-1", circleId: "c-900001", circleName: "北風畫室", status: "verified", targetUrl: null };
 const pending = { id: "claim-2", circleId: "c-900002", circleName: "南星工房", status: "pending", targetUrl: "https://circle.example/" };
 
-/** `claimsGate` holds the claim list back until the journey releases it. */
-function portalRoutes(claimsByEvent, claimsGate) {
+/**
+ * `claimsGate` holds the claim list back until the journey releases it;
+ * `failOnce` names events whose first claim read fails.
+ */
+function portalRoutes(claimsByEvent, claimsGate, failOnce = new Set()) {
   return async (page) => {
     // sample-two is being held and sample has ended on this day.
     await page.clock.setFixedTime(new Date("2026-10-02T12:00:00+08:00"));
@@ -23,6 +26,7 @@ function portalRoutes(claimsByEvent, claimsGate) {
       else if (url.pathname === "/api/claims") {
         await claimsGate;
         const event = url.searchParams.get("event");
+        if (failOnce.delete(event)) return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "暫時無法讀取。" }) });
         body = { eventId: event, claims: claimsByEvent[event] ?? [] };
       } else if (url.pathname === "/api/circle/search") body = { circles: [] };
       else if (url.pathname === "/api/circle/c-900001/overrides") body = { fields: {}, status: "active", postEventHidden: false, retention: null, retentionExpiresAt: null };
@@ -131,6 +135,15 @@ try {
   assert.deepEqual(claim, masthead, "alone, the claim spans the row");
   await journey.capture(first, "workspace-1440-first-claim");
   await first.close();
+
+  // A claim read that failed is tried again when the picker is reached for.
+  const retry = await journey.page({ url: `${base}/circle?event=sample`, viewport: { width: 1440, height: 900 }, routes: portalRoutes({ sample: [verified] }, undefined, new Set(["sample-two"])) });
+  const retryPicker = retry.getByRole("banner").getByLabel("活動", { exact: true });
+  await retryPicker.locator("option", { hasText: "已認領：北風畫室" }).waitFor({ state: "attached" });
+  assert.equal(await retryPicker.locator("option[value='sample-two']").textContent(), "第二範例活動・2026.10.01–04", "a failed read shows no status rather than a wrong one");
+  await retryPicker.focus();
+  await retryPicker.locator("option", { hasText: "未認領" }).waitFor({ state: "attached" });
+  await retry.close();
 
   const phone = await journey.page({ url: `${base}/circle?event=sample-two`, viewport: { width: 390, height: 844 }, routes: portalRoutes({}) });
   await phone.getByRole("list", { name: "開始使用", exact: true }).waitFor();
