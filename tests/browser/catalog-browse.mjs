@@ -130,7 +130,7 @@ try {
   await failedStorage.getByRole("button", { name: "取消收藏 北風畫室", exact: true }).waitFor();
   await failedStorage.getByRole("button", { name: "資料管理", exact: true }).click();
   const download = failedStorage.waitForEvent("download");
-  await failedStorage.getByRole("button", { name: "下載完整備份", exact: true }).click();
+  await failedStorage.getByRole("button", { name: "匯出備份", exact: true }).click();
   // Playwright drops the download with its page, and the next page needs it.
   const backupPath = path.join(output, "planning-backup.json");
   await (await download).saveAs(backupPath);
@@ -141,19 +141,19 @@ try {
   await failedStorage.close();
 
   // The backup carries the plan to another browser (#415): a fresh context
-  // starts empty, previews the file, and only writes after 確認匯入.
+  // starts empty, previews the file, and only writes after 確認復原.
   const otherDevice = await journey.page({ params: "&view=browse", routes: content });
   await ready(otherDevice);
   await otherDevice.getByRole("button", { name: "收藏 北風畫室", exact: true }).waitFor();
   await otherDevice.getByRole("button", { name: "資料管理", exact: true }).click();
   const chooser = otherDevice.waitForEvent("filechooser");
-  await otherDevice.getByRole("button", { name: "匯入計畫…", exact: true }).click();
+  await otherDevice.getByRole("button", { name: "從備份復原…", exact: true }).click();
   await (await chooser).setFiles(backupPath);
-  const preview = otherDevice.getByLabel("匯入預覽");
+  const preview = otherDevice.getByLabel("復原預覽");
   await preview.getByText("收藏 1（新增 1）").waitFor();
   assert.equal(await otherDevice.evaluate(() => JSON.parse(localStorage.getItem("event-map-planning-v1") ?? "null")?.favorites?.length ?? 0), 0, "previewing writes nothing");
-  await preview.getByRole("button", { name: "確認匯入", exact: true }).click();
-  await otherDevice.getByText("已匯入：新增 1 筆。", { exact: true }).waitFor();
+  await preview.getByRole("button", { name: "確認復原", exact: true }).click();
+  await otherDevice.getByText("已從備份復原：新增 1 筆。", { exact: true }).waitFor();
   await otherDevice.getByRole("button", { name: "關閉規劃資料管理", exact: true }).click();
   await otherDevice.getByRole("button", { name: "取消收藏 北風畫室", exact: true }).waitFor();
   await otherDevice.close();

@@ -41,7 +41,7 @@ type Pending = { fileName: string; text: string; preview: BackupPreview; base: P
 type Result = { kind: "ok" | "error"; message: string } | null;
 
 /**
- * 帶到另一台裝置 (#415, ADR-0078): download the whole-browser backup, or bring
+ * 完整備份 (#415, ADR-0078): export the whole-browser backup, or restore from
  * one in. Nothing is written until the reader confirms a preview, and the
  * preview is recomputed when this device's data changed in between.
  */
@@ -65,7 +65,7 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
   async function choose(file: File | undefined) {
     if (!file || blocked) return;
     setResult(null); setReplacing("off"); setMode("keep");
-    if (file.size > MAX_BACKUP_BYTES) { setPending(null); setResult({ kind: "error", message: "檔案超過 10 MiB，沒有匯入任何資料。" }); return; }
+    if (file.size > MAX_BACKUP_BYTES) { setPending(null); setResult({ kind: "error", message: "檔案超過 10 MiB，沒有復原任何資料。" }); return; }
     const text = await file.text();
     const base = stored().document;
     setPending({ fileName: file.name, text, base, preview: previewPlanningBackup(text, base, catalogStatus) });
@@ -80,7 +80,7 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
   function commit(next: (incoming: PlanningDocument, current: PlanningDocument) => PlanningDocument, success: string) {
     if (!pending?.preview.ok) return;
     const latest = stored();
-    if (blocked || !latest.writable) { setResult({ kind: "error", message: "這台裝置有無法讀取的舊資料，沒有匯入任何資料。" }); return; }
+    if (blocked || !latest.writable) { setResult({ kind: "error", message: "這台裝置有無法讀取的舊資料，沒有復原任何資料。" }); return; }
     if (planningFingerprint(latest.document) !== pending.preview.baseFingerprint) {
       setPending({ ...pending, base: latest.document, preview: previewPlanningBackup(pending.text, latest.document, catalogStatus) });
       // A choice made against the old preview must not overwrite what changed since.
@@ -104,14 +104,14 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
 
   return <section className={styles.section} id="planning-transfer" aria-labelledby="planning-transfer-title">
     <div>
-      <h3 id="planning-transfer-title">帶到另一台裝置</h3>
-      <p>下載完整備份，再到另一台裝置的「資料管理」匯入。備份含私人備註與預算，請自行保管。</p>
+      <h3 id="planning-transfer-title">完整備份</h3>
+      <p>包含所有活動的收藏、群組、私人備註、行程、購買項目與預算。換瀏覽器或裝置時，用「從備份復原」還原；檔案請自行保管。</p>
       {events.length > 0 && <p>包含 {events.map(eventName).join("、")}。</p>}
-      {blocked && <p>這台裝置有無法讀取的舊資料。先下載原始資料，或清除後再匯入。</p>}
+      {blocked && <p>這台裝置有無法讀取的舊資料。先下載原始資料，或清除後再復原。</p>}
     </div>
     <div className={styles.actions}>
-      <button onClick={() => downloadText(backupName(), exportPlanningJson(document), "application/json")}>下載完整備份</button>
-      <button disabled={blocked} onClick={() => inputRef.current?.click()}>匯入計畫…</button>
+      <button onClick={() => downloadText(backupName(), exportPlanningJson(document), "application/json")}>匯出備份</button>
+      <button disabled={blocked} onClick={() => inputRef.current?.click()}>從備份復原…</button>
       <input ref={inputRef} type="file" accept=".json,application/json" aria-label="選擇規劃備份檔" onChange={(event) => void choose(event.target.files?.[0])} />
     </div>
     <div className={styles.csvRow}>
@@ -120,13 +120,13 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
     </div>
 
     {pending && preview && !preview.ok && <div className={styles.preview} role="alert">
-      <b>無法匯入 {pending.fileName}</b>
+      <b>無法復原 {pending.fileName}</b>
       <ul>{preview.errors.map((error) => <li key={error}>{error}</li>)}</ul>
-      <p>沒有匯入任何資料。</p>
+      <p>沒有復原任何資料。</p>
       <button onClick={cancel}>關閉</button>
     </div>}
 
-    {pending && preview?.ok && <div className={styles.preview} aria-label="匯入預覽">
+    {pending && preview?.ok && <div className={styles.preview} aria-label="復原預覽">
       <b>{pending.fileName}</b>
       {preview.events.length === 0 && <p>備份裡沒有收藏或行程。</p>}
       {preview.events.map((event) => <EventPreview key={event.eventId} event={event} />)}
@@ -141,7 +141,7 @@ export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
       </fieldset>}
       {nothingNew && conflicts === 0 && <p>備份內容已全部在這台裝置上。</p>}
       {replacing === "off" && <div className={styles.confirmActions}>
-        <button className={styles.primary} disabled={nothingNew && (conflicts === 0 || mode === "keep")} onClick={() => commit((incoming, current) => mergePlanningBackup(current, incoming, mode), `已匯入：新增 ${added} 筆${conflicts > 0 && mode === "incoming" ? `，更新 ${conflicts} 筆` : ""}。`)}>確認匯入</button>
+        <button className={styles.primary} disabled={nothingNew && (conflicts === 0 || mode === "keep")} onClick={() => commit((incoming, current) => mergePlanningBackup(current, incoming, mode), `已從備份復原：新增 ${added} 筆${conflicts > 0 && mode === "incoming" ? `，更新 ${conflicts} 筆` : ""}。`)}>確認復原</button>
         <button onClick={cancel}>取消</button>
         <button className={styles.linkButton} onClick={() => setReplacing("summary")}>改為完整取代…</button>
       </div>}

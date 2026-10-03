@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isKnownCircleId } from "./circle-records";
 import { PUBLISHED_EVENTS } from "./event-catalog";
@@ -11,20 +11,6 @@ import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
 import styles from "./planning-tools.module.css";
-
-const OPEN_TRANSFER_EVENT = "planning-transfer-open";
-
-/** Opens 資料管理 at 帶到另一台裝置, e.g. from the plan panel (#415). */
-export function openPlanningTransfer() {
-  window.dispatchEvent(new CustomEvent(OPEN_TRANSFER_EVENT));
-}
-
-function focusTransferSection() {
-  const section = document.getElementById("planning-transfer");
-  section?.scrollIntoView({ block: "start" });
-  (section?.querySelector("button") as HTMLButtonElement | null)?.focus();
-  return Boolean(section);
-}
 
 export default function PlanningTools({ eventId }: { eventId: string }) {
   const catalog = useCircleCatalog(eventId);
@@ -42,22 +28,6 @@ function PlanningToolsContent({ eventId }: { eventId: string }) {
   const [batchTarget, setBatchTarget] = useState<string>("");
   const dialogRef = useRef<HTMLElement | null>(null);
   useModalFocus(open, dialogRef, () => setOpen(false));
-  // A one-shot request to land on 帶到另一台裝置 once the dialog is on screen.
-  const focusTransfer = useRef(false);
-  useEffect(() => {
-    const show = () => {
-      if (focusTransferSection()) return;
-      focusTransfer.current = true;
-      setOpen(true);
-    };
-    window.addEventListener(OPEN_TRANSFER_EVENT, show);
-    return () => window.removeEventListener(OPEN_TRANSFER_EVENT, show);
-  }, []);
-  // Runs after the dialog is committed and after useModalFocus has focused its
-  // first control, so this moves the reader on to the transfer section.
-  useEffect(() => {
-    if (open && focusTransfer.current) { focusTransfer.current = false; focusTransferSection(); }
-  }, [open]);
   const memoCount = document.favorites.filter((item) => item.memo.trim()).length;
   const batchSourceId = batchSource === "ALL" ? "ALL" : batchSource || null;
   const batchCount = document.favorites.filter((favorite) => favorite.eventId === eventId && (batchSourceId === "ALL" || favorite.groupId === batchSourceId)).length;

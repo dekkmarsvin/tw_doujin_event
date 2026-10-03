@@ -44,7 +44,7 @@ import {
 } from "./event-catalog";
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
-import PlanningTools, { openPlanningTransfer } from "./planning-tools";
+import PlanningTools from "./planning-tools";
 import ReaderHelp from "./reader-help";
 import { eventCalendar } from "./event-calendar";
 import { publicLoginHref } from "./public-header";
@@ -719,7 +719,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     onVisit: (entry: (typeof dayPlan)[number]) => updatePlanning((current) => markVisited(current, eventId, day, entry.circleId, entry.status !== "visited")),
     onRemove: (circleId: string) => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, circleId)),
     onUpdatePurchase: (circleId: string, purchaseMemo: string, budget: number | null) => updatePlanning((current) => updateVisitPlanPurchase(current, eventId, day, circleId, purchaseMemo, budget)),
-    onTransfer: openPlanningTransfer,
   };
   const fullItineraryPanel = <DayItinerary {...itineraryProps} variant="full" />;
   const planningControls = <PlanningDisplayControls value={planningDisplay} groups={planning.favoriteGroups} onApply={(next) => { historyIntent.current = "push"; setPlanningDisplay(next); }} />;

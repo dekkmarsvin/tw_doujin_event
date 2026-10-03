@@ -39,7 +39,7 @@
 .orphanList b { font:800 calc(12px * var(--ui-font-scale,1)) ui-monospace,monospace; }.orphanList small { margin-top:2px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }
 @media (max-width: 620px) { .groupRow { grid-template-columns:1fr 72px 44px 44px; } .groupRow input,.groupRow select,.groupRow button { min-height:44px; }.groupRow select:nth-last-of-type(1) { grid-column:1 / 4; } }
 @media (max-width: 620px) { .batchRow { grid-template-columns:1fr 1fr; }.batchRow button { grid-column:1/-1; }.orphanList { min-width:0; } }
-/* 帶到另一台裝置 (#415): CSV stays available but reads as secondary to the full backup. */
+/* 完整備份 (#415): CSV stays available but reads as secondary to the full backup. */
 .csvRow { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:8px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }
 .eventPreview { display:grid; gap:2px; padding:8px 0; border-top:1px solid #e6e9e4; font-size:calc(12px * var(--ui-font-scale,1)); }
 .eventPreview b { font-size:calc(14px * var(--ui-font-scale,1)); }
