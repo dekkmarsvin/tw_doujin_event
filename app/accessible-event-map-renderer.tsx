@@ -5,7 +5,7 @@ import { MAP_AREA_COLORS, MAP_SPACE_MARK_LABELS, type EventMapLayout } from "./e
 import styles from "./event-map-renderer.module.css";
 import { MAP_MEDIA_LABEL_BAND, mapLabelFontSize, type MapLabelPresentation } from "./map-label-presentation";
 import { DEFAULT_MAP_MARKER_PRESENTATION, layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel, type MapMarkerPresentation } from "./map-marker-presentation";
-import { MapAccessBadge, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
+import { MapAccessBadge, MapMarkerText, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
 import { MapNoteDrawing, MapPathDrawing } from "./map-annotation-drawing";
 import { MapShapeDrawing } from "./map-shape-drawing";
@@ -52,7 +52,7 @@ export default function AccessibleEventMapRenderer({ eventName, layout, slots, s
   // Markers are drawn in screen pixels: a group at the layout anchor undoes the
   // map's scale, so badges and names keep their size while the map zooms.
   const screenGroup = (x: number, y: number) => `translate(${x} ${y}) scale(${toScreen})`;
-  const markerText = (label: MapMarkerLabel, className: string) => <text className={className} x={label.dx} y={label.dy} textAnchor={label.anchor} style={{ fontSize: label.fontPx }}>{label.text}</text>;
+  const markerText = (label: MapMarkerLabel, className: string) => <MapMarkerText label={label} className={className} />;
   const preferredKeyboardCode = focusWithin ? keyboardCode : selectedCode;
   const activeKeyboardCode = interactiveSlots.some((slot) => slot.code === preferredKeyboardCode) ? preferredKeyboardCode : interactiveSlots.some((slot) => slot.code === keyboardCode) ? keyboardCode : interactiveSlots[0]?.code ?? "";
 
