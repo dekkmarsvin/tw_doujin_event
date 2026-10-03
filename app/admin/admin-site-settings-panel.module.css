@@ -15,7 +15,8 @@
 .modes strong, .switch strong { display: block; font-size: 15px; }
 .modes small, .switch small { display: block; margin-top: 5px; color: var(--muted); font-size: 14px; font-weight: 400; }
 .emails { display: block; font-size: 14px; }
-.emails + .emails { margin-top: 12px; }
+/* Outranks `.card.card label`, which zeroed this and left each field against the text above. */
+.card.card .emails { margin-top: 18px; }
 .card .emails textarea, .card .emails input { display: block; width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 16px; font-weight: 400; resize: vertical; background: white; color: var(--ink); }
 .card .switch { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .switch span { max-width: 720px; }

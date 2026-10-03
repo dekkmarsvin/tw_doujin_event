@@ -58,7 +58,7 @@
 .identityWho span { color: var(--ink); font-size: 14px; overflow-wrap: anywhere; }
 
 .accountMenu { position: relative; flex: none; }
-.accountMenu > button {
+.accountMenu > button, .accountBar > button {
   display: inline-flex;
   align-items: center;
   min-height: 36px;
@@ -72,7 +72,7 @@
   font-weight: 700;
   cursor: pointer;
 }
-.accountMenu > button:hover, .accountMenu > button[aria-expanded="true"] { border-color: #9aa5a0; }
+.accountMenu > button:hover, .accountBar > button:hover, .accountMenu > button[aria-expanded="true"] { border-color: #9aa5a0; }
 .accountMenu > button:focus-visible { outline: 3px solid #8fac9c; outline-offset: 2px; }
 .accountMenuPanel {
   position: absolute;
@@ -170,6 +170,9 @@
 .claimColumn > .notice { margin-top: 0; }
 /* Alone, the claim form is the page's one task: full row, readable measure. */
 .claimSolo .card > * { max-width: 640px; }
+/* Capped below the card width, inline fields left room for the hint and the
+   submit button to sit beside them instead of under them. */
+.claimSolo .card > :is(input, select, textarea) { display: block; }
 
 /* Nothing claimed yet: the claim is step one of three, and says so. */
 .startSteps { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
@@ -720,6 +723,8 @@ a.inlineButton { display: inline-block; text-decoration: none; }
    list, and sections of two widths stacked on each other read as misaligned.
    The map review stays in it too; its preview's own 900px cap fits inside. */
 .adminPage .card { max-width: 960px; }
+/* The masthead spans the same column as the cards under it. */
+.adminPage { max-width: calc(960px + 36px); }
 
 .card .secondaryButton { border-color: var(--line); background: #fff; color: var(--ink); }
 .card .secondaryButton:disabled { background: var(--paper); color: var(--muted); }

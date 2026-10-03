@@ -1,7 +1,11 @@
 .workspace.workspace { max-width: 1487px; }
 .workspace .panel.panel { max-width: none; }
+/* The section nav spans the wide workspace too, not the 960px admin column. */
+.workspace.workspace > nav { max-width: none; }
 .panel.panel { min-width: 0; padding: 26px 28px; font-size: 16px; }
 .panel h2 { font-size: 24px; }
+/* Source links read as the page's links, not the browser's default blue. */
+.panel a:not([class]) { color: var(--ink); text-underline-offset: 2px; }
 .panel > p { font-size: 15px; }
 .panel label { font-size: 14px; font-weight: 500; letter-spacing: normal; }
 .panel button { font-size: 14px; letter-spacing: normal; min-height: 44px; }

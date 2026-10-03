@@ -28,7 +28,7 @@ function portalRoutes(claimsByEvent, claimsGate, failOnce = new Set()) {
         const event = url.searchParams.get("event");
         if (failOnce.delete(event)) return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "暫時無法讀取。" }) });
         body = { eventId: event, claims: claimsByEvent[event] ?? [] };
-      } else if (url.pathname === "/api/circle/search") body = { circles: [] };
+      } else if (url.pathname === "/api/circle/search") body = { circles: url.searchParams.get("q") === "南星" ? [{ id: "c-900002", name: "南星工房", links: [], linkCount: 0 }] : [] };
       else if (url.pathname === "/api/circle/c-900001/overrides") body = { fields: {}, status: "active", postEventHidden: false, retention: null, retentionExpiresAt: null };
       else if (url.pathname === "/api/circle/c-900001/preview") body = { records: [], baseRecords: [], projectedAt: new Date().toISOString() };
       else throw new Error(`unexpected fixture request ${url.pathname}`);
@@ -133,6 +133,15 @@ try {
   const masthead = await box(first.getByRole("banner"));
   const claim = await box(first.getByRole("heading", { name: "認領社團", exact: true }).locator(".."));
   assert.deepEqual(claim, masthead, "alone, the claim spans the row");
+  // The full form: each hint and the submit button sit under their field, not beside it.
+  await first.locator("#portal-search").fill("南星");
+  await first.getByRole("button", { name: /南星工房/ }).click();
+  const rows = (locator) => locator.evaluate((node) => ({ top: Math.round(node.getBoundingClientRect().top), bottom: Math.round(node.getBoundingClientRect().bottom) }));
+  const evidence = await rows(first.locator("#portal-evidence"));
+  const hint = await rows(first.getByText("人工審核不會發驗證碼", { exact: false }));
+  const note = await rows(first.locator("#portal-note"));
+  const submit = await rows(first.getByRole("button", { name: "送出認領", exact: true }));
+  assert.ok(hint.top >= evidence.bottom && submit.top >= note.bottom, JSON.stringify({ evidence, hint, note, submit }));
   await journey.capture(first, "workspace-1440-first-claim");
   await first.close();
 
