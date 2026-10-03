@@ -123,7 +123,6 @@ jobs:
           retention-days: 7
 
       - name: Build pinned production event
-        env:
         run: npm run build:production
 
       - name: Record deployed commit and event bytes
