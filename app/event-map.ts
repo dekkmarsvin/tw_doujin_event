@@ -24,6 +24,11 @@ export type BoothRow = {
 };
 
 export type MapPillar = MapRect & { id: string };
+export const MAP_SPACE_MARK_KINDS = ["reserved", "cancelled"] as const;
+export type MapSpaceMarkKind = (typeof MAP_SPACE_MARK_KINDS)[number];
+export const MAP_SPACE_MARK_LABELS: Record<MapSpaceMarkKind, string> = { reserved: "保留空桌", cancelled: "取消攤位" };
+/** A table-shaped annotation, never a booth or a circle placement. */
+export type MapSpaceMark = { id: string; kind: MapSpaceMarkKind; rect: MapRect };
 
 export const MAP_ACCESS_DIRECTIONS = ["north", "south", "east", "west"] as const;
 export type MapAccessDirection = (typeof MAP_ACCESS_DIRECTIONS)[number];
@@ -137,6 +142,8 @@ export type EventMapLayout = {
   servicePoints?: MapServicePoint[];
   /** Optional for maps published before organizer-drawn area overlays. */
   areaRegions?: MapAreaRegion[];
+  /** Tables that have no booth code or circle interaction. */
+  spaceMarks?: MapSpaceMark[];
 };
 
 /** Rescales every coordinate onto a new canvas size. A canvas is only ever the
@@ -168,6 +175,7 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: scaleRect(landmark.rect) })),
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map(scalePoint) } : {}),
     ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map(scalePoint) })) } : {}),
+    ...(layout.spaceMarks ? { spaceMarks: layout.spaceMarks.map((mark) => ({ ...mark, rect: scaleRect(mark.rect) })) } : {}),
   };
 }
 
@@ -307,6 +315,18 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       if (point.label !== undefined && (typeof point.label !== "string" || point.label.length > MAP_SERVICE_POINT_LABEL_LIMIT)) errors.push(`服務設施 ${point.id || "未命名"} 的名稱必須是 ${MAP_SERVICE_POINT_LABEL_LIMIT} 字以內的文字。`);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`服務設施 ${point.id || "未命名"} 的座標無效。`);
     });
+  }
+  if (layout.spaceMarks !== undefined && !Array.isArray(layout.spaceMarks)) errors.push("保留／取消格必須是陣列。");
+  if (Array.isArray(layout.spaceMarks)) {
+    const ids = new Set<string>();
+    for (const candidate of layout.spaceMarks) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("保留／取消格必須是物件。"); continue; }
+      const mark = candidate as Partial<MapSpaceMark>;
+      if (typeof mark.id !== "string" || !mark.id.trim() || ids.has(mark.id)) errors.push("保留／取消格 id 缺漏或重複。");
+      else ids.add(mark.id);
+      if (!MAP_SPACE_MARK_KINDS.includes(mark.kind as MapSpaceMarkKind)) errors.push(`保留／取消格 ${mark.id || "未命名"} 的類型無效。`);
+      if (!mark.rect || !finiteRect(mark.rect, width, height)) errors.push(`保留／取消格 ${mark.id || "未命名"} 的矩形座標無效。`);
+    }
   }
   if (layout.areaRegions !== undefined && !Array.isArray(layout.areaRegions)) errors.push("areaRegions 必須是陣列。");
   if (Array.isArray(layout.areaRegions)) {

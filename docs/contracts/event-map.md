@@ -18,6 +18,7 @@
 - pillar 必須保存 `x/y/width/height`；access point 必須保存 `kind`（`entrance`、`exit` 或出入兩用的 `both`；`both` 的方向指向場內）、位置與方向。
 - `servicePoints` 是**選填**欄位：每個服務設施保存唯一 `id`、`kind`（`toilet`、`accessible-toilet`、`information`、`cloakroom`、`first-aid`、`stairs`、`elevator`、`ticket-office`、`changing-room` 九類固定）、畫布內的 `x/y`，以及選填、40 字以內的 `label`。`ticket-office` 為售票處（票券圖示）、`changing-room` 為更衣室（上衣圖示），與 `cloakroom` 寄物處（衣架圖示）分開；更衣與寄物合用區可分別放置兩種設施點並命名。編輯器、Reader 與設施清單共用圖示及名稱。服務設施出現以前發布的快照沒有這個欄位，不需遷移；沒有服務設施的 layout 也不必帶空陣列。舊七類資料維持有效，新種類須由已支援的草稿 API、Reader 與 publication Worker 一起消費。
 - `areaRegions` 是選填欄位：每塊保存唯一 `id`、所屬的匯入 `areaId`、固定淡色 palette 的 `color` 與至少三個畫布內 `points`。同一展區可有多塊不規則範圍，顏色必須一致；核准前以該活動日 × 場地所宣告的展區代碼驗證。舊地圖沒有此欄位仍有效。
+- `spaceMarks` 是選填的獨立保留／取消格集合：每格保存集合內唯一 `id`、`kind`（`reserved` 保留空桌／`cancelled` 取消攤位）與畫布內有效 `rect`，不含攤位代碼或社團資料。它不計入攤位覆蓋、社團數、搜尋、收藏、行程或設施清單，也不能抵銷 `missing_booth`；仍有有效配置時須先按既有流程修正名單。舊圖無此欄位時維持原樣；草稿、地圖複製、preview 與 publication 保留新集合，新內容使用前須由 Pages 與 publication Worker 共同支援。
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
 - **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
 
@@ -107,6 +108,8 @@ type AccessibleEventMapRendererProps = {
 ### Slot 視覺狀態
 
 未配置攤位低對比；有社團的攤位採分類色淡底；selected 使用實色與 3px 深色描邊；favorite 加入珊瑚圓點；next 加入深墨箭頭。**任何狀態都不得只靠顏色表達**，必須有形狀或文字補充。
+
+保留／取消格與一般攤位分開：保留空桌用虛線外框及「空桌」，取消攤位用交叉線及「取消」，完整可讀名稱分別為「保留空桌」與「取消攤位」。Editor、Reader 預覽及公開圖共用繪製規則；短文字限在格內，隨倍率保持有界字級，格子太小時仍由線型區分。Reader 標記位於一般攤位下層、不接受指標及鍵盤攤位操作；即使標記畫在現有攤位位置，也不會改寫其社團狀態或遮掉攤位控制。
 
 ## 縮放契約
 

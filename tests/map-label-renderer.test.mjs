@@ -56,6 +56,30 @@ test("a thumbnail moves the code into the shaded band instead of dropping it", (
   assert.ok(result.slot.childNodes.some((node) => node.tagName === "image"));
 });
 
+test("reserved and cancelled tables are named passive marks while an overlapping booth keeps its action", () => {
+  const marked = { ...layout, spaceMarks: [
+    { id: "empty", kind: "reserved", rect },
+    { id: "withdrawn", kind: "cancelled", rect: { x: 60, y: 20, width: 24, height: 24 } },
+  ] };
+  for (const screenScale of [.25, 6]) {
+    const result = output({ layout: marked, markerPresentation: { screenScale, fontScale: 1.24 } });
+    const marks = result.nodes.filter(node => result.attr(node, "data-space-mark"));
+    assert.deepEqual(marks.map(node => result.attr(node, "aria-label")), ["保留空桌", "取消攤位"]);
+    for (const mark of marks) {
+      assert.equal(result.attr(mark, "role"), "img");
+      assert.equal(result.attr(mark, "tabindex"), undefined);
+      assert.equal(result.attr(mark, "data-slot-code"), undefined);
+      assert.ok(mark.childNodes.some(node => node.tagName === "title"));
+    }
+    assert.ok(result.attr(marks[0].childNodes.find(node => node.tagName === "rect"), "stroke-dasharray"));
+    assert.equal(marks[0].childNodes.some(node => node.tagName === "path"), false);
+    assert.ok(marks[1].childNodes.some(node => node.tagName === "path"), "cancelled has a visible cross");
+    assert.equal(result.attr(result.slot, "role"), "button");
+    assert.equal(result.attr(result.slot, "tabindex"), "0");
+    assert.equal(result.nodes.filter(node => result.attr(node, "role") === "button").length, 1);
+  }
+});
+
 test("entrances and exits differ in shape, keep their screen size and name themselves", () => {
   const withFacilities = {
     ...layout,

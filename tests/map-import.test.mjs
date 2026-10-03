@@ -1386,3 +1386,30 @@ test("service points are picked up, moved and removed like access points", () =>
   assert.equal("servicePoints" in scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 }), false, "a layout without service points does not gain the field");
   assert.equal(validateEventMapLayout({ ...layout, accessPoints: [{ id: "side", kind: "both", direction: "west", x: 1, y: 1, label: "側門" }] }).ok, true, "a two-way doorway is a valid access point");
 });
+
+test("space marks move, resize, scale and delete without changing any booth", () => {
+  const layout = { ...multiSelectLayout(), spaceMarks: [
+    { id: "empty", kind: "reserved", rect: { x: 20, y: 80, width: 10, height: 10 } },
+    { id: "withdrawn", kind: "cancelled", rect: { x: 50, y: 80, width: 10, height: 10 } },
+  ] };
+  const rows = structuredClone(layout.rows);
+  const picked = selectionsWithinBox(layout, { x: 15, y: 75, width: 20, height: 20 });
+  assert.deepEqual(picked.filter(({ kind }) => kind === "space-mark"), [{ kind: "space-mark", itemIndex: 0 }]);
+  const resolved = resolveSelectionBoxes(layout, [{ kind: "space-mark", itemIndex: 0 }, { kind: "space-mark", itemIndex: 1 }]);
+  applySelectionBoxes(layout, resolved.selections, translateBoxesWithin(resolved.boxes, 10, 5, layout));
+  assert.deepEqual(layout.spaceMarks.map(({ rect }) => rect), [
+    { x: 30, y: 85, width: 10, height: 10 }, { x: 60, y: 85, width: 10, height: 10 },
+  ]);
+  const boxes = resolveSelectionBoxes(layout, resolved.selections).boxes;
+  applySelectionBoxes(layout, resolved.selections, scaleBoxesIntoBox(boxes, boundingBox(boxes), { x: 30, y: 85, width: 80, height: 20 }, layout));
+  assert.deepEqual(layout.spaceMarks.map(({ rect }) => rect), [
+    { x: 30, y: 85, width: 20, height: 20 }, { x: 90, y: 85, width: 20, height: 20 },
+  ]);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  const scaled = scaleEventMapLayout(layout, { width: layout.width * 2, height: layout.height * 2 });
+  assert.deepEqual(scaled.spaceMarks[0], { id: "empty", kind: "reserved", rect: { x: 60, y: 170, width: 40, height: 40 } });
+  removeSelectionsFrom(layout, [{ kind: "space-mark", itemIndex: 0 }]);
+  assert.deepEqual(layout.spaceMarks.map(({ id }) => id), ["withdrawn"]);
+  assert.deepEqual(layout.rows, rows);
+  assert.equal("spaceMarks" in scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 }), false);
+});

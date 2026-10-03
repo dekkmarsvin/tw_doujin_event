@@ -14,8 +14,9 @@ import { DEFAULT_BACKGROUND_OPACITY, NUDGE_STEPS, mapEditorPreferenceStorage, re
 import { editSegmentFrame, replaceSegment, segmentCodeRange, segmentNaming, type SegmentNaming } from "./map-segment-edit";
 import { UiIcon } from "./ui-icons";
 import { FACILITY_TOOLS, PLACEMENT_LABELS, isAreaFacilityTool, isPointFacilityTool, resolveFacilityPlacement, type FacilityTool, type PlacementTool } from "./map-placement-tool";
-import { MapAccessBadge, MapServiceBadge } from "./map-marker-icons";
+import { MapAccessBadge, MapServiceBadge, MapSpaceMarkDrawing } from "./map-marker-icons";
 import { MAP_FACILITY_TYPE_LABELS } from "./map-facility-directory";
+import { MAP_SPACE_MARK_KINDS, MAP_SPACE_MARK_LABELS, type MapSpaceMarkKind } from "./event-map";
 import { layoutMapMarkerLabels, mapMarkerLabelKey, type MapMarkerLabel } from "./map-marker-presentation";
 import { MapEditorSurface, type MapEditorSave } from "./map-editor-surface";
 import { copyRowLabels, copyRowLimitError, planRowCopies, ROW_LABEL_SEQUENCES, type CopyDirection } from "./map-row-copies";
@@ -205,6 +206,7 @@ function cloneLayout(layout: EventMapLayout): EventMapLayout {
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: { ...landmark.rect } })),
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map((point) => ({ ...point })) } : {}),
     ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map((point) => ({ ...point })) })) } : {}),
+    ...(layout.spaceMarks ? { spaceMarks: layout.spaceMarks.map(mark => ({ ...mark, rect: { ...mark.rect } })) } : {}),
   };
 }
 
@@ -292,6 +294,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   const selectedAreaRegion = layout.areaRegions?.find((region) => region.id === selectedAreaRegionId);
   // Which service the 服務設施 tool places next; it stays between placements.
   const [serviceKind, setServiceKind] = useState<MapServicePointKind>("toilet");
+  const [spaceMarkKind, setSpaceMarkKind] = useState<MapSpaceMarkKind>("reserved");
   // Which doorway the 出入口 tool places next, likewise kept between placements.
   const [accessKind, setAccessKind] = useState<MapAccessKind>("entrance");
   const [facilityDraft, setFacilityDraft] = useState<MapRect | null>(null);
@@ -1304,6 +1307,11 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
       const kind = serviceKind;
       commit((draft) => { (draft.servicePoints ??= []).push({ id, kind, x: rect.x, y: rect.y }); });
       setSelections([{ kind: "service", itemIndex }]);
+    } else if (tool === "space-mark") {
+      const itemIndex = layout.spaceMarks?.length ?? 0;
+      const id = uniqueId("space", (layout.spaceMarks ?? []).map(mark => mark.id));
+      commit(draft => { (draft.spaceMarks ??= []).push({ id, kind: spaceMarkKind, rect }); });
+      setSelections([{ kind: "space-mark", itemIndex }]);
     } else {
       const itemIndex = layout.landmarks.length;
       const id = uniqueId("landmark", layout.landmarks.map(({ id }) => id));
@@ -1348,6 +1356,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   const selectedLandmarkSelection = selection?.kind === "landmark" ? selection : undefined;
   const selectedLandmark = selection?.kind === "landmark" ? layout.landmarks[selection.itemIndex] : undefined;
   const selectedLandmarkKind = selectedLandmark ? resolveMapLandmarkKind(selectedLandmark) : undefined;
+  const selectedSpaceMark = selection?.kind === "space-mark" ? layout.spaceMarks?.[selection.itemIndex] : undefined;
   const resizeHitRadius = 14 * layoutUnitsPerPixel;
   const resizeKnobHalfSize = 3 * layoutUnitsPerPixel;
   const activeKey = selection ? selectionKey(selection) : "";
@@ -1364,6 +1373,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     ...layout.accessPoints.map((point, itemIndex) => ({ key: `access:${itemIndex}`, label: `出入口 ${point.label}`, selection: { kind: "access", itemIndex } as Selection })),
     ...(layout.servicePoints ?? []).map((point, itemIndex) => ({ key: `service:${itemIndex}`, label: `服務設施 ${point.label || MAP_FACILITY_TYPE_LABELS[point.kind]}`, selection: { kind: "service", itemIndex } as Selection })),
     ...layout.landmarks.map((landmark, itemIndex) => ({ key: `landmark:${itemIndex}`, label: `區域 ${landmark.label || landmark.id}`, selection: { kind: "landmark", itemIndex } as Selection })),
+    ...(layout.spaceMarks ?? []).map((mark, itemIndex) => ({ key: `space-mark:${itemIndex}`, label: `${MAP_SPACE_MARK_LABELS[mark.kind]} ${itemIndex + 1}`, selection: { kind: "space-mark", itemIndex } as Selection })),
   ];
 
   /* The map is padded, and centred while it still fits, so its top-left corner
@@ -1535,13 +1545,19 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     </div>
     <div className={styles.addTools} hidden={!['booths', 'facilities', 'areas', 'guides'].includes(toolGroup ?? '')}>
       <span hidden={toolGroup !== "areas"}><button disabled={!scope?.areaIds?.length} aria-pressed={areaTool} onClick={() => areaTool ? cancelPlacement() : startAreaDrawing()}>新增展區範圍</button>{!scope?.areaIds?.length && <span>先在場地設定展區，再新增範圍。</span>}</span>
-      <span hidden={toolGroup !== "booths"}><button aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button></span>
+      <span hidden={toolGroup !== "booths"}><button aria-pressed={placementTool === "row"} onClick={toggleRowForm} aria-expanded={!!rowForm}>新增排／排段</button><button aria-pressed={!!slotDrawForm} onClick={toggleSlotDrawForm}>手動畫攤位</button><button aria-pressed={placementTool === "space-mark"} onClick={() => activateFacility("space-mark")}>新增保留／取消格</button></span>
       <span hidden={toolGroup !== "facilities"}>{FACILITY_TOOLS.map(tool => <button key={tool} aria-pressed={placementTool === tool} onClick={() => activateFacility(tool)}>新增{PLACEMENT_LABELS[tool]}</button>)}</span>
       <span hidden={toolGroup !== "guides"}>{(["y", "x"] as const).map(axis => <button key={axis} disabled={authoring.guides.length >= MAX_MAP_GUIDES} aria-pressed={guideTool === axis} onClick={() => activateGuide(axis)}>新增{axis === "x" ? "垂直" : "水平"}輔助線</button>)}</span>
     </div>
     {overlaps.length > 0 && <div className={styles.overlapNotice}>攤位重疊{overlaps.map(code => <button type="button" key={code} onClick={() => focusSlotCode(code)}>{code}</button>)}</div>}
     {areaTool && <div className={styles.areaStatus} role="status"><span>在地圖上依序點選範圍的頂點，至少 3 點；可跨排畫不規則形狀。</span><label>展區<select value={areaId} onChange={(event) => setAreaId(event.target.value)}>{scope?.areaIds?.map((id) => <option key={id} value={id}>{areaName(id)}</option>)}</select></label><label>顏色<select value={layout.areaRegions?.find((region) => region.areaId === areaId)?.color ?? areaColor} disabled={!!layout.areaRegions?.some((region) => region.areaId === areaId)} onChange={(event) => setAreaColor(event.target.value as MapAreaColor)}>{Object.entries(MAP_AREA_COLORS).map(([id, color]) => <option key={id} value={id}>{id} · {color}</option>)}</select></label><button disabled={areaDraft.length < 3} onClick={finishAreaDrawing}>完成範圍（{areaDraft.length} 點）</button><button onClick={cancelPlacement}>取消</button></div>}
-    {placementTool && <p className={styles.placementStatus} role="status">目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。{facilityTool === "access" && <label className={styles.serviceKindPicker}>類型<select value={accessKind} onChange={(event) => setAccessKind(event.target.value as MapAccessKind)}>{MAP_ACCESS_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}{facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}<button type="button" onClick={cancelPlacement}>取消放置</button></p>}
+    {placementTool && <p className={styles.placementStatus} role="status">
+      目前工具：{PLACEMENT_LABELS[placementTool]}。{guideTool || isPointFacilityTool(facilityTool) ? "在畫布點一下放置。" : isAreaFacilityTool(facilityTool) ? "在畫布上按住拖曳出範圍，放開後建立。" : facilityTool ? "拖曳外框，或點一下以預設大小置中放置。" : "拖曳外框後放開建立。"} Escape 取消。
+      {facilityTool === "access" && <label className={styles.serviceKindPicker}>類型<select value={accessKind} onChange={(event) => setAccessKind(event.target.value as MapAccessKind)}>{MAP_ACCESS_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}
+      {facilityTool === "service" && <label className={styles.serviceKindPicker}>類型<select value={serviceKind} onChange={(event) => setServiceKind(event.target.value as MapServicePointKind)}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label>}
+      {facilityTool === "space-mark" && <label className={styles.serviceKindPicker}>類型<select value={spaceMarkKind} onChange={event => setSpaceMarkKind(event.target.value as MapSpaceMarkKind)}>{MAP_SPACE_MARK_KINDS.map(kind => <option key={kind} value={kind}>{MAP_SPACE_MARK_LABELS[kind]}</option>)}</select></label>}
+      <button type="button" onClick={cancelPlacement}>取消放置</button>
+    </p>}
     <div className={`${styles.workspace} ${rosterOpen ? styles.withRoster : ""}`}>
       <button type="button" className={styles.rosterToggle} hidden={toolGroup === "recognition"} aria-expanded={rosterOpen} onClick={() => setRosterOpen(!rosterOpen)}>攤位清單</button>
       <aside className={styles.rosterDrawer} hidden={!rosterOpen || toolGroup === "recognition"} aria-label="攤位與排清單">
@@ -1573,6 +1589,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
               fills the sheet would otherwise swallow every click on blank paper. */}
           <rect className={`${styles.editable} ${styles.floorHandle}`} {...layout.floor} onPointerDown={(event) => startDrag(event, { kind: "floor" })} />
           {layout.landmarks.map((landmark, itemIndex) => <g key={landmark.id} className={`${styles.editable} ${selectedKeys.has(`landmark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "landmark", itemIndex })}><rect className={styles.landmark} {...landmark.rect} /><text x={landmark.rect.x + landmark.rect.width / 2} y={landmark.rect.y + landmark.rect.height / 2}>{landmark.label || "未命名區域"}</text></g>)}
+          {layout.spaceMarks?.map((mark, itemIndex) => <g key={mark.id} data-space-mark={mark.id} role="img" aria-label={MAP_SPACE_MARK_LABELS[mark.kind]} className={`${styles.editable} ${selectedKeys.has(`space-mark:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={event => startDrag(event, { kind: "space-mark", itemIndex })}><MapSpaceMarkDrawing mark={mark} presentation={{ screenScale: renderScale, fontScale: 1 }} /></g>)}
           {layout.rows.map(row => renderRowLabel(row))}
           {layout.rows.map((row, rowIndex) => <g key={row.label}>{row.slots.map((slot, itemIndex) => <g key={slot.code} data-slot-code={slot.code} className={`${styles.editable} ${overlapping.has(slot.code) ? styles.overlapping : ""} ${selectedKeys.has(`slot:${rowIndex}:${itemIndex}`) ? styles.selected : ""}`} onPointerDown={(event) => startDrag(event, { kind: "slot", rowIndex, itemIndex })}><rect className={styles.slot} {...slot.rect} /><text x={slot.rect.x + slot.rect.width / 2} y={slot.rect.y + slot.rect.height * .7}>{slot.code}</text></g>)}</g>)}
           {layout.pillars.map((pillar, itemIndex) => <rect key={pillar.id} className={`${styles.editable} ${styles.pillar} ${selectedKeys.has(`pillar:${itemIndex}`) ? styles.selected : ""}`} {...pillar} onPointerDown={(event) => startDrag(event, { kind: "pillar", itemIndex })} />)}
@@ -1768,12 +1785,13 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
           <button className={styles.remove} onClick={removeSelection}>移除選取的元素</button>
         </>}
         {selection && !activeSegment && <>
-          <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : selection.kind === "service" ? "服務設施" : selection.kind === "floor" ? "場館外框" : "非一般攤位區"}</small><b>{selection.kind === "floor" ? layout.template : selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? (selectedService && (selectedService.label || MAP_FACILITY_TYPE_LABELS[selectedService.kind])) ?? selectedLandmark?.label ?? "未命名"}</b></div>
+          <div className={styles.selectionTitle}><small>{selection.kind === "slot" ? "一般攤位" : selection.kind === "pillar" ? "柱子" : selection.kind === "access" ? "出入口" : selection.kind === "service" ? "服務設施" : selection.kind === "space-mark" ? "保留／取消格" : selection.kind === "floor" ? "場館外框" : "非一般攤位區"}</small><b>{selection.kind === "floor" ? layout.template : selectedSlot?.code ?? selectedPillar?.id ?? selectedAccess?.id ?? (selectedService && (selectedService.label || MAP_FACILITY_TYPE_LABELS[selectedService.kind])) ?? (selectedSpaceMark && MAP_SPACE_MARK_LABELS[selectedSpaceMark.kind]) ?? selectedLandmark?.label ?? "未命名"}</b></div>
           {selectedSlot && selectedSlotSelection && <><label className={styles.wide}><span>攤位代碼</span><input {...trimmedField(selectedSlot.code, (next) => commit((draft) => { draft.rows[selectedSlotSelection.rowIndex].slots[selectedSlotSelection.itemIndex].code = next; }, `field:${activeKey}:code`))} /></label><label className={styles.wide}><span>所屬排標籤</span><input {...trimmedField(layout.rows[selectedSlotSelection.rowIndex].label, (next) => updateRow(selectedSlotSelection.rowIndex, { label: next }, `row:${selectedSlotSelection.rowIndex}:label`))} /></label><label className={styles.wide}><span>所屬排方向</span><select value={layout.rows[selectedSlotSelection.rowIndex].orientation} onChange={(event) => updateRow(selectedSlotSelection.rowIndex, { orientation: event.target.value as MapOrientation })}><option value="vertical">直排</option><option value="horizontal">橫排</option></select></label></>}
           {selectedPillar && selectedPillarSelection && <label className={styles.wide}><span>柱子代號</span><input {...trimmedField(selectedPillar.id, (next) => commit((draft) => { draft.pillars[selectedPillarSelection.itemIndex].id = next; }, `field:${activeKey}:id`))} /></label>}
           {selectedLandmark && selectedLandmarkSelection && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedLandmark.label ?? ""} onChange={(event) => { const stableKind = resolveMapLandmarkKind(selectedLandmark); commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = stableKind; draft.landmarks[selectedLandmarkSelection.itemIndex].label = event.target.value; }, `field:${activeKey}:label`); }} /></label><label className={styles.wide}><span>區域類型</span><select value={selectedLandmarkKind} onChange={(event) => commit((draft) => { draft.landmarks[selectedLandmarkSelection.itemIndex].kind = event.target.value as MapLandmarkKind; })}><option value="enterprise">企業攤</option><option value="stage">舞台</option><option value="other">其他區域</option></select></label></>}
           {selectedAccess && <><label className={styles.wide}><span>顯示名稱</span><input value={selectedAccess.label} onChange={(event) => updateAccess({ label: event.target.value }, `field:${activeKey}:label`)} /></label><label><span>類型</span><select value={selectedAccess.kind} onChange={(event) => updateAccess({ kind: event.target.value as MapAccessKind })}><option value="entrance">入口</option><option value="exit">出口</option><option value="both">出入兩用</option></select></label><label><span>方向</span><select value={selectedAccess.direction} onChange={(event) => updateAccess({ direction: event.target.value as MapAccessDirection })}>{MAP_ACCESS_DIRECTIONS.map((direction) => <option key={direction} value={direction}>{ACCESS_DIRECTION_LABELS[direction]}</option>)}</select></label></>}
           {selectedService && <><label className={styles.wide}><span>類型</span><select value={selectedService.kind} onChange={(event) => updateService({ kind: event.target.value as MapServicePointKind })}>{MAP_SERVICE_POINT_KINDS.map((kind) => <option key={kind} value={kind}>{MAP_FACILITY_TYPE_LABELS[kind]}</option>)}</select></label><label className={styles.wide}><span>名稱（選填）</span><input value={selectedService.label ?? ""} maxLength={MAP_SERVICE_POINT_LABEL_LIMIT} placeholder={MAP_FACILITY_TYPE_LABELS[selectedService.kind]} onChange={(event) => updateService({ label: event.target.value }, `field:${activeKey}:label`)} /></label></>}
+          {selectedSpaceMark && selection?.kind === "space-mark" && <><label className={styles.wide}><span>類型</span><select value={selectedSpaceMark.kind} onChange={event => { const itemIndex = selection.itemIndex; commit(draft => { draft.spaceMarks![itemIndex].kind = event.target.value as MapSpaceMarkKind; }); }}>{MAP_SPACE_MARK_KINDS.map(kind => <option key={kind} value={kind}>{MAP_SPACE_MARK_LABELS[kind]}</option>)}</select></label><p className={styles.hint}>此標記不會改動攤位名單。</p></>}
           <div className={styles.fields}>
             {numberField("X", selectedPoint?.x ?? selectedRect?.x ?? 0, (value) => selectedPoint ? updatePoint({ x: value }, `field:${activeKey}:x`) : updateRect({ x: value }, `field:${activeKey}:x`))}
             {numberField("Y", selectedPoint?.y ?? selectedRect?.y ?? 0, (value) => selectedPoint ? updatePoint({ y: value }, `field:${activeKey}:y`) : updateRect({ y: value }, `field:${activeKey}:y`))}

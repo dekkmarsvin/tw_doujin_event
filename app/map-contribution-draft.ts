@@ -100,7 +100,7 @@ function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
 }
 
 function strictLayoutShape(layout: Record<string, unknown>) {
-  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions"])) return false;
+  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions", "spaceMarks"])) return false;
   if (!record(layout.floor) || !onlyKeys(layout.floor, ["x", "y", "width", "height"])) return false;
   if (!Array.isArray(layout.rows) || !layout.rows.every((row) => record(row)
     && onlyKeys(row, ["label", "orientation", "labelSide", "confidence", "slots"])
@@ -112,6 +112,8 @@ function strictLayoutShape(layout: Record<string, unknown>) {
     && onlyKeys(point, ["id", "kind", "direction", "x", "y", "label"]))) return false;
   if (layout.servicePoints !== undefined && !(Array.isArray(layout.servicePoints) && layout.servicePoints.every((point) => record(point)
     && onlyKeys(point, ["id", "kind", "x", "y", "label"])))) return false;
+  if (layout.spaceMarks !== undefined && !(Array.isArray(layout.spaceMarks) && layout.spaceMarks.every((mark) => record(mark)
+    && onlyKeys(mark, ["id", "kind", "rect"]) && record(mark.rect) && onlyKeys(mark.rect, ["x", "y", "width", "height"])))) return false;
   if (layout.areaRegions !== undefined && !(Array.isArray(layout.areaRegions) && layout.areaRegions.every((region) => record(region)
     && onlyKeys(region, ["id", "areaId", "color", "points"])
     && Array.isArray(region.points) && region.points.every((point) => record(point) && onlyKeys(point, ["x", "y"]))))) return false;
@@ -244,6 +246,7 @@ export type MapCandidateDiff = {
   /** Missing on candidates built before service points existed. */
   changedServicePointIds?: string[];
   changedAreaRegionIds?: string[];
+  changedSpaceMarkIds?: string[];
 };
 
 function same(valueA: unknown, valueB: unknown) {
@@ -275,6 +278,7 @@ function buildMapCandidateDiff(previous: PublishedEventMap | null, candidate: Pu
     changedLandmarkIds: changedKeys(previous?.layout.landmarks ?? [], candidate.layout.landmarks, (landmark) => landmark.id),
     changedServicePointIds: changedKeys(previous?.layout.servicePoints ?? [], candidate.layout.servicePoints ?? [], (point) => point.id),
     changedAreaRegionIds: changedKeys(previous?.layout.areaRegions ?? [], candidate.layout.areaRegions ?? [], (region) => region.id),
+    changedSpaceMarkIds: changedKeys(previous?.layout.spaceMarks ?? [], candidate.layout.spaceMarks ?? [], (mark) => mark.id),
   };
 }
 

@@ -13,7 +13,7 @@ test("a pillar click keeps the original centre and stays inside the map", () => 
 
 test("areas are drawn by dragging; a click places no default-sized block", () => {
   const bounds = { width: 1000, height: 500 }, point = { x: 400, y: 250 };
-  for (const tool of ["enterprise", "stage", "other"]) {
+  for (const tool of ["enterprise", "stage", "other", "space-mark"]) {
     assert.equal(place(tool, point, point, { x: 0, y: 0 }, bounds), null, tool);
     assert.equal(place(tool, point, { x: 401, y: 251 }, { x: 1, y: 1 }, bounds), null, `${tool} jitter`);
     assert.deepEqual(place(tool, point, { x: 500, y: 300 }, { x: 100, y: 50 }, bounds), { x: 400, y: 250, width: 100, height: 50 }, `${tool} drag`);

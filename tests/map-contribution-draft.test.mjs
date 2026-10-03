@@ -270,3 +270,29 @@ test("row label side survives draft parsing and review while invalid sides are r
     assert.equal(parseMapContributionDraftContent(content({ ...layout, rows: layout.rows.map(row => ({ ...row, labelSide })) })), null);
   }
 });
+
+test("space marks round-trip independently and never replace a required booth", () => {
+  const marks = [
+    { id: "empty-table", kind: "reserved", rect: { x: 10, y: 80, width: 20, height: 10 } },
+    { id: "withdrawn-table", kind: "cancelled", rect: { x: 40, y: 80, width: 20, height: 10 } },
+  ];
+  const next = { ...layout, spaceMarks: marks };
+  assert.deepEqual(parseMapContributionDraftContent(content(next))?.layout.spaceMarks, marks);
+  assert.equal(parseMapContributionDraftContent(content(layout)).layout.spaceMarks, undefined);
+  const candidate = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: next, previous: null, now: Date.parse("2026-01-02T00:00:00.000Z") });
+  assert.deepEqual(candidate.candidate.layout.spaceMarks, marks);
+  assert.deepEqual(candidate.diff.changedSpaceMarkIds, ["empty-table", "withdrawn-table"]);
+  assert.deepEqual(candidate.diff.addedBoothCodes, layout.rows.flatMap(row => row.slots.map(slot => slot.code)).sort());
+  for (const invalid of [null, { ...marks[0], code: "X" }, { ...marks[0], circleId: "circle-1" }, { ...marks[0], kind: "empty" }, { ...marks[0], id: " " }, { ...marks[0], rect: { ...marks[0].rect, x: -1 } }, { ...marks[0], rect: { ...marks[0].rect, width: 0 } }, { ...marks[0], rect: { ...marks[0].rect, y: 101 } }]) {
+    assert.equal(parseMapContributionDraftContent(content({ ...layout, spaceMarks: [invalid] })), null);
+  }
+  assert.equal(parseMapContributionDraftContent(content({ ...layout, spaceMarks: [marks[0], marks[0]] })), null);
+  assert.equal(parseMapContributionDraftContent(content({ ...layout, spaceMarks: {} })), null);
+  const required = layout.rows.flatMap(row => row.slots).find(slot => slot.code === "S02");
+  for (const kind of ["reserved", "cancelled"]) {
+    const missing = { ...layout, rows: layout.rows.map(row => ({ ...row, slots: row.slots.filter(slot => slot.code !== "S02") })), spaceMarks: [{ id: "replacement", kind, rect: required.rect }] };
+    const result = validateMapContributionDraft(content(missing), scope);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.problems.find(problem => problem.code === "missing_booth").boothCodes, ["S02"]);
+  }
+});

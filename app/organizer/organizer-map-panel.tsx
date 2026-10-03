@@ -22,7 +22,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function layoutHasContent(layout: EventMapLayout | null) {
   return !!layout && (layout.rows.length > 0 || layout.pillars.length > 0
-    || layout.accessPoints.length > 0 || layout.landmarks.length > 0 || (layout.servicePoints?.length ?? 0) > 0);
+    || layout.accessPoints.length > 0 || layout.landmarks.length > 0 || (layout.servicePoints?.length ?? 0) > 0
+    || (layout.spaceMarks?.length ?? 0) > 0);
 }
 
 function canCropPlan(layout: EventMapLayout | null, authoring: MapAuthoringState) {

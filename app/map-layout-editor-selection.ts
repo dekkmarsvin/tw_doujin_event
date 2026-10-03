@@ -7,6 +7,7 @@ export type Selection =
   | { kind: "pillar"; itemIndex: number }
   | { kind: "access"; itemIndex: number }
   | { kind: "service"; itemIndex: number }
+  | { kind: "space-mark"; itemIndex: number }
   | { kind: "landmark"; itemIndex: number };
 
 /** Access and service points are points; everything else is a rectangle, so
@@ -67,6 +68,7 @@ export function rectFor(layout: EventMapLayout, selection: RectSelection): MapRe
   if (selection.kind === "slot") return layout.rows[selection.rowIndex]?.slots[selection.itemIndex]?.rect;
   if (selection.kind === "pillar") return layout.pillars[selection.itemIndex];
   if (selection.kind === "landmark") return layout.landmarks[selection.itemIndex]?.rect;
+  if (selection.kind === "space-mark") return layout.spaceMarks?.[selection.itemIndex]?.rect;
   return layout.floor;
 }
 
@@ -395,6 +397,7 @@ export function selectionsWithinBox(layout: EventMapLayout, area: MapRect): Sele
   layout.accessPoints.forEach((point, itemIndex) => { if (overlaps({ x: point.x, y: point.y, width: 0, height: 0 }, area)) selections.push({ kind: "access", itemIndex }); });
   layout.servicePoints?.forEach((point, itemIndex) => { if (overlaps({ x: point.x, y: point.y, width: 0, height: 0 }, area)) selections.push({ kind: "service", itemIndex }); });
   layout.landmarks.forEach((landmark, itemIndex) => { if (overlaps(landmark.rect, area)) selections.push({ kind: "landmark", itemIndex }); });
+  layout.spaceMarks?.forEach((mark, itemIndex) => { if (overlaps(mark.rect, area)) selections.push({ kind: "space-mark", itemIndex }); });
   return selections;
 }
 
@@ -424,6 +427,7 @@ export function snapTargetsOutsideSelection(layout: EventMapLayout, excluded: re
     ...layout.landmarks.map((_, itemIndex): Selection => ({ kind: "landmark", itemIndex })),
     ...layout.accessPoints.map((_, itemIndex): Selection => ({ kind: "access", itemIndex })),
     ...(layout.servicePoints ?? []).map((_, itemIndex): Selection => ({ kind: "service", itemIndex })),
+    ...(layout.spaceMarks ?? []).map((_, itemIndex): Selection => ({ kind: "space-mark", itemIndex })),
   ];
   return all.filter(item => !keys.has(selectionKey(item))).map(item => ({ id: selectionKey(item), rect: boxFor(layout, item)! }));
 }
@@ -432,7 +436,7 @@ export function slotSelections(selections: readonly Selection[]): SlotSelection[
   return selections.filter((item): item is SlotSelection => item.kind === "slot");
 }
 
-function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "service" | "landmark"): number[] {
+function itemIndicesOf(selections: readonly Selection[], kind: "pillar" | "access" | "service" | "landmark" | "space-mark"): number[] {
   return selections.filter((item): item is Extract<Selection, { itemIndex: number }> => item.kind === kind).map(({ itemIndex }) => itemIndex);
 }
 
@@ -459,6 +463,7 @@ export function removeSelectionsFrom(draft: EventMapLayout, selections: readonly
   descending(itemIndicesOf(selections, "access")).forEach((itemIndex) => draft.accessPoints.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "service")).forEach((itemIndex) => draft.servicePoints?.splice(itemIndex, 1));
   descending(itemIndicesOf(selections, "landmark")).forEach((itemIndex) => draft.landmarks.splice(itemIndex, 1));
+  descending(itemIndicesOf(selections, "space-mark")).forEach((itemIndex) => draft.spaceMarks?.splice(itemIndex, 1));
 }
 
 /** Which booths a merge replaces, and the single booth it leaves in their
