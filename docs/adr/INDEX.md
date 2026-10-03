@@ -113,4 +113,4 @@ ADR 不搬動，決策不改寫；推翻舊決策時寫新的 ADR，並在舊的
 | [0076](./0076-phones-switch-reader-views-from-the-bottom-bar.md) | 手機以底部探索／行程／逛品書切換，桌機切換留在頁首 | 生效；部分取代 0056 |
 | [0077](./0077-circle-share-images-follow-published-media.md) | 社團分享縮圖使用已公開的圖片選擇 | 生效；部分取代 0070、0074 |
 | [0078](./0078-own-planning-backups-can-be-imported.md) | 讀者可匯入自己的完整規劃備份 | 生效；部分取代 0005 |
-| [0079](./0079-shared-booth-lists-travel-in-the-url-fragment.md) | 分享的攤位清單以 URL fragment 承載白名單 | 生效 |
+| [0079](./0079-shared-itineraries-use-short-links-and-qr-codes.md) | 本場行程以短網址與 QR Code 分享，同一流程帶到自己的手機 | 生效 |

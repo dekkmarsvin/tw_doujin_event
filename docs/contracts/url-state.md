@@ -45,8 +45,9 @@ Reader 的互動與可還原狀態都掛在根路徑的 query string，不建立
 | `media` | 顯示設定 | 每筆媒體數 |
 | `selectedCircle` | 地圖／詳情 | canonical `CircleRecord.id` |
 | `selectedBooth` | 地圖／詳情 | 實際 `PlacementRecord` 的攤位代碼 |
+| `share` | 分享行程 | 短網址 snapshot ID；讀取後移除 |
 
-**分享清單 fragment**：`#share=<payload>` 承載讀者分享的攤位清單（版本、活動、社團 ID、必要活動日與順序），不送往伺服器，格式與上限見[收藏與走訪規劃契約](./planning.md#分享我選的攤位)與 [ADR-0079](../adr/0079-shared-booth-lists-travel-in-the-url-fragment.md)。閱讀端只讀取一次並顯示唯讀預覽；關閉預覽後自 URL 移除，不寫入其他參數，也不影響 `selectedCircle` 等狀態。
+**分享清單 `share`**：短網址 `/s/<shareId>` 帶讀者到 `/?event=<id>&share=<shareId>`。閱讀端只在啟動時讀取一次，取得 snapshot 後顯示唯讀預覽，並自 URL 移除；不寫入其他參數，也不影響 `selectedCircle` 等狀態。格式與到期見[收藏與走訪規劃契約](./planning.md#分享行程)與 [ADR-0079](../adr/0079-shared-itineraries-use-short-links-and-qr-codes.md)。
 
 地圖除 `event`、`day` 外，**參數在等於預設值時從 URL 移除**，不留下無意義的殘留條件；多場地活動必須寫出 `venueSpaceId`，避免舊展區代碼或排序改變造成歸屬歧義。新網址不寫 `area`／`hall`。browse 的全範圍例外如下。
 
