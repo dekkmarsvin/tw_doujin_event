@@ -12,6 +12,15 @@ try {
   assert.equal(await reader.evaluate(async () => (await fetch("/api/organizer/applications")).status), 401);
   await journey.capture(reader, "applications-public-entry-closed");
 
+  const admin = await signIn(journey, ADMIN, "organizer");
+  await admin.goto(`${base}/admin?section=settings`);
+  await admin.getByRole("radio", { name: "僅限邀請", exact: true }).check();
+  await admin.getByLabel("邀請名單", { exact: true }).fill(CIRCLE);
+  await admin.getByRole("button", { name: "儲存設定", exact: true }).click();
+  await admin.getByRole("status").getByText("已生效", { exact: true }).waitFor();
+  await admin.goto(`${base}/organizer`);
+  await admin.getByRole("button", { name: "活動申請", exact: true }).waitFor();
+
   const applicant = await signIn(journey, CIRCLE, "organizer", { viewport: { width: 390, height: 844 } });
   await applicant.getByRole("heading", { name: "我的活動申請" }).waitFor();
   async function fill(name) {
@@ -29,7 +38,6 @@ try {
   assert.equal(await applicant.getByRole("link", { name: "進入活動工作區" }).count(), 0);
   await journey.capture(applicant, "application-pending-mobile");
 
-  const admin = await signIn(journey, ADMIN, "organizer");
   // The ordinary public API remains closed even for an admin not on the
   // controlled applicant list. Authorization does not silently open rollout.
   assert.equal(await admin.evaluate(async () => (await fetch("/api/organizer/applications", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status), 403);
