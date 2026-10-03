@@ -18,7 +18,7 @@
 .plan { border-color:#202a35; background:#202a35; color:#f9faf8; }
 .plan:hover:not(:disabled) { background:#34404d; }
 .barButtons button:focus-visible,.plan:focus-visible,.planned:focus-visible,.feedback button:focus-visible,.unavailable button:focus-visible { outline:3px solid #d99b44; outline-offset:2px; }
-.barButtons button:disabled,.plan:disabled,.planned:disabled { border-color:#dfe3df; background:#eceee8; color:#6f7873; cursor:not-allowed; }
+.barButtons button:disabled,.plan:disabled,.planned:disabled { border-color:#dfe3df; background:#eceee8; color:#59626c; cursor:not-allowed; }
 .barButtons svg { color:#b9b1ad; }
 .barButtons .saved { border-color:#202a35; }
 .barButtons .saved svg { color:#e86f5d; }

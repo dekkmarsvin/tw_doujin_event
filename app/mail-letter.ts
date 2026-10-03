@@ -63,9 +63,8 @@ const SANS = "-apple-system,BlinkMacSystemFont,'PingFang TC','Noto Sans TC','Mic
 const MONO = "ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
 
 const INK = "#202a35";
-// Not the design system's text-muted (#707a82): that is 4.08:1 on the paper
-// ground, and a letter's small print is read on a phone. This is the reader's
-// own darker secondary grey, 5.8:1 on paper and 6.2:1 on the card.
+// The design system's text-muted: 5.8:1 on paper and 6.2:1 on the card, so a
+// letter's small print stays readable on a phone.
 const MUTED = "#59626c";
 const LINE = "#dfe3df";
 const PAPER = "#f8f7f2";

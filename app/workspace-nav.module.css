@@ -2,7 +2,7 @@
    leaning on either one's variables. `[href]` keeps these ahead of each
    surface's own link rules without depending on stylesheet order. */
 .entries { display: grid; gap: 10px; }
-.entries p { margin: 0; color: #59645d; font-size: 12px; line-height: 1.6; }
+.entries p { margin: 0; color: #59645d; font-size: 14px; line-height: 1.6; }
 .entries ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .entries a[href] { display: grid; align-content: center; gap: 2px; height: 100%; min-height: 56px; padding: 10px 12px; border: 1px solid #cfd5cf; border-radius: 7px; background: #fff; color: #202a35; text-decoration: none; }
 .entries a[href]:hover { border-color: #8a948e; }
@@ -10,11 +10,11 @@
    as the one to press. */
 .entries a[href][aria-current="page"] { border-color: #202a35; box-shadow: inset 0 0 0 1px #202a35; }
 .entries b { font-size: 14px; line-height: 1.35; }
-.entries small { color: #59645d; font-size: 12px; line-height: 1.45; }
+.entries small { color: #59645d; font-size: 14px; line-height: 1.45; }
 
 /* The reader's view switch, down to the signed-in header's size. */
 .switch { display: inline-flex; flex: none; }
-.switch a[href] { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; border: 1px solid #cfd5cf; background: #f9faf8; color: #202a35; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.switch a[href] { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; border: 1px solid #cfd5cf; background: #f9faf8; color: #202a35; font-size: 14px; font-weight: 700; text-decoration: none; white-space: nowrap; }
 .switch a[href]:first-child { border-radius: 7px 0 0 7px; }
 .switch a[href]:last-child { margin-left: -1px; border-radius: 0 7px 7px 0; }
 .switch a[href]:hover { background: #fff; }

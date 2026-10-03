@@ -2,20 +2,20 @@
    restates their tokens and font instead of falling back to browser defaults. */
 .dialog {
   --ink: #202a35;
-  --muted: #707a82;
+  --muted: #59626c;
   --line: #dfe3df;
   --paper: #f8f7f2;
   --surface: #f9faf8;
   --danger: #a43e30;
   box-sizing: border-box; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 24px;
   border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 24px 70px #202a3533;
-  overflow-y: auto; font-family: Geist, system-ui, "Noto Sans TC", sans-serif; font-size: 13px; line-height: 1.6;
+  overflow-y: auto; font-family: Geist, system-ui, "Noto Sans TC", sans-serif; font-size: 14px; line-height: 1.6;
 }
 .dialog::backdrop { background: #202a3566; }
 .dialog p { margin: 0; }
 .header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
 .header h2 { margin: 0; font-size: 20px; line-height: 1.2; letter-spacing: .02em; }
-.dialog button { min-height: 38px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
+.dialog button { min-height: 38px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-weight: 800; letter-spacing: .06em; cursor: pointer; }
 .dialog button:hover:not(:disabled) { border-color: #aeb6b3; background: #f2f0e8; }
 .dialog select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 16px; }
 /* 16px avoids the iOS zoom on focus; with a mouse there is no zoom to avoid. */
@@ -24,7 +24,7 @@
 .dialog button:disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: not-allowed; }
 .dialog select:disabled { border-color: #c8d0cb; background: #eef1ef; color: var(--muted); cursor: not-allowed; }
 .dialog a { color: var(--ink); text-underline-offset: 2px; }
-.muted, .email, .required p, .form p, .admin { color: var(--muted); font-size: 12px; }
+.muted, .email, .required p, .form p, .admin { color: var(--muted); font-size: 14px; }
 .email { overflow-wrap: anywhere; }
 .required, .form, .admin { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .required h3 { margin: 0 0 4px; font-size: 14px; }
@@ -34,7 +34,7 @@
    when the result appears beside the menu. */
 .form .result { min-height: 19px; font-weight: 700; }
 .form .done { color: #306d59; }
-.error { margin-top: 12px; padding: 9px 11px; border: 1px solid #f0cdc6; border-radius: 8px; background: #fff3f1; color: var(--danger); font-size: 12px; }
+.error { margin-top: 12px; padding: 9px 11px; border: 1px solid #f0cdc6; border-radius: 8px; background: #fff3f1; color: var(--danger); font-size: 14px; }
 .error + button { margin-top: 8px; }
 @media (max-width: 760px) {
   .dialog { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }

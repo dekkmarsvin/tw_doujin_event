@@ -1,19 +1,19 @@
 .workspace.workspace { max-width: 960px; margin: 26px auto 0; font-size: 15px; }
 .title { display: flex; align-items: baseline; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; }
 .title h2 { font-size: 22px; }
-.title span, .updated { color: var(--muted); font-size: 13px; }
+.title span, .updated { color: var(--muted); font-size: 14px; }
 .fields, .modes { border: 0; padding: 0; margin: 0; min-width: 0; }
 .card.card { max-width: none; padding: 26px 28px; margin-top: 20px; }
 .card h3 { font-size: 20px; margin: 0 0 8px; }
 .card.card label { font-size: 14px; font-weight: 400; letter-spacing: normal; color: var(--ink); margin-top: 0; }
-.card.card > p { color: var(--muted); font-size: 13px; }
+.card.card > p { color: var(--muted); font-size: 14px; }
 .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
 .modes legend { font-size: 14px; margin-bottom: 10px; }
 .card .modes label { display: flex; align-items: start; gap: 10px; padding: 16px 12px; border: 1px solid var(--line); border-radius: 9px; background: white; cursor: pointer; }
 .modes label:has(input:checked) { border-color: var(--success); background: #eef3ee; }
 .card .modes input { margin: 4px 0 0; width: 16px; height: 16px; padding: 0; accent-color: var(--success); flex: 0 0 auto; }
 .modes strong, .switch strong { display: block; font-size: 15px; }
-.modes small, .switch small { display: block; margin-top: 5px; color: var(--muted); font-size: 13px; font-weight: 400; }
+.modes small, .switch small { display: block; margin-top: 5px; color: var(--muted); font-size: 14px; font-weight: 400; }
 .emails { display: block; font-size: 14px; }
 .emails + .emails { margin-top: 12px; }
 .card .emails textarea, .card .emails input { display: block; width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 16px; font-weight: 400; resize: vertical; background: white; color: var(--ink); }
@@ -26,7 +26,7 @@
 .switch input:disabled { opacity: .5; cursor: default; }
 .workspace :is(input, textarea, button):focus-visible { outline: 3px solid #9aa5a0; outline-offset: 3px; }
 .service { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; padding-top: 18px; font-size: 14px; }
-.service p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.service p { color: var(--muted); font-size: 14px; margin-top: 4px; }
 .available { color: var(--success); font-weight: 600; }
 .unavailable { color: var(--danger); font-weight: 600; }
 .activities { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
@@ -35,7 +35,7 @@
 .activities li { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-top: 1px solid var(--line); }
 .activities a { color: var(--ink); text-underline-offset: 3px; overflow-wrap: anywhere; }
 .activities span { color: var(--muted); flex-shrink: 0; }
-.empty { margin-top: 20px !important; font-size: 13px; }
+.empty { margin-top: 20px !important; font-size: 14px; }
 .actions { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; flex-wrap: wrap; }
 .actions button { min-height: 44px; padding: 9px 18px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font: inherit; cursor: pointer; }
 .actions button[type=submit] { background: var(--success); color: white; border-color: var(--success); }

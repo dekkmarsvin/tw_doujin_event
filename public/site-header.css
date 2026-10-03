@@ -8,7 +8,7 @@
 .site-header .site-header-name { min-width:0; }
 .site-header .site-header-name b,.site-header .site-header-name small { display:block; white-space:nowrap; }
 .site-header .site-header-name b { font-size:calc(16px * var(--ui-font-scale,1)); letter-spacing:.08em; }
-.site-header .site-header-name small { margin-top:2px; color:#707a82; font-size:calc(10px * var(--ui-font-scale,1)); letter-spacing:.12em; }
+.site-header .site-header-name small { margin-top:2px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); letter-spacing:.12em; }
 /* Secondary, so it is found without outranking a page's own first action.
    The map and browse views have their own header bar and add `reader-login`. */
 .site-header .site-header-login,.site-header-login.reader-login { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:1px solid #b9c2bb; border-radius:7px; background:#f9faf8; color:#202a35; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; text-decoration:none; white-space:nowrap; }
