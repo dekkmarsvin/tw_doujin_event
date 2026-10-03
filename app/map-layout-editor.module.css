@@ -52,11 +52,11 @@
 .canvasToolbar button:focus-visible { outline:3px solid #dfe8e3; outline-offset:2px; }
 .canvasToolbar button:disabled { color:#59626c; cursor:not-allowed; }
 .canvasToolbar output { min-width:44px; color:#202a35; text-align:center; font:800 calc(12px * var(--ui-font-scale,1)) var(--font-mono),ui-monospace,monospace; font-variant-numeric:tabular-nums; }
-.canvasViewport { min-width:0; min-height:0; overflow:auto; padding:12px; overscroll-behavior:contain; scrollbar-color:#8a958e #dfe3df; scrollbar-width:thin; }
+.canvasViewport { min-width:0; min-height:0; overflow:hidden; padding:12px; overscroll-behavior:contain; }
 /* Sized in pixels from the fitted scale, so 100% is the whole map inside
    the viewport. `margin:0 auto` centres it while it fits and collapses to
    zero once it is wider, which keeps the left edge reachable. */
-.zoomSurface { margin:0 auto; border:1px solid #bdc4be; border-radius:8px; background:#fff; overflow:hidden; }
+.zoomSurface { margin:0 auto; background:#fff; overflow:hidden; }
 /* Scoped to the viewport, not to .canvas: the toolbar is inside .canvas too,
    and these rules stretched every button icon to fill its button and painted
    an opaque white block behind it. */
@@ -137,7 +137,7 @@
 .sharedEdgePanel>b { font-size:calc(12px * var(--ui-font-scale,1)); }
 .sharedEdgePanel p { margin:8px 0; color:#344039; font-size:calc(12px * var(--ui-font-scale,1)); line-height:1.55; }
 .snapGuide { fill:none; stroke:#e86f5d; stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke; pointer-events:none; }
-.inspector { position:absolute; top:12px; right:12px; max-height:calc(100% - 104px); width:264px; box-sizing:border-box; overflow:auto; padding:12px; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; box-shadow:0 4px 16px #202a3512; }
+.inspector { position:absolute; z-index:1; top:12px; right:12px; max-height:calc(100% - 104px); width:264px; box-sizing:border-box; overflow:auto; padding:12px; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; box-shadow:0 4px 16px #202a3512; }
 .canvasSize { margin-top:0; margin-bottom:15px; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker { margin-bottom:15px!important; padding-bottom:13px; border-bottom:1px solid #e2e5e1; }
 .elementPicker select { width:100%; }
@@ -252,7 +252,7 @@
 .surfaceTitle span,.saveStatus,.saveError { font-size:calc(14px * var(--ui-font-scale,1)); color:#59626c; }
 .saveStatus,.saveError { max-width:34ch; }
 .saveError { color:#a43e30; }
-/* Inline on a laptop the canvas is small beside the reserved inspector space; point to full window there. */
+/* Inline on a laptop the canvas is small; point to full window there. */
 .expandHint { display:none; font-size:calc(14px * var(--ui-font-scale,1)); color:#59626c; }
 @container (max-width:899px) {
   .expandHint { display:inline; }
@@ -273,8 +273,7 @@
 .editor .addTools { justify-content:flex-start; padding:8px 12px; border-bottom:1px solid #dfe3df; background:#f9faf8; }
 .addTools>span { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:14px; }
 .editor .addTools button { background:#f9faf8; color:#202a35; font-size:calc(14px * var(--ui-font-scale,1)); }
-.canvasViewport { flex:1; margin-right:276px; padding:48px 16px 16px; }
-.withRoster .canvasViewport { margin-left:264px; }
+.canvasViewport { flex:1; padding:48px 16px 16px; }
 .editor .canvasToolbar { border-top:1px solid #dfe3df; border-bottom:0; background:#f9faf8; justify-content:flex-end; padding:6px 12px; }
 .editor .canvasToolbar button,.editor .canvasToolbar span,.editor .canvasToolbar output { font-size:calc(12px * var(--ui-font-scale,1)); }
 .editor .guideToolbar { padding:6px 12px; border-top:1px solid #dfe3df; background:#f9faf8; }
@@ -288,8 +287,8 @@
 .editor :is(.rowPanel p,.hint,.rowErrors,.rowFormActions button,.batchTools button,.remove) { font-size:calc(14px * var(--ui-font-scale,1)); }
 .editor .rowFormActions .rowConfirm { color:#f9faf8; background:#202a35; }
 .editor .rowFormActions .rowConfirm:hover:not(:disabled) { color:#f9faf8; background:#34404c; }
-.editorSurface .rosterToggle { position:absolute; top:10px; left:12px; }
-.rosterDrawer { position:absolute; left:12px; top:52px; bottom:90px; width:252px; overflow:auto; padding:8px; box-sizing:border-box; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; box-shadow:0 4px 16px #202a3512; }
+.editorSurface .rosterToggle { position:absolute; z-index:1; top:10px; left:12px; }
+.rosterDrawer { position:absolute; z-index:1; left:12px; top:52px; bottom:90px; width:252px; overflow:auto; padding:8px; box-sizing:border-box; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; box-shadow:0 4px 16px #202a3512; }
 .rosterDrawer .boothList { border:0; background:transparent; padding:0; }
 .rosterDrawer .boothList ul { max-height:none; }
 .copyPreview { pointer-events:none; }
@@ -305,7 +304,5 @@
   .surfaceHeader { flex-wrap:wrap; }
   .saveStatus,.saveError { order:3; max-width:none; width:100%; }
   .inspector { width:230px; }
-  .canvasViewport { margin-right:242px; }
   .rosterDrawer { width:210px; }
-  .withRoster .canvasViewport { margin-left:214px; }
 }
