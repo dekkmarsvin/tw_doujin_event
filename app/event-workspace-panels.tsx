@@ -86,7 +86,7 @@ export function SearchResults({ records, circleCount, catalogStatus, catalogErro
   </section>;
 }
 
-export function DayItinerary({ day, entries, recordsById, variant = "compact", onSelect, onMove, onMoveTo, onVisit, onRemove, onUpdatePurchase, onPrepareOffline, onShare }: {
+export function DayItinerary({ day, entries, recordsById, variant = "compact", onSelect, onMove, onMoveTo, onVisit, onRemove, onUpdatePurchase, onShare }: {
   day: EventDayKey;
   entries: VisitPlanEntry[];
   recordsById: Map<string, CircleViewRecord>;
@@ -97,8 +97,6 @@ export function DayItinerary({ day, entries, recordsById, variant = "compact", o
   onVisit: (entry: VisitPlanEntry) => void;
   onRemove: (circleId: string) => void;
   onUpdatePurchase: (circleId: string, purchaseMemo: string, budget: number | null) => void;
-  /** Opens 準備離線使用 for this day (#415). */
-  onPrepareOffline?: () => void;
   /** Opens 分享行程 (#415): short link and QR code for this event's itinerary. */
   onShare?: () => void;
 }) {
@@ -108,7 +106,7 @@ export function DayItinerary({ day, entries, recordsById, variant = "compact", o
   const shoppingCount = entries.filter((entry) => entry.purchaseMemo.trim() || entry.budget !== null).length;
   const formatBudget = (value: number) => new Intl.NumberFormat("zh-TW").format(value);
   return <section className={`${styles.itinerary} ${variant === "full" ? styles.fullItinerary : styles.compactItinerary}`} aria-label={`DAY ${day} 當日行程列表`}>
-    <header><div><h2>當日行程列表</h2></div>{(onShare || onPrepareOffline) && <div className={styles.headerActions}>{onShare && <button type="button" className={styles.headerAction} onClick={onShare}>分享行程</button>}{onPrepareOffline && <button type="button" className={styles.headerAction} onClick={onPrepareOffline}>準備離線使用</button>}</div>}<span>{entries.length} 站</span></header>
+    <header><div><h2>當日行程列表</h2></div>{onShare && <button type="button" className={styles.headerAction} onClick={onShare}>分享行程</button>}<span>{entries.length} 站</span></header>
     {entries.length > 0 && <div className={styles.shoppingSummary}><b>今日購物規劃</b><span>{shoppingCount > 0 ? `${shoppingCount} 攤已填寫 · ` : "尚未填寫購買項目 · "}預算合計 NT$ {formatBudget(budgetTotal)}</span></div>}
     {entries.length === 0 ? <div className={styles.empty}><b>還沒有安排攤位</b><p>從搜尋結果或社團詳細資訊加入。</p></div> : <ol>
       {entries.map((entry, index) => {

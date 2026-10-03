@@ -723,7 +723,6 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     onVisit: (entry: (typeof dayPlan)[number]) => updatePlanning((current) => markVisited(current, eventId, day, entry.circleId, entry.status !== "visited")),
     onRemove: (circleId: string) => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, circleId)),
     onUpdatePurchase: (circleId: string, purchaseMemo: string, budget: number | null) => updatePlanning((current) => updateVisitPlanPurchase(current, eventId, day, circleId, purchaseMemo, budget)),
-    onPrepareOffline: () => setOfflinePrepOpen(true),
     onShare: () => setShareOpen(true),
   };
   const fullItineraryPanel = <DayItinerary {...itineraryProps} variant="full" />;
@@ -832,7 +831,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
 
   // Every public page ends its header with the same "登入" (#439, #488).
   const readerLogin = <a className={`site-header-login reader-login ${styles.readerLogin}`} href={publicLoginHref({ eventId })}>登入</a>;
-  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
+  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} onCheckOffline={() => setOfflinePrepOpen(true)} /></>;
 
   // The map as the reader sees it, without a selection: what the switch and the
   // phone's 逛品書 tab carry over into the browse view.

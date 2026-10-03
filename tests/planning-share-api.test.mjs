@@ -188,7 +188,8 @@ test("/s serves escaped dynamic metadata, brand image and refresh through nonce 
   const target = `/?event=sample&amp;share=${created.shareId}`;
   assert.ok(text.includes(`<meta http-equiv="refresh" content="0;url=${target}">`));
   assert.ok(text.includes(`<a href="${target}">開啟清單</a>`));
-  assert.doesNotMatch(text, /<script>|event\.png/);
+  assert.ok(!text.toLowerCase().includes("<script"), "the share page needs no script for its metadata");
+  assert.ok(!text.includes("event.png"), "the fixed brand image is used, never the event image");
 });
 
 test("Pages route wiring uses deployed events rather than the browser fixture fallback", async () => {

@@ -20,7 +20,7 @@ type View =
   | { kind: "error" };
 
 /**
- * 準備離線使用 (#415): confirm that this event day's official catalog, map
+ * 離線使用 (#415): confirm that this event day's official catalog, map
  * and reader are in the offline cache, fetch what is missing, and say only
  * what the re-check verified. A page loaded once is not evidence.
  */
@@ -59,17 +59,15 @@ export function OfflinePrepDialog({ event, day, venueSpaceId, onClose }: {
 
   return createPortal(<div className={styles.backdrop} role="presentation" onPointerDown={(pressed) => { if (pressed.target === pressed.currentTarget) onClose(); }}>
     <section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="offline-prep-title" tabIndex={-1}>
-      <header><div><h2 id="offline-prep-title">準備離線使用</h2></div><button onClick={onClose} aria-label="關閉離線準備"><UiIcon name="close" /></button></header>
+      <header><div><h2 id="offline-prep-title">離線使用</h2></div><button onClick={onClose} aria-label="關閉離線使用"><UiIcon name="close" /></button></header>
       <section className={styles.section}>
         <div>
           <h3>{event.name}・{dayInfo ? `${dayInfo.label}（${dayInfo.dateLabel}）` : `DAY ${day}`}{venue ? `・${venue.venueName} · ${venue.venueSpaceName}` : ""}</h3>
-          <p>會準備：這天的官方場刊、地圖與閱讀介面。你的收藏與行程本來就存在這台裝置。</p>
-          <p>不包括：社團自填的介紹與品書圖、外部連結；離線時看到的是準備當下的官方資料。</p>
         </div>
         <div className={styles.offlineStatus} role="status">
           {view.kind === "checking" && <p>正在檢查…</p>}
           {view.kind === "ready" && <p className={styles.okText}>已就緒：斷網後重新開啟，仍可查看這天的地圖、收藏與行程。</p>}
-          {view.kind === "missing" && <p>尚未準備完成，還缺 {view.count} 個檔案。</p>}
+          {view.kind === "missing" && <p>還缺 {view.count} 個檔案，按「補齊」下載。</p>}
           {view.kind === "preparing" && <p>準備中{view.total > 0 ? `：${view.done}／${view.total}` : "…"}</p>}
           {view.kind === "failed" && <p className={styles.errorText}>有 {view.count} 個檔案無法下載，請確認網路後重試。</p>}
           {view.kind === "unsupported" && <p className={styles.errorText}>這個瀏覽器目前無法離線使用。請重新整理頁面後再試；若仍無法使用，請改用其他瀏覽器。</p>}
@@ -77,7 +75,7 @@ export function OfflinePrepDialog({ event, day, venueSpaceId, onClose }: {
           {view.kind === "error" && <p className={styles.errorText}>無法確認離線準備狀態，請重新整理頁面後再試。</p>}
         </div>
         <div className={styles.confirmActions}>
-          {(view.kind === "missing" || view.kind === "failed") && <button className={styles.primary} onClick={() => void prepare()}>{view.kind === "failed" ? "重試" : "準備離線使用"}</button>}
+          {(view.kind === "missing" || view.kind === "failed") && <button className={styles.primary} onClick={() => void prepare()}>{view.kind === "failed" ? "重試" : "補齊"}</button>}
           <button onClick={onClose}>關閉</button>
         </div>
       </section>

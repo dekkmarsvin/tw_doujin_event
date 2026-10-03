@@ -32,3 +32,4 @@
   .panel { position:fixed; top:56px; right:12px; width:calc(100vw - 24px); max-height:calc(100dvh - 68px); }
   .panel header button { width:44px; height:44px; }
 }
+.steps .inlineAction { display:block; min-height:32px; margin-top:6px; padding:0 10px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); font-size:calc(12px * var(--ui-font-scale,1)); font-weight:700; cursor:pointer; }

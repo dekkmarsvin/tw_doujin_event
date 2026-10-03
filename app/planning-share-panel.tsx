@@ -117,9 +117,8 @@ type Opened =
   | { kind: "error"; error: string };
 
 /** A short link opened in the reader (`?share=<id>`): read-only until 加入我的行程 (#415, ADR-0079). */
-export function SharedItineraryDialog({ eventId, document, update, blocked }: {
+export function SharedItineraryDialog({ eventId, update, blocked }: {
   eventId: string;
-  document: PlanningDocument;
   update: (change: (current: PlanningDocument) => PlanningDocument) => void;
   blocked: boolean;
 }) {
@@ -147,24 +146,24 @@ export function SharedItineraryDialog({ eventId, document, update, blocked }: {
     {opened.kind === "missing" && <div className={styles.section}><p>這個分享連結不存在或已過期。</p><a className={styles.linkButton} href="/">查看場刊 Map 的活動</a></div>}
     {opened.kind === "expired" && <div className={styles.section}><p>這個分享連結已過期。</p>{expiredEvent && <a className={styles.linkButton} href={`/?event=${encodeURIComponent(expiredEvent.id)}`}>查看 {expiredEvent.name}</a>}</div>}
     {opened.kind === "error" && <p className={styles.errorText} role="alert">{opened.error}</p>}
-    {opened.kind === "ok" && <SharedItineraryBody snapshot={opened.snapshot} shareId={shareId} eventId={eventId} document={document} update={update} blocked={blocked} />}
+    {opened.kind === "ok" && <SharedItineraryBody snapshot={opened.snapshot} shareId={shareId} eventId={eventId} update={update} blocked={blocked} onAdded={close} />}
   </Dialog>;
 }
 
-function SharedItineraryBody({ snapshot, shareId, eventId, document, update, blocked }: {
-  snapshot: ShareSnapshot; shareId: string; eventId: string; document: PlanningDocument;
+function SharedItineraryBody({ snapshot, shareId, eventId, update, blocked, onAdded }: {
+  snapshot: ShareSnapshot; shareId: string; eventId: string;
   update: (change: (current: PlanningDocument) => PlanningDocument) => void; blocked: boolean;
+  /** Closes the preview once added; the 行程 count is the confirmation. */
+  onAdded: () => void;
 }) {
   // Re-render when the event's catalog arrives, so items are not judged against an empty one.
   useCircleCatalog(snapshot.eventId);
   const event = eventOf(snapshot.eventId);
   const resolved = resolveSharedList(snapshot);
-  const [message, setMessage] = useState("");
   if (!event) return <p className={styles.errorText} role="alert">這份行程的活動目前沒有公開。</p>;
   if (snapshot.eventId !== eventId) return <div className={styles.section}><p>這份行程是「{event.name}」的攤位。</p>
     <a className={styles.linkButton} href={`/?event=${encodeURIComponent(snapshot.eventId)}&share=${encodeURIComponent(shareId)}`}>到 {event.name} 查看</a></div>;
   const available = resolved.items.filter((item) => item.state === "available").map(({ circleId, day }) => ({ circleId, day }));
-  const skipped = resolved.items.length - available.length;
   return <>
     <p className={styles.notice}>先看看再決定；按下加入前不會改動你的行程。</p>
     {resolved.status !== "ready" && <p className={styles.notice} role="status">{resolved.status === "loading" ? "正在讀取活動資料…" : "活動資料讀取失敗，暫時無法核對這份行程。"}</p>}
@@ -177,14 +176,11 @@ function SharedItineraryBody({ snapshot, shareId, eventId, document, update, blo
     {resolved.status === "ready" && <div className={styles.section}>
       <div className={styles.confirmActions}>
         <button className={styles.primary} disabled={blocked || available.length === 0} onClick={() => {
-          const { added } = addSharedToPlan(document, snapshot.eventId, available);
           update((current) => addSharedToPlan(current, snapshot.eventId, available).document);
-          const note = skipped > 0 ? `；${skipped} 個無法加入` : "";
-          setMessage(added > 0 ? `已加入 ${added} 筆到你的行程${note}。` : `這些攤位都已在你的行程裡${note}。`);
+          onAdded();
         }}>加入我的行程</button>
       </div>
       {blocked && <p className={styles.errorText}>這台裝置有無法讀取的舊資料，請先在「資料管理」處理。</p>}
-      {message && <p className={styles.okText} role="status">{message}</p>}
     </div>}
   </>;
 }

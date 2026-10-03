@@ -57,7 +57,7 @@
 .okText,.errorText { grid-column:1/-1; margin:0; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:700; }
 .okText { color:#306d59; }
 .errorText { color:#a43e30; }
-/* 準備離線使用 (#415) */
+/* 離線使用 (#415) */
 .offlineStatus { grid-column:1/-1; font-size:calc(12px * var(--ui-font-scale,1)); }
 .offlineStatus p { margin:0; }
 /* 分享我選的攤位 (#415) */
