@@ -1,5 +1,5 @@
 import { isAccountNotificationCadence } from "./account-notifications";
-import { canSubmitEventApplication, parseSiteSettings } from "./site-settings";
+import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
@@ -1135,7 +1135,9 @@ export function createCirclePortalHandlers({
     const body = await readJson(request);
     if (!body || Object.keys(body).some(key => !["settings", "expectedUpdatedAt"].includes(key))) return json({ error: "設定格式無效。" }, 400);
     const settings = parseSiteSettings(body.settings);
-    if (!settings || !Number.isSafeInteger(body.expectedUpdatedAt)) return json({ error: "請填寫完整設定與有效的邀請 email。" }, 400);
+    if (!settings || !Number.isSafeInteger(body.expectedUpdatedAt)) {
+      return json({ error: contactSettingsProblem(body.settings) ?? "請填寫完整設定與有效的邀請 email。" }, 400);
+    }
     const current = await repository.getSiteSettings();
     if ((config.organizerPublicationMode ?? "disabled") === "disabled" && settings.publicationEnabled !== current?.publicationEnabled) {
       return json({ error: "此環境尚未設定發布功能，無法變更發布開關。" }, 409);

@@ -53,6 +53,8 @@ test("settings are admin-only, validate the complete object and atomically audit
     assert.equal((await save(change)).status, 400);
   }
   assert.equal((await handlers.adminUpdateSiteSettings(request("PUT", { settings: { publicationEnabled: true }, expectedUpdatedAt: 1 }))).status, 400);
+  assert.match((await (await save({ contactUrl: "http://discord.gg/x" })).json()).error, /聯絡連結/);
+  assert.match((await (await save({ claimReviewNotice: "字".repeat(201) })).json()).error, /認領審核中說明/);
   const response = await save({ organizerApplicationMode: "invite_only", organizerAllowedEmails: ["  MEMBER@example.test ", "member@example.test", " "] });
   assert.equal(response.status, 200, await response.clone().text());
   const saved = (await response.json()).settings;

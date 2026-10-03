@@ -35,6 +35,17 @@ function isHttpsUrl(value: string) {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
+/** The contact fields are free input, so a refusal names them instead of the invite list. */
+export function contactSettingsProblem(value: unknown) {
+  const body = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const url = typeof body.contactUrl === "string" ? body.contactUrl.trim() : "";
+  if (url && (!isHttpsUrl(url) || url.length > CONTACT_URL_MAX)) return "聯絡連結必須是 https:// 開頭的網址。";
+  if (typeof body.claimReviewNotice === "string" && body.claimReviewNotice.trim().length > CLAIM_REVIEW_NOTICE_MAX) {
+    return `認領審核中說明不能超過 ${CLAIM_REVIEW_NOTICE_MAX} 字。`;
+  }
+  return null;
+}
+
 /** Complete form only. Server-managed epoch and attribution never come from the caller. */
 export function parseSiteSettings(value: unknown): SiteSettingsInput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
