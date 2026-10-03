@@ -33,7 +33,7 @@
 
 .masthead {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 18px;
@@ -670,7 +670,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .lifecycle { background: #edf8f3; color: var(--success); }
 .lifecycleMuted { background: #efefe9; color: #4d5660; }
 .overviewDate { margin: -6px 0 0; color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; }
-.overviewCounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.overviewCounts { margin-top: auto; display: grid;grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .card .countButton {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   min-height: 0; margin: 0; padding: 9px 11px;
