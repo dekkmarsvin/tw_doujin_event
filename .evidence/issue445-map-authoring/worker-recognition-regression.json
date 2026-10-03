@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-03",
+  "failedCiHead": "d6e6fea64b6b6e8866f7bb6dff6f92ceaf94391f",
+  "failedBrowserRun": "https://github.com/dekkmarsvin/tw_doujin_event/actions/runs/37103821307",
+  "actualBrowserReproduction": {
+    "action": "open the existing recognition tool and click recognition",
+    "workerError": "Uncaught ReferenceError: window is not defined",
+    "module": "/@react-refresh",
+    "line": 599,
+    "productionWrites": 0
+  },
+  "fix": {
+    "commit": "1a072ee",
+    "scope": "keep pure annotation data and validation in .ts; render in .tsx; preserve behavior",
+    "reviewBaseline": "a3a0c8e",
+    "additionalFixRound": 4,
+    "maintainerExplicitlyAllowedThisLocalFix": true,
+    "primaryReview": "Done; zero blockers"
+  },
+  "focusedVerification": {
+    "recognitionActualWorkerChecks": 6,
+    "annotationBrowserChecks": 4,
+    "guideBrowserChecks": 7,
+    "navigationBrowserChecks": 8,
+    "amendmentMockUiChecks": 12,
+    "sharedModuleTests": 24,
+    "documentTests": 4,
+    "typeCheck": "passed",
+    "lint": "passed; ignored temporary acceptance harness excluded",
+    "amendmentEnvironment": "isolated Vite with mocked API and images; not real D1 or built artifact",
+    "productionWrites": 0
+  }
+}
