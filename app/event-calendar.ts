@@ -68,10 +68,10 @@ export function eventCalendar(event: EventDefinition) {
   const days = event.days.map((day) => eventDayDate(day.dateLabel, end));
   if (!days.length || days.some((day) => !day || day > end)) return { start: null, end, label: event.dateRangeLabel };
   const start = (days as string[]).sort()[0];
-  const full = (date: string) => date.slice(2).replaceAll("-", ".");
+  const full = (date: string) => date.replaceAll("-", ".");
   const tail = start.slice(0, 7) === end.slice(0, 7) ? end.slice(8)
     : start.slice(0, 4) === end.slice(0, 4) ? end.slice(5).replace("-", ".") : full(end);
-  return { start, end, label: start === end ? full(start) : `${full(start)}-${tail}` };
+  return { start, end, label: start === end ? full(start) : `${full(start)}–${tail}` };
 }
 
 export const EVENT_GROUPS = [

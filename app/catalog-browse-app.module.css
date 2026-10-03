@@ -87,7 +87,7 @@ a.event:hover>span:first-child { text-decoration:underline; text-underline-offse
 @media(max-width:760px) {
   .header>div { padding-inline:14px; }
   /* As on the map: brand, event and tools share the top row; the switch moves to the bottom navigation. */
-  .identity { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:6px 12px; min-height:56px; padding-block:6px; }
+  .identity { display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; gap:6px 12px; min-height:56px; padding-block:6px; }
   .brand { font-size:18px; gap:10px; margin-right:0; }
   .brand>span { width:34px; height:34px; }
   .identity>.event { flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; margin-right:0; font-size:12px; }
@@ -97,6 +97,7 @@ a.event:hover>span:first-child { text-decoration:underline; text-underline-offse
   .mobileNav { position:fixed; z-index:40; inset:auto 0 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); height:calc(64px + env(safe-area-inset-bottom)); padding:3px 16px env(safe-area-inset-bottom); border-top:1px solid var(--line); background:#fff; }
   .undo { bottom:calc(76px + env(safe-area-inset-bottom)); }
   .identity>button { grid-column:3; grid-row:1; }
+  .readerLogin { grid-column:4; grid-row:1; }
   .main { padding:12px 12px calc(96px + env(safe-area-inset-bottom)); }
   .grid,.textList { grid-template-columns:minmax(0,1fr); }
   .grid { gap:16px; }
@@ -111,3 +112,8 @@ a.event:hover>span:first-child { text-decoration:underline; text-underline-offse
   .resultHeader span { display:block; margin-top:2px; }
 }
 @media(max-width:360px) { .scope { grid-template-columns:repeat(2,minmax(0,1fr)); } .scope>section { grid-column:1/-1; } }
+/* As on the map: the brand mark stays, its name gives way to the event name. */
+@media (max-width:420px) {
+  .brand { font-size:0; gap:0; }
+  .brand>span { font-size:16px; }
+}

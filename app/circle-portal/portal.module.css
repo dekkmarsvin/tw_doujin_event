@@ -2,6 +2,10 @@
    separate entry, and pulling the map/workspace CSS in would bloat it for no
    reason. Shares the reader's paper/ink language so it still reads as one site. */
 
+/* Same as the organizer workspace: without a page colour a dark browser canvas
+   shows through, and the dark ink headings disappear on it (#489). */
+:global(html) { color-scheme: light; background: #f8f7f2; }
+
 .page {
   /* The editor's preview column and the card edge around it. The claim row
      above the editor is cut on the same lines, so both rows share one grid. */

@@ -356,6 +356,6 @@ export function validateOrganizerEventDraft(draft: OrganizerEventDraft): Organiz
     if (assignment.venueSpaceId && spaces.has(assignment.venueSpaceId)) add({ severity: "error", step: "venue", code: "duplicate_space", row: row + 1, target: `venue.assignments.${row}.venueSpaceId`, message: "同一個場地重複選取。" });
     if (assignment.venueSpaceId) spaces.add(assignment.venueSpaceId);
   });
-  if (!httpsUrl(draft.officialSource.url)) add({ severity: "error", step: "event", code: "invalid_source_url", target: "officialSource.url", message: "來源網址必須使用 HTTPS。" });
+  if (!httpsUrl(draft.officialSource.url)) add({ severity: "error", step: "event", code: "invalid_source_url", target: "officialSource.url", message: "官方公告網址必須使用 HTTPS。" });
   return issues;
 }

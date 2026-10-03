@@ -19,7 +19,7 @@ import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
-import { nearestEvent, taipeiDate } from "../event-calendar";
+import { eventCalendar, nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
 import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
@@ -313,7 +313,7 @@ export default function CirclePortalApp() {
             eventId={event.id}
             onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />
-          : <p>{event.name}・{event.dateRangeLabel}</p>}
+          : <p>{event.name}・{eventCalendar(event).label}</p>}
         <p className={styles.backLink}><a href={mapHref(event.id)}>返回活動地圖</a></p>
       </div>
       {session && <div className={styles.identity}>
@@ -372,7 +372,7 @@ function EventPicker({ eventId, onChoose }: { eventId: string; onChoose: (eventI
   return <div className={styles.eventPicker}>
     <label htmlFor="portal-event" className={styles.visuallyHidden}>活動</label>
     <select id="portal-event" value={eventId} onChange={(event) => onChoose(event.target.value)}>
-      {PUBLISHED_EVENTS.map((item) => <option key={item.id} value={item.id}>{item.name}・{item.dateRangeLabel}</option>)}
+      {PUBLISHED_EVENTS.map((item) => <option key={item.id} value={item.id}>{item.name}・{eventCalendar(item).label}</option>)}
     </select>
   </div>;
 }
@@ -467,7 +467,6 @@ function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; ses
       {claims.map((claim) => <li key={claim.id}>
         <div>
           <b>{claim.circleName}</b>
-          <small>{claim.circleId}</small>
         </div>
         {claim.status === "verified" && <a href={`#circle-editor-${claim.circleId}`}>編輯資料</a>}
         <span className={styles[`claim_${claim.status}`]}>{
@@ -482,7 +481,7 @@ function ClaimList({ claims, session, onChanged }: { claims: ClaimSummary[]; ses
             })
             .catch((error: unknown) => setStatus({ kind: "error", message: errorMessage(error) }));
         }}>重新驗證</button>}
-        {claim.status === "pending" && <button type="button" onClick={() => {
+        {claim.status === "pending" && <button type="button" className={styles.secondaryButton} onClick={() => {
           setStatus({ kind: "busy", message: "撤回中…" });
           void withdrawClaim(claim.id)
             .then(() => {
