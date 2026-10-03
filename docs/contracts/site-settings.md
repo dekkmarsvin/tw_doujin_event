@@ -7,7 +7,8 @@
 
 ## 唯一設定來源與儲存
 
-同環境 Pages 與排程 Worker 共用 D1 `site_settings` 單筆 `id='global'`。Pages 第一次控制面初始化，從自己當時的 runtime 環境讀取原申請模式／邀請名單、通知旗標／有效起點與發布能力，`INSERT OR IGNORE` 保存既有行為。已存在資料不受後續環境變數或 isolate 建立影響。Worker 不初始化這筆資料；若先到則跳過工作並記錄未初始化，待 Pages 完成後下一 tick 讀取。Runtime schema 繼續沿用單一 initializer/version。
+同環境 Pages 與排程 Worker 共用 D1 `site_settings` 單筆 `id='global'`。Pages 控制面以 `INSERT OR IGNORE` 保留已儲存的設定；新資料庫初始為暫停申請、空名單、通知與發布關閉，之後由 Admin 啟用。舊營運環境旗標已移除，不作初始化或 runtime fallback。Worker 不初始化這筆資料；若先到則跳過工作並記錄未初始化，待 Pages 完成後下一 tick 讀取。Runtime schema 繼續沿用單一 initializer/version。
+
 
 `GET /api/admin/site-settings` 只供有效網站管理者讀取完整設定、唯讀發布能力、進行中活動及最近一次診斷。`PUT` 接受完整 `settings` 與 `expectedUpdatedAt`，驗證 enum、boolean、email 陣列並正規化、去空白及去重。時間／epoch／actor 由伺服器建立；交易內重查有效帳號、session、admin 及舊更新版本，同 batch 寫入 audit。過期表單回 409，不覆寫其他管理者的修改。Audit 保留切換值與名單數量，不複製 email 名單。
 

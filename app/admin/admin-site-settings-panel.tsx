@@ -126,7 +126,7 @@ export function AdminSiteSettingsPanel() {
       <span role="status" className={settingsStyles.available}>{message}</span>
     </div>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    <p className={settingsStyles.updated}>最後更新 {date(data.settings.updatedAt)} · {data.settings.updatedBy === "migration" ? "沿用部署設定" : data.settings.updatedBy}</p>
+    <p className={settingsStyles.updated}>最後更新 {date(data.settings.updatedAt)} · {data.settings.updatedBy === "migration" ? "初始設定" : data.settings.updatedBy}</p>
     {data.services?.checkedAt !== null && data.services?.checkedAt !== undefined && <p className={settingsStyles.updated}>服務檢查 {date(data.services.checkedAt)}</p>}
   </form>;
 }

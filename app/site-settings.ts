@@ -38,21 +38,6 @@ export function parseSiteSettings(value: unknown): SiteSettingsInput | null {
   return { ...body, organizerAllowedEmails: emails } as SiteSettingsInput;
 }
 
-/** Used once by Pages to migrate the actual environment, never as a read fallback. */
-export function initialSiteSettings(env: Pick<PortalEnv, "ORGANIZER_APPLICATIONS_OPEN" | "ORGANIZER_APPLICATION_ALLOWED_EMAILS" | "ACCOUNT_NOTIFICATIONS_ENABLED" | "ACCOUNT_NOTIFICATIONS_SINCE" | "ADMIN_REVIEW_NOTIFICATIONS_ENABLED" | "ORGANIZER_PUBLICATION_MODE">): SiteSettings {
-  const emails = [...new Set((env.ORGANIZER_APPLICATION_ALLOWED_EMAILS ?? "").split(",").map(normalizeEmail).filter(Boolean))];
-  const since = Date.parse(env.ACCOUNT_NOTIFICATIONS_SINCE ?? "");
-  return {
-    organizerApplicationMode: env.ORGANIZER_APPLICATIONS_OPEN === "true" ? "public" : emails.length ? "invite_only" : "closed",
-    organizerAllowedEmails: emails,
-    accountNotificationsEnabled: env.ACCOUNT_NOTIFICATIONS_ENABLED === "true" && Number.isFinite(since),
-    accountNotificationsSince: Number.isFinite(since) ? since : null,
-    adminReviewNotificationsEnabled: env.ADMIN_REVIEW_NOTIFICATIONS_ENABLED === "true",
-    publicationEnabled: env.ORGANIZER_PUBLICATION_MODE === "github" || env.ORGANIZER_PUBLICATION_MODE === "fake",
-    updatedAt: Date.now(), updatedBy: "migration",
-  };
-}
-
 export function canSubmitEventApplication(settings: SiteSettings | null, email: string) {
   return settings?.organizerApplicationMode === "public"
     || (settings?.organizerApplicationMode === "invite_only" && settings.organizerAllowedEmails.includes(normalizeEmail(email)));

@@ -85,9 +85,6 @@ interface PortalEnv {
   MAILGUN_API_KEY?: string;
   MAILGUN_DOMAIN?: string;
   MAILGUN_SENDER?: string;
-  ACCOUNT_NOTIFICATIONS_ENABLED?: string;
-  ACCOUNT_NOTIFICATIONS_SINCE?: string;
-  ADMIN_REVIEW_NOTIFICATIONS_ENABLED?: string;
   NOTIFICATION_ORIGIN?: string;
   SESSION_SECRET?: string;
   HASH_PEPPER?: string;
@@ -107,8 +104,6 @@ interface PortalEnv {
   /** Defaults disabled. Production enablement follows ADR-0058; fake is accepted
    * only with the isolated preview mail sink. */
   ORGANIZER_PUBLICATION_MODE?: "disabled" | "fake" | "github";
-  ORGANIZER_APPLICATIONS_OPEN?: string;
-  ORGANIZER_APPLICATION_ALLOWED_EMAILS?: string;
   GITHUB_WEBHOOK_SECRET?: string;
   GITHUB_APP_ID?: string;
   GITHUB_APP_PRIVATE_KEY?: string;

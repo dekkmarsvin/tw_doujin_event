@@ -4,7 +4,7 @@
 
 通知使用既有 `workers/publication-dispatch` 的每分鐘排程、同環境 D1 及 Mailgun；不新增部署單位。個人偏好位於 `/admin#review-notifications`，預設開啟、每 5 分鐘，只收初始化／啟用後的新送審。上線順序：先交付 Pages 的 runtime schema、偏好 API、四類送審寫入及面板，再交付 Worker 寄送端。既有資料庫首次初始化不回填待審項目。
 
-全站待審通知由 D1 `admin_review_notifications_enabled` 控制，與發布及帳號通知分開。Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER` 及 `NOTIFICATION_ORIGIN`；Pages secrets 不會自動成為 Worker secrets。舊旗標只供 Pages 初次遷移，不是日後開關。
+全站待審通知由 D1 `admin_review_notifications_enabled` 控制，與發布及帳號通知分開。Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER` 及 `NOTIFICATION_ORIGIN`；Pages secrets 不會自動成為 Worker secrets。
 
 Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_TEST_RECIPIENTS` 及 preview 的固定 HTTPS origin，先驗證設定→送審→tick→D1 收信。通知 Worker 的 preview 已啟用，人工收信使用 `verify.kotoban.top` 與 `postmaster@verify.kotoban.top`，確保 SPF／DKIM 與 From 對齊；API key 仍由 preview 自己的 secret 提供。`PREVIEW_SANDBOX_RECIPIENTS` 是人工測試收件白名單，名稱雖含 sandbox，亦適用已驗證自有網域，不放寬任意收件人。Worker 的 `keep_vars: true` 保留 Dashboard 管理的白名單，設定檔明列的 vars 仍會覆寫同名值。preview 環境的 vars 與 secrets 必須各自設定。Pages preview 的登入與邀請信同樣由 `verify.kotoban.top` 寄出，見 [preview 的兩個信箱](#preview-的兩個信箱)。Mailgun `accepted` 後仍須查 `delivered`／`failed` 事件確認交付。
 
@@ -290,10 +290,11 @@ Pages 每次部署都是不可變 deployment。若正式版本有問題：
 
 ## 網站營運設定遷移（#477）
 
-1. 先部署新版 Pages，保留當時 Pages 的 `ORGANIZER_APPLICATIONS_OPEN`、`ORGANIZER_APPLICATION_ALLOWED_EMAILS`、`ACCOUNT_NOTIFICATIONS_ENABLED`、`ACCOUNT_NOTIFICATIONS_SINCE`、`ADMIN_REVIEW_NOTIFICATIONS_ENABLED`，以及環境能力 `ORGANIZER_PUBLICATION_MODE`。登入 `/admin?section=settings` 觸發一次初始化，核對模式、名單、通知起點與發布狀態確實沿用部署前行為。加密變數由 runtime 自行讀取，不把值匯出或猜測成預設值。
-2. 部署獨立 publication-dispatch Worker，執行 `node scripts/worker-delivery.mjs --audit` 核對同環境 D1 binding、active version、schedule 與 source fingerprint。Worker 不 seed 營運設定；在 Pages 完成初始化前跳過執行。只有 Pages／CI 成功不代表 Worker 已更新。
-3. 在 Admin 保存低風險設定、重新載入並核對結果；於同一個 warm repository／Worker 後續讀取確認 D1 新值。點「檢查服務」由實際 Worker 檢查 Mailgun／GitHub，不寄測試信、不修改儲存庫。無檢查結果或無診斷讀取權顯示無法確認；此檢查不證明 delivered、收件匣可見、ruleset 或完整發布驗收。
-4. 兩端版本及初始化已確認後，刪除 Pages／Worker 舊的五個營運環境旗標，以及 GitHub repository variable `ORGANIZER_APPLICATIONS_OPEN`；Vite 注入已移除。`ORGANIZER_PUBLICATION_MODE`、憑證、binding、通知 origin 保留。刪旗標後 D1 是唯一來源，不靠重部署切換。
-5. 如需回滾至仍讀環境旗標的舊版，先依當前 D1 值重設舊旗標（帳號通知包含相同有效起點），再回滾兩端；D1 表與 schema marker 保留。回滾不能重新啟用已暫停功能或恢復舊 epoch。日常暫停直接用 Admin，不做工程回滾。
+既有環境透過保留一次性 env seed 的 PR #480 遷移；完成初始值、Pages／Worker 與 D1 核對後，Phase 5 移除舊五個營運環境旗標與 GitHub build variable，以及初始化讀取。現行版本只由 D1 管理營運設定，不保留 env fallback。
 
-Admin 公開申請由維護者手動啟用。環境機密與 GitHub／Mailgun 設備設定仍在既有部署面，不接受 Admin 輸入 key／secret。
+- 新環境先部署 Pages 並登入 `/admin?section=settings` 初始化。預設暫停申請、空名單、通知與發布關閉；由管理者在 Admin 開啟所需功能。
+- 再部署 publication-dispatch Worker，執行 `node scripts/worker-delivery.mjs --audit` 核對同環境 D1 binding、active version、schedule 與 source fingerprint。Worker 不 seed 營運設定；只有 Pages／CI 成功不代表 Worker 已更新。
+- 在 Admin 保存設定、重新載入並核對；下一次 request／scheduled tick 使用 D1 新值。手動「檢查服務」由實際 Worker 執行，不寄測試信或修改儲存庫；無結果／無診斷讀取權不宣稱寄信或發布失敗。
+- `ORGANIZER_PUBLICATION_MODE`、憑證、binding、通知 origin 維持部署設定。
+
+回滾到遷移前程式時，先從當前 D1 設定恢復舊旗標與同一通知 epoch，再部署舊程式。只回滾程式、不刪 `site_settings`、通知表、job／snapshot／checkpoint 或 monotonic schema marker；回滾到 PR #480 可直接沿用既有 D1。
