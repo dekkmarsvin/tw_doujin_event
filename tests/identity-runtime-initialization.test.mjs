@@ -94,6 +94,19 @@ test("fresh database initializes safely across repository instances", async () =
   assert.equal(await count(database, "organizer_reference_records"), initialVenueReferences().length);
 });
 
+test("version 5 upgrades add planning shares and their indexes without losing existing data", async () => {
+  const database = await preparedDatabase();
+  await database.prepare("DROP TABLE planning_shares").run();
+  await database.prepare("UPDATE identity_runtime_state SET version = 5").run();
+  await database.prepare("INSERT INTO accounts (id, email, created_at) VALUES ('keep', 'keep@example.test', 1)").run();
+  await createIdentityRepository(database).getOverridesDoc("sample");
+  assert.equal((await marker(database)).version, version.version);
+  assert.equal(await count(database, "planning_shares"), 0);
+  assert.equal(await count(database, "accounts"), 1);
+  const indexes = await database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'planning_shares' AND sql IS NOT NULL ORDER BY name").all();
+  assert.deepEqual(indexes.results.map(row => row.name), ["planning_shares_expiry_idx", "planning_shares_ip_idx"]);
+});
+
 test("missing or stale marker reruns initialization without overwriting canonical references", async () => {
   const database = await preparedDatabase();
   const reference = initialVenueReferences()[0];

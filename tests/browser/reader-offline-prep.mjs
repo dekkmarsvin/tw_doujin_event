@@ -1,5 +1,5 @@
 // staged-data: portal
-// 準備離線使用 (#415): the real built site and Service Worker, not routed
+// 離線使用 (#415): the real built site and Service Worker, not routed
 // fixtures, because the point is what survives going offline.
 import assert from "node:assert/strict";
 import { start } from "./support/journey.mjs";
@@ -17,11 +17,12 @@ try {
   assert.ok(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)), "the reader is controlled by the Service Worker");
   await page.locator("[data-slot-code]").first().waitFor();
 
-  await page.getByRole("tab", { name: "行程 1", exact: true }).click();
-  await page.getByRole("button", { name: "準備離線使用", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "準備離線使用" });
-  await dialog.getByText(/已就緒|尚未準備完成/).waitFor();
-  if (await dialog.getByText(/尚未準備完成/).count()) await dialog.getByRole("button", { name: "準備離線使用", exact: true }).click();
+  // The check lives in 使用說明 › 離線使用 (maintainer request on #415).
+  await page.getByRole("button", { name: "使用說明", exact: true }).click();
+  await page.getByRole("button", { name: "確認這天可離線使用", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "離線使用" });
+  await dialog.getByText(/已就緒|還缺/).waitFor();
+  if (await dialog.getByText(/還缺/).count()) await dialog.getByRole("button", { name: "補齊", exact: true }).click();
   await dialog.getByText(/已就緒/).waitFor({ timeout: 20000 });
   await journey.capture(page, "reader-offline-prep-ready");
   await dialog.getByRole("button", { name: "關閉", exact: true }).click();

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { getCircleCatalogState } from "./circle-records";
 import { PUBLISHED_EVENTS } from "./event-catalog";
 import { inspectPlanningStorage, type PlanningDocument } from "./planning-store";
+import { downloadText } from "./download-text";
 import {
   exportPlanningCsv,
   exportPlanningJson,
@@ -19,14 +20,6 @@ import styles from "./planning-tools.module.css";
 /** Same limit the parser enforces; checked first so a huge file is never read into memory. */
 const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 
-export function downloadText(name: string, text: string, type: string) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 const backupName = () => `場刊Map-規劃備份-${new Date().toISOString().slice(0, 10)}.json`;
 const eventName = (eventId: string) => PUBLISHED_EVENTS.find((event) => event.id === eventId)?.name ?? eventId;

@@ -14,7 +14,7 @@ export function htmlPolicy(pathname: string, nonce?: string): string {
 
 export function isHtmlRoute(pathname: string): boolean {
   return ["/", "/index.html", "/404.html"].includes(pathname)
-    || ["/circle", "/organizer", "/admin", "/privacy", "/events/"].some(prefix => pathname.startsWith(prefix));
+    || ["/circle", "/organizer", "/admin", "/privacy", "/events/", "/s/"].some(prefix => pathname.startsWith(prefix));
 }
 
 export function unconditionalHtmlRequest(request: Request): Request {

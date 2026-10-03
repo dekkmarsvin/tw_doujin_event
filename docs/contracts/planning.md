@@ -2,8 +2,8 @@
 
 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。
 
-**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、`app/reader-planning.tsx`
-**測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`
+**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、[`app/planning-share.ts`](../../app/planning-share.ts)、[`app/planning-share-client.ts`](../../app/planning-share-client.ts)、[`app/planning-share-snapshot.ts`](../../app/planning-share-snapshot.ts)、[`app/planning-share-handlers.ts`](../../app/planning-share-handlers.ts)、[`app/planning-share-panel.tsx`](../../app/planning-share-panel.tsx)、[`app/download-text.ts`](../../app/download-text.ts)、`app/reader-planning.tsx`
+**測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`、`tests/planning-share.test.mjs`、`tests/planning-share-client.test.mjs`、`tests/planning-share-api.test.mjs`
 
 規劃資料只儲存在使用者當下的瀏覽器，不跨裝置同步。這是刻意的隱私姿態，不是尚未完成的功能——決策與代價見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 
@@ -139,6 +139,13 @@ type PlanningDocument = {
   - 瀏覽器保有無法讀取的舊資料（受保護的原始字串）時不開放匯入。
   - 本站未公開的活動無法從閱讀端開啟，其收藏與行程列在「目前無法匹配的規劃資料」，可逐筆移除並隨完整備份匯出。
 - **仍屬 P2**：CSV 匯入、外部服務匯入（[資料匯入契約](./data-import.md)、[ADR-0005](../adr/0005-import-stays-p2-export-only.md)），以及登入後持續同步與協作清單。轉移是單次的，之後兩台裝置各自修改。
+
+## 分享行程
+
+- 帶到自己的手機與分享給朋友是同一條流程（[ADR-0079](../adr/0079-shared-itineraries-use-short-links-and-qr-codes.md)）：在本場行程勾選要分享的項目，先看「將分享的內容」，再建立短網址 `/s/<shareId>`，可複製、系統分享或顯示 QR Code。分享前明說連結可被轉傳、到期前無法撤銷或更新。
+- snapshot 只有版本、活動 ID、社團 ID、必要的活動日與順序；私人備註、群組、購買項目、預算、已走訪／下一站、帳號、時間戳、社團名稱、攤位號與瀏覽紀錄一律不送出、不保存。
+- 接收端開啟短網址先看唯讀預覽，不寫入；社團名稱、攤位與移動／退出狀態由最新公開資料解析，不以同名社團代替未知 ID。按「加入我的行程」才寫入：分享日期仍有攤位的社團加入該日行程（待前往，接在既有順序之後），已存在的保留，不改動既有備註、購買項目、預算、下一站與順序；已移動、已退出、找不到的列出並略過。
+- 短網址於活動結束後 30 天到期並由既有 retention purge 刪除整列，不保留任何資料。刪除前的過期連結顯示已過期並可返回該活動；刪除後與不存在的連結相同，顯示「不存在或已過期」並連到活動選擇頁（維護者 2026-10-03 決定）。
 
 ## 驗收條件
 

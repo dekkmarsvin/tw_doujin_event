@@ -6,7 +6,9 @@ import { isKnownCircleId } from "./circle-records";
 import { PUBLISHED_EVENTS } from "./event-catalog";
 import { useCircleCatalog } from "./use-circle-catalog";
 import { EMPTY_PLANNING_DOCUMENT, deleteFavoriteGroup, moveFavoriteGroup, moveFavoritesToGroup, removeFromVisitPlan, toggleFavorite, updateFavoriteGroup } from "./planning-store";
-import { PlanningTransferPanel, downloadText } from "./planning-transfer-panel";
+import { PlanningTransferPanel } from "./planning-transfer-panel";
+import { downloadText } from "./download-text";
+import { SharedItineraryDialog } from "./planning-share-panel";
 import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
@@ -41,6 +43,7 @@ function PlanningToolsContent({ eventId }: { eventId: string }) {
 
   return <>
     <button className={styles.launcher} onClick={() => setOpen(true)}>資料管理</button>
+    {ready && <SharedItineraryDialog eventId={eventId} update={update} blocked={Boolean(unsupportedRaw)} />}
     {open && createPortal(<div className={styles.backdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}><section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="planning-tools-title" tabIndex={-1}>
       <header><div><h2 id="planning-tools-title">規劃資料管理</h2></div><button onClick={() => setOpen(false)} aria-label="關閉規劃資料管理"><UiIcon name="close" /></button></header>
       <p className={styles.notice} role="status">{ready ? "資料僅儲存於瀏覽器，您可以匯出備份。" : "正在讀取瀏覽器資料"}</p>

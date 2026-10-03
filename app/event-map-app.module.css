@@ -157,6 +157,8 @@
   .rightRail button { min-height:44px; }
   .rightRail button[aria-label="關閉攤位詳細資訊"] { min-width:44px; }
   .planningPanel > :first-child { max-height:45%; overflow:auto; flex-shrink:0; }
+  /* The open 行程、收藏與顯示 settings may use the whole rail instead of scrolling in 45%. */
+  .planningPanel > :first-child:has([role="dialog"]) { max-height:100%; }
 }
 @container (max-width:400px) {
   .locationControls .dateTabs { display:none; }

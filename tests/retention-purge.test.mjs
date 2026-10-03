@@ -36,6 +36,17 @@ const countIn = async (table) => {
   return row.total;
 };
 
+test("deletes expired planning shares including the boundary, keeps live shares", async () => {
+  for (const [id, expiresAt] of [["expired", NOW - 1], ["boundary", NOW], ["live", NOW + 1]]) {
+    await database.prepare(`INSERT INTO planning_shares
+      (share_id, event_id, items_json, created_at, expires_at, request_ip_hash)
+      VALUES (?1, 'sample', '[]', ?2, ?3, 'hash')`).bind(id, NOW - HOUR, expiresAt).run();
+  }
+  const summary = await purgeExpiredRecords(database, NOW);
+  assert.equal(summary.deleted.planning_shares, 2);
+  assert.deepEqual((await database.prepare("SELECT share_id FROM planning_shares").all()).results, [{ share_id: "live" }]);
+});
+
 test("deletes login tokens older than the retention window", async () => {
   await repository.createLoginToken({ tokenHash: "old", email: "a@example.test", now: NOW - 25 * HOUR, expiresAt: NOW - 25 * HOUR + 900_000, ipHash: "ip" });
   await repository.createLoginToken({ tokenHash: "fresh", email: "a@example.test", now: NOW - 2 * HOUR, expiresAt: NOW - 2 * HOUR + 900_000, ipHash: "ip" });
@@ -123,6 +134,7 @@ test("records every run in the audit log, including the empty ones", async () =>
     review_notification_batches: 0,
     login_tokens: 0,
     sessions: 0,
+    planning_shares: 0,
     preview_mail_sink: 0,
     circle_overrides: 0,
     map_drafts: 0,
@@ -255,6 +267,7 @@ test("never creates a table it does not find", async () => {
     review_notification_batches: 0,
     login_tokens: 0,
     sessions: 0,
+    planning_shares: 0,
     preview_mail_sink: 0,
     circle_overrides: 0,
     map_drafts: 0,
@@ -272,6 +285,7 @@ test("never creates a table it does not find", async () => {
     "map_draft_revisions",
     "map_drafts",
     "overrides_doc",
+    "planning_shares",
     "preview_mail_sink",
     "review_notification_batches",
     "review_notification_items",

@@ -46,6 +46,7 @@ import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEvent
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
 import { OfflinePrepDialog } from "./offline-prep-dialog";
+import { ShareItineraryDialog } from "./planning-share-panel";
 import ReaderHelp from "./reader-help";
 import { eventCalendar } from "./event-calendar";
 import { publicLoginHref } from "./public-header";
@@ -142,6 +143,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const [mapError, setMapError] = useState("");
   const [showFullDetail, setShowFullDetail] = useState(false);
   const [offlinePrepOpen, setOfflinePrepOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
   const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
@@ -721,7 +723,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     onVisit: (entry: (typeof dayPlan)[number]) => updatePlanning((current) => markVisited(current, eventId, day, entry.circleId, entry.status !== "visited")),
     onRemove: (circleId: string) => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, circleId)),
     onUpdatePurchase: (circleId: string, purchaseMemo: string, budget: number | null) => updatePlanning((current) => updateVisitPlanPurchase(current, eventId, day, circleId, purchaseMemo, budget)),
-    onPrepareOffline: () => setOfflinePrepOpen(true),
+    onShare: () => setShareOpen(true),
   };
   const fullItineraryPanel = <DayItinerary {...itineraryProps} variant="full" />;
   const planningControls = <PlanningDisplayControls value={planningDisplay} groups={planning.favoriteGroups} onApply={(next) => { historyIntent.current = "push"; setPlanningDisplay(next); }} />;
@@ -829,7 +831,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
 
   // Every public page ends its header with the same "登入" (#439, #488).
   const readerLogin = <a className={`site-header-login reader-login ${styles.readerLogin}`} href={publicLoginHref({ eventId })}>登入</a>;
-  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
+  const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} onCheckOffline={() => setOfflinePrepOpen(true)} /></>;
 
   // The map as the reader sees it, without a selection: what the switch and the
   // phone's 逛品書 tab carry over into the browse view.
@@ -915,6 +917,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
     {/* Keyed on the scope: a day or venue change (e.g. browser Back) starts a fresh check, and an earlier day's result cannot land on it. */}
     {offlinePrepOpen && <OfflinePrepDialog key={`${eventId} ${String(day)} ${venueAssignment.venueSpaceId}`} event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
+    {shareOpen && <ShareItineraryDialog eventId={eventId} document={planning} onClose={() => setShareOpen(false)} />}
     {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }

@@ -49,11 +49,13 @@ export const onRequest: PagesFunction<PortalEnv> = async (context) => {
   const html = SAFE_METHODS.has(request.method) && isHtmlRoute(url.pathname);
   const response = html ? await context.next(unconditionalHtmlRequest(request)) : await context.next();
 
-  // The public overlay sets its own cacheable headers; everything else under
-  // /api/ carries identity and must never be stored by a cache or the worker.
+  // Shares are anonymous snapshots with a bounded private cache. Other APIs
+  // carry identity and must never be stored by a cache or the worker.
   if (url.pathname.startsWith("/api/")) {
     const headers = new Headers(response.headers);
-    headers.set("cache-control", "no-store");
+    if (!(request.method === "GET" && /^\/api\/shares\/[^/]+$/.test(url.pathname))) {
+      headers.set("cache-control", "no-store");
+    }
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   }

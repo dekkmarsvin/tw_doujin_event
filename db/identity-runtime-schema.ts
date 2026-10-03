@@ -48,6 +48,10 @@ function index(name: string, tableName: string, expression: string, options: { u
 }
 
 export const IDENTITY_TABLES = [
+  table("planning_shares", [
+    "share_id TEXT PRIMARY KEY", "event_id TEXT NOT NULL", "items_json TEXT NOT NULL",
+    "created_at INTEGER NOT NULL", "expires_at INTEGER NOT NULL", "request_ip_hash TEXT",
+  ]),
   table("site_settings", [
     "id TEXT PRIMARY KEY CHECK (id = 'global')",
     "organizer_application_mode TEXT NOT NULL CHECK (organizer_application_mode IN ('closed', 'invite_only', 'public'))",
@@ -563,6 +567,8 @@ export const IDENTITY_TABLES = [
 ] as const;
 
 export const IDENTITY_INDEXES = [
+  index("planning_shares_expiry_idx", "planning_shares", "expires_at"),
+  index("planning_shares_ip_idx", "planning_shares", "request_ip_hash, created_at"),
   index("account_notification_occurrence_idx", "account_notification_items", "occurrence, account_id", { unique: true }),
   index("account_notification_due_idx", "account_notification_items", "state, batch_id, due_at"),
   index("account_notification_recipient_idx", "account_notification_items", "account_id, state"),
