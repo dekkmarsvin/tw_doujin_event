@@ -120,9 +120,35 @@ test("a single day/space requires its shared map without probing for a manifest"
   assert.equal(env.requests.length, 0);
 });
 
-test("only a 404 manifest selects the Reader's legacy shared-map fallback", async (t) => {
+test("a 404 manifest selects the Reader's legacy shared-map fallback", async (t) => {
   install(t, { fetcher: () => artifact("", { status: 404 }) });
   assert.deepEqual((await offlineRequirements({ eventId: "legacy", day: 2 })).slice(-1), ["/data/events/legacy/map.json"]);
+});
+
+test("an offline absent manifest requires the cached shared map and can report ready", async (t) => {
+  const mapPath = "/data/events/sample/map.json";
+  const sharedRequired = ["/index.html", ...assets, "/data/events/sample/circles.json", mapPath];
+  const env = install(t, {
+    entries: Object.fromEntries(sharedRequired.map((path) => [path, responseFor(path)])),
+    fetcher: () => { throw new TypeError("Offline"); },
+  });
+  assert.deepEqual(await offlineRequirements(scope), sharedRequired);
+  assert.deepEqual(await checkOfflineReadiness(scope), { state: "ready", required: sharedRequired, missing: [] });
+  assert.ok(env.requests.every(({ path }) => path === manifestPath));
+  env.stores.get(workerCache).delete(mapPath);
+  await assert.rejects(offlineRequirements(scope), /Cannot resolve/);
+  assert.equal((await checkOfflineReadiness(scope)).state, "missing");
+});
+
+test("a manifest error response requires a reachable shared map to be cached", async (t) => {
+  const mapPath = "/data/events/sample/map.json";
+  const sharedRequired = ["/index.html", ...assets, "/data/events/sample/circles.json", mapPath];
+  install(t, {
+    entries: Object.fromEntries(sharedRequired.filter((path) => path !== mapPath).map((path) => [path, responseFor(path)])),
+    fetcher: (path) => path === manifestPath ? Response.error() : responseFor(path),
+  });
+  assert.deepEqual(await offlineRequirements(scope), sharedRequired);
+  assert.deepEqual(await checkOfflineReadiness(scope), { state: "missing", required: sharedRequired, missing: [mapPath] });
 });
 
 test("readiness checks real entries across worker caches and ignores unrelated/legacy caches", async (t) => {
@@ -228,6 +254,7 @@ test("a repaired manifest reveals and prepares the previously unknown scoped map
   let manifestRequests = 0;
   const env = install(t, { entries: {}, fetcher: (path) => {
     if (path === manifestPath && ++manifestRequests === 1) throw new Error("Temporary manifest failure");
+    if (path === "/data/events/sample/map.json") return artifact("", { status: 404 });
     return responseFor(path);
   } });
   const result = await prepareOffline(scope);

@@ -21,12 +21,20 @@ async function readMap(eventId: string, relativePath: string) {
 export async function loadStaticEventMapResource(eventId: string, scope?: { periodKey: string; venueSpaceId: string }): Promise<{ map: PublishedEventMap; artifactKey: string }> {
   const resource = async (path: string) => ({ map: await readMap(eventId, path), artifactKey: `${eventId}/${path}` });
   if (!scope) return resource("map.json");
-  const manifestResponse = await fetch(eventDataEndpoint(eventId, "map-manifest.json"), {
-    headers: { accept: "application/json" },
-  });
+  let manifestResponse: Response;
+  try {
+    manifestResponse = await fetch(eventDataEndpoint(eventId, "map-manifest.json"), {
+      headers: { accept: "application/json" },
+    });
+    if (manifestResponse.type === "error") throw new TypeError("Failed to fetch map manifest.");
+  } catch (error) {
+    // Offline, an absent manifest is a network error rather than a cached 404.
+    try { return await resource("map.json"); }
+    catch { throw error; }
+  }
   // An event whose halls never change between days publishes one map.json and
   // no manifest, so a missing index is that event, not a broken deployment.
-  // Every other failure still surfaces: a 500 or a parse error must not be read
+  // HTTP and parse failures still surface: a 500 or a parse error must not be read
   // as "this event has one layout" and silently serve the wrong day's floor.
   if (manifestResponse.status === 404) return resource("map.json");
   if (!manifestResponse.ok) throw new Error(`讀取活動地圖索引失敗（${manifestResponse.status}）。`);

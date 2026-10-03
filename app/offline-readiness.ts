@@ -67,8 +67,22 @@ async function resolveRequirements(scope: OfflineScope) {
   required.add(manifestPath);
   try {
     const cached = typeof caches === "undefined" ? undefined : await cachedResponse(manifestPath, await workerCacheNames());
-    const response = cached ?? await fetch(manifestPath, { headers: { accept: "application/json" } });
-    // Match loadStaticEventMapResource: only an actual 404 selects the legacy shared map.
+    let response: Response;
+    try {
+      response = cached ?? await fetch(manifestPath, { headers: { accept: "application/json" } });
+      if (response.type === "error") throw new TypeError("Failed to fetch map manifest.");
+    } catch {
+      // Match the Reader's network-error fallback, but require a usable shared
+      // artifact before replacing the unresolved manifest requirement.
+      const mapPath = `${base}/map.json`;
+      const map = await cachedResponse(mapPath, await workerCacheNames())
+        ?? await fetch(mapPath, { headers: { accept: "application/json" } });
+      if (!accepts(mapPath, map)) throw new Error("Shared map response is not an artifact.");
+      required.delete(manifestPath);
+      required.add(mapPath);
+      return { required: [...required], unresolved: [] as string[] };
+    }
+    // A reachable manifest still selects the shared map only on an actual 404.
     if (response.status === 404) {
       required.delete(manifestPath);
       required.add(`${base}/map.json`);

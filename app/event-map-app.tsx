@@ -45,6 +45,7 @@ import {
 import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEventUrlState, shouldWriteEventUrl, type PendingCircleSelection } from "./event-url-state";
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
+import { OfflinePrepDialog } from "./offline-prep-dialog";
 import ReaderHelp from "./reader-help";
 import { eventCalendar } from "./event-calendar";
 import { publicLoginHref } from "./public-header";
@@ -140,6 +141,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
   const [mapLoading, setMapLoading] = useState(true);
   const [mapError, setMapError] = useState("");
   const [showFullDetail, setShowFullDetail] = useState(false);
+  const [offlinePrepOpen, setOfflinePrepOpen] = useState(false);
   const [textScale, setTextScale] = useState<TextScale>("standard");
   const [planNotice, setPlanNotice] = useState<{ recordId: string; text: string } | null>(null);
   const [urlReady, setUrlReady] = useState(false);
@@ -719,6 +721,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     onVisit: (entry: (typeof dayPlan)[number]) => updatePlanning((current) => markVisited(current, eventId, day, entry.circleId, entry.status !== "visited")),
     onRemove: (circleId: string) => updatePlanning((current) => removeFromVisitPlan(current, eventId, day, circleId)),
     onUpdatePurchase: (circleId: string, purchaseMemo: string, budget: number | null) => updatePlanning((current) => updateVisitPlanPurchase(current, eventId, day, circleId, purchaseMemo, budget)),
+    onPrepareOffline: () => setOfflinePrepOpen(true),
   };
   const fullItineraryPanel = <DayItinerary {...itineraryProps} variant="full" />;
   const planningControls = <PlanningDisplayControls value={planningDisplay} groups={planning.favoriteGroups} onApply={(next) => { historyIntent.current = "push"; setPlanningDisplay(next); }} />;
@@ -910,6 +913,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       </aside>
     </div>
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
+    {offlinePrepOpen && <OfflinePrepDialog event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
     {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }

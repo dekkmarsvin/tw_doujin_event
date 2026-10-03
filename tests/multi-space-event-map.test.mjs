@@ -60,12 +60,45 @@ test("shared fallback retains one artifact identity across dates; scoped paths s
     return Response.json(map);
   });
   const read = (day) => loadStaticEventMapResource("sample", { periodKey: String(day), venueSpaceId: "sample-hall" });
+  assert.deepEqual(await read(1), { map, artifactKey: "sample/map.json" });
   assert.equal((await read(1)).artifactKey, (await read(2)).artifactKey);
   scoped = true;
+  assert.deepEqual(await read(1), { map, artifactKey: "sample/maps/1/sample-hall.json" });
   assert.notEqual((await read(1)).artifactKey, (await read(2)).artifactKey);
 });
 
-test("an unavailable manifest cannot silently become a shared map", async (t) => {
+test("a manifest network failure loads the cached shared map", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    calls.push(url);
+    if (url.endsWith("map-manifest.json")) throw new TypeError("Offline manifest");
+    return Response.json(map);
+  });
+  assert.deepEqual(await loadStaticEventMapResource("sample", { periodKey: "1", venueSpaceId: "sample-hall" }), {
+    map, artifactKey: "sample/map.json",
+  });
+  assert.deepEqual(calls, ["/data/events/sample/map-manifest.json", "/data/events/sample/map.json"]);
+});
+
+test("a manifest error response also tries the shared map", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url) => url.endsWith("map-manifest.json") ? Response.error() : Response.json(map));
+  assert.deepEqual(await loadStaticEventMapResource("sample", { periodKey: "1", venueSpaceId: "sample-hall" }), {
+    map, artifactKey: "sample/map.json",
+  });
+});
+
+test("failed shared-map fallback preserves the original manifest network error", async (t) => {
+  const failure = new TypeError("Offline manifest");
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    calls.push(url);
+    throw url.endsWith("map-manifest.json") ? failure : new TypeError("Offline map");
+  });
+  await assert.rejects(loadStaticEventMapResource("sample", { periodKey: "1", venueSpaceId: "sample-hall" }), (error) => error === failure);
+  assert.deepEqual(calls, ["/data/events/sample/map-manifest.json", "/data/events/sample/map.json"]);
+});
+
+test("a manifest HTTP failure cannot silently become a shared map", async (t) => {
   const calls = [];
   t.mock.method(globalThis, "fetch", async (url) => { calls.push(url); return new Response(null, { status: 503 }); });
   await assert.rejects(loadStaticEventMapResource("sample", { periodKey: "1", venueSpaceId: "sample-hall" }), /503/);
