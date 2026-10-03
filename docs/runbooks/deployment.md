@@ -75,9 +75,9 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 ### Organizer 發布
 
-活動申請與 publication 是不同的開關。申請 API 的 `ORGANIZER_APPLICATIONS_OPEN` 預設關閉；靜態 Reader CTA 的 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN` 也預設關閉，不新增讀取 Function。#163 的一場真實零人工技術補救驗收完成前，兩者均不得設為 `true`。受控驗收可用 Pages runtime secret `ORGANIZER_APPLICATION_ALLOWED_EMAILS` 指定申請帳號（逗號分隔），只開放該帳號，名單不進前端或 repository。
+活動申請與 publication 是不同的開關。申請 API 由 Pages `ORGANIZER_APPLICATIONS_OPEN` 控制；靜態 Reader CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN` 控制，不新增讀取 Function。維護者已在 [#163](https://github.com/dekkmarsvin/tw_doujin_event/issues/163) 接受 `arktw-only-2026` 與 `fgo-only-2026` 的正式發布成果並決定公開申請，取代原「完整零人工技術補救旅程後才啟用」條件；兩場缺少申請紀錄與 FGO 的人工補救仍如實保留於該票。正常新增活動不需人工技術操作的產品目標不變。受控模式可用 Pages runtime secret `ORGANIZER_APPLICATION_ALLOWED_EMAILS` 指定申請帳號（逗號分隔），名單不進前端或 repository。
 
-正式啟用時先把真實旅程與七項量測記在 #163，再設定 Pages 的 API 開關與 GitHub Actions repository variable `ORGANIZER_APPLICATIONS_OPEN=true`，由既有 production build 傳入 Vite 並部署 CTA；關閉時 API 立即拒絕新的非受控送件，既有申請結果／審核／邀請仍可使用。這些是一次性的功能開放設定，不是每場活動所需的基礎設施設定。
+正式開放使用 `wrangler.jsonc` 頂層 `vars.ORGANIZER_APPLICATIONS_OPEN=true` 與 GitHub Actions repository variable `ORGANIZER_APPLICATIONS_OPEN=true`，由既有 production build 傳入 Vite 並部署 CTA。切換時同步修改兩處並重新部署 Pages，使 API 與入口一致；preview 不繼承 production 的申請開關。關閉後 API 拒絕新的非受控送件，既有申請結果／審核／邀請仍可使用。這些是一次性的功能開放設定，不是每場活動所需的基礎設施設定。
 
 Pages production 需設定 `GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_APP_PRIVATE_KEY`、`GITHUB_APP_INSTALLATION_ID`。Private key 與 webhook secret 不進 repo；App 僅安裝於固定 data／main 兩個 repository，啟用前置以 [ADR-0058 第 4 點](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md#4-開啟-production-publication-的前置) 為準，取代 ADR-0046 的舊 ruleset 前置。
 
