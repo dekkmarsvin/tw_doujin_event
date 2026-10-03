@@ -16,6 +16,7 @@ type View =
   | { kind: "preparing"; done: number; total: number }
   | { kind: "failed"; count: number }
   | { kind: "unsupported" }
+  | { kind: "reload" }
   | { kind: "error" };
 
 /**
@@ -41,7 +42,7 @@ export function OfflinePrepDialog({ event, day, venueSpaceId, onClose }: {
     let active = true;
     const [eventId, dayKey, space] = scopeKey.split("\u0000");
     checkOfflineReadiness({ eventId, day: dayKey, ...(space ? { venueSpaceId: space } : {}) })
-      .then((status) => { if (active) setView(status.state === "ready" ? { kind: "ready" } : status.state === "unsupported" ? { kind: "unsupported" } : { kind: "missing", count: status.missing.length }); })
+      .then((status) => { if (active) setView(status.ambiguousCache ? { kind: "reload" } : status.state === "ready" ? { kind: "ready" } : status.state === "unsupported" ? { kind: "unsupported" } : { kind: "missing", count: status.missing.length }); })
       .catch(() => { if (active) setView({ kind: "error" }); });
     return () => { active = false; };
   }, [scopeKey]);
@@ -50,7 +51,7 @@ export function OfflinePrepDialog({ event, day, venueSpaceId, onClose }: {
     setView({ kind: "preparing", done: 0, total: 0 });
     try {
       const result = await prepareOffline(scope, (done, total) => setView({ kind: "preparing", done, total }));
-      setView(result.state === "ready" ? { kind: "ready" } : result.state === "unsupported" ? { kind: "unsupported" } : { kind: "failed", count: Math.max(result.failed.length, result.missing.length) });
+      setView(result.ambiguousCache ? { kind: "reload" } : result.state === "ready" ? { kind: "ready" } : result.state === "unsupported" ? { kind: "unsupported" } : { kind: "failed", count: Math.max(result.failed.length, result.missing.length) });
     } catch {
       setView({ kind: "error" });
     }
@@ -61,7 +62,7 @@ export function OfflinePrepDialog({ event, day, venueSpaceId, onClose }: {
       <header><div><h2 id="offline-prep-title">準備離線使用</h2></div><button onClick={onClose} aria-label="關閉離線準備"><UiIcon name="close" /></button></header>
       <section className={styles.section}>
         <div>
-          <h3>{event.name}・{dayInfo ? `${dayInfo.label}（${dayInfo.dateLabel}）` : `DAY ${day}`}{venue ? `・${venue.venueName}` : ""}</h3>
+          <h3>{event.name}・{dayInfo ? `${dayInfo.label}（${dayInfo.dateLabel}）` : `DAY ${day}`}{venue ? `・${venue.venueName} · ${venue.venueSpaceName}` : ""}</h3>
           <p>會準備：這天的官方場刊、地圖與閱讀介面。你的收藏與行程本來就存在這台裝置。</p>
           <p>不包括：社團自填的介紹與品書圖、外部連結；離線時看到的是準備當下的官方資料。</p>
         </div>
@@ -72,6 +73,7 @@ export function OfflinePrepDialog({ event, day, venueSpaceId, onClose }: {
           {view.kind === "preparing" && <p>準備中{view.total > 0 ? `：${view.done}／${view.total}` : "…"}</p>}
           {view.kind === "failed" && <p className={styles.errorText}>有 {view.count} 個檔案無法下載，請確認網路後重試。</p>}
           {view.kind === "unsupported" && <p className={styles.errorText}>這個瀏覽器目前無法離線使用。請重新整理頁面後再試；若仍無法使用，請改用其他瀏覽器。</p>}
+          {view.kind === "reload" && <p className={styles.errorText}>網站剛更新，離線資料還在切換。請重新整理頁面後再準備。</p>}
           {view.kind === "error" && <p className={styles.errorText}>無法確認離線準備狀態，請重新整理頁面後再試。</p>}
         </div>
         <div className={styles.confirmActions}>

@@ -125,9 +125,11 @@ test("a 404 manifest selects the Reader's legacy shared-map fallback", async (t)
   assert.deepEqual((await offlineRequirements({ eventId: "legacy", day: 2 })).slice(-1), ["/data/events/legacy/map.json"]);
 });
 
-test("an offline absent manifest requires the cached shared map and can report ready", async (t) => {
-  const mapPath = "/data/events/sample/map.json";
-  const sharedRequired = ["/index.html", ...assets, "/data/events/sample/circles.json", mapPath];
+test("a single-venue offline absent manifest uses the cached shared map and can report ready", async (t) => {
+  const scope = { eventId: "legacy", day: 2 };
+  const manifestPath = "/data/events/legacy/map-manifest.json";
+  const mapPath = "/data/events/legacy/map.json";
+  const sharedRequired = ["/index.html", ...assets, "/data/events/legacy/circles.json", mapPath];
   const env = install(t, {
     entries: Object.fromEntries(sharedRequired.map((path) => [path, responseFor(path)])),
     fetcher: () => { throw new TypeError("Offline"); },
@@ -140,9 +142,11 @@ test("an offline absent manifest requires the cached shared map and can report r
   assert.equal((await checkOfflineReadiness(scope)).state, "missing");
 });
 
-test("a manifest error response requires a reachable shared map to be cached", async (t) => {
-  const mapPath = "/data/events/sample/map.json";
-  const sharedRequired = ["/index.html", ...assets, "/data/events/sample/circles.json", mapPath];
+test("a single-venue manifest error response requires a reachable shared map to be cached", async (t) => {
+  const scope = { eventId: "legacy", day: 2 };
+  const manifestPath = "/data/events/legacy/map-manifest.json";
+  const mapPath = "/data/events/legacy/map.json";
+  const sharedRequired = ["/index.html", ...assets, "/data/events/legacy/circles.json", mapPath];
   install(t, {
     entries: Object.fromEntries(sharedRequired.filter((path) => path !== mapPath).map((path) => [path, responseFor(path)])),
     fetcher: (path) => path === manifestPath ? Response.error() : responseFor(path),
@@ -151,15 +155,44 @@ test("a manifest error response requires a reachable shared map to be cached", a
   assert.deepEqual(await checkOfflineReadiness(scope), { state: "missing", required: sharedRequired, missing: [mapPath] });
 });
 
-test("readiness checks real entries across worker caches and ignores unrelated/legacy caches", async (t) => {
-  const env = install(t, { entries: Object.fromEntries(required.map((path) => [path, responseFor(path)])), names: [workerCache, "event-catalog-other", "unrelated", "ff47-catalog-old"] });
+test("multi-venue manifest transport failures cannot select an obsolete shared map", async (t) => {
+  let errorResponse = false;
+  const env = install(t, {
+    entries: Object.fromEntries([...required.filter((path) => path !== manifestPath), "/data/events/sample/map.json"].map((path) => [path, responseFor(path)])),
+    fetcher: () => {
+      if (errorResponse) return Response.error();
+      throw new TypeError("Offline manifest");
+    },
+  });
+  for (const responseError of [false, true]) {
+    errorResponse = responseError;
+    await assert.rejects(offlineRequirements(scope), /Cannot resolve/);
+    assert.deepEqual(await checkOfflineReadiness(scope), { state: "missing", required: required.slice(0, -1), missing: [manifestPath] });
+    assert.equal((await prepareOffline(scope)).state, "missing");
+  }
+  assert.ok(env.requests.every(({ path }) => path === manifestPath));
+  assert.equal(env.writes.length, 0);
+});
+
+test("readiness checks the sole worker cache and ignores unrelated/legacy caches", async (t) => {
+  const env = install(t, { entries: Object.fromEntries(required.map((path) => [path, responseFor(path)])), names: [workerCache, "unrelated", "ff47-catalog-old"] });
   assert.deepEqual(await checkOfflineReadiness(scope), { state: "ready", required, missing: [] });
   env.stores.get(workerCache).delete(mapPath);
   env.stores.get("unrelated").set(mapPath, responseFor(mapPath));
   env.stores.get("ff47-catalog-old").set(mapPath, responseFor(mapPath));
   assert.deepEqual(await checkOfflineReadiness(scope), { state: "missing", required, missing: [mapPath] });
-  env.stores.get("event-catalog-other").set(mapPath, responseFor(mapPath));
-  assert.equal((await checkOfflineReadiness(scope)).state, "ready");
+});
+
+test("multiple worker caches require reload even with complete or combined coverage", async (t) => {
+  const env = install(t, { entries: Object.fromEntries(required.map((path) => [path, responseFor(path)])), names: [workerCache, "event-catalog-installing"] });
+  const expected = { state: "missing", required, missing: required, ambiguousCache: true };
+  assert.deepEqual(await checkOfflineReadiness(scope), expected);
+  assert.deepEqual(await prepareOffline(scope), { ...expected, failed: required });
+  env.stores.get(workerCache).delete(mapPath);
+  env.stores.get("event-catalog-installing").set(mapPath, responseFor(mapPath));
+  assert.deepEqual(await checkOfflineReadiness(scope), expected);
+  assert.deepEqual(await prepareOffline(scope), { ...expected, failed: required });
+  assert.equal(env.writes.length, 0);
 });
 
 test("a downloaded manifest is still missing until it is stored in the worker cache", async (t) => {

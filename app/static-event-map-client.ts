@@ -1,3 +1,4 @@
+import { getPublishedEvent } from "./event-catalog";
 import { isPublishedEventMap, type PublishedEventMap } from "./event-map";
 import { parseEventMapManifest } from "./event-map-manifest";
 
@@ -28,6 +29,7 @@ export async function loadStaticEventMapResource(eventId: string, scope?: { peri
     });
     if (manifestResponse.type === "error") throw new TypeError("Failed to fetch map manifest.");
   } catch (error) {
+    if (getPublishedEvent(eventId)?.venueAssignments.length !== 1) throw error;
     // Offline, an absent manifest is a network error rather than a cached 404.
     try { return await resource("map.json"); }
     catch { throw error; }

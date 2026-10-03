@@ -913,7 +913,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       </aside>
     </div>
     {favoriteUndo && <div className={styles.undoToast} role="status"><span>已取消收藏「{favoriteUndo.circleName}」</span><button onClick={() => { updatePlanning((current) => restoreFavorite(current, favoriteUndo.favorite)); setFavoriteUndo(null); }}>復原收藏</button><button onClick={() => setFavoriteUndo(null)} aria-label="關閉收藏復原提示"><UiIcon name="close" /></button></div>}
-    {offlinePrepOpen && <OfflinePrepDialog event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
+    {/* Keyed on the scope: a day or venue change (e.g. browser Back) starts a fresh check, and an earlier day's result cannot land on it. */}
+    {offlinePrepOpen && <OfflinePrepDialog key={`${eventId} ${String(day)} ${venueAssignment.venueSpaceId}`} event={event} day={day} venueSpaceId={venueAssignment.venueSpaceId} onClose={() => setOfflinePrepOpen(false)} />}
     {showFullDetail && selected && createPortal(<div className={styles.fullDetailBackdrop} style={{ "--ui-font-scale": textScale === "extra" ? 1.24 : textScale === "large" ? 1.12 : 1 } as CSSProperties} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setShowFullDetail(false); } }}><div ref={fullDetailRef} className={styles.fullDetailDialog} role="dialog" aria-modal="true" aria-label={`${selected.name} 完整詳細資訊`} tabIndex={-1}>{fullDetailsPanel}</div></div>, document.body)}
   </main>;
 }

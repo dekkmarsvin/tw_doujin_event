@@ -6,7 +6,10 @@ import type { EventDayKey } from "./planning-store";
 export type OfflineScope = { eventId: string; day: EventDayKey; venueSpaceId?: string };
 
 /** Verified cache coverage; missing also includes a manifest whose scope cannot be resolved. */
-export type OfflineStatus = { state: "unsupported" | "ready" | "missing"; required: string[]; missing: string[] };
+export type OfflineStatus = { state: "unsupported" | "ready" | "missing"; required: string[]; missing: string[];
+  /** Multiple worker versions hide the usable cache; reload before checking or preparing. */
+  ambiguousCache?: boolean;
+};
 
 const CACHE_PREFIX = "event-catalog-";
 const MATCH_OPTIONS = { ignoreVary: true };
@@ -22,6 +25,7 @@ async function workerCacheNames() {
 }
 
 async function cachedResponse(path: string, names: string[]) {
+  if (names.length !== 1) return undefined;
   for (const name of names) {
     try {
       const response = await (await caches.open(name)).match(path, MATCH_OPTIONS);
@@ -71,7 +75,8 @@ async function resolveRequirements(scope: OfflineScope) {
     try {
       response = cached ?? await fetch(manifestPath, { headers: { accept: "application/json" } });
       if (response.type === "error") throw new TypeError("Failed to fetch map manifest.");
-    } catch {
+    } catch (error) {
+      if (event.venueAssignments.length !== 1) throw error;
       // Match the Reader's network-error fallback, but require a usable shared
       // artifact before replacing the unresolved manifest requirement.
       const mapPath = `${base}/map.json`;
@@ -116,6 +121,7 @@ export async function checkOfflineReadiness(scope: OfflineScope): Promise<Offlin
   if (!supported()) return { state: "unsupported", required: [], missing: [] };
   const { required, unresolved } = await resolveRequirements(scope);
   const names = await workerCacheNames();
+  if (names.length > 1) return { state: "missing", required, missing: required, ambiguousCache: true };
   const missing: string[] = [];
   for (const path of required) {
     if (unresolved.includes(path) || !await cachedResponse(path, names)) missing.push(path);
@@ -130,6 +136,7 @@ export async function checkOfflineReadiness(scope: OfflineScope): Promise<Offlin
 export async function prepareOffline(scope: OfflineScope, onProgress?: (done: number, total: number) => void): Promise<OfflineStatus & { failed: string[] }> {
   let status = await checkOfflineReadiness(scope);
   if (status.state === "unsupported") return { ...status, failed: [] };
+  if (status.ambiguousCache) return { ...status, failed: status.missing };
   const attempted = new Set<string>();
   const failed = new Set<string>();
   let pending = status.missing;
