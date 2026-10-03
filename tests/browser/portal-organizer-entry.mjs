@@ -29,6 +29,7 @@ try {
   // #439: one session opens both workspaces. Signed in at /circle, the
   // organizer workspace is still named there, and opening it asks for nothing.
   await organizer.goto(`${base}/circle`);
+  await organizer.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
   const circleSwitch = organizer.getByRole("banner").getByRole("navigation", { name: "工作區" });
   assert.equal(await circleSwitch.getByRole("link", { name: "社團資料", exact: true }).getAttribute("aria-current"), "page");
   await journey.capture(organizer, "circle-signed-in-switch");

@@ -19,7 +19,7 @@ import { useModalFocus } from "../use-modal-focus";
 import type { CircleExternalLink, CircleViewRecord } from "../circle-records";
 import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
-import { eventCalendar, nearestEvent, taipeiDate } from "../event-calendar";
+import { eventCalendar, eventsByProximity, nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
 import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
@@ -29,6 +29,7 @@ import { selectedCircleShareImage } from "../circle-share-image";
 import { CatalogImagesField } from "./catalog-images-field";
 import { pointTo } from "./point-to";
 import { SessionDeadline, useSessionExpiry } from "./session-status";
+import { AccountMenu } from "./account-menu";
 import styles from "./portal.module.css";
 
 /**
@@ -213,6 +214,8 @@ export default function CirclePortalApp() {
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
   const [claimsLoadedFor, setClaimsLoadedFor] = useState("");
   const [claimsFailedFor, setClaimsFailedFor] = useState("");
+  /** Each event's claims as last read, for the picker; an event not read yet shows no status. */
+  const [claimsByEvent, setClaimsByEvent] = useState<Record<string, ClaimSummary[]>>({});
   const [eventId, setEventId] = useState(initialPortalEventId);
   const [entry] = useState(() => {
     const parameters = new URLSearchParams(window.location.search);
@@ -222,7 +225,7 @@ export default function CirclePortalApp() {
   const targetCircleId = entry.eventId === event.id ? entry.circleId : "";
   /** What a late answer is compared against; `claims` lives above the keyed subtree. */
   const maintainedEventId = useRef(event.id);
-  const forgetSession = useCallback(() => { setSession(null); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); }, []);
+  const forgetSession = useCallback(() => { setSession(null); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setClaimsByEvent({}); }, []);
   const expireSession = useCallback(() => {
     forgetSession();
     setStatus({ kind: "error", message: "登入已到期，請重新登入。" });
@@ -238,6 +241,7 @@ export default function CirclePortalApp() {
     const requested = event.id;
     try {
       const answer = await listMyClaims();
+      if (answer.eventId === requested) setClaimsByEvent((known) => ({ ...known, [requested]: answer.claims }));
       // A switch while this request was in flight leaves an older answer
       // arriving late. The server says which event it answered for, so a stale
       // one is dropped rather than rendered — with its editors — under the
@@ -297,39 +301,63 @@ export default function CirclePortalApp() {
     queueMicrotask(() => { void refreshClaims(); });
   }, [refreshClaims, session]);
 
+  // The picker says what this account holds in every event, so the other
+  // events are read once per sign-in; the open one is kept current by
+  // `refreshClaims`, which is also what a later switch re-reads.
+  const signedInAs = session?.email;
+  useEffect(() => {
+    if (!signedInAs || PUBLISHED_EVENTS.length < 2) return;
+    let active = true;
+    for (const item of PUBLISHED_EVENTS) {
+      if (item.id === maintainedEventId.current) continue;
+      void listMyClaims(item.id).then((answer) => {
+        if (active && answer.eventId === item.id) setClaimsByEvent((known) => item.id in known ? known : { ...known, [item.id]: answer.claims });
+      }, () => {});
+    }
+    return () => { active = false; };
+  }, [signedInAs]);
+
   if (entry.eventId && !getPublishedEvent(entry.eventId)) return <div className={styles.page}>
-    <header className={styles.masthead}><div><h1>社團資料</h1></div></header>
+    <header className={styles.masthead}><div className={styles.titleRow}><h1>社團資料</h1></div></header>
     <main className={styles.card}><h2>找不到指定的活動</h2><p className={styles.backLink}><a href="/circle">返回社團資料</a></p></main>
   </div>;
 
   return <div className={styles.page}>
     <header className={styles.masthead}>
-      <div>
+      {/* Who is signed in, beside the page and its event when they fit and
+          above them when not (the stylesheet orders them). Everything else
+          about the account waits in one menu. */}
+      {session && <div className={styles.accountBar}>
+        {/* Shows which identity the server resolved, so a mismatch against
+            ADMIN_EMAILS is visible rather than silently hiding the panel. */}
+        <p className={styles.identityWho}>
+          <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
+          <SessionDeadline session={session} />
+        </p>
+        <AccountMenu>
+          {/* Signing in here does not hide the way to the organizer workspace:
+              the same session opens it, and that page decides what it allows. */}
+          <WorkspaceSwitch current="circle" />
+          <AccountNotificationSettings key={session.email} session={session} />
+          <ContactLink url={session.contactUrl} />
+          {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
+          {session.isAdmin && <a href="/admin">網站管理</a>}
+          <button type="button" className={styles.accountMenuEnd} onClick={() => void signOut().then(forgetSession)}>登出</button>
+        </AccountMenu>
+      </div>}
+      <div className={styles.titleRow}>
         <h1>社團資料</h1>
         {/* The event is the page's context, not a task of its own: the picker
             sits where its name would, and one event needs no picker at all. */}
         {session && PUBLISHED_EVENTS.length > 1
           ? <EventPicker
             eventId={event.id}
+            claimsByEvent={claimsByEvent}
             onChoose={(next) => { setEventId(next); setClaims([]); setClaimsLoadedFor(""); setClaimsFailedFor(""); setStatus(IDLE); }}
           />
           : <p>{event.name}・{eventCalendar(event).label}</p>}
-        <p className={styles.backLink}><a href={mapHref(event.id)}>返回活動地圖</a></p>
+        <a className={styles.backLink} href={mapHref(event.id)}>返回活動地圖</a>
       </div>
-      {session && <div className={styles.identity}>
-        {/* Signing in here does not hide the way to the organizer workspace:
-            the same session opens it, and that page decides what it allows. */}
-        <WorkspaceSwitch current="circle" />
-        {/* Shows which identity the server resolved, so a mismatch against
-            ADMIN_EMAILS is visible rather than silently hiding the panel. */}
-        <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
-        <SessionDeadline session={session} />
-        <AccountNotificationSettings key={session.email} session={session} />
-        <ContactLink url={session.contactUrl} />
-        {session.isMapContributor && <a href="#map-contribution">地圖草稿</a>}
-        {session.isAdmin && <a href="/admin">管理</a>}
-        <button type="button" onClick={() => void signOut().then(forgetSession)}>登出</button>
-      </div>}
     </header>
 
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice} role="status">{status.message}</p>}
@@ -362,17 +390,43 @@ export default function CirclePortalApp() {
           {/* Account-wide, so after the event's work rather than inside it
               (ADR-0043); still keyed on the event so its notice never outlives
               a switch. */}
-          <AccountDeletion key={`account-${event.id}`} session={session} onDeleted={() => { setSession(null); setClaims([]); }} />
+          <AccountDeletion key={`account-${event.id}`} session={session} onDeleted={forgetSession} />
         </div>}
 
   </div>;
 }
 
-function EventPicker({ eventId, onChoose }: { eventId: string; onChoose: (eventId: string) => void }) {
+/** What this account holds in an event, as the picker says it; nothing until the event has been read. */
+function claimSummaryLabel(claims: readonly ClaimSummary[] | undefined) {
+  if (!claims) return "";
+  const names = (status: ClaimSummary["status"]) => [...new Set(claims.filter((claim) => claim.status === status).map((claim) => claim.circleName))].join("、");
+  const parts = ([["已認領", names("verified")], ["審核中", names("pending")]] as const)
+    .filter(([, circles]) => circles).map(([label, circles]) => `${label}：${circles}`);
+  return `（${parts.join("；") || "未認領"}）`;
+}
+
+/**
+ * Events by date: the ones still to come or being held first, soonest first,
+ * then the ended ones from the most recent back. An event whose dates cannot
+ * be read stays with the current ones rather than reading as over.
+ */
+function EventPicker({ eventId, claimsByEvent, onChoose }: {
+  eventId: string; claimsByEvent: Record<string, ClaimSummary[]>; onChoose: (eventId: string) => void;
+}) {
+  const [today] = useState(() => taipeiDate(Date.now()));
+  const ordered = eventsByProximity(PUBLISHED_EVENTS, today);
+  const groups = [
+    { label: "即將舉辦、舉辦中", entries: ordered.filter((entry) => entry.group !== "past") },
+    { label: "已結束", entries: ordered.filter((entry) => entry.group === "past") },
+  ].filter((group) => group.entries.length > 0);
   return <div className={styles.eventPicker}>
     <label htmlFor="portal-event" className={styles.visuallyHidden}>活動</label>
     <select id="portal-event" value={eventId} onChange={(event) => onChoose(event.target.value)}>
-      {PUBLISHED_EVENTS.map((item) => <option key={item.id} value={item.id}>{item.name}・{eventCalendar(item).label}</option>)}
+      {groups.map((group) => <optgroup key={group.label} label={group.label}>
+        {group.entries.map(({ event: item, label }) => <option key={item.id} value={item.id}>
+          {item.name}・{label}{claimSummaryLabel(claimsByEvent[item.id])}
+        </option>)}
+      </optgroup>)}
     </select>
   </div>;
 }

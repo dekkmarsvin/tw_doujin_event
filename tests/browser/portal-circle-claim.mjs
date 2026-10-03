@@ -41,7 +41,7 @@ try {
   await entryPage.getByRole("heading", { name: "登入", exact: true }).waitFor();
   const link = await loginLink(CIRCLE, "circle", { event: "sample", circleId: CIRCLE_ID });
   const circle = await journey.page({ url: link });
-  await circle.getByRole("button", { name: "登出", exact: true }).waitFor();
+  await circle.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).waitFor();
   await entryPage.close();
   assert.match(await circle.locator("body").innerText(), new RegExp(CIRCLE), "the signed-in account is named");
   await journey.capture(circle, "portal-signed-in");
@@ -62,7 +62,8 @@ try {
 
   // 3. The admin is a different person with a different inbox.
   const admin = await signIn(journey, ADMIN, "circle");
-  await admin.getByRole("link", { name: "管理", exact: true }).click();
+  await admin.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
+  await admin.getByRole("link", { name: "網站管理", exact: true }).click();
   const queue = admin.getByRole("button", { name: "核准", exact: true });
   await queue.waitFor();
   assert.match(await admin.locator("body").innerText(), new RegExp(CIRCLE_ID), "the queue names the circle under review");

@@ -1,7 +1,8 @@
 // staged-data: fixture
 // The signed-in /circle page as one column: every section spans the masthead's
 // width, the claim row is cut on the editor's own form/preview line, the event
-// is chosen under the title, and account deletion sits after the event's work.
+// is chosen beside the title, events are grouped by date and say what this
+// account holds in each, and account deletion sits after the event's work.
 // A circle with nothing claimed is shown where to begin.
 // Responses are fixtures: real claims and editing run in portal-circle-claim.
 import assert from "node:assert/strict";
@@ -13,6 +14,8 @@ const pending = { id: "claim-2", circleId: "c-900002", circleName: "南星工房
 /** `claimsGate` holds the claim list back until the journey releases it. */
 function portalRoutes(claimsByEvent, claimsGate) {
   return async (page) => {
+    // sample-two is being held and sample has ended on this day.
+    await page.clock.setFixedTime(new Date("2026-10-02T12:00:00+08:00"));
     await page.route("**/api/**", async (route) => {
       const url = new URL(route.request().url());
       let body;
@@ -59,9 +62,25 @@ try {
     assert.equal(await editor.getByRole("region", { name: "分享公開頁" }).count(), 0);
     assert.equal(retention.left, preview.left, `the after-event choice sits in the preview column: ${detail}`);
 
+    // The header shows who is signed in; the account's actions wait behind 帳號.
+    const menu = page.getByRole("banner").getByRole("button", { name: "帳號", exact: true });
+    assert.equal(await page.getByRole("button", { name: "登出", exact: true }).count(), 0);
+    await menu.click();
+    await page.getByRole("button", { name: "登出", exact: true }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "登出", exact: true }).waitFor({ state: "hidden" });
+    assert.equal(await menu.evaluate((node) => node === document.activeElement), true, "Escape hands focus back to the menu button");
+
     // The event belongs under the title, not in a card of its own.
     assert.equal(await page.getByRole("banner").getByLabel("活動", { exact: true }).inputValue(), "sample");
     assert.equal(await page.getByRole("heading", { name: "活動", exact: true }).count(), 0);
+    // Current events first, ended ones apart, each with what this account holds there.
+    const picker = page.getByRole("banner").getByLabel("活動", { exact: true });
+    await picker.locator("option", { hasText: "未認領" }).waitFor({ state: "attached" });
+    assert.deepEqual(await picker.evaluate((node) => [...node.querySelectorAll("optgroup")].map((group) => [group.label, ...[...group.querySelectorAll("option")].map((option) => option.textContent)])), [
+      ["即將舉辦、舉辦中", "第二範例活動・2026.10.01–04（未認領）"],
+      ["已結束", "範例創作市集・2026.09.01–02（已認領：北風畫室；審核中：南星工房）"],
+    ]);
     assert.equal(await page.getByRole("link", { name: "編輯資料", exact: true }).getAttribute("href"), "#circle-editor-c-900001");
     assert.equal(await page.getByRole("list", { name: "開始使用", exact: true }).count(), 0, "a circle with claims is past the first step");
 

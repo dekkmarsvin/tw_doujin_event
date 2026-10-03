@@ -55,7 +55,8 @@ export async function loginLink(email, audience, { event, circleId, destination 
 export async function signIn(journey, email, audience, options = {}) {
   const link = await loginLink(email, audience);
   const page = await journey.page({ ...options, url: link });
-  await page.getByRole("button", { name: "登出", exact: true }).waitFor();
+  // /circle keeps 登出 behind its 帳號 menu; either button means signed in.
+  await page.getByRole("button", { name: /^(登出|帳號)$/ }).first().waitFor();
   return page;
 }
 

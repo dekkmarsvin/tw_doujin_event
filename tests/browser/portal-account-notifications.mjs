@@ -16,7 +16,13 @@ const detail = { event: { ...event, eventIdLocked: false }, publicationAvailable
 try {
   await clearMail();
   const page = await signIn(journey, CIRCLE, "circle");
-  const open = () => page.getByRole("button", { name: "通知設定", exact: true }).click();
+  // On /circle the account's actions wait behind 帳號; the menu stays open
+  // under the dialog so closing it can hand focus back to 通知設定.
+  const open = async () => {
+    const menu = page.getByRole("banner").getByRole("button", { name: "帳號", exact: true });
+    if (await menu.getAttribute("aria-expanded") !== "true") await menu.click();
+    await page.getByRole("button", { name: "通知設定", exact: true }).click();
+  };
   const dialog = page.getByRole("dialog", { name: "通知設定", exact: true });
   await open();
   const cadence = dialog.getByLabel("社團內容更新", { exact: true });
