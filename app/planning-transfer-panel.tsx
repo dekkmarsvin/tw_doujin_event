@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { getCircleCatalogState } from "./circle-records";
 import { PUBLISHED_EVENTS } from "./event-catalog";
-import type { PlanningDocument } from "./planning-store";
+import { inspectPlanningStorage, type PlanningDocument } from "./planning-store";
 import {
   exportPlanningCsv,
   exportPlanningJson,
@@ -44,7 +44,13 @@ type Result = { kind: "ok" | "error"; message: string } | null;
  * one in. Nothing is written until the reader confirms a preview, and the
  * preview is recomputed when this device's data changed in between.
  */
-export function PlanningTransferPanel({ document, replace }: { document: PlanningDocument; replace: (next: PlanningDocument) => boolean }) {
+export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
+  eventId: string;
+  document: PlanningDocument;
+  replace: (next: PlanningDocument) => boolean;
+  /** Unreadable older data is being protected; importing would overwrite it. */
+  blocked: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [mode, setMode] = useState<"keep" | "incoming">("keep");
@@ -52,12 +58,15 @@ export function PlanningTransferPanel({ document, replace }: { document: Plannin
   const [result, setResult] = useState<Result>(null);
   const events = [...new Set([...document.favorites, ...document.visitPlans].map((item) => item.eventId))];
 
+  /** What is stored now. Another tab may have saved since this tab last rendered. */
+  const stored = () => inspectPlanningStorage(localStorage, eventId);
+
   async function choose(file: File | undefined) {
-    if (!file) return;
+    if (!file || blocked) return;
     setResult(null); setReplacing("off"); setMode("keep");
     if (file.size > MAX_BACKUP_BYTES) { setPending(null); setResult({ kind: "error", message: "檔案超過 10 MiB，沒有匯入任何資料。" }); return; }
     const text = await file.text();
-    setPending({ fileName: file.name, text, preview: previewPlanningBackup(text, document, catalogStatus) });
+    setPending({ fileName: file.name, text, preview: previewPlanningBackup(text, stored().document, catalogStatus) });
   }
 
   function cancel() {
@@ -66,16 +75,18 @@ export function PlanningTransferPanel({ document, replace }: { document: Plannin
   }
 
   /** Writes only when this device still holds what the preview was computed from. */
-  function commit(next: (incoming: PlanningDocument) => PlanningDocument, success: string) {
+  function commit(next: (incoming: PlanningDocument, current: PlanningDocument) => PlanningDocument, success: string) {
     if (!pending?.preview.ok) return;
-    if (planningFingerprint(document) !== pending.preview.baseFingerprint) {
-      setPending({ ...pending, preview: previewPlanningBackup(pending.text, document, catalogStatus) });
+    const latest = stored();
+    if (blocked || !latest.writable) { setResult({ kind: "error", message: "這台裝置有無法讀取的舊資料，沒有匯入任何資料。" }); return; }
+    if (planningFingerprint(latest.document) !== pending.preview.baseFingerprint) {
+      setPending({ ...pending, preview: previewPlanningBackup(pending.text, latest.document, catalogStatus) });
       // A choice made against the old preview must not overwrite what changed since.
       setReplacing("off"); setMode("keep");
       setResult({ kind: "error", message: "這台裝置的資料在預覽後有變更，已重新計算，請再確認一次。" });
       return;
     }
-    if (replace(next(pending.preview.document))) {
+    if (replace(next(pending.preview.document, latest.document))) {
       cancel();
       setResult({ kind: "ok", message: success });
     } else {
@@ -94,10 +105,11 @@ export function PlanningTransferPanel({ document, replace }: { document: Plannin
       <h3 id="planning-transfer-title">帶到另一台裝置</h3>
       <p>下載完整備份，再到另一台裝置的「資料管理」匯入。備份含私人備註與預算，請自行保管。</p>
       {events.length > 0 && <p>包含 {events.map(eventName).join("、")}。</p>}
+      {blocked && <p>這台裝置有無法讀取的舊資料。先下載原始資料，或清除後再匯入。</p>}
     </div>
     <div className={styles.actions}>
       <button onClick={() => downloadText(backupName(), exportPlanningJson(document), "application/json")}>下載完整備份</button>
-      <button onClick={() => inputRef.current?.click()}>匯入計畫…</button>
+      <button disabled={blocked} onClick={() => inputRef.current?.click()}>匯入計畫…</button>
       <input ref={inputRef} type="file" accept=".json,application/json" aria-label="選擇規劃備份檔" onChange={(event) => void choose(event.target.files?.[0])} />
     </div>
     <div className={styles.csvRow}>
@@ -127,14 +139,14 @@ export function PlanningTransferPanel({ document, replace }: { document: Plannin
       </fieldset>}
       {nothingNew && conflicts === 0 && <p>備份內容已全部在這台裝置上。</p>}
       {replacing === "off" && <div className={styles.confirmActions}>
-        <button className={styles.primary} disabled={nothingNew && (conflicts === 0 || mode === "keep")} onClick={() => commit((incoming) => mergePlanningBackup(document, incoming, mode), `已匯入：新增 ${added} 筆${conflicts > 0 && mode === "incoming" ? `，更新 ${conflicts} 筆` : ""}。`)}>確認匯入</button>
+        <button className={styles.primary} disabled={nothingNew && (conflicts === 0 || mode === "keep")} onClick={() => commit((incoming, current) => mergePlanningBackup(current, incoming, mode), `已匯入：新增 ${added} 筆${conflicts > 0 && mode === "incoming" ? `，更新 ${conflicts} 筆` : ""}。`)}>確認匯入</button>
         <button onClick={cancel}>取消</button>
         <button className={styles.linkButton} onClick={() => setReplacing("summary")}>改為完整取代…</button>
       </div>}
       {summary && <div className={styles.replacePanel}>
         <b>完整取代這台裝置的規劃資料</b>
         <p>會移除 {summary.totals.favorites.removed} 筆收藏、{summary.totals.visitPlans.removed} 筆行程、{summary.totals.groups.removed} 個群組，並以備份取代 {summary.totals.favorites.replaced + summary.totals.visitPlans.replaced} 筆。</p>
-        {summary.events.length > 0 && <ul className={styles.previewNotes}>{summary.events.map((item) => <li key={item.eventId}>{eventName(item.eventId)}：移除收藏 {item.favorites.removed}、行程 {item.visitPlans.removed}</li>)}</ul>}
+        {summary.events.length > 0 && <ul className={styles.previewNotes}>{summary.events.map((item) => <li key={item.eventId}>{eventName(item.eventId)}：移除收藏 {item.favorites.removed}、行程 {item.visitPlans.removed}；取代收藏 {item.favorites.replaced}、行程 {item.visitPlans.replaced}</li>)}</ul>}
         <div className={styles.confirmActions}>
           <button onClick={() => downloadText(backupName(), exportPlanningJson(document), "application/json")}>先下載目前備份</button>
           {replacing === "summary"
@@ -149,13 +161,15 @@ export function PlanningTransferPanel({ document, replace }: { document: Plannin
   </section>;
 }
 
+const counts = (value: { new: number; conflicting: number }) => `新增 ${value.new}${value.conflicting ? `、內容不同 ${value.conflicting}` : ""}`;
+
 function EventPreview({ event }: { event: BackupEventPreview }) {
   const days = Object.entries(event.visitPlans.perDay);
   const { notLoaded, failed, unmatched } = event.unresolved;
   return <div className={styles.eventPreview}>
     <b>{eventName(event.eventId)}</b>
-    <span>收藏 {event.favorites.total}（新增 {event.favorites.new}）</span>
-    <span>行程 {event.visitPlans.total}（新增 {event.visitPlans.new}）{days.length > 0 && `：${days.map(([day, count]) => `${dayName(event.eventId, day)} ${count} 筆`).join("、")}`}</span>
+    <span>收藏 {event.favorites.total}（{counts(event.favorites)}）</span>
+    <span>行程 {event.visitPlans.total}（{counts(event.visitPlans)}）{days.length > 0 && `：${days.map(([day, count]) => `${dayName(event.eventId, day)} ${count} 筆`).join("、")}`}</span>
     {notLoaded.total > 0 && <small>{notLoaded.total} 筆所屬活動尚未載入，會照原樣保留。</small>}
     {failed.total > 0 && <small>{failed.total} 筆所屬活動讀取失敗，會照原樣保留。</small>}
     {unmatched.total > 0 && <small>{unmatched.total} 筆目前找不到對應社團，會保留在「目前無法匹配的規劃資料」。</small>}
