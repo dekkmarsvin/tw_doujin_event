@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, before, beforeEach } from "node:test";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -84,6 +85,7 @@ beforeEach(async () => {
   sent = [];
   objects = new Map();
   await repository.clearPreviewData();
+  await resetSiteSettings(database);
   await repository.addAdmin("admin@example.test", "bootstrap", now);
   handlerOptions = {
     repository,

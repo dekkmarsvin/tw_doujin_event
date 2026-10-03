@@ -20,6 +20,7 @@ export function createScheduledPublicationDispatcher(repository: IdentityReposit
  * The time budget stops admitting transitions; an admitted transition retains
  * its existing lease/remote-call bounds and must finish its checkpoint. */
 export async function runPublicationTick(input: { repository: IdentityRepository; driver: PublicationDriver; now?: () => number }) {
+  if (!(await input.repository.getSiteSettings())?.publicationEnabled) return { expired: [], results: [] };
   const now = input.now ?? Date.now;
   const deadline = now() + PUBLICATION_TICK_START_BUDGET_MS;
   const { expired } = await input.repository.expireStalledOrganizerPublicationJobs({ now: now(), timeoutMs: QUEUED_PUBLICATION_TIMEOUT_MS });
@@ -35,6 +36,7 @@ export async function runPublicationTick(input: { repository: IdentityRepository
     let transitions = 0;
     try {
       while (canStart() && transitions < PUBLICATION_JOB_MAX_TRANSITIONS) {
+        if (!(await input.repository.getSiteSettings())?.publicationEnabled) break;
         transitions++; totalTransitions++;
         result = await dispatch(job.id);
         if (result !== "advanced") break;

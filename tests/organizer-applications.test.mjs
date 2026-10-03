@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, before, beforeEach } from "node:test";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -23,14 +24,14 @@ function request(path = PATH, method = "GET", body, cookie) {
 }
 beforeEach(async () => {
   await repository.clearPreviewData();
+  await resetSiteSettings(database, { organizerApplicationMode: "invite_only", organizerAllowedEmails: ["applicant@example.test"] });
   await repository.addAdmin("admin@example.test", "bootstrap", now);
   sent = [];
   options = { repository, sendMail: async (message) => { sent.push(message); }, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test",
     projectCircle: async () => null,
     config: { eventId: "sample", origin: ORIGIN, sessionSecret: "test-session", hashPepper: "test-pepper", adminEmails: ["admin@example.test"],
-      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2026-12-31T00:00:00Z", now: () => now,
-      organizerApplicationAllowedEmails: ["applicant@example.test"] } };
+      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2026-12-31T00:00:00Z", now: () => now } };
   handlers = createCirclePortalHandlers(options);
 });
 async function signIn(email) {
@@ -55,13 +56,13 @@ test("submission is closed by default and only the exact controlled account is a
   const stranger = await signIn("stranger@example.test");
   assert.equal((await submit(stranger)).status, 403);
   assert.equal((await handlers.listEventApplications(request())).status, 401);
-  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config, organizerApplicationAllowedEmails: [] } });
+  await resetSiteSettings(database, { organizerApplicationMode: "closed", organizerAllowedEmails: ["applicant@example.test"] });
   assert.equal((await submit(applicant)).status, 403);
   assert.equal(await count("organizer_applications"), 0);
 });
 
 test("explicit public gate admits all three relationships while rejecting malformed data and injected privileges", async () => {
-  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config, organizerApplicationsOpen: true } });
+  await resetSiteSettings(database, { organizerApplicationMode: "public" });
   const applicant = await signIn("stranger@example.test");
   for (const relationship of ["organizer", "authorized", "curator"]) await created(applicant, { ...data, relationship });
   for (const change of [{ officialUrl: "javascript:alert(1)" }, { officialUrl: "https://user:pass@example.test" }, { startDate: "2026-02-30" },
@@ -79,7 +80,7 @@ test("submission retries are idempotent without exposing or overwriting another 
   assert.deepEqual(responses.map((response) => response.status), [201, 201]);
   assert.equal(await count("organizer_applications"), 1);
   assert.equal((await submit(owner, id, { ...data, name: "changed" })).status, 409);
-  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config, organizerApplicationsOpen: true } });
+  await resetSiteSettings(database, { organizerApplicationMode: "public" });
   const other = await signIn("other@example.test");
   assert.equal((await submit(other, id)).status, 409);
   const listed = await handlers.listEventApplications(request(PATH, "GET", undefined, other));
@@ -89,8 +90,7 @@ test("submission retries are idempotent without exposing or overwriting another 
 });
 
 test("an admin's own submission immediately carries the same review identity as the list", async () => {
-  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config,
-    organizerApplicationAllowedEmails: ["applicant@example.test", "admin@example.test"] } });
+  await resetSiteSettings(database, { organizerApplicationMode: "invite_only", organizerAllowedEmails: ["applicant@example.test", "admin@example.test"] });
   const admin = await signIn("admin@example.test");
   const id = crypto.randomUUID();
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -142,7 +142,7 @@ test("rejection keeps its reason private, grants nothing and remains readable af
   assert.equal((await review(admin, application.id, "rejected")).status, 400);
   assert.equal((await review(admin, application.id, "rejected", "此活動已存在，請聯絡負責人邀請協作。")).status, 200);
   assert.equal(await count("organizer_event_candidates"), 0);
-  handlers = createCirclePortalHandlers({ ...options, config: { ...options.config, organizerApplicationAllowedEmails: [] } });
+  await resetSiteSettings(database, { organizerApplicationMode: "closed", organizerAllowedEmails: ["applicant@example.test"] });
   const own = await (await handlers.listEventApplications(request(PATH, "GET", undefined, owner))).json();
   assert.equal(own.canApply, false);
   assert.match(own.applications[0].reason, /已存在/);

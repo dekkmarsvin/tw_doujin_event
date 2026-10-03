@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, before, beforeEach } from "node:test";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } from "./support/organizer-repository-fixture.mjs";
@@ -48,6 +49,7 @@ let editorId;
 before(() => repository.ensureTables());
 beforeEach(async () => {
   ({ adminId, ownerId, editorId } = await resetOrganizerRepositoryFixture(miniflare, NOW));
+  await resetSiteSettings(database);
 });
 
 const initialDraft = {

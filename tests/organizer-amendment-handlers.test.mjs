@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, before, beforeEach } from "node:test";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 import { amendmentFixture } from "./support/organizer-amendment-fixture.mjs";
@@ -34,6 +35,7 @@ async function actor(name) {
 }
 beforeEach(async () => {
   await repo.clearPreviewData();
+  await resetSiteSettings(db);
   const ownerActor = await actor("owner"); owner = ownerActor.cookie; ownerId = ownerActor.id;
   const editorActor = await actor("editor"); editor = editorActor.cookie;
   const adminActor = await actor("admin"); admin = adminActor.cookie;

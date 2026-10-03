@@ -4,7 +4,7 @@
 
 通知使用既有 `workers/publication-dispatch` 的每分鐘排程、同環境 D1 及 Mailgun；不新增部署單位。個人偏好位於 `/admin#review-notifications`，預設開啟、每 5 分鐘，只收初始化／啟用後的新送審。上線順序：先交付 Pages 的 runtime schema、偏好 API、四類送審寫入及面板，再交付 Worker 寄送端。既有資料庫首次初始化不回填待審項目。
 
-正式 Worker 的 `ADMIN_REVIEW_NOTIFICATIONS_ENABLED` 已設為 `true`，與 `ORGANIZER_PUBLICATION_MODE` 獨立。該 Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER`，及 `NOTIFICATION_ORIGIN=https://map.kotoban.top`；Pages secrets 不會自動變成獨立 Worker 的 secrets。通知與登入／邀請共用 Mailgun 用量，啟用前確認帳號額度。程式中的個人偏好不等於部署總開關已啟用。
+全站待審通知由 D1 `admin_review_notifications_enabled` 控制，與發布及帳號通知分開。Worker 必須具備自己的 `MAILGUN_API_KEY`、`MAILGUN_DOMAIN`、`MAILGUN_SENDER` 及 `NOTIFICATION_ORIGIN`；Pages secrets 不會自動成為 Worker secrets。舊旗標只供 Pages 初次遷移，不是日後開關。
 
 Preview 使用獨立 D1；設定 `PREVIEW_MAIL_SINK=d1`、`.test` 的 `PREVIEW_TEST_RECIPIENTS` 及 preview 的固定 HTTPS origin，先驗證設定→送審→tick→D1 收信。通知 Worker 的 preview 已啟用，人工收信使用 `verify.kotoban.top` 與 `postmaster@verify.kotoban.top`，確保 SPF／DKIM 與 From 對齊；API key 仍由 preview 自己的 secret 提供。`PREVIEW_SANDBOX_RECIPIENTS` 是人工測試收件白名單，名稱雖含 sandbox，亦適用已驗證自有網域，不放寬任意收件人。Worker 的 `keep_vars: true` 保留 Dashboard 管理的白名單，設定檔明列的 vars 仍會覆寫同名值。preview 環境的 vars 與 secrets 必須各自設定。Pages preview 的登入與邀請信同樣由 `verify.kotoban.top` 寄出，見 [preview 的兩個信箱](#preview-的兩個信箱)。Mailgun `accepted` 後仍須查 `delivered`／`failed` 事件確認交付。
 
@@ -75,9 +75,9 @@ production 的六個 runtime secret 以 `wrangler pages secret put` 設定。**�
 
 ### Organizer 發布
 
-活動申請與 publication 是不同的開關。申請 API 由 Pages `ORGANIZER_APPLICATIONS_OPEN` 控制；靜態 Reader CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN` 控制，不新增讀取 Function。維護者已在 [#163](https://github.com/dekkmarsvin/tw_doujin_event/issues/163) 接受 `arktw-only-2026` 與 `fgo-only-2026` 的正式發布成果並決定公開申請，取代原「完整零人工技術補救旅程後才啟用」條件；兩場缺少申請紀錄與 FGO 的人工補救仍如實保留於該票。正常新增活動不需人工技術操作的產品目標不變。受控模式可用 Pages runtime secret `ORGANIZER_APPLICATION_ALLOWED_EMAILS` 指定申請帳號（逗號分隔），名單不進前端或 repository。
+活動申請與 publication 是不同的開關，由 `/admin?section=settings` 管理共用 D1 的即時設定。公開申請由維護者手動啟用；首頁沿用既有登入入口。#477 已接受決策取代 #163 原公開申請開關前置，真實零人工技術補救旅程仍屬 Organizer 里程碑驗收。
 
-正式開放使用 `wrangler.jsonc` 頂層 `vars.ORGANIZER_APPLICATIONS_OPEN=true` 與 GitHub Actions repository variable `ORGANIZER_APPLICATIONS_OPEN=true`，由既有 production build 傳入 Vite 並部署 CTA。切換時同步修改兩處並重新部署 Pages，使 API 與入口一致；preview 不繼承 production 的申請開關。關閉後 API 拒絕新的非受控送件，既有申請結果／審核／邀請仍可使用。這些是一次性的功能開放設定，不是每場活動所需的基礎設施設定。
+新環境與既有設定遷移順序見[網站營運設定遷移](#網站營運設定遷移477)。申請模式不依賴前端 build 或重新部署；關閉仍保留已有申請、審核與工作區。
 
 Pages production 需設定 `GITHUB_WEBHOOK_SECRET`、`GITHUB_APP_ID`、`GITHUB_APP_PRIVATE_KEY`、`GITHUB_APP_INSTALLATION_ID`。Private key 與 webhook secret 不進 repo；App 僅安裝於固定 data／main 兩個 repository，啟用前置以 [ADR-0058 第 4 點](../adr/0058-publication-is-enforced-by-the-app-not-the-ruleset.md#4-開啟-production-publication-的前置) 為準，取代 ADR-0046 的舊 ruleset 前置。
 
@@ -280,10 +280,20 @@ Pages 每次部署都是不可變 deployment。若正式版本有問題：
 
 沿用 publication-dispatch 與 retention 的既有排程、D1、Mailgun，新增產品／排程角色為 0。schema runtime version 3 新增三張 account notification 表及索引；不改舊 review notification 表、偏好與 pending，舊 consumer 也不讀新表。部署順序：先 Pages 的 schema／事件寫入／設定介面，再同版本的 publication-dispatch 與 retention Worker；先在獨立 preview D1 sink 驗證。沒有旗標時新入列與消費均停用，UI 可先設定偏好。
 
-正式啟用須在 Pages 與 publication-dispatch **同環境** 設定 `ACCOUNT_NOTIFICATIONS_ENABLED=true` 及相同的 `ACCOUNT_NOTIFICATIONS_SINCE`（含時區的 ISO 時間）。建議先部署兩端，再設定同一未來起點；缺失或無法解析的時間不啟用，不掃歷史資料補寄。停用後重開必須更新起點，早於起點的舊 pending 只會取消。原 `ADMIN_REVIEW_NOTIFICATIONS_ENABLED`、publication mode、登入／邀請路徑獨立。Origin 仍使用 `NOTIFICATION_ORIGIN` 的本站 HTTPS origin。
+正式寄送由同環境 D1 `account_notifications_enabled` 控制，Pages producer 與 Worker 均讀取最新設定。Admin 從關閉改為啟用時自動建立 `account_notifications_since`，取消早於起點的舊 pending，不補寄停用期間事件。登入／邀請、待審通知與發布各自獨立；origin 沿用 `NOTIFICATION_ORIGIN`。
 
 正式啟用前依 Worker delivery audit 核對 active version、binding、schedule、source fingerprint，並取得有授權 preview 信箱的社團結果、主辦結果與摘要收信證據。D1 sink、provider accepted、delivered、人工觀察分開記錄在 issue／PR；不由 CI 或 Pages 部署推定 Worker／收件匣已完成。preview 白名單與 Mailgun secrets 沿用既有隔離規則，不將 production 地址放入測試。
 
 `account_notifications.tick` 含 batch ID 與結果；D1 批次保存安全錯誤分類及 provider ID，不記錄地址／信件全文於正式 logs。每 tick 最多 10 個批次、每摘要最多 100 項；租約 120 秒，批次內容固定，暫時錯誤退避至 6 小時，首次嘗試 48 小時後終止，完成／取消／失敗 30 天清除。外部已受理但寫回失敗可能重複，禁止以重試成功宣稱 exactly-once。
 
-回滾時先將新通知旗標關閉（Pages 與 Worker），再回滾程式；保留新增表及 monotonic schema marker，不刪既有業務資料或舊管理者偏好。重新啟用使用新起點，不能直接補送過期事件。費用增加來源是控制面每收件者一筆入列、有限批次 D1 讀寫與 Mailgun 封數，無公開讀取路徑新增持久化寫入；量測與月用量假設寫在實作 PR。
+回滾與舊環境旗標清除依下方營運設定遷移段落，保留 notification 表與 monotonic schema marker。既有重試／保留期／個人偏好維持原契約。
+
+## 網站營運設定遷移（#477）
+
+1. 先部署新版 Pages，保留當時 Pages 的 `ORGANIZER_APPLICATIONS_OPEN`、`ORGANIZER_APPLICATION_ALLOWED_EMAILS`、`ACCOUNT_NOTIFICATIONS_ENABLED`、`ACCOUNT_NOTIFICATIONS_SINCE`、`ADMIN_REVIEW_NOTIFICATIONS_ENABLED`，以及環境能力 `ORGANIZER_PUBLICATION_MODE`。登入 `/admin?section=settings` 觸發一次初始化，核對模式、名單、通知起點與發布狀態確實沿用部署前行為。加密變數由 runtime 自行讀取，不把值匯出或猜測成預設值。
+2. 部署獨立 publication-dispatch Worker，執行 `node scripts/worker-delivery.mjs --audit` 核對同環境 D1 binding、active version、schedule 與 source fingerprint。Worker 不 seed 營運設定；在 Pages 完成初始化前跳過執行。只有 Pages／CI 成功不代表 Worker 已更新。
+3. 在 Admin 保存低風險設定、重新載入並核對結果；於同一個 warm repository／Worker 後續讀取確認 D1 新值。點「檢查服務」由實際 Worker 檢查 Mailgun／GitHub，不寄測試信、不修改儲存庫。無檢查結果或無診斷讀取權顯示無法確認；此檢查不證明 delivered、收件匣可見、ruleset 或完整發布驗收。
+4. 兩端版本及初始化已確認後，刪除 Pages／Worker 舊的五個營運環境旗標，以及 GitHub repository variable `ORGANIZER_APPLICATIONS_OPEN`；Vite 注入已移除。`ORGANIZER_PUBLICATION_MODE`、憑證、binding、通知 origin 保留。刪旗標後 D1 是唯一來源，不靠重部署切換。
+5. 如需回滾至仍讀環境旗標的舊版，先依當前 D1 值重設舊旗標（帳號通知包含相同有效起點），再回滾兩端；D1 表與 schema marker 保留。回滾不能重新啟用已暫停功能或恢復舊 epoch。日常暫停直接用 Admin，不做工程回滾。
+
+Admin 公開申請由維護者手動啟用。環境機密與 GitHub／Mailgun 設備設定仍在既有部署面，不接受 Admin 輸入 key／secret。

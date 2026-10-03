@@ -1,5 +1,7 @@
 # 資料 inventory
 
+網站營運設定 `site_settings` 僅供管理者讀寫，保存目前申請模式、邀請 email 名單、通知起點及發布開關，保留至覆寫。操作者只保存 account ID，顯示時讀取目前帳號；不另存歷任管理者 email。單筆 `site_service_check` 只保存最近一次請求／完成時間及安全的來源／原因分類，下次檢查覆寫，沒有信件、憑證、provider 原始內容或診斷歷史；詳見[網站營運設定](./site-settings.md)。
+
 本站實際持有哪些資料、寫在哪一欄、由什麼動作寫入、保存多久。**這份文件只記事實**；保存期限、排程與帳號刪除依序由 [ADR-0018](../adr/0018-retention-is-the-circles-choice.md)、[ADR-0021](../adr/0021-credentials-expire-and-are-purged-records-are-kept.md)、[ADR-0022](../adr/0022-expiry-runs-in-a-separate-cron-worker.md)、[ADR-0027](../adr/0027-personal-data-lifecycle-and-account-deletion.md) 、[ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md) 與 [ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 決定。
 
 **schema 權威**：[`db/identity-runtime-schema.ts`](../../db/identity-runtime-schema.ts)（runtime tables 由 `identity-runtime-initializer.ts` 於資料庫首次使用或版本落後時建立；既有資料庫用同檔案的 additive column migrations 升級。表名與數量直接以該檔為準，不在本文複製一個會漂移的計數）

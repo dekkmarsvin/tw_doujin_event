@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
@@ -244,6 +245,7 @@ beforeEach(async () => {
   sent = [];
   await repository.ensureTables();
   await repository.clearPreviewData();
+  await resetSiteSettings(database);
   adminId = await repository.upsertAccount("admin@example.test", NOW);
   ownerId = await repository.upsertAccount("owner@example.test", NOW);
   editorId = await repository.upsertAccount("editor@example.test", NOW);

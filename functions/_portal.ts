@@ -1,5 +1,5 @@
 import { mailFailure, sendPortalMail, previewMailRouteFor } from "../app/portal-mail";
-import { accountNotificationConfig } from "../app/account-notifications";
+import { initialSiteSettings } from "../app/site-settings";
 export { previewMailRouteFor } from "../app/portal-mail";
 import { createCirclePortalHandlers, type CircleLookup, type CirclePortalHandlers } from "../app/circle-portal-handlers";
 import { buildCircleCatalog, isCircleCatalogPayload, normalizeCircleName, type CircleCatalogPayload } from "../app/circle-records";
@@ -198,7 +198,7 @@ const repositories = new WeakMap<D1Database, IdentityRepository>();
 export function repositoryFor(env: PortalEnv) {
   const existing = repositories.get(env.DB);
   if (existing) return existing;
-  const created = createIdentityRepository(env.DB, { bootstrapAdmins: bootstrapAdmins(env), accountNotifications: accountNotificationConfig(env) });
+  const created = createIdentityRepository(env.DB, { bootstrapAdmins: bootstrapAdmins(env), initialSiteSettings: initialSiteSettings(env) });
   repositories.set(env.DB, created);
   return created;
 }
@@ -444,8 +444,6 @@ export function portalHandlers(context: { request: Request; env: PortalEnv }): C
       eventEndsAt: async () => (await catalog(env, request, eventId)).event.eventEndsAt,
       now: () => Date.now(),
       organizerPublicationMode: env.ORGANIZER_PUBLICATION_MODE ?? "disabled",
-      organizerApplicationsOpen: env.ORGANIZER_APPLICATIONS_OPEN === "true",
-      organizerApplicationAllowedEmails: (env.ORGANIZER_APPLICATION_ALLOWED_EMAILS ?? "").split(",").map((email) => email.trim()).filter(Boolean),
       // Published means "this deployment actually serves the event's data", so
       // the set is read from what was deployed rather than from a second list
       // that could drift away from it. Ill-formed ids are rejected without a

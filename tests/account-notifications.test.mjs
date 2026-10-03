@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createServer } from "vite";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
 const load = name => vite.environments.ssr.runner.import(name);
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
 const { runAccountNotificationTick } = await load("/app/account-notification-scheduler.ts");
 const { notificationParameters } = await load("/app/notification-navigation.ts");
-const { accountNotificationLetter, accountNotificationConfig } = await load("/app/account-notifications.ts");
+const { accountNotificationLetter } = await load("/app/account-notifications.ts");
 const { onRequest: middleware } = await load("/functions/_middleware.ts");
 const { nextNotificationSlot } = await load("/app/review-notifications.ts");
 const { MailDeliveryError, sendPortalMail } = await load("/app/portal-mail.ts");
@@ -19,7 +20,7 @@ const { purgeExpiredRecords } = await load("/db/retention-purge.ts");
 const { createEmptyOrganizerEventDraft } = await load("/app/organizer-event.ts");
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default {fetch(){return new Response('ok')}}", d1Databases: { DB: "review-notifications" } }));
 const db = await mf.getD1Database("DB");
-const repo = createIdentityRepository(db, { accountNotifications: { enabled: true, since: 0 } });
+const repo = createIdentityRepository(db);
 after(async () => { await mf.dispose(); await vite.close(); });
 const START = Date.UTC(2027, 0, 1, 0, 1), ADMIN = "admin@example.test", SECOND = "second@example.test";
 let now, owner, sent, handlers, cookie;
@@ -44,6 +45,7 @@ function request(method = "GET", body, signed = cookie) {
 beforeEach(async () => {
   now = START; sent = [];
   await repo.ensureTables(); await repo.clearPreviewData();
+  await resetSiteSettings(db, { accountNotificationsEnabled: true, accountNotificationsSince: 0 });
   await db.prepare("DELETE FROM admin_notification_preferences").run();
   await db.prepare("DELETE FROM admins").run();
   for (const email of [ADMIN, SECOND]) {
@@ -303,15 +305,31 @@ test("removed relationships, disabled accounts, deletion and retention remove de
   assert.ok(purge.deleted.account_notification_items > 0); assert.equal((await items()).length, 0);
 });
 
-test("feature flag and rollout epoch do not backfill; preview sink is isolated", async () => {
-  assert.equal(accountNotificationConfig({ ACCOUNT_NOTIFICATIONS_ENABLED: "true" }).enabled, false);
-  const disabled = createIdentityRepository(db);
-  await disabled.createClaim({ id: "old", accountId: owner, eventId: "sample", circleId: "old", circleNameKey: "old", circleNameAtClaim: "Old", sourceRowAtClaim: null, status: "verified", method: "email_domain", targetUrl: null, challengeTokenHash: null, challengeExpiresAt: null, evidenceUrl: null, evidenceNote: null, now });
-  await tick(); assert.equal(sent.length, 0);
+test("Admin toggle changes warm producer and delivery; reopening skips old events and preserves personal preferences", async () => {
+  const adminCookie = `${SESSION_COOKIE}=${ADMIN}.${await hmacSign("secret", ADMIN)}`;
+  async function toggle(enabled) {
+    const current = await repo.getSiteSettings();
+    const response = await handlers.adminUpdateSiteSettings(new Request("https://map.kotoban.top/api/admin/site-settings", {
+      method: "PUT", headers: { cookie: adminCookie, "content-type": "application/json" }, body: JSON.stringify({ expectedUpdatedAt: current.updatedAt,
+        settings: { organizerApplicationMode: current.organizerApplicationMode, organizerAllowedEmails: current.organizerAllowedEmails,
+          accountNotificationsEnabled: enabled, adminReviewNotificationsEnabled: current.adminReviewNotificationsEnabled, publicationEnabled: current.publicationEnabled } }),
+    }));
+    assert.equal(response.status, 200, await response.clone().text());
+  }
+  // The existing instance, writer and notification batches must all observe each new setting.
   await claim();
-  const reopened = createIdentityRepository(db, { accountNotifications: { enabled: true, since: now + 1 } });
-  await runAccountNotificationTick({ repository: reopened, origin: "https://map.kotoban.top", now: () => now + 1, sendMail: async m => { sent.push(m); return "ok"; } });
+  const preferences = await prefs();
+  now += 100; await toggle(false);
+  await claim("during-pause"); await tick();
+  assert.equal(await count("account_notification_items"), 1);
   assert.equal(sent.length, 0);
+  now += 100; await toggle(true);
+  assert.equal((await repo.getSiteSettings()).accountNotificationsSince, now);
+  assert.deepEqual(await prefs(), preferences);
+  await tick();
+  assert.equal(sent.length, 0);
+  assert.equal(await count("account_notification_items", "state = 'cancelled'"), 1);
+  now += 2;
   await claim("sink");
   await tick(mail => sendPortalMail({ PREVIEW_MAIL_SINK: "d1", PREVIEW_TEST_RECIPIENTS: "owner@example.test" }, mail, async m => { sent.push(m); }));
   assert.equal(sent.length, 1);
@@ -353,7 +371,6 @@ test("scheduled account delivery is independent of publication and admin digests
     return db.prepare(sql);
   }, batch: statements => db.batch(statements) };
   await notificationWorker.scheduled({}, { DB: failingPublicationDB, ORGANIZER_PUBLICATION_MODE: "fake", PREVIEW_MAIL_SINK: "d1",
-    ACCOUNT_NOTIFICATIONS_ENABLED: "true", ACCOUNT_NOTIFICATIONS_SINCE: "2026-01-01T00:00:00Z",
     NOTIFICATION_ORIGIN: "https://map.kotoban.top", PREVIEW_TEST_RECIPIENTS: "owner@example.test" });
   assert.equal(await count("account_notification_batches", "state = 'accepted'"), 1);
   assert.match((await repo.latestPreviewMail("owner@example.test")).subject, /認領通過/);

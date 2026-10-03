@@ -33,8 +33,6 @@
   },
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
-    // Preview delivery verified; independent of publication mode.
-    "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
     "NOTIFICATION_ORIGIN": "https://map.kotoban.top",
     "MAILGUN_DOMAIN": "verify.kotoban.top",
     "MAILGUN_SENDER": "場刊 Map <noreply@verify.kotoban.top>",
@@ -55,7 +53,6 @@
         "PREVIEW_MAIL_SINK": "d1",
         "PREVIEW_TEST_RECIPIENTS": "preview-admin@example.test,preview-circle@example.test",
         "NOTIFICATION_ORIGIN": "https://review-notifications.tw-catalog.pages.dev",
-        "ADMIN_REVIEW_NOTIFICATIONS_ENABLED": "true",
         "MAILGUN_DOMAIN": "verify.kotoban.top",
         "MAILGUN_SENDER": "場刊 Map <postmaster@verify.kotoban.top>"
       },

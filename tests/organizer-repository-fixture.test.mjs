@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer } from "vite";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { organizerRepositoryFixtureScript, resetOrganizerRepositoryFixture } from "./support/organizer-repository-fixture.mjs";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
@@ -23,6 +24,7 @@ const actual = createIdentityRepository(actualDb);
 async function nodeFixture(now) {
   await baseline.ensureTables();
   await baseline.clearPreviewData();
+  await resetSiteSettings(baselineDb);
   const adminId = await baseline.upsertAccount("admin@example.test", now);
   await baseline.addAdmin("admin@example.test", "bootstrap", now);
   const ownerId = await baseline.upsertAccount("owner@example.test", now);
@@ -54,6 +56,7 @@ test("worker fixture matches the old hook and clears previous-case state while r
     await db.batch([
       db.prepare("UPDATE organizer_venues SET name = name || ' changed'"),
       db.prepare("DELETE FROM organizer_reference_records"),
+      db.prepare("UPDATE site_settings SET publication_enabled = 0"),
     ]);
   }
   const next = await resetOrganizerRepositoryFixture(runtime, now + 1000);
@@ -63,6 +66,7 @@ test("worker fixture matches the old hook and clears previous-case state while r
   assert.notEqual(next.adminId, first.adminId, "accounts must be recreated for each case");
   assert.deepEqual(resetState.organizer_event_candidates, []);
   assert.deepEqual(resetState.audit_log, []);
+  assert.equal(resetState.site_settings[0].publication_enabled, 1, "each scenario restores its publication choice");
   assert.equal(resetState.accounts.length, 3);
   assert.ok(resetState.admins.some((row) => row.email === "retained@example.test"));
   assert.ok(resetState.organizer_reference_records.length > 0, "the reference catalog must be reseeded");
