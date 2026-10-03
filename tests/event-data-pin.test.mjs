@@ -78,7 +78,15 @@ test("new pins may carry the reviewed circle identity grouping", () => {
   assert.equal(EVENT_FILE_NAMES.includes("circle-identity-groups.json"), true);
 });
 
-test("only the immutable FF47 pin may omit circle identity grouping", () => {
+test("only the original FF47 pin and its fixed address completion may omit circle identity grouping", () => {
+  const originalPin = {
+    ...pin,
+    commit: "8c645303fa6838383549fbe8433ece081c514e1e",
+    files: pin.files.map(file => file.path === "references/venues/taipei-expo-park-zhengyan-hall.json"
+      ? { ...file, sha256: "b7a5c3be4758db71a264bbf994b57329c377abcea68f5e7edefd288494c2e244" } : file),
+  };
+  assert.equal(parseEventDataPin(originalPin), originalPin, "the original published pin remains readable");
+  assert.equal(parseEventDataPin(pin), pin, "the fixed address completion remains readable");
   const anotherEvent = {
     ...pin,
     eventId: "event-alpha",

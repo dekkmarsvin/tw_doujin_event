@@ -14,6 +14,8 @@
 
 介紹頁仍在 build 產生；HTML 經既有 Function 加上每次回應的 CSP nonce（ADR-0074）。社團頁另依 [ADR-0077](../adr/0077-circle-share-images-follow-published-media.md) 唯讀取得分享縮圖，不重建 overlay 或寫入資料。Event JSON-LD 僅使用可解析的活動日日期與既有場館／主辦名稱、網址，活動有別稱時以 `alternateName` 列出；`image` 使用活動圖片（[ADR-0070](../adr/0070-event-images-are-published-by-approval-under-their-hash.md)），沒有時使用下段的品牌分享圖。pinned 場館記錄有地址時，`location[].address` 輸出 `PostalAddress`：從官方地址文字拆出郵遞區號、縣市（`addressRegion`）、鄉鎮市區（`addressLocality`）與其餘街道（`streetAddress`），`addressCountry` 為 `TW`，拆不出縣市時整段作為 `streetAddress`。地址只出現在 JSON-LD，不加到頁面文字。沒有地址的舊 pin 省略地址；售票、表演者、活動狀態與開場時間沒有資料，一律省略，不保證 rich result 資格。
 
+FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin 外，僅允許 #395 的固定地址補齊 pin `44c437efc9133e1a37a68b93f3ed3e49175684e2` 省略分組檔；其七份非場館檔案 bytes 與原 pin 相同，場館只補上已公開的地址及出處。其他新 commit／活動仍須提供分組檔；本次不建立候選、不變更既有身分、攤位或歷史核准紀錄。
+
 首頁、介紹頁的 build 產物與 Reader 啟動後的 head 預設以絕對網址指向品牌分享圖 `/share-card.png`（1200×630 PNG，維護者選定的 C 版），並使用 `summary_large_image`。有活動圖片時，活動介紹頁與 Reader 的活動畫面使用活動圖片及其尺寸。社團頁 GET 回應使用該社團已儲存的分享縮圖選擇；代表圖尺寸未知時移除尺寸 metadata，未選圖或所選內容已不公開時回到品牌圖。多數分享平台不接受 SVG，所以不用站台圖示。分享圖供其他平台的伺服器抓取，不加入 Service Worker precache。
 
 首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
