@@ -59,6 +59,8 @@ const mapHref = (eventId: string, record?: CircleViewRecord) => {
 /** The map side panel renders `externalLinks.slice(0, 6)`; the rest move to full detail. */
 const SIDE_PANEL_LINK_LIMIT = 6;
 
+const CIRCLE_CONTACT_DISCORD = "https://discord.gg/MmtjnUjEwW";
+
 const EMPTY_LINK: CircleExternalLink = { provider: "", kind: "social", url: "" };
 
 const PORTAL_EVENT_STORAGE_KEY = "circle-portal-event";
@@ -492,9 +494,9 @@ function ClaimList({ claims, onChanged }: { claims: ClaimSummary[]; onChanged: (
         }}>撤回</button>}
       </li>)}
     </ul>
-    {/* The recovery path only works if it is visible before the code goes missing. */}
-    {claims.some((claim) => claim.status === "pending") && <p className={styles.notice}>
-      驗證碼遺失或過期時，撤回該筆認領後重新送出，即可取得新的驗證碼，不需要聯絡管理者。
+    {/* Only manual review waits on the maintainers; a code claim verifies itself. */}
+    {claims.some((claim) => claim.status === "pending" && !claim.targetUrl) && <p className={styles.notice}>
+      預計 1–3 天內完成審核。如需聯絡，請到<a href={CIRCLE_CONTACT_DISCORD} target="_blank" rel="noopener noreferrer">社團聯絡 Discord</a>。
     </p>}
     {status.kind !== "idle" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;
@@ -546,7 +548,7 @@ function ClaimDestination({ circleId, claims, ready, failed, onChanged }: {
   if (!ready) return <p className={styles.notice} role="status">正在讀取社團…</p>;
   if (claim) return <section className={styles.card}><h2>{claim.circleName}</h2>{claim.status === "verified"
     ? <a href={`#circle-editor-${claim.circleId}`}>管理社團資料</a>
-    : created?.id === claim.id && proof ? proof : <p>認領處理中，可在「我的社團」查看或撤回。</p>}</section>;
+    : created?.id === claim.id && proof ? proof : <p>審核中，進度見「我的社團」。</p>}</section>;
   if (!result) return <p className={styles.notice} role="status">正在讀取社團…</p>;
   if (result.error) return <section className={styles.card}><p className={styles.error} role="status">{result.error}</p><button type="button" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>重新讀取</button></section>;
   // Same words as the refusal `createClaim` would give after the form was filled in.
