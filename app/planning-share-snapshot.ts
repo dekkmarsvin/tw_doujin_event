@@ -1,5 +1,7 @@
 import { getPublishedEvent, type EventDefinition } from "./event-catalog";
 
+export const SHARE_MAX_ITEMS = 500;
+
 export type ShareSnapshot = {
   version: 1;
   eventId: string;
@@ -23,8 +25,8 @@ export function parseShareSnapshot(
     || value.version !== 1 || typeof value.eventId !== "string") return invalid;
   const event = publishedEvent(value.eventId);
   if (!event) return { ok: false, error: "活動尚未公開或不存在。" };
-  if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > 500) {
-    return { ok: false, error: "分享清單須包含 1 至 500 個項目。" };
+  if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > SHARE_MAX_ITEMS) {
+    return { ok: false, error: `分享清單須包含 1 至 ${SHARE_MAX_ITEMS} 個項目。` };
   }
   const seen = new Set<string>();
   const items: ShareSnapshot["items"] = [];
