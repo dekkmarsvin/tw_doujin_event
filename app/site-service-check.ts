@@ -35,7 +35,8 @@ export async function checkPublicationService(env: Environment, requestFetch = g
     // Token exchange checks the same two repositories and permission scope as publication; no repository writes.
     await createGitHubAppTokenProvider({ appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
       privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "", repositories: GITHUB_PUBLICATION_REPOSITORIES,
-      permissions: PUBLICATION_GITHUB_PERMISSIONS, fetch: requestFetch }).getToken();
+      permissions: PUBLICATION_GITHUB_PERMISSIONS,
+      fetch: (url, init) => requestFetch(url, { ...init, signal: AbortSignal.timeout(8_000) }) }).getToken();
     return check("available", "GitHub App", "連線、安裝與發布權限正常。");
   } catch (error) {
     if (error instanceof PublicationFailure) {
