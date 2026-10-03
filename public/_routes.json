@@ -2,7 +2,7 @@
   "version": 1,
   "include": [
     "/", "/index.html", "/404.html",
-    "/circle*", "/organizer*", "/admin*", "/privacy*", "/events/*",
+    "/circle*", "/organizer*", "/admin*", "/privacy*", "/events/*", "/s/*",
     "/api/*", "/data/events/*/overrides.json"
   ],
   "exclude": []
