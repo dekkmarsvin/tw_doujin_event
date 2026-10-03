@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import { createServer } from "vite";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { assignShapeBox, cloneShape, isSimplePolygon, pointInPolygon, polygonBounds, shapeInterior } = await vite.environments.ssr.runner.import("/app/map-shape-geometry.ts");
+const { assignShapeBox, cloneShape, isSimplePolygon, pointInPolygon, polygonBounds, rectInsidePolygon, shapeInterior } = await vite.environments.ssr.runner.import("/app/map-shape-geometry.ts");
 const { createBlankEventMapLayout, validateEventMapLayout, scaleEventMapLayout } = await vite.environments.ssr.runner.import("/app/event-map.ts");
 const { parseMapContributionDraftContent } = await vite.environments.ssr.runner.import("/app/map-contribution-draft.ts");
 const { applySelectionBoxes } = await vite.environments.ssr.runner.import("/app/map-layout-editor-selection.ts");
@@ -63,4 +63,10 @@ test("shared area name and facility locator lie inside a concave area", () => {
   assert.ok(label); assert.equal(pointInPolygon(label, points), true);
   const directory = mapFacilityDirectory(layout);
   assert.equal(pointInPolygon(directory.entries[0].point, points), true);
+});
+
+test("a box is inside a concave area only when no edge of the area cuts it", () => {
+  assert.equal(rectInsidePolygon({ x: 12, y: 40, width: 16, height: 60 }, concave), true);
+  assert.equal(rectInsidePolygon({ x: 12, y: 12, width: 60, height: 60 }, concave), false, "every corner may be inside while the missing corner cuts through");
+  assert.equal(rectInsidePolygon({ x: 0, y: 40, width: 16, height: 20 }, concave), false);
 });

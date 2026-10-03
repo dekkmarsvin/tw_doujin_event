@@ -24,11 +24,11 @@ test("labels keep a readable size on a fitted map and stop growing when zoomed i
   const overview = layoutMapMarkerLabels(layout, { screenScale: .12, fontScale: 1 });
   assert.equal(overview.get("access:in").fontPx, 11);
   assert.equal(overview.get("row:A").fontPx, 12);
-  assert.equal(overview.get("landmark:stage").fontPx, 11);
+  assert.equal(overview.get("landmark:stage").fontPx, 16, "an area name uses a comfortable size wherever its area has room");
   const close = layoutMapMarkerLabels(layout, { screenScale: 3.4, fontScale: 1 });
   assert.equal(close.get("access:in").fontPx, 14);
   assert.equal(close.get("row:A").fontPx, 28);
-  assert.equal(close.get("landmark:stage").fontPx, 16);
+  assert.equal(close.get("landmark:stage").fontPx, 28);
   const extra = layoutMapMarkerLabels(layout, { screenScale: .12, fontScale: 1.24 });
   assert.equal(extra.get("access:in").fontPx, 11 * 1.24);
   assert.equal(extra.get("row:A").fontPx, 12 * 1.24);
@@ -69,6 +69,36 @@ test("an area name must fit inside its own area", () => {
   const wide = labels.get("landmark:wide");
   assert.ok(wide && wide.fontPx >= 11 && wide.fontPx * mapLabelEms(wide.text) <= 400 * .4);
   assert.equal(labels.has("landmark:narrow"), false);
+});
+
+test("an area name stands vertically in a tall, narrow area and stays on one line where it already fits", () => {
+  const areas = [
+    { id: "cloak", kind: "other", label: "更衣寄物區", rect: { x: 100, y: 100, width: 40, height: 300 } },
+    { id: "box", kind: "other", label: "B1 寄物", rect: { x: 300, y: 100, width: 26, height: 300 } },
+    { id: "booth", kind: "enterprise", label: "企業攤", rect: { x: 500, y: 100, width: 400, height: 300 } },
+  ];
+  const labels = layoutMapMarkerLabels(hall({ rows: [], landmarks: areas }), { screenScale: 1, fontScale: 1 });
+  assert.deepEqual(labels.get("landmark:cloak").lines, ["更", "衣", "寄", "物", "區"]);
+  assert.ok(labels.get("landmark:cloak").fontPx * 5 * 1.2 <= 300 && labels.get("landmark:cloak").fontPx <= 40);
+  assert.ok(labels.get("landmark:cloak").fontPx > 16, "a tall area grows its vertical name past the comfortable size");
+  assert.deepEqual(labels.get("landmark:box").lines, ["B1", "寄", "物"], "an ASCII run is never split");
+  assert.equal(labels.get("landmark:booth").lines, undefined, "a name already at its ceiling is not broken");
+  assert.equal(labels.get("landmark:booth").fontPx, 28);
+  // On a smaller screen the comfortable size caps a three-line break; the
+  // stack is still larger and wins.
+  assert.deepEqual(layoutMapMarkerLabels(hall({ rows: [], landmarks: areas }), { screenScale: .87, fontScale: 1 }).get("landmark:cloak").lines, ["更", "衣", "寄", "物", "區"]);
+  const wrapped = layoutMapMarkerLabels(hall({ rows: [], landmarks: [{ id: "wide", kind: "other", label: "更衣寄物區", rect: { x: 100, y: 100, width: 60, height: 70 } }] }), { screenScale: 1, fontScale: 1 }).get("landmark:wide");
+  assert.deepEqual(wrapped.lines, ["更衣寄", "物區"], "a broken name puts its longer line first");
+});
+
+test("a curved band's name uses the band's width, not only the largest circle inside it", () => {
+  const at = (r, a) => ({ x: 500 + r * Math.cos(a), y: 300 + r * Math.sin(a) });
+  const angles = Array.from({ length: 25 }, (_, i) => Math.PI * (.1 + .8 * i / 24));
+  const points = [...angles.map(a => at(170, a)), ...angles.reverse().map(a => at(90, a))];
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const rect = { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), points };
+  const label = layoutMapMarkerLabels(hall({ rows: [], landmarks: [{ id: "stairs", kind: "other", label: "主樓梯", rect }] }), { screenScale: .64, fontScale: 1 }).get("landmark:stairs");
+  assert.equal(label.fontPx, 16);
 });
 
 test("a name at the edge of the plan slides back onto it", () => {

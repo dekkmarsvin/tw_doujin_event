@@ -1,5 +1,5 @@
 import { rowLabelPlacement, type EventMapLayout, type MapAccessDirection, type MapAccessPoint } from "./event-map";
-import { shapeInterior } from "./map-shape-geometry";
+import { rectInsidePolygon, shapeInterior } from "./map-shape-geometry";
 
 /** Layout units to CSS px, and the reader's text-size multiplier. */
 export type MapMarkerPresentation = { screenScale: number; fontScale: number };
@@ -15,12 +15,20 @@ export const MAP_ACCESS_BADGE_PX = 22;
  * above the ceiling it stops growing. */
 const ACCESS_LABEL = { units: 10, minPx: 11, maxPx: 14 };
 const ROW_LABEL = { units: 22, minPx: 12, maxPx: 28 };
-const LANDMARK_LABEL = { units: 12, minPx: 11, maxPx: 16 };
+/** An area's name is sized from the area itself, not from a layout size: it
+ * spans at most this share of the room it has, so a large hall reads at a
+ * glance while a narrow one still fits its name. */
+const LANDMARK_LABEL = { minPx: 11, comfortPx: 16, maxPx: 28, fill: .6, maxLines: 3 };
 const LABEL_GAP_PX = 4;
 const LANDMARK_PADDING_PX = 3;
 const COLLISION_MARGIN_PX = 2;
 /** The label is drawn on a central baseline; this is half its line box. */
 const HALF_LINE_EM = .6;
+const LINE_EM = HALF_LINE_EM * 2;
+/** The largest other arrangement replaces the single line only when it is
+ * clearly larger, so a name is not broken just because a squarish area would
+ * allow it. Between the others, the larger wins and a tie keeps fewer lines. */
+const REARRANGE_GAIN = 1.25;
 /** Floating-point slack when asking whether a slid label is on the plan. */
 const EDGE_EPSILON_PX = 1e-6;
 const OPPOSITE_SIDE = { north: "south", south: "north", east: "west", west: "east" } as const;
@@ -34,6 +42,9 @@ export type MapMarkerLabel = {
   dy: number;
   fontPx: number;
   anchor: "start" | "middle" | "end";
+  /** An area name drawn on several lines, centred on the anchor. One unit per
+   * line is how a tall, narrow area shows its name vertically. */
+  lines?: string[];
 };
 
 type Box = { left: number; top: number; right: number; bottom: number };
@@ -84,11 +95,12 @@ function badgeLabel(point: { x: number; y: number }, text: string, side: MapAcce
 }
 
 function labelBox(label: MapMarkerLabel, screenScale: number): Box {
-  const width = mapLabelEms(label.text) * label.fontPx;
+  const lines = label.lines ?? [label.text];
+  const width = Math.max(...lines.map(mapLabelEms)) * label.fontPx;
   const x = label.x * screenScale + label.dx;
   const y = label.y * screenScale + label.dy;
   const left = label.anchor === "start" ? x : label.anchor === "end" ? x - width : x - width / 2;
-  const half = label.fontPx * HALF_LINE_EM;
+  const half = label.fontPx * HALF_LINE_EM * lines.length;
   return { left, right: left + width, top: y - half, bottom: y + half };
 }
 
@@ -97,13 +109,75 @@ function overlaps(a: Box, b: Box) {
     && a.top < b.bottom + COLLISION_MARGIN_PX && b.top < a.bottom + COLLISION_MARGIN_PX;
 }
 
+/** Units a name may break between: a run of ASCII (WC, 14:30, B1) stays whole,
+ * every other character stands alone, and spaces only separate. */
+function labelUnits(text: string) {
+  return [...text.matchAll(/[!-~]+|\S/gu)].map((match) => match[0]);
+}
+
+function joinUnits(units: readonly string[]) {
+  return units.reduce((line, unit, index) => line + (index && /^[!-~]/.test(unit) && /[!-~]$/.test(units[index - 1]) ? " " : "") + unit, "");
+}
+
+/** The single line, the most even two- and three-line breaks (longer lines
+ * first, as a name is usually broken by hand), and the one-unit-per-line
+ * stack. */
+function landmarkArrangements(text: string): string[][] {
+  const units = labelUnits(text);
+  const arrangements = [[text]];
+  const widest = (lines: string[]) => Math.max(...lines.map(mapLabelEms));
+  const best = (splits: number[][]) => splits.map((cuts) => {
+    const ends = [...cuts, units.length];
+    return ends.map((end, index) => joinUnits(units.slice(index ? ends[index - 1] : 0, end)));
+  }).sort((a, b) => widest(a) - widest(b) || mapLabelEms(b[0]) - mapLabelEms(a[0]))[0];
+  for (let lines = 2; lines <= Math.min(LANDMARK_LABEL.maxLines, units.length - 1); lines++) {
+    const splits: number[][] = [];
+    for (let i = 1; i < units.length; i++) {
+      if (lines === 2) splits.push([i]);
+      else for (let j = i + 1; j < units.length; j++) splits.push([i, j]);
+    }
+    arrangements.push(best(splits));
+  }
+  if (units.length > 1) arrangements.push(units);
+  return arrangements;
+}
+
+/** The size, in px, these lines are drawn at inside the area. Up to the
+ * comfortable size a name may use all the room it has; beyond it, it takes a
+ * share of that room up to the ceiling. Never larger than what fits. */
+function landmarkFontPx(lines: string[], rect: EventMapLayout["landmarks"][number]["rect"], anchor: { x: number; y: number }, { screenScale, fontScale }: MapMarkerPresentation) {
+  const widthEms = Math.max(...lines.map(mapLabelEms));
+  const heightEms = lines.length * LINE_EM;
+  let fit = Math.max(0, Math.min((rect.width * screenScale - LANDMARK_PADDING_PX * 2) / widthEms, (rect.height * screenScale - LANDMARK_PADDING_PX * 2) / heightEms));
+  // A drawn shape is narrower than its bounds somewhere; find the largest
+  // text box, with its padding, that stays inside it around the anchor.
+  if (rect.points) {
+    const points = rect.points;
+    const fits = (fontPx: number) => {
+      const halfWidth = (fontPx * widthEms / 2 + LANDMARK_PADDING_PX) / screenScale;
+      const halfHeight = (fontPx * heightEms / 2 + LANDMARK_PADDING_PX) / screenScale;
+      return rectInsidePolygon({ x: anchor.x - halfWidth, y: anchor.y - halfHeight, width: halfWidth * 2, height: halfHeight * 2 }, points);
+    };
+    let low = 0;
+    for (let high = fit, step = 0; step < 16; step++) {
+      const middle = (low + high) / 2;
+      if (fits(middle)) low = middle; else high = middle;
+    }
+    fit = low;
+  }
+  const preferred = Math.max(LANDMARK_LABEL.comfortPx * fontScale, Math.min(LANDMARK_LABEL.maxPx * fontScale, fit * LANDMARK_LABEL.fill));
+  return Math.min(fit, preferred);
+}
+
 /**
  * Sizes and places every row, access point and landmark label for one zoom, and
  * returns only the ones to draw. Access and service point badges are always
  * drawn, so they are placed first as obstacles; labels then claim space in
  * priority order — access points and rows, then service points, then
  * landmarks — and a label that would overlap one
- * already placed is left out. An access or service point name that cannot stay
+ * already placed is left out. An area's name grows with its area up to a
+ * ceiling, and breaks into lines, or stands vertically in a tall, narrow
+ * area, when that lets it be clearly larger. An access or service point name that cannot stay
  * on the plan on its own side of the badge moves to the other side, and is left
  * out only if neither side fits. A landmark name also has to fit inside its own
  * area at the smallest size, or it is left out. Hidden names stay available
@@ -142,17 +216,16 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
     const text = point.label?.trim();
     if (text) candidates.push([mapMarkerLabelKey("service", point.id), badgeLabel(point, text, "south", accessPx), badgeLabel(point, text, "north", accessPx)]);
   }
-  const landmarkPx = boundedPx(LANDMARK_LABEL, presentation);
   for (const landmark of layout.landmarks) {
     if (!landmark.label.trim()) continue;
-    const width = landmark.rect.width * screenScale - LANDMARK_PADDING_PX * 2;
-    const height = landmark.rect.height * screenScale - LANDMARK_PADDING_PX * 2;
     const interior = shapeInterior(landmark.rect);
-    const shapeFontPx = "points" in landmark.rect ? Math.max(0, interior.radius * screenScale - LANDMARK_PADDING_PX) * 2 / Math.hypot(mapLabelEms(landmark.label), HALF_LINE_EM * 2) : Infinity;
-    const fontPx = Math.min(landmarkPx, width / mapLabelEms(landmark.label), height / (HALF_LINE_EM * 2), shapeFontPx);
-    if (!(fontPx >= LANDMARK_LABEL.minPx * fontScale)) continue;
+    const [single, ...others] = landmarkArrangements(landmark.label).map((lines) => ({ lines, fontPx: landmarkFontPx(lines, landmark.rect, interior, presentation) }));
+    const largest = others.reduce((best, option) => option.fontPx > best.fontPx ? option : best, single);
+    const chosen = largest.fontPx > single.fontPx * REARRANGE_GAIN ? largest : single;
+    if (!(chosen.fontPx >= LANDMARK_LABEL.minPx * fontScale)) continue;
     candidates.push([mapMarkerLabelKey("landmark", landmark.id), {
-      text: landmark.label, x: interior.x, y: interior.y, dx: 0, dy: 0, fontPx, anchor: "middle",
+      text: landmark.label, x: interior.x, y: interior.y, dx: 0, dy: 0, fontPx: chosen.fontPx, anchor: "middle",
+      ...(chosen.lines.length > 1 ? { lines: chosen.lines } : {}),
     }]);
   }
 
