@@ -170,6 +170,9 @@
 .claimColumn > .notice { margin-top: 0; }
 /* Alone, the claim form is the page's one task: full row, readable measure. */
 .claimSolo .card > * { max-width: 640px; }
+/* Capped below the card width, inline fields left room for the hint and the
+   submit button to sit beside them instead of under them. */
+.claimSolo .card > :is(input, select, textarea) { display: block; }
 
 /* Nothing claimed yet: the claim is step one of three, and says so. */
 .startSteps { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
