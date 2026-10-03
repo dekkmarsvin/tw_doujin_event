@@ -2,6 +2,7 @@ import { EVENT_MAP_VERSION, validateEventMapLayout, type EventMapLayout, type Ma
 import { mapTemplateLabel, validateMapTemplateLayout } from "./map-template-registry";
 import { validMapAuthoringState, type MapAuthoringState } from "./map-authoring-state";
 import type { MapBoothGroup } from "./map-booth-coverage";
+import { annotationBoothConflicts } from "./map-annotations";
 
 export const MAP_CONTRIBUTION_DRAFT_SCHEMA = "map-contribution-draft/1" as const;
 
@@ -54,7 +55,7 @@ export function resolveCanonicalMapPeriod<T extends { id: string | number }>(
 }
 
 export type MapDraftProblem = {
-  code: "invalid_content" | "invalid_layout" | "template_mismatch" | "unknown_booth" | "missing_booth" | "missing_evidence" | "overlap";
+  code: "invalid_content" | "invalid_layout" | "template_mismatch" | "unknown_booth" | "missing_booth" | "missing_evidence" | "overlap" | "annotation_overlap";
   /** An error refuses the draft; a warning is reported and lets it through.
    * Absent means error, so a problem added later blocks until someone decides
    * it should not. */
@@ -99,11 +100,16 @@ function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
   return Object.keys(value).every((key) => allowed.includes(key));
 }
 
+function strictAreaShape(value: unknown) {
+  return record(value) && onlyKeys(value, ["x", "y", "width", "height", "points"])
+    && (value.points === undefined || (Array.isArray(value.points) && value.points.every(point => record(point) && onlyKeys(point, ["x", "y"]))));
+}
+
 function strictLayoutShape(layout: Record<string, unknown>) {
-  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions"])) return false;
-  if (!record(layout.floor) || !onlyKeys(layout.floor, ["x", "y", "width", "height"])) return false;
+  if (!onlyKeys(layout, ["version", "template", "width", "height", "floor", "rows", "pillars", "accessPoints", "landmarks", "servicePoints", "areaRegions", "spaceMarks", "notes", "paths"])) return false;
+  if (!strictAreaShape(layout.floor)) return false;
   if (!Array.isArray(layout.rows) || !layout.rows.every((row) => record(row)
-    && onlyKeys(row, ["label", "orientation", "confidence", "slots"])
+    && onlyKeys(row, ["label", "orientation", "labelSide", "confidence", "slots"])
     && Array.isArray(row.slots) && row.slots.every((slot) => record(slot)
       && onlyKeys(slot, ["code", "rect"]) && record(slot.rect) && onlyKeys(slot.rect, ["x", "y", "width", "height"])))) return false;
   if (!Array.isArray(layout.pillars) || !layout.pillars.every((pillar) => record(pillar)
@@ -112,12 +118,18 @@ function strictLayoutShape(layout: Record<string, unknown>) {
     && onlyKeys(point, ["id", "kind", "direction", "x", "y", "label"]))) return false;
   if (layout.servicePoints !== undefined && !(Array.isArray(layout.servicePoints) && layout.servicePoints.every((point) => record(point)
     && onlyKeys(point, ["id", "kind", "x", "y", "label"])))) return false;
+  if (layout.spaceMarks !== undefined && !(Array.isArray(layout.spaceMarks) && layout.spaceMarks.every((mark) => record(mark)
+    && onlyKeys(mark, ["id", "kind", "rect"]) && record(mark.rect) && onlyKeys(mark.rect, ["x", "y", "width", "height"])))) return false;
+  if (layout.notes !== undefined && !(Array.isArray(layout.notes) && layout.notes.every((note) => record(note)
+    && onlyKeys(note, ["id", "text", "rect"]) && record(note.rect) && onlyKeys(note.rect, ["x", "y", "width", "height"])))) return false;
+  if (layout.paths !== undefined && !(Array.isArray(layout.paths) && layout.paths.every((path) => record(path)
+    && onlyKeys(path, ["id", "points"]) && Array.isArray(path.points) && path.points.every(point => record(point) && onlyKeys(point, ["x", "y"]))))) return false;
   if (layout.areaRegions !== undefined && !(Array.isArray(layout.areaRegions) && layout.areaRegions.every((region) => record(region)
     && onlyKeys(region, ["id", "areaId", "color", "points"])
     && Array.isArray(region.points) && region.points.every((point) => record(point) && onlyKeys(point, ["x", "y"]))))) return false;
   return Array.isArray(layout.landmarks) && layout.landmarks.every((landmark) => record(landmark)
     && onlyKeys(landmark, ["id", "kind", "rect", "label"])
-    && record(landmark.rect) && onlyKeys(landmark.rect, ["x", "y", "width", "height"]));
+    && strictAreaShape(landmark.rect));
 }
 
 /**
@@ -223,6 +235,8 @@ export function validateMapContributionDraft(
       boothCodes: [...new Set(overlaps.flat())].sort(),
     });
   }
+  problems.push(...annotationBoothConflicts(content.layout.notes ?? [], content.layout.paths ?? [], slotEntries(content.layout))
+    .map(message => ({ code: "annotation_overlap" as const, message })));
   // Warnings still travel with a passing result: the point of downgrading one
   // is that a human reads it, not that it disappears.
   const refused = problems.some(({ severity }) => severity !== "warning");
@@ -244,6 +258,9 @@ export type MapCandidateDiff = {
   /** Missing on candidates built before service points existed. */
   changedServicePointIds?: string[];
   changedAreaRegionIds?: string[];
+  changedSpaceMarkIds?: string[];
+  changedNoteIds?: string[];
+  changedPathIds?: string[];
 };
 
 function same(valueA: unknown, valueB: unknown) {
@@ -275,6 +292,9 @@ function buildMapCandidateDiff(previous: PublishedEventMap | null, candidate: Pu
     changedLandmarkIds: changedKeys(previous?.layout.landmarks ?? [], candidate.layout.landmarks, (landmark) => landmark.id),
     changedServicePointIds: changedKeys(previous?.layout.servicePoints ?? [], candidate.layout.servicePoints ?? [], (point) => point.id),
     changedAreaRegionIds: changedKeys(previous?.layout.areaRegions ?? [], candidate.layout.areaRegions ?? [], (region) => region.id),
+    changedSpaceMarkIds: changedKeys(previous?.layout.spaceMarks ?? [], candidate.layout.spaceMarks ?? [], (mark) => mark.id),
+    changedNoteIds: changedKeys(previous?.layout.notes ?? [], candidate.layout.notes ?? [], (note) => note.id),
+    changedPathIds: changedKeys(previous?.layout.paths ?? [], candidate.layout.paths ?? [], (path) => path.id),
   };
 }
 

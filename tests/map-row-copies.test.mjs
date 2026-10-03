@@ -5,7 +5,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const { planRowCopies: plan, copyRowLabels: labels, copyRowLimitError: limit } = await vite.environments.ssr.runner.import("/app/map-row-copies.ts");
 const { overlappingSlotCodes } = await vite.environments.ssr.runner.import("/app/map-contribution-draft.ts");
 after(() => vite.close());
-const row = { label: "A", orientation: "vertical", confidence: 1, slots: [
+const row = { label: "A", orientation: "vertical", labelSide: "left", confidence: 1, slots: [
   { code: "A01", rect: { x: 20, y: 20, width: 10, height: 10 } },
   { code: "A02", rect: { x: 20, y: 30, width: 10, height: 10 } },
   { code: "A03", rect: { x: 40, y: 30, width: 10, height: 10 } },
@@ -21,6 +21,7 @@ test("a U-shaped batch preserves numbering order, geometry, source and orientati
   assert.deepEqual(result.rows.map(r => r.label), ["B", "C", "D"]);
   for (const [i, copy] of result.rows.entries()) for (const [j, slot] of copy.slots.entries()) {
     assert.equal(copy.orientation, row.orientation);
+    assert.equal(copy.labelSide, "left", "copies preserve the explicitly chosen row label side");
     assert.equal(slot.code, copy.label + row.slots[j].code.slice(1));
     assert.deepEqual(slot.rect, { ...row.slots[j].rect, x: row.slots[j].rect.x + 35 * (i + 1) });
   }

@@ -1,3 +1,7 @@
+import { isSimplePolygon, polygonBounds, type MapShape } from "./map-shape-geometry";
+import { validNoteText, validPathPoints, type MapNote, type MapPath } from "./map-annotations";
+export type { MapNote, MapPath } from "./map-annotations";
+export type { MapShape } from "./map-shape-geometry";
 export const EVENT_MAP_VERSION = 2 as const;
 
 export type MapRect = { x: number; y: number; width: number; height: number };
@@ -6,6 +10,8 @@ export const MAP_AREA_COLORS = { mint: "#d9f4e1", sky: "#dceeff", peach: "#ffe6d
 export type MapAreaColor = keyof typeof MAP_AREA_COLORS;
 export type MapAreaRegion = { id: string; areaId: string; color: MapAreaColor; points: MapPoint[] };
 export type MapOrientation = "vertical" | "horizontal";
+export const MAP_ROW_LABEL_SIDES = ["above", "below", "left", "right"] as const;
+export type MapRowLabelSide = (typeof MAP_ROW_LABEL_SIDES)[number];
 
 export type BoothSlot = {
   code: string;
@@ -15,11 +21,18 @@ export type BoothSlot = {
 export type BoothRow = {
   label: string;
   orientation: MapOrientation;
+  /** Absent on older maps: vertical rows use above, horizontal rows below. */
+  labelSide?: MapRowLabelSide;
   confidence: number;
   slots: BoothSlot[];
 };
 
 export type MapPillar = MapRect & { id: string };
+export const MAP_SPACE_MARK_KINDS = ["reserved", "cancelled"] as const;
+export type MapSpaceMarkKind = (typeof MAP_SPACE_MARK_KINDS)[number];
+export const MAP_SPACE_MARK_LABELS: Record<MapSpaceMarkKind, string> = { reserved: "保留空桌", cancelled: "取消攤位" };
+/** A table-shaped annotation, never a booth or a circle placement. */
+export type MapSpaceMark = { id: string; kind: MapSpaceMarkKind; rect: MapRect };
 
 export const MAP_ACCESS_DIRECTIONS = ["north", "south", "east", "west"] as const;
 export type MapAccessDirection = (typeof MAP_ACCESS_DIRECTIONS)[number];
@@ -48,7 +61,7 @@ export type MapLandmarkKind = "enterprise" | "stage" | "other";
 
 /** Venue services a reader looks for, each drawn as one badge at a point. The
  * list is fixed: a badge a reader cannot recognise does not help them. */
-export const MAP_SERVICE_POINT_KINDS = ["toilet", "accessible-toilet", "information", "cloakroom", "first-aid", "stairs", "elevator"] as const;
+export const MAP_SERVICE_POINT_KINDS = ["toilet", "accessible-toilet", "information", "cloakroom", "first-aid", "stairs", "elevator", "ticket-office", "changing-room"] as const;
 export type MapServicePointKind = (typeof MAP_SERVICE_POINT_KINDS)[number];
 export const MAP_SERVICE_POINT_LABEL_LIMIT = 40;
 
@@ -64,30 +77,35 @@ export type MapServicePoint = {
 type MapLandmark = {
   id: string;
   kind?: MapLandmarkKind;
-  rect: MapRect;
+  rect: MapShape;
   label: string;
 };
 
-/** Where a row's label goes: centred across the booths it holds, a fixed gap
- * above a vertical row and below a horizontal one. `y` is the label's edge
- * nearest the row, so a label that grows keeps clear of its own booths. A row
- * with no booths has nowhere to put it. */
-export function rowLabelPlacement(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number; side: "above" | "below" } | null {
+/** The label's edge nearest the entire row, with the same 13-unit gap on every
+ * side. Slot order never determines the side of a U-shaped or segmented row. */
+export function rowLabelPlacement(row: Pick<BoothRow, "orientation" | "slots" | "labelSide">): { x: number; y: number; side: MapRowLabelSide } | null {
   if (!row.slots.length) return null;
   const minX = Math.min(...row.slots.map(({ rect }) => rect.x));
   const maxX = Math.max(...row.slots.map(({ rect }) => rect.x + rect.width));
   const minY = Math.min(...row.slots.map(({ rect }) => rect.y));
   const maxY = Math.max(...row.slots.map(({ rect }) => rect.y + rect.height));
-  return row.orientation === "horizontal" ? { x: (minX + maxX) / 2, y: maxY + 13, side: "below" } : { x: (minX + maxX) / 2, y: minY - 13, side: "above" };
+  const side = row.labelSide ?? (row.orientation === "horizontal" ? "below" : "above");
+  switch (side) {
+    case "above": return { x: (minX + maxX) / 2, y: minY - 13, side };
+    case "below": return { x: (minX + maxX) / 2, y: maxY + 13, side };
+    case "left": return { x: minX - 13, y: (minY + maxY) / 2, side };
+    case "right": return { x: maxX + 13, y: (minY + maxY) / 2, side };
+  }
 }
 
-/** The baseline of the editor's fixed 22-unit row label. It sits at the same
- * place the reader's label starts from, so the label a contributor lines a row
- * up against while drawing is the one readers end up seeing; below a row the
- * baseline drops by the cap height so the text top stays on the gap. */
-export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots">): { x: number; y: number } | null {
+/** A fixed 22-unit reference baseline. Screen-scaled renderers instead use
+ * rowLabelPlacement through map-marker-presentation to keep text outside the
+ * row as its size changes. Older above/below reference positions are stable. */
+export function rowLabelAnchor(row: Pick<BoothRow, "orientation" | "slots" | "labelSide">): { x: number; y: number; textAnchor?: "start" | "end" } | null {
   const placement = rowLabelPlacement(row);
-  return placement && { x: placement.x, y: placement.side === "below" ? placement.y + 17 : placement.y };
+  if (!placement) return null;
+  if (placement.side === "left" || placement.side === "right") return { x: placement.x, y: placement.y + 8.5, textAnchor: placement.side === "left" ? "end" : "start" };
+  return { x: placement.x, y: placement.side === "below" ? placement.y + 17 : placement.y };
 }
 
 export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "label">): MapLandmarkKind {
@@ -97,8 +115,8 @@ export function resolveMapLandmarkKind(landmark: Pick<MapLandmark, "kind" | "lab
   return "other";
 }
 
-function scaleRectBy(rect: MapRect, scaleX: number, scaleY: number): MapRect {
-  return { x: rect.x * scaleX, y: rect.y * scaleY, width: rect.width * scaleX, height: rect.height * scaleY };
+function scaleRectBy(rect: MapShape, scaleX: number, scaleY: number): MapShape {
+  return { x: rect.x * scaleX, y: rect.y * scaleY, width: rect.width * scaleX, height: rect.height * scaleY, ...(rect.points ? { points: rect.points.map(point => ({ x: point.x * scaleX, y: point.y * scaleY })) } : {}) };
 }
 
 /** The importer's narrower case: a replacement image only carries over the
@@ -119,7 +137,7 @@ export type EventMapLayout = {
   template: string;
   width: number;
   height: number;
-  floor: MapRect;
+  floor: MapShape;
   rows: BoothRow[];
   pillars: MapPillar[];
   accessPoints: MapAccessPoint[];
@@ -128,6 +146,11 @@ export type EventMapLayout = {
   servicePoints?: MapServicePoint[];
   /** Optional for maps published before organizer-drawn area overlays. */
   areaRegions?: MapAreaRegion[];
+  /** Tables that have no booth code or circle interaction. */
+  spaceMarks?: MapSpaceMark[];
+  /** Static plain text and ordered direction polylines, scoped to this map. */
+  notes?: MapNote[];
+  paths?: MapPath[];
 };
 
 /** Rescales every coordinate onto a new canvas size. A canvas is only ever the
@@ -136,7 +159,7 @@ export type EventMapLayout = {
 export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<EventMapLayout, "width" | "height">): EventMapLayout {
   const scaleX = targetSize.width / layout.width;
   const scaleY = targetSize.height / layout.height;
-  const scaleRect = (rect: MapRect) => scaleRectBy(rect, scaleX, scaleY);
+  const scaleRect = (rect: MapShape) => ({ ...scaleRectBy(rect, scaleX, scaleY), ...(rect.points ? { points: rect.points.map(scalePoint) } : {}) });
   // Points are validated without the rectangles' 1-unit slack, so a point on
   // the edge must stay exactly on it: 200 × 1.1 is 220.00000000000003, and
   // 200 × 1.15 falls short at 229.99999999999997. Only a point that was on the
@@ -159,6 +182,9 @@ export function scaleEventMapLayout(layout: EventMapLayout, targetSize: Pick<Eve
     landmarks: layout.landmarks.map((landmark) => ({ ...landmark, rect: scaleRect(landmark.rect) })),
     ...(layout.servicePoints ? { servicePoints: layout.servicePoints.map(scalePoint) } : {}),
     ...(layout.areaRegions ? { areaRegions: layout.areaRegions.map((region) => ({ ...region, points: region.points.map(scalePoint) })) } : {}),
+    ...(layout.spaceMarks ? { spaceMarks: layout.spaceMarks.map((mark) => ({ ...mark, rect: scaleRect(mark.rect) })) } : {}),
+    ...(layout.notes ? { notes: layout.notes.map((note) => ({ ...note, rect: scaleRect(note.rect) })) } : {}),
+    ...(layout.paths ? { paths: layout.paths.map((path) => ({ ...path, points: path.points.map(scalePoint) })) } : {}),
   };
 }
 
@@ -210,6 +236,14 @@ function finiteRect(rect: MapRect, width: number, height: number) {
     rect.width > 0 && rect.height > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width + 1 && rect.y + rect.height <= height + 1;
 }
 
+function finiteShape(shape: MapShape, width: number, height: number) {
+  if (!finiteRect(shape, width, height)) return false;
+  if (shape.points === undefined) return true;
+  if (!isSimplePolygon(shape.points) || shape.points.some(point => point.x < 0 || point.y < 0 || point.x > width + 1e-7 || point.y > height + 1e-7)) return false;
+  const bounds = polygonBounds(shape.points);
+  return (["x", "y", "width", "height"] as const).every(key => Math.abs(bounds[key] - shape[key]) < 1e-5);
+}
+
 export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly string[]): LayoutValidation {
   const errors: string[] = [];
   if (!value || typeof value !== "object") return { ok: false, errors: ["layout 必須是物件。"] };
@@ -219,7 +253,7 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
   if (!Number.isFinite(layout.width) || Number(layout.width) <= 0 || !Number.isFinite(layout.height) || Number(layout.height) <= 0) errors.push("layout 尺寸無效。" );
   const width = Number(layout.width) || 0;
   const height = Number(layout.height) || 0;
-  if (!layout.floor || !finiteRect(layout.floor, width, height)) errors.push("場館範圍無效。" );
+  if (!layout.floor || !finiteShape(layout.floor, width, height)) errors.push("場館範圍無效；多邊形須在畫布內、不可自交，且外框座標须與頂點一致。" );
   if (!Array.isArray(layout.rows)) errors.push("rows 必須是陣列。" );
   if (!Array.isArray(layout.pillars)) errors.push("pillars 必須是陣列。" );
   if (!Array.isArray(layout.accessPoints)) errors.push("accessPoints 必須是陣列。" );
@@ -234,6 +268,7 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       else if (labels.has(row.label)) errors.push("row label 不可重複。" );
       else labels.add(row.label);
       if (row.orientation !== "vertical" && row.orientation !== "horizontal") errors.push(`${row.label || "未命名"} 排方向無效。`);
+      if (row.labelSide !== undefined && !MAP_ROW_LABEL_SIDES.includes(row.labelSide)) errors.push(`${row.label || "未命名"} 排標籤位置無效。`);
       if (!Number.isFinite(row.confidence) || Number(row.confidence) < 0 || Number(row.confidence) > 1) errors.push(`${row.label || "未命名"} 排 confidence 必須介於 0 與 1。`);
       if (!Array.isArray(row.slots)) errors.push(`${row.label || "未命名"} 排的 slots 必須是陣列。`);
       if (Array.isArray(row.slots)) row.slots.forEach((candidateSlot) => {
@@ -281,7 +316,7 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       else landmarkIds.add(landmark.id);
       if (typeof landmark.label !== "string" || !landmark.label.trim()) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 必須有顯示名稱。`);
       if (landmark.kind !== undefined && !["enterprise", "stage", "other"].includes(landmark.kind)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的類型無效。`);
-      if (!landmark.rect || !finiteRect(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的矩形座標無效。`);
+      if (!landmark.rect || !finiteShape(landmark.rect, width, height)) errors.push(`非一般攤位區 ${landmark.id || "未命名"} 的形狀無效；多邊形不可自交或超出畫布。`);
     });
   }
   if (layout.servicePoints !== undefined && !Array.isArray(layout.servicePoints)) errors.push("servicePoints 必須是陣列。" );
@@ -297,6 +332,41 @@ export function validateEventMapLayout(value: unknown, allowedAreaIds?: readonly
       if (point.label !== undefined && (typeof point.label !== "string" || point.label.length > MAP_SERVICE_POINT_LABEL_LIMIT)) errors.push(`服務設施 ${point.id || "未命名"} 的名稱必須是 ${MAP_SERVICE_POINT_LABEL_LIMIT} 字以內的文字。`);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || Number(point.x) < 0 || Number(point.y) < 0 || Number(point.x) > width || Number(point.y) > height) errors.push(`服務設施 ${point.id || "未命名"} 的座標無效。`);
     });
+  }
+  if (layout.spaceMarks !== undefined && !Array.isArray(layout.spaceMarks)) errors.push("保留／取消格必須是陣列。");
+  if (Array.isArray(layout.spaceMarks)) {
+    const ids = new Set<string>();
+    for (const candidate of layout.spaceMarks) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("保留／取消格必須是物件。"); continue; }
+      const mark = candidate as Partial<MapSpaceMark>;
+      if (typeof mark.id !== "string" || !mark.id.trim() || ids.has(mark.id)) errors.push("保留／取消格 id 缺漏或重複。");
+      else ids.add(mark.id);
+      if (!MAP_SPACE_MARK_KINDS.includes(mark.kind as MapSpaceMarkKind)) errors.push(`保留／取消格 ${mark.id || "未命名"} 的類型無效。`);
+      if (!mark.rect || !finiteRect(mark.rect, width, height)) errors.push(`保留／取消格 ${mark.id || "未命名"} 的矩形座標無效。`);
+    }
+  }
+  if (layout.notes !== undefined && !Array.isArray(layout.notes)) errors.push("文字註記必須是陣列。");
+  if (Array.isArray(layout.notes)) {
+    const ids = new Set<string>();
+    for (const candidate of layout.notes) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("文字註記必須是物件。"); continue; }
+      const note = candidate as Partial<MapNote>;
+      if (typeof note.id !== "string" || !note.id.trim() || ids.has(note.id)) errors.push("文字註記 id 缺漏或重複。");
+      else ids.add(note.id);
+      if (!validNoteText(note.text)) errors.push("文字註記須有內容，最多 120 字、3 行。");
+      if (!note.rect || !finiteRect(note.rect, width, height)) errors.push(`文字註記 ${note.id || "未命名"} 的矩形座標無效。`);
+    }
+  }
+  if (layout.paths !== undefined && !Array.isArray(layout.paths)) errors.push("動線箭頭必須是陣列。");
+  if (Array.isArray(layout.paths)) {
+    const ids = new Set<string>();
+    for (const candidate of layout.paths) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) { errors.push("動線箭頭必須是物件。"); continue; }
+      const path = candidate as Partial<MapPath>;
+      if (typeof path.id !== "string" || !path.id.trim() || ids.has(path.id)) errors.push("動線箭頭 id 缺漏或重複。");
+      else ids.add(path.id);
+      if (!validPathPoints(path.points, width, height)) errors.push(`動線箭頭 ${path.id || "未命名"} 須有 2–100 個畫布內頂點，相鄰點不可重複。`);
+    }
   }
   if (layout.areaRegions !== undefined && !Array.isArray(layout.areaRegions)) errors.push("areaRegions 必須是陣列。");
   if (Array.isArray(layout.areaRegions)) {

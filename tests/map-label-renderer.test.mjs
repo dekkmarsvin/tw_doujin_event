@@ -56,6 +56,30 @@ test("a thumbnail moves the code into the shaded band instead of dropping it", (
   assert.ok(result.slot.childNodes.some((node) => node.tagName === "image"));
 });
 
+test("reserved and cancelled tables are named passive marks while an overlapping booth keeps its action", () => {
+  const marked = { ...layout, spaceMarks: [
+    { id: "empty", kind: "reserved", rect },
+    { id: "withdrawn", kind: "cancelled", rect: { x: 60, y: 20, width: 24, height: 24 } },
+  ] };
+  for (const screenScale of [.25, 6]) {
+    const result = output({ layout: marked, markerPresentation: { screenScale, fontScale: 1.24 } });
+    const marks = result.nodes.filter(node => result.attr(node, "data-space-mark"));
+    assert.deepEqual(marks.map(node => result.attr(node, "aria-label")), ["保留空桌", "取消攤位"]);
+    for (const mark of marks) {
+      assert.equal(result.attr(mark, "role"), "img");
+      assert.equal(result.attr(mark, "tabindex"), undefined);
+      assert.equal(result.attr(mark, "data-slot-code"), undefined);
+      assert.ok(mark.childNodes.some(node => node.tagName === "title"));
+    }
+    assert.ok(result.attr(marks[0].childNodes.find(node => node.tagName === "rect"), "stroke-dasharray"));
+    assert.equal(marks[0].childNodes.some(node => node.tagName === "path"), false);
+    assert.ok(marks[1].childNodes.some(node => node.tagName === "path"), "cancelled has a visible cross");
+    assert.equal(result.attr(result.slot, "role"), "button");
+    assert.equal(result.attr(result.slot, "tabindex"), "0");
+    assert.equal(result.nodes.filter(node => result.attr(node, "role") === "button").length, 1);
+  }
+});
+
 test("entrances and exits differ in shape, keep their screen size and name themselves", () => {
   const withFacilities = {
     ...layout,
@@ -91,7 +115,13 @@ test("service points draw a badge named by type, and a two-way doorway is a diam
     layout: {
       ...layout,
       accessPoints: [{ id: "side", kind: "both", direction: "north", x: 50, y: 95, label: "側門" }],
-      servicePoints: [{ id: "t1", kind: "toilet", x: 20, y: 80 }, { id: "aid", kind: "first-aid", x: 80, y: 80, label: "北側" }],
+      servicePoints: [
+        { id: "t1", kind: "toilet", x: 20, y: 80 },
+        { id: "aid", kind: "first-aid", x: 80, y: 80, label: "北側" },
+        { id: "tickets", kind: "ticket-office", x: 20, y: 20 },
+        { id: "changing", kind: "changing-room", x: 50, y: 20 },
+        { id: "bags", kind: "cloakroom", x: 80, y: 20 },
+      ],
     },
     markerPresentation: { screenScale: 2, fontScale: 1 },
     locatedMarker: "service:aid",
@@ -100,9 +130,25 @@ test("service points draw a badge named by type, and a two-way doorway is a diam
   assert.equal(result.attr(marker("service:t1"), "aria-label"), "廁所");
   assert.equal(result.attr(marker("service:aid"), "aria-label"), "北側，醫護站");
   assert.equal(result.attr(marker("service:t1"), "role"), "img");
+  for (const [id, name] of [["tickets", "售票處"], ["changing", "更衣室"], ["bags", "寄物處"]]) {
+    assert.equal(result.attr(marker(`service:${id}`), "aria-label"), name);
+    assert.equal(result.attr(marker(`service:${id}`), "role"), "img");
+  }
   assert.ok(marker("service:aid").childNodes.some((node) => node.tagName === "circle" && /located/i.test(result.attr(node, "class") ?? "")), "the located service point is ringed");
   const side = marker("access:side");
   assert.equal(result.attr(side, "aria-label"), "側門，出入兩用");
   assert.equal(side.childNodes.some((node) => node.tagName === "circle" || node.tagName === "rect"), false, "a two-way doorway is neither round nor square");
   assert.equal(output({ layout }).nodes.some((node) => result.attr(node, "aria-label") === "服務設施"), false, "a map without service points draws no service layer");
+});
+
+test("explicit row label sides render with the shared edge anchors without changing booth controls", () => {
+  for (const [labelSide, anchor] of [["above", "middle"], ["below", "middle"], ["left", "end"], ["right", "start"]]) {
+    const sideLayout = { ...layout, width: 400, height: 300, rows: [{ ...layout.rows[0], labelSide, slots: [{ code: "A01", rect: { x: 160, y: 120, width: 24, height: 24 } }] }] };
+    const result = output({ layout: sideLayout });
+    const marker = result.nodes.find(node => result.attr(node, "data-marker") === "row:A");
+    const label = marker.childNodes.find(node => node.tagName === "text");
+    assert.equal(result.attr(label, "text-anchor"), anchor);
+    assert.equal(result.attr(result.slot, "role"), "button");
+    assert.equal(result.attr(result.slot, "aria-label"), "A01 完整社團名稱，已收藏");
+  }
 });

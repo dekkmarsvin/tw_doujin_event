@@ -145,12 +145,60 @@ test("row names start at the same gap the editor draws them at", () => {
   assert.ok(labels.get("row:A").dy < 0, "above a vertical row the name grows upward");
 });
 
+test("explicit row label sides stay outside U-shaped and interrupted rows at every text size", () => {
+  const slots = [slot("逃01", 400, 300), slot("逃02", 400, 314), slot("逃03", 460, 314), slot("逃04", 460, 300), slot("逃05", 460, 420)];
+  for (const side of ["above", "below", "left", "right"]) for (const scale of [.12, 1, 8]) for (const fontScale of [1, 1.24]) {
+    const row = { label: "逃", labelSide: side, orientation: "horizontal", confidence: 1, slots };
+    const plan = hall({ rows: [row] }), before = structuredClone(plan);
+    const label = layoutMapMarkerLabels(plan, { screenScale: scale, fontScale }).get("row:逃");
+    assert.ok(label, `${side} at ${scale}/${fontScale} is drawn`);
+    assertOnPlan(label, scale, plan, side);
+    const box = screenBox(label, scale);
+    if (side === "above") assert.ok(box.bottom < 300 * scale);
+    if (side === "below") assert.ok(box.top > 434 * scale);
+    if (side === "left") assert.ok(box.right < 400 * scale);
+    if (side === "right") assert.ok(box.left > 480 * scale);
+    const reversed = layoutMapMarkerLabels({ ...plan, rows: [{ ...row, slots: [...slots].reverse() }] }, { screenScale: scale, fontScale }).get("row:逃");
+    assert.deepEqual(reversed, label, "slot order does not choose the side or label anchor");
+    assert.deepEqual(plan, before, "presentation changes no codes or geometry");
+  }
+});
+
+test("row labels at canvas edges slide only along their side and omit an impossible side", () => {
+  for (const scale of [.12, 1, 8]) for (const [side, x, y] of [["above", 0, 300], ["below", 1980, 300], ["left", 900, 0], ["right", 900, 1186]]) {
+    const row = { label: "十二地支", labelSide: side, orientation: "vertical", confidence: 1, slots: [slot("子01", x, y)] };
+    const plan = hall({ rows: [row] });
+    const label = layoutMapMarkerLabels(plan, { screenScale: scale, fontScale: 1.24 }).get("row:十二地支");
+    assert.ok(label, `${side} still fits at ${scale}`);
+    assertOnPlan(label, scale, plan, side);
+    const box = screenBox(label, scale);
+    if (side === "above") assert.ok(box.bottom < y * scale);
+    if (side === "below") assert.ok(box.top > (y + 14) * scale);
+    if (side === "left") assert.ok(box.right < x * scale);
+    if (side === "right") assert.ok(box.left > (x + 20) * scale);
+  }
+  for (const [side, x, y] of [["above", 400, 0], ["below", 400, 1186], ["left", 0, 300], ["right", 1980, 300]]) {
+    const row = { label: "A", labelSide: side, orientation: "vertical", confidence: 1, slots: [slot("A01", x, y)] };
+    assert.equal(layoutMapMarkerLabels(hall({ rows: [row] }), { screenScale: 1, fontScale: 1 }).has("row:A"), false, "no side swap or shift through the row");
+  }
+});
+
 test("the facility list names each access point and each uniquely named area, and explains shared names in the legend", () => {
   const blocks = Array.from({ length: 3 }, (_, index) => ({ id: `e${index}`, kind: "enterprise", label: "企業攤", rect: { x: index * 100, y: 0, width: 80, height: 60 } }));
+  const spaceMarks = [
+    { id: "empty-table", kind: "reserved", rect: { x: 100, y: 300, width: 20, height: 14 } },
+    { id: "cancelled-table", kind: "cancelled", rect: { x: 200, y: 300, width: 20, height: 14 } },
+  ];
+  const annotations = {
+    notes: [{ id: "time", text: "社團入場 9:30–10:30", rect: { x: 0, y: 400, width: 200, height: 40 } }],
+    paths: [{ id: "direction", points: [{ x: 0, y: 500 }, { x: 200, y: 500 }] }],
+  };
   const directory = mapFacilityDirectory({
     accessPoints: [entrance("in", 100, "一般入口"), { id: "out", kind: "exit", direction: "north", x: 500, y: 10, label: "活動出口" }, entrance("blank", 300, "  ")],
     landmarks: [...blocks, { id: "hq", label: "大會總部", rect: { x: 0, y: 200, width: 40, height: 120 } }, { id: "stage", kind: "stage", label: "舞台", rect: { x: 300, y: 200, width: 100, height: 100 } }],
     pillars: [{ id: "p1", x: 0, y: 0, width: 10, height: 10 }],
+    spaceMarks,
+    ...annotations,
   });
   assert.deepEqual(directory.entries.map((entry) => [entry.key, entry.label, entry.ariaLabel]), [
     ["access:in", "一般入口", "一般入口"],
@@ -160,8 +208,9 @@ test("the facility list names each access point and each uniquely named area, an
   ]);
   assert.deepEqual(directory.entries.find((entry) => entry.key === "landmark:hq").point, { x: 20, y: 260 });
   assert.deepEqual(directory.legend.map((item) => item.label), ["入口", "出口", "柱子", "企業攤"]);
-  const empty = mapFacilityDirectory({ accessPoints: [], landmarks: blocks, pillars: [] });
-  assert.equal(empty.entries.length, 0, "a map with only shared names offers nothing to locate");
+  const empty = mapFacilityDirectory({ accessPoints: [], landmarks: blocks, pillars: [], spaceMarks, ...annotations });
+  assert.equal(empty.entries.length, 0, "shared names and passive space marks offer nothing to locate");
+  assert.deepEqual(empty.legend.map((item) => item.label), ["企業攤"], "space marks add no facility legend entries");
 });
 
 test("service points name themselves by type and are grouped so the toilets sit together", () => {
@@ -172,6 +221,9 @@ test("service points name themselves by type and are grouped so the toilets sit 
       { id: "t1", kind: "toilet", x: 10, y: 20 },
       { id: "desk", kind: "information", x: 30, y: 20, label: "大會服務台" },
       { id: "t2", kind: "toilet", x: 50, y: 20, label: "女廁" },
+      { id: "tickets", kind: "ticket-office", x: 10, y: 80 },
+      { id: "changing", kind: "changing-room", x: 30, y: 80, label: "更衣與寄物區" },
+      { id: "bags", kind: "cloakroom", x: 50, y: 80 },
     ],
   });
   assert.deepEqual(directory.entries.map((entry) => [entry.key, entry.group, entry.label, entry.ariaLabel]), [
@@ -179,8 +231,11 @@ test("service points name themselves by type and are grouped so the toilets sit 
     ["service:t1", "service", "廁所", "廁所"],
     ["service:t2", "service", "女廁", "女廁，廁所"],
     ["service:desk", "service", "大會服務台", "大會服務台"],
+    ["service:bags", "service", "寄物處", "寄物處"],
+    ["service:tickets", "service", "售票處", "售票處"],
+    ["service:changing", "service", "更衣與寄物區", "更衣與寄物區，更衣室"],
   ]);
-  assert.deepEqual(directory.legend.map((item) => item.label), ["出入兩用", "廁所", "服務台"]);
+  assert.deepEqual(directory.legend.map((item) => item.label), ["出入兩用", "廁所", "服務台", "寄物處", "售票處", "更衣室"]);
 });
 
 test("a service point badge is an obstacle, and only a name of its own is drawn", () => {

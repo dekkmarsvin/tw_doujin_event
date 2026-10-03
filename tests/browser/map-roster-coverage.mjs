@@ -25,10 +25,13 @@ async function open(surface) {
     { id: "two-a", periodKey: "2", venueSpaceId: "hall-a", layout: makeLayout([]) },
     { id: "one-b", periodKey: "1", venueSpaceId: "hall-b", layout: makeLayout(["A01"]) },
   ].map(map => ({ ...map, status: "draft", mapRevision: 1, updatedAt: now, authoring: { guides: [] } }));
+  for (const [index, text] of ["第一天 9:30–10:30", "第二天 10:30–15:30", "乙場地 11:30–15:30"].entries()) {
+    maps[index].layout.notes = [{ id: "time", text, rect: { x: 300, y: 20, width: 250, height: 50 } }];
+  }
   const summary = { id: "coverage", tentativeName: "清單地圖對照", status: "draft", operation: "CREATE", version: 1, role: "owner", updatedAt: now, workspaceMode: "binder" };
   const detail = { event: summary, publicationAvailable: false, publication: null, revisions: [],
     venueCatalog: { venues: [{ id: "hall", name: "測試場館", spaces: [{ id: "hall-a", name: "甲場地" }, { id: "hall-b", name: "乙場地" }] }] },
-    draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: "清單地圖對照", days: [{ id: "1", label: "第一天", date: "2026-11-07" }, { id: "2", label: "第二天", date: "2026-11-08" }] },
+    draft: { schema: "organizer-event-draft/1", event: { id: "sample", name: "清單地圖對照", days: [{ id: "1", label: "第一天", date: "2026-11-07" }, { id: "2", label: "第二天", date: "2026-11-08" }, { id: "3", label: "第三天", date: "2026-11-09" }] },
       venue: { assignments: ["hall-a", "hall-b"].map(venueSpaceId => ({ venueId: "hall", venueSpaceId, areaIds: ["A"], areaMode: "imported", mapTemplate: "SAMPLE" })) },
       officialSource: { label: "測試來源", url: "https://organizer.example/" } },
     import: { source: { fileName: "roster.csv", worksheet: null, sha256: "a".repeat(64), sourceDescription: "合成來源", mapping: {} }, rows: roster },
@@ -54,6 +57,14 @@ async function open(surface) {
       }
       if (path.endsWith("/events/coverage")) return reply(detail);
       if (path.endsWith("/background")) return reply({ error: "missing" }, 404);
+      if (path.endsWith("/maps") && method === "POST") {
+        const body = request.postDataJSON();
+        assert.equal(body.periodKey, "3");
+        assert.equal(body.venueSpaceId, "hall-b");
+        const map = { id: "three-b", periodKey: body.periodKey, venueSpaceId: body.venueSpaceId, layout: body.layout, authoring: body.authoring, mapRevision: 1, status: "draft", updatedAt: now };
+        maps.push(map); summary.version++;
+        return reply({ ok: true, draftId: map.id, version: summary.version, mapRevision: 1 });
+      }
       if (path.endsWith("/maps")) return reply({ maps: maps.map(map => ({ ...map, boothCodes: map.layout.rows.flatMap(row => row.slots.map(slot => slot.code)) })) });
       const map = maps.find(map => path.endsWith(`/${map.id}`));
       if (map && path.includes("/maps/")) {
@@ -83,6 +94,7 @@ try {
       await saved.locator("tbody tr").filter({ hasText: "首日甲社" }).getByRole("button", { name: "定位 A01", exact: true }).click();
     } else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).nth(0).click();
     const editor = page.getByRole("region", { name: "活動地圖編輯器" });
+    assert.equal(await editor.locator("[data-note-id]").getAttribute("aria-label"), "第一天 9:30–10:30");
     await openToolGroup(editor, "攤位清單");
     const comparison = editor.getByRole("region", { name: "攤位清單對照" });
     const picker = editor.getByRole("combobox", { name: "選取地圖元素", exact: true });
@@ -136,6 +148,7 @@ try {
     await page.getByRole("button", { name: surface === "organizer" ? "儲存地圖變更" : "儲存新版本", exact: true }).click();
     await page.getByText(surface === "organizer" ? "地圖已儲存，尚未公開。" : "草稿已儲存。", { exact: true }).waitFor();
     assert.equal(maps[0].layout.rows[0].slots[1].code, "A02");
+    assert.equal(maps[0].layout.notes[0].text, "第一天 9:30–10:30");
 
     if (surface === "organizer") {
       await page.getByRole("group", { name: "活動項目" }).getByRole("button").filter({ hasText: "攤位名單" }).click();
@@ -146,7 +159,8 @@ try {
       await comparison.getByText("選取 A02：首日甲社", { exact: true }).waitFor();
       await page.getByRole("button", { name: "第二天・測試場館・甲場地", exact: true }).click();
     } else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).nth(1).click();
-    await page.waitForFunction(() => document.querySelector("select[aria-label=\"選取地圖元素\"]")?.options.length === 2);
+    await editor.locator("[data-note-id]").filter({ hasText: "第二天 10:30–15:30" }).waitFor();
+    assert.equal(await editor.locator("[data-note-id]").getAttribute("aria-label"), "第二天 10:30–15:30", "switching days reads that day's own static time");
     await openToolGroup(editor, "攤位清單");
     await comparison.getByText("清單 1 碼・已畫 0 碼・待畫 1 碼", { exact: true }).waitFor();
     await openToolGroup(editor, "攤位清單");
@@ -154,7 +168,7 @@ try {
     assert.doesNotMatch(await comparison.innerText(), /首日甲社/);
     if (surface === "organizer") await page.getByRole("button", { name: "第一天・測試場館・乙場地", exact: true }).click();
     else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).nth(2).click();
-    await page.waitForFunction(() => document.querySelector("select[aria-label=\"選取地圖元素\"]")?.options.length === 3);
+    await editor.locator("[data-note-id]").filter({ hasText: "乙場地 11:30–15:30" }).waitFor();
     await openToolGroup(editor, "攤位清單");
     await comparison.getByText("清單 1 碼・已畫 1 碼・待畫 0 碼", { exact: true }).waitFor();
     await openToolGroup(editor, "攤位清單");
@@ -164,6 +178,22 @@ try {
     await comparison.getByText("選取 A01：隔壁丙社", { exact: true }).waitFor();
     await editor.evaluate(element => element.scrollIntoView({ block: "start" }));
     await journey.capture(page, `${surface}-map-roster-other-scope`);
+    if (surface === "organizer") {
+      await page.getByRole("button", { name: "關閉編輯器", exact: true }).click();
+      await page.getByRole("combobox", { name: "活動日", exact: true }).selectOption("3");
+      await page.getByRole("combobox", { name: "從同場地複製", exact: true }).selectOption("one-b");
+      await editor.waitFor();
+      await picker.selectOption("note:0");
+      const noteText = editor.getByRole("textbox", { name: "註記文字", exact: true });
+      assert.equal(await noteText.inputValue(), "乙場地 11:30–15:30", "copying keeps the source text for the organizer to check");
+      await noteText.fill("第三天 12:00–15:30"); await noteText.press("Tab");
+      await page.getByRole("button", { name: "建立這個活動日與場地的地圖", exact: true }).click();
+      await page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
+      assert.equal(maps[3].layout.notes[0].text, "第三天 12:00–15:30");
+      assert.equal(maps[2].layout.notes[0].text, "乙場地 11:30–15:30", "editing the copied day never writes back to its source");
+      await page.getByRole("button", { name: "第一天・測試場館・乙場地", exact: true }).click();
+      await editor.locator("[data-note-id]").filter({ hasText: "乙場地 11:30–15:30" }).waitFor();
+    }
     await page.close();
   }
   await journey.finish();

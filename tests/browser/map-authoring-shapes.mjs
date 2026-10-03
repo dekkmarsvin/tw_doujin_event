@@ -1,0 +1,106 @@
+// staged-data: fixture
+import assert from "node:assert/strict";
+import path from "node:path";
+import { start, output } from "./support/journey.mjs";
+import { openSurface, openToolGroup, source } from "./support/map-authoring.mjs";
+
+const journey = await start("map-authoring-shapes");
+journey.report.synthetic = true;
+journey.report.productionWrites = 0;
+try {
+  const { page, editor, state } = await openSurface(journey, "organizer");
+  const svg = editor.locator("svg[tabindex='0']");
+  const picker = editor.getByRole("combobox", { name: "選取地圖元素" });
+  const click = async (x, y) => { await svg.scrollIntoViewIfNeeded(); const bounds = await svg.boundingBox(); await page.mouse.click(bounds.x + bounds.width * x, bounds.y + bounds.height * y); };
+  await openToolGroup(editor, "設施");
+  await editor.getByRole("button", { name: "描繪多邊形", exact: true }).click();
+  await click(.12, .1); await click(.32, .1); await svg.press("Escape");
+  assert.equal(await svg.locator("[data-shape-floor]").getAttribute("points"), null);
+  assert.equal(await editor.getByRole("button", { name: "復原上一步編輯" }).isDisabled(), true);
+  await openToolGroup(editor, "設施");
+  await editor.getByRole("button", { name: "描繪多邊形", exact: true }).click();
+  await click(.12, .1); await click(.32, .35); await click(.12, .35); await click(.32, .1);
+  await editor.getByRole("button", { name: "完成多邊形（4 點）", exact: true }).click();
+  await editor.getByRole("alert").filter({ hasText: "不可自交" }).waitFor();
+  assert.equal(await svg.locator("[data-shape-floor]").getAttribute("points"), null);
+  await svg.press("Escape");
+  journey.report.checks.push("cancel creates nothing and self-crossing polygons keep the valid floor with a visible reason");
+  for (const kind of ["floor", "enterprise", "stage", "other"]) {
+    await openToolGroup(editor, "設施");
+    await editor.getByRole("combobox", { name: "多邊形類型", exact: true }).selectOption(kind);
+    await editor.getByRole("button", { name: "描繪多邊形", exact: true }).click();
+    const offset = kind === "stage" ? .28 : kind === "other" ? .56 : 0;
+    await click(.12 + offset, .1); await click(.32 + offset, .1); await click(.32 + offset, .16); await click(.18 + offset, .16); await click(.18 + offset, .35); await click(.12 + offset, .35);
+    await editor.getByRole("button", { name: "完成多邊形（6 點）", exact: true }).click();
+    const polygon = svg.locator(kind === "floor" ? "[data-shape-floor]" : "[data-shape-id]").last();
+    const before = await polygon.getAttribute("points");
+    const selection = await picker.inputValue();
+    await svg.press("ArrowRight");
+    assert.notEqual(await polygon.getAttribute("points"), before);
+    await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
+    assert.equal(await polygon.getAttribute("points"), before);
+    await editor.getByRole("button", { name: "重做已復原的編輯", exact: true }).click();
+    await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
+    await picker.selectOption(selection);
+    await svg.scrollIntoViewIfNeeded();
+    const handle = await svg.locator('[data-shape-vertex="0"]').boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 + 8, handle.y + handle.height / 2 + 4, { steps: 3 }); await page.mouse.up();
+    assert.notEqual(await polygon.getAttribute("points"), before);
+    await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
+    assert.equal(await polygon.getAttribute("points"), before);
+    await picker.selectOption(selection);
+    await editor.locator("summary").filter({ hasText: "多邊形頂點" }).click();
+    const vertex = editor.getByRole("spinbutton", { name: "頂點 1 X", exact: true });
+    await vertex.fill(String(Number(await vertex.inputValue()) + 2)); await vertex.press("Tab");
+    assert.notEqual(await polygon.getAttribute("points"), before);
+    await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
+    assert.equal(await polygon.getAttribute("points"), before);
+    await picker.selectOption(selection);
+    const width = editor.getByRole("spinbutton", { name: "寬", exact: true });
+    await width.fill(String(Number(await width.inputValue()) + 12)); await width.press("Tab");
+    assert.notEqual(await polygon.getAttribute("points"), before);
+    await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
+    assert.equal(await polygon.getAttribute("points"), before);
+    journey.report.checks.push(`${kind}: draw concave polygon, move/resize/vertex edit and undo/redo preserve vertices`);
+  }
+  const firstArea = await svg.locator("[data-shape-id]").first().getAttribute("points");
+  await picker.selectOption("landmark:0");
+  await editor.getByRole("button", { name: "移除此元素", exact: true }).click();
+  await picker.selectOption("landmark:0");
+  await editor.getByRole("button", { name: "重新描繪多邊形", exact: true }).click();
+  await click(.14, .12); await click(.24, .12);
+  await editor.getByRole("button", { name: "復原上一步編輯", exact: true }).click();
+  assert.equal(await editor.getByRole("button", { name: /完成多邊形/ }).count(), 0, "undo cancels pending redraw before selection indices change");
+  assert.equal(await svg.locator("[data-shape-id]").count(), 3);
+  assert.equal(await svg.locator("[data-shape-id]").first().getAttribute("points"), firstArea);
+  journey.report.checks.push("undo cancels a pending redraw after deletion and cannot overwrite a restored different area");
+  await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
+  assert.equal(state.saves, 1);
+  assert.equal(state.layout.floor.points.length, 6);
+  for (const kind of ["enterprise", "stage", "other"]) assert.equal(state.layout.landmarks.findLast(item => item.kind === kind).rect.points.length, 6);
+  const saved = structuredClone(state.layout);
+  await page.reload(); await page.getByRole("button", { name: "第一天", exact: true }).click();
+  await editor.waitFor();
+  assert.equal(await svg.locator("[data-shape-floor]").getAttribute("points"), saved.floor.points.map(p => `${p.x},${p.y}`).join(" "));
+  assert.deepEqual(state.layout.rows, source.rows);
+  await editor.screenshot({ path: path.join(output, "organizer-concave-polygons.png") });
+  journey.report.checks.push("all four polygon types save/reopen; ordinary booth rectangles and codes remain unchanged");
+  await page.close();
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const reader = await journey.mapPage({ viewport, routes: async tab => {
+      await tab.route("**/data/events/sample/map.json", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ eventId: "sample", revision: 1, sourceName: "fixture", confidence: 1, updatedAt: "2026-01-01", layout: saved }) }));
+    } });
+    const map = reader.locator('svg[role="group"]').filter({ has: reader.locator('[data-slot-code="S01"]') });
+    await map.waitFor();
+    assert.equal(await map.locator("polygon").count(), 4);
+    assert.equal(await map.getAttribute("viewBox"), `0 0 ${source.width} ${source.height}`);
+    await journey.capture(reader, `reader-polygons-fit-${viewport.width}`);
+    for (let i = 0; i < 2; i++) await reader.getByRole("button", { name: "放大地圖", exact: true }).click();
+    await map.locator('[data-slot-code="S01"][role="button"]').focus();
+    await map.locator('[data-slot-code="S01"]').press("ArrowRight");
+    await journey.capture(reader, `reader-polygons-${viewport.width}`);
+    journey.report.checks.push(`Reader ${viewport.width}: all four polygon types preserve fit/zoom and keyboard booth navigation`);
+  }
+  await journey.finish();
+} catch (error) { await journey.abort(error); }

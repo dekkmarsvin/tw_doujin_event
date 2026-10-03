@@ -1,4 +1,5 @@
 import { rowLabelPlacement, type EventMapLayout, type MapAccessDirection, type MapAccessPoint } from "./event-map";
+import { shapeInterior } from "./map-shape-geometry";
 
 /** Layout units to CSS px, and the reader's text-size multiplier. */
 export type MapMarkerPresentation = { screenScale: number; fontScale: number };
@@ -130,8 +131,10 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
   for (const row of layout.rows) {
     const placement = rowLabelPlacement(row);
     if (!placement) continue;
-    const dy = (placement.side === "below" ? 1 : -1) * rowPx * HALF_LINE_EM;
-    candidates.push([mapMarkerLabelKey("row", row.label), { text: row.label, x: placement.x, y: placement.y, dx: 0, dy, fontPx: rowPx, anchor: "middle" }]);
+    const vertical = placement.side === "above" || placement.side === "below";
+    const dy = vertical ? (placement.side === "below" ? 1 : -1) * rowPx * HALF_LINE_EM : 0;
+    const anchor = vertical ? "middle" : placement.side === "left" ? "end" : "start";
+    candidates.push([mapMarkerLabelKey("row", row.label), { text: row.label, x: placement.x, y: placement.y, dx: 0, dy, fontPx: rowPx, anchor }]);
   }
   // A service point's badge already says what it is; only a name that tells
   // two of a kind apart is drawn, below the badge.
@@ -144,10 +147,12 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
     if (!landmark.label.trim()) continue;
     const width = landmark.rect.width * screenScale - LANDMARK_PADDING_PX * 2;
     const height = landmark.rect.height * screenScale - LANDMARK_PADDING_PX * 2;
-    const fontPx = Math.min(landmarkPx, width / mapLabelEms(landmark.label), height / (HALF_LINE_EM * 2));
+    const interior = shapeInterior(landmark.rect);
+    const shapeFontPx = "points" in landmark.rect ? Math.max(0, interior.radius * screenScale - LANDMARK_PADDING_PX) * 2 / Math.hypot(mapLabelEms(landmark.label), HALF_LINE_EM * 2) : Infinity;
+    const fontPx = Math.min(landmarkPx, width / mapLabelEms(landmark.label), height / (HALF_LINE_EM * 2), shapeFontPx);
     if (!(fontPx >= LANDMARK_LABEL.minPx * fontScale)) continue;
     candidates.push([mapMarkerLabelKey("landmark", landmark.id), {
-      text: landmark.label, x: landmark.rect.x + landmark.rect.width / 2, y: landmark.rect.y + landmark.rect.height / 2, dx: 0, dy: 0, fontPx, anchor: "middle",
+      text: landmark.label, x: interior.x, y: interior.y, dx: 0, dy: 0, fontPx, anchor: "middle",
     }]);
   }
 
@@ -175,6 +180,9 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
       label = slideOntoPlan(otherSide);
       if (!onPlan(label)) continue;
     }
+    // A row's chosen side cannot be swapped or pulled across its booths just
+    // to fit the name. Tangential sliding is safe; no space on that side is not.
+    if (key.startsWith("row:") && !onPlan(label)) continue;
     const box = labelBox(label, screenScale);
     if (placed.some((other) => overlaps(box, other))) continue;
     placed.push(box);

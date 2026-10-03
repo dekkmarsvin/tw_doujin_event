@@ -2,6 +2,11 @@
 
 公開閱讀端的向量地圖：資料不變量、renderer 邊界、互動與縮放規則。
 
+**實作**：`app/map-shape-geometry.ts`、`app/map-shape-drawing.tsx`
+**測試**：`tests/map-shape-geometry.test.mjs`
+**實作**：[`app/map-annotations.ts`](../../app/map-annotations.ts)、[`app/map-annotation-drawing.tsx`](../../app/map-annotation-drawing.tsx)、[`app/staged-event-data.ts`](../../app/staged-event-data.ts)
+**測試**：`tests/map-annotations.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/publication-artifacts.test.mjs`、`tests/browser/map-authoring-annotations.mjs`、`tests/browser/map-roster-coverage.mjs`
+
 **實作**：[`app/accessible-event-map-renderer.tsx`](../../app/accessible-event-map-renderer.tsx)、[`app/event-map.ts`](../../app/event-map.ts)、[`app/map-viewport.ts`](../../app/map-viewport.ts)、[`app/use-map-viewport.ts`](../../app/use-map-viewport.ts)、[`app/map-label-presentation.ts`](../../app/map-label-presentation.ts)、[`app/map-marker-presentation.ts`](../../app/map-marker-presentation.ts)、[`app/map-marker-icons.tsx`](../../app/map-marker-icons.tsx)、[`app/map-facility-directory.ts`](../../app/map-facility-directory.ts)、[`app/map-facility-panel.tsx`](../../app/map-facility-panel.tsx)、[`app/map-view-state.ts`](../../app/map-view-state.ts)
 **測試**：`tests/map-viewport.test.mjs`、`tests/map-desktop-geometry.test.mjs`、`tests/map-label-renderer.test.mjs`、`tests/map-marker-presentation.test.mjs`、`tests/map-view-state.test.mjs`、`tests/map-import.test.mjs`、`tests/browser/map-viewport.mjs`、`tests/browser/reader-map-facilities.mjs`
 **活動資料**：data repo 的 `map.json`（只有一組「活動日 × 場地」，或尚未改用 scoped map 的既有活動）或 `map-manifest.json` + `maps/<periodKey>/<venueSpaceId>.json`（多組），由 pin 驗證後 staging 到 `dist/data/events/<event>/`
@@ -13,11 +18,16 @@
 
 - 座標使用原始配置圖的像素座標；沒有配置圖時使用建立空白地圖時指定的畫布尺寸。`width`、`height` 定義 SVG `viewBox`，所有元素都在同一座標空間。
 - `rows[].label` 在同一 layout 中唯一。排號與方向由該活動的 template adapter 決定，不是共用 schema 常數。
+- `rows[].labelSide` 為選填的 `above`／`below`／`left`／`right`，指定整排標籤位於上／下／左／右側。缺省維持直排上方、橫排下方；不改攤位幾何、代碼或編號次序。U 形及中斷排以整排外框定位，不依 slots 順序猜側邊。草稿、複製、預覽與 publication 保留設定；既有快照不用遷移，新欄位使用前須由 Pages 與 publication Worker 的共用驗證版本支援。
 - slot 掛在排底下（`rows[].slots[]`，`EventMapLayout` 沒有頂層 `slots`）；`code` 在同一 layout 中唯一。slot 保存矩形 `x/y/width/height`，互動使用 slot 而非圖片座標點。
 - pillar 必須保存 `x/y/width/height`；access point 必須保存 `kind`（`entrance`、`exit` 或出入兩用的 `both`；`both` 的方向指向場內）、位置與方向。
-- `servicePoints` 是**選填**欄位：每個服務設施保存唯一 `id`、`kind`（`toilet`、`accessible-toilet`、`information`、`cloakroom`、`first-aid`、`stairs`、`elevator` 七類固定）、畫布內的 `x/y`，以及選填、40 字以內的 `label`。服務設施出現以前發布的快照沒有這個欄位，不需遷移；沒有服務設施的 layout 也不必帶空陣列。
+- `servicePoints` 是**選填**欄位：每個服務設施保存唯一 `id`、`kind`（`toilet`、`accessible-toilet`、`information`、`cloakroom`、`first-aid`、`stairs`、`elevator`、`ticket-office`、`changing-room` 九類固定）、畫布內的 `x/y`，以及選填、40 字以內的 `label`。`ticket-office` 為售票處（票券圖示）、`changing-room` 為更衣室（上衣圖示），與 `cloakroom` 寄物處（衣架圖示）分開；更衣與寄物合用區可分別放置兩種設施點並命名。編輯器、Reader 與設施清單共用圖示及名稱。服務設施出現以前發布的快照沒有這個欄位，不需遷移；沒有服務設施的 layout 也不必帶空陣列。舊七類資料維持有效，新種類須由已支援的草稿 API、Reader 與 publication Worker 一起消費。
 - `areaRegions` 是選填欄位：每塊保存唯一 `id`、所屬的匯入 `areaId`、固定淡色 palette 的 `color` 與至少三個畫布內 `points`。同一展區可有多塊不規則範圍，顏色必須一致；核准前以該活動日 × 場地所宣告的展區代碼驗證。舊地圖沒有此欄位仍有效。
+- `spaceMarks` 是選填的獨立保留／取消格集合：每格保存集合內唯一 `id`、`kind`（`reserved` 保留空桌／`cancelled` 取消攤位）與畫布內有效 `rect`，不含攤位代碼或社團資料。它不計入攤位覆蓋、社團數、搜尋、收藏、行程或設施清單，也不能抵銷 `missing_booth`；仍有有效配置時須先按既有流程修正名單。舊圖無此欄位時維持原樣；草稿、地圖複製、preview 與 publication 保留新集合，新內容使用前須由 Pages 與 publication Worker 共同支援。
 - layout JSON 必須通過 `validateEventMapLayout` 才能進入 renderer 或持久化層。
+- `notes` 與 `paths` 為選填獨立集合，舊圖沒有它們仍有效。`notes[]` 保存集合內唯一 `id`、非空純文字 `text` 與有效畫布內 `rect`；文字最多 120 字、3 行（換行為 `\n`），控制字元拒絕，HTML 只當文字。`paths[]` 保存集合內唯一 `id` 與依方向排序的 2–100 個有限、畫布內 `points`，相鄰點不可重複，箭頭沿最後一段指向末點。沒有任意 SVG、HTML、圖片或外部連結欄位。草稿嚴格拒絕未知欄位與不合長度／幾何限制的資料。
+- 短註記可含官方時段原文，例如「社團入場 9:30–10:30」，它只屬於這張活動日 × 場地地圖的人工維護文字；不解析時間、不同步其他活動日或活動資料、不依時間切換、不產生提醒。複製保留原文，主辦須核對新活動日，修改複本不回寫來源。註記與箭頭不進設施目錄、不計攤位覆蓋或產生社團操作。
+- 草稿可保存尚未移開攤位的註記；編輯器提示文字矩形與攤位重疊、折線或箭頭頭部穿過攤位。送審、候選 publication 與 staged artifact 以同一 `annotationBoothConflicts` 拒絕這些碰撞，須由作者調整，不以 Reader 靜默刪除動線資訊。合格內容經 clone／history／縮放／preview／publication 保留，新內容使用前須由 Pages 與 publication Worker 一起支援。
 - **FF47 adapter 完整性規則**：23 排（A–W）、988 格（A 22、B–V 21×44、W 42）、28 根柱子、5 個出入口。其他活動只套用自己的 adapter 或通用 layout 驗證。
 
 ## 快照的來源語意
@@ -48,6 +58,8 @@ manifest 一旦存在，規則就是 fail closed：`eventId` 必須與活動相�
 資料模型不得把 FF47 的 A–W、988 格或特定場館幾何當成所有活動的固定規則。
 
 ## Renderer 邊界
+
+文字註記及折線採編輯器與 Reader 共用 drawing，完整純文字與箭頭方向都有可讀名稱。它們置於攤位下層且 `pointer-events:none`，不攔截攤位操作；文字依實際地圖倍率及 Reader 字級縮放，必要時縮字以保留全文，多行總高與文字寬度始終在作者指定矩形內。放大有螢幕字級上限，不改地圖座標或時間字串。
 
 `AccessibleEventMapRenderer` 是深模組，穩定 interface 只接受已整理好的顯示資料與選取事件：
 
@@ -98,7 +110,7 @@ type AccessibleEventMapRendererProps = {
 - **出入口徽章固定 22px**：入口是圓形、出口是方形、出入兩用是菱形，箭頭指出通行方向（出入兩用是雙向箭頭），**形狀本身區分三者**，不只靠顏色。徽章在任何倍率都畫，不參與隱藏。
 - **服務設施徽章固定 21px**：同一個圓角方形，以內部圖示區分類型（廁所 WC、無障礙輪椅、服務台 i、寄物衣架、醫護十字、樓梯、電梯上下箭頭），不以顏色區分。只有自己的名稱才畫在徽章下方；沒有名稱的只畫徽章。
 - **名稱有螢幕字級上下限**，下限與上限都乘上讀者的字級倍率：出入口 11–14px、排標籤 12–28px、非一般攤位區 11–16px。在上下限之間沿用原本的 layout 字級（10、22、12 單位），因此一般放大下的比例不變。
-- **出入口名稱放在朝場外那一側**：入口與出入兩用在箭頭後方、出口在箭頭前方；排標籤從原本的間隔起算，直排往上長、橫排往下長，字變大也不壓到自己的攤位。名稱靠近圖面邊緣時沿自己那一側滑回圖面內，不往徽章方向移。出入口與服務設施的名稱滑回後仍超出圖面（例如徽章貼著圖面下緣、名稱畫在下方）時，改放到徽章另一側，照常參與下面的重疊檢查；兩側都放不下才不畫。排標籤與非一般攤位區名稱沒有另一側可換。
+- **出入口名稱放在朝場外那一側**：入口與出入兩用在箭頭後方、出口在箭頭前方；排標籤從整排外框的 13 單位間隔起算，在所選側往外長，字變大也不壓到自己的攤位。名稱靠近圖面邊緣時沿自己那一側滑回圖面內，不往徽章或本排攤位方向移。出入口與服務設施的名稱滑回後仍超出圖面（例如徽章貼著圖面下緣、名稱畫在下方）時，改放到徽章另一側，照常參與下面的重疊檢查；兩側都放不下才不畫。排標籤不換側；所選側無法容納完整文字時不畫，排號仍保留在攤位可讀名稱中。非一般攤位區名稱也沒有另一側可換。
 - **非一般攤位區名稱必須放得進自己的區塊**：放不下時先縮字，縮到下限仍放不下就不畫。
 - **名稱不互相重疊**：出入口與服務設施徽章先佔位，再依「出入口、排標籤、服務設施、非一般攤位區」的順序放名稱，會與已放置者重疊的就不畫。寬度以字元數保守估計，寧可少畫一個也不畫出重疊。
 - 被省略的名稱仍在可讀名稱中：出入口、服務設施與具名區塊各自是 `role="img"`，名稱含類型（「一般入口，入口」、「北側，醫護站」，沒有名稱的服務設施就是「廁所」）；排號已在每一格攤位的可讀名稱裡。名稱加淺色描邊，壓在攤位上仍可辨認。
@@ -106,6 +118,8 @@ type AccessibleEventMapRendererProps = {
 ### Slot 視覺狀態
 
 未配置攤位低對比；有社團的攤位採分類色淡底；selected 使用實色與 3px 深色描邊；favorite 加入珊瑚圓點；next 加入深墨箭頭。**任何狀態都不得只靠顏色表達**，必須有形狀或文字補充。
+
+保留／取消格與一般攤位分開：保留空桌用虛線外框及「空桌」，取消攤位用交叉線及「取消」，完整可讀名稱分別為「保留空桌」與「取消攤位」。Editor、Reader 預覽及公開圖共用繪製規則；短文字限在格內，隨倍率保持有界字級，格子太小時仍由線型區分。Reader 標記位於一般攤位下層、不接受指標及鍵盤攤位操作；即使標記畫在現有攤位位置，也不會改寫其社團狀態或遮掉攤位控制。
 
 ## 縮放契約
 
@@ -157,3 +171,9 @@ type AccessibleEventMapRendererProps = {
 - 收藏群組改變後，地圖、清單與詳情不需重新整理便同步更新。
 - 前台不顯示 A–K／L–W 區域切換。
 - 外部內容缺少或載入失敗時，已發布向量地圖、社團核心資訊與收藏操作仍可使用。
+
+## 場館與非攤位多邊形
+
+`floor` 及 `landmarks[].rect` 可選填 `points`（3–200 個有限座標頂點），涵蓋場館外框、企業攤、舞台與其他區域。既有 `x/y/width/height` 必須等於頂點的外接矩形；缺省 `points` 時仍為原矩形。一般攤位、柱子及保留／取消格維持矩形，服務設施與出入口維持座標點。
+
+多邊形不得有自交、重複頂點、反折重疊邊、零面積或超出畫布。移動、縮放與畫布變更同步更新頂點與外接矩形，草稿、預覽與 publication 使用同一形狀。公開 renderer 與編輯器共用形狀繪製；Reader viewBox 仍使用畫布尺寸。凹形區域的名稱與設施定位採區內錨點；名稱的完整文字範圍須能放入該區，否則沿用設施清單定位。既有 pin 與核准 snapshot 不重寫。

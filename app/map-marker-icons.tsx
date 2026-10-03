@@ -1,4 +1,5 @@
-import type { MapAccessDirection, MapAccessPoint, MapServicePointKind } from "./event-map";
+import type { MapAccessDirection, MapAccessPoint, MapServicePointKind, MapSpaceMark } from "./event-map";
+import type { MapMarkerPresentation } from "./map-marker-presentation";
 
 const ROTATION: Record<MapAccessDirection, number> = { north: 0, east: 90, south: 180, west: 270 };
 export const MAP_ENTRANCE_COLOR = "#267cad";
@@ -49,5 +50,25 @@ export function MapServiceBadge({ kind }: { kind: MapServicePointKind }) {
     {kind === "first-aid" && <path d="M0-6V6M-6 0H6" {...glyph} strokeWidth={3.2} strokeLinecap="butt" />}
     {kind === "stairs" && <path d="M-7 6H-3.5V2.5H0V-1H3.5V-4.5H7" {...glyph} strokeWidth={2} />}
     {kind === "elevator" && <path d="M-3.5-1.5 0-6 3.5-1.5ZM-3.5 1.5 0 6 3.5 1.5Z" fill="#fff" />}
+    {kind === "ticket-office" && <>
+      <path d="M-7-5H7V-2A2 2 0 0 0 7 2V5H-7V2A2 2 0 0 0-7-2Z" {...glyph} strokeWidth={1.6} />
+      <path d="M2-3V-2M2-.5V.5M2 2V3" {...glyph} strokeWidth={1.3} />
+    </>}
+    {kind === "changing-room" && <path d="M-3-6A3 3 0 0 0 3-6L7-3 5 0 3-1V6H-3V-1L-5 0-7-3Z" {...glyph} strokeWidth={1.6} />}
+  </>;
+}
+
+/** Passive table annotations share their shape in the editor and Reader. Text
+ * stays within the table; dashed edges and an X distinguish them at overview. */
+export function MapSpaceMarkDrawing({ mark, presentation = { screenScale: 1, fontScale: 1 } }: { mark: MapSpaceMark; presentation?: MapMarkerPresentation }) {
+  const { rect, kind } = mark;
+  const scale = presentation.screenScale > 0 ? presentation.screenScale : 1;
+  const labelPx = Math.min(12 * presentation.fontScale, Math.max(7 * presentation.fontScale, 7 * scale));
+  const fontSize = Math.min(labelPx / scale, rect.width / 2.4, rect.height * .45);
+  const inset = Math.min(rect.width, rect.height) * .15;
+  return <>
+    <rect {...rect} fill="#f3f2ed" stroke="#7d7b76" strokeWidth={1} strokeDasharray={kind === "reserved" ? "3 2" : undefined} vectorEffect="non-scaling-stroke" />
+    {kind === "cancelled" && <path d={`M${rect.x + inset} ${rect.y + inset}L${rect.x + rect.width - inset} ${rect.y + rect.height - inset}M${rect.x + rect.width - inset} ${rect.y + inset}L${rect.x + inset} ${rect.y + rect.height - inset}`} fill="none" stroke="#6d6b66" strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+    <text x={rect.x + rect.width / 2} y={rect.y + rect.height / 2} style={{ fontSize, textAnchor: "middle", dominantBaseline: "central", fill: "#6d6b66", stroke: "#f3f2ed", strokeWidth: 2 / scale, paintOrder: "stroke", fontWeight: 700, pointerEvents: "none" }}>{kind === "reserved" ? "空桌" : "取消"}</text>
   </>;
 }

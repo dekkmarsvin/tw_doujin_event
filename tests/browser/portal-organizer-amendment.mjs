@@ -269,7 +269,10 @@ try {
   await pictures.getByText("活動設定尚未儲存；下方顯示的影響仍是上次儲存內容。", { exact: true }).waitFor();
   await pictures.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();
   await imageImpact.getByText("無", { exact: true }).waitFor();
-  assert.equal(await imageImpact.getByRole("img").count(), 1, "removal shows the previous image and no replacement");
+  await pictures.waitForFunction(expected => {
+    const before = document.querySelector('img[alt="原本的活動圖片"]');
+    return before?.getAttribute("src") === expected && !document.querySelector('img[alt="修正後的活動圖片"]');
+  }, oldImage.url);
   assert.equal(imageRoutes.state.settings.image, null);
   await pictures.getByRole("button", { name: "改回已發布的圖片", exact: true }).click();
   await pictures.getByRole("button", { name: "儲存修正並檢視影響", exact: true }).click();

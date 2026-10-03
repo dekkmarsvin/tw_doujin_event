@@ -17,7 +17,7 @@ try {
     const picker = editor.getByRole("combobox", { name: "選取地圖元素" });
     const count = () => picker.locator("option").count();
     const before = await count();
-    const activate = async label => { await openToolGroup(editor, label === "排／排段" ? "攤位" : "設施"); await editor.getByRole("button", { name: `新增${label}`, exact: true }).click(); };
+    const activate = async label => { await openToolGroup(editor, ["排／排段", "保留／取消格"].includes(label) ? "攤位" : "設施"); await editor.getByRole("button", { name: `新增${label}`, exact: true }).click(); };
     const at = async (x, y) => { await svg.scrollIntoViewIfNeeded(); const b = await svg.boundingBox(); return { x: b.x + x * b.width, y: b.y + y * b.height }; };
     const click = async (x, y) => { const p = await at(x, y); await page.mouse.click(p.x, p.y); };
     const drag = async (from, to, cancel = false) => {
@@ -67,6 +67,56 @@ try {
     await click(.55, .8);
     assert.match(await picker.inputValue(), /^service:/);
     await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("北側");
+    for (const [type, x] of [["售票處", .35], ["更衣室", .4]]) {
+      await activate("服務設施");
+      await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption({ label: type });
+      const previous = await count();
+      await click(x, .8);
+      assert.equal(await count(), previous + 1);
+      assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), type === "售票處" ? "ticket-office" : "changing-room");
+      await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+      assert.equal(await count(), previous, `${type} placement is one undo step`);
+      await editor.getByRole("button", { name: "重做已復原的編輯" }).click();
+      assert.equal(await count(), previous + 1);
+      await picker.selectOption(await picker.locator('option[value^="service:"]').last().getAttribute("value"));
+    }
+    await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).fill("簡易更衣室");
+    const beforeMarks = await count();
+    await activate("保留／取消格");
+    assert.equal(await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).inputValue(), "reserved", "empty tables start as reserved");
+    await click(.1, .85);
+    assert.equal(await count(), beforeMarks, "marks require a drawn table rectangle");
+    await drag([.1, .8], [.15, .9], true);
+    assert.equal(await count(), beforeMarks, "Escape creates no mark");
+    await activate("保留／取消格");
+    await drag([.1, .8], [.15, .9]);
+    assert.equal(await count(), beforeMarks + 1);
+    assert.equal(await picker.inputValue(), "space-mark:0");
+    await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+    assert.equal(await count(), beforeMarks, "one undo removes the whole mark");
+    await editor.getByRole("button", { name: "重做已復原的編輯" }).click();
+    await picker.selectOption("space-mark:0");
+    const markedX = Number(await editor.getByRole("spinbutton", { name: "X", exact: true }).inputValue());
+    await svg.press("ArrowRight");
+    assert.ok(Number(await editor.getByRole("spinbutton", { name: "X", exact: true }).inputValue()) > markedX, "the mark moves with the regular canvas controls");
+    await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+    await picker.selectOption("space-mark:0");
+    const markWidth = Number(await editor.getByRole("spinbutton", { name: "寬", exact: true }).inputValue());
+    await editor.getByRole("spinbutton", { name: "寬", exact: true }).fill(String(markWidth + 10));
+    await editor.getByRole("spinbutton", { name: "寬", exact: true }).press("Tab");
+    await editor.getByRole("combobox", { name: "類型", exact: true }).selectOption("cancelled");
+    await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+    await picker.selectOption("space-mark:0");
+    assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "reserved", "undo restores the mark kind without reverting its size");
+    assert.equal(Number(await editor.getByRole("spinbutton", { name: "寬", exact: true }).inputValue()), markWidth + 10);
+    await activate("保留／取消格");
+    await editor.getByRole("status").getByRole("combobox", { name: "類型", exact: true }).selectOption("cancelled");
+    await drag([.2, .8], [.25, .9]);
+    assert.equal(await count(), beforeMarks + 2);
+    await svg.press("Delete");
+    assert.equal(await count(), beforeMarks + 1, "Delete removes a mark without removing a booth");
+    await editor.getByRole("button", { name: "復原上一步編輯" }).click();
+    assert.equal(await count(), beforeMarks + 2);
     await journey.capture(page, `${surface}-canvas-facility-placement`);
     if (surface === "circle") {
       // With unsaved changes 提交審閱 is held back by 儲存新版本; pressing it
@@ -90,10 +140,30 @@ try {
     near(region.x + region.width / 2, source.width * .65); near(region.y + region.height / 2, source.height * .25);
     near(point.x, source.width * .75); near(point.y, source.height * .8); assert.equal(point.direction, "north");
     assert.equal(point.kind, "entrance"); assert.equal(point.label, "入口");
-    const service = state.layout.servicePoints.at(-1);
+    const [service, tickets, changing] = state.layout.servicePoints.slice(-3);
     assert.equal(service.kind, "first-aid"); assert.equal(service.label, "北側");
     near(service.x, source.width * .55); near(service.y, source.height * .8);
+    assert.equal(tickets.kind, "ticket-office"); assert.equal(tickets.label, undefined);
+    near(tickets.x, source.width * .35); near(tickets.y, source.height * .8);
+    assert.equal(changing.kind, "changing-room"); assert.equal(changing.label, "簡易更衣室");
+    near(changing.x, source.width * .4); near(changing.y, source.height * .8);
     assert.deepEqual(state.layout.rows, source.rows, "facility placement preserves all booths");
+    assert.deepEqual(state.layout.spaceMarks.map(mark => mark.kind), ["reserved", "cancelled"]);
+    assert.equal(state.layout.spaceMarks[0].rect.width, markWidth + 10);
+    assert.ok(state.layout.spaceMarks.every(mark => !Object.hasOwn(mark, "code") && !Object.hasOwn(mark, "circleId")));
+    await page.reload();
+    if (surface === "organizer") await page.getByRole("button", { name: "第一天", exact: true }).click();
+    else await page.locator("#map-contribution").getByRole("button", { name: "開啟", exact: true }).click();
+    await editor.waitFor();
+    for (const [index, kind] of [[0, "reserved"], [1, "cancelled"]]) {
+      await picker.selectOption(`space-mark:${index}`);
+      assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), kind, "saved marks reopen independently of the roster");
+    }
+    await picker.selectOption(`service:${state.layout.servicePoints.length - 1}`);
+    assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "changing-room");
+    assert.equal(await editor.getByRole("textbox", { name: "名稱（選填）", exact: true }).inputValue(), "簡易更衣室", "saved service type and name reopen");
+    await picker.selectOption(`service:${state.layout.servicePoints.length - 2}`);
+    assert.equal(await editor.getByRole("combobox", { name: "類型", exact: true }).inputValue(), "ticket-office");
     // Returning from a facility tool to the existing continuous row/slot tools
     // must still place on release, preserve numbering, and cancel cleanly.
     await activate("舞台"); await activate("排／排段");

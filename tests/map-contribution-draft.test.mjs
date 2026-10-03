@@ -235,8 +235,10 @@ test("a version mismatch names the template the way a person saw it", () => {
 test("service points are an optional part of the draft shape and of the candidate diff", () => {
   const toilet = { id: "toilet", kind: "toilet", x: 10, y: 10 };
   const named = { id: "aid", kind: "first-aid", x: 190, y: 90, label: "北側醫護站" };
-  const withServices = { ...layout, servicePoints: [toilet, named] };
-  assert.deepEqual(parseMapContributionDraftContent(content(withServices))?.layout.servicePoints, [toilet, named]);
+  const tickets = { id: "tickets", kind: "ticket-office", x: 80, y: 90 };
+  const changing = { id: "changing", kind: "changing-room", x: 120, y: 90, label: "更衣與寄物區" };
+  const withServices = { ...layout, servicePoints: [toilet, named, tickets, changing] };
+  assert.deepEqual(parseMapContributionDraftContent(content(withServices))?.layout.servicePoints, [toilet, named, tickets, changing]);
   assert.equal(parseMapContributionDraftContent(content(layout))?.layout.servicePoints, undefined, "a draft saved before service points stays as it was");
   for (const invalid of [
     { ...toilet, colour: "red" },
@@ -248,6 +250,84 @@ test("service points are an optional part of the draft shape and of the candidat
   assert.equal(parseMapContributionDraftContent(content({ ...layout, servicePoints: [toilet, { ...named, id: "toilet" }] })), null, "ids are unique");
   assert.equal(parseMapContributionDraftContent(content({ ...layout, servicePoints: {} })), null);
   const previous = { eventId: "sample", revision: 1, sourceName: "sample", confidence: 1, updatedAt: "2026-01-01T00:00:00.000Z", layout: { ...layout, servicePoints: [toilet] } };
-  const { diff } = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: { ...layout, servicePoints: [{ ...toilet, x: 12 }, named] }, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
-  assert.deepEqual(diff.changedServicePointIds, ["aid", "toilet"]);
+  const { diff } = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: { ...withServices, servicePoints: [{ ...toilet, x: 12 }, named, tickets, changing] }, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
+  assert.deepEqual(diff.changedServicePointIds, ["aid", "changing", "tickets", "toilet"]);
+});
+
+test("row label side survives draft parsing and review while invalid sides are refused", () => {
+  const previous = { eventId: "sample", revision: 1, sourceName: "sample", confidence: 1, updatedAt: "2026-01-01T00:00:00.000Z", layout };
+  for (const labelSide of ["above", "below", "left", "right"]) {
+    const next = { ...layout, rows: layout.rows.map(row => ({ ...row, labelSide })) };
+    assert.deepEqual(parseMapContributionDraftContent(content(next))?.layout, next);
+    assert.deepEqual(next.rows[0].slots, layout.rows[0].slots, "label side changes no booth geometry or codes");
+    const candidate = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: next, previous, now: Date.parse("2026-01-02T00:00:00.000Z") });
+    assert.deepEqual(candidate.candidate.layout, next);
+    assert.deepEqual(candidate.diff.changedRowLabels, layout.rows.map(row => row.label).sort());
+    assert.deepEqual(candidate.diff.movedBoothCodes, []);
+  }
+  assert.equal(parseMapContributionDraftContent(content(layout)).layout.rows[0].labelSide, undefined, "legacy maps stay absent");
+  for (const labelSide of [null, "north", "", 1]) {
+    assert.equal(parseMapContributionDraftContent(content({ ...layout, rows: layout.rows.map(row => ({ ...row, labelSide })) })), null);
+  }
+});
+
+test("space marks round-trip independently and never replace a required booth", () => {
+  const marks = [
+    { id: "empty-table", kind: "reserved", rect: { x: 10, y: 80, width: 20, height: 10 } },
+    { id: "withdrawn-table", kind: "cancelled", rect: { x: 40, y: 80, width: 20, height: 10 } },
+  ];
+  const next = { ...layout, spaceMarks: marks };
+  assert.deepEqual(parseMapContributionDraftContent(content(next))?.layout.spaceMarks, marks);
+  assert.equal(parseMapContributionDraftContent(content(layout)).layout.spaceMarks, undefined);
+  const candidate = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: next, previous: null, now: Date.parse("2026-01-02T00:00:00.000Z") });
+  assert.deepEqual(candidate.candidate.layout.spaceMarks, marks);
+  assert.deepEqual(candidate.diff.changedSpaceMarkIds, ["empty-table", "withdrawn-table"]);
+  assert.deepEqual(candidate.diff.addedBoothCodes, layout.rows.flatMap(row => row.slots.map(slot => slot.code)).sort());
+  for (const invalid of [null, { ...marks[0], code: "X" }, { ...marks[0], circleId: "circle-1" }, { ...marks[0], kind: "empty" }, { ...marks[0], id: " " }, { ...marks[0], rect: { ...marks[0].rect, x: -1 } }, { ...marks[0], rect: { ...marks[0].rect, width: 0 } }, { ...marks[0], rect: { ...marks[0].rect, y: 101 } }]) {
+    assert.equal(parseMapContributionDraftContent(content({ ...layout, spaceMarks: [invalid] })), null);
+  }
+  assert.equal(parseMapContributionDraftContent(content({ ...layout, spaceMarks: [marks[0], marks[0]] })), null);
+  assert.equal(parseMapContributionDraftContent(content({ ...layout, spaceMarks: {} })), null);
+  const required = layout.rows.flatMap(row => row.slots).find(slot => slot.code === "S02");
+  for (const kind of ["reserved", "cancelled"]) {
+    const missing = { ...layout, rows: layout.rows.map(row => ({ ...row, slots: row.slots.filter(slot => slot.code !== "S02") })), spaceMarks: [{ id: "replacement", kind, rect: required.rect }] };
+    const result = validateMapContributionDraft(content(missing), scope);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.problems.find(problem => problem.code === "missing_booth").boothCodes, ["S02"]);
+  }
+});
+
+test("static time notes and ordered paths round-trip; collisions can be saved but cannot be submitted", () => {
+  const notes = [{ id: "time", text: "社團入場 9:30–10:30\n一般入場 10:30–15:30", rect: { x: 10, y: 0, width: 180, height: 25 } }];
+  const paths = [{ id: "direction", points: [{ x: 10, y: 85 }, { x: 100, y: 85 }, { x: 100, y: 70 }] }];
+  const next = { ...layout, notes, paths };
+  assert.deepEqual(parseMapContributionDraftContent(content(next))?.layout, next);
+  assert.equal(validateMapContributionDraft(content(next), scope).ok, true);
+  const candidate = buildMapCandidate({ scope, draftId: "d", draftRevision: 2, layout: next, previous: null, now: Date.parse("2026-01-02T00:00:00.000Z") });
+  assert.deepEqual(candidate.candidate.layout.notes, notes);
+  assert.deepEqual(candidate.candidate.layout.paths, paths);
+  assert.deepEqual(candidate.diff.changedNoteIds, ["time"]);
+  assert.deepEqual(candidate.diff.changedPathIds, ["direction"]);
+  assert.equal("notes" in parseMapContributionDraftContent(content(layout)).layout, false);
+  assert.equal("paths" in parseMapContributionDraftContent(content(layout)).layout, false);
+  const copied = structuredClone(next);
+  copied.notes[0].text = "第二天 10:30–15:30";
+  copied.paths[0].points[0].x++;
+  assert.deepEqual(next.notes, notes);
+  assert.equal(paths[0].points[0].x, 10);
+  for (const colliding of [
+    { ...next, notes: [{ ...notes[0], rect: layout.rows[0].slots[0].rect }] },
+    { ...next, paths: [{ ...paths[0], points: [{ x: 0, y: 50 }, { x: 100, y: 50 }] }] },
+  ]) {
+    assert.ok(parseMapContributionDraftContent(content(colliding)), "unfinished geometry is still a savable draft");
+    const result = validateMapContributionDraft(content(colliding), scope);
+    assert.equal(result.ok, false);
+    assert.match(result.problems.find(problem => problem.code === "annotation_overlap").message, /S01/);
+  }
+  for (const invalid of [null, { ...notes[0], id: " " }, { ...notes[0], html: "<b>time</b>" }, { ...notes[0], text: "" }, { ...notes[0], text: "x".repeat(121) }, { ...notes[0], text: "一\n二\n三\n四" }, { ...notes[0], rect: { ...notes[0].rect, width: 0 } }]) assert.equal(parseMapContributionDraftContent(content({ ...layout, notes: [invalid] })), null);
+  for (const invalid of [null, { ...paths[0], label: "invented" }, { ...paths[0], points: [] }, { ...paths[0], points: [{ x: 1, y: 1 }] }, { ...paths[0], points: [{ x: 1, y: 1 }, { x: 1, y: 1 }] }, { ...paths[0], points: [{ x: -1, y: 1 }, { x: 20, y: 1 }] }, { ...paths[0], points: [{ x: 1, y: 1, command: "svg" }, { x: 20, y: 1 }] }, { ...paths[0], points: Array.from({ length: 101 }, (_, index) => ({ x: index, y: 80 })) }]) assert.equal(parseMapContributionDraftContent(content({ ...layout, paths: [invalid] })), null);
+  for (const key of ["notes", "paths"]) {
+    assert.equal(parseMapContributionDraftContent(content({ ...next, [key]: {} })), null);
+    assert.equal(parseMapContributionDraftContent(content({ ...next, [key]: [next[key][0], next[key][0]] })), null);
+  }
 });

@@ -1,5 +1,6 @@
 import { MAP_SERVICE_POINT_KINDS, resolveMapLandmarkKind, type EventMapLayout, type MapAccessKind, type MapLandmarkKind, type MapServicePointKind } from "./event-map";
 import { mapMarkerLabelKey } from "./map-marker-presentation";
+import { shapeInterior } from "./map-shape-geometry";
 
 type MapPoint = { x: number; y: number };
 
@@ -19,6 +20,7 @@ export type MapLegendEntry = { kind: MapAccessKind | MapServicePointKind | "pill
 export const MAP_FACILITY_TYPE_LABELS: Record<MapFacilityEntry["kind"], string> = {
   entrance: "入口", exit: "出口", both: "出入兩用",
   toilet: "廁所", "accessible-toilet": "無障礙廁所", information: "服務台", cloakroom: "寄物處", "first-aid": "醫護站", stairs: "樓梯", elevator: "電梯",
+  "ticket-office": "售票處", "changing-room": "更衣室",
   enterprise: "企業攤", stage: "舞台", other: "區域",
 };
 
@@ -60,9 +62,10 @@ export function mapFacilityDirectory(layout: Pick<EventMapLayout, "accessPoints"
     const label = landmark.label.trim();
     if (!label || labelCounts.get(label) !== 1) continue;
     const kind = resolveMapLandmarkKind(landmark);
+    const { x, y } = shapeInterior(landmark.rect);
     entries.push({
       key: mapMarkerLabelKey("landmark", landmark.id), group: "area", kind, label, ariaLabel: describe(label, kind),
-      point: { x: landmark.rect.x + landmark.rect.width / 2, y: landmark.rect.y + landmark.rect.height / 2 },
+      point: { x, y },
     });
   }
   const legend: MapLegendEntry[] = [];

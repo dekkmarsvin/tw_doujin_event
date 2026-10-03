@@ -41,7 +41,7 @@ try {
       // recording no booths, then count itself as 1 張地圖.
       const mapActions = page.getByRole("dialog", { name: "地圖編輯工作區" });
       assert.equal(await mapActions.getByRole("button", { name: "儲存地圖變更", exact: true }).isDisabled(), true);
-      await mapActions.getByText("先放入攤位或設施，才能儲存。", { exact: true }).waitFor();
+      await mapActions.getByText(/先放入.+才能儲存。/).waitFor();
       await journey.capture(page, "organizer-empty-map-blocked");
       await page.getByRole("button", { name: "空白畫布", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "空白畫布會清掉畫面上的內容" });

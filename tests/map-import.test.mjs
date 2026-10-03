@@ -27,6 +27,16 @@ test("validates the staged fixture map without FF47-specific counts", async () =
   assert.equal(validateEventMapLayout(snapshot.layout).ok, true);
   assert.equal(validateFf47Layout(snapshot.layout).ok, false);
   assert.equal(validateStagedEventArtifacts(event, references, catalog, snapshot, "sample").map, snapshot);
+  const annotated = structuredClone(snapshot);
+  annotated.layout.notes = [{ id: "time", text: "社團入場 9:30–10:30", rect: { x: 10, y: 0, width: 180, height: 25 } }];
+  annotated.layout.paths = [{ id: "direction", points: [{ x: 10, y: 85 }, { x: 100, y: 85 }, { x: 100, y: 70 }] }];
+  assert.deepEqual(validateStagedEventArtifacts(event, references, catalog, annotated, "sample").map.layout, annotated.layout);
+  const covered = structuredClone(annotated);
+  covered.layout.notes[0].rect = { ...snapshot.layout.rows[0].slots[0].rect };
+  assert.throws(() => validateStagedEventArtifacts(event, references, catalog, covered, "sample"), /annotations over booths.*S01/);
+  covered.layout.notes = [];
+  covered.layout.paths[0].points = [{ x: 0, y: 50 }, { x: 100, y: 50 }];
+  assert.throws(() => validateStagedEventArtifacts(event, references, catalog, covered, "sample"), /annotations over booths.*S01/);
   assert.throws(() => validateStagedEventArtifacts(event, references, catalog, { ...snapshot, layout: { ...snapshot.layout, template: "FF47" } }, "sample"), /does not match/);
   assert.throws(() => validateStagedEventArtifacts(event, references, { ...catalog, placements: [...catalog.placements, catalog.placements[0]] }, snapshot, "sample"), /duplicate placement/);
   const multiSpaceReferences = [...references, {
@@ -311,7 +321,7 @@ test("resizes and snaps booth and pillar rectangles exactly like a landmark rect
 test("resizing the canvas keeps rows, pillars, access points and landmarks in place proportionally", () => {
   const layout = {
     version: 2, template: "TAIWAN_GENERIC_V1", width: 200, height: 100, floor: { x: 10, y: 5, width: 180, height: 90 },
-    rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 20, y: 20, width: 40, height: 28 } }] }],
+    rows: [{ label: "A", orientation: "horizontal", labelSide: "right", confidence: 1, slots: [{ code: "A01", rect: { x: 20, y: 20, width: 40, height: 28 } }] }],
     pillars: [{ id: "pillar-1", x: 90, y: 60, width: 40, height: 28 }],
     accessPoints: [{ id: "entrance-1", kind: "entrance", direction: "north", x: 100, y: 95, label: "入口" }],
     landmarks: [{ id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 140, y: 20, width: 40, height: 28 } }],
@@ -324,6 +334,7 @@ test("resizing the canvas keeps rows, pillars, access points and landmarks in pl
   assert.deepEqual([scaled.width, scaled.height], [400, 300]);
   assert.deepEqual(scaled.floor, { x: 20, y: 15, width: 360, height: 270 });
   assert.deepEqual(scaled.rows[0].slots[0], { code: "A01", rect: { x: 40, y: 60, width: 80, height: 84 } });
+  assert.equal(scaled.rows[0].labelSide, "right");
   assert.deepEqual(scaled.pillars[0], { id: "pillar-1", x: 180, y: 180, width: 80, height: 84 });
   assert.deepEqual(scaled.accessPoints[0], { id: "entrance-1", kind: "entrance", direction: "north", x: 200, y: 285, label: "入口" });
   assert.deepEqual(scaled.landmarks[0], { id: "landmark-1", kind: "enterprise", label: "企業攤", rect: { x: 280, y: 60, width: 80, height: 84 } });
@@ -757,7 +768,7 @@ test("two segments of a row that touch are one run, and separate columns are not
   assert.equal(contiguousSegment(rects, 30).items.length, 26);
 });
 
-test("a row label sits where both renderers and the editor agree it does", () => {
+test("legacy row labels retain their vertical and horizontal reference positions", () => {
   const vertical = drawnRow("A", { x: 100, y: 200, width: 40, height: 400 }, 8).row;
   assert.deepEqual(rowLabelAnchor(vertical), { x: 120, y: 187 }, "a vertical row is labelled above its first booth");
   const horizontal = drawnRow("W", { x: 100, y: 300, width: 480, height: 30 }, 6).row;
@@ -1384,4 +1395,55 @@ test("service points are picked up, moved and removed like access points", () =>
   assert.deepEqual([scaled.servicePoints[0].x, scaled.servicePoints[0].y], [320, 190], "resizing the canvas keeps service points where they sit");
   assert.equal("servicePoints" in scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 }), false, "a layout without service points does not gain the field");
   assert.equal(validateEventMapLayout({ ...layout, accessPoints: [{ id: "side", kind: "both", direction: "west", x: 1, y: 1, label: "側門" }] }).ok, true, "a two-way doorway is a valid access point");
+});
+
+test("space marks move, resize, scale and delete without changing any booth", () => {
+  const layout = { ...multiSelectLayout(), spaceMarks: [
+    { id: "empty", kind: "reserved", rect: { x: 20, y: 80, width: 10, height: 10 } },
+    { id: "withdrawn", kind: "cancelled", rect: { x: 50, y: 80, width: 10, height: 10 } },
+  ] };
+  const rows = structuredClone(layout.rows);
+  const picked = selectionsWithinBox(layout, { x: 15, y: 75, width: 20, height: 20 });
+  assert.deepEqual(picked.filter(({ kind }) => kind === "space-mark"), [{ kind: "space-mark", itemIndex: 0 }]);
+  const resolved = resolveSelectionBoxes(layout, [{ kind: "space-mark", itemIndex: 0 }, { kind: "space-mark", itemIndex: 1 }]);
+  applySelectionBoxes(layout, resolved.selections, translateBoxesWithin(resolved.boxes, 10, 5, layout));
+  assert.deepEqual(layout.spaceMarks.map(({ rect }) => rect), [
+    { x: 30, y: 85, width: 10, height: 10 }, { x: 60, y: 85, width: 10, height: 10 },
+  ]);
+  const boxes = resolveSelectionBoxes(layout, resolved.selections).boxes;
+  applySelectionBoxes(layout, resolved.selections, scaleBoxesIntoBox(boxes, boundingBox(boxes), { x: 30, y: 85, width: 80, height: 20 }, layout));
+  assert.deepEqual(layout.spaceMarks.map(({ rect }) => rect), [
+    { x: 30, y: 85, width: 20, height: 20 }, { x: 90, y: 85, width: 20, height: 20 },
+  ]);
+  assert.equal(validateEventMapLayout(layout).ok, true);
+  const scaled = scaleEventMapLayout(layout, { width: layout.width * 2, height: layout.height * 2 });
+  assert.deepEqual(scaled.spaceMarks[0], { id: "empty", kind: "reserved", rect: { x: 60, y: 170, width: 40, height: 40 } });
+  removeSelectionsFrom(layout, [{ kind: "space-mark", itemIndex: 0 }]);
+  assert.deepEqual(layout.spaceMarks.map(({ id }) => id), ["withdrawn"]);
+  assert.deepEqual(layout.rows, rows);
+  assert.equal("spaceMarks" in scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 }), false);
+});
+
+test("note boxes and arrow vertices follow selection moves, resizes, canvas scaling and deletion", () => {
+  const layout = { ...multiSelectLayout(), notes: [{ id: "time", text: "社團入場 9:30–10:30", rect: { x: 20, y: 90, width: 50, height: 15 } }],
+    paths: [{ id: "around", points: [{ x: 10, y: 40 }, { x: 90, y: 40 }, { x: 90, y: 90 }] }] };
+  const rows = structuredClone(layout.rows);
+  const band = selectionsWithinBox(layout, { x: 15, y: 85, width: 60, height: 25 });
+  assert.deepEqual(band.filter(selection => selection.kind === "note"), [{ kind: "note", itemIndex: 0 }]);
+  const selections = [{ kind: "note", itemIndex: 0 }, { kind: "path", itemIndex: 0 }];
+  const resolved = resolveSelectionBoxes(layout, selections);
+  applySelectionBoxes(layout, selections, translateBoxesWithin(resolved.boxes, 10, 5, layout));
+  assert.deepEqual(layout.notes[0].rect, { x: 30, y: 95, width: 50, height: 15 });
+  assert.deepEqual(layout.paths[0].points, [{ x: 20, y: 45 }, { x: 100, y: 45 }, { x: 100, y: 95 }]);
+  applySelectionBoxes(layout, [{ kind: "path", itemIndex: 0 }], [{ x: 30, y: 50, width: 100, height: 60 }]);
+  assert.deepEqual(layout.paths[0].points, [{ x: 30, y: 50 }, { x: 130, y: 50 }, { x: 130, y: 110 }]);
+  const scaled = scaleEventMapLayout(layout, { width: 400, height: 240 });
+  assert.deepEqual(scaled.notes[0].rect, { x: 60, y: 190, width: 100, height: 30 });
+  assert.deepEqual(scaled.paths[0].points, [{ x: 60, y: 100 }, { x: 260, y: 100 }, { x: 260, y: 220 }]);
+  assert.equal(scaled.notes[0].text, layout.notes[0].text);
+  removeSelectionsFrom(layout, selections);
+  assert.deepEqual(layout.notes, []); assert.deepEqual(layout.paths, []);
+  assert.deepEqual(layout.rows, rows);
+  const legacy = scaleEventMapLayout(multiSelectLayout(), { width: 400, height: 240 });
+  assert.equal("notes" in legacy, false); assert.equal("paths" in legacy, false);
 });

@@ -10,7 +10,10 @@ const { mapBoothCoverage, boothGroupCoverage } = await environment.runner.import
 after(() => vite.close());
 
 test("canvas coverage counts required codes once, preserves missing codes and exposes unknown codes", () => {
-  const layout = { rows: [{ slots: [{ code: "A01" }, { code: "A01" }, { code: "EXTRA" }] }] };
+  const layout = { rows: [{ slots: [{ code: "A01" }, { code: "A01" }, { code: "EXTRA" }] }], spaceMarks: [
+    { id: "reserved", kind: "reserved", rect: { x: 20, y: 20, width: 10, height: 10 } },
+    { id: "cancelled", kind: "cancelled", rect: { x: 40, y: 20, width: 10, height: 10 } },
+  ] };
   const coverage = mapBoothCoverage(layout, { requiredBoothCodes: ["A01", "A01", "A02"], allowedBoothCodes: ["A01", "A02"] });
   assert.equal(coverage.completed, 1);
   assert.deepEqual(coverage.missing, ["A02"]);
