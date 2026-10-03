@@ -417,4 +417,3 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 活動建置申請依本人關係通知核准／拒絕；核准與首次 Owner grant 合併一封。內容（含更正）審核通過／退修、失敗重開，以及 publication failed／published 通知當時有效 Owner，協作者只接自身權限異動。完成既有 production verified gate 才通知已公開；舊核准進度／失敗信可在同版本已公開或版本更替時取消。業務轉換與通知在同一 D1 batch，寄送失敗不撤銷業務結果。
 
 `/organizer?candidate=…&section=review` 優先於上次活動；`application=…` 打開指定申請，`notifications=1` 開啟跨工作區共用設定。未登入時參數經白名單帶入登入信，無權限／不存在不默開其他活動。手機可讀指定活動目前狀態與通知設定，編輯仍須桌機，同一信件保留目的地。信件指向公開活動時使用 `/events/{eventId}/`。
-
