@@ -106,12 +106,13 @@ try {
   assert.equal(await linkedReview.getByLabel('活動', { exact: true }).inputValue(), 'sample-two', 'section navigation preserves the selected event');
   await linked.page.close();
   const { page, requests, expire } = await open("admin", "circle");
-  await page.getByRole("link", { name: "管理", exact: true }).waitFor();
+  await page.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
+  await page.getByRole("link", { name: "網站管理", exact: true }).waitFor();
   assert.equal(requests.filter(x => x.path.startsWith("/api/admin/")).length, 0, "/circle must never load management data");
   assert.equal(await page.locator("#admin, #map-review").count(), 0);
   // The admin page is cross-event, so the link names no event.
-  assert.equal(await page.getByRole("link", { name: "管理", exact: true }).getAttribute("href"), "/admin");
-  await page.getByRole("link", { name: "管理", exact: true }).click();
+  assert.equal(await page.getByRole("link", { name: "網站管理", exact: true }).getAttribute("href"), "/admin");
+  await page.getByRole("link", { name: "網站管理", exact: true }).click();
   await page.getByRole("heading", { name: "網站管理", exact: true }).waitFor();
   const overview = page.locator("#overview"), panel = page.locator("#admin"), review = page.locator("#map-review");
   const takedown = page.locator("#takedown"), accounts = page.locator("#accounts");

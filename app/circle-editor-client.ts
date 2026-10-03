@@ -197,8 +197,9 @@ export function readClaimCircle(circleId: string) {
     .then((answer) => answer.circles[0] ?? null);
 }
 
-export function listMyClaims() {
-  return call<{ eventId: string; claims: ClaimSummary[] }>("/api/claims");
+/** `eventId` reads another event's claims without moving the page, for the event picker. */
+export function listMyClaims(eventId?: string) {
+  return call<{ eventId: string; claims: ClaimSummary[] }>("/api/claims", undefined, eventId);
 }
 
 export function createClaim(input: { circleId: string; targetUrl?: string; evidenceUrl?: string; evidenceNote?: string }) {
