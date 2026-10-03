@@ -177,7 +177,7 @@ try {
   assert.deepEqual(croppedPixels, [180, 160], "private background contains only selected source pixels");
   await openToolGroup(cropped.editor, "設施"); await cropped.editor.getByRole("button", { name: "新增出入口", exact: true }).click();
   await cropped.svg.click({ position: { x: 100, y: 100 } });
-  await cropped.editor.getByRole("button", { name: "建立這個活動日與場地的地圖", exact: true }).click();
+  await cropped.page.getByRole("button", { name: "建立這個活動日與場地的地圖", exact: true }).click();
   await cropped.page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
   assert.deepEqual([cropped.state.map.layout.width, cropped.state.map.layout.height], [180, 160]);
   assert.deepEqual(cropped.state.map.layout.floor, { x: 0, y: 0, width: 180, height: 160 });
@@ -188,5 +188,20 @@ try {
   assert.equal(await cropDialog.count(), 0);
   assert.deepEqual([cropped.state.map.layout.width, cropped.state.map.layout.height], [180, 160]);
   journey.report.checks.push("crop cancellation changes nothing; source-pixel crop sets background and canvas dimensions; facility-only map cannot be recropped");
+  const late = await openWorkspace({ fresh: true });
+  await late.page.evaluate(() => {
+    const NativeReader = window.FileReader;
+    window.FileReader = class extends NativeReader { readAsDataURL(blob) { window.releasePlanRead = () => super.readAsDataURL(blob); } };
+  });
+  await late.page.locator('input[type="file"]').setInputFiles(composite);
+  await openToolGroup(late.editor, "設施"); await late.editor.getByRole("button", { name: "新增出入口", exact: true }).click();
+  await late.svg.click({ position: { x: 100, y: 100 } });
+  await late.page.evaluate(() => window.releasePlanRead());
+  await late.page.locator('input[type="file"]').waitFor({ state: "attached" });
+  await late.page.waitForFunction(() => !document.querySelector('input[type="file"]').disabled);
+  assert.equal(await late.page.getByRole("dialog", { name: "框選目前場地", exact: true }).count(), 0);
+  assert.equal(await late.svg.locator("image").count(), 0);
+  assert.equal(await late.editor.getByRole("combobox", { name: "選取地圖元素" }).locator("option").filter({ hasText: "出入口" }).count(), 1);
+  journey.report.checks.push("drawing while image reading is pending cancels empty-map cropping; late image cannot replace the edited canvas");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

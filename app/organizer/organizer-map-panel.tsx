@@ -374,7 +374,12 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
     {layout ? <>
       <MapLayoutEditor key={`${periodKey}:${venueSpaceId}`} layout={layout}
         title={`${organizerDayLabel(detail.draft.event.days, periodKey)} · ${organizerVenueSpaceLabel(detail.venueCatalog, venueSpaceId)}`}
-        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || !unsaved, busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位或設施，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => { setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null); }} />
+        save={{ label: selected ? "儲存地圖變更" : "建立這個活動日與場地的地圖", disabled: !editable || !layoutHasContent(layout) || !unsaved, busy: savingMap, error: saveResult?.ok === false, message: savingMap ? "儲存中…" : saveResult?.text ?? (!layoutHasContent(layout) ? "先放入攤位或設施，才能儲存。" : unsaved ? "尚有未儲存變更" : "目前沒有未儲存的變更"), onSave: () => { void saveMap(); } }} recognitionEnabled={editable} recognitionPaused={savingMap || planFeedback.pending} scope={scope} areaLabels={assignment?.areaLabels} focusTarget={focusTarget} authoring={authoring} backgroundImageUrl={background || undefined} onChange={(next, nextAuthoring) => {
+          // A plan picked for an empty map must not later reopen cropping after
+          // the organizer has already started drawing while the image loads.
+          if (planFeedback.pending && canCropPlan(layout, authoring)) clearPlanNotice();
+          setLayout(next); setAuthoring(nextAuthoring); setEdited(true); setSaveResult(null);
+        }} />
       {/* Nothing to save is a disabled button, the same answer the draft form
           gives. It is not only tidiness: every save moves the candidate on a
           version and writes a revision, so a save with no edits leaves a step
