@@ -85,6 +85,29 @@ async function create() {
   return (await response.json()).candidateId;
 }
 
+test("a real unpublished amendment retains its published activity's claim moderation", async () => {
+  const id = await create();
+  assert.equal((await repo.getOrganizerCandidate(id)).status, "draft");
+  await repo.createClaim({ id: "moderation-claim", eventId: "event-alpha", circleId: "c-000001", accountId: ownerId,
+    circleNameKey: "circle", circleNameAtClaim: "Circle", sourceRowAtClaim: null, status: "pending", method: null,
+    targetUrl: null, challengeTokenHash: null, challengeExpiresAt: null, evidenceUrl: "https://circle.example/", evidenceNote: "Evidence", now: data.now });
+  // The amendment has its own copied grant; editing that edition must not
+  // require keeping a grant on the original edition.
+  await db.prepare("UPDATE organizer_event_grants SET revoked_at=?1 WHERE candidate_id='source'").bind(data.now).run();
+  const queue = await handlers.organizerListClaims(request("GET", undefined, editor), id);
+  assert.equal(queue.status, 200);
+  assert.deepEqual((await queue.json()).claims.map(claim => claim.id), ["moderation-claim"]);
+  const approved = await handlers.organizerDecideClaim(request("POST", { decision: "approve", claimId: "moderation-claim" }, editor), id);
+  assert.equal(approved.status, 200, await approved.clone().text());
+  assert.equal((await repo.getClaim("moderation-claim")).status, "verified");
+  await repo.putOverride({ eventId: "event-alpha", circleId: "c-000001", fieldsJson: '{"saleInfo":"live"}',
+    updatedBy: "owner@example.test", accountId: ownerId, now: data.now });
+  const editorId = await repo.upsertAccount("editor@example.test", data.now);
+  assert.equal(await repo.takedownOverride({ eventId: "event-alpha", circleId: "c-000001", reason: "Rights holder request",
+    by: "editor@example.test", now: data.now, authority: { candidateId: id, accountId: editorId } }), true);
+  assert.equal((await repo.getOverride("event-alpha", "c-000001")).status, "takendown");
+});
+
 test("baseline errors distinguish version conflicts from unavailable upstreams without creating candidates", async () => {
   for (const [code, status] of [["amendment_baseline_changed", 409], ["amendment_publication_pending", 409], ["amendment_baseline_unavailable", 503]]) {
     loadHook = async () => { throw new AmendmentBaselineError(code, "可呈現的錯誤", status); };

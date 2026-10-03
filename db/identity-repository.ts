@@ -757,10 +757,31 @@ export function createIdentityRepository(database: D1Database, options: { bootst
 
   // The selected candidate identifies the event; request bodies cannot choose
   // another one. Recheck membership and event identity at the actual write.
+  // A CREATE draft's event_id is editable. Only a published edition or an
+  // amendment created from a published source establishes moderation authority.
+  // Reuse this predicate at the entry guard and the conditional writes.
+  function organizerModerationAssociationSql() {
+    return `(candidate.published_version IS NOT NULL OR
+      (candidate.publication_operation = 'AMEND' AND EXISTS (
+        SELECT 1 FROM organizer_amendments amendment
+        JOIN organizer_event_candidates source ON source.id = amendment.source_candidate_id
+        WHERE amendment.candidate_id = candidate.id AND source.published_version IS NOT NULL
+          AND source.event_id = candidate.event_id)))`;
+  }
+
+  async function getOrganizerModerationEventId(candidateId: string): Promise<string | null> {
+    await ensureTables();
+    const candidate = await database.prepare(`SELECT candidate.event_id FROM organizer_event_candidates candidate
+      WHERE candidate.id = ?1 AND ${organizerModerationAssociationSql()}`)
+      .bind(candidateId).first<{ event_id: string | null }>();
+    return candidate?.event_id ?? null;
+  }
+
   function organizerClaimAuthoritySql(candidateParam: number, accountParam: number, eventColumn = "circle_claims.event_id") {
     return `EXISTS (SELECT 1 FROM organizer_event_candidates candidate
       JOIN accounts actor ON actor.id = ?${accountParam}
       WHERE candidate.id = ?${candidateParam} AND candidate.event_id = ${eventColumn}
+        AND ${organizerModerationAssociationSql()}
         AND actor.disabled_at IS NULL AND actor.deletion_started_at IS NULL
         AND (EXISTS (SELECT 1 FROM admins WHERE email = actor.email)
           OR EXISTS (SELECT 1 FROM organizer_event_grants g WHERE g.candidate_id = candidate.id
@@ -3586,7 +3607,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     ...createOrganizerAmendmentRepository(database, ensureTables),
     ...createOrganizerRecoveryRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),
-    ensureTables, writeAudit,
+    ensureTables, writeAudit, getOrganizerModerationEventId,
     listAdmins, isAdminEmail, addAdmin, removeAdmin,
     countLoginTokensSince, createLoginToken, deleteLoginToken, consumeLoginToken, consumeLoginTokenDetails,
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,

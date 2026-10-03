@@ -8,6 +8,7 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const { createIdentityRepository } = await vite.environments.ssr.runner.import("/db/identity-repository.ts");
 const { createCirclePortalHandlers } = await vite.environments.ssr.runner.import("/app/circle-portal-handlers.ts");
 const { circleObjectPrefix } = await vite.environments.ssr.runner.import("/app/hosted-thumbnails.ts");
+const { createEmptyOrganizerEventDraft } = await vite.environments.ssr.runner.import("/app/organizer-event.ts");
 const runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, script: await organizerRepositoryFixtureScript(), d1Databases: { DB: "organizer-claims-test" } }));
 const database = await runtime.getD1Database("DB");
 const repo = createIdentityRepository(database);
@@ -50,10 +51,64 @@ beforeEach(async () => {
   handlers = createCirclePortalHandlers(options);
   await candidate("candidate-a", "event-a");
   await candidate("candidate-b", "event-b");
+  await database.prepare("UPDATE organizer_event_candidates SET status='published', published_version=1, published_at=?1, event_id_locked_at=?1 WHERE id IN ('candidate-a','candidate-b')").bind(now).run();
   await grant("candidate-a", ids.ownerId, "owner");
   await grant("candidate-a", ids.editorId, "editor");
   await claim("claim-a", "event-a", "c-1");
   await claim("claim-b", "event-b", "c-1");
+});
+
+for (const [email, account] of [["owner@example.test", "ownerId"], ["editor@example.test", "editorId"]]) {
+  test(`${email} cannot turn an editable CREATE draft into a static event's moderation authority`, async () => {
+    await candidate("attacker", "new-event");
+    await grant("attacker", ids[account], account === "ownerId" ? "owner" : "editor");
+    const eventId = "static-target", deleted = [];
+    await claim("target-pending", eventId, "pending-circle");
+    await claim("self-pending", eventId, "self-circle", ids[account]);
+    await claim("protected-owner", eventId, "c-1");
+    await repo.markClaimVerified("protected-owner", "admin", now, "admin@example.test");
+    const key = `${circleObjectPrefix(eventId, "c-1")}image.webp`;
+    await repo.putOverride({ eventId, circleId: "c-1", fieldsJson: '{"saleInfo":"protected"}',
+      updatedBy: "admin@example.test", accountId: ids.adminId, now, hostedThumbnailKey: key });
+    options.config.publishedEvent = async id => ["event-a", "event-b", eventId].includes(id)
+      ? { dataUpdatedAt: id, eventEndsAt: "2030-01-01" } : null;
+    handlers = takedownHandlers({ thumbnailStore: { list: async () => [key], delete: async keys => deleted.push(keys) } });
+    const cookie = await signIn(email);
+    const draft = createEmptyOrganizerEventDraft("New activity");
+    draft.event.id = eventId;
+    const saved = await handlers.updateOrganizerCandidate(new Request(`${origin}/api/organizer/events/attacker`, {
+      method: "PATCH", headers: { origin, cookie, "content-type": "application/json" },
+      body: JSON.stringify({ expectedVersion: 1, draft }),
+    }), "attacker");
+    assert.equal(saved.status, 200, await saved.clone().text());
+    assert.equal((await repo.getOrganizerCandidate("attacker")).event_id, eventId);
+    assert.equal((await handlers.organizerListClaims(request("attacker", cookie), "attacker")).status, 404);
+    for (const decision of ["approve", "reject"]) {
+      assert.equal((await handlers.organizerDecideClaim(request("attacker", cookie, decision, "target-pending"), "attacker")).status, 404);
+    }
+    assert.equal((await handlers.organizerDecideClaim(request("attacker", cookie, "approve", "self-pending"), "attacker")).status, 404);
+    assert.equal((await handlers.organizerSearchTakedownCircles(overridesRequest("attacker", cookie), "attacker")).status, 404);
+    assert.equal((await handlers.organizerTakedown(overridesRequest("attacker", cookie, { circleId: "c-1", reason: "attack" }), "attacker")).status, 404);
+
+    // Exercise the SQL boundary independently of the entry guard.
+    const authority = { candidateId: "attacker", accountId: ids[account] };
+    assert.equal(await repo.markClaimVerified("target-pending", "organizer", now, email, authority), false);
+    assert.equal(await repo.setClaimStatus("target-pending", "rejected", now, email, "pending", authority), false);
+    assert.equal(await repo.takedownOverride({ eventId, circleId: "c-1", reason: "attack", by: email, now, authority }), false);
+    assert.equal((await repo.getClaim("target-pending")).status, "pending");
+    assert.equal(await repo.ownsCircle(ids[account], eventId, "self-circle"), false);
+    assert.equal((await repo.getOverride(eventId, "c-1")).status, "live");
+    assert.equal((await repo.getOverride(eventId, "c-1")).hosted_thumbnail_key, key);
+    assert.deepEqual(deleted, []);
+  });
+}
+
+test("a locked, submitted CREATE draft still has no published-event moderation authority", async () => {
+  await database.prepare("UPDATE organizer_event_candidates SET status='submitted', published_version=NULL WHERE id='candidate-a'").run();
+  const cookie = await signIn("editor@example.test");
+  assert.equal((await handlers.organizerListClaims(request("candidate-a", cookie), "candidate-a")).status, 404);
+  assert.equal((await handlers.organizerDecideClaim(request("candidate-a", cookie, "approve"), "candidate-a")).status, 404);
+  assert.equal((await repo.getClaim("claim-a")).status, "pending");
 });
 
 function overridesRequest(candidateId, cookie, body, query = "社團") {
