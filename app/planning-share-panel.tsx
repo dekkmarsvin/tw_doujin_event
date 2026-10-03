@@ -15,6 +15,8 @@ import styles from "./planning-tools.module.css";
 
 /** Read once, before the reader rebuilds its URL from its own whitelist (ADR-0079). */
 const initialShareId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("share");
+/** Closed once means consumed: switching between map and browse remounts the dialog. */
+let shareDismissed = false;
 
 const eventOf = (eventId: string) => PUBLISHED_EVENTS.find((event) => event.id === eventId);
 function dayLabel(eventId: string, day: EventDayKey) {
@@ -86,7 +88,8 @@ export function ShareItineraryDialog({ eventId, document, onClose }: { eventId: 
       {candidates.length === 0 ? <p>這場活動還沒有行程可以分享。</p> : <>
         <fieldset className={styles.sharePick}>
           <legend>將分享 {selected.length} 個</legend>
-          {candidates.map((item) => <label key={itemKey(item)}><input type="checkbox" checked={!unchecked.has(itemKey(item))} onChange={() => toggle(itemKey(item))} />{item.label}</label>)}
+          {/* Locked while creating, so the link always matches what is ticked. */}
+          {candidates.map((item) => <label key={itemKey(item)}><input type="checkbox" disabled={state.kind === "creating"} checked={!unchecked.has(itemKey(item))} onChange={() => toggle(itemKey(item))} />{item.label}</label>)}
         </fieldset>
         {selected.length > SHARE_MAX_ITEMS && <p className={styles.errorText}>一次最多分享 {SHARE_MAX_ITEMS} 個，請取消勾選 {selected.length - SHARE_MAX_ITEMS} 個。</p>}
         {state.kind !== "ready" && <div className={styles.confirmActions}>
@@ -120,7 +123,7 @@ export function SharedItineraryDialog({ eventId, document, update, blocked }: {
   update: (change: (current: PlanningDocument) => PlanningDocument) => void;
   blocked: boolean;
 }) {
-  const [shareId, setShareId] = useState(initialShareId);
+  const [shareId, setShareId] = useState(() => (shareDismissed ? null : initialShareId));
   const [opened, setOpened] = useState<Opened>({ kind: "loading" });
   useEffect(() => {
     if (!shareId) return;
@@ -132,6 +135,7 @@ export function SharedItineraryDialog({ eventId, document, update, blocked }: {
   }, [shareId]);
   if (!shareId) return null;
   const close = () => {
+    shareDismissed = true;
     setShareId(null);
     const url = new URL(window.location.href);
     url.searchParams.delete("share");
@@ -140,7 +144,7 @@ export function SharedItineraryDialog({ eventId, document, update, blocked }: {
   const expiredEvent = opened.kind === "expired" && opened.eventId ? eventOf(opened.eventId) : undefined;
   return <Dialog title="分享的行程" labelId="shared-itinerary-title" onClose={close}>
     {opened.kind === "loading" && <p className={styles.notice} role="status">正在讀取分享的行程…</p>}
-    {opened.kind === "missing" && <p className={styles.errorText} role="alert">找不到這個分享連結，請向分享者確認網址。</p>}
+    {opened.kind === "missing" && <div className={styles.section}><p>這個分享連結不存在或已過期。</p><a className={styles.linkButton} href="/">查看場刊 Map 的活動</a></div>}
     {opened.kind === "expired" && <div className={styles.section}><p>這個分享連結已過期。</p>{expiredEvent && <a className={styles.linkButton} href={`/?event=${encodeURIComponent(expiredEvent.id)}`}>查看 {expiredEvent.name}</a>}</div>}
     {opened.kind === "error" && <p className={styles.errorText} role="alert">{opened.error}</p>}
     {opened.kind === "ok" && <SharedItineraryBody snapshot={opened.snapshot} shareId={shareId} eventId={eventId} document={document} update={update} blocked={blocked} />}

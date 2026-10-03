@@ -77,7 +77,7 @@ export function createPlanningShareHandlers({ repository, publishedEvent, hashPe
     },
     async get(shareId: string) {
       const row = await read(shareId);
-      if (!row) return json({ error: "找不到分享清單。" }, 404);
+      if (!row) return json({ error: "這個分享連結不存在或已過期。" }, 404);
       if (row.expires_at <= now()) return json({ error: "這份清單已過期。", eventId: row.event_id }, 410);
       const snapshot: ShareSnapshot = { version: 1, eventId: row.event_id, items: JSON.parse(row.items_json) };
       // Never cache a live response beyond its remaining lifetime.
@@ -86,7 +86,8 @@ export function createPlanningShareHandlers({ repository, publishedEvent, hashPe
     },
     async page(request: Request, shareId: string) {
       const row = await read(shareId);
-      if (!row) return html("找不到分享清單｜場刊 Map", '<h1>找不到分享清單。</h1><a href="/">返回場刊 Map</a>', 404);
+      // Purged expired rows are indistinguishable from unknown ids (maintainer decision on #415).
+      if (!row) return html("分享連結不存在或已過期｜場刊 Map", '<h1>這個分享連結不存在或已過期。</h1><a href="/">查看場刊 Map 的活動</a>', 404);
       const eventLink = `/?${new URLSearchParams({ event: row.event_id })}`;
       if (row.expires_at <= now()) return html("清單已過期｜場刊 Map", `<h1>這份清單已過期。</h1><a href="${escapeHtml(eventLink)}">返回活動</a>`, 410);
       const event = await publishedEvent(row.event_id);
