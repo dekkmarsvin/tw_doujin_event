@@ -67,7 +67,8 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
     });
   }, []);
 
-  const replace = useCallback((next: PlanningDocument) => {
+  // Complete replacements commit only after storage succeeds; callers can report success from the boolean.
+  const replace = useCallback((next: PlanningDocument): boolean => {
     try {
       const saved = savePlanningDocument(localStorage, next);
       writable.current = true;
@@ -75,9 +76,10 @@ export function usePlanning(eventId: string, catalogSettled: boolean) {
       setUnsupportedRaw(null);
       setDocument(saved);
       window.dispatchEvent(new CustomEvent(PLANNING_CHANGED_EVENT));
+      return true;
     } catch {
       setStorageError("瀏覽器無法儲存這次變更；目前內容只存在這個分頁。請先匯出備份。");
-      setDocument(next);
+      return false;
     }
   }, []);
 
