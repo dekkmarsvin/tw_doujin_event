@@ -2,7 +2,7 @@
   "schema": "event-data-pin/2",
   "eventId": "ff47",
   "repository": "dekkmarsvin/tw_doujin_event-data",
-  "commit": "8c645303fa6838383549fbe8433ece081c514e1e",
+  "commit": "44c437efc9133e1a37a68b93f3ed3e49175684e2",
   "files": [
     { "path": "events/ff47/event.json", "sha256": "e25267996005ae465ce2008f044887194042cc7eb5b2bbd1df97e8aa5b809875" },
     { "path": "events/ff47/official-booths.json", "sha256": "444c6c9c51c5dd6925f756886b2a0508139962b3039bb59a0f98eb8d710d1428" },
@@ -11,6 +11,6 @@
     { "path": "references/category-catalogs/frontier-anime/circle-topics/2026-08-25.json", "sha256": "94af076b77c08cdd5f28875b7578c86892242e991a4deb212194c8c7a50f60e3" },
     { "path": "references/organizers/frontier-anime.json", "sha256": "72b920e6aea5fc61f0675cff5dde59f8b6eb9e6ec25a61da24afc1e434e5aef2" },
     { "path": "references/venue-spaces/zhengyan-exhibition-area.json", "sha256": "f90fe419e34852637bee4078cdcb8f009b9602b40ea19273f543c32cce450b1e" },
-    { "path": "references/venues/taipei-expo-park-zhengyan-hall.json", "sha256": "b7a5c3be4758db71a264bbf994b57329c377abcea68f5e7edefd288494c2e244" }
+    { "path": "references/venues/taipei-expo-park-zhengyan-hall.json", "sha256": "8c86be66cb77557ac92b2cf0dff3dcd1b978cf165461d1f46d2dcb9603002048" }
   ]
 }
