@@ -8,7 +8,7 @@ import { useCircleCatalog } from "./use-circle-catalog";
 import { EMPTY_PLANNING_DOCUMENT, deleteFavoriteGroup, moveFavoriteGroup, moveFavoritesToGroup, removeFromVisitPlan, toggleFavorite, updateFavoriteGroup } from "./planning-store";
 import { PlanningTransferPanel } from "./planning-transfer-panel";
 import { downloadText } from "./download-text";
-import { OPEN_SHARED_LIST_EVENT, SharePanel, SharedListDialog } from "./planning-share-panel";
+import { SharedItineraryDialog } from "./planning-share-panel";
 import { ReaderPlanningBoundary, useReaderPlanning } from "./reader-planning";
 import { useModalFocus } from "./use-modal-focus";
 import { UiIcon } from "./ui-icons";
@@ -43,14 +43,13 @@ function PlanningToolsContent({ eventId }: { eventId: string }) {
 
   return <>
     <button className={styles.launcher} onClick={() => setOpen(true)}>資料管理</button>
-    {ready && <SharedListDialog eventId={eventId} document={document} update={update} blocked={Boolean(unsupportedRaw)} />}
+    {ready && <SharedItineraryDialog eventId={eventId} document={document} update={update} blocked={Boolean(unsupportedRaw)} />}
     {open && createPortal(<div className={styles.backdrop} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}><section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="planning-tools-title" tabIndex={-1}>
       <header><div><h2 id="planning-tools-title">規劃資料管理</h2></div><button onClick={() => setOpen(false)} aria-label="關閉規劃資料管理"><UiIcon name="close" /></button></header>
       <p className={styles.notice} role="status">{ready ? "資料僅儲存於瀏覽器，您可以匯出備份。" : "正在讀取瀏覽器資料"}</p>
       {storageError && <div className={styles.preview} role="alert"><b>原始規劃資料受到保護</b><p>{storageError}</p>{unsupportedRaw && <button onClick={() => downloadText("場刊Map-原始規劃資料.json", unsupportedRaw, "application/json")}>先下載原始資料</button>}</div>}
       <div className={styles.summary}><span><b>{document.favorites.length}</b> 收藏</span><span><b>{memoCount}</b> 備註</span><span><b>{document.visitPlans.length}</b> 行程項目</span><span><b>{document.favoriteGroups.length}</b> 群組</span></div>
       {ready && <PlanningTransferPanel eventId={eventId} document={document} replace={replace} blocked={Boolean(unsupportedRaw)} />}
-      {ready && <SharePanel eventId={eventId} document={document} />}
       <section className={styles.section}><div><h3>收藏群組管理</h3><p>刪除群組前，請選擇收藏的移動位置。</p></div>{document.favoriteGroups.length === 0 ? <small>尚未建立群組。</small> : <div className={styles.groupList}>{document.favoriteGroups.map((group, index) => <div key={group.id} className={styles.groupRow}>
         <input aria-label={`${group.name} 群組名稱`} defaultValue={group.name} onBlur={(event) => update((current) => updateFavoriteGroup(current, group.id, { name: event.target.value }))} />
         <select aria-label={`${group.name} 群組顏色`} value={group.color} onChange={(event) => update((current) => updateFavoriteGroup(current, group.id, { color: event.target.value }))}><option value="coral">珊瑚</option><option value="mint">薄荷</option><option value="blue">藍</option><option value="amber">琥珀</option><option value="lilac">紫</option></select>

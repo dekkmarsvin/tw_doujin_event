@@ -32,6 +32,7 @@
 | `organizerInvitesPerEmailPerHour` | 3 | 同一收件匣每小時可收到的 Organizer 邀請；只計**他人寄來的**，與本人自助索取分開計數 |
 | `organizerInvitesPerActorPerHour` | 10 | 同一邀請人每小時可寄出的 Organizer 邀請 |
 | `challengeAttemptsPerClaim` | 10 | 單筆認領的驗證碼嘗試次數 |
+| 分享短網址（`db/planning-share-repository.ts`） | 30 | 同一 IP 雜湊每小時可建立的分享短網址；計數依據是 `planning_shares` 本身 |
 
 ## 保存期（現行常數）
 
@@ -44,6 +45,7 @@
 | `previewMailSink` | 7 天 | 建立時。preview 限定，且是全站唯一存有信件內文的地方 |
 | `auditIpHashes` | 90 天 | 稽核紀錄寫入時；到期只清空 `audit_log.ip_hash`，操作紀錄保留 |
 | `mapDraftInactivity` | 180 天 | `draft`／`changes_requested` 最後一次活動；`submitted` 不套用此時鐘 |
+| `planningShares`（`SHARE_LIFETIME_AFTER_EVENT`） | 活動結束後 30 天 | 活動的 `eventEndsAt`；到期由 retention purge 刪除整列，連結改回 404 |
 | `mapDecisionRaw` | 30 天 | `approved`／`rejected`／`exported`／`withdrawn` 的決定時間；只刪原始檔，metadata 保留 |
 
 社團自述內容不在這張表裡：[ADR-0054](../adr/0054-the-retention-choice-is-withdrawn-publish-or-delete.md) 撤回了保存期限選項，新資料列不設期限；只有在那之前選了 `purge` 的既有列，仍照寫在列上的到期日由 Worker 清除（[ADR-0018](../adr/0018-retention-is-the-circles-choice.md)）。
@@ -70,6 +72,18 @@
 `email`（明文）、`added_by`、`added_at`。名單為空時由 `ADMIN_EMAILS` 重新灌入。移除管理者走 `removeAdmin()`，直接刪除資料列。
 
 **目的**：撤下社團補充資料、審核認領。 **保存期**：不設期限。 **到期處置**：移除即刪除資料列（已實作）。
+
+### `planning_shares` — 讀者分享的行程（匿名）
+
+讀者以短網址 `/s/<shareId>` 分享本場行程（#415、[ADR-0079](../adr/0079-shared-itineraries-use-short-links-and-qr-codes.md)）。不需帳號，也不與任何帳號關聯。
+
+| 欄位 | 內容 | 備註 |
+|---|---|---|
+| `share_id` | 128-bit 隨機 base64url | 不可猜測；不連號 |
+| `event_id` | 已發布活動 ID | |
+| `items_json` | 社團 ID、活動日與順序 | 只接受這些欄位；不含備註、群組、購買項目、預算、狀態、社團名稱或攤位號 |
+| `created_at`、`expires_at` | 時間戳 | 到期為活動結束後 30 天 |
+| `request_ip_hash` | 加 pepper 的 IP 雜湊 | 只供每小時建立上限計數；隨整列到期刪除 |
 
 ### `login_tokens` — 一次性登入連結
 

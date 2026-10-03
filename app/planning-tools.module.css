@@ -72,3 +72,8 @@
 .sharedItems li { display:grid; gap:2px; padding:8px 10px; border:1px solid #e6e9e4; border-radius:8px; background:#fff; }
 .sharedItems b { font-size:calc(14px * var(--ui-font-scale,1)); }
 .sharedItems small { color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }
+/* 分享行程：短網址與 QR Code (#415, ADR-0079) */
+.shareResult { grid-column:1/-1; display:grid; gap:10px; justify-items:center; }
+.shareResult .shareLink { width:100%; }
+.shareQr { width:min(220px,60vw); padding:8px; border:1px solid #e6e9e4; border-radius:8px; background:#fff; }
+.shareQr svg { display:block; width:100%; height:auto; }

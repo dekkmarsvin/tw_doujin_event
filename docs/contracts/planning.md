@@ -2,8 +2,8 @@
 
 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。
 
-**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、[`app/planning-share.ts`](../../app/planning-share.ts)、[`app/planning-share-panel.tsx`](../../app/planning-share-panel.tsx)、[`app/download-text.ts`](../../app/download-text.ts)、`app/reader-planning.tsx`
-**測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`、`tests/planning-share.test.mjs`
+**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、[`app/planning-share.ts`](../../app/planning-share.ts)、[`app/planning-share-client.ts`](../../app/planning-share-client.ts)、[`app/planning-share-snapshot.ts`](../../app/planning-share-snapshot.ts)、[`app/planning-share-handlers.ts`](../../app/planning-share-handlers.ts)、[`app/planning-share-panel.tsx`](../../app/planning-share-panel.tsx)、[`app/download-text.ts`](../../app/download-text.ts)、`app/reader-planning.tsx`
+**測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`、`tests/planning-share.test.mjs`、`tests/planning-share-client.test.mjs`、`tests/planning-share-api.test.mjs`
 
 規劃資料只儲存在使用者當下的瀏覽器，不跨裝置同步。這是刻意的隱私姿態，不是尚未完成的功能——決策與代價見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
 

@@ -72,6 +72,10 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 - **離線範圍只涵蓋自家靜態產物。** 外部社團縮圖與外部連結不快取；離線時維持既有的降級狀態，不得改以本地內容假冒。
 - 提供 web app manifest 與可遮罩圖示，讓使用者能在展前把工具加入主畫面。**安裝與否不改變任何核心流程。**
 
+## 分享短網址
+
+`POST /api/shares` 建立匿名 snapshot；`GET /api/shares/<shareId>` 回 snapshot（`private`，最多 60 秒）、不存在 404、過期 410；`GET /s/<shareId>` 由 Function 回應含活動名稱與項目數的 `og:title`／`og:description`、固定 `/share-card.png`、`noindex` 與 refresh 到 `/?event=<id>&share=<shareId>`。三者都不進 Service Worker precache，離線時不可用。格式與保存見[收藏與走訪規劃契約](./planning.md#分享行程)與[資料 inventory](./data-inventory.md)。
+
 ## 快取標頭
 
 靜態資產由 `public/_headers` 設定；HTML 由 Functions 加上 CSP nonce 與 `private, no-store`，不沿用靜態 HTML 快取時間：
