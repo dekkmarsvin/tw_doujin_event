@@ -43,6 +43,8 @@ const REFERENCE_PATH = /^references\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.[A-
 const MAP_ARTIFACT_PATH = /^maps\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\.json$/;
 const GROUPINGLESS_LEGACY_PINS = new Set([
   "ff47@8c645303fa6838383549fbe8433ece081c514e1e",
+  // #395: the same FF47 event bytes, with the already published venue address.
+  "ff47@44c437efc9133e1a37a68b93f3ed3e49175684e2",
 ]);
 
 /**
