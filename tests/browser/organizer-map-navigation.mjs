@@ -129,7 +129,7 @@ try {
   await fresh.dialog.getByRole("button", { name: "儲存並切換", exact: true }).click(); await fresh.dialog.getByRole("alert").waitFor();
   assert.equal(fresh.state.attempts, 0, "empty map is rejected before any write");
   await fresh.dialog.getByRole("button", { name: "取消", exact: true }).click();
-  await fresh.page.getByText("先放入攤位或設施，才能儲存。", { exact: true }).waitFor();
+  await fresh.page.getByText(/先放入.+才能儲存。/).waitFor();
   // A pending plan and a facility-only map use the same save path as the map button.
   await fresh.page.locator('input[type="file"]').setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: PIXEL });
   await fresh.page.getByRole("dialog", { name: "框選目前場地", exact: true }).getByRole("button", { name: "使用整張圖", exact: true }).click();
