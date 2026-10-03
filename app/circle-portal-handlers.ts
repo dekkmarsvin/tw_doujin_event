@@ -1800,8 +1800,7 @@ export function createCirclePortalHandlers({
   async function organizerClaimAccess(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access;
-    const candidate = await repository.getOrganizerCandidate(candidateId);
-    const eventId = candidate?.event_id;
+    const eventId = await repository.getOrganizerModerationEventId(candidateId);
     if (!eventId || !(config.publishedEvent ? await config.publishedEvent(eventId) : eventId === config.eventId)) {
       return { ok: false as const, response: json({ error: "此活動尚未公開社團認領。" }, 404) };
     }

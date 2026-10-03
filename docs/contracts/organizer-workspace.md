@@ -30,13 +30,13 @@
 
 右側頂部顯示此活動的社團認領待審筆數；初版及修正版共用目前待審清單，不統計社團數或歷史裁決。總數在清單 500 筆上限之前計算，超出上限不會少算。核准、婉拒及清單重新整理後同步更新；其他面板在可見時每 30 秒與返回視窗時更新。未能讀取不顯示為零，切換活動不沿用另一活動的筆數。
 
-`GET／POST /api/organizer/events/:candidateId/claims` 要求有效 session 與該候選的有效 Owner／Editor grant，或網站管理者身分。活動由伺服器讀取候選的 `event_id` 決定；不接受由 body 或 query 改寫活動範圍。沒有候選授權、活動未公開或認領屬於另一活動時回 404。列表只回此活動的待審認領與佐證，不回跨活動管理總覽或其他帳號 email。
+`GET／POST /api/organizer/events/:candidateId/claims` 要求有效 session 與該候選的有效 Owner／Editor grant，或網站管理者身分。候選須有已發布版次記錄，或為伺服器從同一活動已發布來源建立的修正版；一般 CREATE 草稿即使填入已公開活動 ID，也不取得審核權限。活動由伺服器讀取這項可信關聯的 `event_id` 決定；不接受由 body 或 query 改寫活動範圍。沒有候選授權、可信關聯、活動未公開或認領屬於另一活動時回 404。列表只回此活動的待審認領與佐證，不回跨活動管理總覽或其他帳號 email。
 
-面板共用 `/admin` 的單筆／批次核准及婉拒、佐證、重複申請提示與重新整理。Owner／Editor 只可核准或婉拒 `pending` 認領，不能撤銷已通過認領或取得其他全域管理權限。每筆裁決沿用唯一擁有者約束、狀態 CAS 及帳號通知，SQL 寫入時再次核對 actor 有效、候選與認領活動相同，以及 grant／管理者身分仍有效；撤權競態不改寫認領。主辦裁決的 method 為 `organizer`，audit action 為 `claim.organizer_approve／reject`，保留 actorRole、candidateId、eventId 與結果。
+面板共用 `/admin` 的單筆／批次核准及婉拒、佐證、重複申請提示與重新整理。Owner／Editor 只可核准或婉拒 `pending` 認領，不能撤銷已通過認領或取得其他全域管理權限。每筆裁決沿用唯一擁有者約束、狀態 CAS 及帳號通知，SQL 寫入時再次核對 actor 有效、候選可信關聯與認領活動相同，以及 grant／管理者身分仍有效；撤權競態不改寫認領。主辦裁決的 method 為 `organizer`，audit action 為 `claim.organizer_approve／reject`，保留 actorRole、candidateId、eventId 與結果。
 
 ### 活動內撤下社團補充資料
 
-`GET／POST /api/organizer/events/:candidateId/overrides` 沿用相同有效 session、Owner／Editor grant／管理者及已公開活動條件，範圍由候選 `event_id` 決定。GET 依社團名稱搜尋此活動的公開社團清單，回傳社團名稱、ID 與補充資料狀態，不回內容或帳號個資。POST 要求社團 ID 與撤下原因，並核對社團屬於此活動。
+`GET／POST /api/organizer/events/:candidateId/overrides` 沿用相同有效 session、Owner／Editor grant／管理者、可信候選關聯及已公開活動條件，範圍由候選 `event_id` 決定。GET 依社團名稱搜尋此活動的公開社團清單，回傳社團名稱、ID 與補充資料狀態，不回內容或帳號個資。POST 要求社團 ID 與撤下原因，並核對社團屬於此活動。
 
 主辦與 `/admin` 共用搜尋、選取、原因及確認面板。確認時說明補充資料停止公開、已上傳圖片刪除，活動攤位與認領保留。D1 更新在寫入時再次核對有效授權與活動，並比較所讀取的內容及更新時間；衝突或撤權不修改資料、不刪 R2。更新成功後依該活動日期重建公開投影，清除所屬活動／社團的 R2 圖片；不重新公開活動後隱藏的其他社團。
 
