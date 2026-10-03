@@ -12,7 +12,8 @@ import { createOrganizerRecoveryRepository } from "./organizer-recovery-reposito
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
 import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource } from "./account-notification-repository";
-import type { AccountNotificationConfig } from "../app/account-notifications";
+import type { SiteSettings } from "../app/site-settings";
+import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-repository";
 
 /**
  * Identity, claims and circle-authored overrides.
@@ -97,8 +98,8 @@ function differentJson(left: string, right: string) {
   return `(EXISTS (${rows(left)} EXCEPT ${rows(right)}) OR EXISTS (${rows(right)} EXCEPT ${rows(left)}))`;
 }
 
-export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[]; accountNotifications?: AccountNotificationConfig } = {}) {
-  const notify = createAccountNotificationWriter(database, options.accountNotifications);
+export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[]; initialSiteSettings?: SiteSettings; initializeSiteSettings?: boolean } = {}) {
+  const notify = createAccountNotificationWriter(database);
   let tablesReady: Promise<void> | null = null;
 
   const ensureRuntimeReady = createIdentityInitializer(database);
@@ -111,6 +112,13 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     if (!tablesReady) {
       tablesReady = ensureRuntimeReady()
         .then(() => seedAdmins())
+        .then(async () => {
+          if (options.initializeSiteSettings !== false) await seedSiteSettings(database, options.initialSiteSettings ?? {
+            organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
+            accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: false,
+            updatedAt: Date.now(), updatedBy: "migration",
+          });
+        })
         .then(async () => { await seedNotificationPreferences(database, Date.now()); })
         .catch((error: unknown) => {
           tablesReady = null;
@@ -3573,8 +3581,9 @@ export function createIdentityRepository(database: D1Database, options: { bootst
   }
 
   return {
+    ...createSiteSettingsRepository(database, ensureTables),
     ...createReviewNotificationRepository(database, ensureTables),
-    ...createAccountNotificationRepository(database, ensureTables, options.accountNotifications),
+    ...createAccountNotificationRepository(database, ensureTables),
     ...createOrganizerAmendmentRepository(database, ensureTables),
     ...createOrganizerRecoveryRepository(database, ensureTables),
     ...createOrganizerApplicationRepository(database, ensureTables, organizerCandidateStatements, notify),

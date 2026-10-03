@@ -6,19 +6,12 @@ export type AccountNotificationKind = "claim.approved" | "claim.rejected" | "cla
   "circle.updated" | "circle.takendown" | "application.approved" | "application.rejected" |
   "member.granted" | "member.revoked" | "review.approved" | "review.changes_requested" |
   "publication.published" | "publication.failed";
-export type AccountNotificationConfig = { enabled: boolean; since: number };
 export type NotificationItem = {
   id: string; account_id: string; kind: AccountNotificationKind; occurrence: string;
   event_id: string | null; circle_id: string | null; candidate_id: string | null;
   source_id: string; audience: "claimant" | "circle_owner" | "applicant" | "owner" | "member";
   name: string; version: number | null; detail: string; occurred_at: number;
 };
-
-/** Both control-plane and scheduled producers must use the same rollout epoch. */
-export function accountNotificationConfig(env: { ACCOUNT_NOTIFICATIONS_ENABLED?: string; ACCOUNT_NOTIFICATIONS_SINCE?: string }): AccountNotificationConfig {
-  const since = Date.parse(env.ACCOUNT_NOTIFICATIONS_SINCE ?? "");
-  return { enabled: env.ACCOUNT_NOTIFICATIONS_ENABLED === "true" && Number.isFinite(since), since: Number.isFinite(since) ? since : 0 };
-}
 
 export function isAccountNotificationCadence(value: unknown): value is AccountNotificationCadence {
   return value === "off" || value === "hourly" || value === "daily";

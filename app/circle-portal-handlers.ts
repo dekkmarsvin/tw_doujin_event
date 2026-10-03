@@ -1,4 +1,5 @@
 import { isAccountNotificationCadence } from "./account-notifications";
+import { canSubmitEventApplication, parseSiteSettings } from "./site-settings";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
@@ -113,8 +114,6 @@ type PortalConfig = {
   publishedEvent?: (eventId: string) => Promise<{ dataUpdatedAt: string; eventEndsAt: string } | null>;
   /** Merge remains off until the GitHub App and both repository rulesets are verified. */
   organizerPublicationMode?: "disabled" | "fake" | "github";
-  organizerApplicationsOpen?: boolean;
-  organizerApplicationAllowedEmails?: string[];
 };
 
 type PortalDependencies = {
@@ -297,9 +296,8 @@ export function createCirclePortalHandlers({
     return json({ turnstileSitekey: turnstileSitekey() });
   }
 
-  function canApplyForEvent(email: string) {
-    return config.organizerApplicationsOpen === true
-      || (config.organizerApplicationAllowedEmails ?? []).some((allowed) => normalizeEmail(allowed) === email);
+  async function canApplyForEvent(email: string) {
+    return canSubmitEventApplication(await repository.getSiteSettings(), email);
   }
 
   function applicationResponse(row: NonNullable<Awaited<ReturnType<IdentityRepository["getOrganizerApplication"]>>>, admin: boolean): OrganizerApplication {
@@ -317,13 +315,13 @@ export function createCirclePortalHandlers({
     if (!current) return json({ error: "尚未登入。" }, 401);
     const admin = await isAdmin(current.email);
     const applications = await repository.listOrganizerApplications(current.accountId, admin);
-    return json({ applications: applications.map((row) => applicationResponse(row, admin)), canApply: canApplyForEvent(current.email) });
+    return json({ applications: applications.map((row) => applicationResponse(row, admin)), canApply: await canApplyForEvent(current.email) });
   }
 
   async function submitEventApplication(request: Request) {
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
-    if (!canApplyForEvent(current.email)) return json({ error: "活動申請尚未開放。" }, 403);
+    if (!await canApplyForEvent(current.email)) return json({ error: "活動申請尚未開放。" }, 403);
     const body = await readJson(request);
     const data = parseOrganizerApplication(body?.application);
     if (!data || typeof body?.id !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.id)
@@ -473,7 +471,7 @@ export function createCirclePortalHandlers({
       expiresAt: now + sessionTtl,
       isMapContributor: await repository.hasActiveMapContributor(accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(accountId) || await isAdmin(email),
-      canApplyForEvent: canApplyForEvent(email),
+      canApplyForEvent: await canApplyForEvent(email),
       hasEventApplications: await repository.hasOrganizerApplications(accountId),
     }, 200, {
       "set-cookie": sessionCookie(`${sessionId}.${signature}`, Math.floor(sessionTtl / 1000)),
@@ -490,7 +488,7 @@ export function createCirclePortalHandlers({
       expiresAt: current.sessionCreatedAt + SESSION_TTL_MS,
       isMapContributor: await repository.hasActiveMapContributor(current.accountId),
       hasOrganizerAccess: await repository.hasOrganizerAccess(current.accountId) || await isAdmin(current.email),
-      canApplyForEvent: canApplyForEvent(current.email),
+      canApplyForEvent: await canApplyForEvent(current.email),
       hasEventApplications: await repository.hasOrganizerApplications(current.accountId),
     });
   }
@@ -1113,6 +1111,39 @@ export function createCirclePortalHandlers({
     if (!current) return { ok: false, response: json({ error: "尚未登入。" }, 401) };
     if (!await isAdmin(current.email)) return { ok: false, response: json({ error: "沒有權限。" }, 403) };
     return { ok: true, session: current };
+  }
+
+  async function adminGetSiteSettings(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const [settings, publicationActivities, services] = await Promise.all([
+      repository.getSiteSettings(), repository.listActivePublicationActivities(), repository.getServiceChecks(),
+    ]);
+    return json({ settings, publicationMode: config.organizerPublicationMode ?? "disabled", publicationActivities, services });
+  }
+
+  async function adminUpdateSiteSettings(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    if (!body || Object.keys(body).some(key => !["settings", "expectedUpdatedAt"].includes(key))) return json({ error: "設定格式無效。" }, 400);
+    const settings = parseSiteSettings(body.settings);
+    if (!settings || !Number.isSafeInteger(body.expectedUpdatedAt)) return json({ error: "請填寫完整設定與有效的邀請 email。" }, 400);
+    const current = await repository.getSiteSettings();
+    if ((config.organizerPublicationMode ?? "disabled") === "disabled" && settings.publicationEnabled !== current?.publicationEnabled) {
+      return json({ error: "此環境尚未設定發布功能，無法變更發布開關。" }, 409);
+    }
+    const result = await repository.updateSiteSettings({ settings, expectedUpdatedAt: body.expectedUpdatedAt as number,
+      actorAccountId: gate.session.accountId, sessionId: gate.session.sessionId, now: config.now() });
+    return result ? adminGetSiteSettings(request) : json({ error: "設定或管理權限已變更，請重新載入後再儲存。" }, 409);
+  }
+
+  async function adminRequestServiceCheck(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const body = await readJson(request);
+    if (!body || Object.keys(body).length) return json({ error: "請求格式無效。" }, 400);
+    return json({ services: await repository.requestServiceCheck(config.now()) }, 202);
   }
 
   async function adminProbeGitHubInstallation(request: Request) {
@@ -2517,7 +2548,8 @@ export function createCirclePortalHandlers({
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
-      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
+      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication)
+        && (await repository.getSiteSettings())?.publicationEnabled === true,
       claimReviewAvailable: Boolean(candidate.event_id && (config.publishedEvent
         ? await config.publishedEvent(candidate.event_id) : candidate.event_id === config.eventId)),
       recoveryAvailable: Boolean(access.admin && auditPublicationRecovery && loadPublishedAmendmentBaseline
@@ -3371,6 +3403,7 @@ export function createCirclePortalHandlers({
     const snapshot = await repository.getOrganizerSubmissionSnapshot(candidateId, expectedVersion as number);
     if (!snapshot) return json({ error: "找不到這一版的送審內容。" }, 409);
     if (decision === "approve") {
+      if (!(await repository.getSiteSettings())?.publicationEnabled) return json({ error: "發布作業已暫停，送審內容會保留。", code: "publication_paused" }, 503);
       if (!dispatchOrganizerPublication || !config.organizerPublicationMode || config.organizerPublicationMode === "disabled") {
         return json({ error: "自動發布尚未通過啟用檢查，目前無法核准並發布。送審內容會保留，請聯絡網站管理者。", code: "publication_unavailable" }, 503);
       }
@@ -3463,6 +3496,7 @@ export function createCirclePortalHandlers({
     const access = await organizerAccess(request, job.candidate_id);
     if (!access.ok) return access.response;
     if (!access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以重試發布。" }, 403);
+    if (!(await repository.getSiteSettings())?.publicationEnabled) return json({ error: "發布作業已暫停，請稍後再試。", code: "publication_paused" }, 503);
     if ((config.organizerPublicationMode ?? "disabled") === "disabled" || !dispatchOrganizerPublication) {
       return json({ error: "發布功能尚未啟用。" }, 503);
     }
@@ -3651,6 +3685,7 @@ export function createCirclePortalHandlers({
 
   return {
     ...createAdminReferenceHandlers(repository, requireAdmin, config.now),
+    adminGetSiteSettings, adminUpdateSiteSettings, adminRequestServiceCheck,
     adminGetNotificationPreferences, adminSaveNotificationPreferences, getAccountNotificationPreferences, saveAccountNotificationPreferences,
     // Account-scoped: the identity is the same in every event, so these answer
     // before an event is chosen.

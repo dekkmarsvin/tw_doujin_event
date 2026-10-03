@@ -16,6 +16,15 @@ async function open(role, entry = "admin") {
   ];
   let admins = [{ email: "admin@example.test", addedBy: "bootstrap", addedAt: now }];
   let notificationPreferences = { enabled: true, cadence: "five_minutes", version: 1 };
+  let siteSettings = { organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
+    accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, updatedAt: now, updatedBy: "admin@example.test" };
+  const siteState = () => ({ settings: siteSettings, publicationMode: "github", services: {
+    requestedAt: now, checkedAt: now, mail: { status: "unavailable", source: "Mailgun", reason: "金鑰驗證失敗。" },
+    publication: { status: "unavailable", source: "GitHub App", reason: "GitHub 拒絕發布授權。" },
+  }, publicationActivities: [
+    { id: "job-one", candidateId: "candidate-one", eventName: "正在發布的活動", status: "publishing", step: "waiting_deployment" },
+    { id: "job-two", candidateId: "candidate-two", eventName: "已排程的活動", status: "queued", step: "preparing_data" },
+  ] });
   let draftStatus = "submitted", failure = 0;
   const draft = () => ({ id: "map-one", event_id: "sample", period_key: "1", venue_space_id: "sample-hall", status: draftStatus, current_revision: 3,
     created_at: now, updated_at: now, decision_at: null, owner_email: "contributor@example.test", content: { schema: "map-contribution-draft/1", layout: map.layout } });
@@ -44,6 +53,13 @@ async function open(role, entry = "admin") {
         if (failure) return reply({ error: "登入已失效。" }, failure);
         if (method === "PUT") notificationPreferences = { ...body, version: notificationPreferences.version + 1 };
         return reply(notificationPreferences);
+      }
+      if (path === "/api/admin/site-settings") {
+        if (method === "PUT") {
+          if (body.expectedUpdatedAt !== siteSettings.updatedAt) return reply({ error: "設定已變更，請重新載入。" }, 409);
+          siteSettings = { ...siteSettings, ...body.settings, updatedAt: siteSettings.updatedAt + 1 };
+        }
+        return reply(siteState());
       }
       if (path === "/api/admin/admins") {
         if (method === "POST") { admins = body.action === "add" ? [...admins, { email: body.email, addedBy: "admin@example.test", addedAt: now }] : admins.filter(x => x.email !== body.email); return reply({ ok: true }); }
@@ -172,5 +188,23 @@ try {
   assert.equal(await page.locator("#admin, #map-review").count(), 0);
   assert.equal(await page.getByRole("button", { name: "登出", exact: true }).count(), 0);
   await journey.capture(page, "admin-expired");
+  const settingsPage = await open("admin");
+  await settingsPage.page.getByRole("link", { name: "網站設定", exact: true }).click();
+  await settingsPage.page.getByRole("switch", { name: "全站寄送待審通知", exact: true }).check();
+  await settingsPage.page.getByRole("button", { name: "儲存設定", exact: true }).click();
+  await settingsPage.page.getByText("已生效", { exact: true }).waitFor();
+  await settingsPage.page.reload();
+  await settingsPage.page.getByRole("heading", { name: "網站設定", exact: true }).waitFor();
+  assert.equal(await settingsPage.page.getByRole("switch", { name: "全站寄送待審通知", exact: true }).isChecked(), true);
+  assert.equal(await settingsPage.page.getByRole("switch", { name: "處理發布作業", exact: true }).isEnabled(), true, "a connection fault must still allow pausing publication");
+  await settingsPage.page.getByText("Mailgun：金鑰驗證失敗。", { exact: true }).waitFor();
+  await settingsPage.page.getByText("GitHub App：GitHub 拒絕發布授權。", { exact: true }).waitFor();
+  await settingsPage.page.getByRole("link", { name: "正在發布的活動", exact: true }).waitFor();
+  await settingsPage.page.getByText("發布中 · 部署網站", { exact: true }).waitFor();
+  await settingsPage.page.getByText("已排程 · 等待開始", { exact: true }).waitFor();
+  assert.equal(settingsPage.requests.filter(request => request.path === "/api/admin/site-settings" && request.method === "PUT").length, 1);
+  await journey.capture(settingsPage.page, "admin-site-settings");
+  await settingsPage.page.setViewportSize({ width: 390, height: 844 });
+  await journey.capture(settingsPage.page, "admin-site-settings-mobile");
   await journey.finish();
 } catch (error) { await journey.abort(error); }

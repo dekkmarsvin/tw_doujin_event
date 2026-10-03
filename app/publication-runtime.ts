@@ -8,11 +8,13 @@ export { PAGES_PRODUCTION_ORIGIN } from "./publication-origin";
 
 type Credentials = Pick<PortalEnv, "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY">;
 
+export const PUBLICATION_GITHUB_PERMISSIONS = { contents: "write", pull_requests: "write", checks: "write", actions: "write", metadata: "read" } as const;
+
 export function createRuntimePublicationDriver(env: Credentials, publishedEvent: (id: string) => Promise<unknown | null>) {
   const tokenProvider = createGitHubAppTokenProvider({
     appId: env.GITHUB_APP_ID ?? "", installationId: env.GITHUB_APP_INSTALLATION_ID ?? "", privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
     repositories: GITHUB_PUBLICATION_REPOSITORIES,
-    permissions: { contents: "write", pull_requests: "write", checks: "write", actions: "write", metadata: "read" }, now: Date.now,
+    permissions: PUBLICATION_GITHUB_PERMISSIONS, now: Date.now,
   });
   return createGitHubPublicationDriver({ publishedEvent, tokenProvider, deployment: createGitHubPublicationDeployment({ tokenProvider }) });
 }

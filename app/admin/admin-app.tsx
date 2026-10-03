@@ -1,4 +1,5 @@
 import { AdminReferencePanel } from "./admin-reference-panel";
+import { AdminSiteSettingsPanel } from "./admin-site-settings-panel";
 import referenceStyles from './admin-reference-panel.module.css';
 import { useCallback, useEffect, useState } from "react";
 import { readSession, setPortalEventId, signOut, type PortalSession } from "../circle-editor-client";
@@ -29,6 +30,8 @@ function initialEventId() {
  */
 export default function AdminApp() {
   const sharedReferences = new URLSearchParams(window.location.search).get("section") === "references";
+  const siteSettings = new URLSearchParams(window.location.search).get("section") === "settings";
+  const separateSection = sharedReferences || siteSettings;
   const [session, setSession] = useState<PortalSession | null>(null);
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
@@ -81,9 +84,9 @@ export default function AdminApp() {
         : !session.isAdmin ? <section className={styles.card}><h2>需要管理者權限</h2><p>目前帳號無法使用網站管理功能。</p><a href="/circle">返回社團入口</a></section>
           : <>
             <nav className={`${styles.card} ${styles.backLink}`} aria-label="管理項目">
-              <a href="/admin?section=references">共用資料</a> · <a href={sharedReferences ? "/admin#overview" : "#overview"}>待審總覽</a> · <a href={sharedReferences ? "/admin#admin" : "#admin"}>社團認領</a> · <a href={sharedReferences ? "/admin#map-review" : "#map-review"}>地圖草稿審閱</a> · <a href={sharedReferences ? "/admin#takedown" : "#takedown"}>撤下補充資料</a> · <a href={sharedReferences ? "/admin#accounts" : "#accounts"}>管理者名單</a> · <a href={sharedReferences ? "/admin#review-notifications" : "#review-notifications"}>待審通知</a>
+              <a href="/admin?section=settings" aria-current={siteSettings ? "page" : undefined}>網站設定</a> · <a href="/admin?section=references">共用資料</a> · <a href={separateSection ? "/admin#overview" : "#overview"}>待審總覽</a> · <a href={separateSection ? "/admin#admin" : "#admin"}>社團認領</a> · <a href={separateSection ? "/admin#map-review" : "#map-review"}>地圖草稿審閱</a> · <a href={separateSection ? "/admin#takedown" : "#takedown"}>撤下補充資料</a> · <a href={separateSection ? "/admin#accounts" : "#accounts"}>管理者名單</a> · <a href={separateSection ? "/admin#review-notifications" : "#review-notifications"}>待審通知</a>
             </nav>
-            {sharedReferences ? <AdminReferencePanel /> : <>
+            {siteSettings ? <AdminSiteSettingsPanel /> : sharedReferences ? <AdminReferencePanel /> : <>
             <AdminReviewQueue initialEventId={claimFilter} onOpenMaps={openMaps} />
             <AdminMapReviewPanel event={event} picker={<AdminEventSelect id="map-review-event" value={event.id} onChange={chooseMapEvent} />} />
             <AdminTakedownPanel initialEventId={event.id} />

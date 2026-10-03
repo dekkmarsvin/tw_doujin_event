@@ -1,4 +1,4 @@
-import { accountNotificationConfig } from "../../app/account-notifications";
+import { runRequestedServiceCheck } from "../../app/site-service-check";
 import { runAccountNotificationTick } from "../../app/account-notification-scheduler";
 import { createIdentityRepository, type IdentityRepository } from "../../db/identity-repository";
 import { runPublicationTick } from "../../app/publication-scheduler";
@@ -7,7 +7,7 @@ import { createFakePublicationDriver } from "../../app/publication-dispatch";
 import { runReviewNotificationTick } from "../../app/review-notification-scheduler";
 import { sendPortalMail, type MailEnvironment } from "../../app/portal-mail";
 
-type Env = MailEnvironment & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE" | "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY" | "ACCOUNT_NOTIFICATIONS_ENABLED" | "ACCOUNT_NOTIFICATIONS_SINCE" | "ADMIN_REVIEW_NOTIFICATIONS_ENABLED" | "NOTIFICATION_ORIGIN">;
+type Env = MailEnvironment & Pick<PortalEnv, "DB" | "ORGANIZER_PUBLICATION_MODE" | "GITHUB_APP_ID" | "GITHUB_APP_INSTALLATION_ID" | "GITHUB_APP_PRIVATE_KEY" | "NOTIFICATION_ORIGIN">;
 
 /**
  * One repository per isolate, not per tick — the same reason `repositoryFor`
@@ -28,7 +28,8 @@ function repositoryFor(env: Env) {
   const database = env.DB;
   const existing = repositories.get(database);
   if (existing) return existing;
-  const created = createIdentityRepository(database, { accountNotifications: accountNotificationConfig(env) });
+  // Only Pages seeds from its authoritative legacy configuration. A Worker arriving first waits for that row.
+  const created = createIdentityRepository(database, { initializeSiteSettings: false });
   repositories.set(database, created);
   return created;
 }
@@ -36,7 +37,11 @@ function repositoryFor(env: Env) {
 /** No HTTP entry point. This Worker shares only the environment's identity D1. */
 export default {
   async scheduled(_controller: ScheduledController, env: Env) {
+    const repository = repositoryFor(env);
+    const settings = await repository.getSiteSettings();
+    if (!settings) { console.warn(JSON.stringify({ event: "site_settings.uninitialized" })); return; }
     const outcomes = await Promise.allSettled([
+      runRequestedServiceCheck(repository, env),
       (async () => {
         if (env.ORGANIZER_PUBLICATION_MODE !== "github" && !(env.ORGANIZER_PUBLICATION_MODE === "fake" && env.PREVIEW_MAIL_SINK === "d1")) return;
         const driver = env.ORGANIZER_PUBLICATION_MODE === "fake" ? createFakePublicationDriver(async () => false)
@@ -45,7 +50,7 @@ export default {
         console.log(JSON.stringify({ event: "publication.tick", ...summary }));
       })(),
       (async () => {
-        if (env.ADMIN_REVIEW_NOTIFICATIONS_ENABLED !== "true") return;
+        if (!settings.adminReviewNotificationsEnabled) return;
         const repository = repositoryFor(env);
         const results = await runReviewNotificationTick({ repository, origin: env.NOTIFICATION_ORIGIN ?? "",
           sendMail: message => sendPortalMail(env, message,
@@ -53,7 +58,7 @@ export default {
         if (results.length) console.log(JSON.stringify({ event: "review_notifications.tick", results }));
       })(),
       (async () => {
-        if (!accountNotificationConfig(env).enabled) return;
+        if (!settings.accountNotificationsEnabled) return;
         const repository = repositoryFor(env);
         const results = await runAccountNotificationTick({ repository, origin: env.NOTIFICATION_ORIGIN ?? "",
           sendMail: message => sendPortalMail(env, message,
@@ -62,7 +67,7 @@ export default {
       })(),
     ]);
     outcomes.forEach((outcome, index) => {
-      if (outcome.status === "rejected") console.error(JSON.stringify({ event: ["publication.tick_failed", "review_notifications.tick_failed", "account_notifications.tick_failed"][index] }));
+      if (outcome.status === "rejected") console.error(JSON.stringify({ event: ["service_check.failed", "publication.tick_failed", "review_notifications.tick_failed", "account_notifications.tick_failed"][index] }));
     });
   },
 };

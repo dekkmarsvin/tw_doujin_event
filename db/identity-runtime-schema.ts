@@ -48,6 +48,20 @@ function index(name: string, tableName: string, expression: string, options: { u
 }
 
 export const IDENTITY_TABLES = [
+  table("site_settings", [
+    "id TEXT PRIMARY KEY CHECK (id = 'global')",
+    "organizer_application_mode TEXT NOT NULL CHECK (organizer_application_mode IN ('closed', 'invite_only', 'public'))",
+    "organizer_allowed_emails_json TEXT NOT NULL",
+    "account_notifications_enabled INTEGER NOT NULL CHECK (account_notifications_enabled IN (0, 1))",
+    "account_notifications_since INTEGER",
+    "admin_review_notifications_enabled INTEGER NOT NULL CHECK (admin_review_notifications_enabled IN (0, 1))",
+    "publication_enabled INTEGER NOT NULL CHECK (publication_enabled IN (0, 1))",
+    "updated_at INTEGER NOT NULL", "updated_by TEXT NOT NULL",
+  ]),
+  // One on-demand Worker check, overwritten each time; no diagnostic history.
+  table("site_service_check", [
+    "id TEXT PRIMARY KEY CHECK (id = 'global')", "requested_at INTEGER NOT NULL", "checked_at INTEGER", "result_json TEXT",
+  ]),
   table("account_notification_preferences", [
     "account_id TEXT PRIMARY KEY NOT NULL", "cadence TEXT NOT NULL CHECK (cadence IN ('off', 'hourly', 'daily'))",
     "version INTEGER NOT NULL", "enabled_since INTEGER NOT NULL", "write_token TEXT NOT NULL",

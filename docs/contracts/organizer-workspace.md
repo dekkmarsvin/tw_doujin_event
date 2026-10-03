@@ -52,7 +52,7 @@ R2 清除暫時失敗時，資料維持撤下，搜尋顯示圖片待清除並�
 
 新候選沿用申請名稱與官方來源，預計日期／地點留在申請供確認；真正活動日與場地由既有引導填寫。核准申請僅准許建置，不建立「官方認證」標示；內容送審、核准 snapshot、publication job、恢復與 production smoke 全沿用既有路徑。
 
-公開活動選擇頁的 CTA 由 build-time `VITE_ORGANIZER_APPLICATIONS_OPEN=true` 控制，送件另由 Pages `ORGANIZER_APPLICATIONS_OPEN=true` 控制，均預設關閉；Reader 不為此呼叫 Function。隔離／受控驗收可只把明確帳號加入伺服器的 `ORGANIZER_APPLICATION_ALLOWED_EMAILS`（逗號分隔），不顯示公開 CTA，其他帳號送件仍回 403。既有邀請與已送件結果不受關閉開關影響。啟用條件與步驟見[部署 runbook](../runbooks/deployment.md#organizer-發布)。
+申請資格由共用 D1 的 `organizer_application_mode` 控制：`closed`、`invite_only`、`public`；Session、申請清單與送件均讀取當次設定。首頁沿用既有登入入口，不新增申請按鈕，也不為開關呼叫 Reader Function。維護者於 `/admin?section=settings` 手動開放；既有邀請、grant 與申請查詢不受關閉開關影響。詳見[網站營運設定](./site-settings.md)及[部署 runbook](../runbooks/deployment.md#網站營運設定遷移477)。
 
 申請與決策不設新的 TTL／排程；帳號刪除時刪除 pending 申請，已審核申請保留去識別的決策與候選連結，清空申請自由內容與理由。帳號／審核者去識別化沿用既有刪除交易；正式活動內容及 sole-owner 刪除保護不變。
 

@@ -1,4 +1,13 @@
 import type { AccountNotificationPreferences } from "./account-notifications";
+import type { AdminSiteSettings, ServiceChecks, SiteSettingsInput } from "./site-settings";
+
+export function readAdminSiteSettings() { return call<AdminSiteSettings>("/api/admin/site-settings"); }
+export function saveAdminSiteSettings(settings: SiteSettingsInput, expectedUpdatedAt: number) {
+  return call<AdminSiteSettings>("/api/admin/site-settings", { method: "PUT", body: JSON.stringify({ settings, expectedUpdatedAt }) });
+}
+export function requestAdminServiceCheck() {
+  return call<{ services: ServiceChecks }>("/api/admin/service-check", { method: "POST", body: "{}" });
+}
 import { notificationParameters } from "./notification-navigation";
 import type { MapAuthoringState } from "./map-authoring-state";
 import type { NotificationPreferences } from "./review-notifications";

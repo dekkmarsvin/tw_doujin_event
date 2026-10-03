@@ -7,7 +7,9 @@ export async function runReviewNotificationTick(input: {
 }) {
   const now = input.now ?? Date.now;
   const results: Array<{ batchId?: string; result: string; errorCode?: string }> = [];
+  if (!(await input.repository.getSiteSettings())?.adminReviewNotificationsEnabled) return results;
   for (const { recipient } of await input.repository.listDueNotificationRecipients(now())) {
+    if (!(await input.repository.getSiteSettings())?.adminReviewNotificationsEnabled) break;
     let batch: Awaited<ReturnType<IdentityRepository["claimNotificationBatch"]>> = null;
     try {
       batch = await input.repository.claimNotificationBatch(recipient, now());

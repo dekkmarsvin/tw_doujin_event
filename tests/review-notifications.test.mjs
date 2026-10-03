@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
+import { resetSiteSettings } from "./support/site-settings-fixture.mjs";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createServer } from "vite";
 
@@ -41,6 +42,7 @@ function request(method = "GET", body, signed = cookie) {
 beforeEach(async () => {
   now = START; sent = [];
   await repo.ensureTables(); await repo.clearPreviewData();
+  await resetSiteSettings(db, { adminReviewNotificationsEnabled: true });
   await db.prepare("DELETE FROM admin_notification_preferences").run();
   await db.prepare("DELETE FROM admins").run();
   for (const email of [ADMIN, SECOND]) {
@@ -211,6 +213,7 @@ test("preview sink end-to-end and thirty day purge retain pending work", async (
 });
 
 test("real preference API and application API feed the scheduled digest", async () => {
+  await resetSiteSettings(db, { organizerApplicationMode: "public", adminReviewNotificationsEnabled: true });
   await repo.createSession(owner, now, now + 86400000, "owner-session");
   const ownerCookie = `${SESSION_COOKIE}=owner-session.${await hmacSign("secret", "owner-session")}`;
   // Session and write gates are the production handlers; only external mail is
@@ -220,7 +223,7 @@ test("real preference API and application API feed the scheduled digest", async 
   const openHandlers = createCirclePortalHandlers({ repository: repo, sendMail: async () => {}, lookupCircle: async () => null,
     searchCircles: async () => [], fetchEvidence: async () => null, verifyHuman: async () => true, turnstileSitekey: () => "test", projectCircle: async () => null,
     config: { eventId: "sample", origin: "https://map.kotoban.top", sessionSecret: "secret", hashPepper: "pepper", adminEmails: [],
-      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", now: () => now, organizerApplicationsOpen: true } });
+      dataUpdatedAt: "2026-09-01T00:00:00Z", eventEndsAt: "2027-12-31T00:00:00Z", now: () => now } });
   const response = await openHandlers.submitEventApplication(new Request("https://map.kotoban.top/api/organizer/applications", {
     method: "POST", headers: { "content-type": "application/json", cookie: ownerCookie },
     body: JSON.stringify({ id: crypto.randomUUID(), application }),

@@ -1,4 +1,4 @@
-import { type AccountNotificationConfig, type AccountNotificationKind, type AccountNotificationPreferences, type NotificationItem } from "../app/account-notifications";
+import { type AccountNotificationKind, type AccountNotificationPreferences, type NotificationItem } from "../app/account-notifications";
 import { nextNotificationSlot, notificationRetryDelay } from "../app/review-notifications";
 
 type NotificationSource = { kind: AccountNotificationKind; occurrence: string; now: number; detail?: string; detailFromSource?: boolean };
@@ -14,9 +14,8 @@ const eligible = `${activeAccount} AND (
 
 /** Source SELECT is private SQL, supplied by the domain transaction, never request text.
  * Its guard must prove that THIS transaction made the transition. */
-export function createAccountNotificationWriter(database: D1Database, config?: AccountNotificationConfig) {
+export function createAccountNotificationWriter(database: D1Database) {
   return (input: NotificationSource, source: string, bindings: Array<string | number | null>): D1PreparedStatement[] => {
-    if (!config?.enabled || input.now < config.since) return [];
     // Source uses named columns and numbered bindings. All message constants go
     // after those bindings so the guarded business query stays readable.
     const p = (offset: number) => `?${bindings.length + offset}`;
@@ -31,6 +30,7 @@ export function createAccountNotificationWriter(database: D1Database, config?: A
       FROM (${source}) s JOIN accounts a ON a.id = s.account_id
       LEFT JOIN account_notification_preferences p ON p.account_id = s.account_id
       WHERE a.disabled_at IS NULL AND a.deletion_started_at IS NULL
+        AND EXISTS (SELECT 1 FROM site_settings WHERE id = 'global' AND account_notifications_enabled = 1 AND account_notifications_since <= ${now})
         AND (${p(1)} <> 'circle.updated' OR (COALESCE(p.cadence, 'daily') <> 'off' AND COALESCE(p.enabled_since, 0) <= ${now}))`)
       .bind(...bindings, input.kind, input.occurrence, input.now, input.detail ?? "")];
   };
@@ -56,7 +56,12 @@ export function deleteAccountNotifications(database: D1Database, accountId: stri
     .map(table => database.prepare(`DELETE FROM ${table} WHERE account_id = ?1`).bind(accountId));
 }
 
-export function createAccountNotificationRepository(database: D1Database, ensureTables: () => Promise<void>, config?: AccountNotificationConfig) {
+export function createAccountNotificationRepository(database: D1Database, ensureTables: () => Promise<void>) {
+  async function currentNotificationEpoch() {
+    await ensureTables();
+    return database.prepare("SELECT account_notifications_since AS since FROM site_settings WHERE id = 'global' AND account_notifications_enabled = 1")
+      .first<{ since: number | null }>();
+  }
   async function getAccountNotificationPreferences(accountId: string): Promise<AccountNotificationPreferences> {
     await ensureTables();
     return await database.prepare("SELECT cadence, version FROM account_notification_preferences WHERE account_id = ?1")
@@ -89,7 +94,7 @@ export function createAccountNotificationRepository(database: D1Database, ensure
     return results[0].meta.changes === 1 ? getAccountNotificationPreferences(input.accountId) : null;
   }
   async function listDueAccountNotifications(now: number) {
-    if (!config?.enabled) return [];
+    if (!await currentNotificationEpoch()) return [];
     await ensureTables();
     // Cancellation and expiry are bounded to the selected batch below. Old
     // epochs never become deliverable when rollout is re-enabled.
@@ -104,7 +109,7 @@ export function createAccountNotificationRepository(database: D1Database, ensure
       .bind(now).all<{ account_id: string; lane: string }>()).results;
   }
   async function claimAccountNotificationBatch(accountId: string, lane: string, now: number): Promise<NotificationBatch | null> {
-    if (!config?.enabled) return null;
+    if (!await currentNotificationEpoch()) return null;
     await ensureTables();
     const id = crypto.randomUUID(), token = crypto.randomUUID();
     await database.batch([
@@ -127,7 +132,8 @@ export function createAccountNotificationRepository(database: D1Database, ensure
       .bind(token).first<NotificationBatch>();
   }
   async function readAccountNotificationBatch(batch: NotificationBatch, now: number) {
-    if (!config?.enabled) return null;
+    const config = await currentNotificationEpoch();
+    if (!config || config.since === null) return null;
     const live = await database.prepare("SELECT 1 FROM account_notification_batches WHERE id = ?1 AND state = 'pending' AND lease_token = ?2 AND lease_until > ?3 AND retry_at <= ?3")
       .bind(batch.id, batch.lease_token, now).first();
     if (!live) return null;
