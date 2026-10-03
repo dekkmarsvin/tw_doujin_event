@@ -2,7 +2,7 @@
 
 把「記住感興趣的社團」與「安排活動當天怎麼走」連成可回顧的流程，同時保留兩者的語意邊界。收藏是長期偏好與備註的容器；行程、下一站與已走訪是特定活動中的執行狀態。
 
-**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、`app/reader-planning.tsx`
+**實作**：[`app/planning-store.ts`](../../app/planning-store.ts)、[`app/use-planning.ts`](../../app/use-planning.ts)、[`app/planning-tools.tsx`](../../app/planning-tools.tsx)、[`app/planning-transfer.ts`](../../app/planning-transfer.ts)、[`app/planning-transfer-panel.tsx`](../../app/planning-transfer-panel.tsx)、`app/reader-planning.tsx`
 **測試**：`tests/planning-store.test.mjs`、`tests/planning-transfer.test.mjs`
 
 規劃資料只儲存在使用者當下的瀏覽器，不跨裝置同步。這是刻意的隱私姿態，不是尚未完成的功能——決策與代價見 [ADR-0002](../adr/0002-planning-data-stays-on-device.md)。
@@ -131,9 +131,14 @@ type PlanningDocument = {
 
 ## 匯出與匯入分期
 
-- **現行（P0／P1）**：只開放**復原用途的安全匯出**——版本化 JSON 與 CSV v1，包含 schema version、群組、收藏、備註與行程，不含瀏覽歷程或任何憑證。CSV 對可能被試算表解讀為公式的值安全轉義。
-- **一般介面不顯示匯入入口。** JSON／CSV 匯入、衝突預覽與寫入 UI 屬 P2，格式與流程見 [資料匯入契約](./data-import.md)。決策見 [ADR-0005](../adr/0005-import-stays-p2-export-only.md)。
-- **P2 另含**：登入後跨裝置同步、分享規劃與協作清單。導入前需另行定義隱私、衝突解決與刪除政策。
+- **匯出**：版本化 JSON（完整備份）與 CSV v1，包含 schema version、群組、收藏、備註與行程，不含瀏覽歷程或任何憑證。CSV 對可能被試算表解讀為公式的值安全轉義；CSV 沒有活動日欄位，介面不稱其為完整多日備份。
+- **從完整備份復原（#415，[ADR-0078](../adr/0078-own-planning-backups-can-be-imported.md)）**：位於「資料管理」的「完整備份」（匯出備份／從備份復原），用於換瀏覽器、換裝置或復原；一般「帶到手機」與分享走短網址流程。只接受 `circle-plan-json/1`，單檔 10 MiB、20,000 筆。未知版本、破損結構或任何不合法項目整份拒絕並說明原因。寫入前依活動預覽收藏與行程的新增、內容不同筆數及各日行程筆數，並分開「活動資料尚未載入」與「目前無法匹配」；兩者都照原記錄保留為可管理、可再次匯出的孤兒，不建立假社團、不猜測位置、不改到目前活動或第一天。
+  - 預設合併並保留目前內容，可明確改採匯入值；重複匯入不重複建立收藏、行程或群組。群組以 id 識別，同 id 不同內容時重新編號並同步更新收藏引用。
+  - 完整取代是獨立的危險操作：列出全瀏覽器各活動將被取代的筆數、提供先匯出備份，並二次確認。
+  - 取消、解析失敗或未確認時不寫入；預覽與確認都讀取瀏覽器目前保存的資料（含其他分頁剛寫入的內容），預覽後若已改變，重新計算並再次確認。整份透過 store 單次寫入，儲存失敗時不宣稱成功、已保存的資料不變。
+  - 瀏覽器保有無法讀取的舊資料（受保護的原始字串）時不開放匯入。
+  - 本站未公開的活動無法從閱讀端開啟，其收藏與行程列在「目前無法匹配的規劃資料」，可逐筆移除並隨完整備份匯出。
+- **仍屬 P2**：CSV 匯入、外部服務匯入（[資料匯入契約](./data-import.md)、[ADR-0005](../adr/0005-import-stays-p2-export-only.md)），以及登入後持續同步與協作清單。轉移是單次的，之後兩台裝置各自修改。
 
 ## 驗收條件
 
@@ -145,4 +150,4 @@ type PlanningDocument = {
 - 重新載入後可恢復資料；schema 1／2 文件被拒絕但原始字串仍在，重試不丟失或重複備註與行程。
 - catalog 找不到對應社團時，管理介面仍可看見未匹配收藏／行程的 ID、備註或狀態並個別移除；匯出保留原記錄。
 - 清除全部資料前可看見受影響數量，取消確認不會改變任何資料。
-- 匯出後在空白瀏覽器環境重新匯入（P2 實作後），可還原群組、收藏、備註與行程，並回報無法匹配的社團。
+- 完整 JSON 匯出後在空白瀏覽器匯入，可還原各活動、各日的群組、收藏、備註、行程、購買項目與預算及順序，並分開回報活動資料未載入與無法匹配的項目。

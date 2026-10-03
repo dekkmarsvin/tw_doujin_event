@@ -1,0 +1,179 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { getCircleCatalogState } from "./circle-records";
+import { PUBLISHED_EVENTS } from "./event-catalog";
+import { inspectPlanningStorage, type PlanningDocument } from "./planning-store";
+import {
+  exportPlanningCsv,
+  exportPlanningJson,
+  mergePlanningBackup,
+  planningFingerprint,
+  planningReplaceSummary,
+  previewPlanningBackup,
+  type BackupEventPreview,
+  type BackupPreview,
+} from "./planning-transfer";
+import styles from "./planning-tools.module.css";
+
+/** Same limit the parser enforces; checked first so a huge file is never read into memory. */
+const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+
+export function downloadText(name: string, text: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+const backupName = () => `場刊Map-規劃備份-${new Date().toISOString().slice(0, 10)}.json`;
+const eventName = (eventId: string) => PUBLISHED_EVENTS.find((event) => event.id === eventId)?.name ?? eventId;
+function dayName(eventId: string, day: string) {
+  const found = PUBLISHED_EVENTS.find((event) => event.id === eventId)?.days.find((item) => String(item.id) === day);
+  return found ? `${found.label}（${found.dateLabel}）` : `DAY ${day}`;
+}
+const catalogStatus = (eventId: string) => getCircleCatalogState(eventId).status;
+
+/** `base` is the stored plan the preview was computed from; summary, backup and write all use it. */
+type Pending = { fileName: string; text: string; preview: BackupPreview; base: PlanningDocument };
+type Result = { kind: "ok" | "error"; message: string } | null;
+
+/**
+ * 完整備份 (#415, ADR-0078): export the whole-browser backup, or restore from
+ * one in. Nothing is written until the reader confirms a preview, and the
+ * preview is recomputed when this device's data changed in between.
+ */
+export function PlanningTransferPanel({ eventId, document, replace, blocked }: {
+  eventId: string;
+  document: PlanningDocument;
+  replace: (next: PlanningDocument) => boolean;
+  /** Unreadable older data is being protected; importing would overwrite it. */
+  blocked: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [mode, setMode] = useState<"keep" | "incoming">("keep");
+  const [replacing, setReplacing] = useState<"off" | "summary" | "confirm">("off");
+  const [result, setResult] = useState<Result>(null);
+  const events = [...new Set([...document.favorites, ...document.visitPlans].map((item) => item.eventId))];
+
+  /** What is stored now. Another tab may have saved since this tab last rendered. */
+  const stored = () => inspectPlanningStorage(localStorage, eventId);
+
+  async function choose(file: File | undefined) {
+    if (!file || blocked) return;
+    setResult(null); setReplacing("off"); setMode("keep");
+    if (file.size > MAX_BACKUP_BYTES) { setPending(null); setResult({ kind: "error", message: "檔案超過 10 MiB，沒有復原任何資料。" }); return; }
+    const text = await file.text();
+    const base = stored().document;
+    setPending({ fileName: file.name, text, base, preview: previewPlanningBackup(text, base, catalogStatus) });
+  }
+
+  function cancel() {
+    setPending(null); setReplacing("off");
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  /** Writes only when this device still holds what the preview was computed from. */
+  function commit(next: (incoming: PlanningDocument, current: PlanningDocument) => PlanningDocument, success: string) {
+    if (!pending?.preview.ok) return;
+    const latest = stored();
+    if (blocked || !latest.writable) { setResult({ kind: "error", message: "這台裝置有無法讀取的舊資料，沒有復原任何資料。" }); return; }
+    if (planningFingerprint(latest.document) !== pending.preview.baseFingerprint) {
+      setPending({ ...pending, base: latest.document, preview: previewPlanningBackup(pending.text, latest.document, catalogStatus) });
+      // A choice made against the old preview must not overwrite what changed since.
+      setReplacing("off"); setMode("keep");
+      setResult({ kind: "error", message: "這台裝置的資料在預覽後有變更，已重新計算，請再確認一次。" });
+      return;
+    }
+    if (replace(next(pending.preview.document, latest.document))) {
+      cancel();
+      setResult({ kind: "ok", message: success });
+    } else {
+      setResult({ kind: "error", message: "無法儲存到這台裝置，原本的資料沒有變更。" });
+    }
+  }
+
+  const preview = pending?.preview;
+  const conflicts = preview?.ok ? preview.events.reduce((total, event) => total + event.favorites.conflicting + event.visitPlans.conflicting, 0) : 0;
+  const added = preview?.ok ? preview.events.reduce((total, event) => total + event.favorites.new + event.visitPlans.new, 0) : 0;
+  const nothingNew = preview?.ok === true && added === 0 && preview.groups.new.length === 0 && preview.groups.clashes.length === 0;
+  const summary = pending && preview?.ok && replacing !== "off" ? planningReplaceSummary(pending.base, preview.document) : null;
+
+  return <section className={styles.section} id="planning-transfer" aria-labelledby="planning-transfer-title">
+    <div>
+      <h3 id="planning-transfer-title">完整備份</h3>
+      <p>包含所有活動的收藏、群組、私人備註、行程、購買項目與預算。換瀏覽器或裝置時，用「從備份復原」還原；檔案請自行保管。</p>
+      {events.length > 0 && <p>包含 {events.map(eventName).join("、")}。</p>}
+      {blocked && <p>這台裝置有無法讀取的舊資料。先下載原始資料，或清除後再復原。</p>}
+    </div>
+    <div className={styles.actions}>
+      <button onClick={() => downloadText(backupName(), exportPlanningJson(document), "application/json")}>匯出備份</button>
+      <button disabled={blocked} onClick={() => inputRef.current?.click()}>從備份復原…</button>
+      <input ref={inputRef} type="file" accept=".json,application/json" aria-label="選擇規劃備份檔" onChange={(event) => void choose(event.target.files?.[0])} />
+    </div>
+    <div className={styles.csvRow}>
+      <span>CSV 供試算表使用，不含活動日，不能用來還原。</span>
+      <button onClick={() => downloadText("circle-plan.csv", exportPlanningCsv(document), "text/csv;charset=utf-8")}>匯出 CSV</button>
+    </div>
+
+    {pending && preview && !preview.ok && <div className={styles.preview} role="alert">
+      <b>無法復原 {pending.fileName}</b>
+      <ul>{preview.errors.map((error) => <li key={error}>{error}</li>)}</ul>
+      <p>沒有復原任何資料。</p>
+      <button onClick={cancel}>關閉</button>
+    </div>}
+
+    {pending && preview?.ok && <div className={styles.preview} aria-label="復原預覽">
+      <b>{pending.fileName}</b>
+      {preview.events.length === 0 && <p>備份裡沒有收藏或行程。</p>}
+      {preview.events.map((event) => <EventPreview key={event.eventId} event={event} />)}
+      {(preview.groups.new.length > 0 || preview.groups.clashes.length > 0) && <ul className={styles.previewNotes}>
+        {preview.groups.new.length > 0 && <li>新增 {preview.groups.new.length} 個收藏群組</li>}
+        {preview.groups.clashes.map((clash) => <li key={clash.incoming.id}>群組「{clash.incoming.name}」與這台裝置的「{clash.local.name}」不同，會另外建立</li>)}
+      </ul>}
+      {conflicts > 0 && <fieldset className={styles.modeChoice}>
+        <legend>{conflicts} 筆兩邊內容不同</legend>
+        <label><input type="radio" name="planning-import-mode" checked={mode === "keep"} onChange={() => setMode("keep")} />保留這台裝置的內容</label>
+        <label><input type="radio" name="planning-import-mode" checked={mode === "incoming"} onChange={() => setMode("incoming")} />採用備份的內容</label>
+      </fieldset>}
+      {nothingNew && conflicts === 0 && <p>備份內容已全部在這台裝置上。</p>}
+      {replacing === "off" && <div className={styles.confirmActions}>
+        <button className={styles.primary} disabled={nothingNew && (conflicts === 0 || mode === "keep")} onClick={() => commit((incoming, current) => mergePlanningBackup(current, incoming, mode), `已從備份復原：新增 ${added} 筆${conflicts > 0 && mode === "incoming" ? `，更新 ${conflicts} 筆` : ""}。`)}>確認復原</button>
+        <button onClick={cancel}>取消</button>
+        <button className={styles.linkButton} onClick={() => setReplacing("summary")}>改為完整取代…</button>
+      </div>}
+      {summary && <div className={styles.replacePanel}>
+        <b>完整取代這台裝置的規劃資料</b>
+        <p>會移除 {summary.totals.favorites.removed} 筆收藏、{summary.totals.visitPlans.removed} 筆行程、{summary.totals.groups.removed} 個群組，並以備份取代 {summary.totals.favorites.replaced + summary.totals.visitPlans.replaced} 筆。</p>
+        {summary.events.length > 0 && <ul className={styles.previewNotes}>{summary.events.map((item) => <li key={item.eventId}>{eventName(item.eventId)}：移除收藏 {item.favorites.removed}、行程 {item.visitPlans.removed}；取代收藏 {item.favorites.replaced}、行程 {item.visitPlans.replaced}</li>)}</ul>}
+        <div className={styles.confirmActions}>
+          <button onClick={() => downloadText(backupName(), exportPlanningJson(pending.base), "application/json")}>先下載目前備份</button>
+          {replacing === "summary"
+            ? <button className={styles.dangerButton} onClick={() => setReplacing("confirm")}>完整取代…</button>
+            : <><span className={styles.confirmText}>確定以備份取代全部規劃資料？</span><button className={styles.dangerButton} onClick={() => commit((incoming) => incoming, "已用備份完整取代這台裝置的規劃資料。")}>確定取代</button></>}
+          <button onClick={() => setReplacing("off")}>返回</button>
+        </div>
+      </div>}
+    </div>}
+
+    {result && <p className={result.kind === "error" ? styles.errorText : styles.okText} role={result.kind === "error" ? "alert" : "status"}>{result.message}</p>}
+  </section>;
+}
+
+const counts = (value: { new: number; conflicting: number }) => `新增 ${value.new}${value.conflicting ? `、內容不同 ${value.conflicting}` : ""}`;
+
+function EventPreview({ event }: { event: BackupEventPreview }) {
+  const days = Object.entries(event.visitPlans.perDay);
+  const { notLoaded, failed, unmatched } = event.unresolved;
+  return <div className={styles.eventPreview}>
+    <b>{eventName(event.eventId)}</b>
+    <span>收藏 {event.favorites.total}（{counts(event.favorites)}）</span>
+    <span>行程 {event.visitPlans.total}（{counts(event.visitPlans)}）{days.length > 0 && `：${days.map(([day, count]) => `${dayName(event.eventId, day)} ${count} 筆`).join("、")}`}</span>
+    {notLoaded.total > 0 && <small>{notLoaded.total} 筆所屬活動尚未載入，會照原樣保留。</small>}
+    {failed.total > 0 && <small>{failed.total} 筆所屬活動讀取失敗，會照原樣保留。</small>}
+    {unmatched.total > 0 && <small>{unmatched.total} 筆目前找不到對應社團，會保留在「目前無法匹配的規劃資料」。</small>}
+  </div>;
+}

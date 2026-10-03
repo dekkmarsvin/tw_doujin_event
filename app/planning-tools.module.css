@@ -39,3 +39,21 @@
 .orphanList b { font:800 calc(12px * var(--ui-font-scale,1)) ui-monospace,monospace; }.orphanList small { margin-top:2px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }
 @media (max-width: 620px) { .groupRow { grid-template-columns:1fr 72px 44px 44px; } .groupRow input,.groupRow select,.groupRow button { min-height:44px; }.groupRow select:nth-last-of-type(1) { grid-column:1 / 4; } }
 @media (max-width: 620px) { .batchRow { grid-template-columns:1fr 1fr; }.batchRow button { grid-column:1/-1; }.orphanList { min-width:0; } }
+/* 完整備份 (#415): CSV stays available but reads as secondary to the full backup. */
+.csvRow { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:8px; color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }
+.eventPreview { display:grid; gap:2px; padding:8px 0; border-top:1px solid #e6e9e4; font-size:calc(12px * var(--ui-font-scale,1)); }
+.eventPreview b { font-size:calc(14px * var(--ui-font-scale,1)); }
+.eventPreview small { color:#59626c; font-size:calc(12px * var(--ui-font-scale,1)); }
+.preview .previewNotes { color:#202a35; }
+.preview p { margin:0; max-width:none; }
+.modeChoice { display:grid; gap:6px; margin:0; padding:8px 10px; border:1px solid #e6e9e4; border-radius:8px; }
+.modeChoice legend { padding:0 4px; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; }
+.preview .modeChoice label { display:flex; grid-template-columns:none; gap:6px; font-weight:400; }
+.confirmActions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px; }
+.section .linkButton { margin-right:auto; order:-1; border:0; background:transparent; color:#a43e30; text-decoration:underline; text-underline-offset:2px; font-weight:700; }
+.preview>.replacePanel { display:grid; gap:6px; padding:10px; border:1px solid #f0c9c2; border-radius:8px; background:#fff8f6; }
+.section .dangerButton { border-color:#a43e30; background:#a43e30; color:#fff; }
+.confirmText { margin-right:auto; color:#a43e30; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:800; }
+.okText,.errorText { grid-column:1/-1; margin:0; font-size:calc(12px * var(--ui-font-scale,1)); font-weight:700; }
+.okText { color:#306d59; }
+.errorText { color:#a43e30; }
