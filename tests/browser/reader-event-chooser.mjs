@@ -37,7 +37,7 @@ try {
       await entry.waitFor();
       assert.equal(await page.locator(`a[href="/events/${event.id}/"]`).count(), 1, `${event.id} has one introduction link`);
       assert.equal(await page.locator(`a[href="?event=${event.id}&view=browse"]`).count(), 1, `${event.id} has a browse link`);
-      const summary = `${["26.09.01-02", "26.10.01-04"][index]} · ${event.venue}`;
+      const summary = `${["2026.09.01–02", "2026.10.01–04"][index]} · ${event.venue}`;
       assert.equal(await page.getByRole("listitem").filter({ has: entry }).getByText(summary, { exact: true }).isVisible(), true, `${event.id} must show its exact calendar dates and pinned venue`);
       assert.equal(await entry.getAttribute("href"), `?event=${encodeURIComponent(event.id)}`, `${event.id} must have its own addressable link`);
     }

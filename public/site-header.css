@@ -9,11 +9,12 @@
 .site-header .site-header-name b,.site-header .site-header-name small { display:block; white-space:nowrap; }
 .site-header .site-header-name b { font-size:calc(16px * var(--ui-font-scale,1)); letter-spacing:.08em; }
 .site-header .site-header-name small { margin-top:2px; color:#707a82; font-size:calc(10px * var(--ui-font-scale,1)); letter-spacing:.12em; }
-/* Secondary, so it is found without outranking a page's own first action. */
-.site-header .site-header-login { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:1px solid #b9c2bb; border-radius:7px; background:#f9faf8; color:#202a35; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; text-decoration:none; white-space:nowrap; }
-.site-header .site-header-login:hover { border-color:#8a948e; background:#fff; }
-.site-header .site-header-login:active { filter:brightness(.95); }
-.site-header .site-header-brand:focus-visible,.site-header .site-header-login:focus-visible { outline:3px solid #8fac9c; outline-offset:2px; }
+/* Secondary, so it is found without outranking a page's own first action.
+   The map and browse views have their own header bar and add `reader-login`. */
+.site-header .site-header-login,.site-header-login.reader-login { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:1px solid #b9c2bb; border-radius:7px; background:#f9faf8; color:#202a35; font-size:calc(14px * var(--ui-font-scale,1)); font-weight:700; text-decoration:none; white-space:nowrap; }
+.site-header .site-header-login:hover,.site-header-login.reader-login:hover { border-color:#8a948e; background:#fff; }
+.site-header .site-header-login:active,.site-header-login.reader-login:active { filter:brightness(.95); }
+.site-header .site-header-brand:focus-visible,.site-header .site-header-login:focus-visible,.site-header-login.reader-login:focus-visible { outline:3px solid #8fac9c; outline-offset:2px; }
 @media (max-width:760px) { .site-header { min-height:64px; padding:8px 16px; } }
 /* The tagline goes before anything else does; "登入" never goes. */
 @media (max-width:420px) { .site-header .site-header-name small { display:none; } }

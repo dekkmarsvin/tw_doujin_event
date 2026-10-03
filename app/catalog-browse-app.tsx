@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EventDefinition } from "./event-catalog";
 import { venueAssignmentForArea } from "./event-catalog";
-import { eventDayCalendarDate, shortDate } from "./event-calendar";
+import { eventCalendar, eventDayCalendarDate, shortDate } from "./event-calendar";
 import { placementStatusLabel } from "./circle-records";
 import { DEFAULT_ADVANCED_CIRCLE_SEARCH, normalizeWorkTopics } from "./circle-search";
 import { catalogPreviewSize } from "./catalog-image-prepare";
@@ -16,6 +16,7 @@ import ReaderViewTabs, { navigateReader, openMapOnPlan, ordinaryLinkClick } from
 import tabStyles from "./reader-mobile-tabs.module.css";
 import AdvancedCircleSearchControls from "./advanced-circle-search";
 import PlanningTools from "./planning-tools";
+import { publicLoginHref } from "./public-header";
 import { UiIcon } from "./ui-icons";
 import { sharePublicContent } from "./public-share";
 import type { PublicFilterDescriptor } from "./public-circle-search";
@@ -166,7 +167,7 @@ export default function CatalogBrowseApp({ event, onChooseEvent }: { event: Even
   const allScope = state.day === null && state.venueSpaceId === null;
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href="/" onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{event.dateRangeLabel}</small></span><span className={styles.eventSwitch}>切換活動<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{event.dateRangeLabel}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /></div>
+      <div className={styles.identity}><div className={`brand ${styles.brand}`}><span aria-hidden="true">場</span>場刊 Map</div>{/* As on the map: the event name leads back to the chooser only when there is another event to choose. */}{onChooseEvent ? <a className={styles.event} href="/" onClick={(pressed) => { if (!ordinaryLinkClick(pressed)) return; pressed.preventDefault(); savePosition(); onChooseEvent(); }}><span>{event.name}<small>{eventCalendar(event).label}</small></span><span className={styles.eventSwitch}>切換活動<UiIcon name="chevron-right" /></span></a> : <div className={styles.event}><span>{event.name}<small>{eventCalendar(event).label}</small></span></div>}<ReaderViewTabs className={styles.viewSwitch} event={event} view="browse" url={url} beforeNavigate={savePosition} /><PlanningTools eventId={event.id} /><a className={`site-header-login reader-login ${styles.readerLogin}`} href={publicLoginHref({ eventId: event.id })}>登入</a></div>
     </header>
     <main className={styles.main}>
       <h1 className={styles.srOnly}>{event.name} 逛品書</h1>

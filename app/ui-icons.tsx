@@ -4,6 +4,7 @@ type UiIconName =
   | "arrow-down"
   | "arrow-up"
   | "book"
+  | "chevron-down"
   | "chevron-left"
   | "chevron-right"
   | "check"
@@ -46,6 +47,7 @@ export function UiIcon({ name, ...props }: { name: UiIconName } & SVGProps<SVGSV
     {name === "drag" && <><circle cx="9" cy="7" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none" /><circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="9" cy="17" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="17" r="1" fill="currentColor" stroke="none" /></>}
     {name === "arrow-up" && <><path d="m6 10 6-6 6 6" /><path d="M12 4v16" /></>}
     {name === "arrow-down" && <><path d="m6 14 6 6 6-6" /><path d="M12 20V4" /></>}
+    {name === "chevron-down" && <path d="m6 9 6 6 6-6" />}
     {name === "chevron-left" && <path d="m15 18-6-6 6-6" />}
     {name === "chevron-right" && <path d="m9 18 6-6-6-6" />}
     {name === "external" && <><path d="M14 5h5v5" /><path d="m19 5-8 8" /><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>}

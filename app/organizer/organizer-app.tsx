@@ -509,7 +509,6 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
               </div>
             </div>;
           })}
-          {events.length === 0 && <p className={styles.muted}>目前沒有可管理的活動。</p>}
         </nav>
       </div>
     </aside>
@@ -541,7 +540,7 @@ function OrganizerWorkspace({ session }: { session: PortalSession }) {
       {!detail && selectedId ? <div className={styles.empty}><p role="status">載入活動…</p></div> : !detail ? <div className={styles.empty}>
         <h2>{events.length === 0 ? "還沒有活動" : "選擇活動"}</h2>
         <p>{events.length > 0 ? "從左側開啟活動，開始準備送審資料。"
-          : session.isAdmin ? "用左側的「建立新活動」開始第一場。"
+          : session.isAdmin ? "建立新活動後，活動會出現在左側。"
             : "收到主辦邀請後，活動會出現在左側。"}</p>
       </div>
         : surface !== "data" && detail.claimReviewAvailable && detail.event.eventId

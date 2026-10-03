@@ -46,6 +46,8 @@ import { defaultEventUrlState, historyMethod, parseEventUrlState, serializeEvent
 import { projectEventWorkspace } from "./event-workspace-projection";
 import PlanningTools from "./planning-tools";
 import ReaderHelp from "./reader-help";
+import { eventCalendar } from "./event-calendar";
+import { publicLoginHref } from "./public-header";
 import { mapFacilityDirectory, type MapFacilityEntry } from "./map-facility-directory";
 import MapFacilityPanel from "./map-facility-panel";
 import styles from "./event-map-app.module.css";
@@ -308,7 +310,9 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     const scopeKey = mapScopeKey;
     void loadStaticEventMapResource(eventId, scope)
       .then((resource) => { if (!cancelled) setLoadedMap({ scopeKey, ...resource }); })
-      .catch((error) => { if (!cancelled) { setLoadedMap(null); setMapError(error instanceof Error ? error.message : "讀取活動地圖失敗。"); } })
+      // Loader errors are internal English ("Failed to fetch", manifest checks);
+      // the reader's only action is to retry, so say that and keep the cause in the console.
+      .catch((error) => { if (!cancelled) { console.error(error); setLoadedMap(null); setMapError("請確認網路連線後重新讀取。"); } })
       .finally(() => { if (!cancelled) setMapLoading(false); });
     return () => { cancelled = true; };
   }, [day, event, eventId, venueAssignment, mapScopeKey, mapRetry]);
@@ -811,7 +815,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
         keyEvent.preventDefault(); changeDay(event.days[target].id);
         (keyEvent.currentTarget.parentElement?.children[target] as HTMLButtonElement)?.focus();
       }}><b>{eventDay.label}</b><span>{eventDay.dateLabel}</span></button>)}</div>
-      <label className={styles.dateSelect}>日期<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}<small>{event.days.find((item) => item.id === day)?.dateLabel}</small></span><select aria-label="活動日期" value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.dateLabel}</option>)}</select></label>
+      <label className={styles.dateSelect}>日期<span className={styles.mobileDateLabel} aria-hidden="true">{event.days.find((item) => item.id === day)?.label}{event.days.length > 1 && <UiIcon name="chevron-down" className={styles.mobileDateChevron} />}<small>{event.days.find((item) => item.id === day)?.dateLabel}</small></span><select aria-label="活動日期" value={day} onChange={(change) => changeDay(event.days.find((item) => String(item.id) === change.target.value)!.id)}>{event.days.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.dateLabel}</option>)}</select></label>
       {event.venueAssignments.length > 1 ? <label>場地<select value={venueAssignment.venueSpaceId} onChange={(change) => changeVenueSpace(change.target.value)}>{event.venueAssignments.map((item) => <option key={item.venueSpaceId} value={item.venueSpaceId}>{item.venueName} · {item.venueSpaceName}</option>)}</select></label> : <span className={styles.venueName}>{event.venue}</span>}
 
     </div>
@@ -820,6 +824,8 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     <div className={styles.codeHint} aria-live={measurement ? undefined : "polite"}>{hintedCode ? "已選取 " + hintedCode : "選取攤位查看社團"}</div>
   </>;
 
+  // Every public page ends its header with the same "登入" (#439, #488).
+  const readerLogin = <a className={`site-header-login reader-login ${styles.readerLogin}`} href={publicLoginHref({ eventId })}>登入</a>;
   const readerTools = <><div className={styles.textScale} role="group" aria-label="網頁字體大小"><span>字級</span>{(["standard", "large", "extra"] as const).map((value, index) => <button key={value} aria-pressed={textScale === value} aria-label={index === 0 ? "標準字級" : index === 1 ? "較大字級" : "最大字級"} onClick={() => changeTextScale(value)}>{index === 0 ? "小" : index === 1 ? "中" : "大"}</button>)}</div><PlanningTools eventId={eventId} />{planningStorageError && <span className={styles.storageError} role="status">儲存異常，請開啟資料管理</span>}<ReaderHelp eventId={eventId} dataLastUpdatedLabel={event.dataLastUpdatedLabel} /></>;
 
   // The map as the reader sees it, without a selection: what the switch and the
@@ -829,7 +835,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
     selection: { day, circleId: null, boothCode: null },
   }, typeof window === "undefined" ? "https://event.invalid/" : window.location.href);
   const browseUrl = switchReaderViewUrl(event, readerUrl);
-  const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{event.dateRangeLabel}</span><span>{event.venue}</span></div>}</div>;
+  const eventInfo = <div className={styles.eventInfo}><h1>{event.name}</h1>{desktop && <div className={styles.eventMeta}><span>{eventCalendar(event).label}</span><span>{event.venue}</span></div>}</div>;
   const eventIdentity = onChooseEvent ? <a className={styles.eventLink} href="/" onClick={(click) => {
     if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
     click.preventDefault();
@@ -842,7 +848,7 @@ function EventMapWorkspace({ event, onChooseEvent }: { event: EventDefinition; o
       <div className="event">{eventIdentity}</div>
       <label className="search"><span aria-hidden="true"><UiIcon name="search" /></span><input ref={searchRef} value={query} onChange={(event) => { autoSelectSearch.current = true; if (desktop && !leftRailRef.current?.getClientRects().length) setDesktopDetailsOpen(false); setQuery(event.target.value); setDesktopPanel("explore"); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); }} placeholder="搜尋社團、攤位或作品" aria-label="搜尋社團、攤位或作品" />{!desktop && query && <button className={styles.searchClear} onClick={() => { setQuery(""); setNavigationMode(false); setMobileWorkspace("explore"); setMobilePanel("results"); setMobileSheetLevel("half"); searchRef.current?.focus(); }} aria-label="清除搜尋"><UiIcon name="close" /></button>}<kbd>⌘ K</kbd></label>
       <ReaderViewTabs className={styles.viewSwitch} event={event} view="map" url={readerUrl} />
-      {desktop ? <div className={styles.topbarActions}>{readerTools}</div> : <details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>}
+      {desktop ? <div className={styles.topbarActions}>{readerTools}{readerLogin}</div> : <><details ref={toolsMenuRef} className={styles.mobileToolsMenu}><summary>工具</summary><div>{readerTools}</div></details>{readerLogin}</>}
     </header>
     <div className={`workspace ${styles.workspace}`} data-details-open={desktop && desktopDetailsOpen && Boolean(selected) || undefined}>
       <aside ref={leftRailRef} className={`filters ${styles.leftRail}`}>
