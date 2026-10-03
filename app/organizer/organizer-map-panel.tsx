@@ -3,7 +3,7 @@
  * 由 `organizer-app.tsx` 拆出（#224）。該檔原本是 1870 行的單檔，面板
  * 彼此無關卻共處一室，讀一個面板要先略過另外四個。
  */
-import { createBlankEventMapLayout, type EventMapLayout } from "../event-map";
+import { createBlankEventMapLayout, type EventMapLayout, type MapRect } from "../event-map";
 import { EMPTY_MAP_AUTHORING, type MapAuthoringState } from "../map-authoring-state";
 import { MAP_IMAGE_MAX_BYTES } from "../map-contribution-files";
 import MapLayoutEditor, { type MapEditorFocusTarget } from "../map-layout-editor";
@@ -15,6 +15,7 @@ import { useModalFocus } from "../use-modal-focus";
 import { message, organizerDayLabel, organizerVenueSpaceLabel } from "./organizer-shared";
 import styles from "./organizer.module.css";
 import { ActionNotice, useActionFeedback } from "./organizer-feedback";
+import { MapPlanCrop, cropMapPlan } from "./map-plan-crop";
 
 const MAP_PLAN_TYPES = ["image/jpeg", "image/png", "image/webp"];
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +23,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 function layoutHasContent(layout: EventMapLayout | null) {
   return !!layout && (layout.rows.length > 0 || layout.pillars.length > 0
     || layout.accessPoints.length > 0 || layout.landmarks.length > 0 || (layout.servicePoints?.length ?? 0) > 0);
+}
+
+function canCropPlan(layout: EventMapLayout | null, authoring: MapAuthoringState) {
+  if (!layout) return true;
+  return !layoutHasContent(layout) && !layout.areaRegions?.length && !authoring.guides.length
+    && layout.floor.x === 0 && layout.floor.y === 0 && layout.floor.width === layout.width && layout.floor.height === layout.height;
 }
 
 /** One dialog for every action that would take what is on the canvas away. The
@@ -87,6 +94,8 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
   // A plan picked before the map exists has nowhere to be stored yet, so it
   // waits here and goes up with the first save.
   const [pendingBackground, setPendingBackground] = useState<File | null>(null);
+  const [crop, setCrop] = useState<{ file: File; source: string; width: number; height: number; generation: number } | null>(null);
+  const [cropError, setCropError] = useState("");
   // The editor reports every committed edit, so one flag is enough to know
   // whether closing would throw work away. Undoing back to the opened state
   // still counts as edited, which errs towards asking.
@@ -103,7 +112,7 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
   // but no longer touches the screen: otherwise the map opened in the meantime
   // would get the previous map's image and its "已儲存" line.
   const planGeneration = useRef(0);
-  const clearPlanNotice = useCallback(() => { planGeneration.current += 1; clearPlanFeedback(); }, [clearPlanFeedback]);
+  const clearPlanNotice = useCallback(() => { planGeneration.current += 1; setCrop(null); setCropError(""); clearPlanFeedback(); }, [clearPlanFeedback]);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingMap, setSavingMap] = useState(false);
   const [confirm, setConfirm] = useState<
@@ -197,40 +206,57 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
    * changes the plan behind it; building a layout from the image — by
    * recognition or as a blank sheet its size — belongs to the empty editor,
    * where there is no work to lose. */
-  const runFile = async (file: File, generation: number) => {
+  const runFile = async (file: File, generation: number, rect?: MapRect) => {
     const current = () => planGeneration.current === generation;
     if (!assignment) throw new Error("請先選擇場地。");
     if (file.size > MAP_IMAGE_MAX_BYTES || !MAP_PLAN_TYPES.includes(file.type)) {
       throw new Error("配置圖需為 JPG、PNG 或 WebP，且不可超過 10MB。");
     }
-    const source = await imageDataUrl(file);
-    const image = await loadOrganizerMapImage(source);
+    let source = await imageDataUrl(file);
+    let image = await loadOrganizerMapImage(source);
     if (!current()) return "";
+    const empty = canCropPlan(layout, authoring);
+    if (empty && !rect) {
+      setCropError("");
+      setCrop({ file, source, width: image.naturalWidth, height: image.naturalHeight, generation });
+      return "";
+    }
+    const whole = !rect || (rect.x === 0 && rect.y === 0 && rect.width === image.naturalWidth && rect.height === image.naturalHeight);
+    if (rect) {
+      file = await cropMapPlan(file, image, rect);
+      if (file.size > MAP_IMAGE_MAX_BYTES) throw new Error("裁切後的配置圖超過 10MB，請框選較小範圍。");
+      source = await imageDataUrl(file);
+      image = await loadOrganizerMapImage(source);
+      if (!current()) return "";
+    }
     // A map built from the image is a new map, so the upload that follows can
     // only wait for the first save even if another map was open a moment ago.
     const target = layout ? selected : null;
+    let next: EventMapLayout | null = null;
     let traced = "";
-    if (!layout) {
+    if (empty) {
       const canvas = document.createElement("canvas");
       canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
       const context = canvas.getContext("2d", { willReadFrequently: true });
       if (!context) throw new Error("瀏覽器無法建立圖片分析畫布。");
       context.drawImage(image, 0, 0);
-      const recognizes = hasMapTemplateRecognizer(assignment.mapTemplate);
-      const next = recognizes
+      // A fixed template adapter expects its complete source image.
+      const recognizes = whole && !layout && hasMapTemplateRecognizer(assignment.mapTemplate);
+      next = recognizes
         ? recognizeMapTemplate(assignment.mapTemplate, context.getImageData(0, 0, canvas.width, canvas.height)).layout
         : createBlankEventMapLayout(assignment.mapTemplate, canvas.width, canvas.height);
-      setSelected(null); setLayout(next); setAuthoring(EMPTY_MAP_AUTHORING); setEdited(false);
-      traced = recognizes ? "已套用地圖模板辨識結果。" : "此地圖模板沒有自動辨識，已建立手動編輯底圖。";
+      traced = recognizes ? "已套用地圖模板辨識結果。" : "";
     }
     // The plan is only put on the canvas once it is somewhere it will survive:
     // stored now for a map that exists, and waiting for the first save for one
     // that does not. A failed upload therefore changes nothing on screen.
     if (target) {
       await uploadOrganizerMapBackground(detail.event.id, target.id, file);
-      if (current()) { setBackground(source); setPendingBackground(null); }
+      if (current()) { setBackground(source); setPendingBackground(null); if (next) { setLayout(next); setAuthoring(EMPTY_MAP_AUTHORING); setEdited(true); } }
       return `${traced}配置圖已儲存。`;
     }
+    if (!current()) return "";
+    if (next) { setSelected(null); setLayout(next); setAuthoring(EMPTY_MAP_AUTHORING); setEdited(false); }
     setBackground(source);
     setPendingBackground(file);
     return `${traced}儲存地圖時會一起存下配置圖。`;
@@ -395,6 +421,17 @@ export function OrganizerMapPanel({ detail, onChanged, onSection, location, onDi
     </div>}
     {confirm && <MapConfirmDialog confirm={confirm} onCancel={() => setConfirm(null)}
       onConfirm={() => { setConfirm(null); confirm.run(); }} />}
+    {crop && <MapPlanCrop source={crop.source} width={crop.width} height={crop.height} busy={planFeedback.pending} error={cropError}
+      onCancel={() => { setCrop(null); clearPlanNotice(); }}
+      onApply={rect => {
+        const request = crop;
+        setCropError("");
+        void planFeedback.run(runFile(request.file, request.generation, rect), text => text, () => planGeneration.current === request.generation).then(ok => {
+          if (planGeneration.current !== request.generation) return;
+          if (ok) setCrop(null);
+          else setCropError("配置圖未套用，請重新框選或取消後重試。");
+        });
+      }} />}
   </section>;
 }
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { start, base, output, PIXEL } from "./support/journey.mjs";
 import { source, openToolGroup } from "./support/map-authoring.mjs";
+import { encodePng, ruledPlan } from "../support/map-recognition-fixture.mjs";
 
 const journey = await start("organizer-map-navigation");
 journey.report.synthetic = true;
@@ -131,6 +132,7 @@ try {
   await fresh.page.getByText("先放入攤位或設施，才能儲存。", { exact: true }).waitFor();
   // A pending plan and a facility-only map use the same save path as the map button.
   await fresh.page.locator('input[type="file"]').setInputFiles({ name: "plan.png", mimeType: "image/png", buffer: PIXEL });
+  await fresh.page.getByRole("dialog", { name: "框選目前場地", exact: true }).getByRole("button", { name: "使用整張圖", exact: true }).click();
   await fresh.page.getByText("儲存地圖時會一起存下配置圖。", { exact: true }).waitFor();
   await openToolGroup(fresh.editor, "設施"); await fresh.editor.getByRole("button", { name: "新增出入口", exact: true }).click();
   await fresh.svg.click({ position: { x: 100, y: 100 } });
@@ -157,5 +159,34 @@ try {
   const closing = await closePrompt; assert.equal(closing.type(), "beforeunload"); await closing.dismiss();
   assert.equal(closingWorkspace.page.isClosed(), false);
   journey.report.checks.push("native tab-close prompt keeps the page open when canceled");
+  // Multi-hall plans are cropped before any layout/background is changed.
+  const cropped = await openWorkspace({ fresh: true });
+  const upload = cropped.page.locator('input[type="file"]');
+  const composite = { name: "composite.png", mimeType: "image/png", buffer: Buffer.from(encodePng(ruledPlan())) };
+  await upload.setInputFiles(composite);
+  const cropDialog = cropped.page.getByRole("dialog", { name: "框選目前場地", exact: true });
+  await cropDialog.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await cropped.svg.locator("image").count(), 0);
+  assert.equal(cropped.state.uploads.length, 0);
+  await upload.setInputFiles(composite);
+  for (const [label, value] of [["左側 X", "110"], ["上側 Y", "20"], ["裁切寬度", "180"], ["裁切高度", "160"]]) await cropDialog.getByRole("spinbutton", { name: label, exact: true }).fill(value);
+  await cropDialog.screenshot({ path: path.join(output, "organizer-map-crop.png") });
+  await cropDialog.getByRole("button", { name: "使用框選範圍", exact: true }).click();
+  await cropDialog.waitFor({ state: "hidden" });
+  const croppedPixels = await cropped.svg.locator("image").evaluate(async node => { const img = new Image(); img.src = node.getAttribute("href"); await img.decode(); return [img.naturalWidth, img.naturalHeight]; });
+  assert.deepEqual(croppedPixels, [180, 160], "private background contains only selected source pixels");
+  await openToolGroup(cropped.editor, "設施"); await cropped.editor.getByRole("button", { name: "新增出入口", exact: true }).click();
+  await cropped.svg.click({ position: { x: 100, y: 100 } });
+  await cropped.editor.getByRole("button", { name: "建立這個活動日與場地的地圖", exact: true }).click();
+  await cropped.page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
+  assert.deepEqual([cropped.state.map.layout.width, cropped.state.map.layout.height], [180, 160]);
+  assert.deepEqual(cropped.state.map.layout.floor, { x: 0, y: 0, width: 180, height: 160 });
+  // Any placed facility makes the map non-empty; replacing its plan must keep geometry.
+  await upload.setInputFiles(composite);
+  await cropped.page.getByRole("dialog", { name: "已經有配置圖", exact: true }).getByRole("button", { name: "換成新的", exact: true }).click();
+  await cropped.page.getByText("配置圖已儲存。", { exact: true }).waitFor();
+  assert.equal(await cropDialog.count(), 0);
+  assert.deepEqual([cropped.state.map.layout.width, cropped.state.map.layout.height], [180, 160]);
+  journey.report.checks.push("crop cancellation changes nothing; source-pixel crop sets background and canvas dimensions; facility-only map cannot be recropped");
   await journey.finish();
 } catch (error) { await journey.abort(error); }
