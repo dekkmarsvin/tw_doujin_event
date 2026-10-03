@@ -1,4 +1,5 @@
 import { rowLabelPlacement, type EventMapLayout, type MapAccessDirection, type MapAccessPoint } from "./event-map";
+import { shapeInterior } from "./map-shape-geometry";
 
 /** Layout units to CSS px, and the reader's text-size multiplier. */
 export type MapMarkerPresentation = { screenScale: number; fontScale: number };
@@ -146,10 +147,12 @@ export function layoutMapMarkerLabels(layout: Pick<EventMapLayout, "width" | "he
     if (!landmark.label.trim()) continue;
     const width = landmark.rect.width * screenScale - LANDMARK_PADDING_PX * 2;
     const height = landmark.rect.height * screenScale - LANDMARK_PADDING_PX * 2;
-    const fontPx = Math.min(landmarkPx, width / mapLabelEms(landmark.label), height / (HALF_LINE_EM * 2));
+    const interior = shapeInterior(landmark.rect);
+    const shapeFontPx = "points" in landmark.rect ? Math.max(0, interior.radius * screenScale - LANDMARK_PADDING_PX) * 2 / Math.hypot(mapLabelEms(landmark.label), HALF_LINE_EM * 2) : Infinity;
+    const fontPx = Math.min(landmarkPx, width / mapLabelEms(landmark.label), height / (HALF_LINE_EM * 2), shapeFontPx);
     if (!(fontPx >= LANDMARK_LABEL.minPx * fontScale)) continue;
     candidates.push([mapMarkerLabelKey("landmark", landmark.id), {
-      text: landmark.label, x: landmark.rect.x + landmark.rect.width / 2, y: landmark.rect.y + landmark.rect.height / 2, dx: 0, dy: 0, fontPx, anchor: "middle",
+      text: landmark.label, x: interior.x, y: interior.y, dx: 0, dy: 0, fontPx, anchor: "middle",
     }]);
   }
 

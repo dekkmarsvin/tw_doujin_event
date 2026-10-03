@@ -1,5 +1,6 @@
 import { MAP_SERVICE_POINT_KINDS, resolveMapLandmarkKind, type EventMapLayout, type MapAccessKind, type MapLandmarkKind, type MapServicePointKind } from "./event-map";
 import { mapMarkerLabelKey } from "./map-marker-presentation";
+import { shapeInterior } from "./map-shape-geometry";
 
 type MapPoint = { x: number; y: number };
 
@@ -61,9 +62,10 @@ export function mapFacilityDirectory(layout: Pick<EventMapLayout, "accessPoints"
     const label = landmark.label.trim();
     if (!label || labelCounts.get(label) !== 1) continue;
     const kind = resolveMapLandmarkKind(landmark);
+    const { x, y } = shapeInterior(landmark.rect);
     entries.push({
       key: mapMarkerLabelKey("landmark", landmark.id), group: "area", kind, label, ariaLabel: describe(label, kind),
-      point: { x: landmark.rect.x + landmark.rect.width / 2, y: landmark.rect.y + landmark.rect.height / 2 },
+      point: { x, y },
     });
   }
   const legend: MapLegendEntry[] = [];
