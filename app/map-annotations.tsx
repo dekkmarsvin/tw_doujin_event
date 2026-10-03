@@ -15,7 +15,9 @@ export function pathBounds(path: MapPath): MapRect {
 
 export function transformPath(path: MapPath, box: MapRect): void {
   const from = pathBounds(path);
-  path.points = path.points.map((point) => ({ x: box.x + (from.width ? (point.x - from.x) * box.width / from.width : 0), y: box.y + (from.height ? (point.y - from.y) * box.height / from.height : 0) }));
+  const maxX = Math.max(...path.points.map((point) => point.x)), maxY = Math.max(...path.points.map((point) => point.y));
+  const coordinate = (value: number, min: number, max: number, start: number, size: number) => value === min ? start : value === max ? start + size : start + (value - min) * size / (max - min);
+  path.points = path.points.map((point) => ({ x: coordinate(point.x, from.x, maxX, box.x, box.width), y: coordinate(point.y, from.y, maxY, box.y, box.height) }));
 }
 
 export function validNoteText(value: unknown): value is string {

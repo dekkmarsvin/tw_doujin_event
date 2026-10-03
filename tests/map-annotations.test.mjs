@@ -6,7 +6,7 @@ import { createServer } from "vite";
 import { parseFragment } from "parse5";
 
 const vite = await createServer({ configFile: false, root: process.cwd(), server: { middlewareMode: true }, appType: "custom", environments: { ssr: {} }, logLevel: "silent" });
-const { annotationBoothConflicts, MapNoteDrawing, MapPathDrawing, pathArrowhead, pathBounds, transformPath, validNoteText } = await vite.environments.ssr.runner.import("/app/map-annotations.tsx");
+const { annotationBoothConflicts, MapNoteDrawing, MapPathDrawing, pathArrowhead, pathBounds, transformPath, validNoteText, validPathPoints } = await vite.environments.ssr.runner.import("/app/map-annotations.tsx");
 after(() => vite.close());
 const booth = { code: "A01", rect: { x: 40, y: 40, width: 20, height: 20 } };
 
@@ -30,6 +30,10 @@ test("moving and resizing a bent or straight arrow preserves its ordered directi
     assert.deepEqual(straight.points[0], { x: 5, y: 7 });
     assert.ok(straight.points[1].x > 5 || straight.points[1].y > 7, "a straight arrow keeps a nonzero final segment");
   }
+  const edge = { id: "edge", points: [{ x: 0, y: 20 }, { x: 10.2, y: 30 }] };
+  transformPath(edge, { x: 0, y: 20, width: 1000, height: 10 });
+  assert.deepEqual(edge.points, [{ x: 0, y: 20 }, { x: 1000, y: 30 }]);
+  assert.equal(validPathPoints(edge.points, 1000, 500), true, "resizing to the canvas edge remains saveable");
 });
 
 test("authors see note and arrow collisions, including a diagonal whose endpoints are outside the booth", () => {
