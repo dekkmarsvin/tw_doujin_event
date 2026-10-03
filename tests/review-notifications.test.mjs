@@ -239,7 +239,7 @@ test("Worker notification tick runs with publication disabled and despite public
   now = Date.now() - 600000;
   await db.prepare("UPDATE admin_notification_preferences SET enabled_since = 0, next_digest_at = 0").run();
   await submit("worker-disabled-publication");
-  const env = { DB: db, ORGANIZER_PUBLICATION_MODE: "disabled", ADMIN_REVIEW_NOTIFICATIONS_ENABLED: "true",
+  const env = { DB: db, ORGANIZER_PUBLICATION_MODE: "disabled",
     NOTIFICATION_ORIGIN: "https://map.kotoban.top", PREVIEW_MAIL_SINK: "d1", PREVIEW_TEST_RECIPIENTS: `${ADMIN},${SECOND}` };
   await notificationWorker.scheduled({}, env);
   assert.match((await repo.latestPreviewMail(ADMIN)).subject, /1 筆新增待審/);
@@ -274,7 +274,7 @@ for (const scenario of ["sink", "sandbox", "denied", "production", "sandbox-reje
     await db.prepare("UPDATE admin_notification_preferences SET enabled_since = 0, next_digest_at = 0").run();
     await submit(`worker-route-${scenario}`);
     const production = scenario.startsWith("production");
-    const runtime = { DB: db, ORGANIZER_PUBLICATION_MODE: "disabled", ADMIN_REVIEW_NOTIFICATIONS_ENABLED: "true",
+    const runtime = { DB: db, ORGANIZER_PUBLICATION_MODE: "disabled",
       NOTIFICATION_ORIGIN: "https://map.kotoban.top", MAILGUN_API_KEY: "fixture-key", MAILGUN_DOMAIN: "fixture.example",
       PREVIEW_MAIL_SINK: production ? undefined : "d1", PREVIEW_TEST_RECIPIENTS: scenario === "sink" ? `${ADMIN},${SECOND}` : "",
       PREVIEW_SANDBOX_RECIPIENTS: scenario === "denied" ? "" : `${ADMIN},${SECOND}` };

@@ -8,7 +8,6 @@ const vite = await createServer({ configFile: false, root: process.cwd(), server
 const load = name => vite.environments.ssr.runner.import(name);
 const { createIdentityRepository } = await load("/db/identity-repository.ts");
 const { createCirclePortalHandlers, SESSION_COOKIE } = await load("/app/circle-portal-handlers.ts");
-const { initialSiteSettings } = await load("/app/site-settings.ts");
 const { hmacSign } = await load("/app/portal-crypto.ts");
 const { runPublicationTick } = await load("/app/publication-scheduler.ts");
 const { runRequestedServiceCheck, checkMailService, checkPublicationService } = await load("/app/site-service-check.ts");
@@ -82,16 +81,23 @@ test("warm repositories and the same handlers see new modes and notification epo
   assert.equal((await (await handlers.session(request("GET", undefined, memberCookie))).json()).canApplyForEvent, true);
 });
 
-test("Worker cannot initialize from a different environment; Pages seeds exactly once from its runtime", async () => {
+test("Worker does not seed settings; Pages defaults are conservative and never overwrite persisted choices", async () => {
   await db.prepare("DELETE FROM site_settings").run();
   const worker = createIdentityRepository(db, { initializeSiteSettings: false });
   assert.equal(await worker.getSiteSettings(), null);
-  const legacy = { ORGANIZER_APPLICATION_ALLOWED_EMAILS: "Invited@example.test", ACCOUNT_NOTIFICATIONS_ENABLED: "true",
-    ACCOUNT_NOTIFICATIONS_SINCE: "2026-10-01T18:00:00+08:00", ADMIN_REVIEW_NOTIFICATIONS_ENABLED: "true", ORGANIZER_PUBLICATION_MODE: "github" };
-  const pages = createIdentityRepository(db, { initialSiteSettings: initialSiteSettings(legacy) });
+  const pages = createIdentityRepository(db);
+  const initial = await pages.getSiteSettings();
+  assert.equal(initial.organizerApplicationMode, "closed");
+  assert.deepEqual(initial.organizerAllowedEmails, []);
+  assert.equal(initial.accountNotificationsEnabled, false);
+  assert.equal(initial.accountNotificationsSince, null);
+  assert.equal(initial.adminReviewNotificationsEnabled, false);
+  assert.equal(initial.publicationEnabled, false);
+  await resetSiteSettings(db, { organizerApplicationMode: "invite_only", organizerAllowedEmails: ["invited@example.test"],
+    accountNotificationsEnabled: true, accountNotificationsSince: 1_790_000_000_000,
+    adminReviewNotificationsEnabled: true, publicationEnabled: true });
   const settings = await pages.getSiteSettings();
-  assert.equal(settings.organizerApplicationMode, "invite_only"); assert.equal(settings.accountNotificationsSince, Date.parse(legacy.ACCOUNT_NOTIFICATIONS_SINCE));
-  await createIdentityRepository(db, { initialSiteSettings: initialSiteSettings({}) }).getSiteSettings();
+  await createIdentityRepository(db).getSiteSettings();
   assert.deepEqual(await worker.getSiteSettings(), settings);
 });
 

@@ -12,7 +12,6 @@ import { createOrganizerRecoveryRepository } from "./organizer-recovery-reposito
 import { createOrganizerApplicationRepository } from "./organizer-application-repository";
 import { createReviewNotificationRepository, seedNotificationPreferences, enqueueReviewNotification, deleteNotificationRecipient, cancelNotificationRecipient } from "./review-notification-repository";
 import { createAccountNotificationRepository, createAccountNotificationWriter, deleteAccountNotifications, claimNotificationSource, circleNotificationSource, ownerNotificationSource, memberNotificationSource } from "./account-notification-repository";
-import type { SiteSettings } from "../app/site-settings";
 import { createSiteSettingsRepository, seedSiteSettings } from "./site-settings-repository";
 
 /**
@@ -98,7 +97,7 @@ function differentJson(left: string, right: string) {
   return `(EXISTS (${rows(left)} EXCEPT ${rows(right)}) OR EXISTS (${rows(right)} EXCEPT ${rows(left)}))`;
 }
 
-export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[]; initialSiteSettings?: SiteSettings; initializeSiteSettings?: boolean } = {}) {
+export function createIdentityRepository(database: D1Database, options: { bootstrapAdmins?: string[]; initializeSiteSettings?: boolean } = {}) {
   const notify = createAccountNotificationWriter(database);
   let tablesReady: Promise<void> | null = null;
 
@@ -113,7 +112,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       tablesReady = ensureRuntimeReady()
         .then(() => seedAdmins())
         .then(async () => {
-          if (options.initializeSiteSettings !== false) await seedSiteSettings(database, options.initialSiteSettings ?? {
+          if (options.initializeSiteSettings !== false) await seedSiteSettings(database, {
             organizerApplicationMode: "closed", organizerAllowedEmails: [], accountNotificationsEnabled: false,
             accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: false,
             updatedAt: Date.now(), updatedBy: "migration",
