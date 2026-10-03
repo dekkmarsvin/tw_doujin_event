@@ -9,6 +9,7 @@ export async function organizerRepositoryFixtureScript() {
     resolveDir: fileURLToPath(new URL("../../", import.meta.url)),
     contents: `
       import { createIdentityRepository } from './db/identity-repository';
+      import { resetSiteSettings } from './tests/support/site-settings-fixture.mjs';
       let repository;
       export default { async fetch(request, env) {
         if (request.method !== 'POST' || new URL(request.url).pathname !== '/reset') {
@@ -18,6 +19,7 @@ export async function organizerRepositoryFixtureScript() {
         repository ??= createIdentityRepository(env.DB);
         await repository.ensureTables();
         await repository.clearPreviewData();
+        await resetSiteSettings(env.DB);
         const adminId = await repository.upsertAccount('admin@example.test', now);
         await repository.addAdmin('admin@example.test', 'bootstrap', now);
         const ownerId = await repository.upsertAccount('owner@example.test', now);

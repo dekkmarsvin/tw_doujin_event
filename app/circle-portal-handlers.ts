@@ -2548,8 +2548,7 @@ export function createCirclePortalHandlers({
           stableKey: row.stable_key, identityGroup: row.identity_group,
         })),
       } : null,
-      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication)
-        && (await repository.getSiteSettings())?.publicationEnabled === true,
+      publicationAvailable: config.organizerPublicationMode !== undefined && config.organizerPublicationMode !== "disabled" && Boolean(dispatchOrganizerPublication),
       claimReviewAvailable: Boolean(candidate.event_id && (config.publishedEvent
         ? await config.publishedEvent(candidate.event_id) : candidate.event_id === config.eventId)),
       recoveryAvailable: Boolean(access.admin && auditPublicationRecovery && loadPublishedAmendmentBaseline

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { createServer } from "vite";
+import { resetSiteSettings } from "../support/site-settings-fixture.mjs";
 import { amendmentFixture } from "../support/organizer-amendment-fixture.mjs";
 import { base, start } from "./support/journey.mjs";
 
@@ -76,6 +77,7 @@ const beforeBytes = publishedBytes;
 let generated;
 try {
   await repo.ensureTables();
+  await resetSiteSettings(db, { publicationEnabled: false });
   const actors = {};
   for (const role of ["owner", "admin"]) {
     const id = await repo.upsertAccount(`${role}@example.test`, data.now);
@@ -291,6 +293,10 @@ try {
   await admin.getByRole("combobox", { name: "活動版本", exact: true }).selectOption(candidate);
   await openSection(admin, /^送審與發布/);
   await admin.getByRole("textbox", { name: "審閱說明", exact: true }).fill("隔離合成資料核准");
+  await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
+  await admin.getByText("發布作業已暫停，送審內容會保留。", { exact: true }).waitFor();
+  assert.equal(await repo.getLatestOrganizerPublicationJob(candidate), null, "paused publication still allows submission but creates no job");
+  await resetSiteSettings(db, { publicationEnabled: true });
   await admin.getByRole("button", { name: "核准並發布", exact: true }).click();
   await admin.getByRole("button", { name: "重試發布", exact: true }).waitFor({ timeout: PUBLICATION_TIMEOUT });
   const failed = await repo.getLatestOrganizerPublicationJob(candidate);
