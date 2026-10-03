@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type Ref, type ChangeEvent, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { resolveMapLandmarkKind, scaleEventMapLayout, MAP_ACCESS_DIRECTIONS, MAP_ACCESS_KINDS, MAP_AREA_COLORS, MAP_SERVICE_POINT_KINDS, MAP_SERVICE_POINT_LABEL_LIMIT, type MapAccessKind, type MapAreaColor, type MapPoint, type MapServicePoint, type MapServicePointKind, type BoothRow, type BoothSlot, type EventMapLayout, type MapAccessDirection, type MapLandmarkKind, type MapOrientation, type MapRect, type MapRowLabelSide } from "./event-map";
 import { clamp, confirmedDraftSlots, contiguousSegment, defaultNumberingStart, formatSlotCode, frameNumbering, generateRowSlots, generateRowSlotsFromRect, inferRowFromAnchors, rectFromDrag, resizeRectFromCorner, resizeRectUniformly, rowOrientationFromEndpoints, segmentSlotRects, snapRectToAdjacentRects, type ResizeCorner, type RowAnchor, type RowDefinition, type RowDraft, type RowFrameDefinition, type RowNumberingStart, type SnapGuide } from "./map-layout-editor-geometry";
 import { alignBoxesToEdge, isPointSelection, appendRowSegment, applySelectionBoxes, applySlotMerge, autoArrangeBoxes, boundingBox, boxFor, mergeSelections, planSelectedSegmentEdges, planSlotMerge, rectFor, removeSelectionsFrom, resolveSelectionBoxes, scaleBoxesIntoBox, selectionKey, selectionSetKey, selectionsWithinBox, slotSelections, snapTargetsOutsideSelection, toggleSelection, translateBoxesWithin, type AlignEdge, type Selection } from "./map-layout-editor-selection";
@@ -366,6 +366,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   const editorRef = useRef<HTMLElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const zoomAnchor = useRef<MapPoint | null>(null);
 
   /* The space a map has to fit into. Measured rather than assumed because the
    * fitted scale below is what "100%" means, and a layout effect so the first
@@ -380,8 +381,8 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
       const vertical = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
       const width = Math.max(0, viewport.clientWidth - horizontal);
       const height = Math.max(0, viewport.clientHeight - vertical);
-      // Same numbers, same object: a scrollbar appearing resizes this box, and
-      // rescaling the map is what makes it appear or go away.
+      // Panning uses scroll offsets without visible scrollbars, so zooming
+      // cannot change the available box. Ignore unchanged measurements.
       setViewportBox((current) => current.width === width && current.height === height ? current : { width, height });
     };
     measure();
@@ -396,6 +397,14 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
     ? Math.min(viewportBox.width / layout.width, viewportBox.height / layout.height)
     : 0;
   const renderScale = fitScale * zoom;
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current, svg = svgRef.current, anchor = zoomAnchor.current;
+    if (!viewport || !svg || !anchor) return;
+    zoomAnchor.current = null;
+    const map = svg.getBoundingClientRect(), box = viewport.getBoundingClientRect();
+    viewport.scrollLeft += map.left + anchor.x * renderScale - (box.left + viewport.clientWidth / 2);
+    viewport.scrollTop += map.top + anchor.y * renderScale - (box.top + viewport.clientHeight / 2);
+  }, [renderScale]);
   const rowLabels = useMemo(() => layoutMapMarkerLabels(layout, { screenScale: renderScale, fontScale: 1 }), [layout, renderScale]);
   const copiedRowLabels = copyPreview?.ok ? layoutMapMarkerLabels({ ...layout, rows: [...layout.rows, ...copyPreview.rows] }, { screenScale: renderScale, fontScale: 1 }) : new Map<string, MapMarkerLabel>();
   const renderRowLabel = (row: BoothRow, labels = rowLabels) => {
@@ -1506,19 +1515,30 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   const changeZoom = (nextZoom: number) => {
     const viewport = viewportRef.current;
     const zoomed = clamp(nextZoom, MIN_EDITOR_ZOOM, MAX_EDITOR_ZOOM);
+    if (zoomed === zoom) return;
     // What the middle of the view is looking at, in map units, so the same
     // place is still in the middle at the new scale.
-    const origin = viewport && renderScale > 0 ? mapOriginIn(viewport, renderScale) : null;
-    const anchor = viewport && origin ? {
-      x: (viewport.scrollLeft + viewport.clientWidth / 2 - origin.x) / renderScale,
-      y: (viewport.scrollTop + viewport.clientHeight / 2 - origin.y) / renderScale,
+    const map = svgRef.current?.getBoundingClientRect(), box = viewport?.getBoundingClientRect();
+    zoomAnchor.current = viewport && map && box && renderScale > 0 ? {
+      x: (box.left + viewport.clientWidth / 2 - map.left) / renderScale,
+      y: (box.top + viewport.clientHeight / 2 - map.top) / renderScale,
     } : null;
     setZoom(zoomed);
-    requestAnimationFrame(() => {
-      const updated = viewportRef.current;
-      if (updated && anchor) centerMapPoint(updated, anchor, fitScale * zoomed);
-    });
   };
+
+  const wheelZoom = useEffectEvent((event: WheelEvent) => {
+    if (!event.deltaY) return;
+    event.preventDefault();
+    if (drag.current) return;
+    changeZoom(zoom + (event.deltaY < 0 ? EDITOR_ZOOM_STEP : -EDITOR_ZOOM_STEP));
+  });
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const onWheel = (event: WheelEvent) => wheelZoom(event);
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", onWheel);
+  }, []);
 
   const resetView = () => {
     setZoom(MIN_EDITOR_ZOOM);
@@ -1651,7 +1671,7 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
       {facilityTool === "space-mark" && <label className={styles.serviceKindPicker}>類型<select value={spaceMarkKind} onChange={event => setSpaceMarkKind(event.target.value as MapSpaceMarkKind)}>{MAP_SPACE_MARK_KINDS.map(kind => <option key={kind} value={kind}>{MAP_SPACE_MARK_LABELS[kind]}</option>)}</select></label>}
       <button type="button" onClick={cancelPlacement}>取消放置</button>
     </p>}
-    <div className={`${styles.workspace} ${rosterOpen ? styles.withRoster : ""}`}>
+    <div className={styles.workspace}>
       <button type="button" className={styles.rosterToggle} hidden={toolGroup === "recognition"} aria-expanded={rosterOpen} onClick={() => setRosterOpen(!rosterOpen)}>攤位清單</button>
       <aside className={styles.rosterDrawer} hidden={!rosterOpen || toolGroup === "recognition"} aria-label="攤位與排清單">
         {scope && <MapBoothList key={`${scope.periodKey}:${scope.venueSpaceId}`} layout={layout} scope={scope} selectedCode={selectedSlot?.code} onLocate={focusSlotCode} />}

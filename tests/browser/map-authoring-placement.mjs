@@ -20,11 +20,17 @@ try {
     const activate = async label => { await openToolGroup(editor, ["排／排段", "保留／取消格"].includes(label) ? "攤位" : "設施"); await editor.getByRole("button", { name: `新增${label}`, exact: true }).click(); };
     const at = async (x, y) => { await svg.scrollIntoViewIfNeeded(); const b = await svg.boundingBox(); return { x: b.x + x * b.width, y: b.y + y * b.height }; };
     const click = async (x, y) => { const p = await at(x, y); await page.mouse.click(p.x, p.y); };
-    const drag = async (from, to, cancel = false) => {
+    const drag = async (from, to, cancel = false, wheelDuringDrag = false) => {
       const startingCount = await count();
       const a = await at(...from), b = await at(...to);
       await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 });
       assert.equal(await count(), startingCount, "preview does not create a persistent element");
+      if (wheelDuringDrag) {
+        const zoom = await svg.getAttribute("aria-label");
+        await page.mouse.wheel(0, -120);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await svg.getAttribute("aria-label"), zoom, "wheel during drawing keeps the gesture coordinate frame unchanged");
+      }
       if (cancel) await page.keyboard.press("Escape");
       await page.mouse.up();
     };
@@ -42,7 +48,7 @@ try {
     assert.equal(await count(), before, "pointercancel creates nothing");
     await editor.getByRole("button", { name: "取消放置", exact: true }).click();
     await activate("柱子");
-    await drag([.25, .2], [.3, .3]);
+    await drag([.25, .2], [.3, .3], false, true);
     assert.equal(await count(), before + 1);
     assert.match(await picker.inputValue(), /^pillar:/);
     assert.equal(await editor.getByRole("button", { name: "新增柱子", exact: true }).getAttribute("aria-pressed"), "false");

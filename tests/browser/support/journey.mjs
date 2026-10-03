@@ -24,10 +24,10 @@ export const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAA
 // dev server; the journeys answer this origin themselves instead.
 export const PICTURE = "https://pictures.test/circle.png";
 
-export async function start(name) {
+export async function start(name, { showScrollbars = false } = {}) {
   const startedAt = performance.now();
   await mkdir(output, { recursive: true });
-  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
+  const browser = await chromium.launch({ headless: true, ...(showScrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}), ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   const report = { journey: name, browser: browser.version(), recordedAt: new Date().toISOString(), source: "local fixtures, not production", matrixMode, pagesOpened: 0, documentLoads: 0, checks: [], errors: [] };
   const observations = new WeakMap();
   let aborted = false;
