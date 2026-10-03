@@ -177,17 +177,25 @@ try {
         const response = await route.fetch();
         const map = await response.json();
         map.layout.servicePoints = services;
+        map.layout.spaceMarks = [
+          { id: "empty", kind: "reserved", rect: { x: 1500, y: 1400, width: 60, height: 50 } },
+          { id: "withdrawn", kind: "cancelled", rect: { x: 1600, y: 1400, width: 60, height: 50 } },
+        ];
         await route.fulfill({ response, json: map });
       });
     } });
     await page.getByRole("button", { name: "查看全場", exact: true }).click();
     await settle(page);
+    const marks = page.locator("[data-space-mark]");
+    assert.deepEqual(await marks.evaluateAll(nodes => nodes.map(node => [node.getAttribute("aria-label"), node.getAttribute("role"), node.getAttribute("tabindex"), getComputedStyle(node).pointerEvents])), [["保留空桌", "img", null, "none"], ["取消攤位", "img", null, "none"]], "marks are passive named tables, with no circle action");
+    await journey.capture(page, "reserved-cancelled-reader-tables");
     const badges = await page.locator('[data-marker^="service:"]').evaluateAll(nodes => nodes.map(node => [node.getAttribute("role"), node.getAttribute("aria-label"), Math.round(node.querySelector("rect").getBoundingClientRect().width)]));
     assert.deepEqual(badges, [["img", "廁所", 21], ["img", "女廁，廁所", 21], ["img", "大會服務台", 21], ["img", "寄物處", 21], ["img", "售票處", 21], ["img", "更衣室", 21]], "each service point is a badge named by its type");
     checkBounds(await markers(page), 1, "1440x900 service points fitted");
     await page.getByRole("button", { name: "設施", exact: true }).click();
     const panel = page.getByRole("group", { name: "場內設施" });
     await panel.waitFor();
+    assert.equal(await panel.getByRole("button", { name: /保留空桌|取消攤位/ }).count(), 0, "marks are excluded from the facility directory");
     const group = panel.getByRole("group", { name: "服務設施" });
     assert.deepEqual(await group.getByRole("button").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))), ["廁所", "女廁，廁所", "大會服務台", "寄物處", "售票處", "更衣室"], "toilets are listed together, an unnamed one by its type");
     assert.match(await panel.getByRole("group", { name: "圖例" }).innerText(), /廁所[\s\S]*服務台[\s\S]*寄物處[\s\S]*售票處[\s\S]*更衣室/);
@@ -245,7 +253,14 @@ try {
   }
 
   // A double tap on a booth still selects it and does not zoom.
-  const page = await journey.mapPage({ event: "ff47", viewport: { width: 1440, height: 900 } });
+  const page = await journey.mapPage({ event: "ff47", viewport: { width: 1440, height: 900 }, routes: async page => {
+    await page.route("**/data/events/ff47/map.json", async route => {
+      const response = await route.fetch(), map = await response.json();
+      const slot = map.layout.rows.flatMap(row => row.slots).find(slot => slot.code === "A01");
+      map.layout.spaceMarks = [{ id: "overlapping-empty", kind: "reserved", rect: { ...slot.rect } }];
+      await route.fulfill({ response, json: map });
+    });
+  } });
   const booth = page.locator('[data-slot-code="A01"]');
   const zoom = (await markers(page)).zoom;
   const target = await booth.evaluate(node => { const box = node.getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 }; });

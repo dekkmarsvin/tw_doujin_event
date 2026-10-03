@@ -263,7 +263,7 @@ test("an unnamed official source is published as the event's official source", a
   assert.equal(artifacts.files.find((file) => file.path.endsWith("/NOTICE")).text, "活動官方來源\nhttps://organizer.example/event\n");
 });
 
-test("service points in an approved map survive publication and staging into the reader's map", async () => {
+test("service points and space marks in an approved map survive publication and staging into the reader's map", async () => {
   const snapshot = await sample();
   const servicePoints = [
     { id: "toilet", kind: "toilet", x: 20, y: 20 },
@@ -271,7 +271,12 @@ test("service points in an approved map survive publication and staging into the
     { id: "tickets", kind: "ticket-office", x: 20, y: 80 },
     { id: "changing", kind: "changing-room", x: 60, y: 80, label: "簡易更衣室" },
   ];
+  const spaceMarks = [
+    { id: "empty-table", kind: "reserved", rect: { x: 80, y: 35, width: 20, height: 30 } },
+    { id: "cancelled-table", kind: "cancelled", rect: { x: 100, y: 35, width: 20, height: 30 } },
+  ];
   snapshot.maps[0].content.layout.servicePoints = servicePoints;
+  snapshot.maps[0].content.layout.spaceMarks = spaceMarks;
   snapshot.maps[0].content.layout.rows[0].labelSide = "left";
   snapshot.maps[0].content.layout.accessPoints = [{ id: "side", kind: "both", direction: "east", x: 5, y: 50, label: "側門" }];
   const approved = source(snapshot);
@@ -290,7 +295,19 @@ test("service points in an approved map survive publication and staging into the
     execFileSync(process.execPath, ["scripts/check-staged-event-data.mjs", "--workspace", workspace], { cwd: process.cwd(), stdio: "pipe" });
     const map = JSON.parse(await readFile(path.join(workspace, "public/data/events/next-event/map.json"), "utf8"));
     assert.deepEqual(map.layout.servicePoints, servicePoints);
+    assert.deepEqual(map.layout.spaceMarks, spaceMarks);
     assert.equal(map.layout.rows[0].labelSide, "left");
     assert.equal(map.layout.accessPoints[0].kind, "both");
   } finally { await rm(workspace, { recursive: true, force: true }); }
+});
+
+test("a space mark cannot replace an imported booth required for publication", async () => {
+  for (const kind of ["reserved", "cancelled"]) {
+    const snapshot = await sample();
+    const layout = snapshot.maps[0].content.layout;
+    const requiredSlot = layout.rows[0].slots.find((slot) => slot.code === "S02");
+    layout.rows[0].slots = layout.rows[0].slots.filter((slot) => slot.code !== "S02");
+    layout.spaceMarks = [{ id: "replacement", kind, rect: structuredClone(requiredSlot.rect) }];
+    await assert.rejects(builder.buildPublicationDataStage(source(snapshot), base(snapshot)), /缺少本活動日的 1 個主辦攤位代碼/);
+  }
 });

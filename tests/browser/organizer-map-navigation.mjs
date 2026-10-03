@@ -175,19 +175,25 @@ try {
   await cropDialog.waitFor({ state: "hidden" });
   const croppedPixels = await cropped.svg.locator("image").evaluate(async node => { const img = new Image(); img.src = node.getAttribute("href"); await img.decode(); return [img.naturalWidth, img.naturalHeight]; });
   assert.deepEqual(croppedPixels, [180, 160], "private background contains only selected source pixels");
-  await openToolGroup(cropped.editor, "設施"); await cropped.editor.getByRole("button", { name: "新增出入口", exact: true }).click();
-  await cropped.svg.click({ position: { x: 100, y: 100 } });
+  await openToolGroup(cropped.editor, "攤位"); await cropped.editor.getByRole("button", { name: "新增保留／取消格", exact: true }).click();
+  const croppedBox = await cropped.svg.boundingBox();
+  await cropped.page.mouse.move(croppedBox.x + croppedBox.width * .3, croppedBox.y + croppedBox.height * .3);
+  await cropped.page.mouse.down();
+  await cropped.page.mouse.move(croppedBox.x + croppedBox.width * .4, croppedBox.y + croppedBox.height * .4, { steps: 5 });
+  await cropped.page.mouse.up();
   await cropped.page.getByRole("button", { name: "建立這個活動日與場地的地圖", exact: true }).click();
   await cropped.page.getByText("地圖已儲存，尚未公開。", { exact: true }).waitFor();
   assert.deepEqual([cropped.state.map.layout.width, cropped.state.map.layout.height], [180, 160]);
   assert.deepEqual(cropped.state.map.layout.floor, { x: 0, y: 0, width: 180, height: 160 });
-  // Any placed facility makes the map non-empty; replacing its plan must keep geometry.
+  assert.equal(cropped.state.map.layout.spaceMarks[0].kind, "reserved");
+  assert.equal(cropped.state.map.layout.rows.length, 0, "a mark alone is saved without inventing any booth");
+  // A reserved table makes the map non-empty; replacing its plan must keep geometry.
   await upload.setInputFiles(composite);
   await cropped.page.getByRole("dialog", { name: "已經有配置圖", exact: true }).getByRole("button", { name: "換成新的", exact: true }).click();
   await cropped.page.getByText("配置圖已儲存。", { exact: true }).waitFor();
   assert.equal(await cropDialog.count(), 0);
   assert.deepEqual([cropped.state.map.layout.width, cropped.state.map.layout.height], [180, 160]);
-  journey.report.checks.push("crop cancellation changes nothing; source-pixel crop sets background and canvas dimensions; facility-only map cannot be recropped");
+  journey.report.checks.push("crop cancellation changes nothing; source-pixel crop sets background and canvas dimensions; a reserved-mark-only map saves and cannot be recropped");
   const late = await openWorkspace({ fresh: true });
   await late.page.evaluate(() => {
     const NativeReader = window.FileReader;

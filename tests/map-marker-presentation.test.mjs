@@ -185,10 +185,15 @@ test("row labels at canvas edges slide only along their side and omit an impossi
 
 test("the facility list names each access point and each uniquely named area, and explains shared names in the legend", () => {
   const blocks = Array.from({ length: 3 }, (_, index) => ({ id: `e${index}`, kind: "enterprise", label: "企業攤", rect: { x: index * 100, y: 0, width: 80, height: 60 } }));
+  const spaceMarks = [
+    { id: "empty-table", kind: "reserved", rect: { x: 100, y: 300, width: 20, height: 14 } },
+    { id: "cancelled-table", kind: "cancelled", rect: { x: 200, y: 300, width: 20, height: 14 } },
+  ];
   const directory = mapFacilityDirectory({
     accessPoints: [entrance("in", 100, "一般入口"), { id: "out", kind: "exit", direction: "north", x: 500, y: 10, label: "活動出口" }, entrance("blank", 300, "  ")],
     landmarks: [...blocks, { id: "hq", label: "大會總部", rect: { x: 0, y: 200, width: 40, height: 120 } }, { id: "stage", kind: "stage", label: "舞台", rect: { x: 300, y: 200, width: 100, height: 100 } }],
     pillars: [{ id: "p1", x: 0, y: 0, width: 10, height: 10 }],
+    spaceMarks,
   });
   assert.deepEqual(directory.entries.map((entry) => [entry.key, entry.label, entry.ariaLabel]), [
     ["access:in", "一般入口", "一般入口"],
@@ -198,8 +203,9 @@ test("the facility list names each access point and each uniquely named area, an
   ]);
   assert.deepEqual(directory.entries.find((entry) => entry.key === "landmark:hq").point, { x: 20, y: 260 });
   assert.deepEqual(directory.legend.map((item) => item.label), ["入口", "出口", "柱子", "企業攤"]);
-  const empty = mapFacilityDirectory({ accessPoints: [], landmarks: blocks, pillars: [] });
-  assert.equal(empty.entries.length, 0, "a map with only shared names offers nothing to locate");
+  const empty = mapFacilityDirectory({ accessPoints: [], landmarks: blocks, pillars: [], spaceMarks });
+  assert.equal(empty.entries.length, 0, "shared names and passive space marks offer nothing to locate");
+  assert.deepEqual(empty.legend.map((item) => item.label), ["企業攤"], "space marks add no facility legend entries");
 });
 
 test("service points name themselves by type and are grouped so the toilets sit together", () => {
