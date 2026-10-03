@@ -72,9 +72,8 @@ export default function AdminApp() {
       <div><h1>網站管理</h1>
         <p className={styles.backLink}><a href="/circle">社團入口</a> · <a href="/organizer">主辦工作區</a></p>
       </div>
-      {session && <div className={styles.identity}>
-        <span>{session.email}{session.isAdmin ? "・管理者" : ""}</span>
-        <SessionDeadline session={session} />
+      {session && <div className={styles.accountBar}>
+        <p className={styles.identityWho}><span>{session.email}{session.isAdmin ? "・管理者" : ""}</span><SessionDeadline session={session} /></p>
         <button type="button" onClick={() => void signOut().then(() => { setSession(null); setMessage(""); }).catch(() => setMessage("登出失敗，請稍後再試。"))}>登出</button>
       </div>}
     </header>
