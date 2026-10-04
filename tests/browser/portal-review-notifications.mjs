@@ -7,7 +7,7 @@ const journey = await start("portal-review-notifications");
 try {
   await clearMail();
   const admin = await signIn(journey, ADMIN, "circle");
-  await admin.goto(`${base}/admin`);
+  await admin.goto(`${base}/admin#review-notifications`);
   const panel = admin.locator("#review-notifications");
   const enabled = panel.getByRole("checkbox", { name: "接收待審通知" });
   const cadence = panel.getByLabel("通知頻率");

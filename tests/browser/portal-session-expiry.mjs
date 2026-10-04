@@ -22,6 +22,7 @@ async function routes(page, { isAdmin, failure = 0 }) {
       accountNotificationsSince: null, adminReviewNotificationsEnabled: false, publicationEnabled: true, contactUrl: "", claimReviewNotice: "", updatedAt: now, updatedBy: "fixture" },
       publicationMode: "disabled", services: null, publicationActivities: [] };
     else if (path === "/api/admin/map-contributions/drafts") body = { drafts: [] };
+    else if (path.startsWith("/api/admin/map-contributions/drafts/")) { status = 404; body = { error: "找不到指定草稿。" }; }
     else if (path.endsWith("/claims")) body = { claims: [], eventId: "sample" };
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });
@@ -37,7 +38,7 @@ try {
     assert.equal(await page.locator("time").getAttribute("datetime"), new Date(now + week).toISOString());
     await journey.capture(page, `${name}-session-deadline`);
     await page.clock.fastForward(week);
-    await page.getByText(entry === "admin" ? "登入已到期，請前往社團入口重新登入。" : "登入已到期，請重新登入。", { exact: true }).waitFor();
+    await page.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
     if (entry === "admin") {
       const login = page.getByRole("link", { name: "前往社團入口登入", exact: true });
       await login.waitFor();

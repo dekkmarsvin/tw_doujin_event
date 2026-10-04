@@ -23,8 +23,15 @@ export default function AdminApp() {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState("");
   const [today] = useState(() => taipeiDate(Date.now()));
+  const [navigationOpen, setNavigationOpen] = useState(() => window.matchMedia("(min-width: 761px)").matches);
   const expire = useCallback(() => { setSession(null); setMessage("登入已到期，請重新登入。"); }, []);
   useSessionExpiry(session, expire);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 761px)");
+    const resize = (event: MediaQueryListEvent) => setNavigationOpen(event.matches);
+    media.addEventListener("change", resize);
+    return () => media.removeEventListener("change", resize);
+  }, []);
   useEffect(() => {
     let current = true;
     void readSession().then(answer => { if (current) setSession(answer); })
@@ -60,7 +67,7 @@ export default function AdminApp() {
     {!ready ? <p className={styles.notice}>載入中…</p> : !session ? <section className={styles.card}><h2>請先登入</h2><a href={adminLoginEntry(window.location.href)}>前往社團入口登入</a></section>
       : !session.isAdmin ? <section className={styles.card}><h2>需要管理者權限</h2><p>目前帳號無法使用網站管理功能。</p><a href="/circle">返回社團入口</a></section>
         : <div className={ui.layout}>
-          <nav aria-label="管理項目"><details className={ui.navigation} open><summary>{labels[route.section]}</summary>
+          <nav aria-label="管理項目"><details className={ui.navigation} open={navigationOpen} onToggle={event => setNavigationOpen(event.currentTarget.open)}><summary>{labels[route.section]}</summary>
             {(["overview", "events", "circles", "accounts", "data", "settings"] as const).map(section => <a key={section} href={adminHref(section)} aria-current={route.section === section ? "page" : undefined}>{labels[section]}</a>)}
           </details></nav>
           <main className={ui.content}>
@@ -69,9 +76,9 @@ export default function AdminApp() {
             {unavailable ? <section className={styles.card}><h3>無法開啟指定頁面</h3><p>這個入口或活動目前無法使用。</p><a href="/admin">返回管理總覽</a></section>
               : route.section === "overview" ? <AdminOverview />
                 : route.section === "events" ? route.view === "publication" ? <AdminPublicationPanel />
-                  : <AdminMapReviewPanel event={event!} initialDraftId={route.draft} onEventChange={id => replaceRoute({ event: id, draft: "" })} onSelectDraft={draft => replaceRoute({ draft })} />
+                  : <AdminMapReviewPanel event={event!} initialDraftId={route.draft} onEventChange={id => replaceRoute({ event: id, draft: "" })} onSelectDraft={draft => replaceRoute({ event: event!.id, draft })} />
                   : route.section === "circles" ? route.view === "claims" ? <AdminReviewQueue key={`${route.event}:${route.claim}`} initialEventId={route.event} initialClaimId={route.claim} onEventChange={id => replaceRoute({ event: id, claim: "" })} />
-                    : <AdminTakedownPanel key={route.event} initialEventId={event!.id} initialQuery={route.q} onEventChange={id => replaceRoute({ event: id, q: "" })} onSearchChange={q => replaceRoute({ q })} />
+                    : <AdminTakedownPanel key={event!.id} initialEventId={event!.id} initialQuery={route.q} onEventChange={id => replaceRoute({ event: id, q: "" })} onSearchChange={q => replaceRoute({ event: event!.id, q })} />
                     : route.section === "accounts" ? <AdminRoster />
                       : route.section === "data" ? <AdminReferencePanel initialView={route.view as ReferenceView} onViewChange={view => replaceRoute({ view })} />
                         : route.section === "settings" ? <AdminSiteSettingsPanel /> : <AdminNotificationPanel email={session.email} />}

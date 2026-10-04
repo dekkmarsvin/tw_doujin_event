@@ -64,12 +64,13 @@ export function AdminSiteSettingsPanel() {
           <input id="site-account-mail" type="checkbox" role="switch" checked={form.accountNotificationsEnabled} onChange={event => patch({ accountNotificationsEnabled: event.target.checked })} /></label>
         <label className={settingsStyles.switch} htmlFor="site-review-mail" aria-label="全站寄送待審通知"><span><strong>全站寄送待審通知</strong><small>寄給已開啟待審通知的網站管理者，彙整活動申請、活動內容送審、社團認領與地圖貢獻的待審項目。</small></span>
           <input id="site-review-mail" type="checkbox" role="switch" checked={form.adminReviewNotificationsEnabled} onChange={event => patch({ adminReviewNotificationsEnabled: event.target.checked })} /></label>
-        <ServiceStatus label="寄信服務" result={data.services?.mail ?? null} pending={checking} />
+        <ServiceStatus label="寄信服務" result={data.services?.mail ?? null} pending={checking} requested={!!data.services} />
       </section>
       <section className={`${styles.card} ${settingsStyles.card}`}><h3>發布作業</h3>
         <label className={settingsStyles.switch} htmlFor="site-publication" aria-label="處理發布作業"><span><strong>處理發布作業</strong><small>暫停後續發布處理，已公開活動不受影響。</small></span>
           <input id="site-publication" type="checkbox" role="switch" disabled={data.publicationMode === "disabled"} checked={form.publicationEnabled} onChange={event => patch({ publicationEnabled: event.target.checked })} /></label>
-        <ServiceStatus label="發布功能" result={data.publicationMode === "disabled" ? { status: "unavailable", source: "發布設定", reason: "此環境尚未啟用 GitHub 發布能力。" } : data.services?.publication ?? null} pending={checking && data.publicationMode !== "disabled"} />
+        {data.publicationMode === "disabled" && <p>此環境未啟用發布能力。</p>}
+        <ServiceStatus label="發布服務" result={data.services?.publication ?? null} pending={checking} requested={!!data.services} />
         {data.publicationActivities.length ? <div className={settingsStyles.activities}><h4>目前發布作業</h4><ul>{data.publicationActivities.map(job => <li key={job.id}>
           <a href={`/organizer?candidate=${encodeURIComponent(job.candidateId)}&section=review`}>{job.eventName}</a>
           <span>{publicationProgress(job, data.settings.publicationEnabled)}</span>
@@ -84,6 +85,6 @@ export function AdminSiteSettingsPanel() {
     </div>
     {error && <p className={styles.error} role="alert">{error}</p>}
     <p className={settingsStyles.updated}>最後更新 {date(data.settings.updatedAt)} · {data.settings.updatedBy === "migration" ? "初始設定" : data.settings.updatedBy}</p>
-    {data.services?.checkedAt !== null && data.services?.checkedAt !== undefined && <p className={settingsStyles.updated}>服務檢查 {date(data.services.checkedAt)}</p>}
+    {data.services && <p className={settingsStyles.updated}>{data.services.checkedAt === null ? `已要求檢查 ${date(data.services.requestedAt)}` : `服務檢查 ${date(data.services.checkedAt)}`}</p>}
   </form>;
 }

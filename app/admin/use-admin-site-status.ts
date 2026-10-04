@@ -9,10 +9,15 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
   const [checking, setChecking] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const mounted = useRef(false);
+  const diagnosticInFlight = useRef(false);
   const version = useRef({ value: 0 });
   const applySaved = useCallback((answer: AdminSiteSettings) => {
     if (!mounted.current) return;
-    setData(answer); setUpdatedAt(Date.now()); setError(""); onLoaded?.(answer);
+    setData(answer); setUpdatedAt(Date.now()); setError("");
+    // A saved request remains pending across navigation; resume its existing
+    // bounded, read-only wait rather than presenting it as never checked.
+    if (!diagnosticInFlight.current) setChecking(answer.services?.checkedAt === null);
+    onLoaded?.(answer);
   }, [onLoaded]);
   const load = useCallback(async () => {
     const request = ++version.current.value;
@@ -50,16 +55,20 @@ export function useAdminSiteStatus(onLoaded?: (answer: AdminSiteSettings) => voi
     return () => { active = false; window.clearInterval(timer); };
   }, [checking, requestedAt, checkedAt]);
   const checkServices = async () => {
+    if (diagnosticInFlight.current) return;
+    diagnosticInFlight.current = true;
+    ++version.current.value;
     setChecking(true); setError("");
     try {
       const answer = await requestAdminServiceCheck();
       if (mounted.current) {
+        ++version.current.value;
         setData(current => current ? { ...current, services: answer.services } : current);
-        if (answer.services.checkedAt !== null) setChecking(false);
+        setChecking(answer.services.checkedAt === null);
       }
     } catch (failure) {
       if (mounted.current) { setChecking(false); setError(failure instanceof Error ? failure.message : "無法開始檢查。"); }
-    }
+    } finally { diagnosticInFlight.current = false; }
   };
   return { data, error, setError, checking, updatedAt, load, applySaved, checkServices };
 }
