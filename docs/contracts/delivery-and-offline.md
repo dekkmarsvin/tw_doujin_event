@@ -20,6 +20,8 @@ FF47 的舊資料沒有 Organizer 候選及身分分組檔。除原始固定 pin
 
 首頁原始 HTML 另帶一份 `WebSite` JSON-LD（`name`「場刊 Map」、`url` 正式網域首頁），供搜尋結果顯示網站名稱；Reader 啟動後不另外插入。介紹頁的站內連結都是最終網址（例如頁尾連到 `/privacy/`），不經轉址。
 
+`/portal/` 是給社團與主辦的功能介紹頁，同一次 build 由 `portalIntroPage()` 產生並列入 sitemap，沒有頁面腳本，HTML 同樣經 Function 加 CSP nonce；`_routes.json` 只包含頁面本身，`/portal/media/` 的示範動圖是靜態資產，不呼叫 Function。示範動圖為循環播放的 WebP，各附一張靜態畫格，`prefers-reduced-motion: reduce` 時改用靜態畫格；所有示範檔案須存在且尺寸一致，否則 build 失敗。這些檔案由維護者以 `scripts/capture-portal-demos.mjs` 對本機隔離環境與虛構 sample 資料重新錄製，不含真實社團或帳號資料。所有介紹頁頁尾連到 `/portal/` 與 `/privacy/`。
+
 介紹頁不加入地圖離線 precache，導覽仍 network-only；它們不得寫入 Reader 的離線 shell。社團介紹頁腳本自己的資產同樣不進 precache（`scripts/build-service-worker.mjs` 與 `tests/public-artifact.test.mjs` 把關），與 Reader 共用的 chunk 除外。原 query 地圖仍使用既有離線行為。介紹頁 HTML 為 `private, no-store`；sitemap 的公開 HTTP 快取最多 5 分鐘後重新驗證；這不新增輪詢。
 
 ### 社團介紹頁的頁面腳本

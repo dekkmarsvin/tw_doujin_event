@@ -18,8 +18,10 @@ test("built sitemap covers exactly the staged introductions and grouped circles"
       expected.push(`https://map.kotoban.top/events/${eventId}/circles/${circle.id}/`);
     }
   }
+  // The circle and organizer introduction comes after every event.
+  expected.push("https://map.kotoban.top/portal/");
   const sitemap = await read("sitemap.xml");
-  const urls = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
+  const urls =[...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
   assert.deepEqual(urls, expected);
   for (const url of urls.slice(1)) {
     const html = await read(`${new URL(url).pathname.slice(1)}index.html`);

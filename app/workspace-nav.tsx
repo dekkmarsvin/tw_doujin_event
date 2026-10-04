@@ -27,6 +27,9 @@ export function WorkspaceEntries({ current, className }: { current: Workspace; c
         <a href={workspace.href} aria-current={workspace.id === current ? "page" : undefined}><b>{workspace.label}</b><small>{workspace.description}</small></a>
       </li>)}</ul>
     </nav>
+    {/* What each workspace opens lives on its own public page, so signing in
+        stays one short step for people who already know. */}
+    <p><a href="/portal/" className={styles.introLink}>第一次使用？看看社團和主辦能做什麼</a></p>
   </div>;
 }
 

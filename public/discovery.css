@@ -47,3 +47,22 @@
 .booth-plan { display:flex; }
 @media(max-width:540px) { .booth-actions > * { flex:1 1 100%; justify-content:center; } .booth-plan > * { flex:1; } .discovery .entries > * { flex:1 1 0; } }
 .discovery .claim { margin-top:32px; }
+.discovery footer a + a { margin-left:20px; }
+/* /portal/: what circles and organizers get after signing in. Each section
+   leads with its demos, then how to get in beside what it opens. */
+.portal-lead { max-width:640px; color:#4d5660; font-size:17px; }
+.portal-jump { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.portal-jump a { display:inline-flex; align-items:center; min-height:44px; padding:0 16px; border:1px solid #cfd5cf; border-radius:999px; background:#f9faf8; color:#202a35; font-weight:700; text-decoration:none; }
+.portal-jump a:hover { background:#f0f2ef; }
+.portal-section { margin-top:48px; padding-top:32px; border-top:1px solid #dfe3df; scroll-margin-top:16px; }
+.portal-section .eyebrow { margin:0; font-weight:700; }
+.discovery .portal-section h2 { margin:4px 0 20px; font-size:clamp(22px,4vw,28px); }
+.portal-demos { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr)); gap:16px; }
+.portal-demos figure { margin:0; }
+.portal-demos img { display:block; width:100%; height:auto; border:1px solid #dfe3df; border-radius:12px; background:#f9faf8; }
+.portal-demos figcaption { margin-top:8px; color:#626b73; font-size:14px; }
+.portal-columns { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:8px 32px; }
+.portal-columns :is(ol,ul) { margin:10px 0 0; padding-left:1.4em; }
+.portal-columns li + li { margin-top:6px; }
+.discovery .portal-note { color:#626b73; font-size:14px; }
+.portal-section .entries { margin-top:20px; }

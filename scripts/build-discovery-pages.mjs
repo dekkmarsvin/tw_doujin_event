@@ -3,6 +3,16 @@ import { dirname, resolve } from "node:path";
 import { createServer, isRunnableDevEnvironment } from "vite";
 
 const root = resolve(import.meta.dirname, "..");
+
+/** Canvas size from a WebP's VP8X header, which every animated WebP has. */
+function webpSize(bytes, file) {
+  if (bytes.toString("ascii", 0, 4) !== "RIFF" || bytes.toString("ascii", 8, 12) !== "WEBP") throw new Error(`${file} is not a WebP.`);
+  const chunk = bytes.toString("ascii", 12, 16);
+  if (chunk === "VP8X") return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+  if (chunk === "VP8L") { const bits = bytes.readUInt32LE(21); return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }; }
+  if (chunk === "VP8 ") return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
+  throw new Error(`${file} has no readable size.`);
+}
 const dist = resolve(root, "dist");
 const stage = JSON.parse(await readFile(resolve(root, ".event-data-stage.json"), "utf8"));
 const entries = stage.events ?? [{ eventId: stage.eventId, source: stage.source }];
@@ -12,7 +22,7 @@ try {
   if (!isRunnableDevEnvironment(environment)) throw new Error("Vite discovery environment is not runnable.");
   const { parseEventDefinition } = await environment.runner.import("/app/event-catalog.ts");
   const { isCircleCatalogPayload } = await environment.runner.import("/app/circle-records.ts");
-  const { discoveryPages, homepageSummary, metadataHtml, sitemapHtml, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
+  const { discoveryPages, homepageSummary, metadataHtml, PORTAL_DEMO_FILES, PORTAL_INTRO_PATH, portalIntroPage, sitemapHtml, websiteSchemaHtml } = await environment.runner.import("/app/static-discovery.ts");
   const { pageMetadata } = await environment.runner.import("/app/seo.ts");
   // Vite built the circle page's script from a template; its tags are all the
   // template is for. Every circle page carries them, and the template itself is
@@ -39,6 +49,13 @@ try {
       paths.push(path);
     }
   }
+  // The intro page's demos share one size, so the page reserves their space
+  // before they load. A missing or mismatched file fails the build.
+  const demoSizes = await Promise.all(PORTAL_DEMO_FILES.map(async (file) => webpSize(await readFile(resolve(dist, "portal", "media", file)), file)));
+  if (new Set(demoSizes.map(({ width, height }) => `${width}x${height}`)).size !== 1) throw new Error("Portal demos must share one size.");
+  await mkdir(resolve(dist, "portal"), { recursive: true });
+  await writeFile(resolve(dist, "portal", "index.html"), portalIntroPage(demoSizes[0]));
+  paths.push(PORTAL_INTRO_PATH);
   const indexPath = resolve(dist, "index.html");
   const index = await readFile(indexPath, "utf8");
   // No static canonical on the shared Reader document: query links resolve in JS.

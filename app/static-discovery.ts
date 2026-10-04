@@ -2,7 +2,7 @@ import type { EventDefinition } from "./event-catalog";
 import type { CircleCatalogPayload } from "./circle-records";
 import { placementStatusLabel } from "./circle-records";
 import { dayDateLabel, eventCalendar, eventDayCalendarDate, eventDayDate, taipeiDate } from "./event-calendar";
-import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SITE_TITLE } from "./seo";
+import { circleBooths, circlePath, eventPath, pageMetadata, PUBLIC_ORIGIN, readerLink, SHARE_IMAGE, SITE_TITLE } from "./seo";
 import { CIRCLE_PAGE_ACTIONS_ID, CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE, CIRCLE_PAGE_ROOT_ID, circlePageData, circlePageDataHtml } from "./circle-page-data";
 import { PUBLIC_HEADER, publicHeaderHtml, publicLoginHref } from "./public-header";
 
@@ -24,7 +24,7 @@ ${canonical ? `<link rel="canonical" href="${escapeHtml(metadata.canonical)}"><m
 function documentHtml(metadata: ReturnType<typeof pageMetadata>, content: string, { loginHref, schema, assets = "" }: { loginHref: string; schema?: unknown; assets?: string }) {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 ${metadataHtml(metadata)}<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/fonts/geist.css"><link rel="stylesheet" href="/discovery.css"><link rel="stylesheet" href="${PUBLIC_HEADER.stylesheet}">
-${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}${assets}</head><body class="discovery">${publicHeaderHtml(loginHref)}<main>${content}</main><footer>${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
+${schema ? `<script type="application/ld+json">${json(schema)}</script>` : ""}${assets}</head><body class="discovery">${publicHeaderHtml(loginHref)}<main>${content}</main><footer>${link(PORTAL_INTRO_PATH, "社團與主辦")}${link("/privacy/", "隱私權與資料使用")}</footer></body></html>`;
 }
 
 // Postal code, country, city or county, postal code, district, the rest.
@@ -192,6 +192,97 @@ function boothCardHtml(event: EventDefinition, card: BoothCard) {
   return `<li class="booth-card${status ? " retired" : ""}"><p class="booth-when">${escapeHtml(card.when)}</p><p class="booth-codes">${codes}</p>
 ${card.where ? `<p class="booth-where">${escapeHtml(card.where)}</p>` : ""}${status ? `<p class="status">${escapeHtml(status)}</p>` : ""}
 <div class="booth-actions">${link(readerLink(event, card.placements[0]), "在地圖查看", "booth-map")}${card.planSlot ? `<span class="booth-plan" ${CIRCLE_PAGE_PLAN_DAY_ATTRIBUTE}="${escapeHtml(String(card.day))}"></span>` : ""}</div></li>`;
+}
+
+export const PORTAL_INTRO_PATH = "/portal/";
+
+type PortalDemo = { file: string; alt: string; caption: string };
+type PortalSection = {
+  id: string; title: string; tagline: string;
+  access: { heading: string; ordered: boolean; items: readonly string[] };
+  abilities: readonly string[]; notes: readonly string[];
+  demos: readonly PortalDemo[]; action: { href: string; label: string };
+};
+
+// What signing in opens, for circles and organizers who have not used the
+// site yet. The sign-in pages link here instead of carrying it, so a returning
+// user signs in in one short step. Every line must stay true to the circle and
+// organizer contracts: an action only some roles have names the role.
+const PORTAL_SECTIONS: readonly PortalSection[] = [
+  {
+    id: "circle", title: "參展社團", tagline: "讓讀者在地圖上就認識你",
+    access: { heading: "怎麼開始", ordered: true, items: [
+      "輸入 email，收信點連結登入",
+      "找到你的社團，送出認領。用和場刊登錄的官網同網域的信箱登入，或在場刊登錄的網頁貼出驗證碼，可以當場通過；其他情況由人工確認。",
+      "通過後就能開始編輯",
+    ] },
+    abilities: [
+      "上傳品書，出現在「逛品書」",
+      "補上販售資訊、筆名、連結、社團主題與作品標籤",
+      "先預覽讀者會看到的樣子再儲存",
+      "把這次的出展頁分享到你的社群",
+    ],
+    notes: ["攤位、日期和社團名稱以主辦公布的為準。每場活動要分別認領。"],
+    demos: [
+      { file: "circle-map-card", alt: "讀者在地圖上點選攤位，社團卡片顯示社團填寫的販售資訊與品書", caption: "讀者在地圖點你的攤位，看到的就是你填的內容" },
+      { file: "circle-editor", alt: "社團編輯販售資訊，旁邊的預覽同步更新後儲存", caption: "邊填邊預覽，確認後再儲存" },
+    ],
+    action: { href: "/circle", label: "前往社團資料" },
+  },
+  {
+    id: "organizer", title: "活動主辦", tagline: "不寫程式，也能把活動放上地圖",
+    access: { heading: "怎麼取得權限", ordered: false, items: [
+      "收到邀請信：用信裡的連結登入，就會加入那場活動",
+      "開放申請時：登入後送出活動申請，網站管理者核准後，你就是這場活動的負責人",
+    ] },
+    abilities: [
+      "設定活動日期、場館與場地，下一場活動可以沿用",
+      "匯入攤位名單，先預覽再儲存",
+      "上傳配置圖，在上面畫出攤位地圖",
+      "檢查並預覽讀者會看到的頁面，送審核准後發布",
+      "負責人可以邀請協作者一起建置",
+      "活動公開後，審核這場活動的社團認領",
+    ],
+    notes: ["活動資料和地圖要用桌機編輯，申請和審核進度用手機也能看。"],
+    demos: [
+      { file: "organizer-import", alt: "主辦選擇攤位名單檔案，預覽匯入結果後確認儲存", caption: "匯入攤位名單，預覽沒問題再儲存" },
+      { file: "organizer-map", alt: "主辦上傳場地配置圖，在圖上畫出攤位", caption: "在配置圖上畫出攤位地圖" },
+    ],
+    action: { href: "/organizer", label: "前往主辦工作區" },
+  },
+];
+
+/** Every demo file the page references, for the build to check and measure. */
+export const PORTAL_DEMO_FILES = PORTAL_SECTIONS.flatMap((section) => section.demos.flatMap(({ file }) => [`${file}.webp`, `${file}-still.webp`]));
+
+/** A looping demo, with its still frame for readers who asked for less motion. */
+function portalDemoHtml({ file, alt, caption }: PortalDemo, size: { width: number; height: number }) {
+  const media = `/portal/media/${file}`;
+  return `<figure><picture><source media="(prefers-reduced-motion: reduce)" srcset="${media}-still.webp"><img src="${media}.webp" alt="${escapeHtml(alt)}" width="${size.width}" height="${size.height}" loading="lazy" decoding="async"></picture><figcaption>${escapeHtml(caption)}</figcaption></figure>`;
+}
+
+/**
+ * `/portal/`: what circles and organizers get after signing in, and how.
+ * `demoSize` is the pixel size every demo shares, read from the files at build.
+ */
+export function portalIntroPage(demoSize: { width: number; height: number }) {
+  const metadata = {
+    title: "社團與主辦｜場刊 Map",
+    description: "參展社團認領後可以補上品書與販售資訊，活動主辦不寫程式也能匯入攤位名單、畫出攤位地圖。用 email 登入，不用設定密碼。",
+    canonical: PUBLIC_ORIGIN + PORTAL_INTRO_PATH,
+    image: SHARE_IMAGE,
+  };
+  const list = (items: readonly string[], ordered = false) => `<${ordered ? "ol" : "ul"}>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</${ordered ? "ol" : "ul"}>`;
+  const sections = PORTAL_SECTIONS.map((section) => `<section id="${section.id}" class="portal-section" aria-labelledby="${section.id}-title">
+<p class="eyebrow">${escapeHtml(section.title)}</p><h2 id="${section.id}-title">${escapeHtml(section.tagline)}</h2>
+<div class="portal-demos">${section.demos.map((demo) => portalDemoHtml(demo, demoSize)).join("")}</div>
+<div class="portal-columns"><div><h3>${escapeHtml(section.access.heading)}</h3>${list(section.access.items, section.access.ordered)}</div>
+<div><h3>你可以</h3>${list(section.abilities)}</div></div>
+${section.notes.map((note) => `<p class="portal-note">${escapeHtml(note)}</p>`).join("")}
+<p class="entries">${link(section.action.href, section.action.label, "primary")}</p></section>`).join("");
+  return documentHtml(metadata, `<h1>社團與主辦</h1>
+<p class="portal-lead">用 email 登入，不用設定密碼，登入後 7 天內不用再登入。逛活動、收藏和排行程都不用登入。</p>
+<nav class="portal-jump" aria-label="本頁內容">${link("#circle", "參展社團")}${link("#organizer", "活動主辦")}</nav>${sections}`, { loginHref: publicLoginHref() });
 }
 
 export function sitemapHtml(paths: readonly string[]) {

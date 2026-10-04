@@ -57,7 +57,11 @@ export default function ReaderHelp({ eventId, dataLastUpdatedLabel, onCheckOffli
         <h3 id="reader-circle-entry-title">你是參展社團嗎？</h3>
         {/* Names the event on screen: without it the portal opens on the last event
             this browser maintained, or the nearest by date, not the one being read. */}
-        <p>到<a href={`/circle?${new URLSearchParams({ event: eventId })}`}>社團專區</a>驗證身分後，即可補充販售資訊、連結與代表圖。</p>
+        <p>到<a href={`/circle?${new URLSearchParams({ event: eventId })}`}>社團資料</a>認領後，可以補上品書、販售資訊與連結。<a href="/portal/#circle">看看能做什麼</a></p>
+      </section>
+      <section className={styles.circleEntry} aria-labelledby="reader-organizer-entry-title">
+        <h3 id="reader-organizer-entry-title">你是活動主辦嗎？</h3>
+        <p>不寫程式，也能建立活動、匯入攤位名單並畫出攤位地圖。<a href="/portal/#organizer">看看能做什麼</a></p>
       </section>
       <section className={styles.about} aria-labelledby="reader-about-title">
         <h3 id="reader-about-title">關於本頁</h3>
