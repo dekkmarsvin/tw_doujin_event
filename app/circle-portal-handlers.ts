@@ -8,6 +8,7 @@ import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
 import { circleOverrideFieldsProblem, circleRetentionExpiresAt, isRetentionChoice, type CircleOverrideFields } from "./circle-overrides";
 import { getEventDefinition } from "./event-catalog";
+import { eventDayDate } from "./event-calendar";
 import { groupOrganizerCircles } from "./organizer-circle-groups.mjs";
 import { isNotificationCadence } from "./review-notifications";
 import { parseOrganizerApplication, type OrganizerApplication, type OrganizerApplicationInput } from "./organizer-applications";
@@ -2497,7 +2498,16 @@ export function createCirclePortalHandlers({
   async function listOrganizerCandidates(request: Request) {
     const current = await currentSession(request);
     if (!current) return json({ error: "尚未登入。" }, 401);
-    const events = await repository.listOrganizerCandidatesForAccount(current.accountId, await isAdmin(current.email));
+    const admin = await isAdmin(current.email);
+    const events = await repository.listOrganizerCandidatesForAccount(current.accountId, admin);
+    const dateRange = (daysJson: string | null, amendmentsJson: string | null) => {
+      const days = JSON.parse(daysJson ?? "[]") as { id: string; date: string }[];
+      const amendments = new Map((JSON.parse(amendmentsJson ?? "[]") as { id: string; date: string }[])
+        .map(day => [day.id, day.date]));
+      const dates = days.map(day => amendments.get(day.id) ?? day.date)
+        .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date) && eventDayDate(date, "") !== null).sort();
+      return dates.length ? { start: dates[0], end: dates[dates.length - 1] } : null;
+    };
     return json({ events: events.map((event) => ({
       id: event.id,
       tentativeName: event.tentative_name,
@@ -2511,6 +2521,7 @@ export function createCirclePortalHandlers({
       role: event.role,
       operation: event.publication_operation,
       workspaceMode: event.workspace_mode,
+      ...(admin && "event_days_json" in event ? { dateRange: dateRange(event.event_days_json, event.amendment_days_json) } : {}),
     })) });
   }
 

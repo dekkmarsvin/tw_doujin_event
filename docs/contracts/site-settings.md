@@ -11,7 +11,7 @@
 同環境 Pages 與排程 Worker 共用 D1 `site_settings` 單筆 `id='global'`。Pages 控制面以 `INSERT OR IGNORE` 保留已儲存的設定；新資料庫初始為暫停申請、空名單、通知與發布關閉，之後由 Admin 啟用。舊營運環境旗標已移除，不作初始化或 runtime fallback。Worker 不初始化這筆資料；若先到則跳過工作並記錄未初始化，待 Pages 完成後下一 tick 讀取。Runtime schema 繼續沿用單一 initializer/version。
 
 
-`GET /api/admin/site-settings` 只供有效網站管理者讀取完整設定、唯讀發布能力、進行中活動及最近一次診斷。`PUT` 接受完整 `settings` 與 `expectedUpdatedAt`，驗證 enum、boolean、email 陣列並正規化、去空白及去重；聯絡連結只接受空字串或 https（500 字內），認領審核中說明為 200 字內的自由文字，兩者去除前後空白。時間／epoch／actor 由伺服器建立；交易內重查有效帳號、session、admin 及舊更新版本，同 batch 寫入 audit。過期表單回 409，不覆寫其他管理者的修改。Audit 保留切換值、名單數量與聯絡設定，不複製 email 名單。
+`GET /api/admin/site-settings` 只供有效網站管理者讀取完整設定、唯讀發布能力、進行中與未解決發布活動及最近一次診斷。`PUT` 接受完整 `settings` 與 `expectedUpdatedAt`，驗證 enum、boolean、email 陣列並正規化、去空白及去重；聯絡連結只接受空字串或 https（500 字內），認領審核中說明為 200 字內的自由文字，兩者去除前後空白。時間／epoch／actor 由伺服器建立；交易內重查有效帳號、session、admin 及舊更新版本，同 batch 寫入 audit。過期表單回 409，不覆寫其他管理者的修改。Audit 保留切換值、名單數量與聯絡設定，不複製 email 名單。
 
 Repository／isolate 只快取初始化，不快取可變設定。申請及通知 producer 讀最新 D1；scheduler 在每 tick／新工作邊界讀設定。管理者儲存後顯示「已生效」、更新時間與操作者。
 
@@ -25,9 +25,9 @@ Repository／isolate 只快取初始化，不快取可變設定。申請及通�
 
 ## 活動狀態與唯讀健康檢查
 
-管理總覽唯讀顯示已保存的申請模式、發布開關、帳號通知與待審通知；設定表單仍是唯一修改入口，未保存輸入與個人偏好不改總覽。總覽與審核發布頁沿用 queued／publishing 作業及精確工作區連結；環境發布能力與已保存開關、最近服務結果分開。讀取失敗顯示未知，保留舊值時標示更新時間及更新失敗。進入或一般刷新只讀取 D1，不發起診斷。
+管理總覽唯讀顯示已保存的申請模式、發布開關、帳號通知與待審通知；設定表單仍是唯一修改入口，未保存輸入與個人偏好不改總覽。總覽與審核發布頁列出 queued／publishing 及目前仍有效的 failed 作業：job 對應候選目前儲存版本，且候選未 abandoned。失敗不因不可重試、發布暫停、環境未啟用或同活動另有較新版候選而消失；已完成與確定歷史工作不列入問題。摘要附 edition、階段、更新時間與指定候選 review 連結，實際恢復沿用原工作區及 API。環境發布能力與已保存開關、最近服務結果分開。讀取失敗顯示未知，保留舊值時標示更新時間及更新失敗。進入或一般刷新只讀取 D1，不發起診斷。
 
-Admin 顯示目前 queued／publishing 活動名稱、狀態、階段及工作區連結；runtime 已暫停時顯示已暫停。發布模式 disabled 時停用發布控制；連線或診斷失敗仍可暫停處理。
+Admin 顯示目前 queued／publishing／failed 活動名稱、狀態、階段及工作區連結；runtime 已暫停時等待中的作業顯示已暫停，失敗仍顯示未完成。發布模式 disabled 時停用發布控制；連線或診斷失敗仍可暫停處理。
 
 「檢查服務」在原 D1 `site_service_check` 保存一筆可覆寫的請求／結果，由既有每分鐘 Worker 使用自己的實際憑證檢查。沒有新 Worker／排程角色、診斷歷史或郵件寄送。Admin 僅在這一次請求等待結果，最多 90 秒；逾時顯示尚未收到結果，不宣稱服務故障。較早結果不能覆寫較新請求。
 

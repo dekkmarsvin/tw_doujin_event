@@ -99,7 +99,7 @@ try {
     routes: (page) => routes(page, "admin", "success") });
   await mobile.getByRole("heading", { name: draft.event.name, exact: true }).waitFor();
   await mobile.getByText("發布狀態：發布未完成", { exact: true }).waitFor();
-  await mobile.getByText("活動資料與地圖編輯請改用桌機。請在桌機開啟同一封信的連結，接續這個工作區。", { exact: true }).waitFor();
+  await mobile.getByText("活動資料與地圖編輯請改用桌機。請在桌機開啟同一個連結，接續這個工作區。", { exact: true }).waitFor();
   assert.equal(await mobile.getByRole("button", { name: "核對還原並終止", exact: true }).count(), 0);
   await journey.capture(mobile, "recovery-mobile-desktop-guidance");
   await mobile.close();

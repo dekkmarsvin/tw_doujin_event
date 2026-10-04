@@ -69,6 +69,8 @@ export type OrganizerEventSummary = {
   updatedByRole: string;
   role: OrganizerRole | "admin";
   workspaceMode: "guided" | "binder";
+  /** A small Admin list projection; full workspace reads keep their existing shape. */
+  dateRange?: { start: string; end: string } | null;
 };
 
 export type OrganizerEventDetail = {
