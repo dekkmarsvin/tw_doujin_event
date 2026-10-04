@@ -257,6 +257,7 @@ test("grant acceptance, role changes, self revocation and invitation-only cancel
   const own = sent.filter(mail => mail.to === "editor@example.test");
   assert.equal(own.length, 1, "lost grant cancels old grants, but own revocation remains");
   assert.match(own[0].subject, /曾被移除/); assert.doesNotMatch(own[0].text, /candidate=/);
+  assert.ok(sent.every(mail => !mail.text.includes("內容版本")), "permission notices carry no content version");
   await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "pending@example.test", action: "invite", actorAccountId: owner, now });
   await repo.manageOrganizerCollaborator({ role: "editor", candidateId: "candidate", email: "pending@example.test", action: "revoke", actorAccountId: owner, now });
   assert.equal((await items("kind = 'member.revoked'")).length, 2);

@@ -147,7 +147,7 @@ export function createAccountNotificationRepository(database: D1Database, ensure
         OR (kind IN ('review.approved', 'publication.failed') AND EXISTS (
           SELECT 1 FROM organizer_event_candidates c WHERE c.id = n.candidate_id
             AND (c.current_version <> n.version OR c.status = 'published' OR (n.kind = 'review.approved' AND c.status = 'failed')))))`).bind(batch.id, now, config.since).run();
-    const items = (await database.prepare(`SELECT n.*, CASE WHEN c.id IS NULL THEN NULL ELSE ${organizerCandidateEdition} END AS edition
+    const items = (await database.prepare(`SELECT n.*, CASE WHEN n.version IS NULL OR c.id IS NULL THEN NULL ELSE ${organizerCandidateEdition} END AS edition
       FROM account_notification_items n LEFT JOIN organizer_event_candidates c ON c.id = n.candidate_id WHERE n.batch_id = ?1 AND n.state = 'pending'
       AND ${eligible} AND EXISTS (SELECT 1 FROM account_notification_batches b WHERE b.id = n.batch_id
         AND b.lease_token = ?2 AND b.state = 'pending' AND b.lease_until > ?3 AND b.retry_at <= ?3)
