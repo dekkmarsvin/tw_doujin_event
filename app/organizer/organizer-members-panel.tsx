@@ -42,7 +42,8 @@ export function MembersPanel({ session, detail, onChanged, onClose }: {
   onClose: () => void;
 }) {
   const [needsLogin, setNeedsLogin] = useState(false);
-  const owner = detail.event.role === "owner";
+  // ADR-0080: the site's admins manage members of any activity, Owner or not.
+  const manager = detail.event.role === "owner" || session.isAdmin;
   const section = { detail, onChanged, onUnauthorized: () => setNeedsLogin(true) };
   return <section className={styles.panel}>
     <div className={styles.panelHead}>
@@ -50,9 +51,8 @@ export function MembersPanel({ session, detail, onChanged, onClose }: {
       <button type="button" className={styles.ghost} onClick={onClose}>返回活動資料</button>
     </div>
     {needsLogin && <p><a href="/organizer?reauth=1">重新登入並返回這個活動</a></p>}
-    {!owner && <p className={styles.warning}>{session.isAdmin
-      ? "管理協作者需要這個活動的負責人身分。" : "管理成員需要負責人身分，請聯絡這個活動的負責人。"}</p>}
-    <CollaboratorSection {...section} blocked={!owner} />
-    {(owner || session.isAdmin) && <OwnerSection {...section} />}
+    {!manager && <p className={styles.warning}>管理成員需要負責人身分，請聯絡這個活動的負責人。</p>}
+    <CollaboratorSection {...section} blocked={!manager} />
+    {manager && <OwnerSection {...section} />}
   </section>;
 }

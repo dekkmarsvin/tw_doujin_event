@@ -70,7 +70,7 @@ FF47 adapter 不辨識企業攤與舞台，必須在送審前手動新增。沒�
 
 ### 6. 驗證、送審與核准
 
-依[主辦單位工作區契約](../contracts/organizer-workspace.md)：`POST …/validate` → `POST …/preview` → `POST …/submit`（僅 Owner），再由全域管理者以 `POST /api/admin/organizer/events/:candidateId/review` 核准。
+依[主辦單位工作區契約](../contracts/organizer-workspace.md)：`POST …/validate` → `POST …/preview` → `POST …/submit`（Owner 或全域管理者），再由全域管理者以 `POST /api/admin/organizer/events/:candidateId/review` 核准。
 
 送審會固定一份 submission snapshot（新活動為 `organizer-submission-snapshot/3`，已發布修正為 `/4`），包含每份地圖內容，並以其 SHA-256 作為 approval hash。
 

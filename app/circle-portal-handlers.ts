@@ -3263,7 +3263,7 @@ export function createCirclePortalHandlers({
       return json({ error: "Email 與動作（邀請／重寄／移除）為必填。" }, 400);
     }
     if (role === "owner" && !access.admin && access.role !== "owner") return json({ error: "只有這個活動的負責人或網站管理者可以管理負責人。" }, 403);
-    if (role === "editor" && access.role !== "owner") return json({ error: "只有負責人可以管理協作者。" }, 403);
+    if (role === "editor" && !access.admin && access.role !== "owner") return json({ error: "只有負責人或網站管理者可以管理協作者。" }, 403);
     const candidate = await repository.getOrganizerCandidate(candidateId);
     if (!candidate) return json({ error: "找不到活動。" }, 404);
     const ipHash = await clientIpHash(request);
@@ -3283,7 +3283,7 @@ export function createCirclePortalHandlers({
       });
     if (!result.ok) {
       const error = result.reason === "forbidden" ? role === "owner"
-        ? "只有這個活動的負責人或網站管理者可以管理負責人。" : "只有負責人可以管理協作者。"
+        ? "只有這個活動的負責人或網站管理者可以管理負責人。" : "只有負責人或網站管理者可以管理協作者。"
         : result.reason === "last_owner" ? "每個活動至少需要一位負責人。"
         : result.reason === "already_owner" ? "這個信箱已是活動負責人，不需要再邀請為協作者。"
         : result.reason === "pending" ? "這個信箱已有待接受的邀請，請按「重寄邀請信」。"
@@ -3303,7 +3303,9 @@ export function createCirclePortalHandlers({
     let invitationDelivery: "sent" | "failed" | "unknown" = "sent";
     try {
       await sendOrganizerInvitation(email, config.now(), ipHash, access.current.accountId,
-        { eventName: candidate.tentative_name, inviterRole: role === "owner" && access.admin ? "admin" : "owner" });
+        // The letter names who is inviting: an admin acting without this
+        // event's Owner grant is the site, not the event's Owner.
+        { eventName: candidate.tentative_name, inviterRole: access.admin && (role === "owner" || access.role !== "owner") ? "admin" : "owner" });
     } catch (error) {
       const failure = mailFailure(error);
       invitationDelivery = failure.delivery;
@@ -3317,7 +3319,7 @@ export function createCirclePortalHandlers({
   async function submitOrganizerCandidate(request: Request, candidateId: string) {
     const access = await organizerAccess(request, candidateId);
     if (!access.ok) return access.response;
-    if (access.role !== "owner") return json({ error: "只有負責人可以送審。" }, 403);
+    if (access.role !== "owner" && !access.admin) return json({ error: "只有負責人或網站管理者可以送審。" }, 403);
     const body = await readJson(request);
     const expectedVersion = body?.expectedVersion;
     if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 1) return json({ error: "版本資訊無效，請重新載入。" }, 400);
@@ -3384,9 +3386,9 @@ export function createCirclePortalHandlers({
       candidateId, actorAccountId: access.current.accountId,
       expectedVersion: expectedVersion as number, now: config.now(),
     });
-    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有負責人可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
+    if (!result.ok) return json({ error: result.reason === "forbidden" ? "只有負責人或網站管理者可以送審。" : "版本或狀態已變更。", conflict: result }, result.reason === "forbidden" ? 403 : 409);
     await repository.writeAudit({
-      at: config.now(), actorAccountId: access.current.accountId, actorRole: "organizer_owner",
+      at: config.now(), actorAccountId: access.current.accountId, actorRole: access.role === "owner" ? "organizer_owner" : "admin",
       action: "organizer_event.submitted", subjectType: "organizer_event", subjectId: candidateId,
       detail: { version: expectedVersion, revisionHash }, ipHash: await clientIpHash(request),
     });

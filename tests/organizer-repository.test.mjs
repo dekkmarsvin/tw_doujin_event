@@ -1143,6 +1143,47 @@ test("optimistic versions refuse stale edits and editors cannot submit", async (
   }), { ok: true, status: "submitted" });
 });
 
+test("a site admin without the Owner grant submits and manages collaborators, and loses both with the roster", async () => {
+  // ADR-0080. The write itself rechecks the roster, as it does the Owner grant.
+  await repository.createOrganizerCandidate({
+    id: "candidate-admin-acts", tentativeName: "管理者代辦", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW,
+  });
+  const complete = structuredClone(initialDraft);
+  complete.event.id = "admin-acts";
+  complete.event.days = [{ id: "1", label: "第一日", date: "2026-11-07" }];
+  await repository.saveOrganizerCandidate({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 1,
+    eventId: "admin-acts", draftJson: JSON.stringify(complete), now: NOW + 1, admin: true,
+  });
+  assert.equal(await repository.organizerRole("candidate-admin-acts", adminId), null, "the admin holds no grant");
+  assert.deepEqual(await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test",
+    role: "editor", action: "invite", now: NOW + 2,
+  }), { ok: true, result: "invited" });
+  assert.deepEqual(await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-admin-acts", actorAccountId: editorId, email: "other@example.test",
+    role: "editor", action: "invite", now: NOW + 2,
+  }), { ok: false, reason: "forbidden" }, "an account with neither grant nor roster place still cannot");
+
+  await database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+  assert.deepEqual(await repository.manageOrganizerCollaborator({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, email: "editor@example.test",
+    role: "editor", action: "revoke", now: NOW + 3,
+  }), { ok: false, reason: "forbidden" });
+  assert.deepEqual(await repository.submitOrganizerCandidate({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 2, now: NOW + 3,
+  }), { ok: false, reason: "forbidden" });
+  await repository.addAdmin("admin@example.test", "bootstrap", NOW + 4);
+
+  assert.deepEqual(await repository.submitOrganizerCandidate({
+    candidateId: "candidate-admin-acts", actorAccountId: adminId, expectedVersion: 2, now: NOW + 5,
+  }), { ok: true, status: "submitted" });
+  const submitted = await repository.getOrganizerCandidate("candidate-admin-acts");
+  assert.equal(submitted.submitted_by, adminId);
+  assert.equal(submitted.last_updated_role, "admin");
+});
+
 test("event id locks at submission while requested changes can produce a new reviewed revision", async () => {
   await repository.createOrganizerCandidate({
     id: "candidate-pf",
@@ -1549,6 +1590,60 @@ test(`the last Owner survives two ${actors} revoking the final two at once`, asy
     "SELECT COUNT(*) AS n FROM organizer_event_grants WHERE candidate_id = 'candidate-race' AND role = 'owner' AND revoked_at IS NULL",
   ).first();
   assert.equal(owners.n, 1, "the candidate must never be left ownerless");
+});
+}
+
+for (const operation of ["invite", "resend", "revoke-grant", "revoke-invitation"]) {
+test(`collaborator management rechecks a grantless admin's roster place at ${operation}`, async () => {
+  // ADR-0080: an admin with no grant here acts on the roster alone, so losing
+  // it between the check and the write must stop the write.
+  const candidateId = "collaborator-admin-race";
+  await repository.createOrganizerCandidate({ id: candidateId, tentativeName: "活動", ownerEmail: "owner@example.test",
+    createdByAccountId: adminId, draftJson: JSON.stringify(initialDraft), now: NOW });
+  await repository.acceptOrganizerInvitations({ accountId: ownerId, email: "owner@example.test", now: NOW + 1 });
+  const editor = { candidateId, actorAccountId: ownerId, role: "editor" };
+  await repository.manageOrganizerCollaborator({ ...editor, email: "editor@example.test", action: "invite", now: NOW + 2 });
+  await repository.acceptOrganizerInvitations({ accountId: editorId, email: "editor@example.test", now: NOW + 3 });
+  await repository.manageOrganizerCollaborator({ ...editor, email: "pending@example.test", action: "invite", now: NOW + 4 });
+  assert.equal(await repository.organizerRole(candidateId, adminId), null);
+  const email = operation === "revoke-grant" ? "editor@example.test" : operation === "invite" ? "new@example.test" : "pending@example.test";
+  let armed = false;
+  let authorityReads = 0;
+  const loseRoster = () => database.prepare("DELETE FROM admins WHERE email = 'admin@example.test'").run();
+  const racing = createIdentityRepository(new Proxy(database, { get(target, key) {
+    if (key === "batch") return async statements => {
+      if (armed && operation.startsWith("revoke")) { armed = false; await loseRoster(); }
+      return target.batch(statements);
+    };
+    if (key === "prepare") return sql => {
+      const statement = target.prepare(sql);
+      return { bind: (...args) => {
+        const bound = statement.bind(...args);
+        const shouldRevoke = armed && (operation === "resend"
+          ? sql.includes("SELECT 1 AS allowed") && ++authorityReads === 2
+          : operation === "invite" && sql.includes("INSERT INTO organizer_event_invitations"));
+        if (!shouldRevoke) return bound;
+        const method = operation === "resend" ? "first" : "run";
+        return new Proxy(bound, { get(inner, member) {
+          if (member === method) return async (...values) => { armed = false; await loseRoster(); return inner[method](...values); };
+          const value = Reflect.get(inner, member);
+          return typeof value === "function" ? value.bind(inner) : value;
+        } });
+      }, run: statement.run.bind(statement), all: statement.all.bind(statement), first: statement.first.bind(statement) };
+    };
+    const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
+  } }));
+  await racing.ensureTables();
+  armed = true;
+  const action = operation.startsWith("revoke") ? "revoke" : operation;
+  assert.deepEqual(await racing.manageOrganizerCollaborator({ candidateId, actorAccountId: adminId, email, role: "editor", action, now: NOW + 6 }),
+    { ok: false, reason: "forbidden" });
+  assert.equal(armed, false, "the roster change must occur at the operation boundary");
+  assert.equal(await repository.organizerRole(candidateId, editorId), "editor");
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'pending@example.test' AND revoked_at IS NULL")
+    .bind(candidateId).first()).n, 1);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS n FROM organizer_event_invitations WHERE candidate_id = ?1 AND email = 'new@example.test'")
+    .bind(candidateId).first()).n, 0);
 });
 }
 

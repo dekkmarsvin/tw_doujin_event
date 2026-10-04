@@ -34,7 +34,7 @@ import { UiIcon } from "../ui-icons";
 import { useModalFocus } from "../use-modal-focus";
 import styles from "./organizer.module.css";
 
-import { GUIDED_LABEL, IDLE, READINESS_LABEL, STATUS_LABEL, message, organizerGuidedDraftIssues, organizerIssueMessage, organizerSectionLabel, takeLoginToken, useDesktopViewport, type Notice, type PendingNavigation } from "./organizer-shared";
+import { GUIDED_LABEL, IDLE, STATUS_LABEL, message, organizerGuidedDraftIssues, organizerIssueMessage, organizerSectionLabel, organizerSectionStateLabel, takeLoginToken, useDesktopViewport, type Notice, type PendingNavigation } from "./organizer-shared";
 
 export default function OrganizerApp() {
   const [session, setSession] = useState<PortalSession | null>(null);
@@ -858,8 +858,8 @@ function ReadinessRail({ detail, current, onSection, compact = false, showNextAc
         the list also answers where the reader is. */}
     <div className={styles.readinessList} role="group" aria-label="活動項目">{readiness.sections.map((item) => <button type="button" key={item.id} aria-current={item.id === current ? "page" : undefined} onClick={() => onSection(item.id)}>
       <span>{organizerSectionLabel(detail, item.id)}</span><small data-state={item.state}>{liveDirty && liveSection
-        ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : READINESS_LABEL[item.state]
-        : READINESS_LABEL[item.state]}</small>
+        ? item.id === liveSection ? "尚未儲存" : ORGANIZER_WORKSPACE_SECTIONS.indexOf(item.id) > liveSectionIndex ? "需先儲存" : organizerSectionStateLabel(detail, item)
+        : organizerSectionStateLabel(detail, item)}</small>
     </button>)}</div>
     <div className={styles.blockerList}><h4>待修正清單</h4>{visibleBlockers.length === 0 ? <p>{showNext ? "沒有需要修正的項目；還沒開始的工作看上面的下一步。" : "沒有需要修正的項目。"}</p> : visibleBlockers.map((blocker, index) => <button type="button" key={`${blocker.section}-${blocker.code}-${index}`} onClick={() => onSection(blocker.section, organizerIssueTarget(blocker, liveDraft ?? detail.draft))}>
       <strong>{organizerSectionLabel(detail, blocker.section)}</strong><span>{organizerIssueMessage(blocker, catalog, liveDraft ?? detail.draft)}</span>

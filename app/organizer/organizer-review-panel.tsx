@@ -123,9 +123,8 @@ export function ReviewPanel({ session, detail, onChanged, onSection }: {
     {/* Stated once, above the control it governs. #216 was this panel going
         blank on an admin who never got the owner grant: nothing on the page
         said what was missing, so the work looked finished and stuck. */}
-    {submittable && !owner && <p className={styles.warning}>{session.isAdmin
-      ? "送出審閱需要這個活動的負責人身分。" : "送出審閱需要負責人身分，請聯絡這個活動的負責人。"}</p>}
-    {submittable && <SubmitSection {...section} blocked={!owner} />}
+    {submittable && !owner && !session.isAdmin && <p className={styles.warning}>送出審閱需要負責人身分，請聯絡這個活動的負責人。</p>}
+    {submittable && <SubmitSection {...section} blocked={!owner && !session.isAdmin} />}
     {session.isAdmin && detail.event.status === "submitted" && <AdminReviewSection {...section} />}
     {session.isAdmin && detail.recoveryAvailable ? <RecoverySection {...section} />
       : (session.isAdmin || owner) && detail.event.status === "failed" && !historicalPublication && <ReopenSection {...section} reopenBlockedByRemoteState={reopenBlockedByRemoteState} />}

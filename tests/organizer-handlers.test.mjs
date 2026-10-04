@@ -217,6 +217,62 @@ test("an activity created for someone else still waits for that owner to accept 
   assert.equal((await ownerDetail.json()).event.role, "owner");
 });
 
+test("an admin without the Owner grant invites collaborators as the site and reaches the submission checks", async () => {
+  // ADR-0080: the HTTP gates admit the roster; the repository rechecks it at the write.
+  const adminCookie = await signIn("admin@example.test", "organizer");
+  const { candidateId } = await (await handlers.adminCreateOrganizerCandidate(request(
+    "/api/admin/organizer/events", "POST", { tentativeName: "PF47", ownerEmail: "owner@example.test" }, adminCookie,
+  ))).json();
+  const path = `/api/organizer/events/${candidateId}/collaborators`;
+  const invited = await handlers.manageOrganizerCollaborators(request(path, "POST",
+    { email: "admin-editor@example.test", action: "invite" }, adminCookie), candidateId);
+  assert.equal(invited.status, 200);
+  assert.match(sent.at(-1).text, /邀請者：網站管理者/, "an admin acting without the grant invites as the site");
+  assert.equal((await handlers.manageOrganizerCollaborators(request(path, "POST",
+    { email: "admin-editor@example.test", action: "revoke" }, adminCookie), candidateId)).status, 200);
+
+  const refused = await handlers.submitOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: 1 }, adminCookie,
+  ), candidateId);
+  assert.equal(refused.status, 422, "the admin passes the role gate and meets the same validation as an Owner");
+
+  // The whole path, snapshot included, for an admin who never held the grant.
+  const draft = {
+    references: await createReferenceSelection(candidateId, adminCookie),
+    schema: "organizer-event-draft/1",
+    event: { id: "pf47", name: "PF47", days: [{ id: "1", label: "第一日", date: "2026-11-07" }] },
+    venue: { assignments: [{ venueId: VENUE_ID, venueSpaceId: VENUE_SPACE_ID, areaIds: ["ALL"], mapTemplate: "TAIWAN_GENERIC_V1", areaMode: "none" }] },
+    officialSource: { label: "主辦提供名單", url: "https://organizer.example/pf47" },
+  };
+  assert.equal((await handlers.updateOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "PATCH",
+    { expectedVersion: 1, draft }, adminCookie), candidateId)).status, 200);
+  assert.equal((await handlers.putOrganizerImport(request(`/api/organizer/events/${candidateId}/imports`, "PUT", {
+    expectedVersion: 2,
+    source: { fileName: "official.csv", worksheet: null, sha256: "b".repeat(64), sourceDescription: "主辦提供", mapping: { day: { fixed: "1" } } },
+    rows: [{ sourceRow: 2, dayId: "1", venueSpaceId: VENUE_SPACE_ID, areaId: "ALL", codes: ["A01"], circleName: "乙社", stableKey: null, identityGroup: null }],
+  }, adminCookie), candidateId)).status, 200);
+  assert.equal((await handlers.createOrganizerMap(request(`/api/organizer/events/${candidateId}/maps`, "POST", {
+    expectedVersion: 3, periodKey: "1", venueSpaceId: VENUE_SPACE_ID,
+    layout: {
+      version: 2, template: "TAIWAN_GENERIC_V1", width: 100, height: 80, floor: { x: 0, y: 0, width: 100, height: 80 },
+      rows: [{ label: "A", orientation: "horizontal", confidence: 1, slots: [{ code: "A01", rect: { x: 5, y: 5, width: 10, height: 8 } }] }],
+      pillars: [], accessPoints: [], landmarks: [],
+    },
+  }, adminCookie), candidateId)).status, 201);
+  const { version } = (await (await handlers.getOrganizerCandidate(request(`/api/organizer/events/${candidateId}`, "GET", undefined, adminCookie), candidateId)).json()).event;
+  assert.deepEqual((await (await handlers.validateOrganizerCandidate(request(`/api/organizer/events/${candidateId}/validate`, "POST", {}, adminCookie), candidateId)).json()).issues, []);
+  const submitted = await handlers.submitOrganizerCandidate(request(
+    `/api/organizer/events/${candidateId}/submit`, "POST", { expectedVersion: version }, adminCookie,
+  ), candidateId);
+  assert.equal(submitted.status, 200);
+  assert.ok(await repository.getOrganizerSubmissionSnapshot(candidateId, version), "the admin's submission keeps its snapshot");
+  const candidate = await repository.getOrganizerCandidate(candidateId);
+  assert.equal(candidate.status, "submitted");
+  assert.equal(candidate.last_updated_role, "admin");
+  assert.equal((await database.prepare("SELECT actor_role FROM audit_log WHERE action = 'organizer_event.submitted' AND subject_id = ?1")
+    .bind(candidateId).first()).actor_role, "admin");
+});
+
 test("an event organizer can list and immediately extend the shared venue catalog", async () => {
   const adminCookie = await signIn("admin@example.test");
   const createdCandidate = await handlers.adminCreateOrganizerCandidate(request(
