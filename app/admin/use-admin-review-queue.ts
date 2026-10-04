@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listReviewQueue, type ReviewQueue } from "../circle-editor-client";
+import { useVisibleRefresh } from "./use-visible-refresh";
 
 type QueueState = {
   key: string;
@@ -8,6 +9,9 @@ type QueueState = {
   loadError: string;
   updatedAt: number | null;
 };
+
+/** How often a visible admin panel re-reads what it shows. */
+export const ADMIN_REFRESH_INTERVAL = 30_000;
 
 /** One mounted overview or claims panel owns the visible queue refresh. */
 export function useAdminReviewQueue({ eventId = "", claimId, load, onQueueLoaded, isBusy }: {
@@ -40,18 +44,9 @@ export function useAdminReviewQueue({ eventId = "", claimId, load, onQueueLoaded
 
   useEffect(() => {
     const initial = window.setTimeout(() => refresh(true), 0);
-    const refreshVisible = () => { if (document.visibilityState === "visible") refresh(false); };
-    const timer = window.setInterval(refreshVisible, 30_000);
-    window.addEventListener("focus", refreshVisible);
-    document.addEventListener("visibilitychange", refreshVisible);
-    return () => {
-      invalidate();
-      window.clearTimeout(initial);
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshVisible);
-      document.removeEventListener("visibilitychange", refreshVisible);
-    };
+    return () => { invalidate(); window.clearTimeout(initial); };
   }, [invalidate, refresh]);
+  useVisibleRefresh(() => refresh(false), ADMIN_REFRESH_INTERVAL);
 
   return {
     ...(state.key === key ? state : { queue: null, loading: true, loadError: "", updatedAt: null }),

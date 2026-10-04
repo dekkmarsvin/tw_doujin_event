@@ -749,6 +749,20 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     return result.results;
   }
 
+  /** Claims whose normalized circle name contains `nameKey`, newest first, with
+   * the claimant's email. Any claim status matches: the search finds accounts. */
+  async function searchClaimAccountsForAdmin(nameKey: string, limit: number) {
+    await ensureTables();
+    const pattern = `%${nameKey.replace(/[!%_]/gu, "!$&")}%`;
+    const result = await database.prepare(
+      `SELECT a.email, c.event_id, c.circle_name_at_claim, c.status
+       FROM circle_claims c JOIN accounts a ON a.id = c.account_id
+       WHERE c.circle_name_key LIKE ?1 ESCAPE '!'
+       ORDER BY c.created_at DESC, c.id LIMIT ?2`,
+    ).bind(pattern, limit).all<{ email: string } & Pick<ClaimRow, "event_id" | "circle_name_at_claim" | "status">>();
+    return result.results;
+  }
+
   /** All historical scopes matter when deleting an account: staged R2 objects
    * are keyed by event/circle even when they were never published to D1. */
   async function listClaimScopesForAccount(accountId: string) {
@@ -3717,7 +3731,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, getAccountForAdmin, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listAccountClaimsForAdmin, searchClaimAccountsForAdmin, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, listCircleClaimsForAdmin, listCircleModerationHistory,
     putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,

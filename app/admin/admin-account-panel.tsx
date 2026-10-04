@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { disableAccount, manageMapContributor, readAdminAccountDetail, type AdminAccountDetail } from "../circle-editor-client";
+import { disableAccount, manageMapContributor, readAdminAccountDetail, searchAdminAccountsByCircle, type AdminAccountCircleMatch, type AdminAccountDetail } from "../circle-editor-client";
 import { isEmailShaped, normalizeEmail } from "../portal-crypto";
 import { useModalFocus } from "../use-modal-focus";
 import { adminHref } from "./admin-navigation";
+import { useVisibleRefresh } from "./use-visible-refresh";
 import styles from "../circle-portal/portal.module.css";
 import ui from "./admin-app.module.css";
 
@@ -11,8 +12,14 @@ const mapStatus = { none: "未授權", active: "有效", revoked: "已撤銷", s
 const claimStatus = { pending: "待審", verified: "已認領", rejected: "未核准", revoked: "已撤銷", withdrawn: "已撤回" };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "操作失敗，請稍後再試。";
 
-export function AdminAccountPanel({ initialEmail, onSearchChange }: { initialEmail: string; onSearchChange: (email: string) => void }) {
-  const [query, setQuery] = useState(initialEmail);
+type CircleSearch = { query: string; matches: AdminAccountCircleMatch[] | null; error: string };
+
+/** One field takes either: anything with an @ is an Email, anything else a circle name. */
+export function AdminAccountPanel({ initialEmail, initialCircle, onSearchChange, onCircleSearch }: {
+  initialEmail: string; initialCircle: string; onSearchChange: (email: string) => void; onCircleSearch: (circle: string) => void;
+}) {
+  const [query, setQuery] = useState(initialEmail || initialCircle);
+  const [circleSearch, setCircleSearch] = useState<CircleSearch | null>(null);
   const [target, setTarget] = useState(initialEmail);
   const [queried, setQueried] = useState(false);
   const [detail, setDetail] = useState<AdminAccountDetail | null>(null);
@@ -28,30 +35,44 @@ export function AdminAccountPanel({ initialEmail, onSearchChange }: { initialEma
   const close = () => { if (!busy.current) setConfirming(false); };
   useModalFocus(confirming, dialog, close);
 
-  const load = useCallback(async (email: string, preserve = false) => {
+  /** `background` re-reads the shown account without a loading state; a failure keeps the last result. */
+  const load = useCallback(async (email: string, preserve = false, background = false) => {
     if (!mounted.current) return;
     const request = ++requests.current.value;
-    setTarget(email); setLoading(true); setReadError(""); setQueried(true);
+    if (!background) { setTarget(email); setLoading(true); setReadError(""); setQueried(true); }
     if (!preserve) setDetail(null);
     try {
       const answer = await readAdminAccountDetail(email);
       if (request !== requests.current.value) return;
       setQuery(answer.email); setTarget(answer.email); setDetail(answer.account);
     } catch (error) {
-      if (request === requests.current.value) setReadError(preserve ? `帳號明細更新失敗，顯示上次讀取的資料。${errorMessage(error)}` : errorMessage(error));
+      if (request === requests.current.value) setReadError(preserve || background ? `帳號明細更新失敗，顯示上次讀取的資料。${errorMessage(error)}` : errorMessage(error));
     } finally { if (request === requests.current.value) setLoading(false); }
+  }, []);
+  const searchCircle = useCallback(async (circle: string) => {
+    const request = ++requests.current.value;
+    setCircleSearch({ query: circle, matches: null, error: "" });
+    try {
+      const answer = await searchAdminAccountsByCircle(circle);
+      if (request === requests.current.value) setCircleSearch({ query: answer.query, matches: answer.matches, error: "" });
+    } catch (error) {
+      if (request === requests.current.value) setCircleSearch({ query: circle, matches: null, error: errorMessage(error) });
+    }
   }, []);
   useEffect(() => {
     mounted.current = true;
     const sequence = requests.current;
     queueMicrotask(() => {
+      if (mounted.current && !initialEmail && initialCircle) void searchCircle(initialCircle);
       if (!mounted.current || !initialEmail) return;
       const email = normalizeEmail(initialEmail);
       if (isEmailShaped(email)) void load(email);
       else { setQueried(true); setReadError("請填寫有效的 Email。"); }
     });
     return () => { mounted.current = false; ++sequence.value; };
-  }, [initialEmail, load]);
+  }, [initialCircle, initialEmail, load, searchCircle]);
+
+  useVisibleRefresh(() => { if (detail && !busy.current && !loading && !readError) void load(detail.email, true, true); });
 
   const mutate = async (action: () => Promise<unknown>, message: string, disable = false) => {
     if (!detail || busy.current || loading || readError) return;
@@ -83,42 +104,64 @@ export function AdminAccountPanel({ initialEmail, onSearchChange }: { initialEma
     <form className={styles.takedownSearch} noValidate onSubmit={event => {
       event.preventDefault();
       if (busy.current) return;
+      setResult(null);
+      if (!query.includes("@")) {
+        const circle = query.normalize("NFKC").trim();
+        if (circle.length > 100) { setReadError("社團名稱不可超過 100 字。"); return; }
+        setQuery(circle);
+        if (circle === initialCircle && !initialEmail) void searchCircle(circle);
+        else onCircleSearch(circle);
+        return;
+      }
       const email = normalizeEmail(query);
       if (!isEmailShaped(email)) { setReadError("請填寫有效的 Email。"); return; }
-      setQuery(email); setResult(null);
+      setQuery(email);
       if (email === initialEmail) void load(email);
       else onSearchChange(email);
     }}>
-      <label htmlFor="account-query-email">帳號 Email<input id="account-query-email" type="email" autoComplete="email" maxLength={254} value={query} disabled={pending}
+      <label htmlFor="account-query-email">Email 或社團名稱<input id="account-query-email" type="search" autoComplete="off" maxLength={254} value={query} disabled={pending}
+        placeholder="帳號 Email，或社團名稱的一部分"
         onChange={event => {
           setQuery(event.target.value); ++requests.current.value;
-          setTarget(""); setDetail(null); setQueried(false); setLoading(false); setReadError(""); setResult(null); setConfirming(false);
+          setTarget(""); setDetail(null); setQueried(false); setLoading(false); setReadError(""); setResult(null); setConfirming(false); setCircleSearch(null);
         }} /></label>
       <button type="submit" disabled={!query.trim() || loading || pending}>{loading ? "查詢中…" : "查詢"}</button>
     </form>
     {result && !confirming && <p role={result.failed ? "alert" : "status"} className={result.failed ? styles.error : styles.notice}>{result.message}</p>}
     {loading && <p role="status">載入帳號明細…</p>}
+    {circleSearch && <section className={ui.detailSection} aria-label="社團名稱搜尋結果">
+      {circleSearch.error ? <p role="alert" className={styles.error}>{circleSearch.error}</p>
+        : !circleSearch.matches ? <p role="status">搜尋中…</p>
+          : !circleSearch.matches.length ? <p role="status">找不到名稱含「{circleSearch.query}」的社團認領。</p> : <>
+            <p role="status" className={styles.muted}>名稱含「{circleSearch.query}」的社團認領 {circleSearch.matches.length} 筆{circleSearch.matches.length >= 20 ? "（只列最近 20 筆，可輸入更完整的名稱）" : ""}</p>
+            <ul className={ui.detailList}>{circleSearch.matches.map((match, index) => <li key={`${match.eventId}:${match.email}:${index}`}>
+              <div><strong>{match.circleName}</strong><span>{match.email}</span><small>{match.eventName}・{claimStatus[match.status]}</small></div>
+              <a href={adminHref("accounts", { view: "search", email: match.email })}>查看帳號</a>
+            </li>)}</ul>
+          </>}
+    </section>}
     {readError && <div role="alert" className={styles.error}><p>{readError}</p>
       {isEmailShaped(target) && <button type="button" disabled={pending || loading} onClick={() => void load(target, !!detail)}>重新讀取</button>}</div>}
     {queried && !loading && !readError && !detail && <p role="status">查無此帳號。</p>}
     {detail && <div aria-label="帳號明細">
-      <div className={ui.detailSection}><div className={ui.detailHeading}><h3>{detail.email}</h3>
-        <button type="button" className={styles.secondaryButton} disabled={loading || pending} onClick={() => void load(detail.email, true)}>重新整理</button></div>
+      <div className={ui.detailSection}><h3>{detail.email}</h3>
         <dl className={ui.detailFacts}><div><dt>帳號狀態</dt><dd>{accountStatus[detail.status]}</dd></div></dl>
       </div>
       <section className={ui.detailSection} aria-labelledby="account-admin-heading"><h4 id="account-admin-heading">網站管理者</h4>
         <p>{detail.isAdmin ? "在管理者名單中" : "未列為管理者"}</p><a href={rosterHref}>管理網站管理者</a>
       </section>
       <section className={ui.detailSection} aria-labelledby="account-map-heading"><h4 id="account-map-heading">地圖貢獻者</h4>
-        <p>{mapStatus[detail.mapContributor.status]}</p>
-        {detail.status !== "active" ? <p className={styles.muted}>帳號{accountStatus[detail.status]}，無法變更地圖貢獻資格。</p>
-          : <div className={`${styles.reviewActions} ${ui.accountActions}`}>
+        <div className={ui.actionRow}>
+          <div><p>{mapStatus[detail.mapContributor.status]}</p>
+            {detail.status !== "active" ? <p className={styles.muted}>帳號{accountStatus[detail.status]}，無法變更地圖貢獻資格。</p>
+              : detail.mapContributor.status !== "none" && detail.mapContributor.status !== "active" && <p className={styles.muted}>重新授予會恢復地圖貢獻資格。</p>}</div>
+          {detail.status === "active" && <div className={ui.actionButtons}>
             {detail.mapContributor.status === "active" ? <>
-              <button type="button" disabled={!available} onClick={() => mapAction("revoke")}>撤銷</button>
-              <button type="button" disabled={!available} onClick={() => mapAction("suspend")}>停權</button>
-            </> : <><button type="button" disabled={!available} onClick={() => mapAction("grant")}>{detail.mapContributor.status === "none" ? "授予" : "重新授予"}</button>
-              {detail.mapContributor.status !== "none" && <p className={styles.muted}>重新授予會恢復地圖貢獻資格。</p>}</>}
+              <button type="button" className={styles.secondaryButton} disabled={!available} onClick={() => mapAction("revoke")}>撤銷</button>
+              <button type="button" className={styles.secondaryButton} disabled={!available} onClick={() => mapAction("suspend")}>停權</button>
+            </> : <button type="button" disabled={!available} onClick={() => mapAction("grant")}>{detail.mapContributor.status === "none" ? "授予" : "重新授予"}</button>}
           </div>}
+        </div>
       </section>
       <section className={ui.detailSection} aria-labelledby="account-workspaces-heading"><h4 id="account-workspaces-heading">活動工作區</h4>
         {detail.organizerGrants.length ? <ul className={ui.detailList}>{detail.organizerGrants.map(grant => <li key={grant.candidateId}>
@@ -134,10 +177,10 @@ export function AdminAccountPanel({ initialEmail, onSearchChange }: { initialEma
       </section>
       <section className={ui.detailSection} aria-labelledby="account-disable-heading"><h4 id="account-disable-heading">停用帳號</h4>
         {detail.isAdmin ? <p>請先移出管理者名單。<a href={rosterHref}>前往網站管理者</a></p>
-          : detail.status === "disabled" ? <p>帳號已停用。</p> : detail.status === "deleting" ? <p>帳號正在刪除，無法停用。</p> : <>
+          : detail.status === "disabled" ? <p>帳號已停用。</p> : detail.status === "deleting" ? <p>帳號正在刪除，無法停用。</p> : <div className={ui.actionRow}>
             <p>停用會立即撤銷登入狀態，保留帳號資料。</p>
             <button type="button" disabled={!available} onClick={() => { setResult(null); setConfirming(true); }}>停用帳號</button>
-          </>}
+          </div>}
       </section>
     </div>}
     {confirming && detail && <div className={styles.previewBackdrop}><div ref={dialog} className={styles.batchDialog} role="dialog" aria-modal="true" aria-labelledby="account-disable-confirm" tabIndex={-1}>

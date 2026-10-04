@@ -440,6 +440,38 @@ test("admin account detail is private, normalizes Email and leaves missing or un
     "a failed read must reach the existing route guard rather than appear as a missing account");
 });
 
+test("admins find accounts by a partial, normalized circle name across events", async () => {
+  const admin = await signIn("admin@example.com");
+  const stranger = await signIn("circle-search-reader@example.com");
+  const search = (query, session = admin) => handlers.adminSearchAccountsByCircle(get(`/api/admin/accounts?circle=${encodeURIComponent(query)}`, session));
+  assert.equal((await handlers.adminSearchAccountsByCircle(get("/api/admin/accounts?circle=x"))).status, 401);
+  assert.equal((await search("x", stranger)).status, 403);
+  assert.equal((await search("   ")).status, 400);
+  assert.equal((await search("名".repeat(101))).status, 400);
+
+  const owner = await repository.upsertAccount("circle-owner@example.com", clock);
+  const other = await repository.upsertAccount("circle-other@example.com", clock);
+  const create = (id, accountId, eventId, name, status) => repository.createClaim({ id, accountId, eventId, circleId: id, status,
+    circleNameKey: name.normalize("NFKC").toLocaleLowerCase("zh-Hant"), circleNameAtClaim: name, sourceRowAtClaim: null,
+    method: "admin", targetUrl: null, challengeTokenHash: null, challengeExpiresAt: null,
+    evidenceUrl: "https://private.example/evidence", evidenceNote: "私人佐證", now: clock });
+  await create("search-ff47", owner, "ff47", "Moon Garden 月光庭園", "verified");
+  await create("search-ff48", other, "ff48", "月光庭園 Second", "withdrawn");
+  await create("search-unrelated", other, "ff47", "100%_SALE", "pending");
+
+  const response = await search("ＭＯＯＮ　garden");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual((await response.json()).matches.map(({ email, circleName, eventId, status }) => ({ email, circleName, eventId, status })), [
+    { email: "circle-owner@example.com", circleName: "Moon Garden 月光庭園", eventId: "ff47", status: "verified" },
+  ], "full-width input matches the stored name key");
+  assert.deepEqual((await (await search("月光")).json()).matches.map(match => [match.email, match.eventId, match.status]).sort(),
+    [["circle-other@example.com", "ff48", "withdrawn"], ["circle-owner@example.com", "ff47", "verified"]], "every claim status and event is searchable");
+  assert.deepEqual((await (await search("%")).json()).matches.map(match => match.circleName), ["100%_SALE"], "LIKE wildcards are matched literally");
+  assert.deepEqual((await (await search("_")).json()).matches.map(match => match.circleName), ["100%_SALE"]);
+  assert.doesNotMatch(JSON.stringify(await (await search("月光")).json()), /私人佐證|private\.example/);
+});
+
 test("admin account detail shows the target's actual grants, editions and all scoped claim results", async () => {
   const admin = await signIn("admin@example.com");
   const email = "account-relations@example.com";

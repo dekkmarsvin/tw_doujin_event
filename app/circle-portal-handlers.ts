@@ -1,8 +1,8 @@
 import { isAccountNotificationCadence } from "./account-notifications";
 import { canSubmitEventApplication, contactSettingsProblem, parseSiteSettings } from "./site-settings";
 import type { AdminCircleDetail } from "./admin-circle-detail";
-import type { AdminAccountDetailResponse } from "./admin-account-detail";
-import type { CircleViewRecord } from "./circle-records";
+import type { AdminAccountCircleSearchResponse, AdminAccountDetailResponse } from "./admin-account-detail";
+import { normalizeCircleName, type CircleViewRecord } from "./circle-records";
 import { notificationParameters } from "./notification-navigation";
 import identityRuntimeVersion from "../db/identity-runtime-version.json";
 import { createAdminReferenceHandlers } from "./admin-reference-handlers";
@@ -181,6 +181,7 @@ export function emailAuditSubjectId(secret: string, email: string) {
 
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_LIMIT = 8;
+const ACCOUNT_SEARCH_LIMIT = 20;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -2027,6 +2028,20 @@ export function createCirclePortalHandlers({
     return json(result);
   }
 
+  /** Finds accounts through their claims: a partial match on the normalized circle name, across events. */
+  async function adminSearchAccountsByCircle(request: Request) {
+    const gate = await requireAdmin(request);
+    if (!gate.ok) return gate.response;
+    const query = (new URL(request.url).searchParams.get("circle") ?? "").normalize("NFKC").trim();
+    if (!query) return json({ error: "請填寫社團名稱。" }, 400);
+    if (query.length > 100) return json({ error: "社團名稱不可超過 100 字。" }, 400);
+    const rows = await repository.searchClaimAccountsForAdmin(normalizeCircleName(query), ACCOUNT_SEARCH_LIMIT);
+    return json({ query, matches: rows.map(row => ({
+      email: row.email, circleName: row.circle_name_at_claim, eventId: row.event_id,
+      eventName: getEventDefinition(row.event_id)?.name ?? row.event_id, status: row.status,
+    })) } satisfies AdminAccountCircleSearchResponse);
+  }
+
   async function adminDisableAccount(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
@@ -3841,7 +3856,7 @@ export function createCirclePortalHandlers({
     // before an event is chosen.
     authConfig, requestLink, verify, session, signOut, deleteMyAccount,
     listEventApplications, submitEventApplication, reviewEventApplication,
-    adminListAdmins, adminManageAdmins, adminAccountDetail, adminDisableAccount, adminManageMapContributor,
+    adminListAdmins, adminManageAdmins, adminAccountDetail, adminSearchAccountsByCircle, adminDisableAccount, adminManageMapContributor,
     // Cross-event and read-only; it filters to served events itself.
     adminReviewQueue,
     adminProbeGitHubInstallation,
