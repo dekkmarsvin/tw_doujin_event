@@ -18,7 +18,7 @@ const ROW_LABEL = { units: 22, minPx: 12, maxPx: 28 };
 /** An area's name is sized from the area itself, not from a layout size: it
  * spans at most this share of the room it has, so a large hall reads at a
  * glance while a narrow one still fits its name. */
-const LANDMARK_LABEL = { minPx: 11, comfortPx: 16, maxPx: 28, fill: .6, maxLines: 3 };
+const LANDMARK_LABEL = { minPx: 11, comfortPx: 16, maxPx: 28, fill: .6 };
 const LABEL_GAP_PX = 4;
 const LANDMARK_PADDING_PX = 3;
 const COLLISION_MARGIN_PX = 2;
@@ -115,30 +115,45 @@ function labelUnits(text: string) {
   return [...text.matchAll(/[!-~]+|\S/gu)].map((match) => match[0]);
 }
 
+const asciiJoin = (before: string, after: string) => /[!-~]$/.test(before) && /^[!-~]/.test(after);
+
 function joinUnits(units: readonly string[]) {
-  return units.reduce((line, unit, index) => line + (index && /^[!-~]/.test(unit) && /[!-~]$/.test(units[index - 1]) ? " " : "") + unit, "");
+  return units.reduce((line, unit, index) => line + (index && asciiJoin(units[index - 1], unit) ? " " : "") + unit, "");
 }
 
 /** The single line, the most even two- and three-line breaks (longer lines
  * first, as a name is usually broken by hand), and the one-unit-per-line
- * stack. */
+ * stack. Names have no length limit, so each break is measured from running
+ * sums rather than by building its lines. */
 function landmarkArrangements(text: string): string[][] {
   const units = labelUnits(text);
-  const arrangements = [[text]];
-  const widest = (lines: string[]) => Math.max(...lines.map(mapLabelEms));
-  const best = (splits: number[][]) => splits.map((cuts) => {
-    const ends = [...cuts, units.length];
-    return ends.map((end, index) => joinUnits(units.slice(index ? ends[index - 1] : 0, end)));
-  }).sort((a, b) => widest(a) - widest(b) || mapLabelEms(b[0]) - mapLabelEms(a[0]))[0];
-  for (let lines = 2; lines <= Math.min(LANDMARK_LABEL.maxLines, units.length - 1); lines++) {
-    const splits: number[][] = [];
-    for (let i = 1; i < units.length; i++) {
-      if (lines === 2) splits.push([i]);
-      else for (let j = i + 1; j < units.length; j++) splits.push([i, j]);
+  const count = units.length;
+  // unitEms[k]: units 0..k-1; spaceEms[k]: spaces joining units 0..k.
+  const unitEms = [0], spaceEms = [0];
+  units.forEach((unit, k) => {
+    unitEms.push(unitEms[k] + mapLabelEms(unit));
+    if (k) spaceEms.push(spaceEms[k - 1] + (asciiJoin(units[k - 1], unit) ? mapLabelEms(" ") : 0));
+  });
+  const width = (from: number, to: number) => unitEms[to] - unitEms[from] + spaceEms[to - 1] - spaceEms[from];
+  type Break = { cuts: number[]; widest: number; first: number };
+  const better = (widest: number, first: number, best: Break | null) => !best || widest < best.widest - 1e-9
+    || (Math.abs(widest - best.widest) <= 1e-9 && first > best.first + 1e-9);
+  let two: Break | null = null, three: Break | null = null;
+  for (let i = 1; i < count; i++) {
+    const first = width(0, i);
+    const pair = Math.max(first, width(i, count));
+    if (better(pair, first, two)) two = { cuts: [i], widest: pair, first };
+    for (let j = i + 1; j < count; j++) {
+      const triple = Math.max(first, width(i, j), width(j, count));
+      if (better(triple, first, three)) three = { cuts: [i, j], widest: triple, first };
     }
-    arrangements.push(best(splits));
   }
-  if (units.length > 1) arrangements.push(units);
+  const lines = ({ cuts }: Break) => [0, ...cuts].map((from, index) => joinUnits(units.slice(from, [...cuts, count][index])));
+  // A break into as many lines as there are units is the stack below.
+  const arrangements = [[text]];
+  if (two && count >= 3) arrangements.push(lines(two));
+  if (three && count >= 4) arrangements.push(lines(three));
+  if (count > 1) arrangements.push(units);
   return arrangements;
 }
 

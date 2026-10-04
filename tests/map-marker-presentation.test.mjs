@@ -91,6 +91,14 @@ test("an area name stands vertically in a tall, narrow area and stays on one lin
   assert.deepEqual(wrapped.lines, ["更衣寄", "物區"], "a broken name puts its longer line first");
 });
 
+test("a long area name is laid out without freezing the map", () => {
+  const label = "同人誌即賣會".repeat(67);
+  const started = performance.now();
+  const labels = layoutMapMarkerLabels(hall({ rows: [], landmarks: [{ id: "long", kind: "other", label, rect: { x: 0, y: 0, width: 2000, height: 1200 } }] }), { screenScale: 1, fontScale: 1 });
+  assert.ok(performance.now() - started < 500, "a 400-character name took seconds when every break was built");
+  assert.ok(labels.has("landmark:long"));
+});
+
 test("a curved band's name uses the band's width, not only the largest circle inside it", () => {
   const at = (r, a) => ({ x: 500 + r * Math.cos(a), y: 300 + r * Math.sin(a) });
   const angles = Array.from({ length: 25 }, (_, i) => Math.PI * (.1 + .8 * i / 24));
