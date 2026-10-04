@@ -5,7 +5,7 @@ export const adminDate = (time: number) => new Date(time).toLocaleString("zh-TW"
 const steps: Record<string, string> = {
   assemble: "準備活動內容", preparing_data: "準備活動資料", waiting_data_checks: "檢查活動資料", merging_data: "套用活動資料",
   preparing_main: "準備網站更新", waiting_main_checks: "檢查網站更新", merging_main: "套用網站更新",
-  waiting_deployment: "部署網站", verifying_production: "確認公開結果",
+  waiting_deployment: "更新網站", verifying_production: "確認公開結果",
 };
 export function publicationProgress(job: PublicationActivity, enabled: boolean) {
   if (job.status === "failed") return `未完成 · ${steps[job.step] ?? "處理發布"}`;

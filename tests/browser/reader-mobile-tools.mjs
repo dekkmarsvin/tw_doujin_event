@@ -58,7 +58,7 @@ try {
         // The portal opens on the event this link names, not on its own fallback.
         assert.equal(await helpDialog.getByRole("link", { name: "社團資料", exact: true }).getAttribute("href"), `/circle?event=${event}`);
         await journey.capture(page, `${name}-help`);
-        const about = helpDialog.getByText("本頁是非官方同人展逛攤工具，不代表活動主辦單位。", { exact: true });
+        const about = helpDialog.getByText("資料最後更新", { exact: true });
         await about.scrollIntoViewIfNeeded();
         await assertReachable(about);
         await helpClose.scrollIntoViewIfNeeded();

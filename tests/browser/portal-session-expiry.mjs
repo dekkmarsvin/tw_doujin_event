@@ -33,10 +33,9 @@ try {
     const name = `${entry}-${isAdmin ? "admin" : "member"}`;
     const page = await journey.page({ url: `${base}/${entry}${entry === "admin" ? "?section=circles&view=claims&event=sample" : ""}`, routes: page => routes(page, { isAdmin }) });
     currentPage = page;
-    // The deadline is shown on every surface while signed in; /circle keeps 登出 in its menu.
-    await page.getByText(/^登入有效至/).waitFor();
-    assert.equal(await page.locator("time").getAttribute("datetime"), new Date(now + week).toISOString());
-    await journey.capture(page, `${name}-session-deadline`);
+    // The account is shown while signed in; expiry still returns to login on every surface.
+    await page.getByRole("banner").getByText(/session@example.test/).waitFor();
+    await journey.capture(page, `${name}-signed-in`);
     await page.clock.fastForward(week);
     await page.getByText("登入已到期，請重新登入。", { exact: true }).waitFor();
     if (entry === "admin") {
@@ -48,7 +47,6 @@ try {
       assert.equal(continuation.searchParams.get("adminEvent"), "sample");
     }
     else await page.getByRole("button", { name: "寄出登入連結", exact: true }).waitFor();
-    assert.equal(await page.getByText(/^登入有效至/).count(), 0);
     await journey.capture(page, `${name}-expired`);
     await page.close();
   }

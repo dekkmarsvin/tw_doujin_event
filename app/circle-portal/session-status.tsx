@@ -21,9 +21,3 @@ export function useSessionExpiry(session: PortalSession | null, onExpired: () =>
     };
   }, [expiresAt, signedIn, onExpired]);
 }
-
-export function SessionDeadline({ session }: { session: PortalSession }) {
-  if (session.expiresAt === undefined) return null;
-  const date = new Date(session.expiresAt);
-  return <small>登入有效至 <time dateTime={date.toISOString()}>{date.toLocaleString("zh-TW", { hour12: false })}</time></small>;
-}

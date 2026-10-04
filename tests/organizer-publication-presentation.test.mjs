@@ -9,7 +9,7 @@ after(() => vite.close());
 
 test("Admin summary keeps unresolved failure separate from retry permission and paused processing", () => {
   for (const retryable of [true, false]) for (const enabled of [true, false]) {
-    assert.equal(adminPublicationProgress({ status: "failed", step: "waiting_deployment", retryable }, enabled), "未完成 · 部署網站");
+    assert.equal(adminPublicationProgress({ status: "failed", step: "waiting_deployment", retryable }, enabled), "未完成 · 更新網站");
   }
   assert.equal(adminPublicationProgress({ status: "queued", step: "preparing_data", updatedAt: 1 }, true), "已排程 · 等待開始");
   assert.equal(adminPublicationProgress({ status: "publishing", step: "waiting_deployment", updatedAt: 1 }, false), "發布中 · 已暫停");
