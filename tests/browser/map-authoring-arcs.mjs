@@ -47,6 +47,15 @@ try {
   await click(150, 150); await click(200, 100); await click(250, 150);
   await editor.getByRole("button", { name: "3 點畫成圓形", exact: true }).click();
   await editor.getByRole("button", { name: "完成多邊形（48 點）", exact: true }).click();
+  // A circle a unit or so across: rounding lands neighbours together, and the
+  // repeats are dropped so it still completes.
+  const areas = await svg.locator("[data-shape-id]").count();
+  await openToolGroup(editor, "設施");
+  await editor.getByRole("button", { name: "描繪多邊形", exact: true }).click();
+  await click(800, 300); await click(801, 300); await click(800, 301);
+  await editor.getByRole("button", { name: "3 點畫成圓形", exact: true }).click();
+  await editor.getByRole("button", { name: /^完成多邊形（\d+ 點）$/ }).click();
+  assert.equal(await svg.locator("[data-shape-id]").count(), areas + 1, "a tiny circle completes instead of being refused");
   journey.report.checks.push("points on one line or a circle off the canvas keep the clicks with a reason; three points can also make a circle");
 
   await openToolGroup(editor, "註記");
@@ -58,8 +67,9 @@ try {
 
   await page.getByRole("button", { name: "儲存地圖變更", exact: true }).click();
   assert.equal(state.saves, 1);
-  const [band, circle] = state.layout.landmarks.slice(-2);
+  const [band, circle, tiny] = state.layout.landmarks.slice(-3);
   assert.ok(band.rect.points.length > 20 && circle.rect.points.length === 48);
+  assert.ok(tiny.rect.points.length < 48, "the tiny circle dropped the points rounding put together");
   assert.ok(state.layout.paths.at(-1).points.length > 3, "an arrow can bend along a curve");
   journey.report.checks.push("curved areas and a curved arrow save as ordinary vertices");
   await journey.finish();

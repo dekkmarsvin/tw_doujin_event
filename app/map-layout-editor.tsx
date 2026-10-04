@@ -677,13 +677,19 @@ export default function MapLayoutEditor({ layout, title, save, saveButtonRef, au
   // A curve is three clicks — its start, any point on it and its end — rather
   // than many hand-placed vertices that never line up.
   // Generated vertices are kept to a tenth of a unit, so the vertex fields
-  // read as numbers someone could have typed. A curve that would leave the
-  // canvas keeps the clicked points: pressing it onto the edge would flatten it
-  // into a shape that cannot be saved.
+  // read as numbers someone could have typed; on a tiny curve that can land
+  // neighbours on the same spot, and the repeat is dropped. A curve that would
+  // leave the canvas, or a circle that no longer closes cleanly, keeps the
+  // clicked points rather than becoming a shape that cannot be saved.
   const replaceWithCurve = (draft: MapPoint[], curve: MapPoint[] | null, keep: number, action: string) => {
     if (!curve) { setRowErrors([`這 3 點在同一直線上，無法${action}。`]); return draft; }
-    const points = curve.map(point => ({ x: Math.round(point.x * 10) / 10, y: Math.round(point.y * 10) / 10 }));
-    if (points.some(point => point.x < 0 || point.y < 0 || point.x > layout.width || point.y > layout.height)) { setRowErrors([`${action}後會超出畫布，請把 3 點往畫布內移。`]); return draft; }
+    const rounded = curve.map(point => ({ x: Math.round(point.x * 10) / 10, y: Math.round(point.y * 10) / 10 }));
+    if (rounded.some(point => point.x < 0 || point.y < 0 || point.x > layout.width || point.y > layout.height)) { setRowErrors([`${action}後會超出畫布，請把 3 點往畫布內移。`]); return draft; }
+    const same = (a?: MapPoint, b?: MapPoint) => !!a && !!b && a.x === b.x && a.y === b.y;
+    const points = rounded.filter((point, index) => !same(point, index ? rounded[index - 1] : draft[keep - 1]));
+    const closed = keep === 0;
+    while (closed && points.length > 1 && same(points[0], points.at(-1))) points.pop();
+    if (closed && !isSimplePolygon(points)) { setRowErrors([`這 3 點太近，無法${action}；請把點分開一些。`]); return draft; }
     setRowErrors([]);
     return [...draft.slice(0, keep), ...points];
   };
