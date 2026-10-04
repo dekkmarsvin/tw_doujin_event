@@ -800,6 +800,7 @@ a.inlineButton { display: inline-block; text-decoration: none; }
 .queueList { display: grid; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
 .queueRow { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .queueRow[data-selected] { border-color: var(--ink); background: #eef1f2; }
+.queueRow[data-targeted] { outline: 2px solid var(--ink); outline-offset: 2px; }
 .queueRow[data-problem] { border-color: #f0cdc6; }
 .card .queueRow input[type="checkbox"], .card .selectAll input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--ink); }
 .queueCircle, .queueEvent, .queueEvidence { display: flex; min-width: 0; flex-direction: column; gap: 1px; }

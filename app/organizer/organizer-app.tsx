@@ -94,7 +94,7 @@ export default function OrganizerApp() {
         : isDesktop ? <OrganizerWorkspace session={session} />
           : new URLSearchParams(window.location.search).has("candidate") && !new URLSearchParams(window.location.search).has("application")
             ? <main className={styles.applicationMain}><MobileNotificationResult /></main>
-          : session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
+          : session.isAdmin || session.canApplyForEvent || session.hasEventApplications ? <main className={styles.applicationMain}>
             <p>活動資料與地圖編輯請改用桌機。</p>
             <OrganizerApplicationsPanel session={session} />
           </main> : <main><NarrowScreenBlocker onSignedOut={() => setSession(null)} /></main>}

@@ -18,10 +18,12 @@ export type TakedownScope = {
   search: (query: string) => Promise<{ circles: TakedownCircle[] }>;
   takedown: (circleId: string, reason: string) => Promise<unknown>;
 };
-export function AdminTakedownPanel({ initialEventId, scope }: { initialEventId: string; scope?: TakedownScope }) {
+export function AdminTakedownPanel({ initialEventId, initialQuery = "", onEventChange, onSearchChange, scope }: {
+  initialEventId: string; initialQuery?: string; onEventChange?: (id: string) => void; onSearchChange?: (query: string) => void; scope?: TakedownScope;
+}) {
   const [eventId, setEventId] = useState(initialEventId);
   const [takedownStatus, setTakedownStatus] = useState<Status>(IDLE);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [matches, setMatches] = useState<TakedownCircle[]>([]);
   const [selected, setSelected] = useState<TakedownCircle | null>(null);
   const [searchStatus, setSearchStatus] = useState<Status>(IDLE);
@@ -30,16 +32,28 @@ export function AdminTakedownPanel({ initialEventId, scope }: { initialEventId: 
   const pending = takedownStatus.kind === "busy";
   const busy = useRef(false);
   const searchSequence = useRef(0);
+  const initialSearch = useRef(initialQuery);
   const dialog = useRef<HTMLDivElement>(null);
   const close = () => { if (!busy.current) setConfirming(false); };
   useModalFocus(confirming, dialog, close);
   useEffect(() => () => { searchSequence.current++; }, []);
+  useEffect(() => {
+    const query = initialSearch.current;
+    if (!query) return;
+    initialSearch.current = "";
+    const sequence = ++searchSequence.current;
+    void (scope ? scope.search(query) : searchTakedownCircles(query, eventId)).then(result => {
+      if (sequence !== searchSequence.current) return;
+      setMatches(result.circles); setSearchStatus({ kind: "ok", message: result.circles.length ? `找到 ${result.circles.length} 個社團` : "找不到符合的社團。" });
+    }).catch(error => { if (sequence === searchSequence.current) setSearchStatus({ kind: "error", message: errorMessage(error) }); });
+  }, [scope, eventId]);
 
   const clearSearch = () => {
     searchSequence.current++; setMatches([]); setSelected(null); setReason("");
     setSearchStatus(IDLE); setTakedownStatus(IDLE);
   };
   const search = async () => {
+    onSearchChange?.(query.trim());
     const sequence = ++searchSequence.current;
     setMatches([]); setSelected(null); setReason(""); setTakedownStatus(IDLE);
     setSearchStatus({ kind: "busy", message: "搜尋中…" });
@@ -68,7 +82,7 @@ export function AdminTakedownPanel({ initialEventId, scope }: { initialEventId: 
 
   return <section className={`${styles.card} ${styles.admin}${scope ? ` ${styles.eventClaimPanel}` : ""}`} id="takedown" aria-labelledby="takedown-heading">
     <h2 id="takedown-heading">撤下社團補充資料</h2>
-    {!scope && <AdminEventSelect id="takedown-event" value={eventId} onChange={id => { setEventId(id); setQuery(""); clearSearch(); }} />}
+    {!scope && <AdminEventSelect id="takedown-event" value={eventId} onChange={id => { setEventId(id); setQuery(""); clearSearch(); onEventChange?.(id); }} />}
     <form className={styles.takedownSearch} onSubmit={event => { event.preventDefault(); void search(); }}>
       <label htmlFor="takedown-search">社團名稱<input id="takedown-search" maxLength={100} value={query} placeholder="輸入社團名稱" disabled={pending} onChange={event => { setQuery(event.target.value); clearSearch(); }} /></label>
       <button type="submit" disabled={!query.trim() || searchStatus.kind === "busy" || pending}>搜尋</button>

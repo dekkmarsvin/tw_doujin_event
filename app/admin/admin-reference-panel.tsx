@@ -8,14 +8,14 @@ import { UiIcon } from '../ui-icons';
 type Form = { kind: string; title: string; values: Record<string, string>; initial: string };
 type Managed = { path: string | null; version: string | null; editBlocked: boolean; deleteBlocked: boolean; deleteReason: string; revision?: string };
 type Removal = { kind: string; name: string; item: Managed };
-type Section = 'venues' | 'organizers' | 'categories';
+export type ReferenceView = 'venues' | 'organizers' | 'categories';
 const messageOf = (error: unknown) => error instanceof Error ? error.message : '操作失敗，請稍後再試。';
 
-export function AdminReferencePanel() {
+export function AdminReferencePanel({ initialView = 'venues', onViewChange }: { initialView?: ReferenceView; onViewChange?: (view: ReferenceView) => void }) {
   const formElement = useRef<HTMLFormElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const [catalog, setCatalog] = useState<SharedReferenceCatalog | null>(null);
-  const [section, setSection] = useState<Section>('venues');
+  const [section, setSection] = useState<ReferenceView>(initialView);
   const [search, setSearch] = useState('');
   const [missing, setMissing] = useState(false);
   const [selected, setSelected] = useState('');
@@ -120,7 +120,7 @@ export function AdminReferencePanel() {
     <div className={ui.topbar}><div className={ui.tabs} role="group" aria-label="資料類別">
       {([['venues', '場館與場地'], ['organizers', '主辦單位'], ['categories', '分類目錄']] as const).map(([key, label]) =>
         <button key={key} type="button" aria-pressed={section === key} disabled={busy} onClick={() => {
-          if (mayLeave()) { setSection(key); setForm(null); setSelected(''); setSearch(''); setNotice(''); if (!refreshRequired) setError(''); }
+          if (mayLeave()) { setSection(key); onViewChange?.(key); setForm(null); setSelected(''); setSearch(''); setNotice(''); if (!refreshRequired) setError(''); }
         }}>{label}</button>)}
     </div>{catalog && section === 'categories' && <button type="button" disabled={locked || !catalog.organizers.length} onClick={() => open('category-catalog', '新增分類目錄')}>新增分類目錄</button>}</div>
     {notice && <p role="status" className={styles.notice}>{notice}</p>}

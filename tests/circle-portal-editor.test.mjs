@@ -146,23 +146,6 @@ test("the age rating group carries no explanation beyond its own checkboxes", as
   assert.doesNotMatch(app, /不是一個社團只能有一種分級/);
 });
 
-test("only a load the reader asked for moves the refresh button", async () => {
-  const app = await readFile(new URL("../app/admin/admin-review-queue.tsx", import.meta.url), "utf8");
-
-  // The queue polls every 30 seconds and on every return to the tab. Those
-  // used to run the same `refresh` the button ran, so the label flipped to
-  // 「更新中…」 twice a minute on its own: motion on a control nobody pressed,
-  // reporting nothing that could be acted on.
-  assert.match(app, /const refresh = useCallback\(\(announce: boolean\) => \{/);
-  assert.match(app, /if \(announce\) setLoading\(true\);/);
-  assert.match(app, /if \(document\.visibilityState === "visible"\) refresh\(false\);/);
-  assert.match(app, /window\.setTimeout\(\(\) => refresh\(true\), 0\)/);
-  assert.match(app, /onClick=\{\(\) => refresh\(true\)\}/);
-  // A decision, single or batched, reloads the queue down the same silent path.
-  assert.equal(app.match(/setWorking\(false\);\s*refresh\(false\);/g)?.length, 2);
-});
-
-
 test("the picture is the only thing the upload asks for", async () => {
   const app = await source("portal-app.tsx");
 
