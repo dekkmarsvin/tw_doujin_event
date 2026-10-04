@@ -788,20 +788,14 @@ export function createIdentityRepository(database: D1Database, options: { bootst
             AND g.account_id = actor.id AND g.role IN ('owner', 'editor') AND g.revoked_at IS NULL)))`;
   }
 
-  /**
-   * Everything an administrator can act on, in every event at once. The caller
-   * keeps only the events this deployment serves; decisions still go through
-   * the event-scoped routes. `circle_claimed` says the circle already has an
-   * owner in that event, which an approval would be refused for.
-   */
-  async function listAdminReviewQueue(limit = 500) {
+  /** Counts discover every event with work, without a bounded list hiding it. */
+  async function listAdminReviewSummary() {
     await ensureTables();
-    const [claims, mapDrafts, organizer] = await Promise.all([
+    const [claimCounts, mapDrafts, organizer] = await Promise.all([
       database.prepare(
-        `SELECT c.*, EXISTS (SELECT 1 FROM circle_claims v WHERE v.event_id = c.event_id
-           AND v.circle_id = c.circle_id AND v.status = 'verified') AS circle_claimed
-         FROM circle_claims c WHERE c.status = 'pending' ORDER BY c.created_at ASC LIMIT ?1`,
-      ).bind(limit).all<ClaimRow & { circle_claimed: number }>(),
+        `SELECT event_id, COUNT(*) AS pending FROM circle_claims
+         WHERE status = 'pending' GROUP BY event_id`,
+      ).all<{ event_id: string; pending: number }>(),
       database.prepare(
         `SELECT event_id, COUNT(*) AS submitted FROM map_drafts
          WHERE status = 'submitted' AND candidate_id IS NULL AND retention_action IS NULL GROUP BY event_id`,
@@ -812,11 +806,25 @@ export function createIdentityRepository(database: D1Database, options: { bootst
       ).first<{ applications: number; submissions: number }>(),
     ]);
     return {
-      claims: claims.results,
+      claimCounts: claimCounts.results,
       mapDrafts: mapDrafts.results,
       applications: organizer?.applications ?? 0,
       submissions: organizer?.submissions ?? 0,
     };
+  }
+
+  /** Apply the served/filter scope before LIMIT; a deep link stays reachable. */
+  async function listPendingAdminClaims(eventIds: readonly string[], claimId = "", limit = 500) {
+    await ensureTables();
+    if (eventIds.length === 0) return [];
+    const eventParams = eventIds.map((_, index) => `?${index + 1}`).join(", ");
+    const rows = await database.prepare(
+      `SELECT c.*, EXISTS (SELECT 1 FROM circle_claims v WHERE v.event_id = c.event_id
+         AND v.circle_id = c.circle_id AND v.status = 'verified') AS circle_claimed
+       FROM circle_claims c WHERE c.status = 'pending' AND c.event_id IN (${eventParams})
+       ORDER BY (c.id = ?${eventIds.length + 1}) DESC, c.created_at ASC LIMIT ?${eventIds.length + 2}`,
+    ).bind(...eventIds, claimId, limit).all<ClaimRow & { circle_claimed: number }>();
+    return rows.results;
   }
 
   async function hasVerifiedClaim(eventId: string, circleId: string) {
@@ -3621,7 +3629,7 @@ export function createIdentityRepository(database: D1Database, options: { bootst
     upsertAccount, createSession, getSession, revokeSession, disableAccount, beginAccountDeletion, isAccountWritable, deleteAccount,
     listSoleOwnerOrganizerCandidates,
     listHostedThumbnailKeysForAccount, listHostedThumbnailKeys, listUnsubmittedMapDraftObjectKeysForAccount,
-    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewQueue,
+    createClaim, getClaim, withdrawClaim, listClaimsForAccount, listClaimScopesForAccount, listClaimsByStatus, listPendingEventClaims, listAdminReviewSummary, listPendingAdminClaims,
     hasVerifiedClaim, ownsCircle, markClaimVerified, setClaimStatus, recordChallengeAttempt,
     getOverride, putOverride, deleteOverride, takedownOverride, listLiveOverrides, getPublicOverride, setPostEventHidden,
     rebuildOverridesDoc, getOverridesDoc,

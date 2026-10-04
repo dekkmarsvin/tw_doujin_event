@@ -15,7 +15,7 @@
 - 入口是 `/organizer`，`noindex, nofollow`，**不與 `/circle` 或閱讀端共用 bundle**。公開頁不直接連到這裡：公開頁首的「登入」帶到 `/circle`，`/circle` 與本頁互相列出兩個工作區（見[社團契約的入口分離](./circle-portal.md#入口分離)）。這個入口不受新活動申請開關影響。
 - 登入沿用[社團自助控制面](./circle-portal.md)的 email 一次性連結與統一 7 天 session cookie；`POST /api/auth/request-link` 以 `audience: "organizer"` 決定信件與登入連結指向 `/organizer`。Turnstile、速率上限與 session 規則只寫在該契約，本文不重複。
 - **帳號本身沒有 Organizer 權限。** 能看到工作區的條件是持有任一候選活動的 grant，或是全域管理者。
-- 申請人可在同一 `/organizer` 登入查看自己的申請；送件或待審核不授予候選活動 grant。申請表與結果可在手機使用，活動資料與地圖編輯仍限桌機。
+- 申請人可在同一 `/organizer` 登入查看自己的申請；送件或待審核不授予候選活動 grant。申請表與結果可在手機使用，管理者即使沒有本人申請或申請資格也可進入申請審核；活動資料與地圖編輯仍限桌機。
 - **已登入但無事可做不是登出。** session 有效，但帳號不是管理者、沒有 grant、不能申請也沒有申請紀錄時，保留 session，說明此帳號沒有主辦工作區權限及目前未開放新活動申請，並提供「返回社團資料」與「返回活動列表」，不回到登入表單。主辦邀請只在以主辦登入連結登入時接受，因此同一畫面可應要求寄送主辦登入連結：收件者固定為目前帳號、`audience: "organizer"`，真人驗證在按下後才載入。只有 session 失效（401）才回到登入表單。
 - 工作區是桌機介面。視窗過窄時顯示「請改用桌機」，不提供縮小版的地圖編輯。
 - 左側活動列表可以收合，收合後把寬度讓給工作區。收合狀態不保存，重新登入回到展開。
@@ -416,4 +416,4 @@ data／main 的 PR、核准 check、allowlist 與 expected SHA merge 由 driver 
 
 活動建置申請依本人關係通知核准／拒絕；核准與首次 Owner grant 合併一封。內容（含更正）審核通過／退修、失敗重開，以及 publication failed／published 通知當時有效 Owner，協作者只接自身權限異動。完成既有 production verified gate 才通知已公開；舊核准進度／失敗信可在同版本已公開或版本更替時取消。業務轉換與通知在同一 D1 batch，寄送失敗不撤銷業務結果。
 
-`/organizer?candidate=…&section=review` 優先於上次活動；`application=…` 打開指定申請，`notifications=1` 開啟跨工作區共用設定。未登入時參數經白名單帶入登入信，無權限／不存在不默開其他活動。手機可讀指定活動目前狀態與通知設定，編輯仍須桌機，同一信件保留目的地。信件指向公開活動時使用 `/events/{eventId}/`。
+`/organizer?candidate=…&section=review` 優先於上次活動；`application=…` 打開指定申請，`?application` 未指定申請時打開申請面板，空值仍保留到登入信；`notifications=1` 開啟跨工作區共用設定。未登入時參數經白名單帶入登入信，無權限／不存在不默開其他活動。手機可讀指定活動目前狀態、活動申請與通知設定，編輯仍須桌機，同一信件保留目的地。信件指向公開活動時使用 `/events/{eventId}/`。

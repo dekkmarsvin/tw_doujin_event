@@ -401,7 +401,8 @@ export function createCirclePortalHandlers({
     // These parameters select a form after login; ownership still comes only
     // from the authenticated claim. Never accept an arbitrary redirect URL.
     const destination = new URL(`${config.origin}/${audience === "organizer" ? "organizer" : "circle"}`);
-    if (audience === "circle" && new URL(request.url).searchParams.has("event")) {
+    const continuation = notificationParameters(body?.destination, audience);
+    if (audience === "circle" && !continuation.has("admin") && new URL(request.url).searchParams.has("event")) {
       if (await servesRequestedEvent()) {
         destination.searchParams.set("event", config.eventId);
         if (typeof body?.circleId === "string" && body.circleId.length <= 200) {
@@ -410,7 +411,7 @@ export function createCirclePortalHandlers({
         }
       }
     }
-    for (const [key, value] of notificationParameters(body?.destination, audience)) destination.searchParams.set(key, value);
+    for (const [key, value] of continuation) destination.searchParams.set(key, value);
     const token = randomToken();
     destination.searchParams.set("login", token);
     const expiresAt = now + LOGIN_TOKEN_TTL_MS;
@@ -1774,13 +1775,23 @@ export function createCirclePortalHandlers({
   async function adminReviewQueue(request: Request) {
     const gate = await requireAdmin(request);
     if (!gate.ok) return gate.response;
-    const queue = await repository.listAdminReviewQueue();
-    const eventIds = [...new Set([...queue.claims, ...queue.mapDrafts].map((row) => row.event_id))];
+    const parameters = new URL(request.url).searchParams;
+    const eventId = parameters.get("event");
+    const claimId = parameters.get("claim") ?? "";
+    if (eventId !== null && !(config.publishedEvent ? await config.publishedEvent(eventId) : eventId === config.eventId)) {
+      return json({ error: "找不到此活動。" }, 404);
+    }
+    const queue = await repository.listAdminReviewSummary();
+    const eventIds = [...new Set([...queue.claimCounts, ...queue.mapDrafts].map((row) => row.event_id))];
     const served = new Set((await Promise.all(eventIds.map(async (eventId) => (config.publishedEvent
       ? await config.publishedEvent(eventId) : eventId === config.eventId) ? eventId : null)))
       .filter((eventId): eventId is string => eventId !== null));
+    const claimCounts = queue.claimCounts.filter((row) => served.has(row.event_id));
+    const claims = await repository.listPendingAdminClaims(eventId === null ? [...served] : [eventId], eventId === null ? "" : claimId);
     return json({
-      claims: queue.claims.filter((claim) => served.has(claim.event_id)).map((claim) => ({
+      pendingClaimCount: claimCounts.reduce((sum, row) => sum + row.pending, 0),
+      claimCounts: claimCounts.map((row) => ({ eventId: row.event_id, pending: row.pending })),
+      claims: claims.map((claim) => ({
         id: claim.id, eventId: claim.event_id, circleId: claim.circle_id, circleName: claim.circle_name_at_claim,
         evidenceUrl: claim.evidence_url, evidenceNote: claim.evidence_note, targetUrl: claim.target_url,
         createdAt: claim.created_at, circleClaimed: !!claim.circle_claimed,

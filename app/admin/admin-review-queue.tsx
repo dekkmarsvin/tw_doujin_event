@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { decideClaim, listReviewQueue, PortalError, type QueuedClaim, type ReviewQueue } from "../circle-editor-client";
+import { decideClaim, PortalError, type QueuedClaim, type ReviewQueue } from "../circle-editor-client";
 import { PUBLISHED_EVENTS } from "../event-catalog";
-import { EVENT_GROUPS, eventsByProximity, taipeiDate } from "../event-calendar";
+import { eventsByProximity, taipeiDate } from "../event-calendar";
 import { useModalFocus } from "../use-modal-focus";
 import { planClaimBatch, type ClaimBatchPlan, type ClaimDecision, type SkippedClaims } from "./claim-batch";
+import { useAdminReviewQueue } from "./use-admin-review-queue";
 import styles from "../circle-portal/portal.module.css";
 
 const VERB: Record<ClaimDecision, string> = { approve: "核准", reject: "婉拒" };
-const GROUP_LABEL = Object.fromEntries(EVENT_GROUPS.map(({ id, label }) => [id, label])) as Record<string, string>;
 const ALL_EVENTS = "";
 
 function errorMessage(error: unknown) {
@@ -32,10 +32,6 @@ function evidenceLabel(url: string) {
   }
 }
 
-function daysUntil(start: string, today: string) {
-  return Math.round((Date.parse(`${start}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
-}
-
 function skipReason(skip: SkippedClaims) {
   return skip.reason === "claimed" ? "已有通過的認領" : `同一社團選了 ${skip.count} 筆，只能核准一筆`;
 }
@@ -55,14 +51,10 @@ export type ClaimReviewScope = {
   decide: (claimId: string, decision: ClaimDecision) => Promise<unknown>;
 };
 
-export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQueueLoaded }: {
-  initialEventId: string; onOpenMaps?: (eventId: string) => void; claimScope?: ClaimReviewScope; onQueueLoaded?: (queue: ReviewQueue | null) => void;
+export function AdminReviewQueue({ initialEventId, initialClaimId, onEventChange, claimScope, onQueueLoaded }: {
+  initialEventId: string; initialClaimId?: string; onEventChange?: (eventId: string) => void;
+  claimScope?: ClaimReviewScope; onQueueLoaded?: (queue: ReviewQueue | null) => void;
 }) {
-  const [queue, setQueue] = useState<ReviewQueue | null>(null);
-  /** Read with each answer, so a page left open past midnight moves events on. */
-  const [today, setToday] = useState(() => taipeiDate(Date.now()));
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
   const [filter, setFilter] = useState(initialEventId);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [messages, setMessages] = useState<Record<string, string>>({});
@@ -70,66 +62,34 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
   const [plan, setPlan] = useState<ClaimBatchPlan | null>(null);
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const requestVersion = useRef({ version: 0 });
   /** A decision in flight owns the list: a background answer landing midway
    * would drop rows the batch is still reporting on. */
   const busy = useRef(false);
+  const isBusy = useCallback(() => busy.current, []);
+  const [openedAt] = useState(() => Date.now());
+  const acceptQueue = useCallback((answer: ReviewQueue | null) => {
+    if (answer) {
+      const live = new Set(answer.claims.map(claim => claim.id));
+      setSelected(current => new Set([...current].filter(id => live.has(id))));
+      setMessages(current => Object.fromEntries(Object.entries(current).filter(([id]) => live.has(id))));
+    }
+    onQueueLoaded?.(answer);
+  }, [onQueueLoaded]);
+  const { queue, loading, loadError, updatedAt, refresh, invalidate } = useAdminReviewQueue({
+    eventId: claimScope?.eventId ?? filter, claimId: initialClaimId,
+    load: claimScope?.load, onQueueLoaded: acceptQueue, isBusy,
+  });
+  const today = taipeiDate(updatedAt ?? openedAt);
   const mounted = useRef(true);
   const dialog = useRef<HTMLDivElement>(null);
   const summaryLine = useRef<HTMLParagraphElement>(null);
+  const claimTarget = useRef<HTMLLIElement>(null);
+  const focusedTarget = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-
-  /**
-   * `announce` is whether the button says it is working. Only the first load
-   * and a press of the button do; the timer and returns to the tab replace the
-   * data silently, so nobody sees a control move that they did not press.
-   */
-  const refresh = useCallback((announce: boolean) => {
-    if (busy.current && !announce) return;
-    const version = ++requestVersion.current.version;
-    if (announce) setLoading(true);
-    void (claimScope ? claimScope.load() : listReviewQueue())
-      .then((answer) => {
-        if (version !== requestVersion.current.version) return;
-        const live = new Set(answer.claims.map((claim) => claim.id));
-        setQueue(answer);
-        onQueueLoaded?.(answer);
-        setToday(taipeiDate(Date.now()));
-        setLoadError("");
-        setSelected((current) => new Set([...current].filter((id) => live.has(id))));
-        setMessages((current) => Object.fromEntries(Object.entries(current).filter(([id]) => live.has(id))));
-      })
-      .catch((error: unknown) => {
-        if (version === requestVersion.current.version) { setLoadError(errorMessage(error)); onQueueLoaded?.(null); }
-      })
-      // The button is disabled while an announced request is in flight, so no
-      // second announced request can supersede it and leave it stuck.
-      .finally(() => {
-        if (announce) setLoading(false);
-      });
-  }, [claimScope, onQueueLoaded]);
-
-  useEffect(() => {
-    const requests = requestVersion.current;
-    const initial = window.setTimeout(() => refresh(true), 0);
-    const refreshVisible = () => {
-      if (document.visibilityState === "visible") refresh(false);
-    };
-    const timer = window.setInterval(refreshVisible, 30_000);
-    window.addEventListener("focus", refreshVisible);
-    document.addEventListener("visibilitychange", refreshVisible);
-    return () => {
-      ++requests.version;
-      window.clearTimeout(initial);
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshVisible);
-      document.removeEventListener("visibilitychange", refreshVisible);
-    };
-  }, [refresh]);
 
   const closeDialog = useCallback(() => { if (!busy.current) setPlan(null); }, []);
   useModalFocus(plan !== null, dialog, closeDialog);
@@ -140,11 +100,20 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
   const claims = useMemo(() => (queue?.claims ?? [])
     .filter((claim) => eventEntry.has(claim.eventId))
     .sort((a, b) => eventEntry.get(a.eventId)!.rank - eventEntry.get(b.eventId)!.rank || a.createdAt - b.createdAt), [queue, eventEntry]);
-  const claimCount = (eventId: string) => claims.filter((claim) => claim.eventId === eventId).length;
-  const mapCount = (eventId: string) => queue?.mapDrafts.find((entry) => entry.eventId === eventId)?.submitted ?? 0;
+  const claimCount = (eventId: string) => queue?.claimCounts?.find((entry) => entry.eventId === eventId)?.pending
+    ?? (claimScope?.eventId === eventId ? queue?.pendingClaimCount : undefined)
+    ?? claims.filter((claim) => claim.eventId === eventId).length;
 
   const visible = filter === ALL_EVENTS ? claims : claims.filter((claim) => claim.eventId === filter);
-  const selectedClaims = claims.filter((claim) => selected.has(claim.id));
+  const targetAvailable = !!filter && visible.some(claim => claim.id === initialClaimId);
+  useEffect(() => {
+    if (initialClaimId && targetAvailable && !focusedTarget.current) {
+      focusedTarget.current = true;
+      claimTarget.current?.focus();
+      claimTarget.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [initialClaimId, targetAvailable]);
+  const selectedClaims = visible.filter((claim) => selected.has(claim.id));
   const allVisibleSelected = visible.length > 0 && visible.every((claim) => selected.has(claim.id));
   const pendingPerCircle = new Map<string, number>();
   for (const claim of claims) {
@@ -156,8 +125,14 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
     .filter(({ items }) => items.length > 0);
 
   const showClaims = (eventId: string) => {
+    if (busy.current || (eventId === filter && !initialClaimId)) return;
+    invalidate();
+    setSelected(new Set());
+    setMessages({});
+    setSummary(null);
+    setPlan(null);
     setFilter(eventId);
-    document.getElementById("admin")?.scrollIntoView({ block: "start" });
+    onEventChange?.(eventId);
   };
   const toggle = (id: string) => setSelected((current) => {
     const next = new Set(current);
@@ -176,7 +151,7 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
    * nothing replaces the list until the decision reloads it itself. */
   const holdQueue = () => {
     busy.current = true;
-    ++requestVersion.current.version;
+    invalidate();
     setWorking(true);
   };
 
@@ -239,7 +214,6 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
     const verb = VERB[batch.decision];
     setMessages(reasons);
     // A reason on a row the filter hides would be a reason nobody can read.
-    if ([...unfinished].some((id) => !visible.some((claim) => claim.id === id))) setFilter(ALL_EVENTS);
     setSelected(new Set());
     setSummary({ kind: left ? "mixed" : "ok", text: `已${verb} ${done} 筆。${left ? `${left} 筆未${verb}，原因標在各列。` : ""}` });
     setProgress(null);
@@ -256,75 +230,31 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
     setPlan(planClaimBatch(claims, selected, decision));
   };
 
-  const current = ordered.filter(({ group }) => group !== "past");
-  const past = ordered.filter(({ event, group }) => group === "past" && claimCount(event.id) + mapCount(event.id) > 0);
   const chips = [
-    { id: ALL_EVENTS, label: "全部", count: claims.length },
+    { id: ALL_EVENTS, label: "全部", count: queue?.pendingClaimCount ?? claims.length },
     ...ordered.filter(({ event }) => claimCount(event.id) > 0 || event.id === filter)
       .map(({ event }) => ({ id: event.id, label: event.name, count: claimCount(event.id) })),
   ];
   const skippedCount = plan?.skipped.reduce((sum, skip) => sum + skip.ids.length, 0) ?? 0;
 
   return <>
-    {!claimScope && <section className={`${styles.card} ${styles.admin}`} id="overview" aria-labelledby="overview-heading">
-      <div className={styles.queueHeading}>
-        <h2 id="overview-heading">待審總覽</h2>
-        <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading}>{loading ? "更新中…" : "重新整理"}</button>
-      </div>
-      {loadError && <p className={styles.error} role="alert">{loadError}</p>}
-      <div className={styles.overviewGrid}>
-        {current.map(({ event, group, start, label }) => <article key={event.id} className={styles.overviewCard}>
-          <p className={styles.overviewStatus}>
-            <span className={group === "ongoing" || group === "upcoming" ? styles.lifecycle : styles.lifecycleMuted}>{GROUP_LABEL[group]}</span>
-            {group === "upcoming" && start && <span>{daysUntil(start, today)} 天後</span>}
-          </p>
-          <h3>{event.name}</h3>
-          <p className={styles.overviewDate}>{label}</p>
-          <div className={styles.overviewCounts}>
-            <button type="button" className={styles.countButton} onClick={() => showClaims(event.id)}>
-              <span>社團認領</span><b data-zero={claimCount(event.id) === 0 || undefined}>{queue ? claimCount(event.id) : "–"}</b>
-            </button>
-            <button type="button" className={styles.countButton} onClick={() => onOpenMaps?.(event.id)}>
-              <span>地圖草稿</span><b data-zero={mapCount(event.id) === 0 || undefined}>{queue ? mapCount(event.id) : "–"}</b>
-            </button>
-          </div>
-        </article>)}
-        <article className={styles.overviewCard}>
-          <h3>活動申請與內容送審</h3>
-          <dl className={styles.overviewFacts}>
-            <div><dt>活動申請</dt><dd>{queue ? queue.organizer.applications : "–"}</dd></div>
-            <div><dt>活動內容送審</dt><dd>{queue ? queue.organizer.submissions : "–"}</dd></div>
-          </dl>
-          <a className={styles.overviewLink} href="/organizer">前往主辦工作區</a>
-        </article>
-      </div>
-      {past.map(({ event, label }) => {
-        const pastClaims = claimCount(event.id);
-        const pastMaps = mapCount(event.id);
-        return <button key={event.id} type="button" className={styles.pastLine}
-          onClick={() => (pastClaims ? showClaims(event.id) : onOpenMaps?.(event.id))}>
-          <span className={styles.lifecycleMuted}>{GROUP_LABEL.past}</span>
-          <b>{event.name}</b>
-          <span className={styles.overviewDate}>{label}</span>
-          <span className={styles.pastCounts}>{[pastClaims ? `社團認領 ${pastClaims}` : "", pastMaps ? `地圖草稿 ${pastMaps}` : ""].filter(Boolean).join("・")}</span>
-        </button>;
-      })}
-    </section>}
-
     <section className={`${styles.card} ${styles.admin}${claimScope ? ` ${styles.eventClaimPanel}` : ""}`} id="admin" aria-labelledby="claims-heading">
       <div className={styles.queueHeading}>
         <h2 id="claims-heading">社團認領</h2>
-        {claimScope && <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading || working}>{loading ? "更新中…" : "重新整理"}</button>}
-        {!claimScope && claims.length > 0 && <div role="group" aria-label="依活動篩選" className={styles.filterChips}>
+        <button type="button" className={styles.secondaryButton} onClick={() => refresh(true)} disabled={loading || working}>{loading ? "更新中…" : "重新整理"}</button>
+        {!claimScope && <div role="group" aria-label="依活動篩選" className={styles.filterChips}>
           {chips.map((chip) => <button key={chip.id || "all"} type="button" className={styles.filterChip}
-            aria-pressed={filter === chip.id} onClick={() => setFilter(chip.id)}>{chip.label} <span>{chip.count}</span></button>)}
+            aria-pressed={filter === chip.id} disabled={working} onClick={() => showClaims(chip.id)}>{chip.label} <span>{queue ? chip.count : "—"}</span></button>)}
         </div>}
       </div>
-      {claimScope && loadError && <p className={styles.error} role="alert">{loadError}</p>}
+      {loadError && <p className={styles.error} role="alert">{loadError}</p>}
+      {loadError && updatedAt && <p className={styles.notice}>顯示 {stamp(updatedAt)} 的資料，更新失敗。</p>}
+      {initialClaimId && queue && !targetAvailable && <p className={styles.warningNotice}>此認領不在這個活動的待審清單。</p>}
       {summary && <p ref={summaryLine} tabIndex={-1} className={summary.kind === "ok" ? styles.notice : styles.warningNotice} role="status">{summary.text}</p>}
       {!queue ? loading && <p className={styles.notice}>載入中…</p>
         : visible.length === 0 ? <p>目前沒有待審項目。</p>
           : <>
+            <p className={styles.notice}>待審 {filter ? claimCount(filter) : queue.pendingClaimCount ?? claims.length} 筆，已載入 {visible.length} 筆。</p>
             <div className={styles.queueToolbar} data-selected={selectedClaims.length > 0 || undefined}>
               <label className={styles.selectAll}>
                 <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible} disabled={working} />
@@ -346,7 +276,10 @@ export function AdminReviewQueue({ initialEventId, onOpenMaps, claimScope, onQue
                 const entry = eventEntry.get(claim.eventId)!;
                 const samePending = pendingPerCircle.get(`${claim.eventId}\u0000${claim.circleId}`) ?? 1;
                 const message = messages[claim.id];
-                return <li key={claim.id} className={styles.queueRow} data-selected={selected.has(claim.id) || undefined} data-problem={message ? true : undefined}>
+                return <li key={claim.id} ref={claim.id === initialClaimId && filter ? claimTarget : undefined}
+                  tabIndex={claim.id === initialClaimId && filter ? -1 : undefined}
+                  className={styles.queueRow} data-targeted={claim.id === initialClaimId && !!filter || undefined}
+                  data-selected={selected.has(claim.id) || undefined} data-problem={message ? true : undefined}>
                   <input type="checkbox" aria-label={`選取${claim.circleName}（${entry.event.name}）`}
                     checked={selected.has(claim.id)} onChange={() => toggle(claim.id)} disabled={working} />
                   <div className={styles.queueCircle}>

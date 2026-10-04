@@ -67,6 +67,7 @@ export type QueuedClaim = PendingClaim & { eventId: string; circleClaimed: boole
 export type ReviewQueue = {
   claims: QueuedClaim[];
   pendingClaimCount?: number;
+  claimCounts?: { eventId: string; pending: number }[];
   mapDrafts: { eventId: string; submitted: number }[];
   organizer: { applications: number; submissions: number };
 };
@@ -259,8 +260,9 @@ export function saveOverride(circleId: string, fields: CircleOverrideFields, ret
   });
 }
 
-export function listReviewQueue() {
-  return call<ReviewQueue>("/api/admin/review-queue");
+export function listReviewQueue(eventId = "", claimId?: string) {
+  const path = "/api/admin/review-queue" + (eventId && claimId ? `?claim=${encodeURIComponent(claimId)}` : "");
+  return call<ReviewQueue>(path, undefined, eventId);
 }
 
 export function decideClaim(claimId: string, decision: "approve" | "reject" | "revoke", eventId?: string) {
@@ -378,9 +380,9 @@ export function listMyMapDrafts() {
   return call<{ drafts: MapDraftSummary[] }>("/api/map-contributions/drafts");
 }
 
-export function readMapDraft(draftId: string, admin = false) {
+export function readMapDraft(draftId: string, admin = false, eventId?: string) {
   const base = admin ? "/api/admin/map-contributions/drafts" : "/api/map-contributions/drafts";
-  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[]; scope: MapBoothScope | null }>(`${base}/${encodeURIComponent(draftId)}`);
+  return call<{ draft: MapDraftDetail; files: MapDraftFile[]; reviews: MapDraftReview[]; comments: MapDraftComment[]; scope: MapBoothScope | null }>(`${base}/${encodeURIComponent(draftId)}`, undefined, eventId);
 }
 
 export function createMapContributionDraft(periodKey: string, venueSpaceId: string, layout: EventMapLayout) {
@@ -421,15 +423,15 @@ export function uploadMapContributionEvidence(input: {
 
 /** Discussion is not a state transition, so it carries no expected revision:
  * the server stamps the comment with the draft's revision as it stands. */
-export function postMapDraftComment(input: { draftId: string; body: string; targetKind?: "slot" | "landmark"; targetRef?: string }) {
+export function postMapDraftComment(input: { draftId: string; body: string; targetKind?: "slot" | "landmark"; targetRef?: string }, eventId?: string) {
   return call<{ ok: true; draftId: string; commentId: string }>(
     `/api/map-contributions/drafts/${encodeURIComponent(input.draftId)}/comments`,
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input) }, eventId,
   );
 }
 
-export function listAdminMapDrafts() {
-  return call<{ drafts: MapDraftSummary[] }>("/api/admin/map-contributions/drafts");
+export function listAdminMapDrafts(eventId?: string) {
+  return call<{ drafts: MapDraftSummary[] }>("/api/admin/map-contributions/drafts", undefined, eventId);
 }
 
 export function reviewMapContributionDraft(input: {
@@ -440,19 +442,19 @@ export function reviewMapContributionDraft(input: {
   replacementDraftId?: string;
   confirmOfficialSource?: boolean;
   targets?: MapDraftCommentTarget[];
-}) {
+}, eventId?: string) {
   return call<{ ok: true }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(input.draftId)}/review`, {
     method: "POST", body: JSON.stringify(input),
-  });
+  }, eventId);
 }
 
-export function exportMapContributionCandidate(draftId: string, expectedRevision: number) {
+export function exportMapContributionCandidate(draftId: string, expectedRevision: number, eventId?: string) {
   return call<{
     ok: true; draftId: string; revision: number; targetPath: string; candidate: PublishedEventMap;
     diff: MapCandidateDiff; candidateSha256: string; createdAt: number;
   }>(`/api/admin/map-contributions/drafts/${encodeURIComponent(draftId)}/export`, {
     method: "POST", body: JSON.stringify({ expectedRevision }),
-  });
+  }, eventId);
 }
 
 export function mapDraftProblems(error: unknown) {

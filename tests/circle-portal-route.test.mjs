@@ -1337,6 +1337,36 @@ test("login destinations ignore invalid circles and never redirect to supplied U
   assert.equal(destination.searchParams.has("circle"), false);
 });
 
+test("admin continuation uses the circle audience and does not grant administration", async () => {
+  const response = await handlers.requestLink(post("/api/auth/request-link?event=ff47", {
+    email: "entry@example.com", turnstileToken: "solved", audience: "circle", circleId: "ff47-social",
+    destination: { admin: "1", adminSection: "events", adminView: "maps", adminEvent: "other-event", adminDraft: "map-one", returnTo: "https://other.example/" },
+  }));
+  assert.equal(response.status, 202);
+  const destination = new URL(sent.at(-1).text.match(/https?:\/\/[^\s]+/)[0]);
+  assert.equal(destination.origin, ORIGIN);
+  assert.equal(destination.pathname, "/circle");
+  assert.equal(destination.searchParams.has("event"), false);
+  assert.equal(destination.searchParams.has("circle"), false);
+  assert.equal(destination.searchParams.has("returnTo"), false);
+  assert.equal(destination.searchParams.get("adminEvent"), "other-event");
+  assert.equal(destination.searchParams.get("adminDraft"), "map-one");
+  const verified = await handlers.verify(post("/api/auth/verify", { token: destination.searchParams.get("login") }));
+  assert.equal(verified.status, 200);
+  assert.equal((await verified.json()).isAdmin, false);
+});
+
+test("an organizer login link retains an unselected application panel", async () => {
+  await handlers.requestLink(post("/api/auth/request-link", {
+    email: "entry@example.com", turnstileToken: "solved", audience: "organizer", destination: { application: "", candidate: "" },
+  }));
+  const destination = new URL(sent.at(-1).text.match(/https?:\/\/[^\s]+/)[0]);
+  assert.equal(destination.pathname, "/organizer");
+  assert.equal(destination.searchParams.has("application"), true);
+  assert.equal(destination.searchParams.get("application"), "");
+  assert.equal(destination.searchParams.has("candidate"), false);
+});
+
 test("exact claim entry lookup stays authenticated and returns only the requested circle", async () => {
   assert.equal((await handlers.searchCatalog(get("/api/circle/search?circle=ff47-social"))).status, 401);
   const cookie = await signIn("entry@example.com");
@@ -1581,6 +1611,8 @@ test("the review queue gathers every served event's work, and each claim says it
       ["ff48", "ff47-social", false],
     ]);
     assert.deepEqual(body.mapDrafts, [{ eventId: "ff47", submitted: 1 }]);
+    assert.equal(body.pendingClaimCount, 2);
+    assert.deepEqual(body.claimCounts, [{ eventId: "ff47", pending: 1 }, { eventId: "ff48", pending: 1 }]);
     assert.deepEqual(body.organizer, { applications: 1, submissions: 0 });
 
     assert.equal((await queue.adminReviewQueue(get("/api/admin/review-queue", owner))).status, 403);
@@ -1589,6 +1621,41 @@ test("the review queue gathers every served event's work, and each claim says it
     clock = startedAt;
     await database.batch(["map_drafts", "organizer_applications"].map((table) => database.prepare(`DELETE FROM ${table}`)));
   }
+});
+
+test("review claim totals and event filters include work beyond the global list limit", async () => {
+  const admin = await signIn("admin@example.com");
+  const queue = handlersForEvent("ff47");
+  const seed = database.prepare(`WITH RECURSIVE sequence(number) AS
+      (SELECT 1 UNION ALL SELECT number + 1 FROM sequence WHERE number < ?1)
+    INSERT INTO circle_claims (id, account_id, event_id, circle_id, circle_name_key, circle_name_at_claim, status, method, created_at)
+    SELECT ?2 || '-' || number, 'account-' || number, ?2, 'circle-' || number, 'circle-' || number, ?2 || ' 社團 ' || number,
+      'pending', 'manual', ?3 + number FROM sequence`);
+  await database.batch([
+    seed.bind(501, "ff99", clock),
+    seed.bind(501, "ff47", clock + 1_000),
+    seed.bind(1, "ff48", clock + 2_000),
+  ]);
+  const all = await (await queue.adminReviewQueue(get("/api/admin/review-queue", admin))).json();
+  assert.equal(all.pendingClaimCount, 502);
+  assert.deepEqual(all.claimCounts, [{ eventId: "ff47", pending: 501 }, { eventId: "ff48", pending: 1 }]);
+  assert.equal(all.claims.length, 500);
+  assert.ok(all.claims.every(claim => claim.eventId === "ff47"), "unserved earlier rows cannot consume the list allowance");
+
+  const other = await (await queue.adminReviewQueue(get("/api/admin/review-queue?event=ff48", admin))).json();
+  assert.equal(other.claims.length, 1);
+  assert.equal(other.claims[0].eventId, "ff48", "event filtering loads its own list instead of filtering the truncated global list");
+  assert.equal(other.pendingClaimCount, 502);
+  assert.deepEqual(other.claimCounts, all.claimCounts);
+
+  const target = await (await queue.adminReviewQueue(get("/api/admin/review-queue?event=ff47&claim=ff47-501", admin))).json();
+  assert.equal(target.claims.length, 500);
+  assert.equal(target.claims[0].id, "ff47-501", "a precise pending target beyond the first 500 is still loaded");
+  const mismatch = await (await queue.adminReviewQueue(get("/api/admin/review-queue?event=ff48&claim=ff47-501", admin))).json();
+  assert.ok(mismatch.claims.every(claim => claim.eventId === "ff48"));
+  assert.equal(mismatch.claims.some(claim => claim.id === "ff47-501"), false);
+  assert.equal((await queue.adminReviewQueue(get("/api/admin/review-queue?event=ff99", admin))).status, 404);
+  assert.equal((await queue.adminReviewQueue(get("/api/admin/review-queue?event=", admin))).status, 404);
 });
 
 test("a rejection sent from a stale list does not undo an approval", async () => {

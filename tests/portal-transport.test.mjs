@@ -16,7 +16,25 @@ if (!isRunnableDevEnvironment(environment)) throw new Error("Vite SSR test envir
 const { onRequest } = await environment.runner.import("/functions/_middleware.ts");
 const client = await environment.runner.import("/app/circle-editor-client.ts");
 const organizerClient = await environment.runner.import("/app/organizer-client.ts");
+const { adminLoginEntry, adminLoginDestination, notificationParameters } = await environment.runner.import("/app/notification-navigation.ts");
 const { requestedEventId } = await environment.runner.import("/functions/_portal.ts");
+const { readAdminRoute, adminHref } = await environment.runner.import("/app/admin/admin-navigation.ts");
+
+test("Admin precise routes take precedence over legacy event links while old destinations remain reachable", () => {
+  const route = path => readAdminRoute(new URL(path, "https://example.test"));
+  assert.equal(route("/admin").section, "overview");
+  assert.equal(route("/admin?event=sample").view, "claims");
+  assert.equal(route("/admin?section=events&view=maps&event=sample&draft=chosen").draft, "chosen");
+  assert.equal(route("/admin?section=events&view=maps&event=sample").view, "maps");
+  for (const [hash, section, view] of [["#overview", "overview", ""], ["#admin", "circles", "claims"], ["#map-review", "events", "maps"], ["#takedown", "circles", "search"], ["#accounts", "accounts", ""], ["#review-notifications", "notifications", ""]]) {
+    const result = route(`/admin?event=sample${hash}`);
+    assert.deepEqual([result.section, result.view, result.event], [section, view, "sample"]);
+  }
+  assert.equal(route("/admin?section=references").section, "data");
+  assert.equal(route("/admin?section=events&view=list").unavailable, true);
+  const search = route(adminHref("circles", { view: "search", event: "sample", q: "測試社團" }));
+  assert.equal(search.q, "測試社團");
+});
 after(() => vite.close());
 
 const ORIGIN = "https://verify.kotoban.top";
@@ -136,6 +154,49 @@ beforeEach(() => {
 });
 
 after(() => { globalThis.fetch = originalFetch; });
+
+test("admin login continuation keeps supported destinations separate from circle selectors", async () => {
+  const source = new URL(`${ORIGIN}/admin?section=circles&view=claims&event=sample-two&claim=claim-one&circle=c-900001&draft=map-one&q=北風&notifications=1#review-notifications`);
+  const entry = new URL(adminLoginEntry(source), ORIGIN);
+  assert.equal(entry.pathname, "/circle");
+  assert.equal(entry.searchParams.has("event"), false);
+  assert.equal(entry.searchParams.has("circle"), false);
+  assert.equal(adminLoginDestination(entry.searchParams), `${source.pathname}${source.search}${source.hash}`);
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { location: { search: entry.search } };
+    await client.requestLoginLink("admin@example.test", "solved");
+    const body = JSON.parse(captured.at(-1).init.body);
+    assert.equal(body.audience, "circle");
+    assert.equal(adminLoginDestination(new URLSearchParams(body.destination)), `${source.pathname}${source.search}${source.hash}`);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("continuation rejects caller URLs and retains legacy admin notifications and event links", () => {
+  assert.equal(adminLoginDestination(new URLSearchParams("event=sample&circle=c-900001&returnTo=https://evil.test")), null);
+  const selectors = notificationParameters({ admin: "1", adminEvent: "sample", adminClaim: "//evil.test", adminSection: "/other", adminHash: "javascript:alert(1)", returnTo: "https://evil.test", event: "wrong", circle: "wrong", login: "secret" }, "circle");
+  assert.equal(adminLoginDestination(selectors), "/admin?event=sample");
+  for (const path of ["/admin?event=sample", "/admin#review-notifications", "/admin?section=events&view=maps&event=sample&draft=map-one"]) {
+    assert.equal(adminLoginDestination(new URL(adminLoginEntry(path), ORIGIN).searchParams), path);
+  }
+  assert.equal(notificationParameters({ admin: "1", adminSearch: "x".repeat(101) }, "circle").has("adminSearch"), false);
+});
+
+test("organizer login preserves an unselected application panel without relaxing identifiers", async () => {
+  assert.equal(notificationParameters({ application: "", section: "review", admin: "1", adminEvent: "sample", candidate: "//evil.test" }, "organizer").toString(), "application=&section=review");
+  assert.equal(notificationParameters({ application: "request-one" }, "organizer").get("application"), "request-one");
+  assert.equal(notificationParameters({ application: "/other", candidate: "" }, "organizer").toString(), "");
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { location: { search: "?application" } };
+    await client.requestLoginLink("organizer@example.test", "solved", "organizer");
+    assert.deepEqual(JSON.parse(captured.at(-1).init.body).destination, { application: "" });
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
 
 test("JSON and map background API refusals expire a session only on 401, even without JSON", async () => {
   const originalWindow = globalThis.window;
@@ -260,6 +321,40 @@ test("a client that names no event is left alone, which is the single-event depl
   client.setPortalEventId("");
   await client.listMyClaims();
   assert.equal(captured[0].path, "/api/claims");
+});
+
+test("the admin review queue uses its local event filter and never inherits another panel's event", async () => {
+  try {
+    client.setPortalEventId("ff47");
+    await client.listReviewQueue();
+    assert.equal(captured[0].path, "/api/admin/review-queue");
+    await client.listReviewQueue("ff48", "claim-later");
+    assert.equal(captured[1].path, "/api/admin/review-queue?claim=claim-later&event=ff48");
+  } finally {
+    client.setPortalEventId("");
+  }
+});
+
+test("admin map requests use their explicit event while contributor callers retain the page scope", async () => {
+  try {
+    client.setPortalEventId("ff47");
+    for (const run of [
+      () => client.listAdminMapDrafts("ff48"),
+      () => client.readMapDraft("map-one", true, "ff48"),
+      () => client.postMapDraftComment({ draftId: "map-one", body: "請確認攤位位置。" }, "ff48"),
+      () => client.reviewMapContributionDraft({ draftId: "map-one", expectedRevision: 2, decision: "changes_requested" }, "ff48"),
+      () => client.exportMapContributionCandidate("map-one", 2, "ff48"),
+    ]) {
+      captured = [];
+      await run();
+      assert.equal(new URL(captured[0].path, ORIGIN).searchParams.get("event"), "ff48");
+    }
+    captured = [];
+    await client.readMapDraft("map-own");
+    assert.equal(captured[0].path, "/api/map-contributions/drafts/map-own?event=ff47");
+  } finally {
+    client.setPortalEventId("");
+  }
 });
 
 test("the server reads the event the request named, and never substitutes the default", () => {

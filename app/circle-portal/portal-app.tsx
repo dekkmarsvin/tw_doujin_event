@@ -21,6 +21,7 @@ import { projectCircleDraftRecords } from "../circle-records";
 import { PUBLISHED_EVENTS, getPublishedEvent, type EventDefinition } from "../event-catalog";
 import { eventCalendar, eventsByProximity, nearestEvent, taipeiDate } from "../event-calendar";
 import { AccountNotificationSettings } from "../account-notification-settings";
+import { adminLoginDestination } from "../notification-navigation";
 import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 import { TurnstileWidget } from "./turnstile-widget";
 import { MapContributorPanel } from "./map-contribution-panel";
@@ -217,6 +218,7 @@ export default function CirclePortalApp() {
   /** Each event's claims as last read, for the picker; an event not read yet shows no status. */
   const [claimsByEvent, setClaimsByEvent] = useState<Record<string, ClaimSummary[]>>({});
   const [eventId, setEventId] = useState(initialPortalEventId);
+  const [adminDestination] = useState(() => adminLoginDestination(new URLSearchParams(window.location.search)));
   const [entry] = useState(() => {
     const parameters = new URLSearchParams(window.location.search);
     return { eventId: parameters.get("event"), circleId: parameters.get("circle") ?? "" };
@@ -258,6 +260,7 @@ export default function CirclePortalApp() {
   // Declared before the session effect so the scope is in place for every
   // event-scoped call of this commit.
   useEffect(() => {
+    if (adminDestination) return;
     if (entry.eventId && !getPublishedEvent(entry.eventId)) return;
     maintainedEventId.current = event.id;
     setPortalEventId(event.id);
@@ -271,28 +274,32 @@ export default function CirclePortalApp() {
     if (entry.eventId !== event.id) url.searchParams.delete("circle");
     else if (entry.circleId) url.searchParams.set("circle", entry.circleId);
     window.history.replaceState(null, "", url);
-  }, [entry, event.id]);
+  }, [adminDestination, entry, event.id]);
 
   useEffect(() => {
     const token = takeLoginToken();
+    const acceptSession = (current: PortalSession) => {
+      if (adminDestination) window.location.replace(adminDestination);
+      else setSession(current);
+    };
     void (async () => {
       if (token) {
         try {
-          setSession(await verifyLoginToken(token));
+          acceptSession(await verifyLoginToken(token));
           setStatus({ kind: "ok", message: "登入成功。" });
         } catch (error) {
           setStatus({ kind: "error", message: errorMessage(error) });
         }
       } else {
         try {
-          setSession(await readSession());
+          acceptSession(await readSession());
         } catch {
           setSession(null);
         }
       }
       setReady(true);
     })();
-  }, []);
+  }, [adminDestination]);
 
   useEffect(() => {
     if (!session) return;

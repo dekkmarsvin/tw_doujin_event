@@ -2,6 +2,7 @@
 
 **實作**：`app/site-settings.ts`、`app/site-service-check.ts`、`app/admin/admin-site-settings-panel.tsx`、`app/workspace-nav.tsx`、`db/site-settings-repository.ts`、`db/identity-runtime-schema.ts`、`functions/api/admin/site-settings.ts`、`functions/api/admin/service-check.ts`、`workers/publication-dispatch/index.ts`
 **測試**：`tests/site-settings.test.mjs`、`tests/organizer-applications.test.mjs`、`tests/account-notifications.test.mjs`、`tests/review-notifications.test.mjs`、`tests/organizer-repository.test.mjs`、`tests/browser/portal-admin-entry.mjs`、`tests/browser/portal-organizer-amendment-publication.mjs`
+**實作**：`app/admin/use-admin-site-status.ts`、`app/admin/admin-service-status.tsx`
 
 `/admin?section=settings` 沿用網站管理入口、登入與管理者授權，管理活動申請、聯絡方式、通知、發布四項營運設定。首頁沿用既有登入入口，不新增另一個申請按鈕，也不為開關加入 Reader API。公開申請由維護者在 Admin 手動啟用；這是 #477 的已接受決策，取代 #163 原以零人工補救旅程作為公開申請開關的前置；該旅程仍是 Organizer 里程碑驗收。
 
@@ -23,6 +24,8 @@ Repository／isolate 只快取初始化，不快取可變設定。申請及通�
 - 發布：`ORGANIZER_PUBLICATION_MODE` 保留環境能力邊界，D1 `publication_enabled` 控制正常執行。暫停仍可編輯與送審；拒絕新核准發布／重試，scheduler 不執行新步驟及逾時清理，保留 job／snapshot／checkpoint／已公開版本。恢復同一 job；queued 工作的原 15 分鐘等待窗從恢復時重算。已發出的 GitHub 呼叫、合併及部署不會因開關而撤銷。
 
 ## 活動狀態與唯讀健康檢查
+
+管理總覽唯讀顯示已保存的申請模式、發布開關、帳號通知與待審通知；設定表單仍是唯一修改入口，未保存輸入與個人偏好不改總覽。總覽與審核發布頁沿用 queued／publishing 作業及精確工作區連結；環境發布能力與已保存開關、最近服務結果分開。讀取失敗顯示未知，保留舊值時標示更新時間及更新失敗。進入或一般刷新只讀取 D1，不發起診斷。
 
 Admin 顯示目前 queued／publishing 活動名稱、狀態、階段及工作區連結；runtime 已暫停時顯示已暫停。發布模式 disabled 時停用發布控制；連線或診斷失敗仍可暫停處理。
 

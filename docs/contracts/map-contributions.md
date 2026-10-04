@@ -4,8 +4,8 @@
 
 本契約涵蓋角色、私人草稿、檔案與保存機制；投稿、審閱、核准替換與 event-data 候選匯出；以及審閱留言串、指向單一元素的局部修改請求與具名的版本衝突說明。政策決策見 [ADR-0033](../adr/0033-map-contributions-use-admin-granted-roles-and-private-revisioned-drafts.md)。
 
-**實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)、[`app/map-contribution-draft.ts`](../../app/map-contribution-draft.ts)、[`app/map-contribution-panels.tsx`](../../app/map-contribution-panels.tsx)、[`app/circle-portal/map-contribution-panel.tsx`](../../app/circle-portal/map-contribution-panel.tsx)
-**測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`、`tests/map-contribution-draft.test.mjs`
+**實作**：[`app/map-contribution-files.ts`](../../app/map-contribution-files.ts)、[`app/circle-portal-handlers.ts`](../../app/circle-portal-handlers.ts)、[`db/identity-repository.ts`](../../db/identity-repository.ts)、[`db/retention-purge.ts`](../../db/retention-purge.ts)、[`functions/api/map-contributions/`](../../functions/api/map-contributions)、[`app/map-contribution-draft.ts`](../../app/map-contribution-draft.ts)、[`app/map-contribution-panels.tsx`](../../app/map-contribution-panels.tsx)、[`app/circle-portal/map-contribution-panel.tsx`](../../app/circle-portal/map-contribution-panel.tsx)、[`app/admin/admin-map-review-panel.tsx`](../../app/admin/admin-map-review-panel.tsx)
+**測試**：`tests/map-contribution-files.test.mjs`、`tests/map-contribution-handlers.test.mjs`、`tests/map-contribution-repository.test.mjs`、`tests/map-contribution-retention.test.mjs`、`tests/map-contribution-draft.test.mjs`、`tests/browser/portal-admin-entry.mjs`
 
 > **活動範圍**：地圖貢獻 route 以請求的 `event` 參數決定活動（未帶時為部署預設活動），草稿、檔案與審閱都在該活動內分域。[ADR-0043](../adr/0043-the-circle-portal-is-event-agnostic.md) 沒有決定 `map_contributor` 是否逐活動授權；要改必須另行定案，不能從社團多活動 ownership 自動類推。
 
@@ -25,6 +25,8 @@
 - 社團認領不會自動取得此角色；停用帳號也不具備投稿能力。
 - 撤銷與停權立即阻止建立、修改、上傳與提交，但不刪除已進入審閱流程的紀錄。
 - 原始檔只有草稿 owner 與管理者可讀。原始下載一律是 attachment；圖片可經授權 route 預覽，PDF 不提供 inline 預覽。
+
+Admin 的地圖投稿位於 `/admin?section=events&view=maps&event=…`；指定 `draft=…` 直接讀取該草稿，讀取失敗不改開另一份。清單、草稿、留言、審核、匯出及來源檔下載／預覽都明確帶目前活動，不依賴其他面板的活動選擇。切換活動或草稿會清除前一份的選取、審閱說明、局部修改請求及匯出結果；未送出內容可取消離開，進行中的操作不能切換對象，前一場的非同步回應不會套到新活動。
 
 ## 編輯器
 
@@ -74,7 +76,7 @@
 | `POST /api/admin/map-contributions/drafts/:draftId/review` | 管理者 | 要求修改、拒絕或核准；取代既有核准稿時必須帶其 draftId。`targets[]` 附帶局部修改請求，只有 `changes_requested` 接受 |
 | `POST /api/admin/map-contributions/drafts/:draftId/export` | 管理者 | 將核准 revision 固化為候選 JSON、SHA-256 與語意差異，並轉為 exported |
 
-所有 contributor 與管理 route 都只列出、讀取或修改目前 Pages 設定的 `eventId`；共用 D1 中其他活動留下的草稿與來源檔不會進入目前活動的控制面。
+所有 contributor 與管理 route 都只列出、讀取或修改請求指定的可服務活動（未指定時採部署預設）；共用 D1 中其他活動留下的草稿與來源檔不會進入目前活動的控制面。
 
 ## 候選匯出與公開邊界
 

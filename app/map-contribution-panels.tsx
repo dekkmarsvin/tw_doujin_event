@@ -53,8 +53,8 @@ export function Preview({ event, layout }: { event: EventDefinition; layout: Eve
   </div>;
 }
 
-export function previewUrl(fileId: string) {
-  return withEventScope(`/api/map-contributions/files/${encodeURIComponent(fileId)}/preview`);
+export function previewUrl(fileId: string, eventId?: string) {
+  return withEventScope(`/api/map-contributions/files/${encodeURIComponent(fileId)}/preview`, eventId);
 }
 
 export function Problems({ problems }: { problems: MapDraftProblem[] }) {
@@ -64,14 +64,14 @@ export function Problems({ problems }: { problems: MapDraftProblem[] }) {
   </li>)}</ul>;
 }
 
-export function EvidenceList({ files, showReviewResult = false }: { files: MapDraftFile[]; showReviewResult?: boolean }) {
+export function EvidenceList({ files, showReviewResult = false, eventId }: { files: MapDraftFile[]; showReviewResult?: boolean; eventId?: string }) {
   if (!files.length) return <p>尚未上傳來源檔。</p>;
   return <ul className={styles.auditList}>{files.map((item) => {
-    const fileUrl = withEventScope(`/api/map-contributions/files/${encodeURIComponent(item.id)}`);
+    const fileUrl = withEventScope(`/api/map-contributions/files/${encodeURIComponent(item.id)}`, eventId);
     const canReadRaw = item.raw_deleted_at == null;
     return <li key={item.id}>
       {item.document_date}・<a href={item.source_url} rel="noreferrer" target="_blank">原始來源</a>
-      {canReadRaw && item.mime.startsWith("image/") ? <>・<a href={previewUrl(item.id)} rel="noreferrer" target="_blank">預覽上傳檔</a></> : null}
+      {canReadRaw && item.mime.startsWith("image/") ? <>・<a href={previewUrl(item.id, eventId)} rel="noreferrer" target="_blank">預覽上傳檔</a></> : null}
       {canReadRaw ? <>・<a href={fileUrl}>下載上傳檔</a></> : <>・原始檔已依保存期限刪除</>}
       ・版本 {item.revision}{showReviewResult ? `・${item.review_result ?? "尚未確認來源"}` : ""}・SHA-256 {item.sha256}
     </li>;
@@ -85,12 +85,12 @@ export function draftScopeLabel(event: EventDefinition, periodKey: string, venue
   return `${day?.label ?? periodKey}・${space?.venueSpaceName ?? venueSpaceId}`;
 }
 
-export function DraftList({ event, drafts, selected, onSelect }: { event: EventDefinition; drafts: MapDraftSummary[]; selected: string | null; onSelect: (id: string) => void }) {
+export function DraftList({ event, drafts, selected, onSelect, disabled = false }: { event: EventDefinition; drafts: MapDraftSummary[]; selected: string | null; onSelect: (id: string) => void; disabled?: boolean }) {
   if (!drafts.length) return <p>目前沒有草稿。</p>;
   return <ul className={styles.claimList}>{drafts.map((draft) => <li key={draft.id}>
     <div><b>{draftScopeLabel(event, draft.period_key, draft.venue_space_id)}</b><small>{draft.id}・版本 {draft.current_revision}{draft.owner_email ? `・${draft.owner_email}` : ""}</small></div>
     <span>{STATUS_LABEL[draft.status]}</span>
-    <button type="button" aria-pressed={selected === draft.id} onClick={() => onSelect(draft.id)}>開啟</button>
+    <button type="button" disabled={disabled} aria-pressed={selected === draft.id} onClick={() => onSelect(draft.id)}>開啟</button>
   </li>)}</ul>;
 }
 

@@ -64,11 +64,22 @@ try {
   const admin = await signIn(journey, ADMIN, "circle");
   await admin.getByRole("banner").getByRole("button", { name: "帳號", exact: true }).click();
   await admin.getByRole("link", { name: "網站管理", exact: true }).click();
-  const queue = admin.getByRole("button", { name: "核准", exact: true });
-  await queue.waitFor();
-  assert.match(await admin.locator("body").innerText(), new RegExp(CIRCLE_ID), "the queue names the circle under review");
-  await queue.first().click();
-  await admin.waitForTimeout(600);
+  await admin.getByRole("heading", { name: "管理總覽", exact: true }).waitFor();
+  await admin.locator('[aria-label="待審工作"]').getByRole("link", { name: /^社團認領/ }).click();
+  assert.equal(new URL(admin.url()).searchParams.get("section"), "circles", "the overview opens circle management");
+  assert.equal(new URL(admin.url()).searchParams.get("view"), "claims", "the summary opens the claim queue");
+  const panel = admin.locator("#admin");
+  const claimRow = panel.locator("li", { hasText: CIRCLE_ID });
+  await claimRow.getByText(CIRCLE_NAME, { exact: true }).waitFor();
+  assert.equal(await claimRow.count(), 1, "the circle under review identifies one pending claim");
+  const approvalResponse = admin.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === "/api/admin/claims" && url.searchParams.get("event") === "sample";
+  });
+  await claimRow.getByRole("button", { name: "核准", exact: true }).click();
+  assert.equal((await approvalResponse).status(), 200, "the selected circle's event accepts the approval");
+  await panel.getByText(`已核准「${CIRCLE_NAME}」。`, { exact: true }).waitFor();
+  await claimRow.waitFor({ state: "hidden" });
   await journey.capture(admin, "portal-claim-approved");
   await admin.close();
 

@@ -111,13 +111,55 @@ try {
   // telling the reader they are not there.
   await organizer.setViewportSize({ width: 900, height: 900 });
   await organizer.reload();
-  await organizer.getByText("請改用桌機").waitFor();
+  await organizer.getByRole("heading", { name: "活動申請", exact: true }).waitFor();
   const narrow = await workspace.innerText();
-  assert.match(narrow, /較寬的畫面/, "a narrow screen explains what to do instead");
+  assert.match(narrow, /活動資料與地圖編輯請改用桌機/, "a narrow screen preserves applications and explains authoring limits");
   assert.doesNotMatch(narrow, /建立新活動|活動列表/, "and offers no authoring controls at all");
   assert.equal(await organizer.getByRole("button", { name: "建立新活動", exact: true }).count(), 0, "the authoring controls are absent, not merely hidden");
   await journey.capture(organizer, "organizer-narrow");
   await organizer.close();
+
+  // The application-list selector survives login with no application id.
+  // A site administrator needs neither eligibility nor a personal application
+  // to review on a phone.
+  let applicationRequested;
+  let applicationSignedIn = false;
+  let applicationStatus = "pending";
+  const applicationEntry = await journey.page({ url: `${base}/organizer?application`, viewport: { width: 390, height: 844 }, routes: async page => {
+    const adminSession = { email: "reviewer@example.test", isAdmin: true, isMapContributor: false, hasOrganizerAccess: true,
+      canApplyForEvent: false, hasEventApplications: false, expiresAt: Date.now() + 86_400_000 };
+    await page.route("https://challenges.cloudflare.com/turnstile/**", route => route.fulfill({ contentType: "text/javascript", body: `
+      window.turnstile = { render: (host, options) => { setTimeout(() => options.callback("journey-token")); return "widget"; }, remove: () => {} };
+      window.__ff47TurnstileReady();` }));
+    await page.route("**/api/**", route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/auth/session") return route.fulfill({ status: applicationSignedIn ? 200 : 401, json: applicationSignedIn ? adminSession : { error: "尚未登入。" } });
+      if (path === "/api/auth/config") return route.fulfill({ json: { turnstileSitekey: "journey-sitekey" } });
+      if (path === "/api/auth/request-link") { applicationRequested = route.request().postDataJSON(); return route.fulfill({ status: 202, json: { ok: true } }); }
+      if (path === "/api/auth/verify") { applicationSignedIn = true; return route.fulfill({ json: adminSession }); }
+      if (path === "/api/organizer/applications") return route.fulfill({ json: { canApply: false, applications: [
+        { id: "request-one", name: "手機申請審核", status: applicationStatus, officialUrl: "https://official.example/event", startDate: "2026-12-05", endDate: "2026-12-06", location: "", relationship: "organizer", note: "", applicantEmail: "applicant@example.test", candidateId: null },
+      ] } });
+      if (path === "/api/admin/organizer/applications/request-one") { applicationStatus = route.request().postDataJSON().decision; return route.fulfill({ json: { ok: true } }); }
+      throw new Error(`Unexpected application continuation request: ${path}`);
+    });
+  } });
+  await applicationEntry.getByLabel("Email", { exact: true }).fill("reviewer@example.test");
+  await applicationEntry.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "寄出登入連結" && !button.disabled));
+  await applicationEntry.getByRole("button", { name: "寄出登入連結", exact: true }).click();
+  await applicationEntry.getByText("若帳號可使用，登入連結已寄出。", { exact: true }).waitFor();
+  assert.equal(applicationRequested.audience, "organizer");
+  assert.deepEqual(applicationRequested.destination, { application: "" });
+  await applicationEntry.goto(`${base}/organizer?${new URLSearchParams({ ...applicationRequested.destination, login: "application-login-token" })}`);
+  await applicationEntry.getByRole("heading", { name: "活動申請", exact: true }).waitFor();
+  const applicationCard = applicationEntry.getByRole("article", { name: "手機申請審核", exact: true });
+  await applicationCard.getByRole("button", { name: "確認審核", exact: true }).click();
+  await applicationCard.getByText("已核准建置", { exact: true }).waitFor();
+  assert.equal(new URL(applicationEntry.url()).searchParams.has("application"), true);
+  assert.equal(new URL(applicationEntry.url()).searchParams.has("login"), false);
+  assert.equal(await applicationEntry.getByRole("button", { name: "建立新活動", exact: true }).count(), 0);
+  await journey.capture(applicationEntry, "organizer-application-continuation-390");
+  await applicationEntry.close();
 
   // #439: signed out, each entry names both workspaces and marks where the
   // reader is, on a phone as well, so an organizer who pressed the public
