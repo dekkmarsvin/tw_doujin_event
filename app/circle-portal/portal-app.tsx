@@ -29,7 +29,7 @@ import { CirclePageShare } from "./circle-page-share";
 import { selectedCircleShareImage } from "../circle-share-image";
 import { CatalogImagesField } from "./catalog-images-field";
 import { pointTo } from "./point-to";
-import { SessionDeadline, useSessionExpiry } from "./session-status";
+import { useSessionExpiry } from "./session-status";
 import { AccountMenu } from "./account-menu";
 import styles from "./portal.module.css";
 
@@ -346,7 +346,6 @@ export default function CirclePortalApp() {
             ADMIN_EMAILS is visible rather than silently hiding the panel. */}
         <p className={styles.identityWho}>
           <span>{session.email}{session.isAdmin ? "・管理者" : ""}{session.isMapContributor ? "・地圖貢獻者" : ""}</span>
-          <SessionDeadline session={session} />
         </p>
         <AccountMenu>
           {/* Signing in here does not hide the way to the organizer workspace:
@@ -498,7 +497,6 @@ function SignIn({ circleId }: { circleId: string }) {
 
   return <section className={styles.card}>
     <h2>登入</h2>
-    <p>輸入 email 取得 15 分鐘內有效的一次性登入連結。</p>
     <form onSubmit={(event) => {
       event.preventDefault();
       if (!humanToken) return;
@@ -524,7 +522,7 @@ function SignIn({ circleId }: { circleId: string }) {
         static and is not part of this bundle. */}
     <p className={styles.policyLink}>
       送出即表示你已閱讀<a href="/privacy">隱私權與資料使用告知</a>。
-      個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，控制面使用問題請寄 <code>circle@kotoban.top</code>。
+      個資與著作權爭議請寄 <code>maintain@kotoban.top</code>，網站操作問題請寄 <code>circle@kotoban.top</code>。
     </p>
     {status.kind !== "idle" && status.kind !== "busy" && <p className={status.kind === "error" ? styles.error : styles.notice}>{status.message}</p>}
   </section>;

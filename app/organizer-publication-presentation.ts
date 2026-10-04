@@ -1,7 +1,7 @@
 const GROUPS = [
   { label: "準備活動資料", steps: ["assemble", "preparing_data"] },
   { label: "更新公開資料", steps: ["waiting_data_checks", "merging_data", "preparing_main", "waiting_main_checks", "merging_main"] },
-  { label: "部署網站", steps: ["waiting_deployment"] },
+  { label: "更新網站", steps: ["waiting_deployment"] },
   { label: "確認公開結果", steps: ["verifying_production", "smoke", "verify"] },
 ];
 

@@ -23,7 +23,7 @@ import { type OrganizerEventDraft } from "../organizer-event";
 import { ORGANIZER_GUIDED_TASKS, ORGANIZER_WORKSPACE_SECTIONS, type OrganizerGuidedTask, type OrganizerWorkspaceSection } from "../organizer-workspace";
 
 import { TurnstileWidget } from "../circle-portal/turnstile-widget";
-import { SessionDeadline, useSessionExpiry } from "../circle-portal/session-status";
+import { useSessionExpiry } from "../circle-portal/session-status";
 import { AccountNotificationSettings } from "../account-notification-settings";
 import { ContactLink, WorkspaceEntries, WorkspaceSwitch } from "../workspace-nav";
 
@@ -73,7 +73,6 @@ export default function OrganizerApp() {
         <WorkspaceSwitch current="organizer" />
         <span>{session.email}{session.isAdmin ? "・網站管理者" : ""}</span>
         {session.isAdmin && <a href="/admin">管理</a>}
-        <SessionDeadline session={session} />
         <AccountNotificationSettings key={session.email} session={session} className={styles.ghost} />
         <ContactLink url={session.contactUrl} />
         <button type="button" className={styles.ghost} onClick={() => void signOut().finally(() => setSession(null))}>登出</button>
@@ -85,7 +84,6 @@ export default function OrganizerApp() {
         <WorkspaceEntries current="organizer" className={styles.signInEntries} />
         <section className={styles.centerCard}>
           <h2>主辦單位登入</h2>
-          <p>使用 email 取得 15 分鐘內有效的一次性登入連結。</p>
           <OrganizerLoginLink />
         </section>
       </main>

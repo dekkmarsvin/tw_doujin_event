@@ -213,7 +213,7 @@ const PORTAL_SECTIONS: readonly PortalSection[] = [
     id: "circle", title: "參展社團", tagline: "讓讀者在地圖上就認識你",
     access: { heading: "怎麼開始", ordered: true, items: [
       "輸入 email，收信點連結登入",
-      "找到你的社團，送出認領。用和場刊登錄的官網同網域的信箱登入，或在場刊登錄的官網、連結整合頁、pixivFANBOX 或 Fantia 頁面貼出驗證碼，可以當場通過；其他情況由人工確認。",
+      "找到你的社團，送出認領並依提示驗證身分",
       "通過後就能開始編輯",
     ] },
     abilities: [
@@ -230,7 +230,7 @@ const PORTAL_SECTIONS: readonly PortalSection[] = [
     action: { href: "/circle", label: "前往社團資料" },
   },
   {
-    id: "organizer", title: "活動主辦", tagline: "不寫程式，也能把活動放上地圖",
+    id: "organizer", title: "活動主辦", tagline: "把活動放上地圖",
     access: { heading: "怎麼取得權限", ordered: false, items: [
       "收到邀請信：用信裡的連結登入，就會加入那場活動",
       "開放申請時：登入後送出活動申請，網站管理者核准後，你就是這場活動的負責人",
@@ -268,7 +268,7 @@ function portalDemoHtml({ file, alt, caption }: PortalDemo, size: { width: numbe
 export function portalIntroPage(demoSize: { width: number; height: number }) {
   const metadata = {
     title: "社團與主辦｜場刊 Map",
-    description: "參展社團認領後可以補上品書與販售資訊，活動主辦不寫程式也能匯入攤位名單、畫出攤位地圖。用 email 登入，不用設定密碼。",
+    description: "參展社團認領後可以補上品書與販售資訊，活動主辦可以匯入攤位名單、畫出攤位地圖。",
     canonical: PUBLIC_ORIGIN + PORTAL_INTRO_PATH,
     image: SHARE_IMAGE,
   };
@@ -281,7 +281,6 @@ export function portalIntroPage(demoSize: { width: number; height: number }) {
 ${section.notes.map((note) => `<p class="portal-note">${escapeHtml(note)}</p>`).join("")}
 <p class="entries">${link(section.action.href, section.action.label, "primary")}</p></section>`).join("");
   return documentHtml(metadata, `<h1>社團與主辦</h1>
-<p class="portal-lead">用 email 登入，不用設定密碼，登入後 7 天內不用再登入。逛活動、收藏和排行程都不用登入。</p>
 <nav class="portal-jump" aria-label="本頁內容">${link("#circle", "參展社團")}${link("#organizer", "活動主辦")}</nav>${sections}`, { loginHref: publicLoginHref() });
 }
 

@@ -50,7 +50,6 @@
 .discovery footer a + a { margin-left:20px; }
 /* /portal/: what circles and organizers get after signing in. Each section
    leads with its demos, then how to get in beside what it opens. */
-.portal-lead { max-width:640px; color:#4d5660; font-size:17px; }
 .portal-jump { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
 .portal-jump a { display:inline-flex; align-items:center; min-height:44px; padding:0 16px; border:1px solid #cfd5cf; border-radius:999px; background:#f9faf8; color:#202a35; font-weight:700; text-decoration:none; }
 .portal-jump a:hover { background:#f0f2ef; }

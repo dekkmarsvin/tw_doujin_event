@@ -21,7 +21,6 @@ const WORKSPACES = [
 /** Before sign-in: both workspaces side by side, each saying what it is for. */
 export function WorkspaceEntries({ current, className }: { current: Workspace; className?: string }) {
   return <div className={className ? `${styles.entries} ${className}` : styles.entries}>
-    <p>社團與主辦單位可在此登入。瀏覽、收藏與排行程不需登入。</p>
     <nav aria-label="工作區">
       <ul>{WORKSPACES.map((workspace) => <li key={workspace.id}>
         <a href={workspace.href} aria-current={workspace.id === current ? "page" : undefined}><b>{workspace.label}</b><small>{workspace.description}</small></a>

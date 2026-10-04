@@ -268,7 +268,7 @@ try {
   assert.equal(await tasks.locator("li", { hasText: "待審活動內容" }).getByRole("link").getAttribute("href"), "/organizer?candidate=submitted-one&section=review");
   assert.equal(await tasks.getByRole("link", { name: "查看草稿", exact: true }).getAttribute("href"), "/admin?section=events&view=maps&event=sample");
   assert.equal(await page.locator("#admin, #map-review, #takedown, #accounts").count(), 0);
-  await page.getByText("第 1 版 · 發布中 · 部署網站", { exact: true }).waitFor();
+  await page.getByText("第 1 版 · 發布中 · 更新網站", { exact: true }).waitFor();
   await page.getByText("第 1 版 · 已排程 · 等待開始", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "重新整理", exact: true }).count(), 0, "the overview refreshes in the background");
   await refreshInBackground(page);
@@ -644,7 +644,7 @@ try {
   await workVersions.getByText("2026年11月1日至2日", { exact: true }).waitFor();
   assert.equal(await workVersions.locator("li", { hasText: "公開中" }).getByText("第 2 版 公開中", { exact: true }).count(), 1, "the newest published edition is marked as served");
   const failedEdition = workVersions.locator("li", { hasText: "第 3 版 發布失敗" });
-  await failedEdition.getByText("未完成 · 部署網站", { exact: true }).waitFor();
+  await failedEdition.getByText("未完成 · 更新網站", { exact: true }).waitFor();
   assert.equal(await failedEdition.getByRole("link").first().textContent(), "查看處理方式", "a failed edition leads with its recovery");
   assert.equal(await failedEdition.getByRole("link").first().getAttribute("href"), "/organizer?candidate=sample-failed-amend&section=review");
   const earlierEditions = workVersions.locator("details", { hasText: "較早版本 1 筆" });
@@ -660,7 +660,7 @@ try {
   assert.equal(await publicOnly.getByRole("link", { name: "開啟工作區", exact: true }).count(), 0);
   assert.equal(await publicOnly.getByRole("link", { name: "查看公開頁", exact: true }).getAttribute("href"), "/events/sample-two/");
   const publications = eventDesktop.page.locator('section[aria-labelledby="publication-jobs-heading"]');
-  await publications.getByText("第 3 版 · 未完成 · 部署網站", { exact: true }).waitFor();
+  await publications.getByText("第 3 版 · 未完成 · 更新網站", { exact: true }).waitFor();
   assert.equal(await publications.getByRole("link", { name: "查看處理方式", exact: true }).count(), 2, "failed jobs stay visible with publishing disabled and regardless of retry permission");
   await publications.getByText("第 1 版 · 已排程 · 已暫停", { exact: true }).waitFor();
   assert.equal(eventDesktop.requests.filter(request => request.path.startsWith("/api/organizer/events/")).length, 0, "the index does not read every private workspace");

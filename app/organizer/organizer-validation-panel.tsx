@@ -119,7 +119,7 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
     <p>{(preview.references ?? []).filter((record) => record.schema === "organizer/1").map((record) => record.name).join("、")}</p>
     <p>{(preview.references ?? []).filter((record) => record.schema === "venue/1" || record.schema === "venue-space/1").map((record) => record.name).join("・")}</p>
     <p>{(preview.references ?? []).flatMap((record) => record.categories?.map((category) => category.label) ?? []).join("、")}</p>
-    <div className={styles.panelHead}><div><p className={styles.contextLine}>登入後預覽</p><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => { setMapIndex(Number(event.target.value)); setSelectedCode(null); }}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{organizerDayLabel(preview.event.days, map.periodKey)}{preview.venueAssignments.length > 1 ? `・${organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}` : ""}</option>)}</select></div>
+    <div className={styles.panelHead}><div><h4>{preview.event.name}</h4></div><select aria-label="選擇預覽地圖" value={mapIndex} onChange={(event) => { setMapIndex(Number(event.target.value)); setSelectedCode(null); }}>{preview.maps.map((map, index) => <option value={index} key={`${map.periodKey}/${map.venueSpaceId}`}>{organizerDayLabel(preview.event.days, map.periodKey)}{preview.venueAssignments.length > 1 ? `・${organizerVenueSpaceLabel(venueCatalog, map.venueSpaceId)}` : ""}</option>)}</select></div>
     <p className={styles.previewSelection} role="status">{selectedPlacement
       ? <><strong>{selectedPlacement.boothCode}</strong> · {selectedPlacement.circleName}</>
       : "選取攤位，核對攤位代碼與社團名稱。"}</p>
@@ -129,6 +129,5 @@ function OrganizerReaderPreviewPanel({ preview, venueCatalog }: { preview: Organ
       </li>)}
     </ul>}
     {selected ? <AccessibleEventMapRenderer eventName={`${preview.event.name} 預覽`} layout={selected.layout} slots={slots} areaLabels={preview.venueAssignments.find((assignment) => assignment.venueSpaceId === selected.venueSpaceId)?.areaLabels} onSelect={setSelectedCode} /> : <p>尚無可預覽的地圖。</p>}
-    <details><summary>檢視資料明細</summary><pre className={styles.preview}>{JSON.stringify(preview, null, 2)}</pre></details>
   </div>;
 }
